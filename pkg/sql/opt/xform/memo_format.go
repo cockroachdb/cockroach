@@ -41,8 +41,9 @@ type group struct {
 }
 
 type memoFormatter struct {
-	buf   *bytes.Buffer
-	flags FmtFlags
+	buf              *bytes.Buffer
+	flags            FmtFlags
+	redactableValues bool
 
 	o *Optimizer
 
@@ -54,8 +55,8 @@ type memoFormatter struct {
 	groupIdx map[opt.Expr]int
 }
 
-func makeMemoFormatter(o *Optimizer, flags FmtFlags) memoFormatter {
-	return memoFormatter{buf: &bytes.Buffer{}, flags: flags, o: o}
+func makeMemoFormatter(o *Optimizer, flags FmtFlags, redactableValues bool) memoFormatter {
+	return memoFormatter{buf: &bytes.Buffer{}, flags: flags, redactableValues: redactableValues, o: o}
 }
 
 func (mf *memoFormatter) format() string {
@@ -274,7 +275,9 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 
 	// Start by using private expression formatting.
 	m := mf.o.mem
-	nf := memo.MakeExprFmtCtxBuffer(mf.o.ctx, mf.buf, memo.ExprFmtHideAll, m, nil /* catalog */)
+	nf := memo.MakeExprFmtCtxBuffer(
+		mf.o.ctx, mf.buf, memo.ExprFmtHideAll, mf.redactableValues, m, nil, /* catalog */
+	)
 	memo.FormatPrivate(&nf, private, physProps)
 
 	// Now append additional information that's useful in the memo case.

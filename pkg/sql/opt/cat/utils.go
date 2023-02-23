@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ExpandDataSourceGlob is a utility function that expands a tree.TablePattern
@@ -56,7 +57,7 @@ func ResolveTableIndex(
 
 // FormatTable nicely formats a catalog table using a treeprinter for debugging
 // and testing.
-func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
+func FormatTable(cat Catalog, tab Table, tp treeprinter.Node, redactableValues bool) {
 	child := tp.Childf("TABLE %s", tab.Name())
 	if tab.IsVirtualTable() {
 		child.Child("virtual table")
@@ -65,7 +66,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	for i := 0; i < tab.ColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tab.Column(i), &buf)
+		formatColumn(tab.Column(i), &buf, redactableValues)
 		child.Child(buf.String())
 	}
 
@@ -79,11 +80,15 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
+		constrStr := tab.Check(i).Constraint
+		if redactableValues {
+			constrStr = string(redact.Sprintf("%s", constrStr))
+		}
+		child.Childf("CHECK (%s)", constrStr)
 	}
 
 	for i := 0; i < tab.DeletableIndexCount(); i++ {
-		formatCatalogIndex(tab, i, child)
+		formatCatalogIndex(tab, i, child, redactableValues)
 	}
 
 	for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
@@ -106,6 +111,9 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 			formatCols(tab, tab.Unique(i).ColumnCount(), tab.Unique(i).ColumnOrdinal),
 		)
 		if pred, isPartial := uniq.Predicate(); isPartial {
+			if redactableValues {
+				pred = string(redact.Sprintf("%s", pred))
+			}
 			c.Childf("WHERE %s", pred)
 		}
 	}
@@ -115,7 +123,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
+func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValues bool) {
 	idx := tab.Index(ord)
 	idxType := ""
 	if idx.Ordinal() == PrimaryIndex {
@@ -148,7 +156,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, &buf)
+		formatColumn(idxCol.Column, &buf, redactableValues)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -173,12 +181,19 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			part := c.Child(p.Name())
 			prefixes := part.Child("partition by list prefixes")
 			for _, datums := range p.PartitionByListPrefixes() {
-				prefixes.Child(datums.String())
+				datumsStr := datums.String()
+				if redactableValues {
+					datumsStr = string(redact.Sprintf("%s", datumsStr))
+				}
+				prefixes.Child(datumsStr)
 			}
 			FormatZone(p.Zone(), part)
 		}
 	}
 	if pred, isPartial := idx.Predicate(); isPartial {
+		if redactableValues {
+			pred = string(redact.Sprintf("%s", pred))
+		}
 		child.Childf("WHERE %s", pred)
 	}
 }
@@ -238,22 +253,30 @@ func formatCatalogFKRef(
 	)
 }
 
-func formatColumn(col *Column, buf *bytes.Buffer) {
+func formatColumn(col *Column, buf *bytes.Buffer, redactableValues bool) {
 	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
 	}
 	if col.IsComputed() {
+		exprStr := col.ComputedExprStr()
+		if redactableValues {
+			exprStr = string(redact.Sprintf("%s", exprStr))
+		}
 		if col.IsVirtualComputed() {
-			fmt.Fprintf(buf, " as (%s) virtual", col.ComputedExprStr())
+			fmt.Fprintf(buf, " as (%s) virtual", exprStr)
 		} else {
-			fmt.Fprintf(buf, " as (%s) stored", col.ComputedExprStr())
+			fmt.Fprintf(buf, " as (%s) stored", exprStr)
 		}
 	}
 	if col.HasDefault() {
 		generatedAsIdentityType := col.GeneratedAsIdentityType()
 		if generatedAsIdentityType == NotGeneratedAsIdentity {
-			fmt.Fprintf(buf, " default (%s)", col.DefaultExprStr())
+			exprStr := col.DefaultExprStr()
+			if redactableValues {
+				exprStr = string(redact.Sprintf("%s", exprStr))
+			}
+			fmt.Fprintf(buf, " default (%s)", exprStr)
 		} else {
 			switch generatedAsIdentityType {
 			case GeneratedAlwaysAsIdentity:

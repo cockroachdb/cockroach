@@ -819,7 +819,9 @@ func (ot *OptTester) FormatExpr(e opt.Expr) string {
 	if rel, ok := e.(memo.RelExpr); ok {
 		mem = rel.Memo()
 	}
-	return memo.FormatExpr(ot.ctx, e, ot.Flags.ExprFormat, mem, ot.catalog)
+	return memo.FormatExpr(
+		ot.ctx, e, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
+	)
 }
 
 func formatRuleSet(r RuleSet) string {
@@ -1271,7 +1273,7 @@ func (ot *OptTester) Memo() (string, error) {
 	if _, err := ot.optimizeExpr(o, nil); err != nil {
 		return "", err
 	}
-	return o.FormatMemo(ot.Flags.MemoFormat), nil
+	return o.FormatMemo(ot.Flags.MemoFormat, false /* redactableValues */), nil
 }
 
 // Expr parses the input directly into an expression; see exprgen.Build.
@@ -1461,7 +1463,7 @@ func (ot *OptTester) OptSteps() (string, error) {
 			return "", err
 		}
 
-		next = os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat)
+		next = os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat, false /* redactableValues */)
 
 		// This call comes after setting "next", because we want to output the
 		// final expression, even though there were no diffs from the previous
@@ -1532,7 +1534,7 @@ func (ot *OptTester) optStepsNormDiff() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		expr := os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat)
+		expr := os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat, false /* redactableValues */)
 		name := "Initial"
 		if len(normSteps) > 0 {
 			rule := os.LastRuleName()
@@ -1597,11 +1599,14 @@ func (ot *OptTester) optStepsExploreDiff() (string, error) {
 			continue
 		}
 		newNodes := et.NewExprs()
-		before := et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat)
+		before := et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat, false /* redactableValues */)
 
 		for i := range newNodes {
 			name := et.LastRuleName().String()
-			after := memo.FormatExpr(ot.ctx, newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog)
+			after := memo.FormatExpr(
+				ot.ctx, newNodes[i], ot.Flags.ExprFormat, false /* redactableValues */, et.fo.o.Memo(),
+				ot.catalog,
+			)
 
 			diff := difflib.UnifiedDiff{
 				A:        difflib.SplitLines(before),
@@ -1791,13 +1796,16 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		ot.output("%s\n", et.LastRuleName())
 		ot.separator("=")
 		ot.output("Source expression:\n")
-		ot.indent(et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat))
+		ot.indent(et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat, false /* redactableValues */))
 		if len(newNodes) == 0 {
 			ot.output("\nNo new expressions.\n")
 		}
 		for i := range newNodes {
 			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
-			ot.indent(memo.FormatExpr(ot.ctx, newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog))
+			ot.indent(memo.FormatExpr(
+				ot.ctx, newNodes[i], ot.Flags.ExprFormat, false /* redactableValues */, et.fo.o.Memo(),
+				ot.catalog,
+			))
 		}
 	}
 	return ot.builder.String(), nil
