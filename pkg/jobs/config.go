@@ -128,7 +128,7 @@ var (
 	RetentionTimeSetting = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		retentionTimeSettingKey,
-		"the amount of time to retain records for completed jobs before",
+		"the amount of time for which records for completed jobs are retained",
 		defaultRetentionTime,
 		settings.PositiveDuration,
 	).WithPublic()
