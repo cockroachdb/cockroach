@@ -288,17 +288,11 @@ func (i *PointSynthesizingIter) updateRangeKeys() {
 	// last call to updateRangeKeys().
 	if i.rangeKeyChanged {
 		i.rangeKeyChanged = false
-		if i.prefix {
-			// A prefix iterator will always be at the start bound of the range key,
-			// and never move onto a different range key, so we can omit the cloning.
-			i.rangeKeys = i.iter.RangeKeys().Versions
-		} else {
-			rangeKeys := i.iter.RangeKeys()
-			i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeKeys.Bounds.Key...)
-			rangeKeys.Versions.CloneInto(&i.rangeKeysBuf)
-			i.rangeKeys = i.rangeKeysBuf
-			i.rangeKeysStartPassed = false // we'll compare below
-		}
+		rangeKeys := i.iter.RangeKeys()
+		i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeKeys.Bounds.Key...)
+		rangeKeys.Versions.CloneInto(&i.rangeKeysBuf)
+		i.rangeKeys = i.rangeKeysBuf
+		i.rangeKeysStartPassed = false // we'll compare below
 	}
 
 	// Update the current iterator position.
@@ -899,19 +893,12 @@ func (i *PointSynthesizingIter) assertInvariants() error {
 	}
 
 	// rangeKeysStart must be set, and rangeKeysPos must be at or after it.
-	// prefix iterators do not set rangeKeysStart.
-	if !i.prefix {
-		if len(i.rangeKeysStart) == 0 {
-			return errors.AssertionFailedf("no rangeKeysStart at %s", i.iter.UnsafeKey())
-		}
-		if i.rangeKeysPos.Compare(i.rangeKeysStart) < 0 {
-			return errors.AssertionFailedf("rangeKeysPos %s not after rangeKeysStart %s",
-				i.rangeKeysPos, i.rangeKeysStart)
-		}
-	} else {
-		if len(i.rangeKeysStart) != 0 {
-			return errors.AssertionFailedf("rangeKeysStart set to %s for prefix iterator", i.rangeKeysStart)
-		}
+	if len(i.rangeKeysStart) == 0 {
+		return errors.AssertionFailedf("no rangeKeysStart at %s", i.iter.UnsafeKey())
+	}
+	if i.rangeKeysPos.Compare(i.rangeKeysStart) < 0 {
+		return errors.AssertionFailedf("rangeKeysPos %s not after rangeKeysStart %s",
+			i.rangeKeysPos, i.rangeKeysStart)
 	}
 
 	// rangeKeysStartPassed must match rangeKeysPos and rangeKeysStart. Note that
