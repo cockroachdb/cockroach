@@ -34,6 +34,10 @@ type MemoryMetrics struct {
 	TxnCurBytesCount     *metric.Gauge
 	SessionMaxBytesHist  *metric.Histogram
 	SessionCurBytesCount *metric.Gauge
+
+	// For prepared statements.
+	SessionPreparedMaxBytesHist  *metric.Histogram
+	SessionPreparedCurBytesCount *metric.Gauge
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -66,6 +70,12 @@ func makeMemMetricMetadata(name, help string) metric.Metadata {
 	}
 }
 
+func makeMemMetricHistogram(
+	metadata metric.Metadata, histogramWindow time.Duration,
+) *metric.Histogram {
+	return metric.NewHistogram(metadata, histogramWindow, log10int64times1000, 3)
+}
+
 // MakeBaseMemMetrics instantiates the metric objects for an SQL endpoint, but
 // only includes the root metrics: .max and .current, without txn and session.
 func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemoryMetrics {
@@ -73,7 +83,7 @@ func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemo
 	MetaMemMaxBytes := makeMemMetricMetadata(prefix+".max", "Memory usage per sql statement for "+endpoint)
 	MetaMemCurBytes := makeMemMetricMetadata(prefix+".current", "Current sql statement memory usage for "+endpoint)
 	return BaseMemoryMetrics{
-		MaxBytesHist:  metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		MaxBytesHist:  makeMemMetricHistogram(MetaMemMaxBytes, histogramWindow),
 		CurBytesCount: metric.NewGauge(MetaMemCurBytes),
 	}
 }
@@ -86,12 +96,15 @@ func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetric
 	MetaMemTxnCurBytes := makeMemMetricMetadata(prefix+".txn.current", "Current sql transaction memory usage for "+endpoint)
 	MetaMemMaxSessionBytes := makeMemMetricMetadata(prefix+".session.max", "Memory usage per sql session for "+endpoint)
 	MetaMemSessionCurBytes := makeMemMetricMetadata(prefix+".session.current", "Current sql session memory usage for "+endpoint)
+	MetaMemMaxSessionPreparedBytes := makeMemMetricMetadata(prefix+".session.prepared.max", "Memory usage by prepared statements per sql session for "+endpoint)
+	MetaMemSessionPreparedCurBytes := makeMemMetricMetadata(prefix+".session.prepared.current", "Current sql session memory usage by prepared statements for "+endpoint)
 	return MemoryMetrics{
-		BaseMemoryMetrics:    base,
-		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, log10int64times1000, 3),
-		TxnCurBytesCount:     metric.NewGauge(MetaMemTxnCurBytes),
-		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, log10int64times1000, 3),
-		SessionCurBytesCount: metric.NewGauge(MetaMemSessionCurBytes),
+		BaseMemoryMetrics:            base,
+		TxnMaxBytesHist:              makeMemMetricHistogram(MetaMemMaxTxnBytes, histogramWindow),
+		TxnCurBytesCount:             metric.NewGauge(MetaMemTxnCurBytes),
+		SessionMaxBytesHist:          makeMemMetricHistogram(MetaMemMaxSessionBytes, histogramWindow),
+		SessionCurBytesCount:         metric.NewGauge(MetaMemSessionCurBytes),
+		SessionPreparedMaxBytesHist:  makeMemMetricHistogram(MetaMemMaxSessionPreparedBytes, histogramWindow),
+		SessionPreparedCurBytesCount: metric.NewGauge(MetaMemSessionPreparedCurBytes),
 	}
-
 }
