@@ -596,6 +596,18 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
+		Name:    "tpchvec/direct_scans",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
+				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
+				100, /* slownessThreshold */
+			), baseTestRun)
+		},
+	})
+
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/bench",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
