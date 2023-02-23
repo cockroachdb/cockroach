@@ -300,7 +300,8 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					}
 				}
 				return nil
-			}, "env.sql plan.txt schema.sql statement.sql stats-defaultdb.public.pterosaur.sql vec-v.txt vec.txt",
+			},
+			plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
 		)
 	})
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // FmtFlags controls how the memo output is formatted.
@@ -41,8 +42,9 @@ type group struct {
 }
 
 type memoFormatter struct {
-	buf   *bytes.Buffer
-	flags FmtFlags
+	buf              *bytes.Buffer
+	flags            FmtFlags
+	redactableValues bool
 
 	o *Optimizer
 
@@ -54,8 +56,8 @@ type memoFormatter struct {
 	groupIdx map[opt.Expr]int
 }
 
-func makeMemoFormatter(o *Optimizer, flags FmtFlags) memoFormatter {
-	return memoFormatter{buf: &bytes.Buffer{}, flags: flags, o: o}
+func makeMemoFormatter(o *Optimizer, flags FmtFlags, redactableValues bool) memoFormatter {
+	return memoFormatter{buf: &bytes.Buffer{}, flags: flags, redactableValues: redactableValues, o: o}
 }
 
 func (mf *memoFormatter) format() string {
@@ -231,7 +233,13 @@ func (mf *memoFormatter) formatGroup(first memo.RelExpr) {
 //
 //	(filters G6 G7)
 func (mf *memoFormatter) formatExpr(e opt.Expr) {
-	fmt.Fprintf(mf.buf, "(%s", e.Op())
+	if mf.redactableValues && opt.IsConstValueOp(e) && e.Private() == nil {
+		// This marks FalseOp and TrueOp as redactable, e.g. instead of (true) we
+		// print (‹true›).
+		redact.Fprintf(mf.buf, "(%s", e.Op())
+	} else {
+		fmt.Fprintf(mf.buf, "(%s", e.Op())
+	}
 	for i := 0; i < e.ChildCount(); i++ {
 		child := e.Child(i)
 		if opt.IsListItemOp(child) {
@@ -274,7 +282,9 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 
 	// Start by using private expression formatting.
 	m := mf.o.mem
-	nf := memo.MakeExprFmtCtxBuffer(mf.o.ctx, mf.buf, memo.ExprFmtHideAll, m, nil /* catalog */)
+	nf := memo.MakeExprFmtCtxBuffer(
+		mf.o.ctx, mf.buf, memo.ExprFmtHideAll, mf.redactableValues, m, nil, /* catalog */
+	)
 	memo.FormatPrivate(&nf, private, physProps)
 
 	// Now append additional information that's useful in the memo case.

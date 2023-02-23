@@ -1,0 +1,341 @@
+# LogicTest: local
+
+# Test redaction of constants in partitions.
+
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY, q INT, FAMILY (p, q)) PARTITION BY LIST (p) (
+  PARTITION p1 VALUES IN (-1, 0, 1),
+  PARTITION p2 VALUES IN (2, 3),
+  PARTITION p3 VALUES IN (DEFAULT)
+)
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM p
+----
+TABLE p
+ ├── p int not null
+ ├── q int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_p_q (p, q)
+ └── PRIMARY INDEX p_pkey
+      ├── p int not null
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         ├── ‹×›
+           │         ├── ‹×›
+           │         └── ‹×›
+           ├── p2
+           │    └── partition by list prefixes
+           │         ├── ‹×›
+           │         └── ‹×›
+           └── p3
+                └── partition by list prefixes
+                     └── ‹×›
+scan p
+
+statement ok
+CREATE TABLE q (q INT PRIMARY KEY, r INT, FAMILY (q, r)) PARTITION BY RANGE (q) (
+  PARTITION q1 VALUES FROM (MINVALUE) TO (-10),
+  PARTITION q2 VALUES FROM (-10) TO (10),
+  PARTITION q3 VALUES FROM (10) TO (MAXVALUE)
+)
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM q
+----
+TABLE q
+ ├── q int not null
+ ├── r int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_q_r (q, r)
+ └── PRIMARY INDEX q_pkey
+      └── q int not null
+scan q
+
+query T
+EXPLAIN (REDACT) INSERT INTO p VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: p(p, q)
+  auto commit
+  size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE, REDACT) INSERT INTO p VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: p(p, q)
+  auto commit
+  size: 2 columns, 1 row
+  row 0, expr 0: ‹×›
+  row 0, expr 1: ‹×›
+
+query T
+EXPLAIN (OPT, REDACT) INSERT INTO p VALUES (1, 1)
+----
+insert p
+ └── values
+      └── ‹(‹×›, ‹×›)›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) INSERT INTO p VALUES (1, 1)
+----
+insert p
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => p:1
+ │    └── column2:6 => q:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:5 column2:6
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── distribution: test
+      ├── prune: (5,6)
+      └── ‹(‹×›, ‹×›)›
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) INSERT INTO p VALUES (1, 1)
+----
+insert p
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => p:1
+ │    └── column2:6 => q:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:5(int!null) column2:6(int!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── distribution: test
+      ├── prune: (5,6)
+      └── tuple [type=tuple{int, int}]
+           ├── const: ‹×› [type=int]
+           └── const: ‹×› [type=int]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) INSERT INTO p VALUES (1, 1)
+----
+memo (optimized, ~4KB, required=[presentation: info:7] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:7] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 0.05
+ ├── G2: (insert G3 G4 G5 p)
+ │    ├── [distribution: test]
+ │    │    ├── best: (insert G3="[distribution: test]" G4 G5 p)
+ │    │    └── cost: 0.03
+ │    └── []
+ │         ├── best: (insert G3 G4 G5 p)
+ │         └── cost: 0.03
+ ├── G3: (values G6 id=v1)
+ │    ├── [distribution: test]
+ │    │    ├── best: (values G6 id=v1)
+ │    │    └── cost: 0.02
+ │    └── []
+ │         ├── best: (values G6 id=v1)
+ │         └── cost: 0.02
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (scalar-list G7)
+ ├── G7: (tuple G8)
+ ├── G8: (scalar-list G9 G9)
+ └── G9: (const ‹×›)
+insert p
+ └── values
+      └── ‹(‹×›, ‹×›)›
+
+query T
+EXPLAIN (REDACT) SELECT * FROM p WHERE p = 11
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: p@p_pkey
+  spans: 1 span
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM p WHERE p = 11
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (p, q)
+  estimated row count: 1 (missing stats)
+  table: p@p_pkey
+  spans: 1 span
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM p WHERE p = 11
+----
+scan p
+ └── constraint: /1: ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM p WHERE p = 11
+----
+scan p
+ ├── columns: p:1 q:2
+ ├── constraint: /1: ‹×›
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.09
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── distribution: test
+ └── prune: (2)
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM p WHERE p = 11
+----
+scan p
+ ├── columns: p:1(int!null) q:2(int)
+ ├── constraint: /1: ‹×›
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.09
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── distribution: test
+ └── prune: (2)
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM p WHERE p = 11
+----
+memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
+ ├── G1: (explain G2 [presentation: p:1,q:2] [distribution: test])
+ │    └── [presentation: info:5] [distribution: test]
+ │         ├── best: (explain G2="[presentation: p:1,q:2] [distribution: test]" [presentation: p:1,q:2] [distribution: test])
+ │         └── cost: 9.11
+ ├── G2: (select G3 G4) (scan p,cols=(1,2),constrained)
+ │    ├── [presentation: p:1,q:2] [distribution: test]
+ │    │    ├── best: (scan p,cols=(1,2),constrained)
+ │    │    └── cost: 9.09
+ │    └── []
+ │         ├── best: (scan p,cols=(1,2),constrained)
+ │         └── cost: 9.09
+ ├── G3: (scan p,cols=(1,2))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan p,cols=(1,2))
+ │    │    └── cost: 1116.82
+ │    └── []
+ │         ├── best: (scan p,cols=(1,2))
+ │         └── cost: 1116.82
+ ├── G4: (filters G5)
+ ├── G5: (eq G6 G7)
+ ├── G6: (variable p)
+ └── G7: (const ‹×›)
+scan p
+ └── constraint: /1: ‹×›
+
+query T
+EXPLAIN (REDACT) SELECT * FROM q WHERE q > 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: q@q_pkey
+  spans: 1 span
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM q WHERE q > 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (q, r)
+  estimated row count: 333 (missing stats)
+  table: q@q_pkey
+  spans: 1 span
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM q WHERE q > 2
+----
+scan q
+ └── constraint: /1: ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM q WHERE q > 2
+----
+scan q
+ ├── columns: q:1 r:2
+ ├── constraint: /1: ‹×›
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── cost: 378.02
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── distribution: test
+ └── prune: (2)
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM q WHERE q > 2
+----
+scan q
+ ├── columns: q:1(int!null) r:2(int)
+ ├── constraint: /1: ‹×›
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── cost: 378.02
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── distribution: test
+ └── prune: (2)
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM q WHERE q > 2
+----
+memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
+ ├── G1: (explain G2 [presentation: q:1,r:2] [distribution: test])
+ │    └── [presentation: info:5] [distribution: test]
+ │         ├── best: (explain G2="[presentation: q:1,r:2] [distribution: test]" [presentation: q:1,r:2] [distribution: test])
+ │         └── cost: 378.04
+ ├── G2: (select G3 G4) (scan q,cols=(1,2),constrained)
+ │    ├── [presentation: q:1,r:2] [distribution: test]
+ │    │    ├── best: (scan q,cols=(1,2),constrained)
+ │    │    └── cost: 378.02
+ │    └── []
+ │         ├── best: (scan q,cols=(1,2),constrained)
+ │         └── cost: 378.02
+ ├── G3: (scan q,cols=(1,2))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan q,cols=(1,2))
+ │    │    └── cost: 1108.82
+ │    └── []
+ │         ├── best: (scan q,cols=(1,2))
+ │         └── cost: 1108.82
+ ├── G4: (filters G5)
+ ├── G5: (gt G6 G7)
+ ├── G6: (variable q)
+ └── G7: (const ‹×›)
+scan q
+ └── constraint: /1: ‹×›
