@@ -68,9 +68,10 @@ func NewFlowCoordinator(
 	f.Init(
 		f,
 		flowCtx,
-		// FlowCoordinator doesn't modify the eval context, so it is safe to
-		// reuse the one from the flow context.
-		flowCtx.EvalCtx,
+		// The FlowCoordinator will update the eval context when closed, so we
+		// give it a copy of the eval context to preserve the "global" eval
+		// context from being mutated.
+		flowCtx.NewEvalCtx(),
 		processorID,
 		output,
 		execinfra.ProcStateOpts{
