@@ -578,14 +578,16 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
 └ Node 1
   └ *colexec.topKSorter
     └ *colexec.hashAggregator
-      └ *rowexec.joinReader
-        └ *colexecjoin.hashJoiner
-          ├ *colfetcher.ColBatchScan
-          └ *colexecjoin.hashJoiner
-            ├ *colexecsel.selLTInt64Int64ConstOp
-            │ └ *colfetcher.ColBatchScan
-            └ *colexecsel.selEQBytesBytesConstOp
-              └ *colfetcher.ColBatchScan
+      └ *colexecproj.projMultFloat64Float64Op
+        └ *colexecproj.projMinusFloat64ConstFloat64Op
+          └ *rowexec.joinReader
+            └ *colexecjoin.hashJoiner
+              ├ *colfetcher.ColBatchScan
+              └ *colexecjoin.hashJoiner
+                ├ *colexecsel.selLTInt64Int64ConstOp
+                │ └ *colfetcher.ColBatchScan
+                └ *colexecsel.selEQBytesBytesConstOp
+                  └ *colfetcher.ColBatchScan
 
 # Query 4
 query T
