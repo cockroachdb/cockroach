@@ -314,16 +314,12 @@ func TestSpanEntries(t *testing.T) {
 		return roachpb.Span{Key: key(start), EndKey: key(end)}
 	}
 
-	spAZ := mkspan('A', 'Z')
-	f, err := MakeFrontier(spAZ)
-	require.NoError(t, err)
-
-	advance := func(s roachpb.Span, wall int64) {
+	advance := func(f *Frontier, s roachpb.Span, wall int64) {
 		_, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
 		require.NoError(t, err)
 	}
 
-	spanEntries := func(sp roachpb.Span) string {
+	spanEntries := func(f *Frontier, sp roachpb.Span) string {
 		var buf strings.Builder
 		f.SpanEntries(sp, func(s roachpb.Span, ts hlc.Timestamp) OpResult {
 			if buf.Len() != 0 {
@@ -334,35 +330,52 @@ func TestSpanEntries(t *testing.T) {
 		})
 		return buf.String()
 	}
+	t.Run("contiguous frontier", func(t *testing.T) {
+		spAZ := mkspan('A', 'Z')
+		f, err := MakeFrontier(spAZ)
+		require.NoError(t, err)
+		// Nothing overlaps span fully to the left of frontier.
+		require.Equal(t, ``, spanEntries(f, mkspan('0', '9')))
+		// Nothing overlaps span fully to the right of the frontier.
+		require.Equal(t, ``, spanEntries(f, mkspan('a', 'z')))
 
-	// Nothing overlaps span fully to the left of frontier.
-	require.Equal(t, ``, spanEntries(mkspan('0', '9')))
-	// Nothing overlaps span fully to the right of the frontier.
-	require.Equal(t, ``, spanEntries(mkspan('a', 'z')))
+		// Span overlaps entire frontier.
+		require.Equal(t, `{A-Z}@0`, spanEntries(f, spAZ))
+		advance(f, spAZ, 1)
+		require.Equal(t, `{A-Z}@1`, spanEntries(f, spAZ))
 
-	// Span overlaps entire frontier.
-	require.Equal(t, `{A-Z}@0`, spanEntries(spAZ))
-	advance(spAZ, 1)
-	require.Equal(t, `{A-Z}@1`, spanEntries(spAZ))
+		// Span overlaps part of the frontier, with left part outside frontier.
+		require.Equal(t, `{A-C}@1`, spanEntries(f, mkspan('0', 'C')))
 
-	// Span overlaps part of the frontier, with left part outside frontier.
-	require.Equal(t, `{A-C}@1`, spanEntries(mkspan('0', 'C')))
+		// Span overlaps part of the frontier, with right part outside frontier.
+		require.Equal(t, `{Q-Z}@1`, spanEntries(f, mkspan('Q', 'c')))
 
-	// Span overlaps part of the frontier, with right part outside frontier.
-	require.Equal(t, `{Q-Z}@1`, spanEntries(mkspan('Q', 'c')))
+		// Span fully inside frontier.
+		require.Equal(t, `{P-W}@1`, spanEntries(f, mkspan('P', 'W')))
 
-	// Span fully inside frontier.
-	require.Equal(t, `{P-W}@1`, spanEntries(mkspan('P', 'W')))
+		// Advance part of the frontier.
+		advance(f, mkspan('C', 'E'), 2)
+		advance(f, mkspan('H', 'M'), 5)
+		advance(f, mkspan('N', 'Q'), 3)
 
-	// Advance part of the frontier.
-	advance(mkspan('C', 'E'), 2)
-	advance(mkspan('H', 'M'), 5)
-	advance(mkspan('N', 'Q'), 3)
+		// Span overlaps various parts of the frontier.
+		require.Equal(t,
+			`{A-C}@1 {C-E}@2 {E-H}@1 {H-M}@5 {M-N}@1 {N-P}@3`,
+			spanEntries(f, mkspan('3', 'P')))
+	})
 
-	// Span overlaps various parts of the frontier.
-	require.Equal(t,
-		`{A-C}@1 {C-E}@2 {E-H}@1 {H-M}@5 {M-N}@1 {N-P}@3`,
-		spanEntries(mkspan('3', 'P')))
+	t.Run("disjoint frontier", func(t *testing.T) {
+		spAB := mkspan('A', 'B')
+		spCE := mkspan('C', 'E')
+		f, err := MakeFrontier(spAB, spCE)
+		require.NoError(t, err)
+
+		// Nothing overlaps between the two spans in the frontier.
+		require.Equal(t, ``, spanEntries(f, mkspan('B', 'C')))
+
+		// Overlap with only one entry in the frontier
+		require.Equal(t, `{C-D}@0`, spanEntries(f, mkspan('B', 'D')))
+	})
 }
 
 // symbols that can make up spans.

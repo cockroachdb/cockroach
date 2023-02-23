@@ -426,7 +426,7 @@ func (f *Frontier) Entries(fn Operation) {
 //
 //	([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
 //
-// Note: neither [a-b) nor [m, q) will be emitted since they fall outside the spans
+// Note: neither [a-b) nor [m, q) will be emitted since they do not intersect with the spans
 // tracked by this frontier.
 func (f *Frontier) SpanEntries(span roachpb.Span, op Operation) {
 	f.Lock()
