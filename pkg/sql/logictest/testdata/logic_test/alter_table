@@ -2997,3 +2997,70 @@ SHOW CONSTRAINTS FROM t_97538_1
 ----
 table_name  constraint_name  constraint_type  details              validated
 t_97538_1   t_97538_1_pkey   PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+# This subtest ensures that dropping a column that is referenced
+# by constraints works properly.
+subtest drop_column_with_dependent_FKs_96727
+
+statement ok
+CREATE TABLE t_96727_2 (i INT PRIMARY KEY, j INT UNIQUE, FAMILY (i, j));
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+ALTER TABLE t_96727_2 ADD UNIQUE WITHOUT INDEX (j);
+
+statement ok
+CREATE TABLE t_96727_1 (i INT PRIMARY KEY REFERENCES t_96727_2(j));
+
+# Here, either the unique index or the unique without index constraint
+# is used for the output of error message is okay, so we used ".*".
+statement error pq: ".*" is referenced by foreign key from table "t_96727_1"
+ALTER TABLE t_96727_2 DROP COLUMN j;
+
+statement ok
+ALTER TABLE t_96727_2 DROP COLUMN j CASCADE;
+
+# Ensure that the unique index, unique without index constraint, as well
+# as the FK constraint are all dropped as a result of dropping the column.
+query TT
+SHOW CREATE TABLE t_96727_2
+----
+t_96727_2  CREATE TABLE public.t_96727_2 (
+             i INT8 NOT NULL,
+             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+             FAMILY fam_0_i_j (i)
+           )
+
+query TT
+SHOW CREATE TABLE t_96727_1
+----
+t_96727_1  CREATE TABLE public.t_96727_1 (
+             i INT8 NOT NULL,
+             CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
+           )
+
+# More testing when the column is referenced in other constraints.
+statement ok
+ALTER TABLE t_96727_2 ADD COLUMN j INT;
+
+statement ok
+ALTER TABLE t_96727_2 ADD CHECK (j > 0), ADD CHECK (j < 10) NOT VALID, ADD UNIQUE WITHOUT INDEX (j);
+
+statement ok
+CREATE UNIQUE INDEX idx ON t_96727_2(j);
+
+statement ok
+ALTER TABLE t_96727_2 DROP COLUMN j;
+
+# Ensure dropping the column, even without CASCADE, will also
+# drop all the constraints.
+query TT
+SHOW CREATE TABLE t_96727_2
+----
+t_96727_2  CREATE TABLE public.t_96727_2 (
+             i INT8 NOT NULL,
+             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+             FAMILY fam_0_i_j (i)
+           )
