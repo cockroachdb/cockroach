@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ScalarFmtInterceptor is a callback that can be set to a custom formatting
@@ -146,13 +147,18 @@ func (f ExprFmtFlags) HasFlags(subset ExprFmtFlags) bool {
 // FormatExpr returns a string representation of the given expression, formatted
 // according to the specified flags.
 func FormatExpr(
-	ctx context.Context, e opt.Expr, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+	ctx context.Context,
+	e opt.Expr,
+	flags ExprFmtFlags,
+	redactableValues bool,
+	mem *Memo,
+	catalog cat.Catalog,
 ) string {
 	if catalog == nil {
 		// Automatically hide qualifications if we have no catalog.
 		flags |= ExprFmtHideQualifications
 	}
-	f := MakeExprFmtCtx(ctx, flags, mem, catalog)
+	f := MakeExprFmtCtx(ctx, flags, redactableValues, mem, catalog)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -164,8 +170,12 @@ type ExprFmtCtx struct {
 	Ctx    context.Context
 	Buffer *bytes.Buffer
 
-	// Flags controls how the expression is formatted.
+	// Flags controls which information is included in the formatted expression.
 	Flags ExprFmtFlags
+
+	// If RedactableValues is true we surround any constant values or other user
+	// data from the formatted expression with redaction markers, including spans.
+	RedactableValues bool
 
 	// Memo must contain any expression that is formatted.
 	Memo *Memo
@@ -184,26 +194,36 @@ type ExprFmtCtx struct {
 // buffer with the context.Background(). This method is designed to be used in
 // stringer.String implementations.
 func makeExprFmtCtxForString(flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) ExprFmtCtx {
-	return MakeExprFmtCtxBuffer(context.Background(), &bytes.Buffer{}, flags, mem, catalog)
+	return MakeExprFmtCtxBuffer(
+		context.Background(), &bytes.Buffer{}, flags, false /* redactableValues */, mem, catalog,
+	)
 }
 
 // MakeExprFmtCtx creates an expression formatting context from a new buffer.
 func MakeExprFmtCtx(
-	ctx context.Context, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+	ctx context.Context, flags ExprFmtFlags, redactableValues bool, mem *Memo, catalog cat.Catalog,
 ) ExprFmtCtx {
-	return MakeExprFmtCtxBuffer(ctx, &bytes.Buffer{}, flags, mem, catalog)
+	return MakeExprFmtCtxBuffer(ctx, &bytes.Buffer{}, flags, redactableValues, mem, catalog)
 }
 
 // MakeExprFmtCtxBuffer creates an expression formatting context from an
 // existing buffer.
 func MakeExprFmtCtxBuffer(
-	ctx context.Context, buf *bytes.Buffer, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+	ctx context.Context,
+	buf *bytes.Buffer,
+	flags ExprFmtFlags,
+	redactableValues bool,
+	mem *Memo,
+	catalog cat.Catalog,
 ) ExprFmtCtx {
 	var nameGen *ExprNameGenerator
 	if mem != nil && mem.saveTablesPrefix != "" {
 		nameGen = NewExprNameGenerator(mem.saveTablesPrefix)
 	}
-	return ExprFmtCtx{Ctx: ctx, Buffer: buf, Flags: flags, Memo: mem, Catalog: catalog, nameGen: nameGen}
+	return ExprFmtCtx{
+		Ctx: ctx, Buffer: buf, Flags: flags, RedactableValues: redactableValues, Memo: mem,
+		Catalog: catalog, nameGen: nameGen,
+	}
 }
 
 // HasFlags tests whether the given flags are all set.
@@ -461,11 +481,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if c.IsContradiction() {
 				tp.Childf("constraint: contradiction")
 			} else if c.Spans.Count() == 1 {
-				tp.Childf("constraint: %s: %s", c.Columns.String(), c.Spans.Get(0).String())
+				tp.Childf(
+					"constraint: %s: %s", c.Columns.String(),
+					cat.MaybeRedact(c.Spans.Get(0).String(), f.RedactableValues),
+				)
 			} else {
 				n := tp.Childf("constraint: %s", c.Columns.String())
 				for i := 0; i < c.Spans.Count(); i++ {
-					n.Child(c.Spans.Get(i).String())
+					n.Child(cat.MaybeRedact(c.Spans.Get(i).String(), f.RedactableValues))
 				}
 			}
 		}
@@ -812,7 +835,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(ExprFmtHideStats) {
-		if f.HasFlags(ExprFmtHideHistograms) {
+		if f.HasFlags(ExprFmtHideHistograms) || f.RedactableValues {
 			tp.Childf("stats: %s", relational.Statistics().StringWithoutHistograms())
 		} else {
 			tp.Childf("stats: %s", relational.Statistics())
@@ -1133,7 +1156,10 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 				if scalarProps.TightConstraints {
 					tight = "; tight"
 				}
-				emitProp("constraints=(%s%s)", scalarProps.Constraints, tight)
+				emitProp(
+					"constraints=(%s%s)",
+					cat.MaybeRedact(scalarProps.Constraints.String(), f.RedactableValues), tight,
+				)
 			}
 		}
 
@@ -1703,7 +1729,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		// Don't show anything, because it's mostly redundant.
 
 	default:
-		fmt.Fprintf(f.Buffer, " %v", private)
+		if f.RedactableValues {
+			redact.Fprintf(f.Buffer, " %v", private)
+		} else {
+			fmt.Fprintf(f.Buffer, " %v", private)
+		}
 	}
 }
 
