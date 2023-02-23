@@ -493,3 +493,11 @@ SELECT * FROM t1 ORDER BY a;
 1  1
 2  1
 3  1
+
+# Make sure dependency circle is not allowed.
+statement ok
+CREATE TABLE t_circle(a INT PRIMARY KEY, b INT);
+CREATE FUNCTION f_circle() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_circle $$;
+
+statement error pq: cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
+ALTER TABLE t_circle ALTER COLUMN b SET DEFAULT f_circle();

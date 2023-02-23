@@ -541,8 +541,8 @@ func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
 func (desc *Mutable) AddConstraintReference(id descpb.ID, constraintID descpb.ConstraintID) error {
 	for _, dep := range desc.DependsOn {
 		if dep == id {
-			return errors.AssertionFailedf(
-				"Cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			return errors.Errorf(
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
 			)
 		}
 	}
@@ -585,8 +585,8 @@ func (desc *Mutable) RemoveConstraintReference(id descpb.ID, constraintID descpb
 func (desc *Mutable) AddColumnReference(id descpb.ID, colID descpb.ColumnID) error {
 	for _, dep := range desc.DependsOn {
 		if dep == id {
-			return errors.AssertionFailedf(
-				"Cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			return errors.Errorf(
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
 			)
 		}
 	}

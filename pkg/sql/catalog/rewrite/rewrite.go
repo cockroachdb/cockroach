@@ -74,44 +74,14 @@ func TableDescs(
 		// Rewrite CHECK constraints before function IDs in expressions are
 		// rewritten. Check constraint mutations are also dropped if any function
 		// referenced are missing.
-		var newChecks []*descpb.TableDescriptor_CheckConstraint
-		for i := range table.Checks {
-			fnIDs, err := table.GetAllReferencedFunctionIDsInConstraint(table.Checks[i].ConstraintID)
-			if err != nil {
-				return err
-			}
-			allFnFound := true
-			for _, fnID := range fnIDs.Ordered() {
-				if _, ok := descriptorRewrites[fnID]; !ok {
-					allFnFound = false
-					break
-				}
-			}
-			if allFnFound {
-				newChecks = append(newChecks, table.Checks[i])
-			}
+		if err := dropCheckConstraintMissingDeps(table, descriptorRewrites); err != nil {
+			return err
 		}
-		table.Checks = newChecks
-		var newMutations []descpb.DescriptorMutation
-		for i := range table.Mutations {
-			keepMutation := true
-			if c := table.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
-				fnIDs, err := table.GetAllReferencedFunctionIDsInConstraint(c.Check.ConstraintID)
-				if err != nil {
-					return err
-				}
-				for _, fnID := range fnIDs.Ordered() {
-					if _, ok := descriptorRewrites[fnID]; !ok {
-						keepMutation = false
-						break
-					}
-				}
-			}
-			if keepMutation {
-				newMutations = append(newMutations, table.Mutations[i])
-			}
+
+		// Drop column expressions if referenced UDFs not found.
+		if err := dropColumnExpressionsMissingDeps(table, descriptorRewrites); err != nil {
+			return err
 		}
-		table.Mutations = newMutations
 
 		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.
 		// TODO (rohany): This needs tests once partial indexes are ready.
@@ -295,6 +265,12 @@ func TableDescs(
 				}
 			}
 			col.OwnsSequenceIds = newOwnedSeqRefs
+
+			for i, fnID := range col.UsesFunctionIds {
+				// We have dropped expressions missing UDF references. so it's safe to
+				// just rewrite ids.
+				col.UsesFunctionIds[i] = descriptorRewrites[fnID].ID
+			}
 
 			return nil
 		}
@@ -708,6 +684,14 @@ func rewriteSchemaChangerState(
 				i--
 				droppedConstraints.Add(el.ConstraintID)
 				continue
+			case *scpb.ColumnDefaultExpression:
+				// IF there is any dependency missing for column default expression, we
+				// just drop the target.
+				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+				i--
+				continue
 			}
 			return errors.Wrap(err, "rewriting descriptor ids")
 		}
@@ -742,6 +726,7 @@ func rewriteSchemaChangerState(
 		// views are not handled by the declarative schema changer.
 	}
 
+	// Drop all children targets of dropped CHECK constraint.
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
 		if err := screl.WalkConstraintIDs(t.Element(), func(id *catid.ConstraintID) error {
@@ -758,6 +743,92 @@ func rewriteSchemaChangerState(
 		}
 	}
 	d.SetDeclarativeSchemaChangerState(state)
+	return nil
+}
+
+func dropCheckConstraintMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	var newChecks []*descpb.TableDescriptor_CheckConstraint
+	for i := range table.Checks {
+		fnIDs, err := table.GetAllReferencedFunctionIDsInConstraint(table.Checks[i].ConstraintID)
+		if err != nil {
+			return err
+		}
+		allFnFound := true
+		for _, fnID := range fnIDs.Ordered() {
+			if _, ok := descriptorRewrites[fnID]; !ok {
+				allFnFound = false
+				break
+			}
+		}
+		if allFnFound {
+			newChecks = append(newChecks, table.Checks[i])
+		}
+	}
+	table.Checks = newChecks
+	var newMutations []descpb.DescriptorMutation
+	for i := range table.Mutations {
+		keepMutation := true
+		if c := table.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
+			fnIDs, err := table.GetAllReferencedFunctionIDsInConstraint(c.Check.ConstraintID)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					keepMutation = false
+					break
+				}
+			}
+		}
+		if keepMutation {
+			newMutations = append(newMutations, table.Mutations[i])
+		}
+	}
+	table.Mutations = newMutations
+	return nil
+}
+
+func dropColumnExpressionsMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	maybeDropExpressions := func(col *descpb.ColumnDescriptor) error {
+		allFnFound := true
+		fnIDs, err := table.GetAllReferencedFunctionIDsInColumnExprs(col.ID)
+		if err != nil {
+			return err
+		}
+		for _, fnID := range fnIDs.Ordered() {
+			if _, ok := descriptorRewrites[fnID]; !ok {
+				allFnFound = false
+				break
+			}
+		}
+		if !allFnFound {
+			// TODO(chengxiong): right now, we only allow UDFs in DEFAULT expression,
+			// so it's ok to just clear default expression and referenced function
+			// ids. Need to refactor to support ON UPDATE and computed column
+			// expression once supported.
+			col.DefaultExpr = nil
+			col.UsesFunctionIds = nil
+		}
+		return nil
+	}
+
+	for i := range table.Columns {
+		col := &table.Columns[i]
+		if err := maybeDropExpressions(col); err != nil {
+			return err
+		}
+	}
+	for i := range table.Mutations {
+		if col := table.Mutations[i].GetColumn(); col != nil {
+			if err := maybeDropExpressions(col); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

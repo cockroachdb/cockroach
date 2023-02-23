@@ -1212,29 +1212,49 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			// in this case, since it will no longer be simply `before`
 			// and `after`.
 
-			removeChecksDependOnUDFs := func(n *tree.CreateTable) {
-				usesUDF := func(ck *tree.CheckConstraintTableDef) bool {
-					var foundUDF bool
-					_, err := tree.SimpleVisit(ck.Expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-						if fe, ok := expr.(*tree.FuncExpr); ok {
-							ref := fe.Func.FunctionReference.(*tree.UnresolvedName)
-							fn, err := ref.ToFunctionName()
-							require.NoError(t, err)
-							fd, err := tree.GetBuiltinFuncDefinition(fn, &sessiondata.DefaultSearchPath)
-							require.NoError(t, err)
-							if fd == nil {
-								foundUDF = true
-							}
+			containsUDF := func(expr tree.Expr) (bool, error) {
+				var foundUDF bool
+				_, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+					if fe, ok := expr.(*tree.FuncExpr); ok {
+						ref := fe.Func.FunctionReference.(*tree.UnresolvedName)
+						fn, err := ref.ToFunctionName()
+						require.NoError(t, err)
+						fd, err := tree.GetBuiltinFuncDefinition(fn, &sessiondata.DefaultSearchPath)
+						require.NoError(t, err)
+						if fd == nil {
+							foundUDF = true
 						}
-						return true, expr, nil
-					})
-					require.NoError(t, err)
-					return foundUDF
+					}
+					return true, expr, nil
+				})
+				if err != nil {
+					return false, err
 				}
+				return foundUDF, nil
+			}
+
+			removeDefsDependOnUDFs := func(n *tree.CreateTable) {
 				var newDefs tree.TableDefs
 				for _, def := range n.Defs {
-					if ck, ok := def.(*tree.CheckConstraintTableDef); ok && usesUDF(ck) {
-						continue
+					var usesUDF bool
+					switch d := def.(type) {
+					case *tree.CheckConstraintTableDef:
+						usesUDF, err = containsUDF(d.Expr)
+						require.NoError(t, err)
+						if usesUDF {
+							continue
+						}
+					case *tree.ColumnTableDef:
+						if d.DefaultExpr.Expr != nil {
+							usesUDF, err = containsUDF(d.DefaultExpr.Expr)
+							require.NoError(t, err)
+							if usesUDF {
+								d.DefaultExpr = struct {
+									Expr           tree.Expr
+									ConstraintName tree.Name
+								}{}
+							}
+						}
 					}
 					newDefs = append(newDefs, def)
 				}
@@ -1250,30 +1270,37 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 					waitForSchemaChangesToFinish(t, tdb)
 					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
-					if b.isRollback {
-						require.Equal(t, before, afterRestore)
-					} else {
-						if flavor.name != "restore all tables in database" {
-							require.Equal(t, after, afterRestore)
+
+					if flavor.name != "restore all tables in database" {
+						if b.isRollback {
+							require.Equal(t, before, afterRestore)
 						} else {
-							// If the flavor restore only tables, there can be missing UDF
-							// dependencies which cause check constraints dropped through
-							// RESTORE due to missing UDFs. We need to remove those kind of
-							// check constraint using UDFs from original AST.
-							require.Equal(t, len(after), len(afterRestore))
-							for i := range after {
-								require.Equal(t, 1, len(after[i]))
-								require.Equal(t, 1, len(afterRestore[i]))
-								afterNode, _ := parser.ParseOne(after[i][0])
-								afterRestoreNode, _ := parser.ParseOne(afterRestore[i][0])
-								if _, ok := afterNode.AST.(*tree.CreateTable); !ok {
-									require.Equal(t, after[i][0], afterRestore[i][0])
-								} else {
-									createTbl := afterNode.AST.(*tree.CreateTable)
-									removeChecksDependOnUDFs(createTbl)
-									createTblRestored := afterRestoreNode.AST.(*tree.CreateTable)
-									require.Equal(t, tree.AsString(createTbl), tree.AsString(createTblRestored))
-								}
+							require.Equal(t, after, afterRestore)
+						}
+					} else {
+						// If the flavor restore only tables, there can be missing UDF
+						// dependencies which cause check constraints or expressions
+						// dropped through RESTORE due to missing UDFs. We need to remove
+						// those kind of table elements from original AST.
+						var expected [][]string
+						if b.isRollback {
+							expected = before
+						} else {
+							expected = after
+						}
+						require.Equal(t, len(expected), len(afterRestore))
+						for i := range expected {
+							require.Equal(t, 1, len(expected[i]))
+							require.Equal(t, 1, len(afterRestore[i]))
+							afterNode, _ := parser.ParseOne(expected[i][0])
+							afterRestoreNode, _ := parser.ParseOne(afterRestore[i][0])
+							if _, ok := afterNode.AST.(*tree.CreateTable); !ok {
+								require.Equal(t, expected[i][0], afterRestore[i][0])
+							} else {
+								createTbl := afterNode.AST.(*tree.CreateTable)
+								removeDefsDependOnUDFs(createTbl)
+								createTblRestored := afterRestoreNode.AST.(*tree.CreateTable)
+								require.Equal(t, tree.AsString(createTbl), tree.AsString(createTblRestored))
 							}
 						}
 					}
