@@ -420,6 +420,8 @@ message GenerativeSplitAndScatterSpec {
   optional int64 num_nodes = 17[(gogoproto.nullable) = false];
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional bool use_simple_import_spans = 19 [(gogoproto.nullable) = false];
+  optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
+  repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
 }
 
 message CloudStorageTestSpec {
