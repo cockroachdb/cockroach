@@ -14,6 +14,7 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/storage/pebbleiter",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",

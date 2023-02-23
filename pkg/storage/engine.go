@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -340,7 +341,7 @@ type EngineIterator interface {
 	Value() []byte
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
-	GetRawIter() *pebble.Iterator
+	GetRawIter() pebbleiter.Iterator
 	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
 	// additional exclusive upper limit parameter. The limit is semantically
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
@@ -1551,17 +1552,7 @@ func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
 					rangeKey, value.Value.RawBytes)
 			}
 		}
-
-	} else {
-		// Bounds and range keys must be empty.
-		if bounds := iter.RangeBounds(); !bounds.Equal(roachpb.Span{}) {
-			return errors.AssertionFailedf("hasRange=false but RangeBounds=%s", bounds)
-		}
-		if r := iter.RangeKeys(); !r.IsEmpty() || !r.Bounds.Equal(roachpb.Span{}) {
-			return errors.AssertionFailedf("hasRange=false but RangeKeys=%s", r)
-		}
 	}
-
 	return nil
 }
 
