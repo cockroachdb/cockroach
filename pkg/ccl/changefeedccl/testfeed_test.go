@@ -1637,15 +1637,23 @@ func (c *fakeKafkaClient) Config() *sarama.Config {
 
 var _ kafkaClient = (*fakeKafkaClient)(nil)
 
-type ignoreCloseProducer struct {
-	*asyncProducerMock
+type syncIgnoreCloseProducer struct {
 	*syncProducerMock
 }
 
-var _ sarama.AsyncProducer = &ignoreCloseProducer{}
-var _ sarama.SyncProducer = &ignoreCloseProducer{}
+var _ sarama.SyncProducer = (*syncIgnoreCloseProducer)(nil)
 
-func (p *ignoreCloseProducer) Close() error {
+func (p *syncIgnoreCloseProducer) Close() error {
+	return nil
+}
+
+type asyncIgnoreCloseProducer struct {
+	*asyncProducerMock
+}
+
+var _ sarama.AsyncProducer = (*asyncIgnoreCloseProducer)(nil)
+
+func (p *asyncIgnoreCloseProducer) Close() error {
 	return nil
 }
 
@@ -1678,7 +1686,7 @@ func (s *fakeKafkaSink) Dial() error {
 		// This is because normally, kafka sinks owns the producer and so it closes it.
 		// But in this case, if we let the sink close this producer, the test will panic
 		// because we will attempt to send acknowledgements on a closed channel.
-		producer := &ignoreCloseProducer{newAsyncProducerMock(100), nil}
+		producer := &asyncIgnoreCloseProducer{newAsyncProducerMock(100)}
 
 		interceptor := func(m *sarama.ProducerMessage) bool {
 			if s.knobs != nil && s.knobs.kafkaInterceptor != nil {
@@ -1699,7 +1707,7 @@ func (s *fakeKafkaSink) Dial() error {
 	}
 
 	kafka.knobs.OverrideSyncProducerFromClient = func(client kafkaClient) (sarama.SyncProducer, error) {
-		return &ignoreCloseProducer{nil, &syncProducerMock{
+		return &syncIgnoreCloseProducer{&syncProducerMock{
 			overrideSend: func(m *sarama.ProducerMessage) error {
 				if s.knobs != nil && s.knobs.kafkaInterceptor != nil {
 					err := s.knobs.kafkaInterceptor(m, client)

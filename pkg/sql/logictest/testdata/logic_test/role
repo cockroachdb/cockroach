@@ -1530,7 +1530,7 @@ statement ok
 SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = false
 
 # Password hash not recognized: hash considered as password input.
-statement ok
+statement error pgcode 28P01 bcrypt: password length exceeds 72 bytes
 CREATE USER hash4 WITH PASSWORD '$bcrypt_pw'
 
 # Password hash not recognized: hash considered as password input.
@@ -1538,7 +1538,7 @@ statement ok
 CREATE USER hash5 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
 # Password hash not recognized: hash considered as password input.
-statement ok
+statement error pgcode 28P01 bcrypt: password length exceeds 72 bytes
 CREATE USER hash6 WITH PASSWORD '$scram_pw'
 
 query TTB
@@ -1546,9 +1546,7 @@ SELECT username, substr("hashedPassword", 1, 7), 'CRDB-BCRYPT'||"hashedPassword"
 ----
 hash1  $2a$10$  true
 hash3  SCRAM-S  false
-hash4  $2a$10$  false
 hash5  $2a$10$  false
-hash6  $2a$10$  false
 
 # Reset cluster setting after test completion.
 statement ok
