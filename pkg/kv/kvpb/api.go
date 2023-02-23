@@ -394,6 +394,19 @@ func (dr *RevertRangeResponse) combine(c combinable) error {
 var _ combinable = &RevertRangeResponse{}
 
 // combine implements the combinable interface.
+func (rr *ResolveIntentResponse) combine(c combinable) error {
+	otherRR := c.(*ResolveIntentResponse)
+	if rr != nil {
+		if err := rr.ResponseHeader.combine(otherRR.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &ResolveIntentResponse{}
+
+// combine implements the combinable interface.
 func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
