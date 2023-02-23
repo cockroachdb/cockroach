@@ -982,6 +982,9 @@ func restoreTypeCheck(
 			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			tree.Exprs(restoreStmt.Options.IncrementalStorage),
 		),
+		exprutil.Bools{
+			restoreStmt.Options.IncludeAllSecondaryTenants,
+		},
 		exprutil.Strings{
 			restoreStmt.Subdir,
 			restoreStmt.Options.EncryptionPassphrase,
@@ -1134,6 +1137,18 @@ func restorePlanHook(
 		}
 	}
 
+	var restoreAllTenants bool
+	if restoreStmt.Options.IncludeAllSecondaryTenants != nil {
+		if restoreStmt.DescriptorCoverage != tree.AllDescriptors {
+			return nil, nil, nil, false, errors.New("the include_all_secondary_tenants option is only supported for full cluster restores")
+		}
+		var err error
+		restoreAllTenants, err = exprEval.Bool(ctx, restoreStmt.Options.IncludeAllSecondaryTenants)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	var newTenantID *roachpb.TenantID
 	var newTenantName *roachpb.TenantName
 	if restoreStmt.Options.AsTenant != nil || restoreStmt.Options.ForceTenantID != nil {
@@ -1220,7 +1235,7 @@ func restorePlanHook(
 		// locality aware.
 
 		return doRestorePlan(
-			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, intoDB,
+			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, restoreAllTenants, intoDB,
 			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir,
 		)
 	}
@@ -1411,6 +1426,7 @@ func doRestorePlan(
 	incFrom []string,
 	passphrase string,
 	kms []string,
+	restoreAllTenants bool,
 	intoDB string,
 	newDBName string,
 	newTenantID *roachpb.TenantID,
@@ -1657,7 +1673,7 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
+		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreAllTenants,
 	)
 	if err != nil {
 		return errors.Wrap(err,
