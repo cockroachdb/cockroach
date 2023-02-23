@@ -151,7 +151,7 @@ func (ex *connExecutor) prepare(
 ) (_ *PreparedStatement, retErr error) {
 
 	prepared := &PreparedStatement{
-		memAcc:   ex.sessionMon.MakeBoundAccount(),
+		memAcc:   ex.sessionPreparedMon.MakeBoundAccount(),
 		refCount: 1,
 
 		createdAt: timeutil.Now(),
