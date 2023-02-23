@@ -437,6 +437,8 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	} else {
 		f.responses = nil
 	}
+	// TODO(yuzefovich): BatchResponse.Size ignores the overhead of the
+	// GetResponse and ScanResponse structs. We should include it here.
 	returnedBytes := int64(br.Size())
 	if monitoring && (returnedBytes > int64(f.batchBytesLimit) || returnedBytes > f.batchResponseAccountedFor) {
 		// Resize up to the actual amount of bytes we got back from the fetch,

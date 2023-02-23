@@ -74,6 +74,8 @@ type singleRangeBatch struct {
 	// subRequestIdx is only allocated in InOrder mode when
 	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
 	subRequestIdx []int32
+	// numGetsInReqs tracks the number of Get requests in reqs.
+	numGetsInReqs int64
 	// reqsReservedBytes tracks the memory reservation against the budget for
 	// the memory usage of reqs, excluding the overhead.
 	reqsReservedBytes int64
@@ -82,9 +84,6 @@ type singleRangeBatch struct {
 	// well as the positions and the subRequestIdx slices. Since we reuse these
 	// slices for the resume requests, this can be released only when the
 	// BatchResponse doesn't have any resume spans.
-	//
-	// RequestUnion.Size() ignores the overhead of RequestUnion object, so we
-	// need to account for it separately.
 	overheadAccountedFor int64
 	// minTargetBytes, if positive, indicates the minimum TargetBytes limit that
 	// this singleRangeBatch should be sent with in order for the response to
