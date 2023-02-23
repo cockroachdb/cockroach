@@ -347,6 +347,8 @@ func createInMemoryTenant(
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
 
+	removeTenantRateLimiters(t, sysSQL, tenantName)
+
 	// Opening a SQL session to a newly created in-process tenant may require a
 	// few retries. Unfortunately, the c.ConnE and MakeSQLRunner APIs do not make
 	// it clear if they eagerly open a session with the tenant or wait until the
@@ -365,14 +367,22 @@ func createInMemoryTenant(
 		return nil
 	})
 
-	// Currently, a tenant has by default a 10m RU burst limit, which can be
-	// reached during these tests. To prevent RU limit throttling, add 10B RUs to
-	// the tenant.
-	var tenantID int
-	sysSQL.QueryRow(t, `SELECT id FROM [SHOW TENANT $1]`, tenantName).Scan(&tenantID)
-	sysSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
-10000000000, now(), 0);`, tenantID)
 	if secure {
 		createTenantAdminRole(t, tenantName, tenantSQL)
 	}
+}
+
+// removeTenantRateLimiters ensures the tenant is not throttled by limiters.
+func removeTenantRateLimiters(t test.Test, systemSQL *sqlutils.SQLRunner, tenantName string) {
+	var tenantID int
+	systemSQL.QueryRow(t, `SELECT id FROM [SHOW TENANT $1]`, tenantName).Scan(&tenantID)
+	systemSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
+10000000000, now(), 0);`, tenantID)
+	systemSQL.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.tenant_rate_limiter.burst_limit_seconds = 10000;`,
+		`SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = -1000; `,
+		`SET CLUSTER SETTING kv.tenant_rate_limiter.read_batch_cost = 0;`,
+		`SET CLUSTER SETTING kv.tenant_rate_limiter.read_cost_per_mebibyte = 0;`,
+		`SET CLUSTER SETTING kv.tenant_rate_limiter.write_cost_per_megabyte = 0;`,
+		`SET CLUSTER SETTING kv.tenant_rate_limiter.write_request_cost = 0;`)
 }
