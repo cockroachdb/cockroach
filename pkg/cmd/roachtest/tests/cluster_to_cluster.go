@@ -409,6 +409,21 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:            5 * time.Minute,
 		},
 		{
+			name:     "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
+			srcNodes: 4,
+			dstNodes: 4,
+			cpus:     8,
+			pdSize:   1000,
+			// 500 warehouses adds 30 GB to source
+			//
+			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
+			// job speeds up.
+			workload:           replicateTPCC{warehouses: 1000},
+			timeout:            3 * time.Hour,
+			additionalDuration: 60 * time.Minute,
+			cutover:            30 * time.Minute,
+		},
+		{
 			name:               "c2c/kv0",
 			srcNodes:           3,
 			dstNodes:           3,
