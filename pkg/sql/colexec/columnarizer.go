@@ -155,12 +155,9 @@ func newColumnarizer(
 	c.ProcessorBaseNoHelper.Init(
 		nil, /* self */
 		flowCtx,
-		// Similar to the materializer, the columnarizer will update the eval
-		// context when closed, so we give it a copy of the eval context to
-		// preserve the "global" eval context from being mutated. In practice,
-		// the columnarizer is closed only when DrainMeta() is called which
-		// occurs at the very end of the execution, yet we choose to be
-		// defensive here.
+		// The columnarizer will update the eval context when closed, so we give
+		// it a copy of the eval context to preserve the "global" eval context
+		// from being mutated.
 		flowCtx.NewEvalCtx(),
 		processorID,
 		nil, /* output */

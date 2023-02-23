@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -165,38 +164,6 @@ func NewMaterializer(
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 ) *Materializer {
-	// When the materializer is created in the middle of the chain of operators,
-	// it will modify the eval context when it is done draining, so we have to
-	// give it a copy to preserve the "global" eval context from being mutated.
-	return newMaterializerInternal(allocator, flowCtx, flowCtx.NewEvalCtx(), processorID, input, typs)
-}
-
-// NewMaterializerNoEvalCtxCopy is the same as NewMaterializer but doesn't make
-// a copy of the eval context (i.e. it'll use the "global" one coming from the
-// flowCtx).
-//
-// This should only be used when the materializer is at the root of the operator
-// tree which is acceptable because the root materializer is closed (which
-// modifies the eval context) only when the whole flow is done, at which point
-// the eval context won't be used anymore.
-func NewMaterializerNoEvalCtxCopy(
-	allocator *colmem.Allocator,
-	flowCtx *execinfra.FlowCtx,
-	processorID int32,
-	input colexecargs.OpWithMetaInfo,
-	typs []*types.T,
-) *Materializer {
-	return newMaterializerInternal(allocator, flowCtx, flowCtx.EvalCtx, processorID, input, typs)
-}
-
-func newMaterializerInternal(
-	allocator *colmem.Allocator,
-	flowCtx *execinfra.FlowCtx,
-	evalCtx *eval.Context,
-	processorID int32,
-	input colexecargs.OpWithMetaInfo,
-	typs []*types.T,
-) *Materializer {
 	m := materializerPool.Get().(*Materializer)
 	*m = Materializer{
 		ProcessorBaseNoHelper: m.ProcessorBaseNoHelper,
@@ -212,7 +179,10 @@ func newMaterializerInternal(
 	m.Init(
 		m,
 		flowCtx,
-		evalCtx,
+		// The materializer will update the eval context when closed, so we give
+		// it a copy of the eval context to preserve the "global" eval context
+		// from being mutated.
+		flowCtx.NewEvalCtx(),
 		processorID,
 		nil, /* output */
 		execinfra.ProcStateOpts{
