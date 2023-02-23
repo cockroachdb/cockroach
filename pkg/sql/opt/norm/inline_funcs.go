@@ -411,6 +411,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  2. It has a single statement.
 //  3. It is not a set-returning function.
 //  4. Its arguments are only Variable or Const expressions.
+//  5. It is not a record-returning function.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -434,8 +435,13 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // referenced in the UDF body more than once. Any argument that contains a
 // subquery and is referenced multiple times cannot be inlined, unless new
 // columns IDs for the entire subquery are generated (see #100915).
+//
+// TODO(harding): We could potentially loosen (5), since only record-returning
+// UDFs used as data sources return multiple columns. Other UDFs returning a
+// single column can be inlined since subqueries can only return a single
+// column.
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
-	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning || udfp.MultiColDataSource {
 		return false
 	}
 	if !args.IsConstantsAndPlaceholdersAndVariables() {
