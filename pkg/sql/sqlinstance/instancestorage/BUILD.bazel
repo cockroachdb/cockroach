@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "instancestorage",
     srcs = [
+        "instancefeed.go",
         "instancereader.go",
         "instancestorage.go",
         "row_codec.go",
@@ -50,6 +51,7 @@ go_test(
     name = "instancestorage_test",
     srcs = [
         "helpers_test.go",
+        "instancefeed_test.go",
         "instancereader_test.go",
         "instancestorage_internal_test.go",
         "instancestorage_test.go",
@@ -60,6 +62,7 @@ go_test(
     embed = [":instancestorage"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
@@ -67,7 +70,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",
@@ -82,6 +84,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
+        "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

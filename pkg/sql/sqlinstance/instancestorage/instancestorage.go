@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,6 +87,8 @@ type Storage struct {
 	slReader sqlliveness.Reader
 	rowcodec rowCodec
 	settings *cluster.Settings
+	clock    *hlc.Clock
+	f        *rangefeed.Factory
 	// TestingKnobs refers to knobs used for testing.
 	TestingKnobs struct {
 		// JitteredIntervalFn corresponds to the function used to jitter the
@@ -119,21 +122,30 @@ func NewTestingStorage(
 	table catalog.TableDescriptor,
 	slReader sqlliveness.Reader,
 	settings *cluster.Settings,
+	clock *hlc.Clock,
+	f *rangefeed.Factory,
 ) *Storage {
 	s := &Storage{
 		db:       db,
 		rowcodec: makeRowCodec(codec, table),
 		slReader: slReader,
 		settings: settings,
+		clock:    clock,
+		f:        f,
 	}
 	return s
 }
 
 // NewStorage creates a new storage struct.
 func NewStorage(
-	db *kv.DB, codec keys.SQLCodec, slReader sqlliveness.Reader, settings *cluster.Settings,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	slReader sqlliveness.Reader,
+	settings *cluster.Settings,
+	clock *hlc.Clock,
+	f *rangefeed.Factory,
 ) *Storage {
-	return NewTestingStorage(db, codec, systemschema.SQLInstancesTable(), slReader, settings)
+	return NewTestingStorage(db, codec, systemschema.SQLInstancesTable(), slReader, settings, clock, f)
 }
 
 // CreateNodeInstance claims a unique instance identifier for the SQL pod, and
@@ -281,6 +293,12 @@ func (s *Storage) createInstanceRow(
 
 	// If we exit here, it has to be the case where the context has expired.
 	return sqlinstance.InstanceInfo{}, ctx.Err()
+}
+
+// newInstanceFeed constructs an instance feed over the sql_instances table.
+// newInstanceFeed blocks until the initial scan is complete.
+func (s *Storage) newInstanceFeed(ctx context.Context) (instanceFeed, error) {
+	return newRangeFeed(ctx, s.rowcodec, s.clock, s.f)
 }
 
 // getAvailableInstanceIDForRegion retrieves an available instance ID for the
