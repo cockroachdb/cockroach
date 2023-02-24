@@ -126,6 +126,6 @@ var CompactionJobRowsToDeletePerTxn = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.stats.cleanup.rows_to_delete_per_txn",
 	"number of rows the compaction job deletes from system table per iteration",
-	1024,
+	10000,
 	settings.NonNegativeInt,
 )
