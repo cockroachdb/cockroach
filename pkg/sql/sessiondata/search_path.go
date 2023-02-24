@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // DefaultSearchPath is the search path used by virgin sessions.
@@ -35,6 +36,7 @@ type SearchPath struct {
 	containsPgTempSchema bool
 	tempSchemaName       string
 	userSchemaName       string
+	duplicatedIndexes    intsets.Fast
 }
 
 // EmptySearchPath is a SearchPath with no schema names in it.
@@ -49,25 +51,31 @@ func DefaultSearchPathForUser(userName username.SQLUsername) SearchPath {
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice
 // must not be modified after hand-off to MakeSearchPath.
 func MakeSearchPath(paths []string) SearchPath {
-	containsPgCatalog := false
-	containsPgExtension := false
-	containsPgTempSchema := false
-	for _, e := range paths {
+	exists := func(p []string, e string) bool {
+		for i := range p {
+			if p[i] == e {
+				return true
+			}
+		}
+		return false
+	}
+
+	sp := SearchPath{paths: paths}
+
+	for i, e := range paths {
 		switch e {
 		case catconstants.PgCatalogName:
-			containsPgCatalog = true
+			sp.containsPgCatalog = true
 		case catconstants.PgTempSchemaName:
-			containsPgTempSchema = true
+			sp.containsPgTempSchema = true
 		case catconstants.PgExtensionSchemaName:
-			containsPgExtension = true
+			sp.containsPgExtension = true
+		}
+		if exists(paths[:i], e) {
+			sp.duplicatedIndexes.Add(i)
 		}
 	}
-	return SearchPath{
-		paths:                paths,
-		containsPgCatalog:    containsPgCatalog,
-		containsPgExtension:  containsPgExtension,
-		containsPgTempSchema: containsPgTempSchema,
-	}
+	return sp
 }
 
 // WithTemporarySchemaName returns a new immutable SearchPath struct with
@@ -82,6 +90,7 @@ func (s SearchPath) WithTemporarySchemaName(tempSchemaName string) SearchPath {
 		containsPgExtension:  s.containsPgExtension,
 		userSchemaName:       s.userSchemaName,
 		tempSchemaName:       tempSchemaName,
+		duplicatedIndexes:    s.duplicatedIndexes,
 	}
 }
 
@@ -95,6 +104,7 @@ func (s SearchPath) WithUserSchemaName(userSchemaName string) SearchPath {
 		containsPgExtension:  s.containsPgExtension,
 		userSchemaName:       userSchemaName,
 		tempSchemaName:       s.tempSchemaName,
+		duplicatedIndexes:    s.duplicatedIndexes,
 	}
 }
 
@@ -143,6 +153,7 @@ func (s SearchPath) Iter() SearchPathIter {
 		implicitPgTempSchema: implicitPgTempSchema,
 		tempSchemaName:       s.tempSchemaName,
 		userSchemaName:       s.userSchemaName,
+		duplicatedIndexes:    s.duplicatedIndexes,
 	}
 	return sp
 }
@@ -156,6 +167,7 @@ func (s SearchPath) IterWithoutImplicitPGSchemas() SearchPathIter {
 		implicitPgTempSchema: false,
 		tempSchemaName:       s.tempSchemaName,
 		userSchemaName:       s.userSchemaName,
+		duplicatedIndexes:    s.duplicatedIndexes,
 	}
 	return sp
 }
@@ -248,6 +260,7 @@ type SearchPathIter struct {
 	implicitPgTempSchema bool
 	tempSchemaName       string
 	userSchemaName       string
+	duplicatedIndexes    intsets.Fast
 	i                    int
 }
 
@@ -265,6 +278,7 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 	}
 
 	if iter.i < len(iter.paths) {
+		var ret string
 		iter.i++
 		// If pg_temp is explicitly present in the paths, it must be resolved to the
 		// session specific temp schema (if one exists). tempSchemaName is set in the
@@ -275,7 +289,7 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 			if iter.tempSchemaName == "" {
 				return iter.Next()
 			}
-			return iter.tempSchemaName, true
+			ret = iter.tempSchemaName
 		}
 		if iter.paths[iter.i-1] == catconstants.UserSchemaName {
 			// In case the user schema name is unset, we simply iterate to the next
@@ -283,16 +297,25 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 			if iter.userSchemaName == "" {
 				return iter.Next()
 			}
-			return iter.userSchemaName, true
+			ret = iter.userSchemaName
 		}
 		// pg_extension should be read before delving into the schema.
 		if iter.paths[iter.i-1] == catconstants.PublicSchemaName && iter.implicitPgExtension {
 			iter.implicitPgExtension = false
 			// Go back one so `public` can be found again next.
 			iter.i--
-			return catconstants.PgExtensionSchemaName, true
+			ret = catconstants.PgExtensionSchemaName
 		}
-		return iter.paths[iter.i-1], true
+
+		if ret == "" {
+			ret = iter.paths[iter.i-1]
+		}
+
+		for iter.i < len(iter.paths) && iter.duplicatedIndexes.Contains(iter.i) {
+			iter.i++
+		}
+
+		return ret, true
 	}
 	return "", false
 }
