@@ -57,8 +57,12 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 
 			// Check conversion succeeds.
 			autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&s.SV)
+			autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&s.SV)
 			method := security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
-			converted, prevHash, newHashBytes, hashMethod, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, bh, nil, log.Infof)
+			converted, prevHash, newHashBytes, hashMethod, err := password.MaybeConvertPasswordHash(
+				ctx, autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool,
+				method, cleartext, bh, nil, log.Infof,
+			)
 			require.NoError(t, err)
 			require.True(t, converted)
 			require.Equal(t, "SCRAM-SHA-256", string(newHashBytes)[:13])
@@ -67,6 +71,7 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 
 			newHash := password.LoadPasswordHash(ctx, newHashBytes)
 			ok, creds := password.GetSCRAMStoredCredentials(newHash)
+			require.Equal(t, password.HashSCRAMSHA256, newHash.Method())
 			require.True(t, ok)
 			require.Equal(t, password.BcryptCostToSCRAMIterCount[i], int64(creds.Iters))
 
@@ -74,7 +79,64 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 			autoUpgradePasswordHashesBool = security.AutoUpgradePasswordHashes.Get(&s.SV)
 			method = security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
 
-			ec, _, _, _, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, newHash, nil, log.Infof)
+			ec, _, _, _, err := password.MaybeConvertPasswordHash(
+				ctx, autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool,
+				method, cleartext, newHash, nil, log.Infof,
+			)
+			require.NoError(t, err)
+			require.False(t, ec)
+		})
+	}
+}
+
+func TestSCRAMToBCryptConversion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s := cluster.MakeTestingClusterSettings()
+
+	const cleartext = "hello"
+
+	ourDefault := int(security.BcryptCost.Get(&s.SV))
+	security.PasswordHashMethod.Override(ctx, &s.SV, int64(password.HashBCrypt))
+
+	// Don't iterate all the way to the max cost: the larger values
+	// incur incredibly large hashing times.
+	for i := bcrypt.MinCost; i < ourDefault+3; i++ {
+		iterCount := password.BcryptCostToSCRAMIterCount[i]
+		t.Run(fmt.Sprintf("bcrypt=%d", i), func(t *testing.T) {
+
+			scramRaw, err := password.HashPassword(ctx, int(iterCount), password.HashSCRAMSHA256, cleartext, nil /* hashSem */)
+			require.NoError(t, err)
+			sh := password.LoadPasswordHash(ctx, scramRaw)
+			require.Equal(t, password.HashSCRAMSHA256, sh.Method())
+
+			// Check conversion succeeds.
+			autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&s.SV)
+			autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&s.SV)
+			method := security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
+			converted, prevHash, newHashBytes, hashMethod, err := password.MaybeConvertPasswordHash(
+				ctx, autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool,
+				method, cleartext, sh, nil, log.Infof,
+			)
+			require.NoError(t, err)
+			require.True(t, converted)
+			require.Equal(t, password.HashBCrypt.String(), hashMethod)
+			require.Equal(t, scramRaw, prevHash)
+
+			newHash := password.LoadPasswordHash(ctx, newHashBytes)
+			cost, err := bcrypt.Cost(newHashBytes)
+			require.Equal(t, password.HashBCrypt, newHash.Method())
+			require.NoError(t, err)
+			require.Equal(t, i, cost)
+
+			// Check that converted hash can't be converted further.
+			autoUpgradePasswordHashesBool = security.AutoUpgradePasswordHashes.Get(&s.SV)
+			method = security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
+
+			ec, _, _, _, err := password.MaybeConvertPasswordHash(
+				ctx, autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool,
+				method, cleartext, newHash, nil, log.Infof,
+			)
 			require.NoError(t, err)
 			require.False(t, ec)
 		})

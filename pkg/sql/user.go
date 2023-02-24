@@ -658,17 +658,18 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser username.SQ
 	return nil
 }
 
-// MaybeUpgradeStoredPasswordHash attempts to convert a stored hash
-// that was encoded using crdb-bcrypt, to the SCRAM-SHA-256 format.
+// MaybeConvertStoredPasswordHash attempts to convert a stored hash
+// to match the current server.user_login.password_encryption setting..
 //
 // This auto-conversion is a CockroachDB-specific feature, which
 // pushes clusters upgraded from a previous version into using
-// SCRAM-SHA-256.
+// SCRAM-SHA-256, and also allows easy downgrading from SCRAM-SHA-256
+// back to crdb-bcrypt.
 //
 // The caller is responsible for ensuring this function is only called
 // after a successful authentication, that is, the provided cleartext
 // password is known to match the previously-encoded prevHash.
-func MaybeUpgradeStoredPasswordHash(
+func MaybeConvertStoredPasswordHash(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	userName username.SQLUsername,
@@ -679,11 +680,16 @@ func MaybeUpgradeStoredPasswordHash(
 	// configuration.
 
 	autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&execCfg.Settings.SV)
+	autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&execCfg.Settings.SV)
 	hashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
 
-	converted, prevHash, newHash, newMethod, err := password.MaybeUpgradePasswordHash(ctx,
-		autoUpgradePasswordHashesBool, hashMethod, cleartext, currentHash,
-		security.GetExpensiveHashComputeSem(ctx), log.Infof)
+	converted, prevHash, newHash, newMethod, err := password.MaybeConvertPasswordHash(
+		ctx,
+		autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool,
+		hashMethod, cleartext, currentHash,
+		security.GetExpensiveHashComputeSem(ctx),
+		log.Infof,
+	)
 	if err != nil {
 		// We're not returning an error: clients should not be refused a
 		// session just because a password conversion failed.
