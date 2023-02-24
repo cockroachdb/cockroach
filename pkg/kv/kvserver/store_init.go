@@ -147,8 +147,8 @@ func WriteInitialClusterData(
 		log.VEventf(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
-		batch := eng.NewBatch()
-		defer batch.Close()
+		stateBatch := eng.NewBatch()
+		defer stateBatch.Close()
 
 		now := hlc.Timestamp{
 			WallTime: nowNanos,
@@ -161,14 +161,14 @@ func WriteInitialClusterData(
 		// If requested, write an MVCC range tombstone at the bottom of the
 		// keyspace, for performance and correctness testing.
 		if knobs.GlobalMVCCRangeTombstone {
-			if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
+			if err := writeGlobalMVCCRangeTombstone(ctx, stateBatch, desc, now.Prev()); err != nil {
 				return err
 			}
 		}
 
 		// Range descriptor.
 		if err := storage.MVCCPutProto(
-			ctx, batch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
+			ctx, stateBatch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
 			now, hlc.ClockTimestamp{}, nil /* txn */, desc,
 		); err != nil {
 			return err
@@ -176,7 +176,7 @@ func WriteInitialClusterData(
 
 		// Replica GC timestamp.
 		if err := storage.MVCCPutProto(
-			ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
+			ctx, stateBatch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
 			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &now,
 		); err != nil {
 			return err
@@ -184,7 +184,7 @@ func WriteInitialClusterData(
 		// Range addressing for meta2.
 		meta2Key := keys.RangeMetaKey(endKey)
 		if err := storage.MVCCPutProto(
-			ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
+			ctx, stateBatch, firstRangeMS, meta2Key.AsRawKey(),
 			now, hlc.ClockTimestamp{}, nil /* txn */, desc,
 		); err != nil {
 			return err
@@ -195,7 +195,7 @@ func WriteInitialClusterData(
 			// Range addressing for meta1.
 			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
 			if err := storage.MVCCPutProto(
-				ctx, batch, nil /* ms */, meta1Key.AsRawKey(), now, hlc.ClockTimestamp{}, nil /* txn */, desc,
+				ctx, stateBatch, nil /* ms */, meta1Key.AsRawKey(), now, hlc.ClockTimestamp{}, nil /* txn */, desc,
 			); err != nil {
 				return err
 			}
@@ -206,27 +206,27 @@ func WriteInitialClusterData(
 			// Initialize the checksums.
 			kv.Value.InitChecksum(kv.Key)
 			if err := storage.MVCCPut(
-				ctx, batch, nil /* ms */, kv.Key, now, hlc.ClockTimestamp{}, kv.Value, nil, /* txn */
+				ctx, stateBatch, nil /* ms */, kv.Key, now, hlc.ClockTimestamp{}, kv.Value, nil, /* txn */
 			); err != nil {
 				return err
 			}
 		}
 
 		if err := stateloader.WriteInitialRangeState(
-			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
+			ctx, stateBatch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
 			return err
 		}
-		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
+		computedStats, err := rditer.ComputeStatsForRange(desc, stateBatch, now.WallTime)
 		if err != nil {
 			return err
 		}
 
 		sl := stateloader.Make(rangeID)
-		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
+		if err := sl.SetMVCCStats(ctx, stateBatch, &computedStats); err != nil {
 			return err
 		}
 
-		if err := batch.Commit(true /* sync */); err != nil {
+		if err := stateBatch.Commit(true /* sync */); err != nil {
 			return err
 		}
 	}
