@@ -21,6 +21,7 @@ import {
   Duration,
   performanceBestPractices,
   statementsRetries,
+  stmtPerformanceRules,
 } from "../util";
 import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
@@ -91,6 +92,12 @@ function descriptionCell(
   const summary = computeOrUseStmtSummary(
     insightRec.execution?.statement,
     insightRec.execution?.summary,
+  );
+
+  const learnMoreSuboptimalPlan = (
+    <Anchor href={stmtPerformanceRules} target="_blank">
+      Learn more
+    </Anchor>
   );
 
   const indexLink = isCockroachCloud
@@ -190,7 +197,7 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
-            {insightRec.details.description}
+            {insightRec.details.description} {learnMoreSuboptimalPlan}
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Recommendation: </span>{" "}
