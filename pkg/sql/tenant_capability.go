@@ -14,25 +14,19 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
-const canAdminSplitCapabilityName = "can_admin_split"
-const canAdminUnsplitCapabilityName = "can_admin_unsplit"
-const canViewNodeInfoCapabilityName = "can_view_node_info"
-const canViewTsdbMetricsCapabilityName = "can_view_tsdb_metrics"
-
 var capabilityTypes = map[string]*types.T{
-	canAdminSplitCapabilityName:      types.Bool,
-	canAdminUnsplitCapabilityName:    types.Bool,
-	canViewNodeInfoCapabilityName:    types.Bool,
-	canViewTsdbMetricsCapabilityName: types.Bool,
+	tenantcapabilitiespb.CanAdminSplit:      types.Bool,
+	tenantcapabilitiespb.CanViewNodeInfo:    types.Bool,
+	tenantcapabilitiespb.CanViewTSDBMetrics: types.Bool,
 }
 
 const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
@@ -60,29 +54,33 @@ func (p *planner) AlterTenantCapability(
 	}
 
 	exprs := make([]tree.TypedExpr, len(n.Capabilities))
-	for i, cap := range n.Capabilities {
-		desiredType, ok := capabilityTypes[cap.Name]
+	for i, capability := range n.Capabilities {
+		capabilityName := capability.Name
+		desiredType, ok := capabilityTypes[capabilityName]
 		if !ok {
-			return nil, pgerror.Newf(pgcode.Syntax, "unknown capability: %q", cap.Name)
+			return nil, pgerror.Newf(pgcode.Syntax, "unknown capability: %q", capabilityName)
 		}
 
 		// In REVOKE, we do not support a value assignment.
+		capabilityValue := capability.Value
 		if n.IsRevoke {
-			if cap.Value != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "no value allowed in revoke: %q", cap.Name)
+			if capabilityValue != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "no value allowed in revoke: %q", capabilityName)
 			}
 			continue
 		}
 
 		// Type check the expression on the right-hand side of the
 		// assignment.
-		var dummyHelper tree.IndexedVarHelper
-		typedValue, err := p.analyzeExpr(
-			ctx, cap.Value, nil, dummyHelper, desiredType, true /* requireType */, fmt.Sprintf("%s %s", alterTenantCapabilityOp, cap.Name))
-		if err != nil {
-			return nil, err
+		if capabilityValue != nil {
+			var dummyHelper tree.IndexedVarHelper
+			typedValue, err := p.analyzeExpr(
+				ctx, capabilityValue, nil, dummyHelper, desiredType, true /* requireType */, fmt.Sprintf("%s %s", alterTenantCapabilityOp, capability.Name))
+			if err != nil {
+				return nil, err
+			}
+			exprs[i] = typedValue
 		}
-		exprs[i] = typedValue
 	}
 
 	return &alterTenantCapabilityNode{
@@ -118,47 +116,54 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 	}
 
 	dst := &tenantInfo.Capabilities
-	for i, cap := range n.n.Capabilities {
-		switch cap.Name {
-		case canAdminSplitCapabilityName:
+	for i, capability := range n.n.Capabilities {
+		capabilityName := capability.Name
+		typedExpr := n.typedExprs[i]
+		switch capabilityName {
+		case tenantcapabilitiespb.CanAdminSplit:
 			if n.n.IsRevoke {
 				dst.CanAdminSplit = false
 			} else {
-				b, err := paramparse.DatumAsBool(ctx, p.EvalContext(), cap.Name, n.typedExprs[i])
-				if err != nil {
-					return err
+				b := true
+				if typedExpr != nil {
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName, typedExpr)
+					if err != nil {
+						return err
+					}
 				}
 				dst.CanAdminSplit = b
 			}
 
-		case canAdminUnsplitCapabilityName:
-			// TODO(sql-sessions): handle this capability.
-			return unimplemented.Newf("cap-unsplit", "update capability %q", cap.Name)
-
-		case canViewNodeInfoCapabilityName:
+		case tenantcapabilitiespb.CanViewNodeInfo:
 			if n.n.IsRevoke {
 				dst.CanViewNodeInfo = false
 			} else {
-				b, err := paramparse.DatumAsBool(ctx, p.EvalContext(), cap.Name, n.typedExprs[i])
-				if err != nil {
-					return err
+				b := true
+				if typedExpr != nil {
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName, typedExpr)
+					if err != nil {
+						return err
+					}
 				}
 				dst.CanViewNodeInfo = b
 			}
 
-		case canViewTsdbMetricsCapabilityName:
+		case tenantcapabilitiespb.CanViewTSDBMetrics:
 			if n.n.IsRevoke {
-				dst.CanViewTsdbMetrics = false
+				dst.CanViewTSDBMetrics = false
 			} else {
-				b, err := paramparse.DatumAsBool(ctx, p.EvalContext(), cap.Name, n.typedExprs[i])
-				if err != nil {
-					return err
+				b := true
+				if typedExpr != nil {
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName, typedExpr)
+					if err != nil {
+						return err
+					}
 				}
-				dst.CanViewTsdbMetrics = b
+				dst.CanViewTSDBMetrics = b
 			}
 
 		default:
-			return errors.AssertionFailedf("unhandled: %q", cap.Name)
+			return errors.AssertionFailedf("unhandled: %q", capabilityName)
 		}
 	}
 
