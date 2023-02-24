@@ -143,6 +143,10 @@ const (
 	// DefaultDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
 	DefaultDescriptorLeaseRenewalTimeout = time.Minute
+
+	// DefaultDescriptorLeaseRenewalTimeout is the default time
+	// before a lease expires when acquisition to renew the lease begins.
+	DefaultLeaseRenewalCrossValidate = false
 )
 
 // DefaultCertsDirectory is the default value for the cert directory flag.
