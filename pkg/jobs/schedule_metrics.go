@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 // ExecutorMetrics describes metrics related to scheduled
@@ -24,10 +25,27 @@ type ExecutorMetrics struct {
 	NumFailed    *metric.Counter
 }
 
+// ExecutorPTSMetrics describes metrics related to protected
+// timestamp system for executors that maintain PTS records.
+type ExecutorPTSMetrics struct {
+	NumWithPTS *metric.Gauge
+	PTSAge     *metric.Gauge
+}
+
+// PTSMetrics is a marker interface indicating that executor metrics
+// also keep track of PTS related metrics.
+type PTSMetrics interface {
+	PTSMetrics() *ExecutorPTSMetrics
+}
+
 var _ metric.Struct = &ExecutorMetrics{}
+var _ metric.Struct = &ExecutorPTSMetrics{}
 
 // MetricStruct implements metric.Struct interface
 func (m *ExecutorMetrics) MetricStruct() {}
+
+// MetricStruct implements metric.Struct interface.
+func (m *ExecutorPTSMetrics) MetricStruct() {}
 
 // SchedulerMetrics are metrics specific to job scheduler daemon.
 type SchedulerMetrics struct {
@@ -111,6 +129,26 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Help:        fmt.Sprintf("Number of %s jobs failed", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+		}),
+	}
+}
+
+// MakeExecutorPTSMetrics creates PTS metrics.
+func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
+	return ExecutorPTSMetrics{
+		NumWithPTS: metric.NewGauge(metric.Metadata{
+			Name:        fmt.Sprintf("schedules.%s.protected_record_count", name),
+			Help:        fmt.Sprintf("Number of PTS records held by %s schedules", name),
+			Measurement: "Records",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_GAUGE,
+		}),
+		PTSAge: metric.NewGauge(metric.Metadata{
+			Name:        fmt.Sprintf("schedules.%s.protected_age_sec", name),
+			Help:        fmt.Sprintf("The age of the oldest PTS record protected by %s schedules", name),
+			Measurement: "Seconds",
+			Unit:        metric.Unit_SECONDS,
+			MetricType:  io_prometheus_client.MetricType_GAUGE,
 		}),
 	}
 }
