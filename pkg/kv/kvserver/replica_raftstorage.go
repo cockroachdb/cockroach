@@ -74,8 +74,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
-// Entries requires that r.mu is held for writing because it requires exclusive
-// access to r.mu.stateLoader.
+// Holding r.mu is not required.
 //
 // Entries can return log entries that are not yet stable in durable storage.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
@@ -83,7 +82,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+	return logstore.LoadEntries(ctx, r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
