@@ -258,23 +258,22 @@ type granterWithLockedCalls interface {
 // The interface is used by the entity that periodically looks at load and
 // computes the tokens to grant (ioLoadListener).
 type granterWithIOTokens interface {
-	// setAvailableIOTokensLocked bounds the available tokens that can be
-	// granted to the value provided in the tokens parameter. This is not a
-	// tight bound when the callee has negative available tokens, due to the use
-	// of granter.tookWithoutPermission, since in that the case the callee
+	// setAvailableTokens bounds the available {io,elastic disk bandwidth}
+	// tokens that can be granted to the value provided in the
+	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens
+	// bounds what can be granted to elastic work, and is based on disk
+	// bandwidth being a bottleneck resource. These are not tight bounds when
+	// the callee has negative available tokens, due to the use of
+	// granter.tookWithoutPermission, since in that the case the callee
 	// increments that negative value with the value provided by tokens. This
 	// method needs to be called periodically. The return value is the number of
 	// used tokens in the interval since the prior call to this method. Note
 	// that tokensUsed can be negative, though that will be rare, since it is
 	// possible for tokens to be returned.
-	setAvailableIOTokensLocked(tokens int64) (tokensUsed int64)
-	// setAvailableElasticDiskBandwidthTokensLocked bounds the available tokens
-	// that can be granted to elastic work. These tokens are based on disk
-	// bandwidth being a bottleneck resource.
-	setAvailableElasticDiskBandwidthTokensLocked(tokens int64)
-	// getDiskTokensUsedAndResetLocked returns the disk bandwidth tokens used
+	setAvailableTokens(ioTokens int64, elasticDiskBandwidthTokens int64) (tokensUsed int64)
+	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
 	// since the last such call.
-	getDiskTokensUsedAndResetLocked() [admissionpb.NumWorkClasses]int64
+	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
 	// setAdmittedDoneModelsLocked supplies the models to use when
 	// storeWriteDone is called, to adjust token consumption. Note that these
 	// models are not used for token adjustment at admission time -- that is
@@ -282,7 +281,7 @@ type granterWithIOTokens interface {
 	// asymmetry is due to the need to use all the functionality of WorkQueue at
 	// admission time. See the long explanatory comment at the beginning of
 	// store_token_estimation.go, regarding token estimation.
-	setAdmittedDoneModelsLocked(l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel,
+	setAdmittedDoneModels(l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel,
 		ingestLM tokensLinearModel)
 }
 
