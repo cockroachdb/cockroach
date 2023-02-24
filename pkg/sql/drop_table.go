@@ -663,7 +663,7 @@ func removeFKBackReferenceFromTable(
 func removeMatchingReferences(
 	refs []descpb.TableDescriptor_Reference, id descpb.ID,
 ) []descpb.TableDescriptor_Reference {
-	updatedRefs := refs[:0]
+	var updatedRefs []descpb.TableDescriptor_Reference
 	for _, ref := range refs {
 		if ref.ID != id {
 			updatedRefs = append(updatedRefs, ref)
