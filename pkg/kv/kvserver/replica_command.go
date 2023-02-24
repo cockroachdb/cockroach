@@ -2673,8 +2673,10 @@ func (r *Replica) sendSnapshot(
 		)
 	}
 
-	// Check follower snapshots cluster setting.
-	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
+	// Check follower snapshots cluster setting
+	// TODO: re-enable this once it is safe.
+	const followerSnapshotsEnabledAllowed = false
+	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) && followerSnapshotsEnabledAllowed {
 		sender, err = r.getSenderReplica(ctx)
 		if err != nil {
 			return err
