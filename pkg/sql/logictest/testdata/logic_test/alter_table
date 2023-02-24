@@ -2748,3 +2748,83 @@ query IT
 SELECT c1, c3 FROM t_93398;
 ----
 0  f
+
+subtest regression_97546
+
+skipif config local-mixed-22.1-22.2
+statement ok
+CREATE TABLE t_twocol (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY fam_0 (id, a, b)
+);
+CREATE FUNCTION f1() RETURNS t_twocol AS 'SELECT id, a, b FROM t_twocol' LANGUAGE SQL;
+CREATE FUNCTION f2() RETURNS t_twocol AS 'SELECT id, a, b FROM t_twocol' LANGUAGE SQL;
+CREATE FUNCTION f3() RETURNS INT AS 'SELECT a FROM t_twocol' LANGUAGE SQL;
+
+skipif config local-mixed-22.1-22.2
+statement ok
+ALTER TABLE t_twocol DROP COLUMN b CASCADE;
+
+skipif config local-mixed-22.1-22.2
+statement error pq: unknown function: f1\(\): function undefined
+SELECT f1();
+
+skipif config local-mixed-22.1-22.2
+statement error pq: unknown function: f2\(\): function undefined
+SELECT f2();
+
+skipif config local-mixed-22.1-22.2
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  id INT8 NOT NULL,
+  a INT8 NULL,
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0 (id, a)
+)
+
+skipif config local-mixed-22.1-22.2
+statement ok
+DROP TABLE t_twocol CASCADE;
+
+subtest regress_96368
+
+skipif config local-mixed-22.1-22.2
+statement ok
+CREATE TABLE t_twocol (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY fam_0 (id, a, b)
+);
+CREATE FUNCTION f_unqualified_twocol() RETURNS t_twocol AS
+$$
+  SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
+$$ LANGUAGE SQL;
+CREATE FUNCTION f_allcolsel_alias() RETURNS t_twocol AS
+$$
+  SELECT t1.id, t1.a, t1.b FROM t_twocol AS t1, t_twocol AS t2 WHERE t1.a = t2.a;
+$$ LANGUAGE SQL;
+CREATE FUNCTION f_tuplestar() RETURNS t_twocol AS
+$$
+  SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
+$$ LANGUAGE SQL;
+
+# This statement should be ok but fails
+skipif config local-mixed-22.1-22.2
+statement ok
+ALTER TABLE t_twocol DROP COLUMN b CASCADE;
+
+skipif config local-mixed-22.1-22.2
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  id INT8 NOT NULL,
+  a INT8 NULL,
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0 (id, a)
+)

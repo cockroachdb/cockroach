@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1636,6 +1635,7 @@ func dropColumnImpl(
 
 	// You can't drop a column depended on by a view unless CASCADE was
 	// specified.
+	var depsToDrop catalog.DescriptorIDSet
 	for _, ref := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range ref.ColumnIDs {
@@ -1653,32 +1653,14 @@ func dropColumnImpl(
 		if err != nil {
 			return nil, err
 		}
-		depDesc, err := params.p.getDescForCascade(
-			params.ctx, "column", string(t.Column), tableDesc.ParentID, ref.ID, t.DropBehavior,
-		)
-		if err != nil {
-			return nil, err
-		}
-		switch t := depDesc.(type) {
-		case *tabledesc.Mutable:
-			jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",
-				t.Name, colToDrop.ColName())
-			cascadedViews, err := params.p.removeDependentView(params.ctx, tableDesc, t, jobDesc)
-			if err != nil {
-				return nil, err
-			}
-			qualifiedView, err := params.p.getQualifiedTableName(params.ctx, t)
-			if err != nil {
-				return nil, err
-			}
+		depsToDrop.Add(ref.ID)
+	}
 
-			droppedViews = append(droppedViews, cascadedViews...)
-			droppedViews = append(droppedViews, qualifiedView.FQString())
-		case *funcdesc.Mutable:
-			if err := params.p.removeDependentFunction(params.ctx, tableDesc, t); err != nil {
-				return nil, err
-			}
-		}
+	droppedViews, err = params.p.removeDependents(
+		params.ctx, tableDesc, depsToDrop, "column", colToDrop.GetName(), t.DropBehavior,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// We cannot remove this column if there are computed columns or a TTL
