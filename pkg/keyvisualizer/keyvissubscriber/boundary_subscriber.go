@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -49,9 +51,11 @@ func Start(
 	handleBoundaryUpdate func(update *keyvispb.UpdateBoundariesRequest),
 ) error {
 
-	tableID, err := sysTableResolver.LookupSystemTableID(
-		ctx, systemschema.SpanStatsTenantBoundariesTable.GetName())
-
+	tableID, err := startup.RunWithRetryEx(ctx, "obs lookup system table",
+		func(ctx context.Context) (descpb.ID, error) {
+			return sysTableResolver.LookupSystemTableID(
+				ctx, systemschema.SpanStatsTenantBoundariesTable.GetName())
+		})
 	if err != nil {
 		return err
 	}

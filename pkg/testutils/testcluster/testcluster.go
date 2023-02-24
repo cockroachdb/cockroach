@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1363,6 +1364,26 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	if len(tc.Servers) < 3 {
 		// If we have less than three nodes, we will never have full replication.
 		return nil
+	}
+
+	if len(tc.Servers) > 4 {
+		// We need to wait for zone config propagations before we could check
+		// conformance since zone configs are propagated synchronously.
+		// Generous timeout is added to allow rangefeeds to catch up. On startup
+		// they could get delayed making test to fail.
+		now := tc.Server(0).Clock().Now()
+		for _, s := range tc.Servers {
+			scs := s.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+			err := testutils.SucceedsWithinError(func() error {
+				if scs.LastUpdated().Less(now) {
+					return errors.New("zone configs not yet propagated")
+				}
+				return nil
+			}, 2*testutils.SucceedsSoonDuration())
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	opts := retry.Options{
