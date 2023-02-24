@@ -12,7 +12,6 @@ package mixedversion
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"io"
 	"math/rand"
@@ -81,31 +80,31 @@ func TestTestPlanner(t *testing.T) {
 mixed-version test plan for upgrading from %[1]s to <current>:
 ├── starting cluster from fixtures for version "%[1]s" (1)
 ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2)
-├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+`, with connection to node 4 (3)
+├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (3)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
 │   ├── restart node 2 with binary version <current> (4)
 │   ├── restart node 1 with binary version <current> (5)
-│   ├── run "mixed-version 1", with connection to node 3 (6)
+│   ├── run "mixed-version 1" (6)
 │   ├── restart node 4 with binary version <current> (7)
 │   ├── restart node 3 with binary version <current> (8)
-│   └── run "mixed-version 2", with connection to node 3 (9)
+│   └── run "mixed-version 2" (9)
 ├── downgrade nodes :1-4 from "<current>" to "%[1]s"
 │   ├── restart node 3 with binary version %[1]s (10)
 │   ├── restart node 4 with binary version %[1]s (11)
 │   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", with connection to node 1, after 200ms delay (12)
-│   │   └── run "mixed-version 2", with connection to node 1, after 200ms delay (13)
+│   │   ├── run "mixed-version 1", after 200ms delay (12)
+│   │   └── run "mixed-version 2", after 200ms delay (13)
 │   ├── restart node 2 with binary version %[1]s (14)
 │   └── restart node 1 with binary version %[1]s (15)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
 │   ├── restart node 3 with binary version <current> (16)
-│   ├── run "mixed-version 1", with connection to node 1 (17)
+│   ├── run "mixed-version 1" (17)
 │   ├── restart node 4 with binary version <current> (18)
 │   ├── restart node 1 with binary version <current> (19)
 │   ├── restart node 2 with binary version <current> (20)
-│   └── run "mixed-version 2", with connection to node 2 (21)
-├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+`, with connection to node 3 (22)
-├── run "mixed-version 2", with connection to node 1 (23)
+│   └── run "mixed-version 2" (21)
+├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (22)
+├── run "mixed-version 2" (23)
 └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (24)
 `, previousVersion,
 	)
@@ -184,6 +183,6 @@ func requireConcurrentHooks(t *testing.T, step testStep, names ...string) {
 	}
 }
 
-func dummyHook(*logger.Logger, *gosql.DB) error {
+func dummyHook(*logger.Logger, *rand.Rand, *Helper) error {
 	return nil
 }
