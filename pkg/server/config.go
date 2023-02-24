@@ -803,7 +803,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			addCfgOpt(storage.MaxSize(sizeInBytes))
-			addCfgOpt(storage.BallastSize(sizeInBytes))
+			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
 			addCfgOpt(storage.Caches(pebbleCache, tableCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
