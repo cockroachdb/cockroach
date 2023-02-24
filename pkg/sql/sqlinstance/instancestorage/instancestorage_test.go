@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -77,7 +78,8 @@ func TestStorage(t *testing.T) {
 		clock := hlc.NewClockForTesting(nil)
 		stopper := stop.NewStopper()
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+		settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
+		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), settingsWatcher)
 		return stopper, storage, slStorage, clock
 	}
 
@@ -170,6 +172,21 @@ func TestStorage(t *testing.T) {
 			}
 		}
 
+		// Release an instance and verify all instances are returned.
+		{
+			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE id = $1`, instanceIDs[0])
+			instances, err := storage.GetAllInstancesDataForTest(ctx)
+			require.NoError(t, err)
+			require.Equal(t, preallocatedCount-1, len(instances))
+			sortInstances(instances)
+			for i := 0; i < len(instances)-1; i++ {
+				require.Equal(t, instanceIDs[i+1], instances[i].InstanceID)
+				require.Equal(t, sessionIDs[i+1], instances[i].SessionID)
+				require.Equal(t, rpcAddresses[i+1], instances[i].InstanceRPCAddr)
+				require.Equal(t, sqlAddresses[i+1], instances[i].InstanceSQLAddr)
+				require.Equal(t, localities[i+1], instances[i].Locality)
+			}
+		}
 
 		// Verify instance ID associated with an expired session gets reused.
 		sessionID6 := makeSession()
@@ -266,8 +283,9 @@ func TestSQLAccess(t *testing.T) {
 	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 	storage := instancestorage.NewTestingStorage(
-		kvDB, keys.SystemSQLCodec, table, slstorage.NewFakeStorage(), s.ClusterSettings())
+		kvDB, keys.SystemSQLCodec, table, slstorage.NewFakeStorage(), s.ClusterSettings(), settingsWatcher)
 	const (
 		tierStr         = "region=test1,zone=test2"
 		expiration      = time.Minute
@@ -392,7 +410,8 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	stopper := stop.NewStopper()
 	slStorage := slstorage.NewFakeStorage()
 	defer stopper.Stop(ctx)
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), settingsWatcher)
 	instancestorage.PreallocatedCount.Override(ctx, &s.ClusterSettings().SV, 1)
 
 	const (
@@ -454,7 +473,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if i == -1 {
 				return
 			}
-			tDB.Exec(t, `DELETE FROM "`+dbName+`".sql_instances WHERE instance_id = $1`, i)
+			tDB.Exec(t, `DELETE FROM "`+dbName+`".sql_instances WHERE id = $1`, i)
 			state.freeInstances[i] = struct{}{}
 			delete(state.liveInstances, i)
 		}
@@ -537,7 +556,8 @@ func TestReclaimLoop(t *testing.T) {
 	tDB.Exec(t, schema)
 	tableID := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	slStorage := slstorage.NewFakeStorage()
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
+	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings(), settingsWatcher)
 	storage.TestingKnobs.JitteredIntervalFn = func(d time.Duration) time.Duration {
 		// For deterministic tests.
 		return d

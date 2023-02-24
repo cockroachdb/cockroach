@@ -127,8 +127,6 @@ func NewTestingStorage(
 ) *Storage {
 	s := &Storage{
 		db: db,
-		// TODO(jeffswenson): initialize the old row codec as well
-		// TODO(jeffswenson): initialize the settings watcher
 		newRowCodec: makeRowCodec(codec, table, true),
 		oldRowCodec: makeRowCodec(codec, table, false),
 		slReader:    slReader,

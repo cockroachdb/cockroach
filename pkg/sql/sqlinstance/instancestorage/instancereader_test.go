@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -56,7 +57,8 @@ func TestReader(t *testing.T) {
 		tDB.Exec(t, schema)
 		table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbName, "sql_instances")
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+		settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
+		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), settingsWatcher)
 		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, table, s.Clock(), s.Stopper())
 		return storage, slStorage, s.Clock(), reader
 	}
@@ -242,7 +244,7 @@ func TestReader(t *testing.T) {
 
 		// Release an instance and verify only active instances are returned.
 		{
-			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE instance_id = $1`, instanceIDs[0])
+			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE id = $1`, instanceIDs[0])
 			testutils.SucceedsSoon(t, func() error {
 				return verifyInstances(t, expectationsFromOffset(1))
 			})
@@ -339,7 +341,7 @@ func TestReader(t *testing.T) {
 
 		// Verify request for released instance data results in an error.
 		{
-			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE instance_id = $1`, instanceIDs[0])
+			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE id = $1`, instanceIDs[0])
 			testutils.SucceedsSoon(t, func() error {
 				_, err := reader.GetInstance(ctx, instanceIDs[0])
 				if !errors.Is(err, sqlinstance.NonExistentInstanceError) {

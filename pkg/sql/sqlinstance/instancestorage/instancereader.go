@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -86,14 +87,14 @@ type rangeFeed struct {
 
 func (s *rangeFeed) getInstance(instanceID base.SQLInstanceID) (instancerow, bool) {
 	s.mu.Lock()
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 	row, ok := s.mu.instances[instanceID]
 	return row, ok
 }
 
 func (s *rangeFeed) listInstances() []instancerow {
 	s.mu.Lock()
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 	result := make([]instancerow, 0, len(s.mu.instances))
 	for _, row := range s.mu.instances {
 		result = append(result, row)
@@ -166,7 +167,32 @@ func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 			timestamp:  hlc.Timestamp{}, // intentionally zero
 		},
 	})
-	r.startRangeFeed(ctx, r.rowcodec)
+	// TODO(jeffswenson): pass in settings properly instead of sneaking it off
+	// of storage.
+	r.storage.settings.Version.SetOnChange(r.onVersionChange)
+
+	rowCodec := r.storage.newRowCodec
+	if !r.storage.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+		rowCodec = r.storage.oldRowCodec
+	}
+
+	r.startRangeFeed(ctx, rowCodec)
+}
+
+func (r *Reader) onVersionChange(ctx context.Context, version clusterversion.ClusterVersion) {
+	if version.Equal(clusterversion.ByKey(clusterversion.V23_1_SystemRbrReadNew)) {
+		// onVersionChange is not supposed to block because blocking slows down
+		// the upgrade process, but this will only block if the old range feed
+		// has not yet initialized, which is an unlikely race condition.
+		_ = r.WaitForStarted(ctx)
+
+		// Close the old feed to stop updates. An upgrade is about to drop the
+		// index and the feed should not process those deletions.
+		r.getFeed().Close()
+
+		// Replace the feed with a feed over the new index.
+		r.startRangeFeed(ctx, r.storage.newRowCodec)
+	}
 }
 
 // WaitForStarted will block until the Reader has an initial full snapshot of

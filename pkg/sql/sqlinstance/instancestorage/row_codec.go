@@ -338,3 +338,32 @@ func (d *rowCodec) decodeValue(
 	}
 	return rpcAddr, sqlAddr, sessionID, locality, value.Timestamp, nil
 }
+
+func MakeMigrationMapper(codec keys.SQLCodec, table catalog.TableDescriptor) migrationMapper {
+	const rbtIndexID = 1
+	return migrationMapper {
+		oldCodec: rbtKeyCodec {
+			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(rbtIndexID)),
+		},
+		newCodec: rbrKeyCodec {
+			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID())),
+		},
+	}
+}
+
+type migrationMapper struct {
+	oldCodec rbtKeyCodec
+	newCodec rbrKeyCodec
+}
+
+func (m *migrationMapper) OldToNew(key roachpb.Key) (roachpb.Key, error) {
+	region, instance, err := m.oldCodec.decodeKey(key)
+	if err != nil {
+		return nil, err
+	}
+	return m.newCodec.encodeKey(region, instance), nil
+}
+
+func (m *migrationMapper) SourcePrefix() roachpb.Key {
+	return m.oldCodec.makeIndexPrefix()
+}
