@@ -59,6 +59,13 @@ var cpuProfileDuration = settings.RegisterDurationSetting(
 	10*time.Second, settings.PositiveDuration,
 )
 
+var cpuProfileEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.cpu_profile.enabled",
+	"a bool which indicates whether cpu profiles should be taken by the cpu profiler",
+	false,
+)
+
 const cpuProfFileNamePrefix = "cpuprof"
 
 // CPUProfiler is used to take CPU profiles.
@@ -100,6 +107,9 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 
 // MaybeTakeProfile takes a cpu profile if cpu usage is high enough.
 func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) {
+	if !cpuProfileEnabled.Get(&cp.st.SV) {
+		return
+	}
 	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
