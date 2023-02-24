@@ -910,8 +910,9 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG
-%token <str> FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX
+%token <str> FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
+%token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -1313,7 +1314,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %type <*tree.TenantReplicationOptions> opt_with_tenant_replication_options tenant_replication_options tenant_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
-%type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
+%type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
 %type <tree.NameList> storage_parameter_key_list
@@ -3980,6 +3981,10 @@ opt_with_copy_options:
   {
     $$.val = $2.copyOptions()
   }
+| opt_with '(' copy_generic_options_list ')'
+  {
+    $$.val = $3.copyOptions()
+  }
 | /* EMPTY */
   {
     $$.val = &tree.CopyOptions{}
@@ -3997,6 +4002,18 @@ copy_options_list:
     }
   }
 
+copy_generic_options_list:
+  copy_generic_options
+  {
+    $$.val = $1.copyOptions()
+  }
+| copy_generic_options_list ',' copy_generic_options
+  {
+    if err := $1.copyOptions().CombineWith($3.copyOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
 copy_options:
   DESTINATION '=' string_or_placeholder
   {
@@ -4004,11 +4021,11 @@ copy_options:
   }
 | BINARY
   {
-    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatBinary}
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatBinary, HasFormat: true}
   }
 | CSV
   {
-    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatCSV}
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatCSV, HasFormat: true}
   }
 | DELIMITER string_or_placeholder
   {
@@ -4028,27 +4045,97 @@ copy_options:
   }
 | HEADER
   {
-    $$.val = &tree.CopyOptions{Header: true}
+    $$.val = &tree.CopyOptions{Header: true, HasHeader: true}
   }
 | QUOTE SCONST
   {
     $$.val = &tree.CopyOptions{Quote: tree.NewStrVal($2)}
   }
-| ESCAPE SCONST error
+| ESCAPE SCONST
   {
     $$.val = &tree.CopyOptions{Escape: tree.NewStrVal($2)}
   }
 | FORCE QUOTE error
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "force quote")
+    return unimplementedWithIssueDetail(sqllex, 41608, "force_quote")
   }
 | FORCE NOT NULL error
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "force not null")
+    return unimplementedWithIssueDetail(sqllex, 41608, "force_not_null")
   }
 | FORCE NULL error
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "force null")
+    return unimplementedWithIssueDetail(sqllex, 41608, "force_null")
+  }
+| ENCODING SCONST error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "encoding")
+  }
+
+copy_generic_options:
+  DESTINATION string_or_placeholder
+  {
+    $$.val = &tree.CopyOptions{Destination: $2.expr()}
+  }
+| FORMAT BINARY
+  {
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatBinary, HasFormat: true}
+  }
+| FORMAT CSV
+  {
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatCSV, HasFormat: true}
+  }
+| FORMAT TEXT
+  {
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatText, HasFormat: true}
+  }
+| DELIMITER string_or_placeholder
+  {
+    $$.val = &tree.CopyOptions{Delimiter: $2.expr()}
+  }
+| NULL string_or_placeholder
+  {
+    $$.val = &tree.CopyOptions{Null: $2.expr()}
+  }
+| OIDS error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "oids")
+  }
+| FREEZE error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "freeze")
+  }
+| HEADER
+  {
+    $$.val = &tree.CopyOptions{Header: true, HasHeader: true}
+  }
+| HEADER TRUE
+  {
+    $$.val = &tree.CopyOptions{Header: true, HasHeader: true}
+  }
+| HEADER FALSE
+  {
+    $$.val = &tree.CopyOptions{Header: false, HasHeader: true}
+  }
+| QUOTE SCONST
+  {
+    $$.val = &tree.CopyOptions{Quote: tree.NewStrVal($2)}
+  }
+| ESCAPE SCONST
+  {
+    $$.val = &tree.CopyOptions{Escape: tree.NewStrVal($2)}
+  }
+| FORCE_QUOTE error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force_quote")
+  }
+| FORCE_NOT_NULL error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force_not_null")
+  }
+| FORCE_NULL error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force_null")
   }
 | ENCODING SCONST error
   {
@@ -16128,7 +16215,11 @@ unreserved_keyword:
 | FILTER
 | FIRST
 | FOLLOWING
+| FORMAT
 | FORCE
+| FORCE_NOT_NULL
+| FORCE_NULL
+| FORCE_QUOTE
 | FORCE_INDEX
 | FORCE_ZIGZAG
 | FORWARD
@@ -16622,9 +16713,13 @@ bare_label_keywords:
 | FLOAT
 | FOLLOWING
 | FORCE
+| FORCE_NOT_NULL
+| FORCE_NULL
+| FORCE_QUOTE
 | FORCE_INDEX
 | FORCE_ZIGZAG
 | FOREIGN
+| FORMAT
 | FORWARD
 | FREEZE
 | FULL

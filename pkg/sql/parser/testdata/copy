@@ -17,82 +17,82 @@ COPY _ (_, _, _) FROM STDIN -- identifiers removed
 parse
 COPY t FROM STDIN QUOTE '"'
 ----
-COPY t FROM STDIN WITH QUOTE '"' -- normalized!
-COPY t FROM STDIN WITH QUOTE ('"') -- fully parenthesized
-COPY t FROM STDIN WITH QUOTE '_' -- literals removed
-COPY _ FROM STDIN WITH QUOTE '"' -- identifiers removed
+COPY t FROM STDIN WITH (QUOTE '"') -- normalized!
+COPY t FROM STDIN WITH (QUOTE ('"')) -- fully parenthesized
+COPY t FROM STDIN WITH (QUOTE '_') -- literals removed
+COPY _ FROM STDIN WITH (QUOTE '"') -- identifiers removed
 
 parse
 COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'
 ----
-COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'
-COPY crdb_internal.file_upload FROM STDIN WITH destination = ('filename') -- fully parenthesized
-COPY crdb_internal.file_upload FROM STDIN WITH destination = '_' -- literals removed
-COPY _._ FROM STDIN WITH destination = 'filename' -- identifiers removed
+COPY crdb_internal.file_upload FROM STDIN WITH (DESTINATION 'filename') -- normalized!
+COPY crdb_internal.file_upload FROM STDIN WITH (DESTINATION ('filename')) -- fully parenthesized
+COPY crdb_internal.file_upload FROM STDIN WITH (DESTINATION '_') -- literals removed
+COPY _._ FROM STDIN WITH (DESTINATION 'filename') -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN WITH BINARY
 ----
-COPY t (a, b, c) FROM STDIN WITH BINARY
-COPY t (a, b, c) FROM STDIN WITH BINARY -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH BINARY -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH BINARY -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY) -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY) -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT BINARY) -- identifiers removed
 
 parse
 COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = 'filename'
 ----
-COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = 'filename'
-COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = ('filename') -- fully parenthesized
-COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = '_' -- literals removed
-COPY _._ FROM STDIN WITH BINARY destination = 'filename' -- identifiers removed
+COPY crdb_internal.file_upload FROM STDIN WITH (FORMAT BINARY, DESTINATION 'filename') -- normalized!
+COPY crdb_internal.file_upload FROM STDIN WITH (FORMAT BINARY, DESTINATION ('filename')) -- fully parenthesized
+COPY crdb_internal.file_upload FROM STDIN WITH (FORMAT BINARY, DESTINATION '_') -- literals removed
+COPY _._ FROM STDIN WITH (FORMAT BINARY, DESTINATION 'filename') -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL'
 ----
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL'
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (',') NULL ('NUL') -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' NULL '_' -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL' -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ',', NULL 'NUL') -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (','), NULL ('NUL')) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', NULL '_') -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ',', NULL 'NUL') -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' destination = 'filename'
 ----
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' destination = 'filename'
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (',') destination = ('filename') -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ',' destination = 'filename' -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ',', DESTINATION 'filename') -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (','), DESTINATION ('filename')) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', DESTINATION '_') -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ',', DESTINATION 'filename') -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN BINARY
 ----
-COPY t (a, b, c) FROM STDIN WITH BINARY -- normalized!
-COPY t (a, b, c) FROM STDIN WITH BINARY -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH BINARY -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH BINARY -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY) -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY) -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT BINARY) -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN destination = 'filename' BINARY
 ----
-COPY t (a, b, c) FROM STDIN WITH BINARY destination = 'filename' -- normalized!
-COPY t (a, b, c) FROM STDIN WITH BINARY destination = ('filename') -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH BINARY destination = '_' -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH BINARY destination = 'filename' -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY, DESTINATION 'filename') -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY, DESTINATION ('filename')) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT BINARY, DESTINATION '_') -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT BINARY, DESTINATION 'filename') -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' '
 ----
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' -- normalized!
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (' ') destination = ('filename') -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename') -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (' '), DESTINATION ('filename')) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', DESTINATION '_') -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename') -- identifiers removed
 
 parse
 COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' ' ESCAPE 'x' HEADER
 ----
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' ESCAPE 'x' HEADER -- normalized!
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (' ') destination = ('filename') ESCAPE ('x') HEADER -- fully parenthesized
-COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' ESCAPE '_' HEADER -- literals removed
-COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' ESCAPE 'x' HEADER -- identifiers removed
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename', ESCAPE 'x', HEADER true) -- normalized!
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER (' '), DESTINATION ('filename'), ESCAPE ('x'), HEADER true) -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH (FORMAT CSV, DELIMITER '_', DESTINATION '_', ESCAPE '_', HEADER true) -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH (FORMAT CSV, DELIMITER ' ', DESTINATION 'filename', ESCAPE 'x', HEADER true) -- identifiers removed
 
 parse
 COPY t TO STDOUT
@@ -105,10 +105,10 @@ COPY _ TO STDOUT -- identifiers removed
 parse
 COPY t TO STDOUT BINARY
 ----
-COPY t TO STDOUT WITH BINARY -- normalized!
-COPY t TO STDOUT WITH BINARY -- fully parenthesized
-COPY t TO STDOUT WITH BINARY -- literals removed
-COPY _ TO STDOUT WITH BINARY -- identifiers removed
+COPY t TO STDOUT WITH (FORMAT BINARY) -- normalized!
+COPY t TO STDOUT WITH (FORMAT BINARY) -- fully parenthesized
+COPY t TO STDOUT WITH (FORMAT BINARY) -- literals removed
+COPY _ TO STDOUT WITH (FORMAT BINARY) -- identifiers removed
 
 error
 COPY t TO 'file'
@@ -140,10 +140,10 @@ COPY (SELECT * FROM _) TO STDOUT -- identifiers removed
 parse
 COPY (SELECT * FROM t) TO STDOUT BINARY
 ----
-COPY (SELECT * FROM t) TO STDOUT WITH BINARY -- normalized!
-COPY (SELECT (*) FROM t) TO STDOUT WITH BINARY -- fully parenthesized
-COPY (SELECT * FROM t) TO STDOUT WITH BINARY -- literals removed
-COPY (SELECT * FROM _) TO STDOUT WITH BINARY -- identifiers removed
+COPY (SELECT * FROM t) TO STDOUT WITH (FORMAT BINARY) -- normalized!
+COPY (SELECT (*) FROM t) TO STDOUT WITH (FORMAT BINARY) -- fully parenthesized
+COPY (SELECT * FROM t) TO STDOUT WITH (FORMAT BINARY) -- literals removed
+COPY (SELECT * FROM _) TO STDOUT WITH (FORMAT BINARY) -- identifiers removed
 
 error
 COPY (SELECT * FROM t) TO 'file'
@@ -154,3 +154,187 @@ COPY (SELECT * FROM t) TO 'file'
                           ^
 HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/96590/
+
+parse
+COPY "copytab" FROM STDIN (DELIMITER '.', FORMAT csv)
+----
+COPY copytab FROM STDIN WITH (FORMAT CSV, DELIMITER '.') -- normalized!
+COPY copytab FROM STDIN WITH (FORMAT CSV, DELIMITER ('.')) -- fully parenthesized
+COPY copytab FROM STDIN WITH (FORMAT CSV, DELIMITER '_') -- literals removed
+COPY _ FROM STDIN WITH (FORMAT CSV, DELIMITER '.') -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN (FORMAT text, HEADER)
+----
+COPY copytab FROM STDIN WITH (FORMAT TEXT, HEADER true) -- normalized!
+COPY copytab FROM STDIN WITH (FORMAT TEXT, HEADER true) -- fully parenthesized
+COPY copytab FROM STDIN WITH (FORMAT TEXT, HEADER true) -- literals removed
+COPY _ FROM STDIN WITH (FORMAT TEXT, HEADER true) -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN (HEADER true, ESCAPE '%')
+----
+COPY copytab FROM STDIN WITH (ESCAPE '%', HEADER true) -- normalized!
+COPY copytab FROM STDIN WITH (ESCAPE ('%'), HEADER true) -- fully parenthesized
+COPY copytab FROM STDIN WITH (ESCAPE '_', HEADER true) -- literals removed
+COPY _ FROM STDIN WITH (ESCAPE '%', HEADER true) -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN WITH (ESCAPE '%', HEADER false, NULL '.')
+----
+COPY copytab FROM STDIN WITH (NULL '.', ESCAPE '%', HEADER false) -- normalized!
+COPY copytab FROM STDIN WITH (NULL ('.'), ESCAPE ('%'), HEADER false) -- fully parenthesized
+COPY copytab FROM STDIN WITH (NULL '_', ESCAPE '_', HEADER false) -- literals removed
+COPY _ FROM STDIN WITH (NULL '.', ESCAPE '%', HEADER false) -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN (FORMAT     binary)
+----
+COPY copytab FROM STDIN WITH (FORMAT BINARY) -- normalized!
+COPY copytab FROM STDIN WITH (FORMAT BINARY) -- fully parenthesized
+COPY copytab FROM STDIN WITH (FORMAT BINARY) -- literals removed
+COPY _ FROM STDIN WITH (FORMAT BINARY) -- identifiers removed
+
+error
+COPY "copytab" FROM STDIN (FORMAT     csv, DELIMITER '/', ESCAPE '.', DELIMITER '%')
+----
+at or near "%": syntax error: delimiter option specified multiple times
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (FORMAT     csv, DELIMITER '/', ESCAPE '.', DELIMITER '%')
+                                                                                ^
+
+error
+COPY "copytab" FROM STDIN (FORMAT text, HEADER, FORMAT csv)
+----
+at or near "csv": syntax error: format option specified multiple times
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (FORMAT text, HEADER, FORMAT csv)
+                                                       ^
+
+error
+COPY "copytab" FROM STDIN (ESCAPE '%', HEADER false, NULL '.', FORCE_NOT_NULL (column))
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (ESCAPE '%', HEADER false, NULL '.', FORCE_NOT_NULL (column))
+                                                                              ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY "copytab" FROM STDIN (FORMAT CSV, FORCE_NULL (c1, c2, c3))
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (FORMAT CSV, FORCE_NULL (c1, c2, c3))
+                                                  ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY "copytab" FROM STDIN (ESCAPE '/',     FORCE_QUOTE (c1, c2))
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (ESCAPE '/',     FORCE_QUOTE (c1, c2))
+                                                       ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY "copytab" FROM STDIN (HEADER, OIDS)
+----
+at or near ")": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (HEADER, OIDS)
+                                       ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+parse
+COPY (SELECT * FROM t) TO STDOUT (FORMAT csv)
+----
+COPY (SELECT * FROM t) TO STDOUT WITH (FORMAT CSV) -- normalized!
+COPY (SELECT (*) FROM t) TO STDOUT WITH (FORMAT CSV) -- fully parenthesized
+COPY (SELECT * FROM t) TO STDOUT WITH (FORMAT CSV) -- literals removed
+COPY (SELECT * FROM _) TO STDOUT WITH (FORMAT CSV) -- identifiers removed
+
+parse
+COPY (SELECT * FROM "tAb") TO STDOUT (FORMAT text, HEADER)
+----
+COPY (SELECT * FROM "tAb") TO STDOUT WITH (FORMAT TEXT, HEADER true) -- normalized!
+COPY (SELECT (*) FROM "tAb") TO STDOUT WITH (FORMAT TEXT, HEADER true) -- fully parenthesized
+COPY (SELECT * FROM "tAb") TO STDOUT WITH (FORMAT TEXT, HEADER true) -- literals removed
+COPY (SELECT * FROM _) TO STDOUT WITH (FORMAT TEXT, HEADER true) -- identifiers removed
+
+parse
+COPY (SELECT c1, c2 FROM t) TO STDOUT (HEADER true, ESCAPE '%')
+----
+COPY (SELECT c1, c2 FROM t) TO STDOUT WITH (ESCAPE '%', HEADER true) -- normalized!
+COPY (SELECT (c1), (c2) FROM t) TO STDOUT WITH (ESCAPE ('%'), HEADER true) -- fully parenthesized
+COPY (SELECT c1, c2 FROM t) TO STDOUT WITH (ESCAPE '_', HEADER true) -- literals removed
+COPY (SELECT _, _ FROM _) TO STDOUT WITH (ESCAPE '%', HEADER true) -- identifiers removed
+
+parse
+COPY (SELECT * FROM t) TO STDOUT (ESCAPE '%', HEADER false, NULL '.')
+----
+COPY (SELECT * FROM t) TO STDOUT WITH (NULL '.', ESCAPE '%', HEADER false) -- normalized!
+COPY (SELECT (*) FROM t) TO STDOUT WITH (NULL ('.'), ESCAPE ('%'), HEADER false) -- fully parenthesized
+COPY (SELECT * FROM t) TO STDOUT WITH (NULL '_', ESCAPE '_', HEADER false) -- literals removed
+COPY (SELECT * FROM _) TO STDOUT WITH (NULL '.', ESCAPE '%', HEADER false) -- identifiers removed
+
+parse
+COPY (SELECT * FROM t) TO STDOUT (FORMAT binary, DELIMITER '.')
+----
+COPY (SELECT * FROM t) TO STDOUT WITH (FORMAT BINARY, DELIMITER '.') -- normalized!
+COPY (SELECT (*) FROM t) TO STDOUT WITH (FORMAT BINARY, DELIMITER ('.')) -- fully parenthesized
+COPY (SELECT * FROM t) TO STDOUT WITH (FORMAT BINARY, DELIMITER '_') -- literals removed
+COPY (SELECT * FROM _) TO STDOUT WITH (FORMAT BINARY, DELIMITER '.') -- identifiers removed
+
+error
+COPY (SELECT * FROM t) TO STDOUT (HEADER false, FORMAT CSV, HEADER true)
+----
+at or near "true": syntax error: header option specified multiple times
+DETAIL: source SQL:
+COPY (SELECT * FROM t) TO STDOUT (HEADER false, FORMAT CSV, HEADER true)
+                                                                   ^
+
+error
+COPY (SELECT * FROM t) TO STDOUT (ESCAPE '%', HEADER false, NULL '.', FORCE_NOT_NULL (column))
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY (SELECT * FROM t) TO STDOUT (ESCAPE '%', HEADER false, NULL '.', FORCE_NOT_NULL (column))
+                                                                                     ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY (SELECT * FROM t) TO STDOUT (FORMAT CSV, FORCE_NULL (c1, c2, c3))
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY (SELECT * FROM t) TO STDOUT (FORMAT CSV, FORCE_NULL (c1, c2, c3))
+                                                         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY (SELECT * FROM t) TO STDOUT (ESCAPE '/',     FORCE_QUOTE (c1, c2))
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY (SELECT * FROM t) TO STDOUT (ESCAPE '/',     FORCE_QUOTE (c1, c2))
+                                                              ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY (SELECT * FROM t) TO STDOUT (HEADER, OIDS)
+----
+at or near ")": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY (SELECT * FROM t) TO STDOUT (HEADER, OIDS)
+                                              ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41608/
