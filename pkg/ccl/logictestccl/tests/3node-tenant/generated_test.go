@@ -1716,6 +1716,13 @@ func TestTenantLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestTenantLogic_show_var(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_var")
+}
+
 func TestTenantLogic_span_builtins(
 	t *testing.T,
 ) {
