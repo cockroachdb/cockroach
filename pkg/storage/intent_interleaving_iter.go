@@ -493,7 +493,7 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		intentSeekKey, i.intentKeyBuf = keys.LockTableSingleKey(key.Key, i.intentKeyBuf)
 	} else if !i.prefix {
 		// Seeking to a specific version, so go past the intent.
-		intentSeekKey, i.intentKeyBuf = keys.LockTableSingleKey(key.Key.Next(), i.intentKeyBuf)
+		intentSeekKey, i.intentKeyBuf = keys.LockTableSingleNextKey(key.Key, i.intentKeyBuf)
 	} else {
 		// Else seeking to a particular version and using prefix iteration,
 		// so don't expect to ever see the intent. NB: intentSeekKey is nil.
@@ -1103,7 +1103,7 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 		// Seeking to a specific version, so need to see the intent. Since we need
 		// to see the intent for key.Key, and we don't have SeekLE, call Next() on
 		// the key before doing SeekLT.
-		intentSeekKey, i.intentKeyBuf = keys.LockTableSingleKey(key.Key.Next(), i.intentKeyBuf)
+		intentSeekKey, i.intentKeyBuf = keys.LockTableSingleNextKey(key.Key, i.intentKeyBuf)
 	}
 	var limitKey roachpb.Key
 	if i.iterValid {
