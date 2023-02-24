@@ -190,8 +190,8 @@ export const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
   switch (execType) {
     case InsightExecEnum.STATEMENT:
       description =
-        `This statement was slow because a good plan was not available, whether ` +
-        `due to outdated statistics or missing indexes.`;
+        `This statement was slow because a good plan was unavailable; ` +
+        `possible reasons include outdated statistics or missing indexes.`;
       break;
     case InsightExecEnum.TRANSACTION:
       description =
