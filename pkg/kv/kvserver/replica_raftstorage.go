@@ -488,16 +488,66 @@ func (r *Replica) applySnapshot(
 		log.Infof(ctx, "applied %s (%s)", inSnap, logDetails)
 	}(timeutil.Now())
 
-	unreplicatedSSTFile, err := writeUnreplicatedSST(
+	var logScratch *SSTSnapshotStorageScratch // nil if log not separated
+	if r.store.sepRaftLog() {
+		if len(subsumedRepls) > 0 {
+			// Rather than returning an error (which will probably just hang most
+			// tests) fail in an obvious way. Merges can be disabled to avoid hitting
+			// this.
+			log.Fatalf(ctx, "subsuming replicas during snapshot under separate raft log is unimplemented, "+
+				"see https://github.com/cockroachdb/cockroach/issues/97609")
+		}
+		// TODO(sep-raft-log): we could implement this without SST ingestion on the log engine.
+		// See: https://github.com/cockroachdb/cockroach/issues/97624
+		logScratch = r.store.logSSTSnapshotStorage.NewScratchSpace(desc.RangeID, inSnap.SnapUUID)
+		defer func() {
+			if err := logScratch.Close(); err != nil {
+				log.Warningf(ctx, "error closing log SST scratch space: %v", err)
+			}
+		}()
+	}
+
+	// TODO(itsbilal): Write to SST directly rather than buffering in a MemFile
+	// first.
+	logSST, err := writeLogEngineSST(
 		ctx, r.ID(), r.ClusterSettings(), nonemptySnap.Metadata, hs, &r.raftMu.stateLoader.StateLoader,
 	)
 	if err != nil {
 		return err
 	}
-	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-	// buffering in a MemObject first.
-	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-		return err
+	if logScratch == nil {
+		// Raft log not separated, so write log SST to state scratch.
+		if err := inSnap.SSTStorageScratch.WriteSST(ctx, logSST.Data()); err != nil {
+			return err
+		}
+	} else {
+		// Raft log is separated, so it gets the log SST.
+		if err := logScratch.WriteSST(ctx, logSST.Data()); err != nil {
+			return err
+		}
+		// But we also clear the RangeID-unreplicated keyspace on the state machine.
+		// There is always at least the RangeTombstoneKey which we "want" to clear
+		// (we don't really have to, but it preserves legacy behavior) and, more
+		// importantly, during the transition period during which we only support
+		// separating the raft log experimentally, we want to play fast and loose
+		// with "less essential" uses of unreplicated keys (which generally use
+		// TODOEngine() which is the state engine) and so it helps to clear both
+		// sides for now.
+		clearUnreplicatedRangeIDSST := &storage.MemObject{}
+		w := storage.MakeIngestionSSTWriter(
+			ctx, r.ClusterSettings(), clearUnreplicatedRangeIDSST,
+		)
+		defer w.Close()
+
+		if err := writeSnapClearUnreplicatedRangeIDSST(desc.RangeID, &w); err != nil {
+			return err
+		}
+		if err := w.Finish(); err != nil {
+			return err
+		}
+		if err := inSnap.SSTStorageScratch.WriteSST(ctx, clearUnreplicatedRangeIDSST.Data()); err != nil {
+			return err
+		}
 	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
@@ -529,8 +579,11 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
+	//
+	// TODO(sep-raft-log): needs work. See https://github.com/cockroachdb/cockroach/issues/97609.
+	// We currently fatal the process earlier in this method when asked to subsume
+	// with a separate log engine.
 	if err := clearSubsumedReplicaDiskData(
-		// TODO(sep-raft-log): needs access to both engines.
 		ctx, r.store.ClusterSettings(), r.store.TODOEngine(), inSnap.SSTStorageScratch.WriteSST,
 		desc, subsumedDescs, mergedTombstoneReplicaID,
 	); err != nil {
@@ -540,21 +593,29 @@ func (r *Replica) applySnapshot(
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
+		// TODO(sep-raft-log): pass the separated SSTs here too for inspection in tests.
 		if err := fn(inSnap, inSnap.snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}
 
-	// TODO: separate ingestions for log and statemachine engine. See:
-	//
-	// https://github.com/cockroachdb/cockroach/issues/93251
-	ingestStats, err := r.store.TODOEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs())
+	if logScratch != nil {
+		// TODO(sep-raft-log): we currently don't recover atomicity on startup, so
+		// crashes here lead to inconsistencies. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/93251
+		if _, err := r.store.LogEngine().IngestExternalFilesWithStats(ctx, logScratch.SSTs()); err != nil {
+			return errors.Wrapf(err, "while ingesting log ssts %q %q %s", r.store.LogEngine().MinVersion(), r.store.StateEngine().MinVersion(), logScratch.SSTs())
+		}
+	}
+	ingestStats, err := r.store.StateEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs())
 	if err != nil {
-		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+		return errors.Wrapf(err, "while ingesting ssts %s", inSnap.SSTStorageScratch.SSTs())
 	}
 	if r.store.cfg.KVAdmissionController != nil {
 		r.store.cfg.KVAdmissionController.SnapshotIngested(r.store.StoreID(), ingestStats)
 	}
+
 	stats.ingestion = timeutil.Now()
 
 	// The on-disk state is now committed, but the corresponding in-memory state
@@ -713,11 +774,14 @@ func writeSnapClearUnreplicatedRangeIDSST(rangeID roachpb.RangeID, w *storage.SS
 	return nil
 }
 
-// writeUnreplicatedSST creates an SST for snapshot application that
-// covers the RangeID-unreplicated keyspace. A range tombstone is
-// laid down and the Raft state provided by the arguments is overlaid
-// onto it.
-func writeUnreplicatedSST(
+// writeLogEngineSST creates an SST for snapshot application that targets the
+// raft log engine. It covers the RangeID-unreplicated keyspace. A range
+// tombstone is laid down and the Raft state provided by the arguments is
+// overlaid onto it.
+//
+// If the raft log resides on the state engine (i.e. no raft log separation)
+// then the SST applies to the state engine.
+func writeLogEngineSST(
 	ctx context.Context,
 	id storage.FullReplicaID,
 	st *cluster.Settings,
