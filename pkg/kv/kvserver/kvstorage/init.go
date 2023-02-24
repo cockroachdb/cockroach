@@ -314,7 +314,7 @@ func (r Replica) ID() storage.FullReplicaID {
 
 // Load loads the state necessary to instantiate a replica in memory.
 func (r Replica) Load(
-	ctx context.Context, eng storage.Reader, storeID roachpb.StoreID,
+	ctx context.Context, eng, logEng storage.Reader, storeID roachpb.StoreID,
 ) (LoadedReplicaState, error) {
 	ls := LoadedReplicaState{
 		ReplicaID: r.ReplicaID,
@@ -322,7 +322,7 @@ func (r Replica) Load(
 	}
 	sl := stateloader.Make(r.Desc.RangeID)
 	var err error
-	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
+	if ls.LastIndex, err = sl.LoadLastIndex(ctx, logEng); err != nil {
 		return LoadedReplicaState{}, err
 	}
 	if ls.ReplState, err = sl.Load(ctx, eng, r.Desc); err != nil {
