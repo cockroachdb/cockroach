@@ -14,7 +14,7 @@ import { AdminUIState } from "src/redux/state";
  * eventsSelector selects the list of events from the store.
  */
 export function eventsSelector(state: AdminUIState) {
-  return state.cachedData.events.data;
+  return state.cachedData.events?.data?.results;
 }
 
 /**
@@ -27,3 +27,7 @@ export function eventsValidSelector(state: AdminUIState) {
 export function eventsLastErrorSelector(state: AdminUIState) {
   return state.cachedData.events.lastError;
 }
+
+export const eventsMaxApiReached = (state: AdminUIState): boolean => {
+  return !!state.cachedData.events?.data?.maxSizeReached;
+};

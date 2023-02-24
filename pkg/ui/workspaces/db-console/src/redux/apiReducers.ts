@@ -524,7 +524,9 @@ export const refreshRawTrace = rawTraceReducerObj.refresh;
 
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
-  events: CachedDataReducerState<clusterUiApi.EventsResponse>;
+  events: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.EventsResponse>
+  >;
   health: HealthState;
   nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;

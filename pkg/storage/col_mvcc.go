@@ -475,7 +475,7 @@ func mvccScanToCols(
 	if err != nil {
 		return MVCCScanResult{}, err
 	}
-	if err = finalizeScanResult(ctx, mvccScanner, &res, opts.errOnIntents()); err != nil {
+	if err = finalizeScanResult(mvccScanner, &res, opts); err != nil {
 		return MVCCScanResult{}, err
 	}
 	return res, nil

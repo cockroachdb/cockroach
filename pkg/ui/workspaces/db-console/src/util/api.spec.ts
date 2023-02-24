@@ -330,7 +330,7 @@ describe("rest api", function () {
 
       return clusterUiApi.getNonRedactedEvents().then(result => {
         expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
-        expect(result.length).toBe(1);
+        expect(result.results.length).toBe(1);
       });
     });
 
@@ -364,7 +364,7 @@ describe("rest api", function () {
 
       return clusterUiApi.getNonRedactedEvents(req).then(result => {
         expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
-        expect(result.length).toBe(1);
+        expect(result.results.length).toBe(1);
       });
     });
 
