@@ -128,7 +128,7 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 		// Running the test suite is expected to error out, so swallow the error.
 		result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(), node,
-			`cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests`,
+			`cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
 		)
 
 		rawResults := "stdout:\n" + result.Stdout + "\n\nstderr:\n" + result.Stderr
@@ -140,11 +140,28 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 			t.Fatal(err)
 		}
 
+		// Load the list of all test results files and parse them individually.
+		// Files are here: /mnt/data1/npgsql/test/Npgsql.Tests/TestResults/
 		t.Status("collating test results")
-		results := newORMTestsResults()
-		results.parseDotNetUnitTestOutput([]byte(result.Stdout), npgsqlBlocklist, npgsqlIgnoreList)
-		results.summarizeAll(
-			t, "npgsql" /* ormName */, "npgsqlBlocklist", npgsqlBlocklist, version, npgsqlSupportedTag,
+		result, err = repeatRunWithDetailsSingleNode(
+			ctx,
+			c,
+			t,
+			node,
+			"get list of test files",
+			`ls /mnt/data1/npgsql/test/Npgsql.Tests/TestResults/*.trx`,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(result.Stdout) == 0 {
+			t.Fatal("could not find any test result files")
+		}
+
+		parseAndSummarizeDotNetTestsResults(
+			ctx, t, c, node, "npgsql" /* ormName */, result.Stdout,
+			"npgsqlBlocklist", npgsqlBlocklist, npgsqlIgnoreList, version, npgsqlSupportedTag,
 		)
 	}
 

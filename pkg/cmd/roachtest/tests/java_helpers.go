@@ -14,22 +14,11 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-)
-
-var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issues?/(\d+)`)
-
-type status int
-
-const (
-	statusPass status = iota
-	statusFail
-	statusSkip
 )
 
 // extractFailureFromJUnitXML parses an XML report to find all failed tests. The
@@ -139,29 +128,29 @@ func (r *ormTestsResults) parseJUnitXML(
 		if len(issue) == 0 || issue == "unknown" {
 			issue = issueHints[test]
 		}
-		status := statuses[i]
+		statusCode := statuses[i]
 		switch {
 		case expectedIgnored:
 			r.results[test] = fmt.Sprintf("--- IGNORE: %s due to %s (expected)", test, ignoredIssue)
 			r.ignoredCount++
-		case status == statusSkip:
+		case statusCode == statusSkip:
 			r.results[test] = fmt.Sprintf("--- SKIP: %s", test)
 			r.skipCount++
-		case status == statusPass && !expectedFailure:
+		case statusCode == statusPass && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 			r.passExpectedCount++
-		case status == statusPass && expectedFailure:
+		case statusCode == statusPass && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.passUnexpectedCount++
-		case status == statusFail && expectedFailure:
+		case statusCode == statusFail && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.failExpectedCount++
 			r.currentFailures = append(r.currentFailures, test)
-		case status == statusFail && !expectedFailure:
+		case statusCode == statusFail && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue))
 			r.failUnexpectedCount++

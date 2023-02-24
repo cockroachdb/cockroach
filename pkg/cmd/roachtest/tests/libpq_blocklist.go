@@ -19,7 +19,6 @@ var libPQBlocklist = blocklist{
 	"pq.TestConnUnlistenAll":                         "41522",
 	"pq.TestConnectorWithNoticeHandler_Simple":       "unknown",
 	"pq.TestConnectorWithNotificationHandler_Simple": "unknown",
-	"pq.TestCopyFromError":                           "5807",
 	"pq.TestCopyInRaiseStmtTrigger":                  "5807",
 	"pq.TestCopyInTypes":                             "5807",
 	"pq.TestCopyRespLoopConnectionError":             "5807",
