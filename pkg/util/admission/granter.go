@@ -648,6 +648,23 @@ var (
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}
+	// NB: Both the following metrics do not look at the SQL queues, since if
+	// the KV queue is empty the only throttling on the SQL queues is via grant
+	// chaining, which should only cause delays if there is no CPU available.
+	kvCPUNonWorkConservingDuration = metric.Metadata{
+		Name:        "admission.granter.cpu_non_work_conserving_duration.kv",
+		Help:        "Total CPU duration with idle CPU and requests waiting for admission in CPU queue",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPUNonWorkConservingDueToACDuration = metric.Metadata{
+		Name: "admission.granter.cpu_non_work_conserving_due_to_admission_duration.kv",
+		Help: "Total CPU duration with idle CPU caused by admission control, i.e., the CPU is" +
+			" idle even after excluding runnable goroutines, and there are requests waiting for" +
+			" admission in CPU queue",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
 	kvSlotAdjusterIncrements = metric.Metadata{
 		Name:        "admission.granter.slot_adjuster_increments.kv",
 		Help:        "Number of increments of the total KV slots",

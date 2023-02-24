@@ -29,7 +29,7 @@ var _ cpuOverloadIndicator = &sqlNodeCPUOverloadIndicator{}
 var _ CPULoadListener = &sqlNodeCPUOverloadIndicator{}
 
 func (sn *sqlNodeCPUOverloadIndicator) CPULoad(
-	runnable int, procs int, samplePeriod time.Duration,
+	runnable int, procs int, idleProcs int, samplePeriod time.Duration,
 ) {
 }
 

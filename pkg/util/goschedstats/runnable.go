@@ -48,7 +48,7 @@ func RecentNormalizedRunnableGoroutines() float64 {
 }
 
 // If you get a compilation error here, the Go version you are using is not
-// supported by this package. Cross-check the structures in runtime_go1.18.go
+// supported by this package. Cross-check the structures in runtime_go1.19.go
 // against those in the new Go's runtime, and if they are still accurate adjust
 // the build tag in that file to accept the version. If they don't match, you
 // will have to add a new version of that file.
@@ -93,7 +93,8 @@ var ewma uint64
 
 // RunnableCountCallback is provided the current value of runnable goroutines,
 // GOMAXPROCS, and the current sampling period.
-type RunnableCountCallback func(numRunnable int, numProcs int, samplePeriod time.Duration)
+type RunnableCountCallback func(
+	numRunnable int, numProcs int, numIdleProcs int, samplePeriod time.Duration)
 
 type callbackWithID struct {
 	RunnableCountCallback
@@ -181,7 +182,7 @@ type timeTickerInterface interface {
 type schedStatsTicker struct {
 	lastTime              time.Time
 	curPeriod             time.Duration
-	numRunnableGoroutines func() (numRunnable int, numProcs int)
+	numRunnableGoroutines func() (numRunnable int, numProcs int, numIdleProcs int)
 	// sum accumulates the sum of the number of runnable goroutines per CPU,
 	// multiplied by toFixedPoint, for all samples since the last reporting.
 	sum uint64
@@ -231,9 +232,9 @@ func (s *schedStatsTicker) getStatsOnTick(
 		s.sum = 0
 		s.numSamples = 0
 	}
-	runnable, numProcs := s.numRunnableGoroutines()
+	runnable, numProcs, numIdleProcs := s.numRunnableGoroutines()
 	for i := range cbs {
-		cbs[i].RunnableCountCallback(runnable, numProcs, s.curPeriod)
+		cbs[i].RunnableCountCallback(runnable, numProcs, numIdleProcs, s.curPeriod)
 	}
 	// The value of the sample is the ratio of runnable to numProcs (scaled
 	// for fixed-point arithmetic).
