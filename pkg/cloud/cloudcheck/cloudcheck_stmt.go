@@ -82,7 +82,8 @@ func ShowCloudStorageTestPlanHook(
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// collapse the two pairs of bytes+time to a single string rate each.
-			res := row[:len(row)-2] //
+			res := make(tree.Datums, len(row)-2)
+			copy(res[:4], row[:4])
 			res[4] = tree.NewDString(rateFromDatums(row[4], row[5]))
 			res[5] = tree.NewDString(rateFromDatums(row[6], row[7]))
 			res[6] = row[8]
