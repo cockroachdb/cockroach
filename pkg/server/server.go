@@ -105,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
@@ -1275,6 +1276,8 @@ func (li listenerInfo) Iter() map[string]string {
 // should represent the general startup operation.
 func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
+	ctx, done := startup.MaybeTagStartupContext(ctx)
+	defer done()
 
 	// The following initialization is mirrored in
 	// (*SQLServerWrapper).PreStart. Please keep them in sync.
@@ -1826,7 +1829,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	})
 
 	// Begin recording status summaries.
-	if err := s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval); err != nil {
+	// TODO(oleg): Startup: [+] This could fail if it can't write node status to db.
+	// Write is performed as task in background context.
+	if err := s.node.startWriteNodeStatus(ctx, workersCtx, base.DefaultMetricsSampleInterval); err != nil {
 		return err
 	}
 
@@ -1884,7 +1889,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.node.recordJoinEvent(ctx)
 
 	// Start the SQL subsystem.
+	// TODO(oleg): Startup: [+] could fail fetching locality info from KV
+	// TODO(oleg): Startup: [+] could fail fetching bootstrap version
+	// TODO(oleg): Startup: [+] could fail fetching cluster version
+	// TODO(oleg): Startup: [+] could fail fetching tenant version
+	// TODO(oleg): Startup: [+] could fail checking migration status
 	if err := s.sqlServer.preStart(
+		ctx,
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
@@ -1944,6 +1955,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Initialize the key visualizer boundary subscriber rangefeed,
 	// and start the rangefeed to broadcast updates to the collector.
+	// TODO(oleg): Startup: [+] Can fail lookup table id and start range feed (why not using rangefeedcache that retries?)
 	if err := keyvissubscriber.Start(
 		ctx,
 		s.stopper,
@@ -1957,10 +1969,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
+	// TODO(oleg): Startup: [+] Can fail lookup table id
+	if err := s.node.tenantSettingsWatcher.Start(ctx, workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
 	}
-	if err := s.tenantCapabilitiesWatcher.Start(ctx); err != nil {
+	if err := s.tenantCapabilitiesWatcher.Start(workersCtx); err != nil {
 		return errors.Wrap(err, "initializing tenant capabilities")
 	}
 	// Now that we've got the tenant capabilities subsystem all started, we bind
@@ -1983,7 +1996,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.stopper)
 
 	// Let the server controller start watching tenant service mode changes.
-	if err := s.serverController.start(workersCtx,
+	// TODO(oleg): Startup: [+] Can fail querying tenants
+	if err := s.serverController.start(ctx, workersCtx,
 		s.node.execCfg.InternalDB.Executor(),
 	); err != nil {
 		return errors.Wrap(err, "failed to start the server controller")

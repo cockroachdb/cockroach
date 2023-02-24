@@ -689,6 +689,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// Start the SQL subsystem.
 	if err := s.sqlServer.preStart(
+		ctx,
 		workersCtx,
 		s.stopper,
 		s.sqlServer.cfg.TestingKnobs,

@@ -972,40 +972,41 @@ func startGraphiteStatsExporter(
 
 // startWriteNodeStatus begins periodically persisting status summaries for the
 // node and its stores.
-func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
-	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "summaries", nil)
+func (n *Node) startWriteNodeStatus(ctx, workerCtx context.Context, frequency time.Duration) error {
+	ctx = logtags.AddTag(n.AnnotateCtx(ctx), "summaries", nil)
 	// Immediately record summaries once on server startup. The update loop below
 	// will only update the key if it exists, to avoid race conditions during
 	// node decommissioning, so we have to error out if we can't create it.
 	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
 		return errors.Wrap(err, "error recording initial status summaries")
 	}
-	return n.stopper.RunAsyncTask(ctx, "write-node-status", func(ctx context.Context) {
-		// Write a status summary immediately; this helps the UI remain
-		// responsive when new nodes are added.
-		ticker := time.NewTicker(frequency)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				// Use an alertTTL of twice the ticker frequency. This makes sure that
-				// alerts don't disappear and reappear spuriously while at the same
-				// time ensuring that an alert doesn't linger for too long after having
-				// resolved.
-				//
-				// The status key must already exist, to avoid race conditions
-				// during decommissioning of this node. Decommissioning may be
-				// carried out by a different node, so this avoids resurrecting
-				// the status entry after the decommissioner has removed it.
-				// See Server.Decommission().
-				if err := n.writeNodeStatus(ctx, 2*frequency, true /* mustExist */); err != nil {
-					log.Warningf(ctx, "error recording status summaries: %s", err)
+	return n.stopper.RunAsyncTask(logtags.AddTag(n.AnnotateCtx(workerCtx), "summaries", nil),
+		"write-node-status", func(ctx context.Context) {
+			// Write a status summary immediately; this helps the UI remain
+			// responsive when new nodes are added.
+			ticker := time.NewTicker(frequency)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					// Use an alertTTL of twice the ticker frequency. This makes sure that
+					// alerts don't disappear and reappear spuriously while at the same
+					// time ensuring that an alert doesn't linger for too long after having
+					// resolved.
+					//
+					// The status key must already exist, to avoid race conditions
+					// during decommissioning of this node. Decommissioning may be
+					// carried out by a different node, so this avoids resurrecting
+					// the status entry after the decommissioner has removed it.
+					// See Server.Decommission().
+					if err := n.writeNodeStatus(ctx, 2*frequency, true /* mustExist */); err != nil {
+						log.Warningf(ctx, "error recording status summaries: %s", err)
+					}
+				case <-n.stopper.ShouldQuiesce():
+					return
 				}
-			case <-n.stopper.ShouldQuiesce():
-				return
 			}
-		}
-	})
+		})
 }
 
 // writeNodeStatus retrieves status summaries from the supplied

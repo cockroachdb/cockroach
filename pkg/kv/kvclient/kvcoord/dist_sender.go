@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -794,6 +795,8 @@ func unsetCanForwardReadTimestampFlag(ba *kvpb.BatchRequest) {
 func (ds *DistSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	startup.AssertStartupTagged(ctx)
+
 	ds.incrementBatchCounters(ba)
 
 	if pErr := ds.initAndVerifyBatch(ctx, ba); pErr != nil {
@@ -1956,7 +1959,31 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 // value when populating the batch header.
 const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
 
-// sendToReplicas sends a batch to the replicas of a range. Replicas are tried one
+func (ds *DistSender) sendToReplicas(
+	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
+) (*kvpb.BatchResponse, error) {
+	if !startup.ShouldRetryReplicas(ctx) {
+		// Skip all unnecessary steps on normal execution.
+		return ds.sendToReplicasImpl(ctx, ba, routing, withCommit)
+	}
+
+	var br *kvpb.BatchResponse
+	var err error
+	for r := retry.Start(startup.RetryOpts); r.Next(); {
+		br, err = ds.sendToReplicasImpl(ctx, ba, routing, withCommit)
+		if br == nil || br.Error == nil {
+			return br, err
+		}
+		bErr := br.Error.GoError()
+		if !startup.IsRetryableError(bErr) {
+			return br, err
+		}
+		log.Infof(ctx, "failed sending to replica during node startup, retrying error %s", bErr)
+	}
+	return br, err
+}
+
+// sendToReplicasImpl sends a batch to the replicas of a range. Replicas are tried one
 // at a time (generally the leaseholder first). The result of this call is
 // either a BatchResponse or an error. In the former case, the BatchResponse
 // wraps either a response or a *kvpb.Error; this error will come from a
@@ -1982,7 +2009,7 @@ const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
 // latter because aborting is idempotent). If withCommit is true, any errors
 // that do not definitively rule out the possibility that the batch could have
 // succeeded are transformed into AmbiguousResultErrors.
-func (ds *DistSender) sendToReplicas(
+func (ds *DistSender) sendToReplicasImpl(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
 

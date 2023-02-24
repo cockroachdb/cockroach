@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -785,6 +786,8 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	startup.AssertStartupTagged(ctx)
+
 	if err := ie.checkIfTxnIsConsistent(txn); err != nil {
 		return nil, err
 	}

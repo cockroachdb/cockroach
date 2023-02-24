@@ -1346,7 +1346,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 }
 
 func (s *SQLServer) preStart(
-	ctx context.Context,
+	ctx, workerCtx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
 	orphanedLeasesTimeThresholdNanos int64,
@@ -1356,7 +1356,7 @@ func (s *SQLServer) preStart(
 	// until a connection is established to the cluster and its ID has been
 	// determined.
 	if s.tenantConnect != nil {
-		if err := s.tenantConnect.Start(ctx); err != nil {
+		if err := s.tenantConnect.Start(workerCtx); err != nil {
 			return err
 		}
 	}
@@ -1374,7 +1374,7 @@ func (s *SQLServer) preStart(
 	s.leaseMgr.SetRegionPrefix(regionPhysicalRep)
 
 	// Start the sql liveness subsystem. We'll need it to get a session.
-	s.sqlLivenessProvider.Start(ctx, regionPhysicalRep)
+	s.sqlLivenessProvider.Start(workerCtx, regionPhysicalRep)
 
 	session, err := s.sqlLivenessProvider.Session(ctx)
 	if err != nil {
@@ -1384,7 +1384,7 @@ func (s *SQLServer) preStart(
 
 	// Start instance ID reclaim loop.
 	if err := s.sqlInstanceStorage.RunInstanceIDReclaimLoop(
-		ctx, stopper, timeutil.DefaultTimeSource{}, s.internalDB, session.Expiration,
+		workerCtx, stopper, timeutil.DefaultTimeSource{}, s.internalDB, session.Expiration,
 	); err != nil {
 		return err
 	}
@@ -1438,33 +1438,33 @@ func (s *SQLServer) preStart(
 	// we might be the only SQL server available, especially when we have not
 	// received data from the rangefeed yet, and if the reader doesn't see
 	// it, we'd be unable to plan any queries.
-	s.sqlInstanceReader.Start(ctx, instance)
+	s.sqlInstanceReader.Start(workerCtx, instance)
 
-	s.execCfg.GCJobNotifier.Start(ctx)
-	s.temporaryObjectCleaner.Start(ctx, stopper)
+	s.execCfg.GCJobNotifier.Start(workerCtx)
+	s.temporaryObjectCleaner.Start(workerCtx, stopper)
 	s.distSQLServer.Start()
-	s.pgServer.Start(ctx, stopper)
-	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
+	s.pgServer.Start(workerCtx, stopper)
+	if err := s.statsRefresher.Start(workerCtx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
-	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
+	s.stmtDiagnosticsRegistry.Start(workerCtx, stopper)
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
 		return err
 	}
 
-	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
-	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
+	s.leaseMgr.RefreshLeases(workerCtx, stopper, s.execCfg.DB)
+	s.leaseMgr.PeriodicallyRefreshSomeLeases(workerCtx)
 
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.execCfg.Settings)
-	ieMon.StartNoReserved(ctx, s.pgServer.SQLServer.GetBytesMonitor())
+	ieMon.StartNoReserved(workerCtx, s.pgServer.SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
 
-	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
+	if err := s.jobRegistry.Start(workerCtx, stopper); err != nil {
 		return err
 	}
 
 	if s.spanconfigMgr != nil {
-		if err := s.spanconfigMgr.Start(ctx); err != nil {
+		if err := s.spanconfigMgr.Start(workerCtx); err != nil {
 			return err
 		}
 	}
@@ -1495,10 +1495,10 @@ func (s *SQLServer) preStart(
 		bootstrapVersion = roachpb.Version{Major: 20, Minor: 1, Internal: 1}
 	}
 
-	if err := s.settingsWatcher.Start(ctx); err != nil {
+	if err := s.settingsWatcher.Start(workerCtx); err != nil {
 		return errors.Wrap(err, "initializing settings")
 	}
-	if err := s.systemConfigWatcher.Start(ctx, s.stopper); err != nil {
+	if err := s.systemConfigWatcher.Start(workerCtx, s.stopper); err != nil {
 		return errors.Wrap(err, "initializing settings")
 	}
 
@@ -1516,6 +1516,7 @@ func (s *SQLServer) preStart(
 	// upgrades in between the two must have run when the cluster version
 	// advanced. But for sql-only servers the bootstrap version is not
 	// well-defined, so we use the active version.
+	// TODO(oleg): Startup this should decide if startup or not
 	if err := s.upgradeManager.RunPermanentUpgrades(
 		ctx,
 		s.cfg.Settings.Version.ActiveVersion(ctx).Version, /* upToVersion */
@@ -1546,11 +1547,12 @@ func (s *SQLServer) preStart(
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
-	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
+	// TODO(oleg): Startup: runs in background but copies tags from provided ctx
+	s.leaseMgr.DeleteOrphanedLeases(workerCtx, orphanedLeasesTimeThresholdNanos)
 
 	// Start scheduled jobs daemon.
 	jobs.StartJobSchedulerDaemon(
-		ctx,
+		workerCtx,
 		stopper,
 		s.metricsRegistry,
 		&scheduledjobs.JobExecutionConfig{
@@ -1574,10 +1576,10 @@ func (s *SQLServer) preStart(
 	)
 
 	scheduledlogging.Start(
-		ctx, stopper, s.execCfg.InternalDB, s.execCfg.Settings,
+		workerCtx, stopper, s.execCfg.InternalDB, s.execCfg.Settings,
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
-	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+	s.execCfg.SyntheticPrivilegeCache.Start(workerCtx)
 	return nil
 }
 

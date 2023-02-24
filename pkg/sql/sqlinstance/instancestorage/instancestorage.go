@@ -438,7 +438,7 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 	db descs.DB,
 	sessionExpirationFn func() hlc.Timestamp,
 ) error {
-	loadRegions := func() ([][]byte, error) {
+	loadRegions := func(ctx context.Context) ([][]byte, error) {
 		// Load regions from the system DB.
 		var regions [][]byte
 		if err := db.DescsTxn(ctx, func(
@@ -488,7 +488,7 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 
 				// Load the regions each time we attempt to generate rows since
 				// regions can be added/removed to/from the system DB.
-				regions, err := loadRegions()
+				regions, err := loadRegions(ctx)
 				if err != nil {
 					log.Warningf(ctx, "failed to load regions from the system DB: %v", err)
 					continue

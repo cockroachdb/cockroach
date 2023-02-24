@@ -80,9 +80,11 @@ func New(
 // This function sets up the rangefeed and waits for the initial scan. An error
 // will be returned if the initial table scan hits an error, the context is
 // canceled or the stopper is stopped prior to the initial data being retrieved.
-func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
+func (w *Watcher) Start(
+	ctx, workerCtx context.Context, sysTableResolver catalog.SystemTableIDResolver,
+) error {
 	w.startCh = make(chan struct{})
-	w.startErr = w.startRangeFeed(ctx, sysTableResolver)
+	w.startErr = w.startRangeFeed(ctx, workerCtx, sysTableResolver)
 	close(w.startCh)
 	return w.startErr
 }
@@ -92,7 +94,7 @@ func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTabl
 // is canceled or the stopper is stopped prior to the initial data being
 // retrieved.
 func (w *Watcher) startRangeFeed(
-	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
+	ctx, workerCtx context.Context, sysTableResolver catalog.SystemTableIDResolver,
 ) error {
 	tableID, err := sysTableResolver.LookupSystemTableID(ctx, systemschema.TenantSettingsTable.GetName())
 	if err != nil {
@@ -175,7 +177,7 @@ func (w *Watcher) startRangeFeed(
 	)
 
 	// Kick off the rangefeedcache which will retry until the stopper stops.
-	if err := rangefeedcache.Start(ctx, w.stopper, c, onError); err != nil {
+	if err := rangefeedcache.Start(workerCtx, w.stopper, c, onError); err != nil {
 		return err // we're shutting down
 	}
 

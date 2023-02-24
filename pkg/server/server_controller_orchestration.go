@@ -78,7 +78,7 @@ type serverState struct {
 
 // start monitors changes to the service mode and updates
 // the running servers accordingly.
-func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
+func (c *serverController) start(ctx, workerCtx context.Context, ie isql.Executor) error {
 	// We perform one round of updates synchronously, to ensure that
 	// any tenants already in service mode SHARED get a chance to boot
 	// up before we signal readiness.
@@ -87,7 +87,7 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 	}
 
 	// Run the detection of which servers should be started or stopped.
-	return c.stopper.RunAsyncTask(ctx, "mark-tenant-services", func(ctx context.Context) {
+	return c.stopper.RunAsyncTask(workerCtx, "mark-tenant-services", func(ctx context.Context) {
 		const watchInterval = time.Second
 		ctx, cancel := c.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
