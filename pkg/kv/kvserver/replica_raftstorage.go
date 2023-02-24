@@ -489,21 +489,16 @@ func (r *Replica) applySnapshot(
 		log.Infof(ctx, "applied %s (%s)", inSnap, logDetails)
 	}(timeutil.Now())
 
-	unreplicatedSSTFile, nonempty, err := writeUnreplicatedSST(
+	unreplicatedSSTFile, err := writeUnreplicatedSST(
 		ctx, r.ID(), r.ClusterSettings(), nonemptySnap.Metadata, hs, &r.raftMu.stateLoader.StateLoader,
 	)
 	if err != nil {
 		return err
 	}
-	if !nonempty {
-		log.Fatalf(ctx, "unreplicated SST was empty")
-	}
-	if nonempty {
-		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-		// buffering in a MemFile first.
-		if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-			return err
-		}
+	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
+	// buffering in a MemFile first.
+	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+		return err
 	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
@@ -708,9 +703,6 @@ func (r *Replica) applySnapshot(
 // covers the RangeID-unreplicated keyspace. A range tombstone is
 // laid down and the Raft state provided by the arguments is overlaid
 // onto it.
-//
-// TODO(sep-raft-log): when is `nonempty` ever false? We always
-// perform a number of writes to this SST.
 func writeUnreplicatedSST(
 	ctx context.Context,
 	id storage.FullReplicaID,
@@ -718,7 +710,7 @@ func writeUnreplicatedSST(
 	meta raftpb.SnapshotMetadata,
 	hs raftpb.HardState,
 	sl *logstore.StateLoader,
-) (_ *storage.MemFile, nonempty bool, _ error) {
+) (*storage.MemFile, error) {
 	unreplicatedSSTFile := &storage.MemFile{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
 		ctx, st, unreplicatedSSTFile,
@@ -733,19 +725,19 @@ func writeUnreplicatedSST(
 		if err := unreplicatedSST.ClearRawRange(
 			sp.Key, sp.EndKey, true /* pointKeys */, false, /* rangeKeys */
 		); err != nil {
-			return nil, false, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+			return nil, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 		}
 	}
 
 	// Update HardState.
 	if err := sl.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
-		return nil, false, errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
+		return nil, errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
 	if err := sl.SetRaftReplicaID(
 		ctx, &unreplicatedSST, id.ReplicaID); err != nil {
-		return nil, false, errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
+		return nil, errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
 	}
 
 	if err := sl.SetRaftTruncatedState(
@@ -755,13 +747,13 @@ func writeUnreplicatedSST(
 			Term:  meta.Term,
 		},
 	); err != nil {
-		return nil, false, errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
+		return nil, errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
 	}
 
 	if err := unreplicatedSST.Finish(); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	return unreplicatedSSTFile, unreplicatedSST.DataSize > 0, nil
+	return unreplicatedSSTFile, nil
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
