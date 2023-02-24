@@ -186,7 +186,8 @@ CREATE TABLE t8 (
     FAMILY (a, b, c)
 )
 
-statement ok
+# TODO(mgartner): Lift this restriction. See #96924.
+statement error column "c" cannot be dropped because it is referenced by partial index "t8_a_idx1"
 ALTER TABLE t8 DROP COLUMN c
 
 query TT
@@ -195,10 +196,12 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
       a INT8 NULL,
       b INT8 NULL,
+      c STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
       INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
-      FAMILY fam_0_a_b_c_rowid (a, b, rowid)
+      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
+      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
     )
 
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
@@ -1911,3 +1914,93 @@ BEGIN;
 COMMIT;
 SELECT * FROM t79613;
 DROP TABLE t79613;
+
+# Regression test for #96924 to disallow dropping a column that is referenced in
+# a partial index predicate.
+subtest column_dropped_referenced_in_partial_index
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE t96924 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f JSON,
+  INDEX (a) WHERE (b > 0),
+  UNIQUE INDEX (b) WHERE (b > 0),
+  UNIQUE (c) WHERE (c > 0),
+  UNIQUE WITHOUT INDEX (d) WHERE (d > 0),
+  INVERTED INDEX (e, f) WHERE (e > 0)
+)
+
+# Column `a` can be dropped because it is not referenced in any partial index
+# predicates.
+statement ok
+ALTER TABLE t96924 DROP COLUMN a
+
+statement error pq: column "b" cannot be dropped because it is referenced by partial index "t96924_b_key"
+ALTER TABLE t96924 DROP COLUMN b
+
+statement ok
+DROP INDEX t96924_b_key CASCADE
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN b
+
+statement error pq: column "c" cannot be dropped because it is referenced by partial index "t96924_c_key"
+ALTER TABLE t96924 DROP COLUMN c
+
+statement ok
+DROP INDEX t96924_c_key CASCADE
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN c
+
+statement error pq: column "d" cannot be dropped because it is referenced by partial unique constraint "unique_d"
+ALTER TABLE t96924 DROP COLUMN d
+
+statement ok
+ALTER TABLE t96924 DROP CONSTRAINT unique_d
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN d
+
+statement error pq: column "e" cannot be dropped because it is referenced by partial index "t96924_e_f_idx"
+ALTER TABLE t96924 DROP COLUMN e
+
+statement ok
+DROP INDEX t96924_e_f_idx CASCADE
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN e
+
+# Column `f` can be dropped because it is not referenced in any partial index
+# predicates.
+statement ok
+ALTER TABLE t96924 DROP COLUMN f
+
+# Another edge case where ALTER PRIMARY KEY implicit drops the `rowid` column
+# yet `rowid` is referenced in a partial index. Note that this behavior is
+# only in the declarative schema changer but not in the legacy schema changer.
+statement ok
+DROP TABLE t96924
+
+statement ok
+CREATE TABLE t96924 (a INT NOT NULL)
+
+statement ok
+CREATE INDEX t96924_idx_1 ON t96924(a) WHERE (rowid > 0);
+
+skipif config local-legacy-schema-changer
+statement error column "rowid" cannot be dropped because it is referenced by partial index "t96924_idx_1"
+ALTER TABLE t96924 ALTER PRIMARY KEY USING COLUMNS (a);
+
+statement ok
+DROP INDEX t96924_idx_1
+
+statement ok
+ALTER TABLE t96924 ALTER PRIMARY KEY USING COLUMNS (a);

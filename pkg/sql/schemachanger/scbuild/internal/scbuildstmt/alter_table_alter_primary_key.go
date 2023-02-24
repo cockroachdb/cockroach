@@ -508,6 +508,40 @@ func mustRetrieveKeyIndexColumns(
 	return indexColumns
 }
 
+func mustRetrieveIndexNameElem(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (indexNameElem *scpb.IndexName) {
+	scpb.ForEachIndexName(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.IndexName,
+	) {
+		if e.IndexID == indexID {
+			indexNameElem = e
+		}
+	})
+	if indexNameElem == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find an index name element "+
+			"with ID %v from table %v", indexID, tableID))
+	}
+	return indexNameElem
+}
+
+func mustRetrieveConstraintWithoutIndexNameElem(
+	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
+) (constraintWithoutIndexName *scpb.ConstraintWithoutIndexName) {
+	scpb.ForEachConstraintWithoutIndexName(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName,
+	) {
+		if e.ConstraintID == constraintID {
+			constraintWithoutIndexName = e
+		}
+	})
+	if constraintWithoutIndexName == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find a constraint name "+
+			"element with ID %v from table %v", constraintID, tableID))
+	}
+	return constraintWithoutIndexName
+}
+
 func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 	if t.Name == "" {
 		return
