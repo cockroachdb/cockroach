@@ -759,7 +759,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		systemTenantNameContainer,
 		nodeLiveness,
 		rpcContext.RemoteClocks,
-		clock,
+		clock.WallClock(),
 		st,
 	)
 	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())

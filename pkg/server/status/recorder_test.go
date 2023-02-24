@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -113,7 +112,7 @@ func TestMetricsRecorderTenants(t *testing.T) {
 		roachpb.NewTenantNameContainer(catconstants.SystemTenantName),
 		nil, /* nodeLiveness */
 		nil, /* remoteClocks */
-		hlc.NewClockForTesting(manual),
+		manual,
 		st,
 	)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
@@ -132,7 +131,7 @@ func TestMetricsRecorderTenants(t *testing.T) {
 		appNameContainer,
 		nil, /* nodeLiveness */
 		nil, /* remoteClocks */
-		hlc.NewClockForTesting(manual),
+		manual,
 		stTenant,
 	)
 	recorderTenant.AddNode(reg2, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
@@ -227,7 +226,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
 	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, hlc.NewClockForTesting(manual), st)
+	recorder := NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, manual, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
