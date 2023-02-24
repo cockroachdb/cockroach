@@ -3160,7 +3160,13 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 			}
 			return nil
 		})
-		tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+		// Need to retry because removing voters could fail while snapshots are
+		// still in flight and cause "cannot remove learner while snapshot is in
+		// flight" error.
+		testutils.SucceedsSoon(t, func() error {
+			_, err := tc.RemoveVoters(lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+			return err
+		})
 
 		if withMerge {
 			// Merge the two ranges together.
