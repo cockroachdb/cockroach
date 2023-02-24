@@ -62,6 +62,11 @@ type CopyOptions struct {
 	Escape      *StrVal
 	Header      bool
 	Quote       *StrVal
+
+	// Additional flags are needed to keep track of whether explicit default
+	// values were already set.
+	HasFormat bool
+	HasHeader bool
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -90,17 +95,20 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {
-			ctx.WriteString(" ")
+			ctx.WriteString(", ")
 		}
 		addSep = true
 	}
+	ctx.WriteString("(")
 	if o.CopyFormat != CopyFormatText {
 		maybeAddSep()
 		switch o.CopyFormat {
 		case CopyFormatBinary:
-			ctx.WriteString("BINARY")
+			ctx.WriteString("FORMAT BINARY")
 		case CopyFormatCSV:
-			ctx.WriteString("CSV")
+			ctx.WriteString("FORMAT CSV")
+		case CopyFormatText:
+			ctx.WriteString("FORMAT TEXT")
 		}
 	}
 	if o.Delimiter != nil {
@@ -120,7 +128,7 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		// Lowercase because that's what has historically been produced
 		// by copy_file_upload.go, so this will provide backward
 		// compatibility with older servers.
-		ctx.WriteString("destination = ")
+		ctx.WriteString("DESTINATION ")
 		ctx.FormatNode(o.Destination)
 		addSep = true
 	}
@@ -131,13 +139,14 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 	}
 	if o.Header {
 		maybeAddSep()
-		ctx.WriteString("HEADER")
+		ctx.WriteString("HEADER true")
 	}
 	if o.Quote != nil {
 		maybeAddSep()
 		ctx.WriteString("QUOTE ")
 		ctx.FormatNode(o.Quote)
 	}
+	ctx.WriteString(")")
 }
 
 // IsDefault returns true if this struct has default value.
@@ -154,11 +163,12 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 		}
 		o.Destination = other.Destination
 	}
-	if other.CopyFormat != CopyFormatText {
-		if o.CopyFormat != CopyFormatText {
+	if other.HasFormat {
+		if o.HasFormat {
 			return pgerror.Newf(pgcode.Syntax, "format option specified multiple times")
 		}
 		o.CopyFormat = other.CopyFormat
+		o.HasFormat = true
 	}
 	if other.Delimiter != nil {
 		if o.Delimiter != nil {
@@ -178,8 +188,12 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 		}
 		o.Escape = other.Escape
 	}
-	if other.Header {
-		o.Header = true
+	if other.HasHeader {
+		if o.HasHeader {
+			return pgerror.Newf(pgcode.Syntax, "header option specified multiple times")
+		}
+		o.Header = other.Header
+		o.HasHeader = true
 	}
 	if other.Quote != nil {
 		if o.Quote != nil {

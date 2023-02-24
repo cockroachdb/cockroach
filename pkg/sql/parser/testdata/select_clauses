@@ -3069,3 +3069,61 @@ SELECT * FROM ROWS FROM (json_to_record('')) AS t (a "Nice Enum 📙", b STRING,
 SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a "Nice Enum 📙", b STRING, c foo) -- fully parenthesized
 SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a "Nice Enum 📙", b STRING, c foo) -- literals removed
 SELECT * FROM ROWS FROM (json_to_record('')) AS _ (_ _, _ STRING, _ _) -- identifiers removed
+
+# Test column aliases that are also COPY options
+
+parse
+SELECT col FORCE_NOT_NULL FROM tab
+----
+SELECT col AS force_not_null FROM tab -- normalized!
+SELECT (col) AS force_not_null FROM tab -- fully parenthesized
+SELECT col AS force_not_null FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
+
+parse
+SELECT col FORCE_NULL FROM tab
+----
+SELECT col AS force_null FROM tab -- normalized!
+SELECT (col) AS force_null FROM tab -- fully parenthesized
+SELECT col AS force_null FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
+
+parse
+SELECT col FORCE_QUOTE FROM tab
+----
+SELECT col AS force_quote FROM tab -- normalized!
+SELECT (col) AS force_quote FROM tab -- fully parenthesized
+SELECT col AS force_quote FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
+
+parse
+SELECT col FORMAT FROM tab
+----
+SELECT col AS format FROM tab -- normalized!
+SELECT (col) AS format FROM tab -- fully parenthesized
+SELECT col AS format FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
+
+parse
+SELECT col escape FROM tab
+----
+SELECT col AS escape FROM tab -- normalized!
+SELECT (col) AS escape FROM tab -- fully parenthesized
+SELECT col AS escape FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
+
+parse
+SELECT col ENCODING FROM tab
+----
+SELECT col AS encoding FROM tab -- normalized!
+SELECT (col) AS encoding FROM tab -- fully parenthesized
+SELECT col AS encoding FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
+
+parse
+SELECT col header FROM tab
+----
+SELECT col AS header FROM tab -- normalized!
+SELECT (col) AS header FROM tab -- fully parenthesized
+SELECT col AS header FROM tab -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
