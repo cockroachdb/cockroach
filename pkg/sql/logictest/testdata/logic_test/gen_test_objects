@@ -193,16 +193,17 @@ ORDER BY table_name, column_name
 LIMIT 20
 ----
 database_role_settings      "dataBase_ḯd"     oid
+database_role_settings      "r""ole_id"      oid
 database_role_settings      role_name         text
 database_role_settings      rowid             bigint
 database_role_settings      settings          ARRAY
 ev̅entlog                   "eventType"       text
-ev̅entlog                   in😜f̈́o           text
+ev̅entlog                   info              text
 ev̅entlog                   "reportingID"     bigint
 ev̅entlog                   rowid             bigint
 ev̅entlog                   "targetID"        bigint
-ev̅entlog                   "timestam̉  p"    timestamp without time zone
-ev̅entlog                   "uniqueID"        bytea
+ev̅entlog                   "uni̹queID"       bytea
+ev̅entlog                   "🙃t%vimestamp"    timestamp without time zone
 namespace                   "name "           text
 namespace                   "parent%42ID"     bigint
 namespace                   "parentSchemaID"  bigint
@@ -211,7 +212,6 @@ namespace                   😁id               bigint
 "prote""cted_ts""_records"  "Id"              uuid
 "prote""cted_ts""_records"  meta              bytea
 "prote""cted_ts""_records"  meta_type         text
-"prote""cted_ts""_records"  num_spans         bigint
 
 subtest templates/different_templates_in_each_db
 
