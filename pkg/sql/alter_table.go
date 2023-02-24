@@ -1612,6 +1612,9 @@ func dropColumnImpl(
 		if err != nil {
 			return nil, err
 		}
+		if depDesc.Dropped() {
+			continue
+		}
 		switch t := depDesc.(type) {
 		case *tabledesc.Mutable:
 			jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",

@@ -2940,3 +2940,30 @@ ALTER TABLE t_96648 DROP CONSTRAINT check_i, DROP CONSTRAINT check_i1;
 
 statement ok
 DROP TABLE t_96648
+
+subtest regression_97546
+
+statement ok
+CREATE TABLE t_twocol (a INT, b INT);
+CREATE FUNCTION f1() RETURNS t_twocol AS 'SELECT * FROM t_twocol' LANGUAGE SQL;
+CREATE FUNCTION f2() RETURNS t_twocol AS 'SELECT * FROM t_twocol' LANGUAGE SQL;
+CREATE FUNCTION f3() RETURNS INT AS 'SELECT a FROM t_twocol' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_twocol DROP COLUMN b CASCADE;
+
+statement error pq: unknown function: f1\(\): function undefined
+SELECT f1();
+
+statement error pq: unknown function: f2\(\): function undefined
+SELECT f2();
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_a_b_rowid (a, rowid)
+)
