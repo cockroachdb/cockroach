@@ -104,12 +104,12 @@ func (r *ormTestsResults) summarizeAll(
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
-	for test, issue := range expectedFailures {
-		if _, ok := r.runTests[test]; ok {
+	for testName, issue := range expectedFailures {
+		if _, ok := r.runTests[testName]; ok {
 			continue
 		}
-		r.allTests = append(r.allTests, test)
-		r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGithubLink(issue))
+		r.allTests = append(r.allTests, testName)
+		r.results[testName] = fmt.Sprintf("--- FAIL: %s - %s (not run)", testName, maybeAddGithubLink(issue))
 		notRunCount++
 	}
 

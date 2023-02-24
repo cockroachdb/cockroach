@@ -37,14 +37,28 @@ func extractFailureFromTRX(contents []byte) ([]string, []status, map[string]stri
 	type UnitTestResult struct {
 		Name    string `xml:"testName,attr"`
 		Outcome string `xml:"outcome,attr"`
+		TestID  string `xml:"testId,attr"`
 		Output  Output `xml:"Output,omitempty"`
 	}
 	type Results struct {
-		UnitTestResult []UnitTestResult `xml:"UnitTestResult"`
+		UnitTestResults []UnitTestResult `xml:"UnitTestResult"`
+	}
+	type TestMethod struct {
+		Name      string `xml:"name,attr"`
+		ClassName string `xml:"className,attr"`
+	}
+	type UnitTest struct {
+		Name       string     `xml:"name,attr"`
+		TestID     string     `xml:"id,attr"`
+		TestMethod TestMethod `xml:"TestMethod"`
+	}
+	type TestDefinitions struct {
+		UnitTests []UnitTest `xml:"UnitTest"`
 	}
 	type TestRun struct {
-		XMLName xml.Name `xml:"TestRun"`
-		Results Results  `xml:"Results"`
+		XMLName         xml.Name        `xml:"TestRun"`
+		Results         Results         `xml:"Results"`
+		TestDefinitions TestDefinitions `xml:"TestDefinitions"`
 	}
 
 	var testRun TestRun
@@ -57,10 +71,18 @@ func extractFailureFromTRX(contents []byte) ([]string, []status, map[string]stri
 	if err := xml.Unmarshal(contents, &testRun); err != nil {
 		return nil, nil, nil, err
 	}
-	for _, testCase := range testRun.Results.UnitTestResult {
-		testName := testCase.Name
+
+	// Create mapping from TestID to ClassName+TestName.
+	idToFullName := make(map[string]string)
+	for _, testDef := range testRun.TestDefinitions.UnitTests {
+		idToFullName[testDef.TestID] = fmt.Sprintf("%s.%s", testDef.TestMethod.ClassName, testDef.TestMethod.Name)
+	}
+
+	// Check each result.
+	for _, testCase := range testRun.Results.UnitTestResults {
+		testName := idToFullName[testCase.TestID]
 		tests = append(tests, testName)
-		if testCase.Outcome == "Skipped" {
+		if testCase.Outcome == "Skipped" || testCase.Outcome == "NotExecuted" {
 			testStatuses = append(testStatuses, statusSkip)
 		} else if testCase.Outcome == "Passed" {
 			testStatuses = append(testStatuses, statusPass)
