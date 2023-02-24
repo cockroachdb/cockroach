@@ -132,7 +132,6 @@ go_test(
         "//pkg/base",
         "//pkg/build",
         "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
