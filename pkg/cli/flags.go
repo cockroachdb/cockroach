@@ -580,7 +580,6 @@ func init() {
 		cliflagcfg.StringFlag(f, &certCtx.caKey, cliflags.CAKey)
 		cliflagcfg.IntFlag(f, &certCtx.keySize, cliflags.KeySize)
 		cliflagcfg.BoolFlag(f, &certCtx.overwriteFiles, cliflags.OverwriteFiles)
-		cliflagcfg.VarFlag(f, &tenantIDSetter{tenantIDs: &certCtx.tenantScope}, cliflags.TenantScope)
 
 		if strings.HasSuffix(cmd.Name(), "-ca") {
 			// CA-only commands.
@@ -596,6 +595,8 @@ func init() {
 		}
 
 		if cmd == createClientCertCmd {
+			cliflagcfg.VarFlag(f, &tenantIDSetter{tenantIDs: &certCtx.tenantScope}, cliflags.TenantScope)
+
 			// PKCS8 key format is only available for the client cert command.
 			cliflagcfg.BoolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
 			cliflagcfg.BoolFlag(f, &certCtx.disableUsernameValidation, cliflags.DisableUsernameValidation)

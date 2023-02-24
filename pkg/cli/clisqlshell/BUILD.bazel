@@ -7,6 +7,7 @@ go_library(
         "api.go",
         "complete.go",
         "context.go",
+        "describe.go",
         "doc.go",
         "editor.go",
         "editor_bimodal.go",
@@ -51,6 +52,7 @@ go_test(
     name = "clisqlshell_test",
     srcs = [
         "complete_test.go",
+        "describe_test.go",
         "editor_bubbline_test.go",
         "main_test.go",
         "sql_internal_test.go",
