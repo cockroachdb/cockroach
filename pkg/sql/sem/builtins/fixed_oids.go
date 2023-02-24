@@ -1405,7 +1405,7 @@ var builtinOidsArray = []string{
 	1425: `oid(int: int) -> oid`,
 	1426: `shobj_description(object_oid: oid, catalog_name: string) -> string`,
 	1427: `pg_try_advisory_lock(int: int) -> bool`,
-	1428: `pg_advisory_unlock(int: int) -> bool`,
+	1428: `pg_advisory_unlock(key: int) -> bool`,
 	1429: `pg_client_encoding() -> string`,
 	1430: `pg_function_is_visible(oid: oid) -> bool`,
 	1431: `pg_table_is_visible(oid: oid) -> bool`,
@@ -2050,6 +2050,10 @@ var builtinOidsArray = []string{
 	2075: `phraseto_tsquery(config: string, text: string) -> tsquery`,
 	2076: `plainto_tsquery(config: string, text: string) -> tsquery`,
 	2077: `ts_parse(parser_name: string, document: string) -> tuple{int AS tokid, string AS token}`,
+	2078: `pg_advisory_unlock(key1: int4, key2: int4) -> bool`,
+	2079: `pg_advisory_unlock_shared(key: int) -> bool`,
+	2080: `pg_advisory_unlock_shared(key1: int4, key2: int4) -> bool`,
+	2081: `pg_advisory_unlock_all() -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
