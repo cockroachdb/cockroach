@@ -556,12 +556,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// add additional synchronization (and complexity to the granter
 		// interface) to deal with this, by keeping the granter's lock
 		// (GrantCoordinator.mu) locked when returning from tryGrant and call
-		// granter again to release that lock after this work has been queued. But
-		// it has the downside of extending the scope of GrantCoordinator.mu.
-		// Instead we tolerate this race in the knowledge that GrantCoordinator
-		// will periodically, at a high frequency, look at the state of the
-		// requesters to see if there is any queued work that can be granted
-		// admission.
+		// granter again to release that lock after this work has been queued.
+		// But it has the downside of extending the scope of
+		// GrantCoordinator.mu. Instead we tolerate this race in the knowledge
+		// that GrantCoordinator will periodically, at a high frequency, look at
+		// the state of the requesters to see if there is any queued work that
+		// can be granted admission.
 		q.mu.Lock()
 		prevTenant := tenant
 		// The tenant could have been removed when using tokens. See the comment
