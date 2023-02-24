@@ -248,6 +248,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
                 data={filteredSchemaInsights}
                 sortSetting={sortSetting}
                 onChangeSortSetting={onChangeSortSetting}
+                pagination={pagination}
                 renderNoResult={
                   <EmptySchemaInsightsTablePlaceholder
                     isEmptySearchResults={
