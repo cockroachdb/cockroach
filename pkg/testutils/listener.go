@@ -35,10 +35,16 @@ type ListenerRegistry struct {
 	listeners map[int]*reusableListener
 }
 
+// NewListenerRegistry creates a registry of reusable listeners to be used with
+// test cluster. Once created use ListenerRegistry.GetOrFail to create new
+// listeners and inject them into test cluster using Listener field of
+// base.TestServerArgs.
 func NewListenerRegistry() ListenerRegistry {
 	return ListenerRegistry{listeners: make(map[int]*reusableListener)}
 }
 
+// GetOrFail returns an existing reusable socket listener or creates a new one
+// on a random local port.
 func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) net.Listener {
 	t.Helper()
 	if l, ok := r.listeners[idx]; ok {
@@ -58,12 +64,16 @@ func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) net.Listener {
 	return l
 }
 
+// ReopenOrFail will allow accepting more connections on existing shared
+// listener if it was previously closed. If it was not closed, nothing happens.
+// If listener wasn't created previously, test failure is raised.
 func (r *ListenerRegistry) ReopenOrFail(t *testing.T, idx int) {
 	l, ok := r.listeners[idx]
 	require.Truef(t, ok, "socket for id %d is not open", idx)
 	l.resume()
 }
 
+// Close closes and deletes all previously created shared listeners.
 func (r *ListenerRegistry) Close() {
 	for k, v := range r.listeners {
 		_ = v.wrapped.Close()
@@ -123,7 +133,7 @@ func (l *reusableListener) resume() {
 	l.pauseMu.pauseC = make(chan interface{})
 }
 
-// Accept implements net.Listener interface
+// Accept implements net.Listener interface.
 func (l *reusableListener) Accept() (net.Conn, error) {
 	select {
 	case c, ok := <-l.acceptC:
@@ -152,7 +162,7 @@ func (l *reusableListener) Close() error {
 	return nil
 }
 
-// Addr implements net.Listener interface
+// Addr implements net.Listener interface.
 func (l *reusableListener) Addr() net.Addr {
 	return l.wrapped.Addr()
 }
