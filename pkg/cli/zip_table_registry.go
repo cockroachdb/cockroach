@@ -619,6 +619,17 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		) SELECT trace_id, parent_span_id, span_id, goroutine_id, finished, start_time, duration, operation, payload_type 
 		FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)`,
 	},
+	"crdb_internal.node_memory_monitors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"level",
+			"name",
+			"id",
+			"parent_id",
+			"used",
+			"reserved_used",
+			"reserved_reserved",
+		},
+	},
 	"crdb_internal.node_metrics": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"store_id",
