@@ -34,8 +34,6 @@ func TestSeparateRaftLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	skip.IgnoreLint(t, "TODO(this PR): unskip in last commit")
-
 	// Six stores, each of which with a separate log engine, makes twelve pebble
 	// instances - likely too heavyweight for stressing.
 	skip.UnderStress(t, "not a useful test to stress")
