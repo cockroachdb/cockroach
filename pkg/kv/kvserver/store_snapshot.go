@@ -1363,7 +1363,7 @@ func SendEmptySnapshot(
 
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
-		eng,
+		eng, eng,
 		ms,
 		desc,
 		roachpb.Lease{},

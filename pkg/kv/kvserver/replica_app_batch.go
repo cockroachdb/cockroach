@@ -290,11 +290,30 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// cannot be constructed at evaluation time because it differs
 		// on each replica (votes may have already been cast on the
 		// uninitialized replica). Write this new hardstate to the batch too.
-		// See https://github.com/cockroachdb/cockroach/issues/20629.
+		// See:
+		// https://github.com/cockroachdb/cockroach/issues/20629
+		// https://github.com/cockroachdb/cockroach/issues/97615
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		logBatch := b.batch
+		sep := b.r.store.sepRaftLog()
+		if sep {
+			// TODO(sep-raft-log): this is experimental code without regards for crash
+			// resilience. The log batch is immediately committed, before the state
+			// batch. While this might be the right order of operations, it could use
+			// some cleanup. Tracking issue to revisit this:
+			//
+			// https://github.com/cockroachdb/cockroach/issues/97617
+			logBatch = b.r.store.LogEngine().NewBatch()
+			defer logBatch.Close()
+		}
+		splitPreApply(ctx, b.r, b.batch, logBatch, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		if sep {
+			if err := logBatch.Commit(true /* sync */); err != nil {
+				log.Fatalf(ctx, "committing log batch: %s", err)
+			}
+		}
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations

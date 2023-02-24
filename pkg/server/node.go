@@ -351,8 +351,13 @@ func bootstrapCluster(
 			if kn, ok := initCfg.testingKnobs.Store.(*kvserver.StoreTestingKnobs); ok {
 				storeKnobs = *kn
 			}
+
+			logEng := eng
+			if se, ok := eng.(kvserver.SeparatedEngine); ok {
+				logEng = se.LogEngine()
+			}
 			if err := kvserver.WriteInitialClusterData(
-				ctx, eng, initialValues,
+				ctx, eng, logEng, initialValues,
 				bootstrapVersion.Version, len(engines), splits,
 				timeutil.Now().UnixNano(), storeKnobs,
 			); err != nil {

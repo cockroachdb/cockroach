@@ -40,7 +40,7 @@ const (
 // are returned.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	stateRW storage.ReadWriter,
+	stateRW, logRW storage.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -96,8 +96,7 @@ func WriteInitialReplicaState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	// TODO(sep-raft-log): should be going to the log engine.
-	if err := rsl.SetRaftTruncatedState(ctx, stateRW, s.TruncatedState); err != nil {
+	if err := rsl.SetRaftTruncatedState(ctx, logRW, s.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
@@ -108,7 +107,7 @@ func WriteInitialReplicaState(
 // bootstrap.
 func WriteInitialRangeState(
 	ctx context.Context,
-	stateRW storage.ReadWriter,
+	stateRW, logRW storage.ReadWriter,
 	desc roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
@@ -119,21 +118,19 @@ func WriteInitialRangeState(
 	initialMS := enginepb.MVCCStats{}
 
 	if _, err := WriteInitialReplicaState(
-		ctx, stateRW, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
+		ctx, stateRW, logRW, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
 		replicaVersion,
 	); err != nil {
 		return err
 	}
 
-	// TODO(sep-raft-log): when the log storage is separated, the below can't be
-	// written in the same batch. Figure out the ordering required here.
 	sl := Make(desc.RangeID)
-	if err := sl.SynthesizeRaftState(ctx, stateRW); err != nil {
+	if err := sl.SynthesizeRaftState(ctx, stateRW, logRW); err != nil {
 		return err
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := sl.SetRaftReplicaID(ctx, stateRW, replicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, logRW, replicaID); err != nil {
 		return err
 	}
 	return nil
