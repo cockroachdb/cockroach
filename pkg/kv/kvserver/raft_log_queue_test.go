@@ -35,8 +35,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
+
+// entries loads all entries for the RangeID from storage. raftMu must
+// *not* be held as it will be acquired.
+func entries(r *Replica, lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
+}
 
 func TestShouldTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -737,20 +746,16 @@ func TestTruncateLog(t *testing.T) {
 		waitForTruncationForTesting(t, tc.repl, indexes[5], looselyCoupled)
 
 		// We can still get what remains of the log.
-		tc.repl.mu.Lock()
-		entries, err := tc.repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64)
-		tc.repl.mu.Unlock()
+		ents, err := entries(tc.repl, indexes[5], indexes[9], math.MaxUint64)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(entries) != int(indexes[9]-indexes[5]) {
-			t.Errorf("expected %d entries, got %d", indexes[9]-indexes[5], len(entries))
+		if len(ents) != int(indexes[9]-indexes[5]) {
+			t.Errorf("expected %d entries, got %d", indexes[9]-indexes[5], len(ents))
 		}
 
 		// But any range that includes the truncated entries returns an error.
-		tc.repl.mu.Lock()
-		_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
-		tc.repl.mu.Unlock()
+		_, err = entries(tc.repl, indexes[4], indexes[9], math.MaxUint64)
 		if !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
 		}
