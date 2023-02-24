@@ -18,6 +18,7 @@ import {
   selectAppName,
   selectRecentTransactions,
   selectExecutionStatus,
+  selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -60,6 +61,7 @@ export const mapStateToRecentTransactionsPageProps = (state: AdminUIState) => ({
   executionStatus: selectExecutionStatus(),
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
+  maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
 });
 
 // This object is just for convenience so we don't need to supply dispatch to

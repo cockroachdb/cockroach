@@ -14,6 +14,9 @@ import {
   LONG_TIMEOUT,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
+  LARGE_RESULT_SIZE,
+  SqlApiResponse,
+  formatApiResult,
 } from "./sqlApi";
 
 export type ClusterLockState = {
@@ -48,7 +51,9 @@ type ClusterLockColumns = {
  * getClusterLocksState returns information from crdb_internal.cluster_locks
  * regarding the state of range locks in the cluster.
  */
-export function getClusterLocksState(): Promise<ClusterLocksResponse> {
+export function getClusterLocksState(): Promise<
+  SqlApiResponse<ClusterLocksResponse>
+> {
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -71,12 +76,16 @@ WHERE
     ],
     execute: true,
     timeout: LONG_TIMEOUT,
+    max_result_size: LARGE_RESULT_SIZE,
   };
 
   return executeInternalSql<ClusterLockColumns>(request).then(result => {
     if (sqlResultsAreEmpty(result)) {
-      // No data.
-      return [];
+      return formatApiResult(
+        [],
+        result.error,
+        "retrieving cluster locks information",
+      );
     }
 
     const locks: Record<string, ClusterLockState> = {};
@@ -117,6 +126,10 @@ WHERE
       }
     });
 
-    return Object.values(locks);
+    return formatApiResult(
+      Object.values(locks),
+      result.error,
+      "retrieving luster locks information",
+    );
   });
 }

@@ -30,12 +30,13 @@ import {
   calculateActiveFilters,
   defaultFilters,
   getFullFiltersAsStringRecord,
-} from "../queryFilter/filter";
+} from "../queryFilter";
 import { RecentStatementsSection } from "../recentExecutions/recentStatementsSection";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
 import { getRecentStatementFiltersFromURL } from "src/queryFilter/utils";
 import { Pagination } from "src/pagination";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import styles from "./statementsPage.module.scss";
 
@@ -58,6 +59,7 @@ export type RecentStatementsViewStateProps = {
   executionStatus: string[];
   internalAppNamePrefix: string;
   isTenant?: boolean;
+  maxSizeApiReached?: boolean;
 };
 
 export type RecentStatementsViewProps = RecentStatementsViewStateProps &
@@ -76,6 +78,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   executionStatus,
   internalAppNamePrefix,
   isTenant,
+  maxSizeApiReached,
 }: RecentStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -231,6 +234,17 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
             total={filteredStatements?.length}
             onChange={onChangePage}
           />
+          {maxSizeApiReached && (
+            <InlineAlert
+              intent="info"
+              title={
+                <>
+                  Not all contention events are displayed because the maximum
+                  number of contention events was reached in the console.
+                </>
+              }
+            />
+          )}
         </Loading>
       </div>
     </div>

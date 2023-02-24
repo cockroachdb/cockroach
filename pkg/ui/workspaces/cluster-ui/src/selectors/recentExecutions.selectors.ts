@@ -30,7 +30,10 @@ import {
 const selectSessions = (state: AppState) => state.adminUI.sessions?.data;
 
 const selectClusterLocks = (state: AppState) =>
-  state.adminUI.clusterLocks?.data;
+  state.adminUI.clusterLocks?.data?.results;
+
+export const selectClusterLocksMaxApiSizeReached = (state: AppState) =>
+  !!state.adminUI.clusterLocks?.data?.maxSizeReached;
 
 export const selectRecentExecutions = createSelector(
   selectSessions,

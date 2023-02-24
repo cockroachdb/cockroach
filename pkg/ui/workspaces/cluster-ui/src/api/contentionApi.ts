@@ -12,9 +12,10 @@ import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
-  sqlApiErrorMessage,
+  SqlApiResponse,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
+  formatApiResult,
 } from "./sqlApi";
 import { ContentionDetails } from "src/insights";
 import moment from "moment";
@@ -44,7 +45,7 @@ export type ContentionResponseColumns = {
 
 export async function getContentionDetailsApi(
   filters?: ContentionFilters,
-): Promise<ContentionDetails[]> {
+): Promise<SqlApiResponse<ContentionDetails[]>> {
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -57,16 +58,13 @@ export async function getContentionDetailsApi(
   };
 
   const result = await executeInternalSql<ContentionResponseColumns>(request);
-  if (result.error) {
-    throw new Error(
-      `Error while retrieving insights information: ${sqlApiErrorMessage(
-        result.error.message,
-      )}`,
-    );
-  }
 
   if (sqlResultsAreEmpty(result)) {
-    return [];
+    return formatApiResult(
+      [],
+      result.error,
+      "retrieving contention information",
+    );
   }
 
   const contentionDetails: ContentionDetails[] = [];
@@ -96,7 +94,11 @@ export async function getContentionDetailsApi(
     });
   });
 
-  return contentionDetails;
+  return formatApiResult(
+    contentionDetails,
+    result.error,
+    "retrieving insights information",
+  );
 }
 
 function isFiltered(filters: ContentionFilters): boolean {

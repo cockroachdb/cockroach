@@ -28,9 +28,9 @@ import {
   calculateActiveFilters,
   Filter,
   getFullFiltersAsStringRecord,
-} from "../queryFilter/filter";
+  inactiveFiltersState,
+} from "../queryFilter";
 import { getAppsFromRecentExecutions } from "../recentExecutions/recentStatementUtils";
-import { inactiveFiltersState } from "../queryFilter/filter";
 import { RecentTransactionsSection } from "src/recentExecutions/recentTransactionsSection";
 import { Pagination } from "src/pagination";
 
@@ -39,6 +39,7 @@ import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { getRecentTransactionFiltersFromURL } from "src/queryFilter/utils";
 import { filterRecentTransactions } from "../recentExecutions/recentStatementUtils";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 const cx = classNames.bind(styles);
 
 export type RecentTransactionsViewDispatchProps = {
@@ -57,6 +58,7 @@ export type RecentTransactionsViewStateProps = {
   sortSetting: SortSetting;
   internalAppNamePrefix: string;
   isTenant?: boolean;
+  maxSizeApiReached?: boolean;
 };
 
 export type RecentTransactionsViewProps = RecentTransactionsViewStateProps &
@@ -78,6 +80,7 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   filters,
   executionStatus,
   internalAppNamePrefix,
+  maxSizeApiReached,
 }: RecentTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -234,6 +237,17 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
             total={filteredTransactions?.length}
             onChange={onChangePage}
           />
+          {maxSizeApiReached && (
+            <InlineAlert
+              intent="info"
+              title={
+                <>
+                  Not all contention events are displayed because the maximum
+                  number of contention events was reached in the console.
+                </>
+              }
+            />
+          )}
         </Loading>
       </div>
     </div>

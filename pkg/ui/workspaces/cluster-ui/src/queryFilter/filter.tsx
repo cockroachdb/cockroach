@@ -113,7 +113,7 @@ export function getFullFiltersAsStringRecord(
       filterKey in partialFilters &&
       partialFilters[filterKey] !== inactiveFiltersState[filterKey]
     ) {
-      filters[filterKey] = partialFilters[filterKey].toString();
+      filters[filterKey] = partialFilters[filterKey]?.toString();
       return;
     }
     filters[filterKey] = null;

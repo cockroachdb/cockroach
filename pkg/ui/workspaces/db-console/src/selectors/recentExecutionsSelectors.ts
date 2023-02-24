@@ -25,7 +25,13 @@ import { SessionsResponseMessage } from "src/util/api";
 const selectSessions = (state: AdminUIState) => state.cachedData.sessions?.data;
 
 const selectClusterLocks = (state: AdminUIState) =>
-  state.cachedData.clusterLocks?.data;
+  state.cachedData.clusterLocks?.data?.results;
+
+export const selectClusterLocksMaxApiSizeReached = (
+  state: AdminUIState,
+): boolean => {
+  return !!state.cachedData.clusterLocks?.data?.maxSizeReached;
+};
 
 export const selectRecentExecutions = createSelector(
   selectSessions,
