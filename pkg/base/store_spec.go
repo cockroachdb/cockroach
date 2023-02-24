@@ -273,6 +273,11 @@ type StoreSpec struct {
 	EncryptionOptions []byte
 	// ProvisionedRateSpec is optional.
 	ProvisionedRateSpec ProvisionedRateSpec
+	// ExperimentalSeparateRaftLogPath, if set, enables a split between the state
+	// and log engines: two engines will be created for this store. This is highly
+	// experimental and not for production use. Data loss and inconsistencies are
+	// likely.
+	ExperimentalSeparateRaftLogPath string
 }
 
 // String returns a fully parsable version of the store spec.

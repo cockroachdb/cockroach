@@ -670,6 +670,32 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
+type sepEngine struct {
+	storage.Engine
+	logEng storage.Engine
+}
+
+var _ kvserver.SeparatedEngine = (*sepEngine)(nil)
+
+// LogEngine implements kvserver.SeparatedEngine.
+func (e *sepEngine) LogEngine() storage.Engine {
+	return e.logEng
+}
+
+// Close closes both wrapped engines.
+func (e *sepEngine) Close() {
+	e.Engine.Close()
+	e.logEng.Close()
+}
+
+// SetMinVersion calls SetMinVersion on both wrapped engines.
+func (e *sepEngine) SetMinVersion(version roachpb.Version) error {
+	return errors.CombineErrors(
+		e.Engine.SetMinVersion(version),
+		e.logEng.SetMinVersion(version),
+	)
+}
+
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	var engines Engines
@@ -746,25 +772,55 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, err
 			}
-			detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
+			detail(redact.Sprintf("store %d: engine %+v", i, eng.Properties()))
+
+			if path := spec.ExperimentalSeparateRaftLogPath; path != "" {
+				logEng, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
+				if err != nil {
+					return Engines{}, err
+				}
+				detail(redact.Sprintf("store %d: log engine %+v", i, logEng.Properties()))
+				eng = &sepEngine{
+					Engine: eng,
+					logEng: logEng,
+				}
+			}
+
 			engines = append(engines, eng)
 			continue
 		}
 
+		var logLocation storage.Location
 		var location storage.Location
-		storageConfigOpts := []storage.ConfigOption{
+
+		// For now, we apply, as much as possible, identical options to state and
+		// log engine.
+		// TODO(sep-raft-log): these needs to be made configurable.
+		// See: https://github.com/cockroachdb/cockroach/issues/97610
+		var logStorageConfigOpts []storage.ConfigOption
+		var storageConfigOpts []storage.ConfigOption
+
+		// Helper to add an option to the state engine.
+		stateOpt := func(options ...storage.ConfigOption) {
+			storageConfigOpts = append(storageConfigOpts, options...)
+		}
+		// Helper to add an option to both state and log engine.
+		bothOpt := func(options ...storage.ConfigOption) {
+			logStorageConfigOpts = append(logStorageConfigOpts, options...)
+			storageConfigOpts = append(storageConfigOpts, options...)
+		}
+
+		bothOpt(
 			storage.Attributes(spec.Attributes),
 			storage.EncryptionAtRest(spec.EncryptionOptions),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
-		}
-		if len(storeKnobs.EngineKnobs) > 0 {
-			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
-		}
-		addCfgOpt := func(opt storage.ConfigOption) {
-			storageConfigOpts = append(storageConfigOpts, opt)
-		}
+		)
+		bothOpt(storeKnobs.EngineKnobs...)
 
 		if spec.InMemory {
+			if spec.ExperimentalSeparateRaftLogPath != "" {
+				logLocation = storage.InMemory()
+			}
 			location = storage.InMemory()
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
@@ -778,11 +834,17 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			addCfgOpt(storage.MaxSize(sizeInBytes))
-			addCfgOpt(storage.CacheSize(cfg.CacheSize))
+			bothOpt(storage.MaxSize(sizeInBytes))
+			bothOpt(storage.CacheSize(cfg.CacheSize))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
+			if path := spec.ExperimentalSeparateRaftLogPath; path != "" {
+				logLocation = storage.Filesystem(path)
+				if err := vfs.Default.MkdirAll(path, 0755); err != nil {
+					return Engines{}, errors.Wrap(err, "creating log store directory")
+				}
+			}
 			location = storage.Filesystem(spec.Path)
 			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
 				return Engines{}, errors.Wrap(err, "creating store directory")
@@ -802,18 +864,18 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
-			addCfgOpt(storage.MaxSize(sizeInBytes))
-			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
-			addCfgOpt(storage.Caches(pebbleCache, tableCache))
+			bothOpt(storage.MaxSize(sizeInBytes))
+			stateOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du))) // log engine doesn't need ballast
+			bothOpt(storage.Caches(pebbleCache, tableCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
-			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
-			addCfgOpt(storage.MaxWriterConcurrency(2))
+			bothOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
+			bothOpt(storage.MaxWriterConcurrency(2))
 			if sharedStorage != nil {
-				addCfgOpt(storage.SharedStorage(sharedStorage))
+				stateOpt(storage.SharedStorage(sharedStorage)) // log engine doesn't need disaggregated storage
 			}
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
-				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
+				bothOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
 					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
 						switch name {
 						case "none":
@@ -829,11 +891,25 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
 			}
 		}
-		eng, err := storage.Open(ctx, location, cfg.Settings, storageConfigOpts...)
+		var eng storage.Engine
+		eng, err = storage.Open(ctx, location, cfg.Settings, storageConfigOpts...)
 		if err != nil {
 			return Engines{}, err
 		}
 		detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
+		if spec.ExperimentalSeparateRaftLogPath != "" {
+			// TODO(sep-raft-log): we'll need the options for the raft log engine to
+			// be determined separately. This will do for basic experimentation
+			// though.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/97610
+			logEng, err := storage.Open(ctx, logLocation, cfg.Settings, logStorageConfigOpts...)
+			if err != nil {
+				return Engines{}, err
+			}
+			detail(redact.Sprintf("store %d: log engine %+v", i, logEng.Properties()))
+			eng = &sepEngine{Engine: eng, logEng: logEng}
+		}
 		engines = append(engines, eng)
 	}
 
