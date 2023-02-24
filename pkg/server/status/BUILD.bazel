@@ -140,7 +140,6 @@ go_test(
         "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
         "//pkg/ts/tspb",
-        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
