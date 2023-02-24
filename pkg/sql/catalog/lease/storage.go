@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -69,6 +70,14 @@ var LeaseRenewalDuration = settings.RegisterDurationSetting(
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)
 
+// LeaseRenewalCrossValidate controls if cross validation should be done during
+// lease renewal.
+var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.catalog.descriptor_lease_renewal_cross_validation.enabled",
+	"controls if cross validation should be done during lease renewal",
+	base.DefaultLeaseRenewalCrossValidate)
+
 func (s storage) leaseRenewalTimeout() time.Duration {
 	return LeaseRenewalDuration.Get(&s.settings.SV)
 }
@@ -80,6 +89,10 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 	jitterFraction := LeaseJitterFraction.Get(&s.settings.SV)
 	return time.Duration(float64(leaseDuration) * (1 - jitterFraction +
 		2*jitterFraction*rand.Float64()))
+}
+
+func (s storage) crossValidateDuringRenewal() bool {
+	return LeaseRenewalCrossValidate.Get(&s.settings.SV)
 }
 
 // acquire a lease on the most recent version of a descriptor. If the lease
@@ -133,7 +146,11 @@ func (s storage) acquire(
 
 		version := s.settings.Version.ActiveVersion(ctx)
 		direct := catkv.MakeDirect(s.codec, version)
-		desc, err = direct.MustGetDescriptorByID(ctx, txn, id, catalog.Any)
+		validationLevel := catalog.ValidationLevelSelfOnly
+		if s.crossValidateDuringRenewal() {
+			validationLevel = validate.ImmutableRead
+		}
+		desc, err = direct.MustGetDescriptorByIDWithValidationLevel(ctx, txn, id, catalog.Any, validationLevel)
 		if err != nil {
 			return err
 		}
