@@ -14,6 +14,8 @@ import {
   SqlExecutionRequest,
   sqlResultsAreEmpty,
   SqlStatement,
+  SqlApiResponse,
+  formatApiResult,
 } from "./sqlApi";
 import { withTimeout } from "./util";
 import moment from "moment";
@@ -89,20 +91,20 @@ export function buildEventsSQLRequest(
 export function getNonRedactedEvents(
   req: NonRedactedEventsRequest = {},
   timeout?: moment.Duration,
-): Promise<EventsResponse> {
+): Promise<SqlApiResponse<EventsResponse>> {
   const eventsRequest: SqlExecutionRequest = buildEventsSQLRequest(req);
   return withTimeout(
     executeInternalSql<EventColumns>(eventsRequest),
     timeout,
   ).then(result => {
-    // If request succeeded but query failed, throw error (caught by saga/cacheDataReducer).
-    if (result.error) {
-      throw result.error;
+    if (sqlResultsAreEmpty(result)) {
+      return formatApiResult([], result.error, "retrieving events information");
     }
 
-    if (sqlResultsAreEmpty(result)) {
-      return [];
-    }
-    return result.execution.txn_results[0].rows;
+    return formatApiResult(
+      result.execution.txn_results[0].rows,
+      result.error,
+      "retrieving events information",
+    );
   });
 }

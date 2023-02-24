@@ -19,6 +19,7 @@ import {
   eventsLastErrorSelector,
   eventsSelector,
   eventsValidSelector,
+  eventsMaxApiReached,
 } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -31,6 +32,7 @@ import {
   util,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import "./events.styl";
 
 // Number of events to show in the sidebar.
@@ -134,6 +136,7 @@ export interface EventPageProps {
   sortSetting: SortSetting;
   setSort: typeof eventsSortSetting.set;
   lastError: Error;
+  maxSizeApiReached: boolean;
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
@@ -148,30 +151,43 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   }
 
   renderContent() {
-    const { events, sortSetting } = this.props;
+    const { events, sortSetting, maxSizeApiReached } = this.props;
     const simplifiedEvents = _.map(events, getEventInfo);
 
     return (
-      <div className="l-columns__left events-table">
-        <EventSortedTable
-          data={simplifiedEvents}
-          sortSetting={sortSetting}
-          onChangeSortSetting={setting => this.props.setSort(setting)}
-          columns={[
-            {
-              title: "Event",
-              name: "event",
-              cell: e => e.content,
-            },
-            {
-              title: "Timestamp",
-              name: "timestamp",
-              cell: e => e.fromNowString,
-              sort: e => e.sortableTimestamp,
-            },
-          ]}
-        />
-      </div>
+      <>
+        <div className="l-columns__left events-table">
+          <EventSortedTable
+            data={simplifiedEvents}
+            sortSetting={sortSetting}
+            onChangeSortSetting={setting => this.props.setSort(setting)}
+            columns={[
+              {
+                title: "Event",
+                name: "event",
+                cell: e => e.content,
+              },
+              {
+                title: "Timestamp",
+                name: "timestamp",
+                cell: e => e.fromNowString,
+                sort: e => e.sortableTimestamp,
+              },
+            ]}
+          />
+        </div>
+        {maxSizeApiReached && (
+          <InlineAlert
+            intent="info"
+            title={
+              <>
+                Not all events are displayed because the maximum number of
+                events was reached in the console.&nbsp;
+              </>
+            }
+          />
+        )}
+      </>
     );
   }
 
@@ -183,7 +199,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         <section className="section section--heading">
           <h1 className="base-heading">Events</h1>
         </section>
-        <section className="section l-columns">
+        <section className="section">
           <Loading
             loading={!events}
             page={"events"}
@@ -220,6 +236,7 @@ const eventPageConnected = withRouter(
         eventsValid: eventsValidSelector(state),
         sortSetting: eventsSortSetting.selector(state),
         lastError: eventsLastErrorSelector(state),
+        maxSizeApiReached: eventsMaxApiReached(state),
       };
     },
     {
