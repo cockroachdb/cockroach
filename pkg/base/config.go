@@ -99,6 +99,10 @@ const (
 	// DefaultDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
 	DefaultDescriptorLeaseRenewalTimeout = time.Minute
+
+	// DefaultLeaseRenewalCrossValidate is the default setting for if
+	// we should validate descriptors on lease renewals.
+	DefaultLeaseRenewalCrossValidate = true
 )
 
 // DefaultHistogramWindowInterval returns the default rotation window for
