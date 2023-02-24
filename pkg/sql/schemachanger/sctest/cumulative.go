@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -1391,7 +1392,17 @@ func executeSchemaChangeTxn(
 	// declarative schema changer testing knobs don't get used.
 	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 	for _, stmt := range setup {
-		tdb.Exec(t, stmt.SQL)
+		_, err := db.Exec(stmt.SQL)
+		if err != nil {
+			// nolint:errcmp
+			switch errT := err.(type) {
+			case *pq.Error:
+				if string(errT.Code) == pgcode.FeatureNotSupported.String() {
+					skip.IgnoreLint(t, "skipping due to unimplemented feature in old cluster version.")
+				}
+			}
+			return err
+		}
 	}
 	waitForSchemaChangesToFinish(t, tdb)
 	if before != nil {
