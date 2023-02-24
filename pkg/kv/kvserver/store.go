@@ -757,24 +757,25 @@ type Store struct {
 	raftLogQueue         *raftLogQueue      // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
-	raftTruncator       *raftLogTruncator
-	raftSnapshotQueue   *raftSnapshotQueue          // Raft repair queue
-	tsMaintenanceQueue  *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner             *replicaScanner             // Replica scanner
-	consistencyQueue    *consistencyQueue           // Replica consistency check queue
-	consistencyLimiter  *quotapool.RateLimiter      // Rate limits consistency checks
-	metrics             *StoreMetrics
-	intentResolver      *intentresolver.IntentResolver
-	recoveryMgr         txnrecovery.Manager
-	syncWaiter          *logstore.SyncWaiterLoop
-	raftEntryCache      *raftentry.Cache
-	limiters            batcheval.Limiters
-	txnWaitMetrics      *txnwait.Metrics
-	sstSnapshotStorage  SSTSnapshotStorage
-	protectedtsReader   spanconfig.ProtectedTSReader
-	ctSender            *sidetransport.Sender
-	storeGossip         *StoreGossip
-	rebalanceObjManager *RebalanceObjectiveManager
+	raftTruncator         *raftLogTruncator
+	raftSnapshotQueue     *raftSnapshotQueue          // Raft repair queue
+	tsMaintenanceQueue    *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner               *replicaScanner             // Replica scanner
+	consistencyQueue      *consistencyQueue           // Replica consistency check queue
+	consistencyLimiter    *quotapool.RateLimiter      // Rate limits consistency checks
+	metrics               *StoreMetrics
+	intentResolver        *intentresolver.IntentResolver
+	recoveryMgr           txnrecovery.Manager
+	syncWaiter            *logstore.SyncWaiterLoop
+	raftEntryCache        *raftentry.Cache
+	limiters              batcheval.Limiters
+	txnWaitMetrics        *txnwait.Metrics
+	sstSnapshotStorage    SSTSnapshotStorage
+	logSSTSnapshotStorage SSTSnapshotStorage // uninited unless raft log separated
+	protectedtsReader     spanconfig.ProtectedTSReader
+	ctSender              *sidetransport.Sender
+	storeGossip           *StoreGossip
+	rebalanceObjManager   *RebalanceObjectiveManager
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1363,9 +1364,15 @@ func NewStore(
 	// we use them now is because we want snapshot apply to be completely atomic but that
 	// is out the window with two engines, so we may as well break the atomicity in the
 	// common case and do something more effective.
-	s.sstSnapshotStorage = NewSSTSnapshotStorage(s.TODOEngine(), s.limiters.BulkIOWriteRate)
+	s.sstSnapshotStorage = NewSSTSnapshotStorage(s.StateEngine(), s.limiters.BulkIOWriteRate)
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
+	}
+	if eng != logEng {
+		s.logSSTSnapshotStorage = NewSSTSnapshotStorage(s.LogEngine(), s.limiters.BulkIOWriteRate)
+		if err := s.logSSTSnapshotStorage.Clear(); err != nil {
+			log.Warningf(ctx, "failed to clear log snapshot storage: %v", err)
+		}
 	}
 	s.protectedtsReader = cfg.ProtectedTimestampReader
 
@@ -2586,6 +2593,10 @@ func (s *Store) TODOEngine() storage.Engine {
 // LogEngine returns the log engine.
 func (s *Store) LogEngine() storage.Engine {
 	return s.internalEngines.logEngine
+}
+
+func (s *Store) sepRaftLog() bool {
+	return s.StateEngine() != s.LogEngine()
 }
 
 // DB accessor.
