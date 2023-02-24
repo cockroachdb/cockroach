@@ -699,6 +699,21 @@ func (r *Replica) applySnapshot(
 	return nil
 }
 
+func writeSnapClearUnreplicatedRangeIDSST(rangeID roachpb.RangeID, w *storage.SSTWriter) error {
+	// Clearing the unreplicated state.
+	//
+	// NB: We do not expect to see range keys in the unreplicated state, so
+	// we don't drop a range tombstone across the range key space.
+	for _, sp := range rditer.Select(rangeID, rditer.SelectOpts{UnreplicatedByRangeID: true}) {
+		if err := w.ClearRawRange(
+			sp.Key, sp.EndKey, true /* pointKeys */, false, /* rangeKeys */
+		); err != nil {
+			return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+		}
+	}
+	return nil
+}
+
 // writeUnreplicatedSST creates an SST for snapshot application that
 // covers the RangeID-unreplicated keyspace. A range tombstone is
 // laid down and the Raft state provided by the arguments is overlaid
@@ -717,16 +732,8 @@ func writeUnreplicatedSST(
 	)
 	defer unreplicatedSST.Close()
 
-	// Clearing the unreplicated state.
-	//
-	// NB: We do not expect to see range keys in the unreplicated state, so
-	// we don't drop a range tombstone across the range key space.
-	for _, sp := range rditer.Select(id.RangeID, rditer.SelectOpts{UnreplicatedByRangeID: true}) {
-		if err := unreplicatedSST.ClearRawRange(
-			sp.Key, sp.EndKey, true /* pointKeys */, false, /* rangeKeys */
-		); err != nil {
-			return nil, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
-		}
+	if err := writeSnapClearUnreplicatedRangeIDSST(id.RangeID, &unreplicatedSST); err != nil {
+		return nil, err
 	}
 
 	// Update HardState.
