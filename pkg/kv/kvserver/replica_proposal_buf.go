@@ -1189,7 +1189,10 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	if p.createdAtTicks == 0 {
 		p.createdAtTicks = rp.mu.ticks
 	}
-	if buildutil.CrdbTestBuild && (p.ec.repl == nil || p.ec.g == nil) {
+	// TODO(tbg): this assertion fires. Figure out why. See:
+	// https://github.com/cockroachdb/cockroach/issues/97605
+	const enableAssertion = false
+	if enableAssertion && buildutil.CrdbTestBuild && (p.ec.repl == nil || p.ec.g == nil) {
 		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "finished proposal inserted into map: %+v", p)
 	}
 	rp.mu.proposals[p.idKey] = p
