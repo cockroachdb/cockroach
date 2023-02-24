@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -254,6 +253,7 @@ func newCopyMachine(
 	p *planner,
 	txnOpt copyTxnOpt,
 	parentMon *mon.BytesMonitor,
+	implicitTxn bool,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	cOpts, err := processCopyOptions(ctx, p, n.Options)
@@ -271,7 +271,7 @@ func newCopyMachine(
 		txnOpt:         txnOpt,
 		p:              p,
 		execInsertPlan: execInsertPlan,
-		implicitTxn:    txnOpt.txn == nil,
+		implicitTxn:    implicitTxn,
 	}
 	// We need a planner to do the initial planning, in addition
 	// to those used for the main execution of the COPY afterwards.
@@ -356,6 +356,7 @@ type copyTxnOpt struct {
 	txn           *kv.Txn
 	txnTimestamp  time.Time
 	stmtTimestamp time.Time
+	initPlanner   func(ctx context.Context, p *planner)
 	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
 
 	// resetExtraTxnState should be called upon completing a batch from the copy
@@ -792,37 +793,23 @@ func (c *copyMachine) readBinarySignature() ([]byte, error) {
 // Depending on how the requesting COPY machine was configured, a new
 // transaction might be created.
 //
-// It returns a cleanup function that needs to be called when we're
-// done with the planner (before preparePlannerForCopy is called
-// again). The cleanup function commits the txn (if it hasn't already
-// been committed) or rolls it back depending on whether it is passed
-// an error. If an error is passed in to the cleanup function, the
-// same error is returned.
+// It returns a cleanup function that needs to be called when we're done with
+// the planner (before preparePlannerForCopy is called again). If
+// CopyFromAtomicEnabled is false, the cleanup function commits the txn (if it
+// hasn't already been committed) or rolls it back depending on whether it is
+// passed an error. If an error is passed in to the cleanup function, the same
+// error is returned.
 func (p *planner) preparePlannerForCopy(
 	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, implicitTxn bool,
 ) func(context.Context, error) error {
-	txn := txnOpt.txn
-	txnTs := txnOpt.txnTimestamp
-	stmtTs := txnOpt.stmtTimestamp
-	autoCommit := finalBatch && implicitTxn
-	if txn == nil {
-		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
-		// The session data stack in the planner is not set up at this point, so use
-		// the default Normal QoSLevel.
-		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)
-		txnTs = p.execCfg.Clock.PhysicalTime()
-		stmtTs = txnTs
-	}
-	txnOpt.resetPlanner(ctx, p, txn, txnTs, stmtTs)
+	autoCommit := false
+	txnOpt.resetPlanner(ctx, p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
 	if implicitTxn {
-		// For atomic implicit COPY remember txn for next time so we don't start a new one.
 		if p.SessionData().CopyFromAtomicEnabled {
-			txnOpt.txn = txn
-			txnOpt.txnTimestamp = txnTs
-			txnOpt.stmtTimestamp = txnTs
+			// If the COPY should be atomic, only the final batch can commit.
 			autoCommit = finalBatch
 		} else {
-			// We're doing original behavior of committing each batch.
+			// Otherwise we do the original behavior of committing each batch.
 			autoCommit = true
 		}
 	}
@@ -831,26 +818,33 @@ func (p *planner) preparePlannerForCopy(
 	return func(ctx context.Context, prevErr error) (err error) {
 		// Ensure that we clean up any accumulated extraTxnState state if we've
 		// been handed a mechanism to do so.
-		if txnOpt.resetExtraTxnState != nil {
+		// If this is the finalBatch, then the connExecutor state machine takes
+		// care of this cleanup.
+		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled && !finalBatch {
 			defer txnOpt.resetExtraTxnState(ctx)
-		}
-		if prevErr == nil {
-			// Ensure that the txn is committed if the copyMachine is in charge of
-			// committing its transactions and the execution didn't already commit it
-			// (through the planner.autoCommit optimization).
-			if autoCommit && !txn.IsCommitted() {
-				err = txn.Commit(ctx)
-				if err != nil {
-					if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
-						log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+
+			if prevErr == nil {
+				// Ensure that the txn is committed if the copyMachine is in charge of
+				// committing its transactions and the execution didn't already commit it
+				// (through the planner.autoCommit optimization).
+				if !txnOpt.txn.IsCommitted() {
+					err = txnOpt.txn.Commit(ctx)
+					if err != nil {
+						if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
+							log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+						}
+						return err
 					}
 				}
-				return err
+			} else if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
+				log.Eventf(ctx, "rollback failed: %s", rollbackErr)
 			}
-			return nil
-		}
-		if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
-			log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+
+			// Start the implicit txn for the next batch.
+			nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
+			txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, p.SessionData().DefaultTxnQualityOfService)
+			txnOpt.txnTimestamp = p.execCfg.Clock.PhysicalTime()
+			txnOpt.stmtTimestamp = txnOpt.txnTimestamp
 		}
 		return prevErr
 	}
@@ -931,6 +925,7 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		},
 		Returning: tree.AbsentReturningClause,
 	}
+	c.txnOpt.initPlanner(ctx, c.p)
 	if err := c.p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
