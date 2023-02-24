@@ -164,7 +164,18 @@ var MinPasswordLength = settings.RegisterIntSetting(
 var AutoUpgradePasswordHashes = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled",
-	"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
+	"if server.user_login.password_encryption=scram-sha-256, this controls "+
+		"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
+	true,
+).WithPublic()
+
+// AutoDowngradePasswordHashes is the cluster setting that configures whether to
+// automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt.
+var AutoDowngradePasswordHashes = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled",
+	"if server.user_login.password_encryption=crdb-bcrypt, this controls "+
+		"whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt",
 	true,
 ).WithPublic()
 
