@@ -62,7 +62,7 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // exclusive access to r.mu.stateLoader.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
+	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.LogEngine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -82,7 +82,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return logstore.LoadEntries(ctx, r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+	return logstore.LoadEntries(ctx, r.raftMu.stateLoader.StateLoader, r.store.LogEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
@@ -106,7 +106,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 		return r.mu.lastTermNotDurable, nil
 	}
 	ctx := r.AnnotateCtx(context.TODO())
-	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.LogEngine(), r.RangeID,
 		r.store.raftEntryCache, i)
 }
 
