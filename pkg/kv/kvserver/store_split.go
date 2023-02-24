@@ -36,7 +36,7 @@ import (
 func splitPreApply(
 	ctx context.Context,
 	r *Replica,
-	readWriter storage.ReadWriter,
+	stateRW, logRW storage.ReadWriter,
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) {
@@ -90,18 +90,30 @@ func splitPreApply(
 				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			var err error
-			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
+			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, logRW)
 			if err != nil {
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
-		if err := kvstorage.ClearRangeData(split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
+		// Clear split's contribution to RHS state engine.
+		if err := kvstorage.ClearRangeData(split.RightDesc.RangeID, stateRW, stateRW, kvstorage.ClearRangeDataOptions{
 			// We know there isn't anything in these two replicated spans below in the
 			// right-hand side (before the current batch), so setting these options
 			// will in effect only clear the writes to the RHS replicated state we have
 			// staged in this batch, which is what we're after.
 			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
 			ClearReplicatedByRangeID: true,
+		}); err != nil {
+			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+		}
+		// Clear split's contribution to RHS log engine. Also clear it on the state engine
+		// because at the time of writing the split writes into it, see:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/97615
+		//
+		// Additionally this likely simplifies moving "non-essential" users of
+		// TODOEngine() over to LogEngine one by one.
+		if err := kvstorage.ClearRangeData(split.RightDesc.RangeID, logRW, logRW, kvstorage.ClearRangeDataOptions{
 			// See the HardState write-back dance above and below.
 			//
 			// TODO(tbg): we don't actually want to touch the raft state of the right
@@ -125,11 +137,11 @@ func splitPreApply(
 			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
 			// values. NB: rightRepl.raftMu is still locked since HardState was read,
 			// so it can't have been rewritten in the meantime (fixed in #75918).
-			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
+			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, logRW, hs); err != nil {
 				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 			}
 			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
-				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
+				ctx, logRW, rightRepl.ReplicaID()); err != nil {
 				log.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
 			}
 		}
@@ -140,7 +152,7 @@ func splitPreApply(
 	// replica is initialized (combining it with existing or default
 	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
-	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
+	if err := rsl.SynthesizeRaftState(ctx, stateRW, logRW); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 	// Write the RaftReplicaID for the RHS to maintain the invariant that any
@@ -148,7 +160,7 @@ func splitPreApply(
 	// RaftReplicaID. NB: this invariant will not be universally true until we
 	// introduce node startup code that will write this value for existing
 	// ranges.
-	if err := rsl.SetRaftReplicaID(ctx, readWriter, rightDesc.ReplicaID); err != nil {
+	if err := rsl.SetRaftReplicaID(ctx, logRW, rightDesc.ReplicaID); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 	// Persist the closed timestamp.
@@ -163,7 +175,7 @@ func splitPreApply(
 		initClosedTS = &hlc.Timestamp{}
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
-	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
+	if err := rsl.SetClosedTimestamp(ctx, stateRW, *initClosedTS); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}
 }

@@ -1190,8 +1190,19 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
+		// TODO(sep-raft-log): this writes unreplicated state for the right hand side
+		// into a log entry on the left hand side, which makes no sense conceptually.
+		// We should only write the replicated state for the right hand side here;
+		// the rest ought to happen below raft. Also, this code runs on the leaseholder;
+		// some of the followers may have a separated raft log, others may not. We need
+		// to clean this up to use separate raft log in production, see the issue below.
+		// For now we play fast and loose when the separate raft log is on and hope we
+		// get away with it "enough" for splits to work.
+		//
+		// https://github.com/cockroachdb/cockroach/issues/97615
+		logBatch := batch
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
-			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
+			ctx, batch, logBatch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, *gcHint, replicaVersion,
 		)
 		if err != nil {

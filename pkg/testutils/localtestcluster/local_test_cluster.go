@@ -148,6 +148,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	clusterID := cfg.RPCContext.StorageClusterID
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
 	var err error
+	// TODO(sep-raft-log): LocalTestCluster currently doesn't support separating the raft log.
+	// That's probably fine, but here's an issue anyway:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/97629
 	ltc.Eng, err = storage.Open(
 		ctx,
 		storage.InMemory(),
@@ -258,6 +262,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	if err := kvserver.WriteInitialClusterData(
 		ctx,
+		ltc.Eng,
 		ltc.Eng,
 		initialValues,
 		clusterversion.TestingBinaryVersion,

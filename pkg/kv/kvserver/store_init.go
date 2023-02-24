@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // WriteInitialClusterData writes initialization data to an engine. It creates
@@ -43,7 +44,7 @@ import (
 // nowNanos: the timestamp at which to write the initial engine data.
 func WriteInitialClusterData(
 	ctx context.Context,
-	eng storage.Engine,
+	eng, logEng storage.Engine,
 	initialValues []roachpb.KeyValue,
 	bootstrapVersion roachpb.Version,
 	numStores int,
@@ -147,8 +148,21 @@ func WriteInitialClusterData(
 		log.VEventf(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
+		// NB: this should ideally be done outside of the loop, i.e. a single batch
+		// should be created for all splits. A crash half-way through could
+		// possibly result in a node that looks bootstrapped but is in an invalid
+		// state. The separate raft log introduces a similar issue. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/97616
 		stateBatch := eng.NewBatch()
 		defer stateBatch.Close()
+
+		logBatch := stateBatch
+		separated := eng != logEng
+		if separated {
+			logBatch = logEng.NewBatch()
+			defer logBatch.Close()
+		}
 
 		now := hlc.Timestamp{
 			WallTime: nowNanos,
@@ -213,7 +227,7 @@ func WriteInitialClusterData(
 		}
 
 		if err := stateloader.WriteInitialRangeState(
-			ctx, stateBatch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
+			ctx, stateBatch, logBatch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
 			return err
 		}
 		computedStats, err := rditer.ComputeStatsForRange(desc, stateBatch, now.WallTime)
@@ -228,6 +242,13 @@ func WriteInitialClusterData(
 
 		if err := stateBatch.Commit(true /* sync */); err != nil {
 			return err
+		}
+		// If log engine not separated, we've committed writes to it with stateBatch
+		// already.
+		if separated {
+			if err := logBatch.Commit(true /* sync */); err != nil {
+				return errors.Wrap(err, "committing log batch")
+			}
 		}
 	}
 
