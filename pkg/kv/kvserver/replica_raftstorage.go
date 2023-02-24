@@ -726,13 +726,12 @@ func writeUnreplicatedSST(
 	//
 	// NB: We do not expect to see range keys in the unreplicated state, so
 	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(id.RangeID)
-	unreplicatedStart := unreplicatedPrefixKey
-	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err := unreplicatedSST.ClearRawRange(
-		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
-	); err != nil {
-		return nil, false, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+	for _, sp := range rditer.Select(id.RangeID, rditer.SelectOpts{UnreplicatedByRangeID: true}) {
+		if err := unreplicatedSST.ClearRawRange(
+			sp.Key, sp.EndKey, true /* pointKeys */, false, /* rangeKeys */
+		); err != nil {
+			return nil, false, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+		}
 	}
 
 	// Update HardState.
