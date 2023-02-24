@@ -2151,52 +2151,6 @@ type Peer struct {
 	}
 }
 
-func newPeerBreaker(ctx context.Context, pc *Peer, stopper *stop.Stopper, pingInterval time.Duration, onReconnect func() error) *circuitbreaker.Breaker {
-	breaker := circuitbreaker.NewBreaker(circuitbreaker.Options{
-		Name: "reconnect",
-		AsyncProbe: func(report func(error), done func()) {
-			if err := stopper.RunAsyncTask(ctx, "reconnect peers", func(ctx context.Context) {
-				var t timeutil.Timer
-				defer t.Stop()
-				defer done()
-				for {
-					t.Reset(pingInterval)
-					select {
-					case <-ctx.Done():
-					case <-stopper.ShouldQuiesce():
-						done()
-						return
-					case <-t.C:
-						t.Read = true
-					}
-					pc.mu.RLock()
-					disconnected := pc.mu.disconnected
-					decommissioned := pc.mu.decommissioned
-					pc.mu.RUnlock()
-					if disconnected.IsZero() || decommissioned {
-						report(nil)
-						return
-					}
-					err := onReconnect()
-					report(err)
-					if err == nil {
-						return
-					}
-				}
-			}); err != nil {
-				report(err)
-				done()
-			}
-		},
-		EventHandler: &circuitbreaker.EventLogger{
-			Log: func(buf redact.StringBuilder) {
-				log.Infof(ctx, "%s", buf)
-			},
-		},
-	})
-	return breaker
-}
-
 func (p *Peer) conn() (*Connection, bool) {
 	if p == nil {
 		return nil, false
@@ -2268,7 +2222,7 @@ func (m *connMap) OnDisconnect(k connKey, conn *Connection) error {
 }
 
 // TryInsert inits new peer and connection (if necessary). onReconnect function is called to restore connection.
-func (m *connMap) TryInsert(ctx context.Context, k connKey, stopper *stop.Stopper, pingInterval time.Duration, onReconnect func() error) (_ *Connection, inserted bool) {
+func (m *connMap) TryInsert(k connKey) (_ *Connection, _ *Peer, inserted bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -2277,7 +2231,7 @@ func (m *connMap) TryInsert(ctx context.Context, k connKey, stopper *stop.Stoppe
 	}
 
 	if c, lostRace := m.mu.m[k].conn(); lostRace {
-		return c, false
+		return c, m.mu.m[k], false
 	}
 
 	newConn := newConnectionToNodeID(k.nodeID, k.class)
@@ -2290,12 +2244,10 @@ func (m *connMap) TryInsert(ctx context.Context, k connKey, stopper *stop.Stoppe
 	// [^1]: https://github.com/cockroachdb/cockroach/issues/37200
 	// [^2]: https://github.com/cockroachdb/cockroach/pull/89539
 	if m.mu.m[k] == nil {
-		pc := &Peer{}
-		pc.breaker = newPeerBreaker(ctx, pc, stopper, pingInterval, onReconnect)
-		m.mu.m[k] = pc
+		m.mu.m[k] = &Peer{}
 	}
 	m.mu.m[k].c = newConn
-	return newConn, true
+	return newConn, m.mu.m[k], true
 }
 
 func maybeFatal(ctx context.Context, err error) {
@@ -2312,23 +2264,90 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 ) *Connection {
 	k := connKey{target, remoteNodeID, class}
 	if conn, ok := rpcCtx.m.Get(k); ok {
-		// There's a cached connection.
+		// Returns cached connection that isn't neither failed nor decommissioned.
 		return conn
 	}
-
 	ctx := rpcCtx.makeDialCtx(target, remoteNodeID, class)
 
-	onReconnect := func() error {
-		c := rpcCtx.grpcDialNodeInternal(k.targetAddr, k.nodeID, k.class)
-		return c.Health()
-	}
-	conn, inserted := rpcCtx.m.TryInsert(ctx, k, rpcCtx.Stopper, rpcCtx.heartbeatInterval, onReconnect)
+	conn, pc, inserted := rpcCtx.m.TryInsert(k)
 	if !inserted {
 		// Someone else won the race.
 		return conn
 	}
-	nm := rpcCtx.metrics.loadNodeMetrics(remoteNodeID)
 
+	// TODO (koorosh): breaker is stored per `peer` and shouldn't be reinitialized every time `grpcDialNodeInternal`
+	// is called.
+	if pc.breaker == nil {
+		// TODO (koorosh): Probably this logic should be extracted from here...
+		breaker := circuitbreaker.NewBreaker(circuitbreaker.Options{
+			Name: "reconnect",
+			AsyncProbe: func(report func(error), done func()) {
+				if err := rpcCtx.Stopper.RunAsyncTask(ctx, "reconnect peers", func(ctx context.Context) {
+					var t timeutil.Timer
+					defer t.Stop()
+					defer done()
+					for {
+						// periodically run probe until connection is healed.
+						// TODO (koorosh): would it be enough to pause for `heartbeatInterval` duration?
+						t.Reset(rpcCtx.heartbeatInterval)
+						select {
+						case <-rpcCtx.Stopper.ShouldQuiesce():
+							return
+						case <-t.C:
+							t.Read = true
+						}
+						pc.mu.RLock()
+						disconnected := pc.mu.disconnected
+						decommissioned := pc.mu.decommissioned
+						pc.mu.RUnlock()
+						if disconnected.IsZero() || decommissioned {
+							report(nil)
+							return
+						}
+						c, _, inserted := rpcCtx.m.TryInsert(k)
+						if !inserted {
+							// someone else inserted connection and probably
+							// started dialing.
+							continue
+						}
+						rpcCtx.grpcDialNodeInternalNoBreaker(ctx, c, k)
+						// Wait for heartbeat timeout to ensure that there's enough time
+						// for initial heartbeat and then check connection health.
+						<-time.After(rpcCtx.heartbeatTimeout)
+						err := c.Health()
+						report(err)
+						if err == nil {
+							return
+						}
+					}
+				}); err != nil {
+					report(err)
+					done()
+				}
+			},
+			EventHandler: &circuitbreaker.EventLogger{
+				Log: func(buf redact.StringBuilder) {
+					log.Infof(ctx, "%s", buf)
+				},
+			},
+		})
+		pc.breaker = breaker
+	}
+	if pc.breaker.Signal().Err() == nil {
+		// Run heartbeats for conn that can be either healed connection from circuit breaker
+		// or new connection if circuit isn't tripped.
+		return rpcCtx.grpcDialNodeInternalNoBreaker(ctx, conn, k)
+	}
+	// TODO (koorosh): Figure out what to return in case circuit is tripped and we know
+	// that connection cannot be dialed?
+	return conn
+}
+
+// grpcDialNodeInternalNoBreaker runs heartbeats for provided connection and
+// handles cases when connection failed.
+func (rpcCtx *Context) grpcDialNodeInternalNoBreaker(
+	ctx context.Context, conn *Connection, k connKey,
+) *Connection {
 	// We made a connection and registered it. Others might already be accessing
 	// it now, but it's our job to kick off the async goroutine that will do the
 	// dialing and health checking of this connection (including eventually
@@ -2338,6 +2357,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	if err := rpcCtx.Stopper.RunAsyncTask(
 		ctx,
 		"rpc.Context: heartbeat", func(ctx context.Context) {
+			nm := rpcCtx.metrics.loadNodeMetrics(k.nodeID)
 			nm.HeartbeatLoopsStarted.Inc(1)
 
 			// Run the heartbeat; this will block until the connection breaks for
