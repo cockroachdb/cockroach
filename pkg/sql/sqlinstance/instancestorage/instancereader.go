@@ -48,9 +48,72 @@ type Reader struct {
 	initialScanDone chan struct{}
 	mu              struct {
 		syncutil.Mutex
-		instances      map[base.SQLInstanceID]instancerow
+		feed           instanceFeed
 		initialScanErr error
 	}
+}
+
+type instanceFeed interface {
+	getInstance(instanceID base.SQLInstanceID) (instancerow, bool)
+	listInstances() []instancerow
+	Close()
+}
+
+type singletonInstanceFeed struct {
+	instance instancerow
+}
+
+func (s *singletonInstanceFeed) getInstance(instanceID base.SQLInstanceID) (instancerow, bool) {
+	initialized := s.instance.sessionID != ""
+	if initialized && instanceID == s.instance.instanceID {
+		return s.instance, true
+	}
+	return instancerow{}, false
+}
+
+func (s *singletonInstanceFeed) listInstances() []instancerow {
+	return []instancerow{s.instance}
+}
+
+func (s *singletonInstanceFeed) Close() {}
+
+type rangeFeed struct {
+	feed *rangefeed.RangeFeed
+	mu   struct {
+		syncutil.Mutex
+		instances map[base.SQLInstanceID]instancerow
+	}
+}
+
+func (s *rangeFeed) getInstance(instanceID base.SQLInstanceID) (instancerow, bool) {
+	s.mu.Lock()
+	s.mu.Unlock()
+	row, ok := s.mu.instances[instanceID]
+	return row, ok
+}
+
+func (s *rangeFeed) listInstances() []instancerow {
+	s.mu.Lock()
+	s.mu.Unlock()
+	result := make([]instancerow, 0, len(s.mu.instances))
+	for _, row := range s.mu.instances {
+		result = append(result, row)
+	}
+	return result
+}
+
+func (r *rangeFeed) updateInstanceMap(instance instancerow, deletionEvent bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if deletionEvent {
+		delete(r.mu.instances, instance.instanceID)
+		return
+	}
+	r.mu.instances[instance.instanceID] = instance
+}
+
+func (s *rangeFeed) Close() {
+	s.feed.Close()
 }
 
 // NewTestingReader constructs a new Reader with control for the database
@@ -74,7 +137,7 @@ func NewTestingReader(
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
 	}
-	r.mu.instances = make(map[base.SQLInstanceID]instancerow)
+	r.setFeed(&singletonInstanceFeed{})
 	return r
 }
 
@@ -94,8 +157,8 @@ func NewReader(
 // the stopper stops. If self has a non-zero ID, it will be used to initialize
 // the set of instances before the rangefeed catches up.
 func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
-	if self.InstanceID != 0 {
-		r.updateInstanceMap(instancerow{
+	r.setFeed(&singletonInstanceFeed{
+		instance: instancerow{
 			region:     self.Region,
 			instanceID: self.InstanceID,
 			sqlAddr:    self.InstanceSQLAddr,
@@ -103,9 +166,9 @@ func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 			sessionID:  self.SessionID,
 			locality:   self.Locality,
 			timestamp:  hlc.Timestamp{}, // intentionally zero
-		}, false /* deletionEvent */)
-	}
-	r.startRangeFeed(ctx)
+		},
+	})
+	r.startRangeFeed(ctx, r.rowcodec)
 }
 
 // WaitForStarted will block until the Reader has an initial full snapshot of
@@ -122,6 +185,18 @@ func (r *Reader) WaitForStarted(ctx context.Context) error {
 		return errors.Wrap(ctx.Err(),
 			"failed to retrieve initial instance data")
 	}
+}
+
+func (r *Reader) getFeed() instanceFeed {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.feed
+}
+
+func (r *Reader) setFeed(feed instanceFeed) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.feed = feed
 }
 
 func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
@@ -167,19 +242,23 @@ func (r *Reader) GetAllInstancesUsingTxn(
 	return makeInstanceInfos(filteredRows), nil
 }
 
-func (r *Reader) startRangeFeed(ctx context.Context) {
+func (reader *Reader) startRangeFeed(ctx context.Context, rowCodec rowCodec) {
+	feed := &rangeFeed{}
+	feed.mu.instances = map[base.SQLInstanceID]instancerow{}
+
 	updateCacheFn := func(
 		ctx context.Context, keyVal *kvpb.RangeFeedValue,
 	) {
-		instance, err := r.rowcodec.decodeRow(keyVal.Key, &keyVal.Value)
+		instance, err := rowCodec.decodeRow(keyVal.Key, &keyVal.Value)
 		if err != nil {
 			log.Ops.Warningf(ctx, "failed to decode settings row %v: %v", keyVal.Key, err)
 			return
 		}
-		r.updateInstanceMap(instance, !keyVal.Value.IsPresent())
+		feed.updateInstanceMap(instance, !keyVal.Value.IsPresent())
 	}
 	initialScanDoneFn := func(_ context.Context) {
-		r.setInitialScanErr(nil)
+		reader.setFeed(feed)
+		reader.setInitialScanErr(nil)
 	}
 	initialScanErrFn := func(_ context.Context, err error) (shouldFail bool) {
 		if grpcutil.IsAuthError(err) ||
@@ -187,20 +266,21 @@ func (r *Reader) startRangeFeed(ctx context.Context) {
 			// errors out of gRPC. See #56208.
 			strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
 			shouldFail = true
-			r.setInitialScanErr(err)
+			reader.setInitialScanErr(err)
 		}
 		return shouldFail
 	}
 
-	instancesTablePrefix := r.rowcodec.makeIndexPrefix()
+	instancesTablePrefix := rowCodec.makeIndexPrefix()
 	instancesTableSpan := roachpb.Span{
 		Key:    instancesTablePrefix,
 		EndKey: instancesTablePrefix.PrefixEnd(),
 	}
-	rf, err := r.f.RangeFeed(ctx,
+	var err error
+	feed.feed, err = reader.f.RangeFeed(ctx,
 		"sql_instances",
 		[]roachpb.Span{instancesTableSpan},
-		r.clock.Now(),
+		reader.clock.Now(),
 		updateCacheFn,
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithInitialScan(initialScanDoneFn),
@@ -208,10 +288,10 @@ func (r *Reader) startRangeFeed(ctx context.Context) {
 		rangefeed.WithRowTimestampInInitialScan(true),
 	)
 	if err != nil {
-		r.setInitialScanErr(err)
+		reader.setInitialScanErr(err)
 		return
 	}
-	r.stopper.AddCloser(rf)
+	reader.stopper.AddCloser(feed)
 }
 
 // GetInstance implements sqlinstance.AddressResolver interface.
@@ -221,9 +301,7 @@ func (r *Reader) GetInstance(
 	if err := r.initialScanErr(); err != nil {
 		return sqlinstance.InstanceInfo{}, err
 	}
-	r.mu.Lock()
-	instance, ok := r.mu.instances[instanceID]
-	r.mu.Unlock()
+	instance, ok := r.getFeed().getInstance(instanceID)
 	if !ok {
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
@@ -252,7 +330,8 @@ func (r *Reader) GetAllInstances(ctx context.Context) ([]sqlinstance.InstanceInf
 	if err := r.initialScanErr(); err != nil {
 		return nil, err
 	}
-	liveInstances, err := selectDistinctLiveRows(ctx, r.slReader, r.getAllInstanceRows())
+
+	liveInstances, err := selectDistinctLiveRows(ctx, r.slReader, r.getFeed().listInstances())
 	if err != nil {
 		return nil, err
 	}
@@ -299,27 +378,6 @@ func selectDistinctLiveRows(
 		rows = truncated
 	}
 	return rows, nil
-}
-
-// getAllInstanceRows returns all instancerow objects contained within the map,
-// in an arbitrary order.
-func (r *Reader) getAllInstanceRows() (instances []instancerow) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, instance := range r.mu.instances {
-		instances = append(instances, instance)
-	}
-	return instances
-}
-
-func (r *Reader) updateInstanceMap(instance instancerow, deletionEvent bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if deletionEvent {
-		delete(r.mu.instances, instance.instanceID)
-		return
-	}
-	r.mu.instances[instance.instanceID] = instance
 }
 
 func (r *Reader) initialScanErr() error {
