@@ -1,0 +1,8 @@
+# Make sure that user get duplicate search paths as they set.
+statement ok
+SET search_path = public, public, a, b, c
+
+query T
+SHOW search_path;
+----
+public, public, a, b, c
