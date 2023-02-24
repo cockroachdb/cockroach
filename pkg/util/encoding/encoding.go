@@ -610,6 +610,23 @@ func EncodeBytesAscending(b []byte, data []byte) []byte {
 	return encodeBytesAscendingWithTerminatorAndPrefix(b, data, ascendingBytesEscapes.escapedTerm, bytesMarker)
 }
 
+// EncodeNextBytesAscending encodes the []byte value with an extra 0x00 byte
+// appended before encoding. It's equivalent to
+//
+//	EncodeBytesAscending(b, append(data, 0x00))
+//
+// but may avoid an allocation when the data slice does not have additional
+// capacity.
+func EncodeNextBytesAscending(b []byte, data []byte) []byte {
+	b = append(b, bytesMarker)
+	return encodeNextBytesAscendingWithTerminator(b, data, ascendingBytesEscapes.escapedTerm)
+}
+
+func encodeNextBytesAscendingWithTerminator(b []byte, data []byte, terminator byte) []byte {
+	bs := encodeBytesAscendingWithoutTerminatorOrPrefix(b, data)
+	return append(bs, escape, escaped00, escape, terminator)
+}
+
 // encodeBytesAscendingWithTerminatorAndPrefix encodes the []byte value using an escape-based
 // encoding. The encoded value is terminated with the sequence
 // "\x00\terminator". The encoded bytes are append to the supplied buffer
@@ -674,6 +691,22 @@ func EncodeBytesSize(data []byte) int {
 	// much faster than looping over the bytes in the slice, especially when
 	// given a single-byte separator.
 	return len(data) + 3 + bytes.Count(data, []byte{escape})
+}
+
+// EncodeNextBytesSize returns the size of the []byte value when suffixed with a
+// zero byte and then encoded using EncodeNextBytes{Ascending,Descending}. The
+// function accounts for the encoding marker, escaping, and the terminator.
+func EncodeNextBytesSize(data []byte) int {
+	// Encoding overhead:
+	// +1 for [bytesMarker] prefix
+	// +2 for [escape, escapedTerm] suffix
+	// +1 for each byte that needs to be escaped
+	// +2 for the appended 0x00 byte, plus its escaping byte
+	//
+	// NOTE: bytes.Count is implemented by the go runtime in assembly and is
+	// much faster than looping over the bytes in the slice, especially when
+	// given a single-byte separator.
+	return len(data) + 5 + bytes.Count(data, []byte{escape})
 }
 
 // DecodeBytesAscending decodes a []byte value from the input buffer

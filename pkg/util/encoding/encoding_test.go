@@ -546,6 +546,56 @@ func TestEncodeDecodeBytesAscending(t *testing.T) {
 	}
 }
 
+func TestEncodeNextBytesAscending_Equivalence(t *testing.T) {
+	for _, b := range [][]byte{
+		{0, 1, 'a'},
+		{0, 'a'},
+		{0, 0xff, 'a'},
+		{'a'},
+		{'b'},
+		{'b', 0},
+		{'b', 0, 0},
+		{'b', 0, 0, 'a'},
+		{'b', 0xff},
+		{'h', 'e', 'l', 'l', 'o'},
+	} {
+		next := append(b, 0x00)
+
+		gotSz := EncodeNextBytesSize(b)
+		wantSz := EncodeBytesSize(next)
+		if gotSz != wantSz {
+			t.Errorf("EncodeNextBytesSize(%q) = %d; want %d", b, gotSz, wantSz)
+		}
+		gotV := EncodeNextBytesAscending(nil, b)
+		wantV := EncodeBytesAscending(nil, next)
+		if !bytes.Equal(gotV, wantV) {
+			t.Errorf("EncodeNextBytesAscending(%q) = %q; want %q", b, gotV, wantV)
+		}
+	}
+}
+
+func TestEncodeNextBytesAscending_Equivalence_Randomized(t *testing.T) {
+	rnd, _ := randutil.NewTestRand()
+	var buf [10]byte
+	var nextBuf [10 + 1]byte
+	for i := 0; i < 1000; i++ {
+		b := buf[:randutil.RandIntInRange(rnd, 1, cap(buf))]
+		randutil.ReadTestdataBytes(rnd, b)
+		next := append(append(nextBuf[:0], b...), 0x00)
+
+		gotSz := EncodeNextBytesSize(b)
+		wantSz := EncodeBytesSize(next)
+		if gotSz != wantSz {
+			t.Errorf("EncodeNextBytesSize(%q) = %d; want %d", b, gotSz, wantSz)
+		}
+		gotV := EncodeNextBytesAscending(nil, b)
+		wantV := EncodeBytesAscending(nil, next)
+		if !bytes.Equal(gotV, wantV) {
+			t.Errorf("EncodeNextBytesAscending(%q) = %q; want %q", b, gotV, wantV)
+		}
+	}
+}
+
 func TestEncodeDecodeBytesDescending(t *testing.T) {
 	testCases := []struct {
 		value   []byte
