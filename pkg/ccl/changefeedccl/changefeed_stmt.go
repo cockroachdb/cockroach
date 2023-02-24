@@ -650,8 +650,28 @@ func createChangefeedJobRecord(
 	// TODO: Ideally those option validations would happen in validateDetails()
 	// earlier, like the others.
 	err = validateSink(ctx, p, jobID, details, opts)
-
+	if err != nil {
+		return nil, err
+	}
 	details.Opts = opts.AsMap()
+
+	ptsExpiration, err := opts.GetPTSExpiration()
+	if err != nil {
+		return nil, err
+	}
+
+	if ptsExpiration > 0 && ptsExpiration < time.Hour {
+		// This threshold is rather arbitrary.  But we want to warn users about
+		// the potential impact of keeping this setting too low.
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			`the value of %s for changefeed option %s might be too low. Having a low
+			value for this option should not have adverse effect as long as changefeed
+			is running. However, should the changefeed be paused, it will need to be
+			resumed before expiration time. The value of this setting should reflect
+			how much time the changefeed may remain paused, before it is canceled. 
+			Few hours to a few days range are appropriate values for this option.
+`, ptsExpiration, changefeedbase.OptExpirePTSAfter, ptsExpiration))
+	}
 
 	jr := &jobs.Record{
 		Description: jobDescription,
@@ -662,11 +682,12 @@ func createChangefeedJobRecord(
 			}
 			return sqlDescIDs
 		}(),
-		Details:   details,
-		CreatedBy: changefeedStmt.CreatedByInfo,
+		Details:       details,
+		CreatedBy:     changefeedStmt.CreatedByInfo,
+		MaximumPTSAge: ptsExpiration,
 	}
 
-	return jr, err
+	return jr, nil
 }
 
 func validateSettings(ctx context.Context, p sql.PlanHookState) error {
@@ -1206,7 +1227,9 @@ func (b *changefeedResumer) OnPauseRequest(
 			return nil
 		}
 		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
+		ptr := createProtectedTimestampRecord(
+			ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp,
+		)
 		return pts.Protect(ctx, ptr)
 	}
 

@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -61,80 +59,39 @@ var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
 	500*time.Millisecond,
 ).WithPublic()
 
-// SplitObjective is a type that specifies a load based splitting objective.
-type SplitObjective int
-
-const (
-	// SplitQPS will track and split QPS (queries-per-second) over a range.
-	SplitQPS SplitObjective = iota
-	// SplitCPU will track and split CPU (cpu-per-second) over a range.
-	SplitCPU
-)
-
-// String returns a human readable string representation of the dimension.
-func (d SplitObjective) String() string {
-	switch d {
-	case SplitQPS:
-		return "qps"
-	case SplitCPU:
-		return "cpu"
+func (obj LBRebalancingObjective) ToSplitObjective() split.SplitObjective {
+	switch obj {
+	case LBRebalancingQueries:
+		return split.SplitQPS
+	case LBRebalancingCPU:
+		return split.SplitCPU
 	default:
-		panic(fmt.Sprintf("cannot name: unknown objective with ordinal %d", d))
-	}
-}
-
-// Format returns a formatted string for a value.
-func (d SplitObjective) Format(value float64) string {
-	switch d {
-	case SplitQPS:
-		return fmt.Sprintf("%.1f", value)
-	case SplitCPU:
-		return string(humanizeutil.Duration(time.Duration(int64(value))))
-	default:
-		panic(fmt.Sprintf("cannot format value: unknown objective with ordinal %d", d))
+		panic(fmt.Sprintf("unknown objective %d", obj))
 	}
 }
 
 // replicaSplitConfig implements the split.SplitConfig interface.
 type replicaSplitConfig struct {
-	randSource                 split.RandSource
-	rebalanceObjectiveProvider RebalanceObjectiveProvider
-	st                         *cluster.Settings
+	randSource split.RandSource
+	st         *cluster.Settings
 }
 
-func newReplicaSplitConfig(
-	st *cluster.Settings, rebalanceObjectiveProvider RebalanceObjectiveProvider,
-) *replicaSplitConfig {
+func newReplicaSplitConfig(st *cluster.Settings) *replicaSplitConfig {
 	return &replicaSplitConfig{
-		randSource:                 split.GlobalRandSource(),
-		rebalanceObjectiveProvider: rebalanceObjectiveProvider,
-		st:                         st,
-	}
-}
-
-// SplitObjective returns the current split objective. Currently this tracks
-// 1:1 to the rebalance objective e.g. balancing QPS means also load based
-// splitting on QPS.
-func (c *replicaSplitConfig) SplitObjective() SplitObjective {
-	obj := c.rebalanceObjectiveProvider.Objective()
-	switch obj {
-	case LBRebalancingQueries:
-		return SplitQPS
-	case LBRebalancingCPU:
-		return SplitCPU
-	default:
-		panic(errors.AssertionFailedf("Unkown split objective %d", obj))
+		randSource: split.GlobalRandSource(),
+		st:         st,
 	}
 }
 
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 // find the midpoint based on recorded load.
-func (c *replicaSplitConfig) NewLoadBasedSplitter(startTime time.Time) split.LoadBasedSplitter {
-	obj := c.SplitObjective()
+func (c *replicaSplitConfig) NewLoadBasedSplitter(
+	startTime time.Time, obj split.SplitObjective,
+) split.LoadBasedSplitter {
 	switch obj {
-	case SplitQPS:
+	case split.SplitQPS:
 		return split.NewUnweightedFinder(startTime, c.randSource)
-	case SplitCPU:
+	case split.SplitCPU:
 		return split.NewWeightedFinder(startTime, c.randSource)
 	default:
 		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
@@ -148,12 +105,11 @@ func (c *replicaSplitConfig) StatRetention() time.Duration {
 
 // StatThreshold returns the threshold for load above which the range should be
 // considered split.
-func (c *replicaSplitConfig) StatThreshold() float64 {
-	obj := c.SplitObjective()
+func (c *replicaSplitConfig) StatThreshold(obj split.SplitObjective) float64 {
 	switch obj {
-	case SplitQPS:
+	case split.SplitQPS:
 		return float64(SplitByLoadQPSThreshold.Get(&c.st.SV))
-	case SplitCPU:
+	case split.SplitCPU:
 		return float64(SplitByLoadCPUThreshold.Get(&c.st.SV))
 	default:
 		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
@@ -166,22 +122,6 @@ func (c *replicaSplitConfig) StatThreshold() float64 {
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
-}
-
-type loadSplitStat struct {
-	max float64
-	ok  bool
-	typ SplitObjective
-}
-
-func (r *Replica) loadSplitStat(ctx context.Context) loadSplitStat {
-	max, ok := r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
-	lss := loadSplitStat{
-		max: max,
-		ok:  ok,
-		typ: r.store.splitConfig.SplitObjective(),
-	}
-	return lss
 }
 
 // getResponseBoundarySpan computes the union span of the true spans that were
@@ -260,7 +200,7 @@ func getResponseBoundarySpan(
 // recordBatchForLoadBasedSplitting records the batch's spans to be considered
 // for load based splitting.
 func (r *Replica) recordBatchForLoadBasedSplitting(
-	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, stat int,
+	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, cpu int,
 ) {
 	if !r.SplitByLoadEnabled() {
 		return
@@ -278,15 +218,20 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 			len(ba.Requests), len(br.Responses))
 	}
 
-	// When QPS splitting is enabled, use the number of requests rather than
-	// the given stat for recording load.
-	if r.store.splitConfig.SplitObjective() == SplitQPS {
-		stat = len(ba.Requests)
+	loadFn := func(obj split.SplitObjective) int {
+		switch obj {
+		case split.SplitCPU:
+			return cpu
+		default:
+			return len(ba.Requests)
+		}
 	}
 
-	shouldInitSplit := r.loadBasedSplitter.Record(ctx, timeutil.Now(), stat, func() roachpb.Span {
+	spanFn := func() roachpb.Span {
 		return getResponseBoundarySpan(ba, br)
-	})
+	}
+
+	shouldInitSplit := r.loadBasedSplitter.Record(ctx, r.Clock().PhysicalTime(), loadFn, spanFn)
 	if shouldInitSplit {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}

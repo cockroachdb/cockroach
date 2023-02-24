@@ -24,6 +24,17 @@ import (
 // Metrics are for production monitoring of each job type.
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
+
+	// JobSpecificMetrics contains a list of job specific metrics, registered when
+	// the job was registered with the system.  Prior to this array, job
+	// implementations had to arrange for various hook functions be configured to
+	// setup registration of the job specific metrics with the jobs registry. This
+	// is a much simpler mechanism. Since having job specific metrics is optional,
+	// these metrics are exposed as an array to the metrics registry since metrics
+	// arrays may contain nil values. TODO(yevgeniy): Remove hook based
+	// implementation of job specific metrics.
+	JobSpecificMetrics [jobspb.NumJobTypes]metric.Struct
+
 	// RunningNonIdleJobs is the total number of running jobs that are not idle.
 	RunningNonIdleJobs *metric.Gauge
 
@@ -56,6 +67,10 @@ type JobTypeMetrics struct {
 	// TODO (sajjad): FailOrCancelFailed metric is not updated after the modification
 	// of retrying all reverting jobs. Remove this metric in v22.1.
 	FailOrCancelFailed *metric.Counter
+
+	NumJobsWithPTS *metric.Gauge
+	ExpiredPTS     *metric.Counter
+	ProtectedAge   *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -163,6 +178,36 @@ func makeMetaFailOrCancelFailed(typeStr string) metric.Metadata {
 	}
 }
 
+func makeMetaProtectedCount(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name:        fmt.Sprintf("jobs.%s.protected_record_count", typeStr),
+		Help:        fmt.Sprintf("Number of protected timestamp records held by %s jobs", typeStr),
+		Measurement: "records",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaProtectedAge(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name:        fmt.Sprintf("jobs.%s.protected_age_sec", typeStr),
+		Help:        fmt.Sprintf("The age of the oldest PTS record protected by %s jobs", typeStr),
+		Measurement: "seconds",
+		Unit:        metric.Unit_SECONDS,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaExpiredPTS(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name:        fmt.Sprintf("jobs.%s.expired_pts_records", typeStr),
+		Help:        fmt.Sprintf("Number of expired protected timestamp records owned by %s jobs", typeStr),
+		Measurement: "records",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+}
+
 var (
 	metaAdoptIterations = metric.Metadata{
 		Name:        "jobs.adopt_iterations",
@@ -233,6 +278,12 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(typeStr)),
 			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(typeStr)),
 			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(typeStr)),
+			NumJobsWithPTS:         metric.NewGauge(makeMetaProtectedCount(typeStr)),
+			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(typeStr)),
+			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(typeStr)),
+		}
+		if opts, ok := options[jt]; ok && opts.metrics != nil {
+			m.JobSpecificMetrics[jt] = opts.metrics
 		}
 	}
 }
