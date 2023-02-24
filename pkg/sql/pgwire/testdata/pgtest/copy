@@ -994,3 +994,49 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"t"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that a CopyFail message does not break the conn_executor state machine.
+send
+Query {"String": "DROP TABLE IF EXISTS copy_fail_test"}
+Query {"String": "CREATE TABLE copy_fail_test(a INT PRIMARY KEY)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "COPY copy_fail_test(a) FROM STDIN"}
+CopyFail
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0]}
+{"Type":"ErrorResponse","Code":"57014"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Previously there was a bug that caused the Parse to fail with "query execution
+# canceled" since the cancellation from the CopyFail message was not cleaned up.
+send
+Parse {"Query": "SELECT count(*) FROM copy_fail_test"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

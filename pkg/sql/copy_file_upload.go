@@ -98,7 +98,7 @@ func newFileUploadMachine(
 
 	// We need a planner to do the initial planning, even if a planner
 	// is not required after that.
-	cleanup := c.p.preparePlannerForCopy(ctx, &txnOpt, false /* finalBatch */, c.implicitTxn)
+	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, false /* finalBatch */, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
