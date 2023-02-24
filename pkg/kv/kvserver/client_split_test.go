@@ -1954,7 +1954,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 		t.Fatalf("expected RHS's GCThreshold is equal to %v, but got %v", specifiedGCThreshold, gcThreshold)
 	}
 
-	repl.AssertState(ctx, store.TODOEngine())
+	repl.AssertState(ctx)
 }
 
 func TestStoreSplitGCHint(t *testing.T) {
@@ -2016,7 +2016,7 @@ func TestStoreSplitGCHint(t *testing.T) {
 	gcHint = repl.GetGCHint()
 	require.False(t, gcHint.IsEmpty(), "GC hint is empty after range delete")
 
-	repl.AssertState(ctx, store.TODOEngine())
+	repl.AssertState(ctx)
 }
 
 // TestStoreRangeSplitRaceUninitializedRHS reproduces #7600 (before it was
