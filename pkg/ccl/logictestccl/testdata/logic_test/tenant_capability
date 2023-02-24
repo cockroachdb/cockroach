@@ -1,56 +1,132 @@
 # LogicTest: local
 
+subtest grant_revoke_error
+
 statement ok
-SELECT crdb_internal.create_tenant(5, 'five')
+CREATE TENANT "grant-revoke-error-tenant";
 
 statement error unknown capability: "not_a_capability"
-ALTER TENANT [5] GRANT CAPABILITY not_a_capability=true
+ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY not_a_capability=true
 
 statement error argument of ALTER TENANT CAPABILITY can_admin_split must be type bool, not type int
-ALTER TENANT [5] GRANT CAPABILITY can_admin_split=1
+ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY can_admin_split=1
 
 statement error parameter "can_admin_split" requires a Boolean value
-ALTER TENANT [5] GRANT CAPABILITY can_admin_split=NULL
+ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY can_admin_split=NULL
 
 statement error unknown capability: "not_a_capability"
-ALTER TENANT [5] REVOKE CAPABILITY not_a_capability
+ALTER TENANT "grant-revoke-error-tenant" REVOKE CAPABILITY not_a_capability
 
 statement error no value allowed in revoke: "can_admin_split"
-ALTER TENANT [5] REVOKE CAPABILITY can_admin_split=false
+ALTER TENANT "grant-revoke-error-tenant" REVOKE CAPABILITY can_admin_split=false
 
-query ITTTTT colnames
-SHOW TENANT 'five' WITH CAPABILITIES
-----
-id  name  data_state  service_mode  capability_name    capability_value
-5   five  ready       none          can_admin_split    false
-5   five  ready       none          can_admin_unsplit  false
-5   five  ready       none          can_view_node_info     false
-5   five  ready       none          can_view_tsdb_metrics  false
+subtest end
+
+subtest no_capabilities
 
 statement ok
-ALTER TENANT [5] GRANT CAPABILITY can_admin_split=true
+CREATE TENANT "no-capabilities-tenant";
 
-# Check that composite expressions are evaluated properly.
-statement ok
-ALTER TENANT [5] GRANT CAPABILITY can_admin_split=(2=1+1)
-
-query ITTTTT colnames
-SHOW TENANT 'five' WITH CAPABILITIES
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "no-capabilities-tenant" WITH CAPABILITIES]
 ----
-id  name  data_state  service_mode  capability_name    capability_value
-5   five  ready       none          can_admin_split    true
-5   five  ready       none          can_admin_unsplit  false
-5   five  ready       none          can_view_node_info     false
-5   five  ready       none          can_view_tsdb_metrics  false
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+
+subtest end
+
+subtest bool_capability_no_value
 
 statement ok
-ALTER TENANT [5] REVOKE CAPABILITY can_admin_split
+CREATE TENANT "bool-capability-no-value-tenant";
 
-query ITTTTT colnames
-SHOW TENANT 'five' WITH CAPABILITIES
+statement ok
+ALTER TENANT "bool-capability-no-value-tenant" GRANT CAPABILITY can_admin_split
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
-id  name  data_state  service_mode  capability_name    capability_value
-5   five  ready       none          can_admin_split    false
-5   five  ready       none          can_admin_unsplit  false
-5   five  ready       none          can_view_node_info     false
-5   five  ready       none          can_view_tsdb_metrics  false
+capability_name        capability_value
+can_admin_split        true
+can_view_node_info     false
+can_view_tsdb_metrics  false
+
+statement ok
+ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+
+subtest end
+
+subtest bool_capability_with_value
+
+statement ok
+CREATE TENANT "bool-capability-with-value-tenant";
+
+statement ok
+ALTER TENANT "bool-capability-with-value-tenant" GRANT CAPABILITY can_admin_split=true
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-with-value-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        true
+can_view_node_info     false
+can_view_tsdb_metrics  false
+
+subtest end
+
+subtest bool_capability_with_expression_value
+
+statement ok
+CREATE TENANT "bool-capability-with-expression-value-tenant";
+
+statement ok
+ALTER TENANT "bool-capability-with-expression-value-tenant" GRANT CAPABILITY can_admin_split=(2=1+1)
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-with-expression-value-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        true
+can_view_node_info     false
+can_view_tsdb_metrics  false
+
+subtest end
+
+subtest multiple_capability
+
+statement ok
+CREATE TENANT "multiple-capability-tenant"
+
+statement ok
+ALTER TENANT "multiple-capability-tenant" GRANT CAPABILITY can_admin_split, can_view_node_info
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        true
+can_view_node_info     true
+can_view_tsdb_metrics  false
+
+statement ok
+ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+
+subtest end
