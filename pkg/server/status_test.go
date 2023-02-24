@@ -3707,7 +3707,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 				WHERE length(contending_key) > 0`,
 				)
 				if tc.testName == "nopermission" {
-					require.Contains(t, err.Error(), "requires VIEWACTIVITY")
+					require.Contains(t, err.Error(), "does not have VIEWACTIVITY")
 				} else {
 					require.NoError(t, err)
 					visibleContendingKeysCount := tree.MustBeDInt(row[0])
