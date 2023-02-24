@@ -323,6 +323,8 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			case *scpb.SequenceOwner:
 				fn(e)
 				sequencesToDrop.Add(elt.SequenceID)
+			case *scpb.SecondaryIndex:
+				indexesToDrop.Add(elt.IndexID)
 			case *scpb.SecondaryIndexPartial:
 				indexesToDrop.Add(elt.IndexID)
 			case *scpb.IndexColumn:
@@ -349,15 +351,16 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			}
 		case *scpb.SecondaryIndex:
 			if indexesToDrop.Contains(elt.IndexID) {
-				fn(e)
-			} else if elt.EmbeddedExpr != nil {
-				for _, columnID := range elt.EmbeddedExpr.ReferencedColumnIDs {
-					if columnID == col.ColumnID {
-						fn(e)
-					}
+				// Temporarily disallow dropping a column that is referenced in any
+				// partial index's predicate. See #96924 for details.
+				if elt.EmbeddedExpr != nil &&
+					descpb.ColumnIDs(elt.EmbeddedExpr.ReferencedColumnIDs).Contains(col.ColumnID) {
+					colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
+					indexNameElem := mustRetrieveIndexNameElem(b, col.TableID, elt.IndexID)
+					panic(sqlerrors.NewColumnReferencedByPartialIndex(colNameElem.Name, indexNameElem.Name))
 				}
+				fn(e)
 			}
-
 		}
 	})
 	sequencesToDrop.ForEach(func(id descpb.ID) {

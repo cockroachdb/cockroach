@@ -1653,7 +1653,7 @@ func dropColumnImpl(
 		containsThisColumn := idx.CollectKeyColumnIDs().Contains(colToDrop.GetID()) ||
 			idx.CollectKeySuffixColumnIDs().Contains(colToDrop.GetID()) ||
 			idx.CollectSecondaryStoredColumnIDs().Contains(colToDrop.GetID())
-		if !containsThisColumn && idx.IsPartial() {
+		if idx.IsPartial() {
 			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return nil, err
@@ -1665,7 +1665,7 @@ func dropColumnImpl(
 			}
 
 			if colIDs.Contains(colToDrop.GetID()) {
-				containsThisColumn = true
+				return nil, sqlerrors.NewColumnReferencedByPartialIndex(string(colToDrop.ColName()), idx.GetName())
 			}
 		}
 		// Perform the DROP.
@@ -1693,6 +1693,21 @@ func dropColumnImpl(
 	for _, uwoi := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
 		if uwoi.Dropped() || !uwoi.CollectKeyColumnIDs().Contains(colToDrop.GetID()) {
 			continue
+		}
+		if uwoi.IsPartial() {
+			expr, err := parser.ParseExpr(uwoi.GetPredicate())
+			if err != nil {
+				return nil, err
+			}
+
+			colIDs, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
+			if err != nil {
+				return nil, err
+			}
+
+			if colIDs.Contains(colToDrop.GetID()) {
+				return nil, sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(string(colToDrop.ColName()), uwoi.GetName())
+			}
 		}
 		// If this unique constraint is used on the referencing side of any FK
 		// constraints, try to remove the references. Don't bother trying to find
