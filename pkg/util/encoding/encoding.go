@@ -104,12 +104,15 @@ const (
 	emptyArray = geoInvertedIndexMarker + 1
 	voidMarker = emptyArray + 1
 
-	jsonNullKeyMarker    = voidMarker + 1
-	jsonStringKeyMarker  = jsonNullKeyMarker + 1
-	jsonNumberKeyMarker  = jsonStringKeyMarker + 1
-	jsonBooleanKeyMarker = jsonNumberKeyMarker + 1
-	jsonArrayKeyMarker   = jsonBooleanKeyMarker + 1
-	jsonObjectKeyMarker  = jsonArrayKeyMarker + 1
+	// Defining different key markers, for the ascending designation,
+	// for handling different JSON values.
+	jsonNullKeyMarker   = voidMarker + 1
+	jsonStringKeyMarker = jsonNullKeyMarker + 1
+	jsonNumberKeyMarker = jsonStringKeyMarker + 1
+	jsonFalseKeyMarker  = jsonNumberKeyMarker + 1
+	jsonTrueKeyMarker   = jsonFalseKeyMarker + 1
+	jsonArrayKeyMarker  = jsonTrueKeyMarker + 1
+	jsonObjectKeyMarker = jsonArrayKeyMarker + 1
 
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
@@ -120,6 +123,20 @@ const (
 	// Because of the context, they cannot be ambiguous with these other bytes.
 	ascendingNullWithinArrayKey  byte = 0x01
 	descendingNullWithinArrayKey byte = 0xFE
+
+	// Defining different key markers, for the descending designation,
+	// for handling different JSON values.
+	jsonNullKeyDescendingMarker   = jsonObjectKeyMarker + 7
+	jsonStringKeyDescendingMarker = jsonNullKeyDescendingMarker - 1
+	jsonNumberKeyDescendingMarker = jsonStringKeyDescendingMarker - 1
+	jsonFalseKeyDescendingMarker  = jsonNumberKeyDescendingMarker - 1
+	jsonTrueKeyDescendingMarker   = jsonFalseKeyDescendingMarker - 1
+	jsonArrayKeyDescendingMarker  = jsonTrueKeyDescendingMarker - 1
+	jsonObjectKeyDescendingMarker = jsonArrayKeyDescendingMarker - 1
+
+	// Terminators for JSON Key encoding.
+	jsonKeyTerminator           byte = 0x00
+	jsonKeyDescendingTerminator byte = 0xFF
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -1705,20 +1722,34 @@ const (
 	// value requires more than 4 bits, and thus will be encoded in two bytes. It
 	// is not used as a type value, and thus intentionally overlaps with the
 	// subsequent type value. The 'Type' annotation is intentionally omitted here.
-	SentinelType      = 15
-	JSON         Type = 15
-	Tuple        Type = 16
-	BitArray     Type = 17
-	BitArrayDesc Type = 18 // BitArray encoded descendingly
-	TimeTZ       Type = 19
-	Geo          Type = 20
-	GeoDesc      Type = 21
-	ArrayKeyAsc  Type = 22 // Array key encoding
-	ArrayKeyDesc Type = 23 // Array key encoded descendingly
-	Box2D        Type = 24
-	Void         Type = 25
-	TSQuery      Type = 26
-	TSVector     Type = 27
+	SentinelType        = 15
+	JSON           Type = 15
+	Tuple          Type = 16
+	BitArray       Type = 17
+	BitArrayDesc   Type = 18 // BitArray encoded descendingly
+	TimeTZ         Type = 19
+	Geo            Type = 20
+	GeoDesc        Type = 21
+	ArrayKeyAsc    Type = 22 // Array key encoding
+	ArrayKeyDesc   Type = 23 // Array key encoded descendingly
+	Box2D          Type = 24
+	Void           Type = 25
+	TSQuery        Type = 26
+	TSVector       Type = 27
+	JSONNull       Type = 28
+	JSONNullDesc   Type = 29
+	JSONString     Type = 30
+	JSONStringDesc Type = 31
+	JSONNumber     Type = 32
+	JSONNumberDesc Type = 33
+	JSONFalse      Type = 34
+	JSONFalseDesc  Type = 35
+	JSONTrue       Type = 36
+	JSONTrueDesc   Type = 37
+	JSONArray      Type = 38
+	JSONArrayDesc  Type = 39
+	JSONObject     Type = 40
+	JSONObjectDesc Type = 41
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1755,6 +1786,34 @@ func slowPeekType(b []byte) Type {
 			return ArrayKeyAsc
 		case m == arrayKeyDescendingMarker:
 			return ArrayKeyDesc
+		case m == jsonNullKeyMarker:
+			return JSONNull
+		case m == jsonNullKeyDescendingMarker:
+			return JSONNullDesc
+		case m == jsonStringKeyMarker:
+			return JSONString
+		case m == jsonStringKeyDescendingMarker:
+			return JSONStringDesc
+		case m == jsonNumberKeyMarker:
+			return JSONNumber
+		case m == jsonNumberKeyDescendingMarker:
+			return JSONNumberDesc
+		case m == jsonFalseKeyMarker:
+			return JSONFalse
+		case m == jsonFalseKeyDescendingMarker:
+			return JSONFalseDesc
+		case m == jsonTrueKeyMarker:
+			return JSONTrue
+		case m == jsonTrueKeyDescendingMarker:
+			return JSONTrueDesc
+		case m == jsonArrayKeyMarker:
+			return JSONArray
+		case m == jsonArrayKeyDescendingMarker:
+			return JSONArrayDesc
+		case m == jsonObjectKeyMarker:
+			return JSONObject
+		case m == jsonObjectKeyDescendingMarker:
+			return JSONObjectDesc
 		case m == bytesMarker:
 			return Bytes
 		case m == bytesDescMarker:
@@ -1845,6 +1904,27 @@ func getArrayLength(buf []byte, dir Direction) (int, error) {
 	return result, nil
 }
 
+// getJSONLength returns the length of a key encoded array. The input
+// must have had the type marker stripped from the front.
+func getJSONLength(buf []byte, dir Direction) (int, error) {
+	result := 0
+	for {
+		if IsJSONKeyDone(buf, dir) {
+			// Increment to include the terminator byte.
+			result++
+			break
+		}
+		next, err := PeekLength(buf)
+		if err != nil {
+			return 0, err
+		}
+		// Shift buf over by the encoded data amount.
+		buf = buf[next:]
+		result += next
+	}
+	return result, nil
+}
+
 // peekBox2DLength peeks to look at the length of a box2d encoding.
 func peekBox2DLength(b []byte) (int, error) {
 	length := 0
@@ -1878,7 +1958,9 @@ func PeekLength(b []byte) (int, error) {
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
 		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False),
-		emptyArray, voidMarker:
+		emptyArray, voidMarker, jsonNullKeyMarker, jsonNullKeyDescendingMarker,
+		jsonFalseKeyMarker, jsonFalseKeyDescendingMarker, jsonTrueKeyMarker,
+		jsonTrueKeyDescendingMarker:
 		// ascendingNullWithinArrayKey and descendingNullWithinArrayKey also
 		// contain the same byte values as encodedNotNull and encodedNotNullDesc
 		// respectively, but they cannot be included explicitly in the case
@@ -1898,6 +1980,34 @@ func PeekLength(b []byte) (int, error) {
 			return 1 + n + m + 1, err
 		}
 		return 1 + n + m + 1, nil
+	case jsonStringKeyMarker, jsonStringKeyDescendingMarker,
+		jsonNumberKeyMarker, jsonNumberKeyDescendingMarker:
+		dir := Ascending
+		if (m == jsonStringKeyDescendingMarker) ||
+			(m == jsonNumberKeyDescendingMarker) {
+			dir = Descending
+		}
+		length, err := getJSONLength(b[1:], dir)
+		return 1 + length, err
+	case jsonArrayKeyMarker, jsonArrayKeyDescendingMarker,
+		jsonObjectKeyMarker, jsonObjectKeyDescendingMarker:
+		dir := Ascending
+		if (m == jsonArrayKeyDescendingMarker) ||
+			(m == jsonObjectKeyDescendingMarker) {
+			dir = Descending
+		}
+		// removing the starter tag
+		b = b[1:]
+
+		// Getting the number of elements present
+		// in the container
+		numberElems, err := getVarintLen(b)
+		if err != nil {
+			panic("failed to get the number of elements encoded in " +
+				"the container")
+		}
+		length, err := getJSONLength(b[numberElems:], dir)
+		return 1 + numberElems + length, err
 	case arrayKeyMarker, arrayKeyDescendingMarker:
 		dir := Ascending
 		if m == arrayKeyDescendingMarker {
@@ -3304,17 +3414,135 @@ func getGeoInvertedIndexKeyLength(buf []byte) (int, error) {
 	return 1 + cellLen + 1 + floatsLen, nil
 }
 
-// EncodeJSONNullKeyMarker adds a JSON Object key encoding marker
+// EncodeJSONNullKeyMarker adds a JSON Null key encoding marker
 // to buf and returns the new buffer.
-//func EncodeJSONNullKeyMarker(buf []byte, dir direction) []byte {
-//	return append(buf, jsonNullKeyMarker)
-//}
+func EncodeJSONNullKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonNullKeyMarker)
+	case Descending:
+		return append(buf, jsonNullKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeJSONStringKeyMarker adds a JSON String key encoding marker
+// to buf and returns the new buffer.
+func EncodeJSONStringKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonStringKeyMarker)
+	case Descending:
+		return append(buf, jsonStringKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeJSONNumberKeyMarker adds a JSON Number key encoding marker
+// to buf and returns the new buffer.
+func EncodeJSONNumberKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonNumberKeyMarker)
+	case Descending:
+		return append(buf, jsonNumberKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeJSONFalseKeyMarker adds a JSON False key encoding marker
+// to buf and returns the new buffer.
+func EncodeJSONFalseKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonFalseKeyMarker)
+	case Descending:
+		return append(buf, jsonFalseKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeJSONTrueKeyMarker adds a JSON True key encoding marker
+// to buf and returns the new buffer.
+func EncodeJSONTrueKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonTrueKeyMarker)
+	case Descending:
+		return append(buf, jsonTrueKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeJSONArrayKeyMarker adds a JSON Array key encoding marker
+// to buf and returns the new buffer.
+func EncodeJSONArrayKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonArrayKeyMarker)
+	case Descending:
+		return append(buf, jsonArrayKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeJSONKeyTerminator adds a JSON Key terminator
+// to buf and returns the buffer.
+func EncodeJSONKeyTerminator(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonKeyTerminator)
+	case Descending:
+		return append(buf, jsonKeyDescendingTerminator)
+	default:
+		panic("invalid direction")
+	}
+}
 
 // EncodeJSONObjectKeyMarker adds a JSON Object key encoding marker
 // to buf and returns the new buffer.
-//func EncodeJSONObjectKeyMarker(buf []byte, dir direction) []byte {
-//	return buf
-//}
+func EncodeJSONObjectKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, jsonObjectKeyMarker)
+	case Descending:
+		return append(buf, jsonObjectKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+func EncodeJSONArrayOrJSONObjectLength(buf []byte, dir Direction, v int64) []byte {
+	switch dir {
+	case Ascending:
+		return EncodeVarintAscending(buf, v)
+	case Descending:
+		return EncodeVarintDescending(buf, v)
+	default:
+		panic("invalid direction")
+	}
+}
+
+func DecodeJSONArrayOrJSONObjectLength(buf []byte, dir Direction) ([]byte, int64, error) {
+	var v int64
+	var err error
+	switch dir {
+	case Ascending:
+		buf, v, err = DecodeVarintAscending(buf)
+		return buf, v, err
+	case Descending:
+		buf, v, err = DecodeVarintDescending(buf)
+		return buf, v, err
+	default:
+		panic("invalid direction")
+	}
+}
 
 // EncodeArrayKeyMarker adds the array key encoding marker to buf and
 // returns the new buffer.
@@ -3364,6 +3592,32 @@ func IsNextByteArrayEncodedNull(buf []byte, dir Direction) bool {
 	return buf[0] == expected
 }
 
+// ValidateAndConsumeJSONKeyMarker checks that the marker at the front
+// of buf is valid for a given JSON value of the given direction, and
+// if so. It returns an error if the tag is valid.
+func ValidateAndConsumeJSONKeyMarker(buf []byte, dir Direction) ([]byte, Type, error) {
+	typ := PeekType(buf)
+	if dir == Descending {
+		if (typ == JSONNullDesc) || (typ == JSONNumberDesc) || (typ == JSONStringDesc) ||
+			(typ == JSONFalseDesc) || (typ == JSONTrueDesc) || (typ == JSONArrayDesc) ||
+			(typ == JSONObjectDesc) {
+			return buf[1:], typ, nil
+		} else {
+			return nil, Unknown, errors.Newf("invalid type found %s", typ)
+		}
+	} else if dir == Ascending {
+		if (typ == JSONNull) || (typ == JSONNumber) || (typ == JSONString) ||
+			(typ == JSONFalse) || (typ == JSONTrue) || (typ == JSONArray) ||
+			(typ == JSONObject) {
+			return buf[1:], typ, nil
+		} else {
+			return nil, Unknown, errors.Newf("invalid type found %s", typ)
+		}
+	} else {
+		return nil, Unknown, errors.Newf("invalid type found %s", typ)
+	}
+}
+
 // ValidateAndConsumeArrayKeyMarker checks that the marker at the front
 // of buf is valid for an array of the given direction, and consumes it
 // if so. It returns an error if the tag is invalid.
@@ -3385,6 +3639,16 @@ func IsArrayKeyDone(buf []byte, dir Direction) bool {
 	expected := arrayKeyTerminator
 	if dir == Descending {
 		expected = arrayKeyDescendingTerminator
+	}
+	return buf[0] == expected
+}
+
+// isJSONKeyDone returns if the first byte in the input is the JSON
+// terminator for the input direction.
+func IsJSONKeyDone(buf []byte, dir Direction) bool {
+	expected := jsonKeyTerminator
+	if dir == Descending {
+		expected = jsonKeyDescendingTerminator
 	}
 	return buf[0] == expected
 }
