@@ -495,6 +495,9 @@ func (r *Replica) applySnapshot(
 	if err != nil {
 		return err
 	}
+	if !nonempty {
+		log.Fatalf(ctx, "unreplicated SST was empty")
+	}
 	if nonempty {
 		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
 		// buffering in a MemFile first.
