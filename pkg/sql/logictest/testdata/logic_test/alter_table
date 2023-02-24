@@ -3064,3 +3064,74 @@ t_96727_2  CREATE TABLE public.t_96727_2 (
              CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
              FAMILY fam_0_i_j (i)
            )
+
+subtest regression_97546
+
+statement ok
+CREATE TABLE t_twocol (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY fam_0 (id, a, b)
+);
+CREATE FUNCTION f1() RETURNS t_twocol AS 'SELECT * FROM t_twocol' LANGUAGE SQL;
+CREATE FUNCTION f2() RETURNS t_twocol AS 'SELECT * FROM t_twocol' LANGUAGE SQL;
+CREATE FUNCTION f3() RETURNS INT AS 'SELECT a FROM t_twocol' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_twocol DROP COLUMN b CASCADE;
+
+statement error pq: unknown function: f1\(\): function undefined
+SELECT f1();
+
+statement error pq: unknown function: f2\(\): function undefined
+SELECT f2();
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  id INT8 NOT NULL,
+  a INT8 NULL,
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0 (id, a)
+)
+
+statement ok
+DROP TABLE t_twocol CASCADE;
+
+subtest regress_96368
+
+statement ok
+CREATE TABLE t_twocol (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY fam_0 (id, a, b)
+);
+CREATE FUNCTION f_unqualified_twocol() RETURNS t_twocol AS
+$$
+  SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
+$$ LANGUAGE SQL;
+CREATE FUNCTION f_allcolsel_alias() RETURNS t_twocol AS
+$$
+  SELECT t1.id, t1.a, t1.b FROM t_twocol AS t1, t_twocol AS t2 WHERE t1.a = t2.a;
+$$ LANGUAGE SQL;
+CREATE FUNCTION f_tuplestar() RETURNS t_twocol AS
+$$
+  SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
+$$ LANGUAGE SQL;
+
+# This statement should be ok but fails
+statement ok
+ALTER TABLE t_twocol DROP COLUMN b CASCADE;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  id INT8 NOT NULL,
+  a INT8 NULL,
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0 (id, a)
+)
