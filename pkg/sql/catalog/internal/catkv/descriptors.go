@@ -53,6 +53,7 @@ func lookupDescriptorsAndValidate(
 	txn *kv.Txn,
 	cq catalogQuerier,
 	vd validate.ValidationDereferencer,
+	targetValidationLevel catalog.ValidationLevel,
 	ids []descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	descs, err := lookupDescriptorsUnvalidated(ctx, txn, cq, ids)
@@ -68,7 +69,7 @@ func lookupDescriptorsAndValidate(
 			txn: txn,
 		}
 	}
-	ve := validate.Validate(ctx, version, vd, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, descs...)
+	ve := validate.Validate(ctx, version, vd, catalog.ValidationReadTelemetry, targetValidationLevel, descs...)
 	if err := ve.CombinedError(); err != nil {
 		return nil, err
 	}
@@ -138,11 +139,32 @@ func MaybeGetDescriptorByID(
 		expectedType: expectedType,
 		codec:        codec,
 	}
-	descs, err := lookupDescriptorsAndValidate(ctx, version, txn, cq, vd, []descpb.ID{id})
+	descs, err := lookupDescriptorsAndValidate(ctx, version, txn, cq, vd, catalog.ValidationLevelCrossReferences, []descpb.ID{id})
 	if err != nil {
 		return nil, err
 	}
 	return descs[0], nil
+}
+
+// MustGetDescriptorsByIDWithValidationLevel looks up the descriptors given their IDs,
+// returning an error if any descriptor is not found. Descriptors are only
+// validated till the specified validation level.
+func MustGetDescriptorsByIDWithValidationLevel(
+	ctx context.Context,
+	version clusterversion.ClusterVersion,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	vd validate.ValidationDereferencer,
+	targetValidationLevel catalog.ValidationLevel,
+	ids []descpb.ID,
+	expectedType catalog.DescriptorType,
+) ([]catalog.Descriptor, error) {
+	cq := catalogQuerier{
+		codec:        codec,
+		isRequired:   true,
+		expectedType: expectedType,
+	}
+	return lookupDescriptorsAndValidate(ctx, version, txn, cq, vd, targetValidationLevel, ids)
 }
 
 // MustGetDescriptorsByID looks up the descriptors given their IDs,
@@ -156,12 +178,8 @@ func MustGetDescriptorsByID(
 	ids []descpb.ID,
 	expectedType catalog.DescriptorType,
 ) ([]catalog.Descriptor, error) {
-	cq := catalogQuerier{
-		codec:        codec,
-		isRequired:   true,
-		expectedType: expectedType,
-	}
-	return lookupDescriptorsAndValidate(ctx, version, txn, cq, vd, ids)
+	return MustGetDescriptorsByIDWithValidationLevel(ctx, version, codec, txn, vd, catalog.ValidationLevelCrossReferences, ids, expectedType)
+
 }
 
 // MustGetDescriptorByID looks up the descriptor given its ID,
