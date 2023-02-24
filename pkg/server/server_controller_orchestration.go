@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -111,7 +112,10 @@ func (c *serverController) startInitialSecondaryTenantServers(
 	ctx context.Context, ie isql.Executor,
 ) error {
 	// The list of tenants that should have a running server.
-	reqTenants, err := c.getExpectedRunningTenants(ctx, ie)
+	reqTenants, err := startup.RunWithStartupRetryEx(ctx, "get expected running tenants",
+		func(ctx context.Context) ([]roachpb.TenantName, error) {
+			return c.getExpectedRunningTenants(ctx, ie)
+		})
 	if err != nil {
 		return err
 	}

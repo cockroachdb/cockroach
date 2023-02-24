@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -794,6 +795,8 @@ func unsetCanForwardReadTimestampFlag(ba *kvpb.BatchRequest) {
 func (ds *DistSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	startup.AssertStartupRetry(ctx)
+
 	ds.incrementBatchCounters(ba)
 
 	if pErr := ds.initAndVerifyBatch(ctx, ba); pErr != nil {
