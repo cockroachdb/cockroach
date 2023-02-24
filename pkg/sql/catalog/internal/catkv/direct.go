@@ -48,6 +48,15 @@ type Direct interface {
 		ctx context.Context, txn *kv.Txn, id descpb.ID,
 	) (catalog.Descriptor, error)
 
+	// MustGetDescriptorByIDWithValidationLevel looks up the descriptor given its ID
+	// and expected type, returning an error if the descriptor is not found or of
+	// the wrong type. The descriptor will only be validated at the valdiation
+	// level.
+	MustGetDescriptorByIDWithValidationLevel(
+		ctx context.Context, txn *kv.Txn, id descpb.ID, expectedType catalog.DescriptorType,
+		validationLevel catalog.ValidationLevel,
+	) (catalog.Descriptor, error)
+
 	// MustGetDescriptorByID looks up the descriptor given its ID and expected
 	// type, returning an error if the descriptor is not found or of the wrong
 	// type.
@@ -171,7 +180,11 @@ func (d *direct) MaybeGetDescriptorByIDUnvalidated(
 
 // MustGetDescriptorsByID is part of the Direct interface.
 func (d *direct) MustGetDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, ids []descpb.ID, expectedType catalog.DescriptorType,
+	ctx context.Context,
+	txn *kv.Txn,
+	ids []descpb.ID,
+	expectedType catalog.DescriptorType,
+	validationLevel catalog.ValidationLevel,
 ) ([]catalog.Descriptor, error) {
 	const isRequired = true
 	descs, err := d.readDescriptorsForDirectAccess(ctx, txn, ids, isRequired, expectedType)
@@ -179,18 +192,33 @@ func (d *direct) MustGetDescriptorsByID(
 		return nil, err
 	}
 	vd := d.NewValidationDereferencer(txn)
-	ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
+	ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validationLevel, descs...)
 	if err := ve.CombinedError(); err != nil {
 		return nil, err
 	}
 	return descs, nil
 }
 
+// MustGetDescriptorByIDWithValidationLevel is part of the Direct interface.
+func (d *direct) MustGetDescriptorByIDWithValidationLevel(
+	ctx context.Context,
+	txn *kv.Txn,
+	id descpb.ID,
+	expectedType catalog.DescriptorType,
+	validationLevel catalog.ValidationLevel,
+) (catalog.Descriptor, error) {
+	descs, err := d.MustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType, validationLevel)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], err
+}
+
 // MustGetDescriptorByID is part of the Direct interface.
 func (d *direct) MustGetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, expectedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
-	descs, err := d.MustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType)
+	descs, err := d.MustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType, validate.ImmutableRead)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +306,7 @@ func (d *direct) MustGetTypeDescByID(
 func (d *direct) GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
 ) ([]catalog.SchemaDescriptor, error) {
-	descs, err := d.MustGetDescriptorsByID(ctx, txn, ids, catalog.Schema)
+	descs, err := d.MustGetDescriptorsByID(ctx, txn, ids, catalog.Schema, validate.ImmutableRead)
 	if err != nil {
 		return nil, err
 	}
