@@ -608,7 +608,8 @@ var pgBuiltins = map[string]builtinDefinition{
              LIMIT 1`, oidext.CockroachPredefinedOIDMax),
 			Info: "For user-defined functions, returns the definition of the specified function. " +
 				"For builtin functions, returns the name of the function.",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -621,7 +622,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Body:       getFunctionArgStringQuery,
 			Info: "Returns the argument list (with defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within CREATE FUNCTION.",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -640,8 +642,9 @@ var pgBuiltins = map[string]builtinDefinition{
              JOIN pg_catalog.pg_type t
              ON prorettype=t.oid
              WHERE p.oid=$1 LIMIT 1`,
-			Info:       "Returns the types of the result of the specified function.",
-			Volatility: volatility.Stable,
+			Info:              "Returns the types of the result of the specified function.",
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -658,7 +661,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Body:       getFunctionArgStringQuery,
 			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -667,12 +671,13 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_indexdef": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		tree.Overload{
-			IsUDF:      true,
-			Types:      tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}},
-			ReturnType: tree.FixedReturnType(types.String),
-			Body:       `SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1`,
-			Info:       "Gets the CREATE INDEX command for index",
-			Volatility: volatility.Stable,
+			IsUDF:             true,
+			Types:             tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}},
+			ReturnType:        tree.FixedReturnType(types.String),
+			Body:              `SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1`,
+			Info:              "Gets the CREATE INDEX command for index",
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 		tree.Overload{
 			IsUDF:      true,
@@ -846,11 +851,12 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types: tree.ParamTypes{
 				{Name: "role_oid", Typ: types.Oid},
 			},
-			ReturnType: tree.FixedReturnType(types.String),
-			IsUDF:      true,
-			Body:       `SELECT COALESCE((SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1 LIMIT 1), 'unknown (OID=' || $1 || ')')`,
-			Info:       notUsableInfo,
-			Volatility: volatility.Stable,
+			ReturnType:        tree.FixedReturnType(types.String),
+			IsUDF:             true,
+			Body:              `SELECT COALESCE((SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1 LIMIT 1), 'unknown (OID=' || $1 || ')')`,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -870,8 +876,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			Body: `SELECT COALESCE ((SELECT (seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid)
              FROM pg_catalog.pg_sequence WHERE seqrelid=$1 LIMIT 1),
              CASE WHEN crdb_internal.force_error('42P01', 'relation with OID ' || $1 || ' does not exist') > 0 THEN NULL ELSE NULL END)`,
-			Info:       notUsableInfo,
-			Volatility: volatility.Stable,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -948,7 +955,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				catconstants.MinVirtualID),
 			Info: "Returns the comment for a table column, which is specified by the OID of its table and its column number. " +
 				"(obj_description cannot be used for table columns, since columns do not have OIDs of their own.)",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -965,7 +973,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the comment for a database object specified by its OID alone. " +
 				"This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; " +
 				"therefore, the wrong comment might be returned.",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 		tree.Overload{
 			IsUDF:      true,
@@ -984,7 +993,8 @@ var pgBuiltins = map[string]builtinDefinition{
 							LIMIT 1`,
 			Info: "Returns the comment for a database object specified by its OID and the name of the containing system catalog. " +
 				"For example, obj_description(123456, 'pg_class') would retrieve the comment for the table with OID 123456.",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -1017,7 +1027,8 @@ var pgBuiltins = map[string]builtinDefinition{
 							LIMIT 1`,
 			Info: "Returns the comment for a shared database object specified by its OID and the name of the containing system catalog. " +
 				"This is just like obj_description except that it is used for retrieving comments on shared objects (e.g. databases). ",
-			Volatility: volatility.Stable,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -1072,8 +1083,9 @@ var pgBuiltins = map[string]builtinDefinition{
              INNER LOOKUP JOIN pg_catalog.pg_namespace n
              ON p.pronamespace = n.oid
              WHERE p.oid=$1 LIMIT 1`,
-			Info:       "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
-			Volatility: volatility.Stable,
+			CalledOnNullInput: true,
+			Info:              "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
+			Volatility:        volatility.Stable,
 		},
 	),
 	// pg_table_is_visible returns true if the input oid corresponds to a table
@@ -1089,8 +1101,9 @@ var pgBuiltins = map[string]builtinDefinition{
              INNER LOOKUP JOIN pg_catalog.pg_namespace n
              ON c.relnamespace = n.oid
              WHERE c.oid=$1 LIMIT 1`,
-			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
-			Volatility: volatility.Stable,
+			CalledOnNullInput: true,
+			Info:              "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
+			Volatility:        volatility.Stable,
 		},
 	),
 
@@ -1110,8 +1123,9 @@ var pgBuiltins = map[string]builtinDefinition{
              INNER LOOKUP JOIN pg_catalog.pg_namespace n
              ON t.typnamespace = n.oid
              WHERE t.oid=$1 LIMIT 1`,
-			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
-			Volatility: volatility.Stable,
+			CalledOnNullInput: true,
+			Info:              "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
+			Volatility:        volatility.Stable,
 		},
 	),
 

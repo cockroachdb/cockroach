@@ -793,9 +793,9 @@ Note: that --external-io-disable-http or --external-io-disable-implicit-credenti
 	TenantScope = FlagInfo{
 		Name: "tenant-scope",
 		Description: `Assign a tenant scope to the certificate.
-This will allow for the certificate to only be used specifically for a particular
-tenant. This flag is optional, when omitted, the certificate is scoped to the
-system tenant.`,
+This will restrict the certificate to only be valid for the specified tenants.
+This flag is optional. When omitted, the certificate is not scoped; i.e.
+it can be used with all tenants.`,
 	}
 
 	GeneratePKCS8Key = FlagInfo{

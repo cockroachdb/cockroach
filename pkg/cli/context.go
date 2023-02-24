@@ -265,7 +265,20 @@ func setCertContextDefaults() {
 	certCtx.generatePKCS8Key = false
 	certCtx.disableUsernameValidation = false
 	certCtx.certPrincipalMap = nil
-	certCtx.tenantScope = []roachpb.TenantID{roachpb.SystemTenantID}
+	// Note: we set tenantScope to nil so that by default, client certs
+	// are not scoped to a specific tenant and can be used to connect to
+	// any tenant.
+	//
+	// Note that the scoping is generally useful for security, and it is
+	// used in CockroachCloud. However, CockroachCloud does not use our
+	// CLI code to generate certs and sets its tenant scopes on its own.
+	//
+	// Given that our CLI code is provided for convenience and developer
+	// productivity, and we don't expect certs generated here to be used
+	// in multi-tenant deployments where tenants are adversarial to each
+	// other, defaulting to certs that are valid on every tenant is a
+	// good choice.
+	certCtx.tenantScope = nil
 }
 
 var sqlExecCtx = clisqlexec.Context{
