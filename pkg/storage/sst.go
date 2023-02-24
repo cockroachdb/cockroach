@@ -609,6 +609,11 @@ func CheckSSTConflicts(
 					statsDiff.Add(updateStatsOnRangeKeyMerge(sstRangeKeys.Bounds.Key, sstRangeKeys.Versions))
 				}
 				extIter.SeekGE(savedExtKey)
+				// After seeking, the old buffers have been invalidated.
+				// Re-retrieve the buffers.
+				if extHasRange {
+					extRangeKeys = extIter.RangeKeys()
+				}
 			}
 			if extRangeKeysChanged && !sstPrevRangeKeys.IsEmpty() && sstPrevRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) {
 				// Because we always re-seek the extIter after every sstIter step,
