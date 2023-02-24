@@ -143,9 +143,9 @@ func newUninitializedReplica(
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
-		store.TODOEngine().GetAuxiliaryDir(),
+		store.LogEngine().GetAuxiliaryDir(),
 		store.limiters.BulkIOWriteRate,
-		store.TODOEngine(),
+		store.LogEngine(),
 	)
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
