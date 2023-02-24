@@ -2561,10 +2561,10 @@ func (s *Store) StateEngine() storage.Engine {
 	return s.internalEngines.stateEngine
 }
 
-// TODOEngine is a placeholder for cases in which
-// the caller needs to be updated in order to use
-// only one engine, or a closer check is still
-// pending.
+// TODOEngine is a placeholder for cases in which the caller needs to be updated
+// in order to use only one engine, or a closer check is still pending.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/97627
 func (s *Store) TODOEngine() storage.Engine {
 	return s.internalEngines.todoEngine
 }
