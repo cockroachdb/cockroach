@@ -6658,12 +6658,14 @@ var_value:
 //
 // In addition, for compatibility with CockroachDB we need to support
 // the reserved keyword ON (to go along OFF, which is a valid column name).
+// Similarly, NONE is specially allowed here.
 //
 // Finally, in PostgreSQL the CockroachDB-reserved words "index",
 // "nothing", etc. are not special and are valid in SET. These need to
 // be allowed here too.
 extra_var_value:
   ON
+| NONE
 | cockroachdb_extra_reserved_keyword
 
 var_list:
