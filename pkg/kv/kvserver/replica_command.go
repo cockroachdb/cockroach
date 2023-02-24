@@ -2675,10 +2675,9 @@ func (r *Replica) sendSnapshot(
 
 	// Check follower snapshots cluster setting.
 	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
-		sender, err = r.getSenderReplica(ctx)
-		if err != nil {
-			return err
-		}
+		log.Warning(ctx, "follower snapshots are not supported on this version")
+		// NB: Delegated snapshots to be implemented in:
+		_ = (*Replica)(nil).getSenderReplica
 	}
 
 	//  Don't send a queue name or priority if the receiver may not understand
@@ -2736,7 +2735,6 @@ var followerSnapshotsEnabled = func() *settings.BoolSetting {
 		"set to true to allow snapshots from follower replicas",
 		false,
 	)
-	s.SetVisibility(settings.Public)
 	return s
 }()
 
