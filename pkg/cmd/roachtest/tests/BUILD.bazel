@@ -48,6 +48,7 @@ go_library(
         "disk_stall.go",
         "django.go",
         "django_blocklist.go",
+        "dotnet_helpers.go",
         "drain.go",
         "drop.go",
         "drt.go",
