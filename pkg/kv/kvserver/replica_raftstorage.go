@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
@@ -545,12 +544,12 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
-	var ingestStats pebble.IngestOperationStats
-	if ingestStats, err =
-		// TODO: separate ingestions for log and statemachine engine. See:
-		//
-		// https://github.com/cockroachdb/cockroach/issues/93251
-		r.store.TODOEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+
+	// TODO: separate ingestions for log and statemachine engine. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/93251
+	ingestStats, err := r.store.TODOEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs())
+	if err != nil {
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 	}
 	if r.store.cfg.KVAdmissionController != nil {
