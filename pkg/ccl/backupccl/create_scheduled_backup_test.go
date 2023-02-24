@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -96,6 +97,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	}
 
 	args := base.TestServerArgs{
+		Settings:      cluster.MakeClusterSettings(),
 		ExternalIODir: dir,
 		// Some scheduled backup tests fail when run within a tenant. More
 		// investigation is required. Tracked with #76378.
@@ -104,6 +106,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 			JobsTestingKnobs: knobs,
 		},
 	}
+	jobs.PollJobsMetricsInterval.Override(context.Background(), &args.Settings.SV, 250*time.Millisecond)
 	s, db, _ := serverutils.StartServer(t, args)
 	require.NotNil(t, th.cfg)
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
@@ -1085,11 +1088,11 @@ INSERT INTO t values (1), (10), (100);
 		}
 	})
 
-	metrics := func() *jobs.ExecutorMetrics {
+	metrics := func() *backupMetrics {
 		ex, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
 		require.NoError(t, err)
 		require.NotNil(t, ex.Metrics())
-		return ex.Metrics().(*backupMetrics).ExecutorMetrics
+		return ex.Metrics().(*backupMetrics)
 	}()
 
 	t.Run("retry", func(t *testing.T) {
@@ -1156,6 +1159,12 @@ INSERT INTO t values (1), (10), (100);
 				return nil
 			}
 			return errors.Newf("expected 2 backup to succeed, got %d", delta)
+		})
+		testutils.SucceedsSoon(t, func() error {
+			if metrics.NumWithPTS.Value() > 0 {
+				return nil
+			}
+			return errors.New("still waiting for pts count > 0")
 		})
 	})
 }
