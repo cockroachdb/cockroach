@@ -1067,7 +1067,8 @@ func makeTenantSQLServerArgs(
 	registry.AddMetricStruct(pp.Metrics())
 	protectedTSProvider = pp
 
-	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, st, tenantNameContainer)
+	recorder := status.NewMetricsRecorder(
+		sqlCfg.TenantID, tenantNameContainer, nil /* nodeLiveness */, nil /* remoteClocks */, clock, st)
 	// Note: If the tenant is in-process, we attach this tenant's metric
 	// recorder to the parentRecorder held by the system tenant. This
 	// ensures that generated Prometheus metrics from the system tenant
