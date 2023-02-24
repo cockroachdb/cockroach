@@ -528,6 +528,7 @@ func maybeLookUpUDF(
 	}
 
 	var udfDef *tree.ResolvedFunctionDefinition
+	var schemaLookedup catalog.DescriptorIDSet
 	for i, n := 0, path.NumElements(); i < n; i++ {
 		schema := path.GetSchema(i)
 		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), schema)
@@ -537,6 +538,10 @@ func maybeLookUpUDF(
 		if !found {
 			continue
 		}
+		if schemaLookedup.Contains(prefix.Schema.GetID()) {
+			continue
+		}
+		schemaLookedup.Add(prefix.Schema.GetID())
 		curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
 		if !found {
 			continue
