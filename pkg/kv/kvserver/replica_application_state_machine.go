@@ -221,7 +221,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.RLock()
 			// TODO(sep-raft-log): either check only statemachine invariants or
 			// pass both engines in.
-			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx)
 			sm.r.mu.RUnlock()
 			sm.applyStats.stateAssertions++
 		}

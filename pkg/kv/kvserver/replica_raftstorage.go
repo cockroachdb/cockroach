@@ -678,7 +678,7 @@ func (r *Replica) applySnapshot(
 	// operation can be expensive. This is safe, as we hold the Replica.raftMu
 	// across both Replica.mu critical sections.
 	r.mu.RLock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx)
 	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to

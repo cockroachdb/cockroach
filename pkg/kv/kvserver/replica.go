@@ -1498,10 +1498,8 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 // assertStateRaftMuLockedReplicaMuRLocked can be called from the Raft goroutine
 // to check that the in-memory and on-disk states of the Replica are congruent.
 // Requires that r.raftMu is locked and r.mu is read locked.
-func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
-	ctx context.Context, reader storage.Reader,
-) {
-	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
+func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(ctx context.Context) {
+	diskState, err := r.mu.stateLoader.Load(ctx, r.store.StateEngine(), r.mu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -1557,7 +1555,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.mu.state.Desc)
 		}
 	}
-	diskReplID, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	diskReplID, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, r.store.LogEngine())
 	if err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}

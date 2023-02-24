@@ -5351,7 +5351,7 @@ func TestStoreMergeGCHint(t *testing.T) {
 				require.Greater(t, gcHint.LatestRangeDeleteTimestamp.WallTime, beforeSecondDel,
 					"highest timestamp wasn't picked up")
 			}
-			repl.AssertState(ctx, store.TODOEngine())
+			repl.AssertState(ctx)
 		})
 	}
 }
