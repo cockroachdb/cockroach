@@ -591,6 +591,15 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"deleted",
 		},
 	},
+	"crdb_internal.memory_monitors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"level",
+			"name",
+			"used",
+			"reserved_used",
+			"reserved_reserved",
+		},
+	},
 	"crdb_internal.node_build_info": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",

@@ -15,13 +15,17 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -418,6 +422,140 @@ func TestReservedAccountCleared(t *testing.T) {
 	// all pre-reserved memory back to the root monitor.
 	require.Equal(t, int64(0), reserved.used)
 	require.Equal(t, int64(0), root.mu.curBudget.used)
+}
+
+// TestBytesMonitorTree is a sanity check that the tree structure of related
+// monitors is maintained and traversed as expected.
+func TestBytesMonitorTree(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	getMonitor := func(name redact.RedactableString, parent *BytesMonitor) *BytesMonitor {
+		m := NewMonitor(name, MemoryResource, nil, nil, 1, 1000, st)
+		var reserved *BoundAccount
+		if parent == nil {
+			reserved = NewStandaloneBudget(1)
+		}
+		m.Start(ctx, parent, reserved)
+		return m
+	}
+	export := func(m *BytesMonitor) string {
+		var sb strings.Builder
+		for _, e := range m.ExportTree() {
+			for i := 0; i < e.Level; i++ {
+				sb.WriteString("-")
+			}
+			sb.WriteString(e.Name + "\n")
+		}
+		return sb.String()
+	}
+
+	parent := getMonitor("parent", nil /* parent */)
+	child1 := getMonitor("child1", parent)
+	child2 := getMonitor("child2", parent)
+	require.Equal(t, "parent\n-child2\n-child1\n", export(parent))
+	require.Equal(t, "child1\n", export(child1))
+	require.Equal(t, "child2\n", export(child2))
+
+	grandchild1 := getMonitor("grandchild1", child1)
+	grandchild2 := getMonitor("grandchild2", child2)
+	require.Equal(t, "parent\n-child2\n--grandchild2\n-child1\n--grandchild1\n", export(parent))
+	require.Equal(t, "child1\n-grandchild1\n", export(child1))
+	require.Equal(t, "child2\n-grandchild2\n", export(child2))
+
+	grandchild2.Stop(ctx)
+	child2.Stop(ctx)
+
+	require.Equal(t, "parent\n-child1\n--grandchild1\n", export(parent))
+	require.Equal(t, "child1\n-grandchild1\n", export(child1))
+
+	grandchild1.Stop(ctx)
+	child1.Stop(ctx)
+
+	require.Equal(t, "parent\n", export(parent))
+	parent.Stop(ctx)
+}
+
+// TestBytesMonitorNoDeadlocks ensures that no deadlocks can occur when monitors
+// are started and stopped concurrently with the monitor tree traversal.
+func TestBytesMonitorNoDeadlocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	getMonitor := func(name string, parent *BytesMonitor) *BytesMonitor {
+		m := NewMonitor(redact.RedactableString(name), MemoryResource, nil, nil, 1, math.MaxInt64, st)
+		var reserved *BoundAccount
+		if parent == nil {
+			reserved = NewStandaloneBudget(math.MaxInt64)
+		} else {
+			reserved = &noReserved
+		}
+		m.Start(ctx, parent, reserved)
+		return m
+	}
+
+	root := getMonitor("root", nil /* parent */)
+	defer root.Stop(ctx)
+
+	// Spin up 10 goroutines that repeatedly start and stop child monitors while
+	// also making reservations against them.
+	var wg sync.WaitGroup
+	const numGoroutines = 10
+	// done will be closed when the concurrent goroutines should exit.
+	done := make(chan struct{})
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rng, _ := randutil.NewTestRand()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					func() {
+						m := getMonitor(fmt.Sprintf("m%d", i), root)
+						defer m.Stop(ctx)
+						numOps := rng.Intn(10 + 1)
+						var reserved int64
+						defer func() {
+							m.releaseBytes(ctx, reserved)
+						}()
+						for op := 0; op < numOps; op++ {
+							if reserved > 0 && rng.Float64() < 0.5 {
+								toRelease := int64(rng.Intn(int(reserved))) + 1
+								m.releaseBytes(ctx, toRelease)
+								reserved -= toRelease
+							} else {
+								toReserve := int64(rng.Intn(1000) + 1)
+								// We shouldn't hit any errors since we have an
+								// unlimited root budget.
+								_ = m.reserveBytes(ctx, toReserve)
+								reserved += toReserve
+							}
+							// Sleep up to 1ms.
+							time.Sleep(time.Duration(rng.Intn(1000)) * time.Microsecond)
+						}
+					}()
+				}
+			}
+		}(i)
+	}
+
+	// In the main goroutine, perform the tree traversal several times with
+	// sleeps in-between.
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 1000; i++ {
+		// We don't care about the output here. We only want to ensure that no
+		// deadlocks nor data races are occurring.
+		root.ExportTree()
+		// Sleep up to 1ms.
+		time.Sleep(time.Duration(rng.Intn(1000)) * time.Microsecond)
+	}
+	close(done)
+	wg.Wait()
 }
 
 func BenchmarkBoundAccountGrow(b *testing.B) {

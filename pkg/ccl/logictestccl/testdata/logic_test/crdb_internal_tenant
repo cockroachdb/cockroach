@@ -69,6 +69,7 @@ crdb_internal  kv_node_status                   table  admin  NULL  NULL
 crdb_internal  kv_store_status                  table  admin  NULL  NULL
 crdb_internal  leases                           table  admin  NULL  NULL
 crdb_internal  lost_descriptors_with_data       table  admin  NULL  NULL
+crdb_internal  memory_monitors                  table  admin  NULL  NULL
 crdb_internal  node_build_info                  table  admin  NULL  NULL
 crdb_internal  node_contention_events           table  admin  NULL  NULL
 crdb_internal  node_distsql_flows               table  admin  NULL  NULL
