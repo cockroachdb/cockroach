@@ -96,6 +96,11 @@ func WriteInitialReplicaState(
 		return enginepb.MVCCStats{}, err
 	}
 
+	// TODO(sep-raft-log): should be going to the log engine.
+	if err := rsl.SetRaftTruncatedState(ctx, stateRW, s.TruncatedState); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
 	return newMS, nil
 }
 

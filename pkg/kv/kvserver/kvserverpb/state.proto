@@ -53,6 +53,10 @@ message ReplicaState {
   // as part of ReplicatedEvalResult.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
+  //
+  // TODO(sep-raft-log): the truncated state is no longer cleanly a part of the
+  // replicated state and so it should not be in this proto. Tracked in:
+  // https://github.com/cockroachdb/cockroach/issues/97613
   roachpb.RaftTruncatedState truncated_state = 5;
   // GCThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
