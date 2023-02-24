@@ -104,7 +104,7 @@ type MetricsRecorder struct {
 	nodeLiveness *liveness.NodeLiveness
 	remoteClocks *rpc.RemoteClockMonitor
 	settings     *cluster.Settings
-	clock        *hlc.Clock
+	clock        hlc.WallClock
 
 	// Counts to help optimize slice allocation. Should only be accessed atomically.
 	lastDataCount        int64
@@ -161,7 +161,7 @@ func NewMetricsRecorder(
 	tenantNameContainer *roachpb.TenantNameContainer,
 	nodeLiveness *liveness.NodeLiveness,
 	remoteClocks *rpc.RemoteClockMonitor,
-	clock *hlc.Clock,
+	clock hlc.WallClock,
 	settings *cluster.Settings,
 ) *MetricsRecorder {
 	mr := &MetricsRecorder{
@@ -322,12 +322,12 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	data := make([]tspb.TimeSeriesData, 0, lastDataCount)
 
 	// Record time series from node-level registries.
-	now := mr.clock.PhysicalNow()
+	now := mr.clock.Now()
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
 		format:         nodeTimeSeriesPrefix,
 		source:         strconv.FormatInt(int64(mr.mu.desc.NodeID), 10),
-		timestampNanos: now,
+		timestampNanos: now.UnixNano(),
 	}
 	recorder.record(&data)
 
@@ -337,7 +337,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 			registry:       r,
 			format:         storeTimeSeriesPrefix,
 			source:         strconv.FormatInt(int64(storeID), 10),
-			timestampNanos: now,
+			timestampNanos: now.UnixNano(),
 		}
 		storeRecorder.record(&data)
 	}
@@ -424,7 +424,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		return nil
 	}
 
-	now := mr.clock.PhysicalNow()
+	now := mr.clock.Now()
 
 	lastSummaryCount := atomic.LoadInt64(&mr.lastSummaryCount)
 	lastNodeMetricCount := atomic.LoadInt64(&mr.lastNodeMetricCount)
@@ -439,7 +439,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	nodeStat := &statuspb.NodeStatus{
 		Desc:              mr.mu.desc,
 		BuildInfo:         build.GetInfo(),
-		UpdatedAt:         now,
+		UpdatedAt:         now.UnixNano(),
 		StartedAt:         mr.mu.startedAt,
 		StoreStatuses:     make([]statuspb.StoreStatus, 0, lastSummaryCount),
 		Metrics:           make(map[string]float64, lastNodeMetricCount),
