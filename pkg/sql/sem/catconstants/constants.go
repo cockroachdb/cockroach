@@ -148,6 +148,7 @@ const (
 	CrdbInternalLocalTransactionsTableID
 	CrdbInternalLocalSessionsTableID
 	CrdbInternalLocalMetricsTableID
+	CrdbInternalMemoryMonitorsTableID
 	CrdbInternalNodeStmtStatsTableID
 	CrdbInternalNodeTxnStatsTableID
 	CrdbInternalPartitionsTableID

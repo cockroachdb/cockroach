@@ -439,6 +439,7 @@ crdb_internal       kv_node_status
 crdb_internal       kv_store_status
 crdb_internal       leases
 crdb_internal       lost_descriptors_with_data
+crdb_internal       memory_monitors
 crdb_internal       node_build_info
 crdb_internal       node_contention_events
 crdb_internal       node_distsql_flows
@@ -774,6 +775,7 @@ kv_node_status
 kv_store_status
 leases
 lost_descriptors_with_data
+memory_monitors
 node_build_info
 node_contention_events
 node_distsql_flows
@@ -1149,6 +1151,7 @@ system         crdb_internal       kv_node_status                         SYSTEM
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       lost_descriptors_with_data             SYSTEM VIEW  NO                  1
+system         crdb_internal       memory_monitors                        SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
 system         crdb_internal       node_contention_events                 SYSTEM VIEW  NO                  1
 system         crdb_internal       node_distsql_flows                     SYSTEM VIEW  NO                  1
@@ -2923,6 +2926,7 @@ NULL     public   system         crdb_internal       kv_node_status             
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NO            YES
+NULL     public   system         crdb_internal       memory_monitors                        SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NO            YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NO            YES
 NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NO            YES
@@ -3546,6 +3550,7 @@ NULL     public   system         crdb_internal       kv_node_status             
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NO            YES
+NULL     public   system         crdb_internal       memory_monitors                        SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NO            YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NO            YES
 NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NO            YES
