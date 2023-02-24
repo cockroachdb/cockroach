@@ -16,8 +16,11 @@ import (
 
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
+	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/facebookgo/clock"
 )
 
@@ -116,4 +119,65 @@ func (r breakerLogger) Debugf(format string, v ...interface{}) {
 
 func (r breakerLogger) Infof(format string, v ...interface{}) {
 	log.Ops.InfofDepth(r.ctx, 1, format, v...)
+}
+
+// newPeerBreaker returns circuit breaker that trips when connection (associated with provided connKey) is
+// failed. It constantly attempts to establish new connection but stops trying when target node is decommissioned.
+func newPeerBreaker(rpcCtx *Context, k connKey) *circuitbreaker.Breaker {
+	breaker := circuitbreaker.NewBreaker(circuitbreaker.Options{
+		Name: "peer connection",
+		AsyncProbe: func(report func(error), done func()) {
+			if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.MasterCtx, "reconnect peers", func(ctx context.Context) {
+				var t timeutil.Timer
+				defer t.Stop()
+				defer done()
+				// Immediately run probe after breaker circuit is tripped.
+				t.Reset(0)
+				for {
+					select {
+					case <-rpcCtx.Stopper.ShouldQuiesce():
+						return
+					case <-t.C:
+						t.Read = true
+						t.Reset(rpcCtx.heartbeatInterval / 2)
+					}
+					pc, ok := rpcCtx.m.GetPeer(k)
+					if !ok {
+						// peer has been evicted from list of known peers.
+						return
+					}
+					pc.mu.RLock()
+					disconnected := pc.mu.disconnected
+					decommissioned := pc.mu.decommissioned
+					pc.mu.RUnlock()
+					// connection is healthy or target node is decommissioned so
+					// we should not attempt to restore this connection.
+					if disconnected.IsZero() || decommissioned {
+						report(nil)
+						return
+					}
+					conn, _, inserted := rpcCtx.m.TryInsert(k)
+					// initiate dialing and heartbeats only for new connections to avoid running
+					// heartbeats twice for the same connection.
+					if inserted {
+						conn = rpcCtx.grpcDialNodeInternalNoBreaker(ctx, conn, k)
+					}
+					err := conn.Health()
+					report(err)
+					if err == nil {
+						return
+					}
+				}
+			}); err != nil {
+				report(err)
+				done()
+			}
+		},
+		EventHandler: &circuitbreaker.EventLogger{
+			Log: func(buf redact.StringBuilder) {
+				log.Infof(rpcCtx.MasterCtx, "%s", buf)
+			},
+		},
+	})
+	return breaker
 }

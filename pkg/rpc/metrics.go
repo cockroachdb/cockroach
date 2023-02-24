@@ -89,14 +89,17 @@ type Metrics struct {
 	}
 }
 
+type EwmaHistogram struct {
+	syncutil.RWMutex
+	*aggmetric.Histogram
+	ma ewma.MovingAverage
+}
+
 type NodeMetrics struct {
 	HeartbeatLoopsStarted       *aggmetric.Counter
 	HeartbeatConnectionFailures *aggmetric.Counter
 	HeartbeatsNominal           *aggmetric.Gauge
-	HeartbeatRoundTripLatency   struct {
-		*aggmetric.Histogram
-		ma ewma.MovingAverage
-	}
+	HeartbeatRoundTripLatency   *EwmaHistogram
 }
 
 func (m *Metrics) loadNodeMetrics(nodeID roachpb.NodeID) NodeMetrics {
@@ -112,10 +115,7 @@ func (m *Metrics) loadNodeMetrics(nodeID roachpb.NodeID) NodeMetrics {
 		HeartbeatLoopsStarted:       m.HeartbeatLoopsStarted.AddChild(nodeID.String()),
 		HeartbeatConnectionFailures: m.HeartbeatConnectionFailures.AddChild(nodeID.String()),
 		HeartbeatsNominal:           m.HeartbeatsNominal.AddChild(nodeID.String()),
-		HeartbeatRoundTripLatency: struct {
-			*aggmetric.Histogram
-			ma ewma.MovingAverage
-		}{
+		HeartbeatRoundTripLatency: &EwmaHistogram{
 			Histogram: m.HeartbeatRoundTripLatency.AddChild(nodeID.String()),
 			ma:        ewma.NewMovingAverage(),
 		},

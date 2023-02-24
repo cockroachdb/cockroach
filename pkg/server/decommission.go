@@ -133,9 +133,9 @@ func (t *decommissioningNodeMap) onNodeDecommissioned(nodeID roachpb.NodeID) {
 
 func getPingCheckDecommissionFn(
 	engines Engines,
-) (*nodeTombstoneStorage, func(context.Context, roachpb.NodeID, codes.Code) error) {
+) (*nodeTombstoneStorage, func(context.Context, roachpb.NodeID, codes.Code) (bool, error)) {
 	nodeTombStorage := &nodeTombstoneStorage{engs: engines}
-	return nodeTombStorage, func(ctx context.Context, nodeID roachpb.NodeID, errorCode codes.Code) error {
+	return nodeTombStorage, func(ctx context.Context, nodeID roachpb.NodeID, errorCode codes.Code) (bool, error) {
 		ts, err := nodeTombStorage.IsDecommissioned(ctx, nodeID)
 		if err != nil {
 			// An error here means something very basic is not working. Better to terminate
@@ -144,13 +144,13 @@ func getPingCheckDecommissionFn(
 		}
 		if !ts.IsZero() {
 			// The node was decommissioned.
-			return grpcstatus.Errorf(errorCode,
+			return true, grpcstatus.Errorf(errorCode,
 				"n%d was permanently removed from the cluster at %s; it is not allowed to rejoin the cluster",
 				nodeID, ts,
 			)
 		}
 		// The common case - target node is not decommissioned.
-		return nil
+		return false, nil
 	}
 }
 

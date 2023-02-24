@@ -404,9 +404,8 @@ func TestNodeDecommissioned(t *testing.T) {
 		}
 		return nil
 	})
-
-	require.ErrorContains(t, tc.Server(0).RPCContext().OnOutgoingPing(ctx, &rpc.PingRequest{TargetNodeID: 3}),
-		"permanently removed from the cluster", "ping of decommissioned node should fail")
+	_, err = tc.Server(0).RPCContext().OnOutgoingPing(ctx, &rpc.PingRequest{TargetNodeID: 3})
+	require.ErrorContains(t, err, "permanently removed from the cluster", "ping of decommissioned node should fail")
 }
 
 func TestRejectDecommissionReachableNode(t *testing.T) {

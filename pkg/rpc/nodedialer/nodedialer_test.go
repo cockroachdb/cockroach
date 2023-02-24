@@ -181,6 +181,7 @@ func TestConnHealth(t *testing.T) {
 
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
+	require.NoError(t, nd.rpcContext.RemoveNodeConnections(staticNodeID))
 	require.Eventually(t, func() bool {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
 	}, time.Second, 10*time.Millisecond)
