@@ -67,6 +67,14 @@ var LeaseRenewalDuration = settings.RegisterDurationSetting(
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)
 
+// LeaseRenewalCrossValidate controls if cross validation should be done during
+// lease renewal.
+var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.catalog.descriptor_lease_renewal_cross_validation.enabled",
+	"controls if cross validation should be done during lease renewal",
+	base.DefaultLeaseRenewalCrossValidate)
+
 func (s storage) leaseRenewalTimeout() time.Duration {
 	return LeaseRenewalDuration.Get(&s.settings.SV)
 }
@@ -78,6 +86,10 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 	jitterFraction := LeaseJitterFraction.Get(&s.settings.SV)
 	return time.Duration(float64(leaseDuration) * (1 - jitterFraction +
 		2*jitterFraction*rand.Float64()))
+}
+
+func (s storage) crossValidateDuringRenewal() bool {
+	return LeaseRenewalCrossValidate.Get(&s.settings.SV)
 }
 
 // acquire a lease on the most recent version of a descriptor. If the lease
@@ -130,10 +142,15 @@ func (s storage) acquire(
 		}
 
 		version := s.settings.Version.ActiveVersion(ctx)
-		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
+		var validationLevel catalog.ValidationLevel = catalog.ValidationLevelSelfOnly
+		if s.crossValidateDuringRenewal() {
+			validationLevel = catalog.ValidationLevelCrossReferences
+		}
+		descs, err := catkv.MustGetDescriptorsByIDWithValidationLevel(ctx, version, s.codec, txn, nil /* vd */, validationLevel, []descpb.ID{id}, catalog.Any)
 		if err != nil {
 			return err
 		}
+		desc = descs[0]
 		if err := catalog.FilterDescriptorState(
 			desc, tree.CommonLookupFlags{IncludeOffline: true}, // filter dropped only
 		); err != nil {
