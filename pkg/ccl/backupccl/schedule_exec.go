@@ -36,6 +36,7 @@ type scheduledBackupExecutor struct {
 
 type backupMetrics struct {
 	*jobs.ExecutorMetrics
+	*jobs.ExecutorPTSMetrics
 	RpoMetric *metric.Gauge
 }
 
@@ -43,6 +44,11 @@ var _ metric.Struct = &backupMetrics{}
 
 // MetricStruct implements metric.Struct interface
 func (m *backupMetrics) MetricStruct() {}
+
+// PTSMetrics implements jobs.PTSMetrics interface.
+func (m *backupMetrics) PTSMetrics() *jobs.ExecutorPTSMetrics {
+	return m.ExecutorPTSMetrics
+}
 
 var _ jobs.ScheduledJobExecutor = &scheduledBackupExecutor{}
 
@@ -546,9 +552,11 @@ func init() {
 		tree.ScheduledBackupExecutor.InternalName(),
 		func() (jobs.ScheduledJobExecutor, error) {
 			m := jobs.MakeExecutorMetrics(tree.ScheduledBackupExecutor.UserName())
+			pm := jobs.MakeExecutorPTSMetrics(tree.ScheduledBackupExecutor.UserName())
 			return &scheduledBackupExecutor{
 				metrics: backupMetrics{
-					ExecutorMetrics: &m,
+					ExecutorMetrics:    &m,
+					ExecutorPTSMetrics: &pm,
 					RpoMetric: metric.NewGauge(metric.Metadata{
 						Name:        "schedules.BACKUP.last-completed-time",
 						Help:        "The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric",

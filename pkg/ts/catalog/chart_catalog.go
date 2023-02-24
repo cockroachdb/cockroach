@@ -3374,6 +3374,18 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "PTS Counts",
+				Metrics: []string{
+					"schedules.BACKUP.protected_record_count",
+				},
+			},
+			{
+				Title: "PTS Age",
+				Metrics: []string{
+					"schedules.BACKUP.protected_age_sec",
+				},
+			},
+			{
 				Title: "Last Completed Backups",
 				Metrics: []string{
 					"schedules.BACKUP.last-completed-time",

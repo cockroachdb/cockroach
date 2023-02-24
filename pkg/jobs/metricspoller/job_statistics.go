@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -79,68 +81,51 @@ func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext) error 
 	return nil
 }
 
-// manageJobsProtectedTimestamps manages protected timestamp records owned by various jobs.
-// This function mostly concerns itself with collecting statistics related to job PTS records.
-// It also detects PTS records that are too old (as configured by the owner job) and requests
-// job cancellation for those jobs.
-func manageJobsProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) error {
-	type ptsStat struct {
-		numRecords int64
-		expired    int64
-		oldest     hlc.Timestamp
-	}
+type ptsStat struct {
+	numRecords int64
+	expired    int64
+	oldest     hlc.Timestamp
+}
+
+type schedulePTSStat struct {
+	ptsStat
+	m *jobs.ExecutorPTSMetrics
+}
+
+// manageProtectedTimestamps manages protected timestamp records owned by
+// various jobs or schedules.. This function mostly concerns itself with
+// collecting statistics related to job PTS records. It also detects PTS records
+// that are too old (as configured by the owner job) and requests job
+// cancellation for those jobs.
+func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) error {
 	var ptsStats map[jobspb.Type]*ptsStat
+	var schedulePtsStats map[string]*schedulePTSStat
 
 	execCfg := execCtx.ExecCfg()
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		ptsStats = make(map[jobspb.Type]*ptsStat)
+		schedulePtsStats = make(map[string]*schedulePTSStat)
+
 		ptsState, err := execCfg.ProtectedTimestampProvider.WithTxn(txn).GetState(ctx)
 		if err != nil {
 			return err
 		}
 		for _, rec := range ptsState.Records {
-			if rec.MetaType != jobsprotectedts.GetMetaType(jobsprotectedts.Jobs) {
-				continue
-			}
 			id, err := jobsprotectedts.DecodeID(rec.Meta)
 			if err != nil {
 				return err
 			}
-			j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(id), txn)
-			if err != nil {
-				continue
-			}
-			p := j.Payload()
-			jobType, err := p.CheckType()
-			if err != nil {
-				return err
-			}
-			stats := ptsStats[jobType]
-			if stats == nil {
-				stats = &ptsStat{}
-				ptsStats[jobType] = stats
-			}
-			stats.numRecords++
-			if stats.oldest.IsEmpty() || rec.Timestamp.Less(stats.oldest) {
-				stats.oldest = rec.Timestamp
-			}
-
-			// If MaximumPTSAge is set on the job payload, verify if PTS record
-			// timestamp is fresh enough.  Note: we only look at paused jobs.
-			// If the running job wants to enforce an invariant wrt to PTS age,
-			// it can do so itself.  This check here is a safety mechanism to detect
-			// paused jobs that own protected timestamp records.
-			if j.Status() == jobs.StatusPaused &&
-				p.MaximumPTSAge > 0 &&
-				rec.Timestamp.GoTime().Add(p.MaximumPTSAge).Before(timeutil.Now()) {
-				stats.expired++
-				ptsExpired := errors.Newf(
-					"protected timestamp records %s as of %s (age %s) exceeds job configured limit of %s",
-					rec.ID, rec.Timestamp, timeutil.Since(rec.Timestamp.GoTime()), p.MaximumPTSAge)
-				if err := j.WithTxn(txn).CancelRequestedWithReason(ctx, ptsExpired); err != nil {
+			switch rec.MetaType {
+			case jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):
+				if err := processJobPTSRecord(ctx, execCfg, id, rec, ptsStats, txn); err != nil {
 					return err
 				}
-				log.Warningf(ctx, "job %d canceled due to %s", id, ptsExpired)
+			case jobsprotectedts.GetMetaType(jobsprotectedts.Schedules):
+				if err := processSchedulePTSRecord(ctx, id, rec, schedulePtsStats, txn); err != nil {
+					return err
+				}
+			default:
+				continue
 			}
 		}
 		return nil
@@ -148,7 +133,62 @@ func manageJobsProtectedTimestamps(ctx context.Context, execCtx sql.JobExecConte
 		return err
 	}
 
-	jobMetrics := execCtx.ExecCfg().JobRegistry.MetricsStruct()
+	updateJobPTSMetrics(execCfg.JobRegistry.MetricsStruct(), execCfg.Clock, ptsStats)
+	updateSchedulesPTSMetrics(execCfg.Clock, schedulePtsStats)
+
+	return nil
+}
+
+func processJobPTSRecord(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	jobID int64,
+	rec ptpb.Record,
+	ptsStats map[jobspb.Type]*ptsStat,
+	txn isql.Txn,
+) error {
+	j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+	if err != nil {
+		return nil // nolint:returnerrcheck -- job maybe deleted when we run; just keep going.
+	}
+	p := j.Payload()
+	jobType, err := p.CheckType()
+	if err != nil {
+		return err
+	}
+	stats := ptsStats[jobType]
+	if stats == nil {
+		stats = &ptsStat{}
+		ptsStats[jobType] = stats
+	}
+	stats.numRecords++
+	if stats.oldest.IsEmpty() || rec.Timestamp.Less(stats.oldest) {
+		stats.oldest = rec.Timestamp
+	}
+
+	// If MaximumPTSAge is set on the job payload, verify if PTS record
+	// timestamp is fresh enough.  Note: we only look at paused jobs.
+	// If the running job wants to enforce an invariant wrt to PTS age,
+	// it can do so itself.  This check here is a safety mechanism to detect
+	// paused jobs that own protected timestamp records.
+	if j.Status() == jobs.StatusPaused &&
+		p.MaximumPTSAge > 0 &&
+		rec.Timestamp.GoTime().Add(p.MaximumPTSAge).Before(timeutil.Now()) {
+		stats.expired++
+		ptsExpired := errors.Newf(
+			"protected timestamp records %s as of %s (age %s) exceeds job configured limit of %s",
+			rec.ID, rec.Timestamp, timeutil.Since(rec.Timestamp.GoTime()), p.MaximumPTSAge)
+		if err := j.WithTxn(txn).CancelRequestedWithReason(ctx, ptsExpired); err != nil {
+			return err
+		}
+		log.Warningf(ctx, "job %d canceled due to %s", jobID, ptsExpired)
+	}
+	return nil
+}
+
+func updateJobPTSMetrics(
+	jobMetrics *jobs.Metrics, clock *hlc.Clock, ptsStats map[jobspb.Type]*ptsStat,
+) {
 	for typ := 0; typ < jobspb.NumJobTypes; typ++ {
 		if jobspb.Type(typ) == jobspb.TypeUnspecified { // do not track TypeUnspecified
 			continue
@@ -159,7 +199,7 @@ func manageJobsProtectedTimestamps(ctx context.Context, execCtx sql.JobExecConte
 			m.NumJobsWithPTS.Update(stats.numRecords)
 			m.ExpiredPTS.Inc(stats.expired)
 			if stats.oldest.WallTime > 0 {
-				m.ProtectedAge.Update((execCfg.Clock.Now().WallTime - stats.oldest.WallTime) / 1e9)
+				m.ProtectedAge.Update((clock.Now().WallTime - stats.oldest.WallTime) / 1e9)
 			} else {
 				m.ProtectedAge.Update(0)
 			}
@@ -170,6 +210,48 @@ func manageJobsProtectedTimestamps(ctx context.Context, execCtx sql.JobExecConte
 			m.ProtectedAge.Update(0)
 		}
 	}
+}
 
+func processSchedulePTSRecord(
+	ctx context.Context,
+	scheduleID int64,
+	rec ptpb.Record,
+	ptsStats map[string]*schedulePTSStat,
+	txn isql.Txn,
+) error {
+	sj, err := jobs.ScheduledJobTxn(txn).
+		Load(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduleID)
+	if jobs.HasScheduledJobNotFoundError(err) {
+		return nil // nolint:returnerrcheck -- schedule maybe deleted when we run; just keep going.
+	}
+	ex, err := jobs.GetScheduledJobExecutor(sj.ExecutorType())
+	if err != nil {
+		return err
+	}
+	pm, ok := ex.Metrics().(jobs.PTSMetrics)
+	if !ok {
+		return nil
+	}
+
+	stats := ptsStats[sj.ExecutorType()]
+	if stats == nil {
+		stats = &schedulePTSStat{m: pm.PTSMetrics()}
+		ptsStats[sj.ExecutorType()] = stats
+	}
+	stats.numRecords++
+	if stats.oldest.IsEmpty() || rec.Timestamp.Less(stats.oldest) {
+		stats.oldest = rec.Timestamp
+	}
 	return nil
+}
+
+func updateSchedulesPTSMetrics(clock *hlc.Clock, ptsStats map[string]*schedulePTSStat) {
+	for _, st := range ptsStats {
+		st.m.NumWithPTS.Update(st.numRecords)
+		if st.oldest.WallTime > 0 {
+			st.m.PTSAge.Update((clock.Now().WallTime - st.oldest.WallTime) / 1e9)
+		} else {
+			st.m.PTSAge.Update(0)
+		}
+	}
 }
