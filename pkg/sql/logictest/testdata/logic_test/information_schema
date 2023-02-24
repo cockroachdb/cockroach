@@ -444,6 +444,7 @@ crdb_internal       node_contention_events
 crdb_internal       node_distsql_flows
 crdb_internal       node_execution_insights
 crdb_internal       node_inflight_trace_spans
+crdb_internal       node_memory_monitors
 crdb_internal       node_metrics
 crdb_internal       node_queries
 crdb_internal       node_runtime_info
@@ -779,6 +780,7 @@ node_contention_events
 node_distsql_flows
 node_execution_insights
 node_inflight_trace_spans
+node_memory_monitors
 node_metrics
 node_queries
 node_runtime_info
@@ -1154,6 +1156,7 @@ system         crdb_internal       node_contention_events                 SYSTEM
 system         crdb_internal       node_distsql_flows                     SYSTEM VIEW  NO                  1
 system         crdb_internal       node_execution_insights                SYSTEM VIEW  NO                  1
 system         crdb_internal       node_inflight_trace_spans              SYSTEM VIEW  NO                  1
+system         crdb_internal       node_memory_monitors                   SYSTEM VIEW  NO                  1
 system         crdb_internal       node_metrics                           SYSTEM VIEW  NO                  1
 system         crdb_internal       node_queries                           SYSTEM VIEW  NO                  1
 system         crdb_internal       node_runtime_info                      SYSTEM VIEW  NO                  1
@@ -2928,6 +2931,7 @@ NULL     public   system         crdb_internal       node_contention_events     
 NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NO            YES
 NULL     public   system         crdb_internal       node_execution_insights                SELECT          NO            YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NO            YES
+NULL     public   system         crdb_internal       node_memory_monitors                   SELECT          NO            YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NO            YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NO            YES
 NULL     public   system         crdb_internal       node_runtime_info                      SELECT          NO            YES
@@ -3551,6 +3555,7 @@ NULL     public   system         crdb_internal       node_contention_events     
 NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NO            YES
 NULL     public   system         crdb_internal       node_execution_insights                SELECT          NO            YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NO            YES
+NULL     public   system         crdb_internal       node_memory_monitors                   SELECT          NO            YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NO            YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NO            YES
 NULL     public   system         crdb_internal       node_runtime_info                      SELECT          NO            YES
