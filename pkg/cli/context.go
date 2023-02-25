@@ -95,6 +95,8 @@ var serverCfg = func() server.Config {
 	return server.MakeConfig(context.Background(), st)
 }()
 
+const goMemLimitNotSet = -1
+
 // setServerContextDefaults set the default values in serverCfg.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
@@ -109,6 +111,13 @@ func setServerContextDefaults() {
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLConfig.MemoryPoolSize = bytes
 	}
+
+	// Initialize this to a negative value in order to distinguish between the
+	// user explicitly setting --go-mem-limit to 0 (which disables the usage of
+	// the soft memory limit) vs not specifying that flag (which will result in
+	// a default value computed based on the total RAM, MemoryPoolSize, and
+	// CacheSize.
+	serverCfg.GoMemLimit = goMemLimitNotSet
 
 	// Attempt to set serverCfg.TimeSeriesServerConfig.QueryMemoryMax to
 	// the default (64MiB) or 1% of system memory, whichever is greater.
@@ -490,6 +499,7 @@ var startCtx struct {
 	// humanized size value.
 	cacheSizeValue           bytesOrPercentageValue
 	sqlSizeValue             bytesOrPercentageValue
+	goMemLimitValue          bytesOrPercentageValue
 	diskTempStorageSizeValue bytesOrPercentageValue
 	tsdbSizeValue            bytesOrPercentageValue
 }
@@ -514,6 +524,7 @@ func setStartContextDefaults() {
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
 	startCtx.cacheSizeValue = makeBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 	startCtx.sqlSizeValue = makeBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
+	startCtx.goMemLimitValue = makeBytesOrPercentageValue(&serverCfg.GoMemLimit, memoryPercentResolver)
 	startCtx.diskTempStorageSizeValue = makeBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 	startCtx.tsdbSizeValue = makeBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
 }

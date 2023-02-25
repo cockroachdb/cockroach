@@ -1232,6 +1232,8 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
 		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize + serverCfg.TimeSeriesServerConfig.QueryMemoryMax
+		// TODO(yuzefovich): we might want to adjust this warning higher now
+		// that GOMEMLIMIT is used.
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Ops.Shoutf(ctx, severity.WARNING,
@@ -1337,6 +1339,35 @@ func setupAndInitializeLoggingAndProfiling(
 	}
 
 	maybeWarnMemorySizes(ctx)
+	if serverCfg.GoMemLimit == goMemLimitNotSet {
+		// --go-mem-limit wasn't specified, so we default to 2.25x of
+		// --max-sql-memory (subject to --go-mem-limit + 1.15x --cache not
+		// exceeding 90% of available RAM).
+		serverCfg.GoMemLimit = 0
+		if sysMem, err := status.GetTotalMemory(ctx); err == nil {
+			// The rationale for this formula is as follows:
+			// - we don't want for the estimated max memory usage to exceed 90%
+			// of the available RAM to prevent the OOMs
+			// - Go runtime doesn't control the pebble cache, so we need to
+			// subtract it
+			// - anecdotally, the pebble cache can have some slop over its
+			// target size (perhaps, due to memory fragmentation), so we adjust
+			// the footprint of the cache by 15%.
+			maxGoMemLimit := int64(0.9*float64(sysMem) - 1.15*float64(serverCfg.CacheSize))
+			// Since not every memory allocation is registered with the memory
+			// accounting system of CRDB, we need to give it some room to
+			// prevent Go GC being too aggressive to stay under the GOMEMLIMIT.
+			// The default multiple of 2.25x over the memory pool size should
+			// give enough room for those unaccounted for allocations.
+			serverCfg.GoMemLimit = int64(2.25 * float64(serverCfg.MemoryPoolSize))
+			if serverCfg.GoMemLimit > maxGoMemLimit {
+				serverCfg.GoMemLimit = maxGoMemLimit
+			}
+			if serverCfg.GoMemLimit <= 0 {
+				serverCfg.GoMemLimit = 0
+			}
+		}
+	}
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.

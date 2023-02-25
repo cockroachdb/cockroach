@@ -257,6 +257,10 @@ type BaseConfig struct {
 	// These events are meant for the Observability Service, but they might pass
 	// through an OpenTelemetry Collector.
 	ObsServiceAddr string
+
+	// GoMemLimit is the soft memory limit enforced by the Go runtime. Set to 0
+	// to disable the soft memory limit.
+	GoMemLimit int64
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -624,6 +628,7 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "max offset\t", cfg.MaxOffset)
 	fmt.Fprintln(w, "cache size\t", humanizeutil.IBytes(cfg.CacheSize))
 	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.MemoryPoolSize))
+	fmt.Fprintln(w, "Go runtime soft memory limit\t", humanizeutil.IBytes(cfg.GoMemLimit))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan min idle time\t", cfg.ScanMinIdleTime)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)

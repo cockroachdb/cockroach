@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	runtimeDebug "runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -1092,6 +1093,9 @@ func makeTenantSQLServerArgs(
 
 	sessionRegistry := sql.NewSessionRegistry()
 
+	if baseCfg.GoMemLimit != 0 {
+		runtimeDebug.SetMemoryLimit(baseCfg.GoMemLimit)
+	}
 	monitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          sqlCfg.MemoryPoolSize,
 		histogramWindowInterval: baseCfg.HistogramWindowInterval(),

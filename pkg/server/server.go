@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	runtimeDebug "runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -567,6 +568,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	registry.AddMetricStruct(protectedtsProvider.Metrics())
 
+	if cfg.GoMemLimit != 0 {
+		runtimeDebug.SetMemoryLimit(cfg.GoMemLimit)
+	}
 	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
 	// the KV memory monitor for the StoreConfig.
 	sqlMonitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
