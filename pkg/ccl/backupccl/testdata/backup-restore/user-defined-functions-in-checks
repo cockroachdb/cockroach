@@ -111,9 +111,14 @@ USE db1
 
 # Make sure function ids in CHECK constraint are rewritten.
 query-sql
-SELECT create_statement FROM [SHOW CREATE TABLE sc1.f1]
+SELECT create_statement FROM [SHOW CREATE TABLE sc1.t1]
 ----
-pq: relation "sc1.f1" does not exist
+CREATE TABLE sc1.t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+	CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
+)
 
 # Make sure that CHECK constraint still applies correctly
 query-sql

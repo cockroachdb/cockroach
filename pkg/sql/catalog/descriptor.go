@@ -588,6 +588,14 @@ type TableDescriptor interface {
 		cstID descpb.ConstraintID,
 	) (DescriptorIDSet, error)
 
+	// GetAllReferencedFunctionIDsInColumnExprs returns descriptor IDs of all user
+	// defined functions referenced by expressions in this column.
+	// Note: it extracts ids from expression strings, not from the UsesFunctionIDs
+	// field of column descriptors.
+	GetAllReferencedFunctionIDsInColumnExprs(
+		colID descpb.ColumnID,
+	) (DescriptorIDSet, error)
+
 	// ForeachDependedOnBy runs a function on all indexes, including those being
 	// added in the mutations.
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error

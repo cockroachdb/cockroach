@@ -240,7 +240,7 @@ CREATE TABLE t.test (k INT);
 	}
 	colDef := alterCmd.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	cdd, err := tabledesc.MakeColumnDefDescs(ctx, colDef, nil, evalCtx)
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, colDef, nil, evalCtx, tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		t.Fatal(err)
 	}

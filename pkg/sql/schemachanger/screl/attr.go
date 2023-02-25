@@ -84,6 +84,9 @@ const (
 	// ReferencedSequenceIDs corresponds to a slice of sequence descriptor IDs
 	// referenced by an element.
 	ReferencedSequenceIDs
+	// ReferencedFunctionIDs corresponds to a slice of function descriptor IDs
+	// referenced by an element.
+	ReferencedFunctionIDs
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -245,6 +248,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnOnUpdateExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

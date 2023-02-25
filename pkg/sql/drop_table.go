@@ -592,6 +592,22 @@ func (p *planner) removeCheckBackReferenceInFunctions(
 	return nil
 }
 
+func (p *planner) removeColumnBackReferenceInFunctions(
+	ctx context.Context, tableDesc *tabledesc.Mutable, col *descpb.ColumnDescriptor,
+) error {
+	for _, id := range col.UsesFunctionIds {
+		fnDesc, err := p.Descriptors().MutableByID(p.Txn()).Function(ctx, id)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveColumnReference(tableDesc.GetID(), col.ID)
+		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func removeCheckBackReferenceInFunctions(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,

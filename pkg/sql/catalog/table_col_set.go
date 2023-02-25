@@ -32,6 +32,9 @@ func MakeTableColSet(vals ...descpb.ColumnID) TableColSet {
 // Add adds a column to the set. No-op if the column is already in the set.
 func (s *TableColSet) Add(col descpb.ColumnID) { s.set.Add(int(col)) }
 
+// Remove removes a column from the set. No-op if the column is not in the set.
+func (s *TableColSet) Remove(col descpb.ColumnID) { s.set.Remove(int(col)) }
+
 // Contains returns true if the set contains the column.
 func (s TableColSet) Contains(col descpb.ColumnID) bool { return s.set.Contains(int(col)) }
 

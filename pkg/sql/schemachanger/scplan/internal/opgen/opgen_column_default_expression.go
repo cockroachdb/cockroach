@@ -75,6 +75,16 @@ func init() {
 						BackReferencedColumnID: this.ColumnID,
 					}
 				}),
+				emit(func(this *scpb.ColumnDefaultExpression) *scop.RemoveTableColumnBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveTableColumnBackReferencesInFunctions{
+						FunctionIDs:            this.UsesFunctionIDs,
+						BackReferencedTableID:  this.TableID,
+						BackReferencedColumnID: this.ColumnID,
+					}
+				}),
 			),
 		),
 	)

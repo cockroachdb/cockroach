@@ -109,6 +109,10 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 			Attrs:    []rel.Attr{screl.ReferencedSequenceIDs},
 			Inverted: true,
 		},
+		{
+			Attrs:    []rel.Attr{screl.ReferencedFunctionIDs},
+			Inverted: true,
+		},
 	}...)
 	if err != nil {
 		return nil, err

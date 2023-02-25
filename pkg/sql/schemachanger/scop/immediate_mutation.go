@@ -516,6 +516,15 @@ type RemoveTableConstraintBackReferencesFromFunctions struct {
 	FunctionIDs                []descpb.ID
 }
 
+// RemoveTableColumnBackReferencesInFunctions removes back-references to columns
+// from referenced functions.
+type RemoveTableColumnBackReferencesInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID  descpb.ID
+	BackReferencedColumnID descpb.ColumnID
+	FunctionIDs            []descpb.ID
+}
+
 // SetColumnName renames a column.
 type SetColumnName struct {
 	immediateMutationOp

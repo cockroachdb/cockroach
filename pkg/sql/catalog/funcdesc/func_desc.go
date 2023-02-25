@@ -326,12 +326,20 @@ func (desc *immutable) validateInboundTableRef(
 
 	var foundInTable bool
 	for _, colID := range by.ColumnIDs {
-		if catalog.FindColumnByID(backRefTbl, colID) == nil {
+		col := catalog.FindColumnByID(backRefTbl, colID)
+		if col == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
 				backRefTbl.GetName(), by.ID, colID)
 		}
-		// TODO(chengxiong): add logic to validate reference in column expressions
-		// when UDF usage is allowed in columns.
+		fnIDs := catalog.MakeDescriptorIDSet(col.ColumnDesc().UsesFunctionIds...)
+		if fnIDs.Contains(desc.GetID()) {
+			foundInTable = true
+			continue
+		}
+		return errors.AssertionFailedf(
+			"column %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
+			col.GetID(), backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
+		)
 	}
 
 	for _, idxID := range by.IndexIDs {
@@ -529,11 +537,12 @@ func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
 	desc.ParentSchemaID = id
 }
 
+// AddConstraintReference adds back reference to a constraint to the function.
 func (desc *Mutable) AddConstraintReference(id descpb.ID, constraintID descpb.ConstraintID) error {
 	for _, dep := range desc.DependsOn {
 		if dep == id {
-			return errors.AssertionFailedf(
-				"Cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			return errors.Errorf(
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
 			)
 		}
 	}
@@ -558,12 +567,57 @@ func (desc *Mutable) AddConstraintReference(id descpb.ID, constraintID descpb.Co
 	return nil
 }
 
+// RemoveConstraintReference removes back reference to a constraint from the
+// function.
 func (desc *Mutable) RemoveConstraintReference(id descpb.ID, constraintID descpb.ConstraintID) {
 	for i := range desc.DependedOnBy {
 		if desc.DependedOnBy[i].ID == id {
 			ids := catalog.MakeConstraintIDSet(desc.DependedOnBy[i].ConstraintIDs...)
 			ids.Remove(constraintID)
 			desc.DependedOnBy[i].ConstraintIDs = ids.Ordered()
+			desc.maybeRemoveTableReference(id)
+			return
+		}
+	}
+}
+
+// AddColumnReference adds back reference to a column to the function.
+func (desc *Mutable) AddColumnReference(id descpb.ID, colID descpb.ColumnID) error {
+	for _, dep := range desc.DependsOn {
+		if dep == id {
+			return errors.Errorf(
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			)
+		}
+	}
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			ids := catalog.MakeTableColSet(desc.DependedOnBy[i].ColumnIDs...)
+			ids.Add(colID)
+			desc.DependedOnBy[i].ColumnIDs = ids.Ordered()
+			return nil
+		}
+	}
+	desc.DependedOnBy = append(
+		desc.DependedOnBy,
+		descpb.FunctionDescriptor_Reference{
+			ID:        id,
+			ColumnIDs: []descpb.ColumnID{colID},
+		},
+	)
+	sort.Slice(desc.DependedOnBy, func(i, j int) bool {
+		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
+	})
+	return nil
+}
+
+// RemoveColumnReference removes back reference to a column from the function.
+func (desc *Mutable) RemoveColumnReference(id descpb.ID, colID descpb.ColumnID) {
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			ids := catalog.MakeTableColSet(desc.DependedOnBy[i].ColumnIDs...)
+			ids.Remove(colID)
+			desc.DependedOnBy[i].ColumnIDs = ids.Ordered()
 			desc.maybeRemoveTableReference(id)
 			return
 		}
