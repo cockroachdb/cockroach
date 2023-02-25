@@ -490,6 +490,7 @@ var startCtx struct {
 	// humanized size value.
 	cacheSizeValue           bytesOrPercentageValue
 	sqlSizeValue             bytesOrPercentageValue
+	goMemLimitValue          bytesOrPercentageValue
 	diskTempStorageSizeValue bytesOrPercentageValue
 	tsdbSizeValue            bytesOrPercentageValue
 }
@@ -514,6 +515,7 @@ func setStartContextDefaults() {
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
 	startCtx.cacheSizeValue = makeBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 	startCtx.sqlSizeValue = makeBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
+	startCtx.goMemLimitValue = makeBytesOrPercentageValue(&goMemLimit, memoryPercentResolver)
 	startCtx.diskTempStorageSizeValue = makeBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 	startCtx.tsdbSizeValue = makeBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
 }
