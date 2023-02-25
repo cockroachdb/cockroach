@@ -72,7 +72,7 @@ func (p *planner) addColumnImpl(
 	}
 	d = newDef
 
-	cdd, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
+	cdd, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext(), tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		return err
 	}

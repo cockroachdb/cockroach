@@ -52,8 +52,10 @@ func TestValidateFuncDesc(t *testing.T) {
 		tableWithFuncForwardRefID = dbID + 6
 		typeWithFuncRefID         = dbID + 7
 		viewID                    = dbID + 8
-		tableWithBadConstraintID  = dbID + 9
-		tableWithGoodConstraintID = dbID + 10
+		tableWithBadConstraint    = dbID + 9
+		tableWithGoodConstraint   = dbID + 10
+		tableWithBadColumn        = dbID + 11
+		tableWIthGoodColumn       = dbID + 12
 	)
 	funcDescID := descpb.ID(bootstrap.TestingUserDescID(0))
 
@@ -104,8 +106,8 @@ func TestValidateFuncDesc(t *testing.T) {
 		ViewQuery: "some query",
 	}).BuildImmutable())
 	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
-		ID:   tableWithBadConstraintID,
-		Name: "tbl",
+		ID:   tableWithBadConstraint,
+		Name: "tbl_bad_constraint",
 		Checks: []*descpb.TableDescriptor_CheckConstraint{
 			{
 				Expr:         "[FUNCTION 100101] ()",
@@ -114,12 +116,32 @@ func TestValidateFuncDesc(t *testing.T) {
 		},
 	}).BuildImmutable())
 	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
-		ID:   tableWithGoodConstraintID,
-		Name: "v",
+		ID:   tableWithGoodConstraint,
+		Name: "tbl_good_constraint",
 		Checks: []*descpb.TableDescriptor_CheckConstraint{
 			{
 				Expr:         "[FUNCTION 100100] ()",
 				ConstraintID: 1,
+			},
+		},
+	}).BuildImmutable())
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   tableWithBadColumn,
+		Name: "tbl_bad_col",
+		Columns: []descpb.ColumnDescriptor{
+			{
+				ID:              1,
+				UsesFunctionIds: []descpb.ID{101},
+			},
+		},
+	}).BuildImmutable())
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   tableWIthGoodColumn,
+		Name: "tbl_good_col",
+		Columns: []descpb.ColumnDescriptor{
+			{
+				ID:              1,
+				UsesFunctionIds: []descpb.ID{100},
 			},
 		},
 	}).BuildImmutable())
@@ -508,7 +530,7 @@ func TestValidateFuncDesc(t *testing.T) {
 			},
 		},
 		{
-			`constraint 1 in depended-on-by relation "tbl" (1009) does not have reference to function "f" (100)`,
+			`constraint 1 in depended-on-by relation "tbl_bad_constraint" (1009) does not have reference to function "f" (100)`,
 			descpb.FunctionDescriptor{
 				Name:           "f",
 				ID:             funcDescID,
@@ -527,7 +549,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				LeakProof:  true,
 				Volatility: catpb.Function_IMMUTABLE,
 				DependedOnBy: []descpb.FunctionDescriptor_Reference{
-					{ID: tableWithBadConstraintID, ConstraintIDs: []descpb.ConstraintID{1}},
+					{ID: tableWithBadConstraint, ConstraintIDs: []descpb.ConstraintID{1}},
 				},
 				DependsOn:      []descpb.ID{tableWithFuncBackRefID},
 				DependsOnTypes: []descpb.ID{typeWithFuncRefID},
@@ -553,7 +575,45 @@ func TestValidateFuncDesc(t *testing.T) {
 				LeakProof:  true,
 				Volatility: catpb.Function_IMMUTABLE,
 				DependedOnBy: []descpb.FunctionDescriptor_Reference{
-					{ID: tableWithGoodConstraintID, ConstraintIDs: []descpb.ConstraintID{1}},
+					{ID: tableWithGoodConstraint, ConstraintIDs: []descpb.ConstraintID{1}},
+				},
+				DependsOn:      []descpb.ID{tableWithFuncBackRefID},
+				DependsOnTypes: []descpb.ID{typeWithFuncRefID},
+			},
+		},
+		{
+			`column 1 in depended-on-by relation "tbl_bad_col" (1011) does not have reference to function "f" (100)`,
+			descpb.FunctionDescriptor{
+				Name:           "f",
+				ID:             funcDescID,
+				ParentID:       dbID,
+				ParentSchemaID: schemaWithFuncRefID,
+				Privileges:     defaultPrivileges,
+				ReturnType: descpb.FunctionDescriptor_ReturnType{
+					Type: types.Int,
+				},
+				Volatility: catpb.Function_IMMUTABLE,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{ID: tableWithBadColumn, ColumnIDs: []descpb.ColumnID{1}},
+				},
+				DependsOn:      []descpb.ID{tableWithFuncBackRefID},
+				DependsOnTypes: []descpb.ID{typeWithFuncRefID},
+			},
+		},
+		{
+			``,
+			descpb.FunctionDescriptor{
+				Name:           "f",
+				ID:             funcDescID,
+				ParentID:       dbID,
+				ParentSchemaID: schemaWithFuncRefID,
+				Privileges:     defaultPrivileges,
+				ReturnType: descpb.FunctionDescriptor_ReturnType{
+					Type: types.Int,
+				},
+				Volatility: catpb.Function_IMMUTABLE,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{ID: tableWIthGoodColumn, ColumnIDs: []descpb.ColumnID{1}},
 				},
 				DependsOn:      []descpb.ID{tableWithFuncBackRefID},
 				DependsOnTypes: []descpb.ID{typeWithFuncRefID},

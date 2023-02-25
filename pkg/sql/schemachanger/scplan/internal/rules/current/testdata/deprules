@@ -2242,6 +2242,20 @@ deprules
     - $referencing-via-expr-Node[CurrentStatus] = ABSENT
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-Target, $referenced-descriptor-Node)
     - joinTargetNode($referencing-via-expr, $referencing-via-expr-Target, $referencing-via-expr-Node)
+- name: descriptor drop right before removing dependent with function refs in columns
+  from: referenced-descriptor-Node
+  kind: SameStagePrecedence
+  to: referencing-via-function-Node
+  query:
+    - $referenced-descriptor[Type] = '*scpb.Function'
+    - $referenced-descriptor[DescID] = $fromDescID
+    - $referencing-via-function[ReferencedFunctionIDs] CONTAINS $fromDescID
+    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SecondaryIndexPartial', '*scpb.FunctionParamDefaultExpression']
+    - toAbsent($referenced-descriptor-Target, $referencing-via-function-Target)
+    - $referenced-descriptor-Node[CurrentStatus] = DROPPED
+    - $referencing-via-function-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-Target, $referenced-descriptor-Node)
+    - joinTargetNode($referencing-via-function, $referencing-via-function-Target, $referencing-via-function-Node)
 - name: descriptor drop right before removing dependent with type refs in expressions
   from: referenced-descriptor-Node
   kind: SameStagePrecedence
@@ -5576,6 +5590,20 @@ deprules
     - $referencing-via-expr-Node[CurrentStatus] = ABSENT
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-Target, $referenced-descriptor-Node)
     - joinTargetNode($referencing-via-expr, $referencing-via-expr-Target, $referencing-via-expr-Node)
+- name: descriptor drop right before removing dependent with function refs in columns
+  from: referenced-descriptor-Node
+  kind: SameStagePrecedence
+  to: referencing-via-function-Node
+  query:
+    - $referenced-descriptor[Type] = '*scpb.Function'
+    - $referenced-descriptor[DescID] = $fromDescID
+    - $referencing-via-function[ReferencedFunctionIDs] CONTAINS $fromDescID
+    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SecondaryIndexPartial', '*scpb.FunctionParamDefaultExpression']
+    - toAbsent($referenced-descriptor-Target, $referencing-via-function-Target)
+    - $referenced-descriptor-Node[CurrentStatus] = DROPPED
+    - $referencing-via-function-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-Target, $referenced-descriptor-Node)
+    - joinTargetNode($referencing-via-function, $referencing-via-function-Target, $referencing-via-function-Node)
 - name: descriptor drop right before removing dependent with type refs in expressions
   from: referenced-descriptor-Node
   kind: SameStagePrecedence

@@ -38,3 +38,40 @@ func (p *planner) updateFunctionReferencesForCheck(
 	}
 	return nil
 }
+
+func (p *planner) maybeUpdateFunctionReferencesForColumn(
+	ctx context.Context, tblDesc catalog.TableDescriptor, col *descpb.ColumnDescriptor,
+) error {
+	// Remove back references in old referenced functions.
+	for _, id := range col.UsesFunctionIds {
+		fnDesc, err := p.descCollection.MutableByID(p.txn).Function(ctx, id)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveColumnReference(tblDesc.GetID(), col.ID)
+		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
+			return err
+		}
+	}
+
+	udfIDs, err := tblDesc.GetAllReferencedFunctionIDsInColumnExprs(col.ID)
+	if err != nil {
+		return err
+	}
+	col.UsesFunctionIds = udfIDs.Ordered()
+
+	// Add new back references.
+	for _, id := range col.UsesFunctionIds {
+		fnDesc, err := p.descCollection.MutableByID(p.txn).Function(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := fnDesc.AddColumnReference(tblDesc.GetID(), col.ID); err != nil {
+			return err
+		}
+		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}

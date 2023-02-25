@@ -1,0 +1,175 @@
+/* setup */
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE TABLE t (i INT PRIMARY KEY, b INT DEFAULT f());
+
+/* test */
+ALTER TABLE t DROP COLUMN b;
+EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
+----
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹b›;
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 2 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 105, ColumnID: 2}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+    │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   └── • ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+    │   │         ABSENT → PUBLIC
+    │   │
+    │   ├── • 4 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │ BACKFILL_ONLY → ABSENT
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 105, Name: t_pkey, IndexID: 2}
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}
+    │   │   │         rule: "dependents removed before index"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
+    │   │
+    │   └── • 10 Mutation operations
+    │       │
+    │       ├── • SetColumnName
+    │       │     ColumnID: 2
+    │       │     Name: b
+    │       │     TableID: 105
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     TableID: 105
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 105
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     TableID: 105
+    │       │
+    │       ├── • MakeWriteOnlyColumnPublic
+    │       │     ColumnID: 2
+    │       │     TableID: 105
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 105
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 2
+    │       │     TableID: 105
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 105
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 3 elements transitioning toward ABSENT
+        │   │
+        │   ├── • IndexData:{DescID: 105, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • IndexData:{DescID: 105, IndexID: 3}
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 105, IndexID: 2}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
+        │
+        └── • 6 Mutation operations
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 2
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN b
+            │     TableID: 105
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 105
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN b
+            │     TableID: 105
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 105
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  - 105
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

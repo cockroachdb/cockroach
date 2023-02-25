@@ -265,6 +265,13 @@ func (v NodeVars) ReferencedSequenceIDsContains(containedIDVar rel.Var) rel.Clau
 	return v.El.AttrContainsVar(screl.ReferencedSequenceIDs, containedIDVar)
 }
 
+// ReferencedFunctionIDsContains defines a clause which will bind
+// containedIDVar to a descriptor ID contained in v's element's referenced
+// function IDs.
+func (v NodeVars) ReferencedFunctionIDsContains(containedIDVar rel.Var) rel.Clause {
+	return v.El.AttrContainsVar(screl.ReferencedFunctionIDs, containedIDVar)
+}
+
 func MkNodeVars(elStr string) NodeVars {
 	el := rel.Var(elStr)
 	return NodeVars{

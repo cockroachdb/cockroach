@@ -83,6 +83,7 @@ type ImmediateMutationVisitor interface {
 	RemoveBackReferencesInRelations(context.Context, RemoveBackReferencesInRelations) error
 	AddTableConstraintBackReferencesInFunctions(context.Context, AddTableConstraintBackReferencesInFunctions) error
 	RemoveTableConstraintBackReferencesFromFunctions(context.Context, RemoveTableConstraintBackReferencesFromFunctions) error
+	RemoveTableColumnBackReferencesInFunctions(context.Context, RemoveTableColumnBackReferencesInFunctions) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
 	SetConstraintName(context.Context, SetConstraintName) error
@@ -422,6 +423,11 @@ func (op AddTableConstraintBackReferencesInFunctions) Visit(ctx context.Context,
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveTableConstraintBackReferencesFromFunctions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveTableConstraintBackReferencesFromFunctions(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveTableColumnBackReferencesInFunctions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveTableColumnBackReferencesInFunctions(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

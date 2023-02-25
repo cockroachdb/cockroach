@@ -910,7 +910,7 @@ func applyColumnMutation(
 			col,
 			t.Default,
 			&col.ColumnDesc().DefaultExpr,
-			tree.ColumnDefaultExpr,
+			tree.ColumnDefaultExprInSetDefault,
 		); err != nil {
 			return err
 		}
@@ -1086,7 +1086,11 @@ func updateNonComputedColExpr(
 		*exprField = &s
 	}
 
-	if err := updateSequenceDependencies(params, tab, col); err != nil {
+	if err := updateSequenceDependencies(params, tab, col, op); err != nil {
+		return err
+	}
+
+	if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, tab, col.ColumnDesc()); err != nil {
 		return err
 	}
 
@@ -1107,6 +1111,12 @@ func sanitizeColumnExpression(
 	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, p.EvalContext().Settings.Version.ActiveVersionOrEmpty(p.ctx)); err != nil {
 		return nil, "", err
 	}
+
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		return nil, "", err
+	}
+
 	s := tree.Serialize(typedExpr)
 	return typedExpr, s, nil
 }
@@ -1114,7 +1124,10 @@ func sanitizeColumnExpression(
 // updateSequenceDependencies checks for sequence dependencies on the provided
 // DEFAULT and ON UPDATE expressions and adds any dependencies to the tableDesc.
 func updateSequenceDependencies(
-	params runParams, tableDesc *tabledesc.Mutable, colDesc catalog.Column,
+	params runParams,
+	tableDesc *tabledesc.Mutable,
+	colDesc catalog.Column,
+	defaultExprCtx tree.SchemaExprContext,
 ) error {
 	var seqDescsToUpdate []*tabledesc.Mutable
 	mergeNewSeqDescs := func(toAdd []*tabledesc.Mutable) {
@@ -1139,7 +1152,7 @@ func updateSequenceDependencies(
 	}{
 		{
 			colExprKind:    tabledesc.DefaultExpr,
-			colExprContext: tree.ColumnDefaultExpr,
+			colExprContext: defaultExprCtx,
 			exists:         colDesc.HasDefault,
 			get:            colDesc.GetDefaultExpr,
 		},
@@ -1573,6 +1586,12 @@ func dropColumnImpl(
 	// If the dropped column uses a sequence, remove references to it from that sequence.
 	if colToDrop.NumUsesSequences() > 0 {
 		if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, colToDrop); err != nil {
+			return nil, err
+		}
+	}
+
+	if colToDrop.NumUsesFunctions() > 0 {
+		if err := params.p.removeColumnBackReferenceInFunctions(params.ctx, tableDesc, colToDrop.ColumnDesc()); err != nil {
 			return nil, err
 		}
 	}

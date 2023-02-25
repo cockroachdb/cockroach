@@ -1466,12 +1466,12 @@ CREATE TABLE fail_assn_cast (
   a BOOL DEFAULT 'foo'
 )
 
-statement error pq: expected DEFAULT expression to have type .*, but .* has type .*
+statement error pq: expected DEFAULT \(in CREATE TABLE\) expression to have type .*, but .* has type .*
 CREATE TABLE fail_assn_cast (
   a DATE DEFAULT 1.0::FLOAT4
 )
 
-statement error pq: expected DEFAULT expression to have type .*, but .* has type .*
+statement error pq: expected DEFAULT \(in CREATE TABLE\) expression to have type .*, but .* has type .*
 CREATE TABLE fail_assn_cast (
   b JSONB DEFAULT 'null'::CHAR
 )

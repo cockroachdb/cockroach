@@ -394,6 +394,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		if desc.Adding() {
 			// if this table and all its references are created in the same
 			// transaction it can be made PUBLIC.
+			// TODO(chengxiong): do we need to do something here? Like. add logic to find all references.
 			refs, err := desc.FindAllReferences()
 			if err != nil {
 				return err
@@ -417,6 +418,13 @@ func (n *createTableNode) startExec(params runParams) error {
 	// references in functions used.
 	for _, ck := range desc.CheckConstraints() {
 		if err := params.p.updateFunctionReferencesForCheck(params.ctx, desc, ck.CheckDesc()); err != nil {
+			return err
+		}
+	}
+
+	// Update cross-references between functions and columns.
+	for i := range desc.Columns {
+		if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, desc, &desc.Columns[i]); err != nil {
 			return err
 		}
 	}
@@ -1579,7 +1587,7 @@ func NewTableDesc(
 				return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
 			}
 
-			cdd[i], err = tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
+			cdd[i], err = tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx, tree.ColumnDefaultExprInNewTable)
 			if err != nil {
 				return nil, err
 			}

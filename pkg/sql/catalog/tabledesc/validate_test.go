@@ -208,6 +208,7 @@ var validationMap = []struct {
 			"AlterColumnTypeInProgress": {status: thisFieldReferencesNoObjects},
 			"SystemColumnKind":          {status: thisFieldReferencesNoObjects},
 			"OnUpdateExpr":              {status: iSolemnlySwearThisFieldIsValidated},
+			"UsesFunctionIds":           {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -2962,6 +2963,69 @@ func TestValidateCrossTableReferences(t *testing.T) {
 						Name: "a",
 						ID:   1,
 						Type: types.NewCompositeType(catid.TypeIDToOID(500), catid.TypeIDToOID(100500), nil, nil),
+					},
+				},
+			},
+		},
+		{ // 23
+			err: `invalid depends-on function back reference: referenced function ID 100: referenced descriptor not found`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:              1,
+						Type:            types.Int,
+						UsesFunctionIds: []descpb.ID{100},
+					},
+				},
+			},
+		},
+		{ // 24
+			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:              1,
+						Type:            types.Int,
+						UsesFunctionIds: []descpb.ID{100},
+					},
+				},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{
+					ID:   100,
+					Name: "f",
+				},
+			},
+		},
+		{ // 25
+			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:              1,
+						Type:            types.Int,
+						UsesFunctionIds: []descpb.ID{100},
+					},
+				},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{
+					ID:   100,
+					Name: "f",
+					DependedOnBy: []descpb.FunctionDescriptor_Reference{
+						{ID: 51},
 					},
 				},
 			},

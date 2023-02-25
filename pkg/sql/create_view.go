@@ -696,7 +696,7 @@ func addResultColumns(
 		columnTableDef.Nullable.Nullability = tree.SilentNull
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		cdd, err := tabledesc.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx)
+		cdd, err := tabledesc.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx, tree.ColumnDefaultExprInNewView)
 		if err != nil {
 			return err
 		}

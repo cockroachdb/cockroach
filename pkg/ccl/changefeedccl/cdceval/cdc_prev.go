@@ -232,6 +232,14 @@ func (c *prevCol) NumOwnsSequences() int {
 	return 0
 }
 
+func (c *prevCol) NumUsesFunctions() int {
+	return 0
+}
+
+func (c *prevCol) GetUsesFunctionID(ordinal int) descpb.ID {
+	return 0
+}
+
 func (c *prevCol) GetOwnsSequenceID(ownsSequenceOrdinal int) descpb.ID {
 	return 0
 }
