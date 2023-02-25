@@ -158,7 +158,7 @@ func init() {
 		"secondary index partial no longer public before referenced column",
 		scgraph.Precedence,
 		"secondary-partial-index", "column",
-		scpb.Status_DELETE_ONLY, scpb.Status_WRITE_ONLY,
+		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndexPartial)(nil)),
