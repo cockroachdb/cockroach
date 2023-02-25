@@ -80,6 +80,10 @@ enum ResumeReason {
   // The DistSender encountered a range boundary and returned a partial result,
   // in response to return_on_range_boundary.
   RESUME_RANGE_BOUNDARY = 4;
+  // The ElasticCPUHandle signalled that the command evaluation exceeded its
+  // allotted CPU time. It is the callers responsibility to resume from the
+  // returned resume key.
+  RESUME_ELASTIC_CPU_LIMIT = 5;
 }
 
 // RequestHeaderPure is not to be used directly. It's generated only for use of

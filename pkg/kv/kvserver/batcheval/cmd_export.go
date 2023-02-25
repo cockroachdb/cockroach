@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -184,7 +185,7 @@ func evalExport(
 			StopMidKey:         args.SplitMidKey,
 		}
 		var summary kvpb.BulkOpSummary
-		var resume storage.MVCCKey
+		var resumeInfo storage.ExportRequestResumeInfo
 		var fingerprint uint64
 		var err error
 		if args.ExportFingerprint {
@@ -196,7 +197,7 @@ func evalExport(
 				StripValueChecksum: true,
 			}
 			var hasRangeKeys bool
-			summary, resume, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(ctx,
+			summary, resumeInfo, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(ctx,
 				cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
 			if err != nil {
 				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
@@ -210,7 +211,7 @@ func evalExport(
 				destFile = &storage.MemFile{}
 			}
 		} else {
-			summary, resume, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
+			summary, resumeInfo, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
 				opts, destFile)
 			if err != nil {
 				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
@@ -226,18 +227,48 @@ func evalExport(
 		//    early exit and thus have a resume key despite
 		//    not having data.
 		if summary.DataSize == 0 {
-			if resume.Key != nil {
-				start = resume.Key
-				resumeKeyTS = resume.Timestamp
-				continue
-			} else {
-				break
+			hasResumeKey := resumeInfo.ResumeKey.Key != nil
+
+			// If we have a resumeKey, it means that we must have hit a resource
+			// constraint before exporting any data.
+			if hasResumeKey {
+				// If we hit our CPU limit we must return the response to the client
+				// instead of retrying immediately. This will give the scheduler a
+				// chance to move the goroutine off CPU allowing other processes to make
+				// progress. The client is responsible for handling pagination of
+				// ExportRequests.
+				if resumeInfo.CPUOverlimit {
+					// Note, since we have not exported any data we do not populate the
+					// `Files` field of the ExportResponse.
+					reply.ResumeSpan = &roachpb.Span{
+						Key:    resumeInfo.ResumeKey.Key,
+						EndKey: args.EndKey,
+					}
+					reply.ResumeReason = kvpb.RESUME_ELASTIC_CPU_LIMIT
+					break
+				} else {
+					// We should never come here. There should be no condition aside from
+					// resource constraints that results in an early exit without
+					// exporting any data. Regardless, if we have a resumeKey we
+					// immediately retry the ExportRequest from that key and timestamp
+					// onwards.
+					if !build.IsRelease() {
+						return result.Result{}, errors.AssertionFailedf("ExportRequest exited without " +
+							"exporting any data for an unknown reason; programming error")
+					}
+					start = resumeInfo.ResumeKey.Key
+					resumeKeyTS = resumeInfo.ResumeKey.Timestamp
+					continue
+				}
 			}
+			// If we do not have a resumeKey it indicates that there is no data to be
+			// exported in this span.
+			break
 		}
 
 		span := roachpb.Span{Key: start}
-		if resume.Key != nil {
-			span.EndKey = resume.Key
+		if resumeInfo.ResumeKey.Key != nil {
+			span.EndKey = resumeInfo.ResumeKey.Key
 		} else {
 			span.EndKey = args.EndKey
 		}
@@ -250,21 +281,39 @@ func evalExport(
 			// `Fingerprint` for point-keys and the SST file that contains the
 			// rangekeys we encountered during ExportRequest evaluation.
 			exported = kvpb.ExportResponse_File{
-				EndKeyTS:    resume.Timestamp,
+				EndKeyTS:    resumeInfo.ResumeKey.Timestamp,
 				SST:         data,
 				Fingerprint: fingerprint,
 			}
 		} else {
 			exported = kvpb.ExportResponse_File{
 				Span:     span,
-				EndKeyTS: resume.Timestamp,
+				EndKeyTS: resumeInfo.ResumeKey.Timestamp,
 				Exported: summary,
 				SST:      data,
 			}
 		}
 		reply.Files = append(reply.Files, exported)
-		start = resume.Key
-		resumeKeyTS = resume.Timestamp
+		start = resumeInfo.ResumeKey.Key
+		resumeKeyTS = resumeInfo.ResumeKey.Timestamp
+
+		// If we paginated because we are over our allotted CPU limit, we must break
+		// from command evaluation and return a response to the client before
+		// resuming our export from the resume key. This gives the scheduler a
+		// chance to take the current goroutine off CPU and allow other processes to
+		// progress.
+		if resumeInfo.CPUOverlimit {
+			if resumeInfo.ResumeKey.Key != nil {
+				reply.ResumeSpan = &roachpb.Span{
+					Key:    resumeInfo.ResumeKey.Key,
+					EndKey: args.EndKey,
+				}
+				// TODO(during review): Do we want to add another resume reason
+				// specifically for CPU preemption.
+				reply.ResumeReason = kvpb.RESUME_ELASTIC_CPU_LIMIT
+			}
+			break
+		}
 
 		if h.TargetBytes > 0 {
 			curSizeOfExportedSSTs += summary.DataSize
@@ -295,9 +344,9 @@ func evalExport(
 			// the next SST. In the worst case this could lead to us exceeding our
 			// TargetBytes by SST target size + overage.
 			if reply.NumBytes == h.TargetBytes {
-				if resume.Key != nil {
+				if resumeInfo.ResumeKey.Key != nil {
 					reply.ResumeSpan = &roachpb.Span{
-						Key:    resume.Key,
+						Key:    resumeInfo.ResumeKey.Key,
 						EndKey: args.EndKey,
 					}
 					reply.ResumeReason = kvpb.RESUME_BYTE_LIMIT

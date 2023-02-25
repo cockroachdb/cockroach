@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -191,46 +192,57 @@ func getAllDescChanges(
 	startKey := codec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 
-	allRevs, err := kvclient.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
-	if err != nil {
-		return nil, err
-	}
+	g := ctxgroup.WithContext(ctx)
+	allRevs := make(chan []kvclient.VersionedValues)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(allRevs)
+		return kvclient.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime, allRevs)
+	})
 
 	var res []backuppb.BackupManifest_DescriptorRevision
-
-	for _, revs := range allRevs {
-		id, err := codec.DecodeDescMetadataID(revs.Key)
-		if err != nil {
-			return nil, err
-		}
-		for _, rev := range revs.Values {
-			r := backuppb.BackupManifest_DescriptorRevision{ID: descpb.ID(id), Time: rev.Timestamp}
-			if len(rev.RawBytes) != 0 {
-				// We update the modification time for the descriptors here with the
-				// timestamp of the KV row so that we can identify the appropriate
-				// descriptors to use during restore.
-				// Note that the modification time of descriptors on disk is usually 0.
-				// See the comment on descpb.FromSerializedValue for more details.
-				b, err := descbuilder.FromSerializedValue(&rev)
+	g.GoCtx(func(ctx context.Context) error {
+		for revs := range allRevs {
+			for _, rev := range revs {
+				id, err := codec.DecodeDescMetadataID(rev.Key)
 				if err != nil {
-					return nil, err
+					return err
 				}
-				if b == nil {
-					continue
-				}
-				desc := b.BuildCreatedMutable()
-				r.Desc = desc.DescriptorProto()
-				// Collect the prior IDs of table descriptors, as the ID may have been
-				// changed during truncate prior to 20.2.
-				switch t := desc.(type) {
-				case *tabledesc.Mutable:
-					if priorIDs != nil && t.ReplacementOf.ID != descpb.InvalidID {
-						priorIDs[t.ID] = t.ReplacementOf.ID
+				for _, values := range rev.Values {
+					r := backuppb.BackupManifest_DescriptorRevision{ID: descpb.ID(id), Time: values.Timestamp}
+					if len(values.RawBytes) != 0 {
+						// We update the modification time for the descriptors here with the
+						// timestamp of the KV row so that we can identify the appropriate
+						// descriptors to use during restore.
+						// Note that the modification time of descriptors on disk is usually 0.
+						// See the comment on descpb.FromSerializedValue for more details.
+						b, err := descbuilder.FromSerializedValue(&values)
+						if err != nil {
+							return err
+						}
+						if b == nil {
+							continue
+						}
+						desc := b.BuildCreatedMutable()
+						r.Desc = desc.DescriptorProto()
+						// Collect the prior IDs of table descriptors, as the ID may have been
+						// changed during truncate prior to 20.2.
+						switch t := desc.(type) {
+						case *tabledesc.Mutable:
+							if priorIDs != nil && t.ReplacementOf.ID != descpb.InvalidID {
+								priorIDs[t.ID] = t.ReplacementOf.ID
+							}
+						}
 					}
+					res = append(res, r)
 				}
 			}
-			res = append(res, r)
 		}
+
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return res, nil
 }
