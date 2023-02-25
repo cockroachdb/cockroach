@@ -92,7 +92,8 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	if err != nil {
 		t.L().Printf("stdout:\n%v\n", det.Stdout)
 		t.L().Printf("stderr:\n%v\n", det.Stderr)
-		t.Fatal(err)
+		// N.B. we don't error here allowing for offline work, ie we assume file
+		// is downloaded already, if not we'll error below.
 	}
 	dur := timeutil.Since(start)
 	t.L().Printf("%v\n", det.Stdout)
@@ -132,11 +133,20 @@ func runCopyFromCRDB(
 	sf int,
 	fastPath, atomic bool,
 	vectorize string,
+	pebbleTweaks bool,
 ) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	clusterSettings := install.MakeClusterSettings()
 	clusterSettings.Env = append(clusterSettings.Env, "GODEBUG=gctrace=1,schedtrace=1000")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, c.All())
+
+	startOpts := option.DefaultStartOptsNoBackups()
+	// See:	https://github.com/cockroachdb/pebble/issues/2173
+	if pebbleTweaks {
+		clusterSettings.Env = append(clusterSettings.Env, "COCKROACH_ROCKSDB_CONCURRENCY=10")
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+			fmt.Sprintf(`--store={store-dir},pebble=[Options] l0_compaction_concurrency=3 mem_table_size=%d lbase_max_bytes=%d`, 512<<20, 1024<<20))
+	}
+	c.Start(ctx, t.L(), startOpts, clusterSettings, c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
@@ -185,22 +195,18 @@ func registerCopyFrom(r registry.Registry) {
 
 	for _, tc := range testcases {
 		tc := tc
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d/vectorize=%s", tc.sf, tc.nodes, tc.vectorize),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(tc.nodes),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf, true /*fastpath*/, true /*atomic*/, tc.vectorize)
-			},
-		})
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d/vectorize=%s", tc.sf, tc.nodes, tc.vectorize),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(tc.nodes),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf, true /*fastpath*/, false /*atomic*/, tc.vectorize)
-			},
-		})
+		for _, atomic := range []string{"atomic", "nonatomic"} {
+			for _, pebbleTweaks := range []string{"", "ex"} {
+				r.Add(registry.TestSpec{
+					Name:    fmt.Sprintf("copyfrom/crdb%s-%s/sf=%d/nodes=%d/vectorize=%s", pebbleTweaks, atomic, tc.sf, tc.nodes, tc.vectorize),
+					Owner:   registry.OwnerKV,
+					Cluster: r.MakeClusterSpec(tc.nodes),
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runCopyFromCRDB(ctx, t, c, tc.sf, true /*fastpath*/, atomic == "atomic" /*atomic*/, tc.vectorize, pebbleTweaks == "ex")
+					},
+				})
+			}
+		}
 	}
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", 1, 1),
