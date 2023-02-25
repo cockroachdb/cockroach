@@ -291,6 +291,10 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 	var indexesToDrop catid.IndexSet
 	var columnsToDrop catalog.TableColSet
 	tblElts := b.QueryByID(col.TableID).Filter(publicTargetFilter)
+	// Panic if `col` is referenced in a predicate of an index or
+	// unique without index constraint.
+	// TODO (xiang): Remove this restriction when #96924 is fixed.
+	panicIfColReferencedInPredicate(b, col, tblElts)
 	tblElts.
 		Filter(referencesColumnIDFilter(col.ColumnID)).
 		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
@@ -310,6 +314,8 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			case *scpb.SequenceOwner:
 				fn(e)
 				sequencesToDrop.Add(elt.SequenceID)
+			case *scpb.SecondaryIndex:
+				indexesToDrop.Add(elt.IndexID)
 			case *scpb.SecondaryIndexPartial:
 				indexesToDrop.Add(elt.IndexID)
 			case *scpb.IndexColumn:
@@ -363,6 +369,48 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			}
 		}
 	})
+}
+
+// panicIfColReferencedInPredicate is a temporary fix that disallow dropping a
+// column that is referenced in predicate of a partial index or unique without index.
+// This restriction shall be lifted once #96924 is fixed.
+func panicIfColReferencedInPredicate(b BuildCtx, col *scpb.Column, tblElts ElementResultSet) {
+	contains := func(container []catid.ColumnID, target catid.ColumnID) bool {
+		for _, elem := range container {
+			if elem == target {
+				return true
+			}
+		}
+		return false
+	}
+
+	var violatingIndex catid.IndexID
+	var violatingUWI catid.ConstraintID
+	tblElts.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		if violatingIndex != 0 || violatingUWI != 0 {
+			return
+		}
+		switch elt := e.(type) {
+		case *scpb.SecondaryIndexPartial:
+			if contains(elt.ReferencedColumnIDs, col.ColumnID) {
+				violatingIndex = elt.IndexID
+			}
+		case *scpb.UniqueWithoutIndexConstraint:
+			if elt.Predicate != nil && contains(elt.Predicate.ReferencedColumnIDs, col.ColumnID) {
+				violatingUWI = elt.ConstraintID
+			}
+		}
+	})
+	if violatingIndex != 0 {
+		colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
+		indexNameElem := mustRetrieveIndexNameElem(b, col.TableID, violatingIndex)
+		panic(sqlerrors.NewColumnReferencedByPartialIndex(colNameElem.Name, indexNameElem.Name))
+	}
+	if violatingUWI != 0 {
+		colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
+		uwiNameElem := mustRetrieveConstraintWithoutIndexNameElem(b, col.TableID, violatingUWI)
+		panic(sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(colNameElem.Name, uwiNameElem.Name))
+	}
 }
 
 func handleDropColumnPrimaryIndexes(

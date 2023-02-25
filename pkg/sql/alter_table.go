@@ -1740,7 +1740,7 @@ func dropColumnImpl(
 
 		// If the column being dropped is referenced in the partial
 		// index predicate, then the index should be dropped.
-		if !containsThisColumn && idx.IsPartial() {
+		if idx.IsPartial() {
 			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return nil, err
@@ -1753,6 +1753,7 @@ func dropColumnImpl(
 
 			if colIDs.Contains(colToDrop.GetID()) {
 				containsThisColumn = true
+				return nil, sqlerrors.NewColumnReferencedByPartialIndex(string(colToDrop.ColName()), idx.GetName())
 			}
 		}
 
@@ -1783,6 +1784,25 @@ func dropColumnImpl(
 		constraint := &tableDesc.UniqueWithoutIndexConstraints[i]
 		tableDesc.UniqueWithoutIndexConstraints[sliceIdx] = *constraint
 		sliceIdx++
+
+		// Temporarily disallow dropping a column that is referenced in the
+		// predicate of a UWI constraint. Lift when #96924 is fixed.
+		if constraint.IsPartial() {
+			expr, err := parser.ParseExpr(constraint.Predicate)
+			if err != nil {
+				return nil, err
+			}
+
+			colIDs, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
+			if err != nil {
+				return nil, err
+			}
+
+			if colIDs.Contains(colToDrop.GetID()) {
+				return nil, sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(string(colToDrop.ColName()), constraint.GetName())
+			}
+		}
+
 		if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.GetID()) {
 			sliceIdx--
 
