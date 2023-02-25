@@ -513,10 +513,14 @@ func init() {
 			// Engine flags.
 			cliflagcfg.VarFlag(f, &startCtx.cacheSizeValue, cliflags.Cache)
 			cliflagcfg.VarFlag(f, &startCtx.sqlSizeValue, cliflags.SQLMem)
+			// N.B. goMemLimitValue.Resolve() will be called after the
+			// max-go-memory flag has been parsed and --max-sql-memory and
+			// --cache values are known.
+			cliflagcfg.VarFlag(f, &startCtx.goMemLimitValue, cliflags.GoMemLimit)
 			cliflagcfg.VarFlag(f, &startCtx.tsdbSizeValue, cliflags.TSDBMem)
-			// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
-			// the stores flag has been parsed and the storage device that a percentage
-			// refers to becomes known.
+			// N.B. diskTempStorageSizeValue.Resolve() will be called after the
+			// stores flag has been parsed and the storage device that a
+			// percentage refers to becomes known.
 			cliflagcfg.VarFlag(f, &startCtx.diskTempStorageSizeValue, cliflags.SQLTempStorage)
 			cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
 			cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)

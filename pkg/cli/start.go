@@ -21,6 +21,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -536,6 +537,70 @@ func runStartInternal(
 
 	// Now perform additional configuration tweaks specific to the start
 	// command.
+
+	// Set the soft memory limit on the Go runtime.
+	if err := func() error {
+		var goMemLimit int64
+		if err := startCtx.goMemLimitValue.Resolve(&goMemLimit, memoryPercentResolver); err != nil {
+			err = errors.WithHint(err, "couldn't resolve --max-go-memory flag")
+			return err
+		}
+		if startCtx.goMemLimitValue.IsSet() {
+			if goMemLimit < 0 {
+				return errors.New("--max-go-memory must be non-negative")
+			}
+		} else {
+			if _, envVarSet := os.LookupEnv("GOMEMLIMIT"); envVarSet {
+				// When --max-go-memory is not specified, but the env var is
+				// set, we don't change it.
+				return nil
+			}
+			// --max-go-memory wasn't specified, so we default to 2.25x of
+			// --max-sql-memory (subject to --max-go-memory + 1.15x --cache not
+			// exceeding 90% of available RAM).
+			if sysMem, err := status.GetTotalMemory(ctx); err == nil {
+				// The rationale for this formula is as follows:
+				// - we don't want for the estimated max memory usage to exceed
+				// 90% of the available RAM to prevent the OOMs
+				// - Go runtime doesn't control the pebble cache, so we need to
+				// subtract it
+				// - anecdotally, the pebble cache can have some slop over its
+				// target size (perhaps, due to memory fragmentation), so we
+				// adjust the footprint of the cache by 15%.
+				maxGoMemLimit := int64(0.9*float64(sysMem) - 1.15*float64(serverCfg.CacheSize))
+				if maxGoMemLimit < 0 {
+					maxGoMemLimit = 0
+				}
+				// Since not every memory allocation is registered with the
+				// memory accounting system of CRDB, we need to give it some
+				// room to prevent Go GC being too aggressive to stay under the
+				// GOMEMLIMIT. The default multiple of 2.25x over the memory
+				// pool size should give enough room for those unaccounted for
+				// allocations.
+				goMemLimit = int64(2.25 * float64(serverCfg.MemoryPoolSize))
+				if goMemLimit > maxGoMemLimit {
+					log.Ops.Shoutf(
+						ctx, severity.WARNING, "recommended default value of "+
+							"--max-go-memory (%s) was truncated to %s, consider reducing "+
+							"--max-sql-memory and / or --cache",
+						humanizeutil.IBytes(goMemLimit), humanizeutil.IBytes(maxGoMemLimit),
+					)
+					goMemLimit = maxGoMemLimit
+				}
+			}
+		}
+		if goMemLimit == 0 {
+			// Value of 0 indicates that the soft memory limit should be
+			// disabled.
+			goMemLimit = math.MaxInt64
+		} else {
+			log.Ops.Infof(ctx, "soft memory limit of Go runtime is set to %s", humanizeutil.IBytes(goMemLimit))
+		}
+		debug.SetMemoryLimit(goMemLimit)
+		return nil
+	}(); err != nil {
+		return err
+	}
 
 	// Initialize the node's configuration from startup parameters.
 	// This also reads the part of the configuration that comes from
@@ -1232,6 +1297,8 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
 		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize + serverCfg.TimeSeriesServerConfig.QueryMemoryMax
+		// TODO(yuzefovich): we might want to adjust this warning higher now
+		// that GOMEMLIMIT is used.
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Ops.Shoutf(ctx, severity.WARNING,
