@@ -397,3 +397,27 @@ SELECT * FROM pg_temp.t
 statement ok
 USE defaultdb;
 DROP DATABASE to_drop CASCADE;
+
+subtest end
+
+subtest temp_table_in_other_session
+
+user testuser
+
+statement ok
+USE defaultdb;
+CREATE TEMPORARY TABLE from_other_session(i INT PRIMARY KEY)
+
+user root
+
+statement ok
+USE defaultdb
+
+query TT
+SELECT c.relname, a.attname FROM pg_attribute a
+INNER LOOKUP JOIN pg_class c ON c.oid = a.attrelid
+WHERE c.relname = 'from_other_session'
+----
+from_other_session  i
+
+subtest end

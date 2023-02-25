@@ -1142,9 +1142,21 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, table.GetParentSchemaID())
-					if err != nil {
-						return false, err
+					var sc catalog.SchemaDescriptor
+					if table.IsTemporary() {
+						// Temp tables from other sessions should still be visible here.
+						_ = forEachSchema(ctx, p, db, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
+							if schema.GetID() == table.GetParentSchemaID() {
+								sc = schema
+							}
+							return nil
+						})
+					}
+					if sc == nil {
+						sc, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, table.GetParentSchemaID())
+						if err != nil {
+							return false, err
+						}
 					}
 					if err := populateFromTable(ctx, p, h, db, sc, table, scResolver,
 						addRow); err != nil {
