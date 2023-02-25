@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -189,6 +190,67 @@ func TestMemoryPoolFlagValues(t *testing.T) {
 				if *tc.config < expectedLow || *tc.config > expectedHigh {
 					t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, *tc.config)
 				}
+			}
+		})
+	}
+}
+
+func TestGetDefaultGoMemLimitValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	maxMem, err := status.GetTotalMemory(context.Background())
+	if err != nil {
+		t.Logf("total memory unknown: %v", err)
+		return
+	}
+	if maxMem < 1<<30 /* 1GiB */ {
+		// The test assumes that it is running on a machine with at least 1GiB
+		// of RAM.
+		skip.IgnoreLint(t)
+	}
+
+	for i, tc := range []struct {
+		maxSQLMemory string
+		cache        string
+		expected     int64
+	}{
+		{
+			maxSQLMemory: "100MiB",
+			cache:        "100MiB",
+			// The default calculation says 225MiB which is smaller than the
+			// lower bound, so we use the latter.
+			expected: minDefaultGoMemLimit,
+		},
+		{
+			maxSQLMemory: "200MiB",
+			cache:        "100MiB",
+			// The default 2.25x of --max-sql-memory.
+			expected: 450 << 20, /* 450MiB */
+		},
+		{
+			maxSQLMemory: "200MiB",
+			cache:        ".8",
+			// --cache is set too high so that we truncate to the lower bound.
+			expected: minDefaultGoMemLimit,
+		},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			// Avoid leaking configuration changes after the test ends.
+			defer initCLIDefaults()
+
+			f := startCmd.Flags()
+
+			args := []string{
+				"--max-sql-memory", tc.maxSQLMemory,
+				"--cache", tc.cache,
+			}
+			if err := f.Parse(args); err != nil {
+				t.Fatal(err)
+			}
+			limit := getDefaultGoMemLimit(context.Background())
+			if tc.expected != limit {
+				t.Errorf("expected %d, but got %d", tc.expected, limit)
 			}
 		})
 	}
