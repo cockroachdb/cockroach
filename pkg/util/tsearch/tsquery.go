@@ -365,32 +365,17 @@ func (p *tsQueryParser) parseTSExpr(minBindingPower int) (*tsNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		t, ok := p.nextTerm()
-		if !ok || t.operator != rparen {
+		nextTerm, ok := p.nextTerm()
+		if !ok || nextTerm.operator != rparen {
 			return p.syntaxError()
 		}
 		lExpr = expr
 	case not:
-		t, ok := p.nextTerm()
-		if !ok {
-			return p.syntaxError()
+		expr, err := p.parseTSExpr(t.operator.precedence())
+		if err != nil {
+			return nil, err
 		}
-		switch t.operator {
-		case invalid:
-			lExpr = &tsNode{op: not, l: &tsNode{term: *t}}
-		case lparen:
-			expr, err := p.parseTSExpr(0)
-			if err != nil {
-				return nil, err
-			}
-			lExpr = &tsNode{op: not, l: expr}
-			t, ok := p.nextTerm()
-			if !ok || t.operator != rparen {
-				return p.syntaxError()
-			}
-		default:
-			return p.syntaxError()
-		}
+		lExpr = &tsNode{op: not, l: expr}
 	default:
 		return p.syntaxError()
 	}
