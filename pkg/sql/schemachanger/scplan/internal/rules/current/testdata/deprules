@@ -3128,7 +3128,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - toAbsent($secondary-partial-index-Target, $column-Target)
-    - $secondary-partial-index-Node[CurrentStatus] = DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
@@ -3143,7 +3143,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - transient($secondary-partial-index-Target, $column-Target)
-    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
@@ -3158,7 +3158,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
@@ -3174,7 +3174,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = ABSENT
-    - $secondary-partial-index-Node[CurrentStatus] = DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = ABSENT
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
@@ -6462,7 +6462,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - toAbsent($secondary-partial-index-Target, $column-Target)
-    - $secondary-partial-index-Node[CurrentStatus] = DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
@@ -6477,7 +6477,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - transient($secondary-partial-index-Target, $column-Target)
-    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
@@ -6492,7 +6492,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
@@ -6508,7 +6508,7 @@ deprules
     - descriptorIsNotBeingDropped-23.1($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = ABSENT
-    - $secondary-partial-index-Node[CurrentStatus] = DELETE_ONLY
+    - $secondary-partial-index-Node[CurrentStatus] = ABSENT
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($secondary-partial-index, $secondary-partial-index-Target, $secondary-partial-index-Node)
