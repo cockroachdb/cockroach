@@ -152,7 +152,7 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 			for _, numRevision := range numRevisions {
 				b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
 					for _, numRangeKey := range numRangeKeys {
-						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKey), func(b *testing.B) {
 							for _, perc := range []int{100, 50, 10} {
 								if numRevision == 1 && perc != 100 {
 									continue // no point in incremental exports with 1 revision
@@ -1666,7 +1666,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	it.SeekGE(MakeMVCCMetadataKey(roachpb.LocalMax))
 	require.NoError(b, err)
 	var n int // points
-	var r int // range key stacks
+	var r int // range keys (within stacks)
 	for {
 		ok, err := it.Valid()
 		require.NoError(b, err)
@@ -1678,7 +1678,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			n++
 		}
 		if hasRange && it.RangeKeyChanged() {
-			r++
+			r += it.RangeKeys().Len()
 		}
 		it.Next()
 	}
@@ -1686,7 +1686,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	// Should not see any rangedel stacks if startTS is set.
 	if opts.numRangeKeys > 0 && startWall == 0 && opts.exportAllRevisions {
 		require.NotZero(b, r)
-		require.LessOrEqual(b, r, opts.numRangeKeys)
+		require.GreaterOrEqual(b, r, opts.numRangeKeys)
 	} else {
 		require.Zero(b, r)
 	}
