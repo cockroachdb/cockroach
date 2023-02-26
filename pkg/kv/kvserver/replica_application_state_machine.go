@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/raft/v3"
 )
@@ -150,6 +151,26 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	return b
 }
 
+func formatReplicatedCmd(cmd *replicatedCmd) redact.RedactableString {
+	var buf redact.StringBuilder
+	// We need to zero various data structures that would otherwise
+	// cause panics in `pretty.Sprint`.
+	var pd ProposalData
+	if cmd.proposal != nil {
+		pd = *cmd.proposal
+		pd.ctx = nil
+		pd.sp = nil
+		pd.command.TraceData = nil
+		pd.quotaAlloc = nil
+		pd.tok = TrackedRequestToken{}
+		pd.ec = endCmds{}
+	}
+
+	// NB: this redacts very poorly, but this is considered acceptable for now.
+	redact.Fprintf(&buf, "cmd:%s\n\nproposal: %s", pretty.Sprint(cmd.ReplicatedCmd), pretty.Sprint(pd))
+	return buf.RedactableString()
+}
+
 // ApplySideEffects implements the apply.StateMachine interface. The method
 // handles the third phase of applying a command to the replica state machine.
 //
@@ -223,30 +244,21 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
-		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
-			// If the command wasn't rejected, we just applied it and no higher
-			// reproposal must exist (since that one may also apply).
-			//
-			// If the command was rejected with ProposalRejectionPermanent, no higher
-			// reproposal should exist (after all, whoever made that reproposal should
-			// also have seen a permanent rejection).
-			//
-			// If it was rejected with ProposalRejectionIllegalLeaseIndex, then the
-			// subsequent call to tryReproposeWithNewLeaseIndex[^1] must have returned an
-			// error (or the proposal would not be IsLocal() now). But that call
-			// cannot return an error for a proposal that is already superseded
-			// initially.
-			//
-			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index: %+v", cmd)
-		}
-		if !cmd.Rejected() && cmd.proposal.applied {
-			// If the command already applied then we shouldn't be "finishing" its
-			// application again because it should only be able to apply successfully
-			// once. We expect that when any reproposal for the same command attempts
-			// to apply it will be rejected by the below raft lease sequence or lease
-			// index check in checkForcedErr.
-			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
+		if !cmd.Rejected() {
+			if cmd.proposal.applied {
+				// If the command already applied then we shouldn't be "finishing" its
+				// application again because it should only be able to apply successfully
+				// once. We expect that when any reproposal for the same command attempts
+				// to apply it will be rejected by the below raft lease sequence or lease
+				// index check in checkForcedErr.
+				log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
+			}
+			if cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex) {
+				// If an entry is superseded but it wasn't rejected, something is wrong.
+				// The superseding reproposal could apply as well, leading to doubly applying
+				// a command.
+				log.Fatalf(ctx, "applying superseded proposal: %s", formatReplicatedCmd(cmd))
+			}
 		}
 		cmd.proposal.applied = true
 	}
