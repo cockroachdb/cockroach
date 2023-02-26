@@ -4096,6 +4096,79 @@ func MVCCIterate(
 	return intents, nil
 }
 
+// MVCCPaginate iteratively invokes f() with the current maxKeys and
+// targetBytes limits. If f returns iterutil.StopIteration (meaning that we
+// have iterated through all elements), the iteration stops with no error
+// propagated. If f returns any other error, the iteration stops and the error
+// is propagated. If the number of keys hits the maxKeys limit or the number of
+// bytes hits the targetBytes limit, the iteration stops with no error
+// propagated but with the appropriate resume reason returned. f returns a
+// resumeReason, which if set, will assert that the number of keys / bytes hit
+// the key / byte limit matching the resumeReason. Moreover, if resumeReason is
+// RESUME_BYTE_LIMIT and allowEmpty is true, then the iteration stops with no
+// error propagated but with the RESUME_BYTE_LIMIT resume reason returned.
+//
+// We note that it is up to f() whether it wants to allow the numBytes to
+// exceed targetBytes by up to one entry or whether it wants to terminate
+// iteration before numBytes exceeds targetBytes. See the AllowEmpty option.
+func MVCCPaginate(
+	ctx context.Context,
+	maxKeys, targetBytes int64,
+	allowEmpty bool,
+	f func(maxKeys, targetBytes int64) (numKeys, numBytes int64, resumeReason kvpb.ResumeReason, err error),
+) (numKeys, numBytes int64, resumeReason kvpb.ResumeReason, err error) {
+	for {
+		if maxKeys < 0 {
+			return numKeys, numBytes, kvpb.RESUME_KEY_LIMIT, nil
+		}
+		if targetBytes < 0 {
+			return numKeys, numBytes, kvpb.RESUME_BYTE_LIMIT, nil
+		}
+		addedKeys, addedBytes, resumeReason, err := f(maxKeys, targetBytes)
+		if err != nil {
+			if addedKeys != 0 || addedBytes != 0 || resumeReason != 0 {
+				log.Fatalf(ctx,
+					"addedKeys, addedBytes, and resumeReason should all be 0, but got addedKeys=%d, addedBytes=%d, resumeReason=%d",
+					addedKeys, addedBytes, resumeReason)
+			}
+			err = iterutil.Map(err)
+			return numKeys, numBytes, 0, err
+		}
+		numKeys += addedKeys
+		numBytes += addedBytes
+		if maxKeys > 0 {
+			if addedKeys > maxKeys {
+				log.Fatalf(ctx, "added %d keys, which exceeds the max key limit %d", addedKeys, maxKeys)
+			} else if addedKeys < maxKeys {
+				maxKeys -= addedKeys
+			} else {
+				maxKeys = -1
+			}
+		}
+		if targetBytes > 0 {
+			if addedBytes < targetBytes {
+				targetBytes -= addedBytes
+			} else {
+				targetBytes = -1
+			}
+		}
+		switch resumeReason {
+		case kvpb.RESUME_KEY_LIMIT:
+			if maxKeys >= 0 {
+				log.Fatalf(ctx, "Resume reason RESUME_KEY_LIMIT, but key limit = %d has not been hit", maxKeys)
+			}
+		case kvpb.RESUME_BYTE_LIMIT:
+			if !allowEmpty && targetBytes >= 0 {
+				log.Fatalf(ctx, "Resume reason RESUME_BYTE_LIMIT, but byte limit = %d has not been hit", targetBytes)
+			}
+			targetBytes = -1
+		case 0:
+		default:
+			log.Fatalf(ctx, "Resume reason must be RESUME_KEY_LIMIT, RESUME_BYTE_LIMIT, or 0, got resumeReason = %d", resumeReason)
+		}
+	}
+}
+
 // MVCCResolveWriteIntent either commits, aborts (rolls back), or moves forward
 // in time an extant write intent for a given txn according to commit
 // parameter. ResolveWriteIntent will skip write intents of other txns.
