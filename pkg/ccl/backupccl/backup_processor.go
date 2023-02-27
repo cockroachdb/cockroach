@@ -231,10 +231,11 @@ type spanAndTime struct {
 	lastTried  time.Time
 }
 
-type exportedSpan struct {
-	metadata       backuppb.BackupManifest_File
+type returnedSST struct {
+	f              backuppb.BackupManifest_File
 	dataSST        []byte
 	revStart       hlc.Timestamp
+	endKeyTS       hlc.Timestamp
 	completedSpans int32
 	atKeyBoundary  bool
 }
@@ -302,7 +303,7 @@ func runBackupProcessor(
 		return err
 	}
 
-	returnedSpansChan := make(chan exportedSpan, 1)
+	returnedSpansChan := make(chan returnedSST, 1)
 
 	grp := ctxgroup.WithContext(ctx)
 	// Start a goroutine that will then start a group of goroutines which each
@@ -491,21 +492,23 @@ func runBackupProcessor(
 						for i, file := range resp.Files {
 							entryCounts := countRows(file.Exported, spec.PKIDs)
 
-							ret := exportedSpan{
+							ret := returnedSST{
 								// BackupManifest_File just happens to contain the exact fields
 								// to store the metadata we need, but there's no actual File
 								// on-disk anywhere yet.
-								metadata: backuppb.BackupManifest_File{
+								f: backuppb.BackupManifest_File{
 									Span:        file.Span,
 									Path:        file.Path,
 									EntryCounts: entryCounts,
 								},
 								dataSST:       file.SST,
 								revStart:      resp.StartTime,
-								atKeyBoundary: file.EndKeyTS.IsEmpty()}
+								endKeyTS:      file.EndKeyTS,
+								atKeyBoundary: file.EndKeyTS.IsEmpty(),
+							}
 							if span.start != spec.BackupStartTime {
-								ret.metadata.StartTime = span.start
-								ret.metadata.EndTime = span.end
+								ret.f.StartTime = span.start
+								ret.f.EndTime = span.end
 							}
 							// If multiple files were returned for this span, only one -- the
 							// last -- should count as completing the requested span.
@@ -564,7 +567,7 @@ func runBackupProcessor(
 		}()
 
 		for returnedSpans := range returnedSpansChan {
-			returnedSpans.metadata.LocalityKV = destLocalityKV
+			returnedSpans.f.LocalityKV = destLocalityKV
 			if err := sink.push(ctx, returnedSpans); err != nil {
 				return err
 			}
