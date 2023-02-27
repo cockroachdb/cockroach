@@ -2373,6 +2373,10 @@ var builtinOidsArray = []string{
 	2399: `to_tsvector(text: string) -> tsvector`,
 	2400: `phraseto_tsquery(text: string) -> tsquery`,
 	2401: `plainto_tsquery(text: string) -> tsquery`,
+	2402: `ts_rank(weights: float[], vector: tsvector, query: tsquery, normalization: int) -> float4`,
+	2403: `ts_rank(vector: tsvector, query: tsquery, normalization: int) -> float4`,
+	2404: `ts_rank(vector: tsvector, query: tsquery) -> float4`,
+	2405: `ts_rank(weights: float[], vector: tsvector, query: tsquery) -> float4`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

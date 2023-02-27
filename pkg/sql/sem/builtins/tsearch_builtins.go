@@ -231,4 +231,117 @@ var tsearchBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Stable,
 		},
 	),
+	"ts_rank": makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "weights", Typ: types.FloatArray},
+				{Name: "vector", Typ: types.TSVector},
+				{Name: "query", Typ: types.TSQuery},
+				{Name: "normalization", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Float4),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				weights, err := getWeights(tree.MustBeDArray(args[0]))
+				if err != nil {
+					return nil, err
+				}
+				rank, err := tsearch.Rank(
+					weights,
+					tree.MustBeDTSVector(args[1]).TSVector,
+					tree.MustBeDTSQuery(args[2]).TSQuery,
+					int(tree.MustBeDInt(args[3])),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(rank)), nil
+			},
+			Info:       "Ranks vectors based on the frequency of their matching lexemes.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "weights", Typ: types.FloatArray},
+				{Name: "vector", Typ: types.TSVector},
+				{Name: "query", Typ: types.TSQuery},
+			},
+			ReturnType: tree.FixedReturnType(types.Float4),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				weights, err := getWeights(tree.MustBeDArray(args[0]))
+				if err != nil {
+					return nil, err
+				}
+				rank, err := tsearch.Rank(
+					weights,
+					tree.MustBeDTSVector(args[1]).TSVector,
+					tree.MustBeDTSQuery(args[2]).TSQuery,
+					0,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(rank)), nil
+			},
+			Info:       "Ranks vectors based on the frequency of their matching lexemes.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "vector", Typ: types.TSVector},
+				{Name: "query", Typ: types.TSQuery},
+				{Name: "normalization", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Float4),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				rank, err := tsearch.Rank(
+					nil, /* weights */
+					tree.MustBeDTSVector(args[0]).TSVector,
+					tree.MustBeDTSQuery(args[1]).TSQuery,
+					int(tree.MustBeDInt(args[2])),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(rank)), nil
+			},
+			Info:       "Ranks vectors based on the frequency of their matching lexemes.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "vector", Typ: types.TSVector},
+				{Name: "query", Typ: types.TSQuery},
+			},
+			ReturnType: tree.FixedReturnType(types.Float4),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				rank, err := tsearch.Rank(
+					nil, /* weights */
+					tree.MustBeDTSVector(args[0]).TSVector,
+					tree.MustBeDTSQuery(args[1]).TSQuery,
+					0, /* method */
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(rank)), nil
+			},
+			Info:       "Ranks vectors based on the frequency of their matching lexemes.",
+			Volatility: volatility.Immutable,
+		},
+	),
+}
+
+func getWeights(arr *tree.DArray) ([]float32, error) {
+	ret := make([]float32, 4)
+	if arr.Len() < len(ret) {
+		return ret, pgerror.New(pgcode.ArraySubscript, "array of weight is too short (must be at least 4)")
+	}
+	for i, d := range arr.Array {
+		if d == tree.DNull {
+			return ret, pgerror.New(pgcode.NullValueNotAllowed, "array of weight must not contain null")
+		}
+		ret[i] = float32(tree.MustBeDFloat(d))
+	}
+	return ret, nil
 }
