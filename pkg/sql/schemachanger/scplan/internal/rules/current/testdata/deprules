@@ -1547,7 +1547,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - toAbsent($column-constraint-Target, $column-Target)
@@ -1560,7 +1560,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - transient($column-constraint-Target, $column-Target)
@@ -1573,7 +1573,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - $column-constraint-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -1587,7 +1587,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - $column-constraint-Target[TargetStatus] = ABSENT
@@ -4895,7 +4895,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - toAbsent($column-constraint-Target, $column-Target)
@@ -4908,7 +4908,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - transient($column-constraint-Target, $column-Target)
@@ -4921,7 +4921,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - $column-constraint-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -4935,7 +4935,7 @@ deprules
   kind: SameStagePrecedence
   to: column-Node
   query:
-    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - $column-constraint-Target[TargetStatus] = ABSENT
