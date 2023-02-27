@@ -499,12 +499,13 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 				}
 				tokens = append(tokens, term)
 			}
-			lexeme, ok, err := TSLexize(config, lexemeTokens[j])
+			lexeme, stopWord, err := TSLexize(config, lexemeTokens[j])
 			if err != nil {
 				return TSQuery{}, err
 			}
-			if !ok {
+			if stopWord {
 				foundStopwords = true
+				//continue
 			}
 			tokens = append(tokens, tsTerm{lexeme: lexeme, positions: tok.positions})
 		}
@@ -518,17 +519,20 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 	}
 
 	if foundStopwords {
-		return cleanupStopwords(query)
+		query = cleanupStopwords(query)
+		if query.root == nil {
+			return query, pgerror.Newf(pgcode.Syntax, "text-search query doesn't contain lexemes: %s", input)
+		}
 	}
-	return query, nil
+	return query, err
 }
 
-func cleanupStopwords(query TSQuery) (TSQuery, error) {
+func cleanupStopwords(query TSQuery) TSQuery {
 	query.root, _, _ = cleanupStopword(query.root)
 	if query.root == nil {
-		return TSQuery{}, nil
+		return TSQuery{}
 	}
-	return query, nil
+	return query
 }
 
 // cleanupStopword cleans up a query tree by removing stop words and adjusting
