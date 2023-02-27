@@ -166,6 +166,12 @@ const (
 	// cluster.
 	CanAdminSplit // can_admin_split
 
+	// CanAdminUnsplit describes the ability of a tenant to perform manual
+	// KV range unsplit requests. These operations need a capability
+	// because excessive KV range unsplits can overwhelm the storage
+	// cluster.
+	CanAdminUnsplit // can_admin_unsplit
+
 	// CanViewNodeInfo describes the ability of a tenant to read the
 	// metadata for KV nodes. These operations need a capability because
 	// the KV node record contains sensitive operational data which we
@@ -215,10 +221,14 @@ const (
 // CapabilityType returns the type of a given capability.
 func (c CapabilityID) CapabilityType() Type {
 	switch c {
-	case CanAdminSplit, CanViewNodeInfo, CanViewTSDBMetrics:
+	case
+		CanAdminSplit,
+		CanAdminUnsplit,
+		CanViewNodeInfo,
+		CanViewTSDBMetrics:
 		return Bool
 
 	default:
-		panic(errors.AssertionFailedf("missing case: %d", c))
+		panic(errors.AssertionFailedf("missing case: %q", c))
 	}
 }
