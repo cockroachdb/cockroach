@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -151,43 +150,6 @@ SELECT nextval(105:::REGCLASS);`,
 		return nil
 	})
 	require.NoError(t, err)
-}
-
-func TestGatingCreateFunction(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
-
-	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SchemaChangeSupportsCreateFunction),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		_, err := sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
-		require.NoError(t, err)
-	})
-
-	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SchemaChangeSupportsCreateFunction - 1),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		_, err := sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
-		require.Error(t, err)
-		require.Equal(t, "pq: cannot run CREATE FUNCTION before system is fully upgraded to v22.2", err.Error())
-	})
 }
 
 func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
