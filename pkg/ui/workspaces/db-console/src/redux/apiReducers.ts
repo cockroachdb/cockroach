@@ -558,7 +558,9 @@ export interface APIReducersState {
   statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
-  clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
+  clusterLocks: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.ClusterLocksResponse>
+  >;
   stmtInsights: CachedDataReducerState<
     clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
