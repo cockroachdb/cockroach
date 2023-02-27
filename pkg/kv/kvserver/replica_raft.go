@@ -189,7 +189,7 @@ func (r *Replica) evalAndPropose(
 	// return a proposal result immediately on the proposal's done channel.
 	// The channel's capacity will be large enough to accommodate this.
 	if ba.AsyncConsensus {
-		if ets := proposal.Local.DetachEndTxns(false /* alwaysOnly */); len(ets) != 0 {
+		if ets := proposal.Local.EndTxns; len(ets) != 0 {
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
