@@ -1555,6 +1555,14 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
+		// We also disable stats forecasts to have deterministic tests. See #97003
+		// for details.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.stats.forecasts.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		// Update the default AS OF time for querying the system.table_statistics
 		// table to create the crdb_internal.table_row_statistics table.
 		if _, err := conn.Exec(
