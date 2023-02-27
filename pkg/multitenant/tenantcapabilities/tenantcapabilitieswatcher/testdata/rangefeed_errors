@@ -25,9 +25,9 @@ ok
 updates
 ----
 Incremental Update
-update: ten=10 cap={can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
-update: ten=11 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
-update: ten=12 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=10 cap={can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=11 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=12 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 inject-error
 ----
@@ -56,9 +56,9 @@ updates
 
 flush-state
 ----
-ten=10 cap={can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
-ten=11 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
-ten=12 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=10 cap={can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=11 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=12 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 get-capabilities ten=50
 ----
@@ -66,11 +66,11 @@ not-found
 
 get-capabilities ten=12
 ----
-{can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
+{can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 get-capabilities ten=10
 ----
-{can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
+{can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 # Let the Watcher attempt to restart.
 restart-after-injected-error
@@ -82,23 +82,23 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
-update: ten=12 cap={can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
-update: ten=50 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=11 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=12 cap={can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=50 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 flush-state
 ----
-ten=11 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
-ten=12 cap={can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
-ten=50 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=11 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=12 cap={can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=50 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 get-capabilities ten=50
 ----
-{can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
+{can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 get-capabilities ten=12
 ----
-{can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
+{can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 get-capabilities ten=10
 ----

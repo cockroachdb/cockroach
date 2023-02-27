@@ -118,7 +118,8 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.Scan:               noCapCheckNeeded,
 
 	// The following are authorized via specific capabilities.
-	kvpb.AdminSplit: tenantcapabilities.CanAdminSplit,
+	kvpb.AdminSplit:   tenantcapabilities.CanAdminSplit,
+	kvpb.AdminUnsplit: tenantcapabilities.CanAdminUnsplit,
 
 	// TODO(ecwall): The following should also be authorized via specific capabilities.
 	kvpb.AdminChangeReplicas: noCapCheckNeeded,
@@ -126,7 +127,6 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.AdminRelocateRange:  noCapCheckNeeded,
 	kvpb.AdminScatter:        noCapCheckNeeded,
 	kvpb.AdminTransferLease:  noCapCheckNeeded,
-	kvpb.AdminUnsplit:        noCapCheckNeeded,
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
