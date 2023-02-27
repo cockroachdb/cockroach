@@ -148,6 +148,8 @@ func optimizePuts(
 // evaluateBatch evaluates a batch request by splitting it up into its
 // individual commands, passing them to evaluateCommand, and combining
 // the results.
+//
+// evaluateBatch is called both on the read-only and read-write path.
 func evaluateBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,

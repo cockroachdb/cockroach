@@ -439,7 +439,7 @@ func (r *Replica) evaluateWriteBatch(
 	defer releaseMVCCStats(ms)
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
 	defer rec.Release()
-	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
+	batch, br, res, pErr := r.evaluateReadWriteBatchWithServersideRefreshes(
 		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */)
 	return batch, *ms, br, res, pErr
 }
@@ -520,10 +520,10 @@ func (r *Replica) evaluate1PC(
 	ms := newMVCCStats()
 	defer releaseMVCCStats(ms)
 	if ba.CanForwardReadTimestamp {
-		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
+		batch, br, res, pErr = r.evaluateReadWriteBatchWithServersideRefreshes(
 			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline)
 	} else {
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
+		batch, br, res, pErr = r.evaluateReadWriteBatchWrapper(
 			ctx, idKey, rec, ms, &strippedBa, g, st, ui)
 	}
 
@@ -610,14 +610,14 @@ func (r *Replica) evaluate1PC(
 	}
 }
 
-// evaluateWriteBatchWithServersideRefreshes invokes evaluateBatch and retries
-// at a higher timestamp in the event of some retriable errors if allowed by the
-// batch/txn.
+// evaluateReadWriteBatchWithServersideRefreshes invokes
+// evaluateReadWriteBatchWrapper and retries at a higher timestamp in the event
+// of some retriable errors if allowed by the batch/txn.
 //
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
+// the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
-func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
+func (r *Replica) evaluateReadWriteBatchWithServersideRefreshes(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
@@ -639,7 +639,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui)
+		batch, br, res, pErr = r.evaluateReadWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui)
 
 		var success bool
 		if pErr == nil {
@@ -665,9 +665,9 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	return batch, br, res, pErr
 }
 
-// evaluateWriteBatchWrapper is a wrapper on top of evaluateBatch() which deals
-// with filling out result.LogicalOpLog.
-func (r *Replica) evaluateWriteBatchWrapper(
+// evaluateReadWriteBatchWrapper is a wrapper on top of evaluateBatch which deals
+// with metrics and filling out result.LogicalOpLog.
+func (r *Replica) evaluateReadWriteBatchWrapper(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,

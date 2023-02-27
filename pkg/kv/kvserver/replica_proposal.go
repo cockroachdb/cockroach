@@ -736,7 +736,7 @@ func (r *Replica) evaluateProposal(
 	// proposal is expensive.
 	//
 	// Note that, during evaluation, ba's read and write timestamps might get
-	// bumped (see evaluateWriteBatchWithServersideRefreshes).
+	// bumped (see evaluateReadWriteBatchWithServersideRefreshes).
 	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
