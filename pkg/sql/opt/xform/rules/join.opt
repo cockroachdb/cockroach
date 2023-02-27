@@ -127,18 +127,16 @@
 # SplitDisjunctionOfJoinTerms splits disjunctions (OR expressions) of ON clause
 # predicates of an inner or semi join into a Union of two Join expressions, the
 # first containing the left subexpression of the OR expression and the second
-# containing the right subexpression.
-# All other filter items in the original expression are preserved in the new
-# Join expressions. The logical Union is evaluated as a UNION ALL followed by a
-# distinct sort on the primary key columns of both the left and right input in
-# the case of inner join, or in the case or semijoin, the primary key columns
-# of the left.
+# containing the right subexpression. All other filter items in the original
+# expression are preserved in the new Join expressions. The logical Union is
+# evaluated as a UNION ALL followed by a distinct sort on the primary key
+# columns of both the left and right input in the case of inner join, or in the
+# case or semijoin, the primary key columns of the left.
 #
-# The call to SplitJoinWithEquijoinDisjuncts adds primary key columns to the
-# original Scan ColSet which the replace pattern removes by adding a Project as
-# the last operation.
-# Inclusion of the primary keys is required to prevent the generated Union from
-# duplicating rows that have the same selected values.
+# The call to SplitJoinWithDisjuncts adds primary key columns to the original
+# Scan ColSet which the replace pattern removes by adding a Project as the last
+# operation. Inclusion of the primary keys is required to prevent the generated
+# Union from duplicating rows that have the same selected values.
 #
 # This can produce better query plans in cases where indexes cover both sides of
 # the OR expression, or to enable hash-based join methods instead of cross join.
@@ -160,7 +158,7 @@
                 $aggCols
                 $groupingCols
                 $ok
-            ):(SplitJoinWithEquijoinDisjuncts (Root) $on)
+            ):(SplitJoinWithDisjuncts (Root) $on)
             $ok
         )
     *
@@ -188,8 +186,8 @@
 # clause predicates of an antijoin into a Union of two AntiJoin expressions, the
 # first containing the left subexpression of the OR expression and the second
 # containing the right subexpression. This rule is identical to
-# SplitDisjunctionOfJoinTerms, except the INTERSECT ALL set operation is used
-# in place of UNION ALL.
+# SplitDisjunctionOfJoinTerms, except the INTERSECT ALL set operation is used in
+# place of UNION ALL.
 [SplitDisjunctionOfAntiJoinTerms, Explore]
 (AntiJoin
     *
@@ -203,7 +201,7 @@
                 $aggCols
                 $groupingCols
                 $ok
-            ):(SplitJoinWithEquijoinDisjuncts (Root) $on)
+            ):(SplitJoinWithDisjuncts (Root) $on)
             $ok
         )
     *
