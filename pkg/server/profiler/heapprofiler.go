@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package heapprofiler
+package profiler
 
 import (
 	"context"
@@ -46,18 +46,19 @@ func NewHeapProfiler(ctx context.Context, dir string, st *cluster.Settings) (*He
 		return nil, errors.AssertionFailedf("need to specify dir for NewHeapProfiler")
 	}
 
-	log.Infof(ctx,
-		"writing go heap profiles to %s at least every %s",
-		log.SafeManaged(dir),
-		resetHighWaterMarkInterval)
-
 	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
 
 	hp := &HeapProfiler{
-		profiler{
-			store: newProfileStore(dumpStore, HeapFileNamePrefix, HeapFileNameSuffix, st),
-		},
+		profiler: makeProfiler(
+			newProfileStore(dumpStore, HeapFileNamePrefix, HeapFileNameSuffix, st),
+			zeroFloor,
+			envMemprofInterval,
+		),
 	}
+
+	log.Infof(ctx,
+		"writing go heap profiles to %s at least every %s", log.SafeManaged(dir), hp.resetInterval())
+
 	return hp, nil
 }
 

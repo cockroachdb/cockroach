@@ -53,12 +53,12 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
+	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 )
 
 func init() {
 	if C.is_profiling_enabled() {
-		heapprofiler.SetJemallocHeapDumpFn(writeJemallocProfile)
+		profiler.SetJemallocHeapDumpFn(writeJemallocProfile)
 	}
 }
 
