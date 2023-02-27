@@ -1676,6 +1676,11 @@ func (t *logicTest) newCluster(
 		); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		// We also disable stats forecasts to have deterministic tests. See #97003
 		// for details.
