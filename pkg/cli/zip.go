@@ -275,7 +275,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 
 			// Collect the per-node data.
 			if err := zc.forAllNodes(ctx, nodesList, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
-				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
+				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID, zipCtx.lite)
 			}); err != nil {
 				return err
 			}

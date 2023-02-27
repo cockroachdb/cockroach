@@ -1491,6 +1491,17 @@ list of node IDs or ranges of node IDs, for example: 5,10-20,23.
 The default is to not exclude any node.`,
 	}
 
+	ZipLite = FlagInfo{
+		Name: "lite",
+		Description: `If set, a small subset of the full zip is collected, excluding 
+		most files that are collection from disks such as logs or historical profiles
+		as well as range statuses or other classes of collected information that is 
+		known to become especially large in larger clusters. Such a "lite" zip is 
+		thus less comprehensive than a full zip, but may be able to be collected and
+		transferred more quickly to allow initial triage steps to begin while the 
+		larger full zip is being collected and transferred.`,
+	}
+
 	ZipIncludedFiles = FlagInfo{
 		Name: "include-files",
 		Description: `

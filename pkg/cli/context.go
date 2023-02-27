@@ -350,6 +350,12 @@ type zipContext struct {
 	// attempts to access multiple nodes concurrently by default.
 	concurrency int
 
+	// lite controls a collecting a pre-set minimal subset of data, excluding the
+	// disk-collected files like logs as well as per-range status, such that this
+	// subset remains small even for very large clusters, and can thus be quickly
+	// collected and shared for initial triage while a larger full zip is pending.
+	lite bool
+
 	// The log/heap/etc files to include.
 	files fileSelection
 }
@@ -365,6 +371,7 @@ func setZipContextDefaults() {
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 
+	zipCtx.lite = false
 	// File selection covers the last 48 hours by default.
 	// We add 24 hours to now for the end timestamp to ensure
 	// that files created during the zip operation are

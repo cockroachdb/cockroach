@@ -147,6 +147,7 @@ func (zc *debugZipContext) collectPerNodeData(
 	nodeDetails serverpb.NodeDetails,
 	nodeStatus *statuspb.NodeStatus,
 	livenessByNodeID nodeLivenesses,
+	lite bool,
 ) error {
 	nodeID := roachpb.NodeID(nodeDetails.NodeID)
 
@@ -259,6 +260,14 @@ func (zc *debugZipContext) collectPerNodeData(
 	}
 	if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
 		return err
+	}
+
+	// Everything below this point will involve collecting _files_ from the disk
+	// on each node -- log files, historical profiles, etc-- or potentially *very*
+	// large numbers of range status jsons blobs. For a fast "lite" zip, skip this
+	// and return with just what we have so far.
+	if lite {
+		return nil
 	}
 
 	var heapData []byte
@@ -549,6 +558,7 @@ func (zc *debugZipContext) collectPerNodeData(
 			}
 		}
 	}
+
 	return nil
 }
 

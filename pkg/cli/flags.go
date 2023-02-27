@@ -691,6 +691,7 @@ func init() {
 		f := cmd.Flags()
 		cliflagcfg.VarFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
 		cliflagcfg.VarFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
+		cliflagcfg.BoolFlag(f, &zipCtx.lite, cliflags.ZipLite)
 		cliflagcfg.StringSliceFlag(f, &zipCtx.files.includePatterns, cliflags.ZipIncludedFiles)
 		cliflagcfg.StringSliceFlag(f, &zipCtx.files.excludePatterns, cliflags.ZipExcludedFiles)
 		cliflagcfg.VarFlag(f, &zipCtx.files.startTimestamp, cliflags.ZipFilesFrom)
