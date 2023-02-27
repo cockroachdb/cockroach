@@ -427,7 +427,7 @@ func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client
 		Closer:         closer,
 	}
 	t.L().Printf("testing all rows from test_table_large replicate")
-	var currentPercent, nonUpdate = 0, 0
+	var numRows, nonUpdate = 0, 0
 	for r := retry.StartWithCtx(ctx, waitForFullLoad); r.Next(); {
 		err := func() error {
 			dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput(t.BuildVersion(), "test_table_large"))
@@ -435,18 +435,18 @@ func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client
 				return err
 			}
 			for _, task := range dmsTasks.ReplicationTasks {
+				tableStats, err := dmsCli.DescribeTableStatistics(context.Background(), &dms.DescribeTableStatisticsInput{
+					ReplicationTaskArn: task.ReplicationTaskArn,
+					Filters: []dmstypes.Filter{{
+						Name:   proto.String("table-name"),
+						Values: []string{"test_table_large"},
+					}},
+				})
+				if err != nil {
+					return err
+				}
 				// If the task is stopped and stop reason is full load finished, we have succeeded.
 				if *task.Status == "stopped" && *task.StopReason == "Stop Reason FULL_LOAD_ONLY_FINISHED" {
-					tableStats, err := dmsCli.DescribeTableStatistics(context.Background(), &dms.DescribeTableStatisticsInput{
-						ReplicationTaskArn: task.ReplicationTaskArn,
-						Filters: []dmstypes.Filter{{
-							Name:   proto.String("table-name"),
-							Values: []string{"test_table_large"},
-						}},
-					})
-					if err != nil {
-						return err
-					}
 					// Check we full loaded the right number of rows
 					if tableStats.TableStatistics[0].FullLoadRows == awsrdsNumInitialRows {
 						t.L().Printf("test_table_large successfully replicated all rows")
@@ -456,20 +456,17 @@ func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client
 					}
 					close(closer)
 				} else if *task.Status == "running" {
-					stats := task.ReplicationTaskStats
-					if stats != nil {
-						if stats.FullLoadProgressPercent != 100 {
-							if stats.FullLoadProgressPercent > int32(currentPercent) {
-								nonUpdate = 0
-								currentPercent = int(stats.FullLoadProgressPercent)
-								t.L().Printf("test_table_large still replicating, percentage: %d", stats.FullLoadProgressPercent)
-							} else {
-								nonUpdate++
-								// Arbitrarily picked 5 consecutive non updates to indicate stuck progress
-								if nonUpdate == 5 {
-									t.Fatal(errors.New("replication progress appears to be stuck"))
-									close(closer)
-								}
+					if tableStats.TableStatistics[0].FullLoadRows != awsrdsNumInitialRows {
+						if tableStats.TableStatistics[0].FullLoadRows > int64(numRows) {
+							nonUpdate = 0
+							numRows = int(tableStats.TableStatistics[0].FullLoadRows)
+							t.L().Printf("test_table_large still replicating, rows: %d/%d", tableStats.TableStatistics[0].FullLoadRows, awsrdsNumInitialRows)
+						} else {
+							nonUpdate++
+							// Arbitrarily picked 5 consecutive non updates to indicate stuck progress
+							if nonUpdate == 5 {
+								t.Fatal(errors.New("replication progress appears to be stuck"))
+								close(closer)
 							}
 						}
 					}
