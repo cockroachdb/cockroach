@@ -16,10 +16,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -72,9 +70,8 @@ type Batch interface {
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
 	// or memory blowup issues. It unsets the selection and sets the length to
-	// 0. Notably, it deeply resets the datum-backed vectors and returns the
-	// number of bytes released as a result of the reset.
-	ResetInternalBatch() int64
+	// 0.
+	ResetInternalBatch()
 	// String returns a pretty representation of this batch.
 	String() string
 }
@@ -132,9 +129,6 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 		col := &cols[i]
 		col.init(t, capacity, factory)
 		b.b[i] = col
-		if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
-			b.datumVecIdxs.Add(i)
-		}
 	}
 	return b
 }
@@ -204,10 +198,8 @@ type MemBatch struct {
 	// MemBatch.
 	capacity int
 	// b is the slice of columns in this batch.
-	b []Vec
-	// datumVecIdxs stores the indices of all datum-backed vectors in b.
-	datumVecIdxs intsets.Fast
-	useSel       bool
+	b      []Vec
+	useSel bool
 	// sel is - if useSel is true - a selection vector from upstream. A
 	// selection vector is a list of selected tuple indices in this memBatch's
 	// columns (tuples for which indices are not in sel are considered to be
@@ -260,9 +252,6 @@ func (m *MemBatch) SetLength(length int) {
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
-	if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
-		m.datumVecIdxs.Add(len(m.b))
-	}
 	m.b = append(m.b, col)
 }
 
@@ -301,17 +290,12 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 	// since those will get reset in ResetInternalBatch anyway.
 	m.b = m.b[:len(typs)]
 	m.sel = m.sel[:length]
-	for i, ok := m.datumVecIdxs.Next(0); ok; i, ok = m.datumVecIdxs.Next(i + 1) {
-		if i >= len(typs) {
-			m.datumVecIdxs.Remove(i)
-		}
-	}
 	m.ResetInternalBatch()
 	m.SetLength(length)
 }
 
 // ResetInternalBatch implements the Batch interface.
-func (m *MemBatch) ResetInternalBatch() int64 {
+func (m *MemBatch) ResetInternalBatch() {
 	m.SetLength(0 /* length */)
 	m.SetSelection(false)
 	for _, v := range m.b {
@@ -320,11 +304,6 @@ func (m *MemBatch) ResetInternalBatch() int64 {
 			ResetIfBytesLike(v)
 		}
 	}
-	var released int64
-	for i, ok := m.datumVecIdxs.Next(0); ok; i, ok = m.datumVecIdxs.Next(i + 1) {
-		released += m.b[i].Datum().Reset()
-	}
-	return released
 }
 
 // String returns a pretty representation of this batch.

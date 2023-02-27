@@ -185,9 +185,9 @@ func (b *AppendOnlyBufferedBatch) Reset([]*types.T, int, coldata.ColumnFactory) 
 }
 
 // ResetInternalBatch implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) ResetInternalBatch() int64 {
+func (b *AppendOnlyBufferedBatch) ResetInternalBatch() {
 	b.SetLength(0 /* n */)
-	return b.batch.ResetInternalBatch()
+	b.batch.ResetInternalBatch()
 }
 
 // String implements the coldata.Batch interface.
