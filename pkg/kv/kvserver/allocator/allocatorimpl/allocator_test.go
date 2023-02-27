@@ -531,7 +531,6 @@ func mockStorePool(
 	for _, storeID := range suspectedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
 		detail := storePool.GetStoreDetailLocked(storeID)
-		detail.LastAvailable = storePool.Clock().Now().GoTime()
 		detail.LastUnavailable = storePool.Clock().Now().GoTime()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,

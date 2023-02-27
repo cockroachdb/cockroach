@@ -59,6 +59,5 @@ func makeStoreDetail(desc *roachpb.StoreDescriptor, tick time.Time) *storepool.S
 	return &storepool.StoreDetail{
 		Desc:            desc,
 		LastUpdatedTime: tick,
-		LastAvailable:   tick,
 	}
 }
