@@ -2871,28 +2871,28 @@ project
            ├── fd: (2)==(6), (6)==(2), (2)-->(1,5)
            ├── ordering: +(2|6) [actual: +2]
            ├── inner-join (merge)
-           │    ├── columns: t0_85393.c0:9 t0_85393.rowid:10!null t1_85393.c0:13 t1_85393.rowid:14!null
-           │    ├── left ordering: +10
-           │    ├── right ordering: +14
-           │    ├── key: (14)
-           │    ├── fd: (10)-->(9), (14)-->(13), (10)==(14), (14)==(10)
-           │    ├── ordering: +(10|14) [actual: +10]
+           │    ├── columns: t0_85393.c0:17 t0_85393.rowid:18!null t1_85393.c0:21 t1_85393.rowid:22!null
+           │    ├── left ordering: +18
+           │    ├── right ordering: +22
+           │    ├── key: (22)
+           │    ├── fd: (18)-->(17), (22)-->(21), (18)==(22), (22)==(18)
+           │    ├── ordering: +(18|22) [actual: +18]
            │    ├── scan t0_85393
-           │    │    ├── columns: t0_85393.c0:9 t0_85393.rowid:10!null
-           │    │    ├── key: (10)
-           │    │    ├── fd: (10)-->(9)
-           │    │    └── ordering: +10
+           │    │    ├── columns: t0_85393.c0:17 t0_85393.rowid:18!null
+           │    │    ├── key: (18)
+           │    │    ├── fd: (18)-->(17)
+           │    │    └── ordering: +18
            │    ├── scan t1_85393
-           │    │    ├── columns: t1_85393.c0:13 t1_85393.rowid:14!null
-           │    │    ├── key: (14)
-           │    │    ├── fd: (14)-->(13)
-           │    │    └── ordering: +14
+           │    │    ├── columns: t1_85393.c0:21 t1_85393.rowid:22!null
+           │    │    ├── key: (22)
+           │    │    ├── fd: (22)-->(21)
+           │    │    └── ordering: +22
            │    └── filters (true)
            └── projections
-                ├── t0_85393.c0:9 [as=t0_85393.c0:1, outer=(9)]
-                ├── t0_85393.rowid:10 [as=t0_85393.rowid:2, outer=(10)]
-                ├── t1_85393.c0:13 [as=t1_85393.c0:5, outer=(13)]
-                └── t1_85393.rowid:14 [as=t1_85393.rowid:6, outer=(14)]
+                ├── t0_85393.c0:17 [as=t0_85393.c0:1, outer=(17)]
+                ├── t0_85393.rowid:18 [as=t0_85393.rowid:2, outer=(18)]
+                ├── t1_85393.c0:21 [as=t1_85393.c0:5, outer=(21)]
+                └── t1_85393.rowid:22 [as=t1_85393.rowid:6, outer=(22)]
 
 # Regression test for #87806 - include optional columns when remapping Project
 # provided ordering.
