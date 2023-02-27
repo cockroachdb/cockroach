@@ -812,27 +812,39 @@ func (r *Replica) requestToProposal(
 	ui uncertainty.Interval,
 ) (*ProposalData, *kvpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, g, st, ui)
-
-	// Fill out the results even if pErr != nil; we'll return the error below.
-	proposal := &ProposalData{
-		ctx:         ctx,
-		idKey:       idKey,
-		doneCh:      make(chan proposalResult, 1),
-		Local:       &res.Local,
-		Request:     ba,
-		leaseStatus: *st,
-	}
-
+	// Fill out the results even if pErr != nil.
+	var raftCmd *kvserverpb.RaftCommand
 	if needConsensus {
-		proposal.command = &kvserverpb.RaftCommand{
+		raftCmd = &kvserverpb.RaftCommand{
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
 			LogicalOpLog:         res.LogicalOpLog,
 			TraceData:            r.getTraceData(ctx),
 		}
 	}
+	return newProposal(ctx, idKey, ba, raftCmd, &res.Local, *st), pErr
+}
 
-	return proposal, pErr
+func newProposal(
+	ctx context.Context,
+	idKey kvserverbase.CmdIDKey,
+	ba *kvpb.BatchRequest,
+	replicatedCmd *kvserverpb.RaftCommand, // may be nil
+	local *result.LocalResult,
+	st kvserverpb.LeaseStatus,
+) *ProposalData {
+	// Fill out the results even if pErr != nil; we'll return the error below.
+	proposal := &ProposalData{
+		ctx:         ctx,
+		idKey:       idKey,
+		doneCh:      make(chan proposalResult, 1),
+		Local:       local,
+		Request:     ba,
+		leaseStatus: st,
+		command:     replicatedCmd,
+	}
+
+	return proposal
 }
 
 // getTraceData extracts the SpanMeta of the current span.
