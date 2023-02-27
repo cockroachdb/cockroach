@@ -43,13 +43,10 @@ c           CREATE TABLE public.c (
             COMMENT ON COLUMN public.c.a IS 'column';
             COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
-# TODO(rytaft): adding a NOT VALID unique constraint in PostgreSQL returns
-# an error. We should consider doing the same unless the constraint is UNIQUE
-# WITHOUT INDEX.
 statement ok
 ALTER TABLE c ADD CONSTRAINT check_b CHECK (b IN (1, 2, 3)) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES d (d) NOT VALID;
-ALTER TABLE c ADD CONSTRAINT unique_a UNIQUE (a) NOT VALID;
+ALTER TABLE c ADD CONSTRAINT unique_a UNIQUE (a);
 ALTER TABLE c ADD CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0 NOT VALID;
 

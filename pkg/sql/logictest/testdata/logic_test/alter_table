@@ -3153,3 +3153,22 @@ SHOW CONSTRAINTS FROM t_96729
 ----
 table_name  constraint_name  constraint_type  details              validated
 t_96729     t_96729_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+# This subtests ensures adding UNIQUE constraint works properly.
+subtest alter_table_add_unique_96728
+
+statement ok
+CREATE TABLE t_96728 (i INT PRIMARY KEY, j INT, k INT);
+
+statement error pgcode 0A000 UNIQUE constraints cannot be marked NOT VALID
+ALTER TABLE t_96728 ADD UNIQUE (j) NOT VALID;
+
+statement ok
+ALTER TABLE t_96728 ADD UNIQUE (j, k) WHERE (i > 0);
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t_96728
+----
+table_name  constraint_name  constraint_type  details                              validated
+t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
+t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
