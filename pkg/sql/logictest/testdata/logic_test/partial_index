@@ -2034,3 +2034,48 @@ DROP INDEX t96924_idx_1
 
 statement ok
 ALTER TABLE t96924 ALTER PRIMARY KEY USING COLUMNS (a);
+
+subtest enum_cast_references
+
+statement ok
+CREATE TYPE enum97551 AS ENUM ('a', 'b', 'c');
+CREATE TABLE t97551 (i INT PRIMARY KEY, j STRING);
+
+# We shouldn't be allowed to create this index because the cast from string
+# to an enum is not immutable. However, we can because of  #68672, so we
+# exercise that here. There's another set of statements below which can
+# continue to exist after that bug is fixed and also protect against the
+# underlying regression.
+statement ok
+CREATE INDEX idx97551 ON t97551 (j) WHERE (j::enum97551 = 'a'::enum97551);
+
+statement error pgcode 2BP01 cannot drop type "enum97551" because other objects \(\[test\.public\.t97551\]\) still depend on it
+DROP TYPE enum97551;
+
+statement ok
+DROP INDEX idx97551;
+
+statement ok
+DROP TYPE enum97551;
+
+# Do the same dance but with an expression that is actually immutable.
+
+statement ok
+CREATE TYPE enum97551 AS ENUM ('a', 'b', 'c');
+
+statement ok
+ALTER TABLE t97551 ADD COLUMN e enum97551;
+
+statement ok
+CREATE INDEX idx97551 ON t97551 (e) WHERE (e = 'a'::enum97551);
+
+statement error pgcode 2BP01 cannot drop type "enum97551" because other objects \(\[test\.public\.t97551\]\) still depend on it
+DROP TYPE enum97551;
+
+statement ok
+DROP INDEX idx97551;
+
+statement ok
+DROP TABLE t97551;
+DROP TYPE enum97551;
+
