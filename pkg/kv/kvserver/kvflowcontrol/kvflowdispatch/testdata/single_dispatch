@@ -1,0 +1,25 @@
+# Verify that we can issue a single dispatch, and that it gets removed
+# appropriately.
+
+init
+----
+
+dispatch
+node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=4/20
+----
+
+pending-dispatch
+----
+node=n1
+
+pending-dispatch-for node=n1
+----
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=4/20
+
+pending-dispatch
+----
+
+pending-dispatch-for node=n1
+----
+
+# vim:ft=sh

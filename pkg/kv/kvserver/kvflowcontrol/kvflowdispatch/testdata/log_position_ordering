@@ -1,0 +1,25 @@
+# Verify that dispatches get coalesced correctly. All things equal, if
+# dispatching with a higher up-to-log-position, we'll ignore the lower entries.
+
+init
+----
+
+dispatch
+node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=4/20
+node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=5/20
+----
+
+pending-dispatch-for node=n1
+----
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=5/20
+
+dispatch
+node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=6/20
+node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=6/19
+----
+
+pending-dispatch-for node=n1
+----
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=6/20
+
+# vim:ft=sh

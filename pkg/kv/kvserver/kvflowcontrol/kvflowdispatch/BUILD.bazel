@@ -1,0 +1,36 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvflowdispatch",
+    srcs = ["kvflowdispatch.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/roachpb",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "kvflowdispatch_test",
+    srcs = ["kvflowdispatch_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":kvflowdispatch"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
