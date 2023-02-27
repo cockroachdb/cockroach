@@ -24,7 +24,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/duration",
-        "//pkg/util/intsets",
         "//pkg/util/json",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",

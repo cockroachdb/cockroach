@@ -71,3 +71,17 @@ true
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+# Regression test for releasing the memory of datums in the datum-backed vector
+# from the incorrect memory account (#97603).
+statement ok
+CREATE TABLE t97603 (id PRIMARY KEY) AS SELECT generate_series(1, 50000);
+
+# The important bits are to use an aggregate function that is not supported
+# natively in the vectorized engine and to have a projection operator that is
+# producing a datum-backed vector (constant OID projection).
+statement ok
+SELECT
+     var_pop(crdb_internal_mvcc_timestamp::DECIMAL),
+     1:::OID
+FROM t97603 GROUP BY id HAVING bool_or(true)
