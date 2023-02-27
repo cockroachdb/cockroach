@@ -2171,10 +2171,6 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 					hasPoint, hasRange := iter.HasPointAndRange()
 					require.True(t, hasPoint)
 					require.False(t, hasRange)
-					rangeBounds, err := iter.EngineRangeBounds()
-					require.NoError(t, err)
-					require.Empty(t, rangeBounds)
-					require.Empty(t, iter.EngineRangeKeys())
 
 					// Exhaust the iterator.
 					ok, err = iter.NextEngineKey()

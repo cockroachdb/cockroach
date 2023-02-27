@@ -172,7 +172,7 @@ func (m *metamorphicIterator) moveAround() {
 	}
 
 	hasPoint, _ := m.it.HasPointAndRange()
-	rangeKeys := m.it.RangeKeys().Clone()
+	rangeKeys := rangeKeysIfExist(m.it).Clone()
 	var rangeKeysIgnoringTime storage.MVCCRangeKeyStack
 	if iit != nil {
 		rangeKeysIgnoringTime = iit.RangeKeysIgnoringTime()
@@ -224,7 +224,7 @@ func (m *metamorphicIterator) moveAround() {
 					if m.it.UnsafeKey().Equal(cur) {
 						break // made it
 					}
-					printfln("step: %s %s [changed=%t]", m.it.UnsafeKey(), m.it.RangeKeys(), m.it.RangeKeyChanged())
+					printfln("step: %s %s [changed=%t]", m.it.UnsafeKey(), rangeKeysIfExist(m.it), m.it.RangeKeyChanged())
 					if iit != nil {
 						// If we're an incremental iterator with time bounds, and `cur` is not within bounds,
 						// would miss it if we used Next. So call NextIgnoringTime unconditionally.
@@ -247,7 +247,7 @@ func (m *metamorphicIterator) moveAround() {
 					valid, err := m.it.Valid()
 					require.Nil(m.t, err)
 					require.True(m.t, valid, "unable to recover original position following SeekLT")
-					printfln("rev-step: %s %s [changed=%t]", m.it.UnsafeKey(), m.it.RangeKeys(), m.it.RangeKeyChanged())
+					printfln("rev-step: %s %s [changed=%t]", m.it.UnsafeKey(), rangeKeysIfExist(m.it), m.it.RangeKeyChanged())
 					if m.it.UnsafeKey().Equal(cur) {
 						printfln("done")
 						break // made it
@@ -268,13 +268,13 @@ func (m *metamorphicIterator) moveAround() {
 			rangeKeysIgnoringTime2 = iit.RangeKeysIgnoringTime()
 		}
 		printfln("recovered position: %s hasPoint=%t, rangeKeys=%s, rangeKeysIgnoringTime=%s",
-			m.it.UnsafeKey(), hasPoint2, m.it.RangeKeys(), rangeKeysIgnoringTime2)
+			m.it.UnsafeKey(), hasPoint2, rangeKeysIfExist(m.it), rangeKeysIgnoringTime2)
 	}
 	// Back where we started and hopefully in an indistinguishable state.
 	// When the stack is empty, sometimes it's a nil slice and sometimes zero
 	// slice. A similar problem exists with MVCCRangeKeyVersion.Value. Sidestep
 	// them by comparing strings.
-	require.Equal(m.t, fmt.Sprint(rangeKeys), fmt.Sprint(m.it.RangeKeys()))
+	require.Equal(m.t, fmt.Sprint(rangeKeys), fmt.Sprint(rangeKeysIfExist(m.it)))
 	if iit != nil {
 		require.Equal(m.t, fmt.Sprint(rangeKeysIgnoringTime), fmt.Sprint(iit.RangeKeysIgnoringTime()))
 	}
