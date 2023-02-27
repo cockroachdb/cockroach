@@ -904,8 +904,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_tsvector"></a><code>to_tsvector(text: <a href="string.html">string</a>) &rarr; tsvector</code></td><td><span class="funcdesc"><p>Converts text to a tsvector, normalizing words according to the default configuration. Position information is included in the result.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="ts_headline"></a><code>ts_headline(config: <a href="string.html">string</a>, document: <a href="string.html">string</a>, query: tsquery) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>display a query match</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ts_headline"></a><code>ts_headline(document: <a href="string.html">string</a>, query: tsquery) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>display a query match</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="ts_parse"></a><code>ts_parse(parser_name: <a href="string.html">string</a>, document: <a href="string.html">string</a>) &rarr; tuple{int AS tokid, string AS token}</code></td><td><span class="funcdesc"><p>ts_parse parses the given document and returns a series of records, one for each token produced by parsing. Each record includes a tokid showing the assigned token type and a token which is the text of the token.</p>
-</span></td><td>Stable</td></tr></tbody>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="ts_rank"></a><code>ts_rank(vector: tsvector, query: tsquery) &rarr; float4</code></td><td><span class="funcdesc"><p>Ranks vectors based on the frequency of their matching lexemes.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ts_rank"></a><code>ts_rank(vector: tsvector, query: tsquery, normalization: <a href="int.html">int</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Ranks vectors based on the frequency of their matching lexemes.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ts_rank"></a><code>ts_rank(weights: <a href="float.html">float</a>[], vector: tsvector, query: tsquery) &rarr; float4</code></td><td><span class="funcdesc"><p>Ranks vectors based on the frequency of their matching lexemes.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ts_rank"></a><code>ts_rank(weights: <a href="float.html">float</a>[], vector: tsvector, query: tsquery, normalization: <a href="int.html">int</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Ranks vectors based on the frequency of their matching lexemes.</p>
+</span></td><td>Immutable</td></tr></tbody>
 </table>
 
 ### Fuzzy String Matching functions

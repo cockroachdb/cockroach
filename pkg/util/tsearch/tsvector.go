@@ -113,6 +113,14 @@ func (w tsWeight) TSVectorPGEncoding() (byte, error) {
 	return 0, errors.Errorf("invalid tsvector weight %d", w)
 }
 
+func (w tsWeight) val() int {
+	b, err := w.TSVectorPGEncoding()
+	if err != nil {
+		panic(err)
+	}
+	return int(b)
+}
+
 // matches returns true if the receiver is matched by the input tsquery weight.
 func (w tsWeight) matches(queryWeight tsWeight) bool {
 	if queryWeight == weightAny {
@@ -229,6 +237,10 @@ func (t tsTerm) matchesWeight(targetWeight tsWeight) bool {
 		}
 	}
 	return false
+}
+
+func (t tsTerm) isPrefixMatch() bool {
+	return len(t.positions) >= 1 && t.positions[0].weight&weightStar != 0
 }
 
 // TSVector is a sorted list of terms, each of which is a lexeme that might have
