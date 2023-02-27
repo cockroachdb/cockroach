@@ -508,6 +508,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
+			if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
+				if err := params.p.tryRemoveFKBackReferences(
+					params.ctx, n.tableDesc, uwoi, t.DropBehavior, true,
+				); err != nil {
+					return err
+				}
+			}
 			if err := n.tableDesc.DropConstraint(
 				c,
 				func(backRef catalog.ForeignKeyConstraint) error {

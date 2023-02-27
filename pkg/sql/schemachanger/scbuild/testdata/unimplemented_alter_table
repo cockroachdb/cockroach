@@ -21,22 +21,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i SET DATA TYPE STRING
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo DROP COLUMN k
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo DROP COLUMN l CASCADE;
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo DROP COLUMN m
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo DROP COLUMN n
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo DROP COLUMN o, ADD COLUMN p INT
 ----
 
