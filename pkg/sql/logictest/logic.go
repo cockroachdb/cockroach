@@ -1549,6 +1549,11 @@ func (t *logicTest) newCluster(
 		); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		// Update the default AS OF time for querying the system.table_statistics
 		// table to create the crdb_internal.table_row_statistics table.
