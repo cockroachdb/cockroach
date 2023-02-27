@@ -1528,12 +1528,13 @@ func (c *CustomFuncs) makeFilteredSelectForJoin(
 	return newSelect
 }
 
-// SplitJoinWithEquijoinDisjuncts checks a join relation for a disjunction of
-// equijoin predicates in an InnerJoin, SemiJoin or AntiJoin. If present, and
-// the inputs to the join are canonical scans, or Selects from canonical scans,
-// it builds two new join relations of the same join type as the original, but
-// with one disjunct assigned to firstJoin and the remaining disjuncts assigned
-// to secondJoin.
+// SplitJoinWithInterestingDisjuncts checks a join relation for a disjunction of
+// interesting predicates in an InnerJoin, SemiJoin or AntiJoin. An "interesting
+// predicate" is defined as an equijoin predicate or a predicate referencing
+// only columns from a single table. If present, and the inputs to the join are
+// canonical scans, or Selects from canonical scans, it builds two new join
+// relations of the same join type as the original, but with one disjunct
+// assigned to firstJoin and the remaining disjuncts assigned to secondJoin.
 //
 // In the case of inner join, newRelationCols contains the column ids from the
 // original Scans in the left and right inputs plus primary key columns from
@@ -1544,9 +1545,9 @@ func (c *CustomFuncs) makeFilteredSelectForJoin(
 // aggCols contains the non-key columns of the left and right inputs.
 // groupingCols contains the primary key columns of the left and right inputs,
 // needed for deduplicating results.
-// If there is no disjunction of equijoin predicates, or the join type is not
+// If there is no disjunction of interesting predicates, or the join type is not
 // one of the supported join types listed above, ok=false is returned.
-func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
+func (c *CustomFuncs) SplitJoinWithInterestingDisjuncts(
 	joinRel memo.RelExpr, joinFilters memo.FiltersExpr,
 ) (
 	firstJoin memo.RelExpr,
@@ -1771,10 +1772,18 @@ func (c *CustomFuncs) CanHoistProjectInput(relation memo.RelExpr) (ok bool) {
 // findInterestingDisjunctionPairForJoin groups disjunction subexpressions into
 // an "interesting" pair of join predicates.
 //
-// An "interesting" pair of predicates is one where one predicate is an
-// equality predicate which could enable more performant joins than cross join,
-// such as hash join or lookup join. At least one predicate in the disjunction
-// must be an equality join term referencing both input relations. When there
+// An "interesting" pair of predicates is one where one predicate is:
+//
+//	a) a conjunction in which at least one conjunct references only columns
+//	   bound by a single table, thus enabling predicate push-down
+//
+// OR
+//
+//	b) an equality predicate referencing both input relations which could
+//	   enable more performant joins than cross join, such as hash join or
+//	   lookup join.
+//
+// At least one predicate in the disjunction must be "interesting". When there
 // are more than two predicates, the deepest leaf node in the left depth OrExpr
 // tree is returned as "left" and the remaining predicates are built into a
 // brand new OrExpr chain and returned as "right".
@@ -1783,9 +1792,9 @@ func (c *CustomFuncs) CanHoistProjectInput(relation memo.RelExpr) (ok bool) {
 // pre-checked to be canonical scans, or Selects from canonical scans, and
 // leftScan and rightScan refer to those scans.
 //
-// findInterestingDisjunctionPairForJoin returns an ok=false if at least one of
-// the ORed predicates is not an equality join term referencing both input
-// relations, or if joinRel is not a join relation.
+// findInterestingDisjunctionPairForJoin returns an ok=false if there is not at
+// least one interesting predicate among the ORed predicates, or if joinRel is
+// not a join relation.
 func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
 	joinRel memo.RelExpr, filter *memo.FiltersItem, leftScan *memo.ScanExpr, rightScan *memo.ScanExpr,
 ) (left opt.ScalarExpr, right opt.ScalarExpr, ok bool) {
@@ -1796,8 +1805,21 @@ func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
 	// isJoinPred tests if a predicate is a join predicate which references columns
 	// from both leftRelColSet and rightRelColSet, as indicated in the predicate's
 	// referenced columns, predCols.
-	isJoinPred := func(predCols, leftRelColSet, rightRelColSet opt.ColSet) bool {
-		return leftRelColSet.Intersects(predCols) && rightRelColSet.Intersects(predCols)
+	isJoinPred := func(eqExpr *memo.EqExpr, leftRelColSet, rightRelColSet opt.ColSet) bool {
+		if leftCol, ok := eqExpr.Left.(*memo.VariableExpr); ok {
+			if rightCol, ok := eqExpr.Right.(*memo.VariableExpr); ok {
+				return (leftRelColSet.Contains(leftCol.Col) && rightRelColSet.Contains(rightCol.Col)) ||
+					(leftRelColSet.Contains(rightCol.Col) && rightRelColSet.Contains(leftCol.Col))
+			}
+		}
+		return false
+	}
+
+	// boundBySingleTable tests if an expression only references columns from
+	// either the left or right tables, but not both.
+	boundBySingleTable := func(expr opt.ScalarExpr, leftRelColSet, rightRelColSet opt.ColSet) bool {
+		cols := c.OuterCols(expr)
+		return cols.SubsetOf(leftRelColSet) || cols.SubsetOf(rightRelColSet)
 	}
 
 	var leftExprs memo.ScalarListExpr
@@ -1806,18 +1828,19 @@ func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
 	rightColSet := c.OutputCols(rightScan)
 
 	// An ANDed expression is interesting if it has at least one equality join
-	// predicate.
+	// predicate or at least one predicate referencing only columns from a single
+	// table.
 	interesting := false
-	var hasJoinEquality func(opt.ScalarExpr) bool
-	hasJoinEquality = func(expr opt.ScalarExpr) bool {
+	var isInteresting func(opt.ScalarExpr) bool
+	isInteresting = func(expr opt.ScalarExpr) bool {
 		switch t := expr.(type) {
 		case *memo.AndExpr:
-			return hasJoinEquality(t.Left) || hasJoinEquality(t.Right)
+			return isInteresting(t.Left) || isInteresting(t.Right)
 		case *memo.EqExpr:
-			cols := c.OuterCols(expr)
-			return isJoinPred(cols, leftColSet, rightColSet)
+			return isJoinPred(t, leftColSet, rightColSet) ||
+				boundBySingleTable(t, leftColSet, rightColSet)
 		default:
-			return false
+			return boundBySingleTable(t, leftColSet, rightColSet)
 		}
 	}
 
@@ -1831,7 +1854,7 @@ func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
 			collect(t.Right)
 			return
 		default:
-			interesting = hasJoinEquality(expr)
+			interesting = isInteresting(expr)
 		}
 
 		if interesting && len(leftExprs) == 0 {

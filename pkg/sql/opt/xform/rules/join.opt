@@ -134,7 +134,7 @@
 # the case of inner join, or in the case or semijoin, the primary key columns
 # of the left.
 #
-# The call to SplitJoinWithEquijoinDisjuncts adds primary key columns to the
+# The call to SplitJoinWithInterestingDisjuncts adds primary key columns to the
 # original Scan ColSet which the replace pattern removes by adding a Project as
 # the last operation.
 # Inclusion of the primary keys is required to prevent the generated Union from
@@ -160,7 +160,7 @@
                 $aggCols
                 $groupingCols
                 $ok
-            ):(SplitJoinWithEquijoinDisjuncts (Root) $on)
+            ):(SplitJoinWithInterestingDisjuncts (Root) $on)
             $ok
         )
     *
@@ -203,7 +203,7 @@
                 $aggCols
                 $groupingCols
                 $ok
-            ):(SplitJoinWithEquijoinDisjuncts (Root) $on)
+            ):(SplitJoinWithInterestingDisjuncts (Root) $on)
             $ok
         )
     *
