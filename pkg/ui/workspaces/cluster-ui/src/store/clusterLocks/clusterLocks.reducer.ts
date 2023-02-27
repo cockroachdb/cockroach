@@ -10,10 +10,10 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME, noopReducer } from "../utils";
-import { ClusterLocksResponse } from "src/api";
+import { ClusterLocksResponse, SqlApiResponse } from "src/api";
 
 export type ClusterLocksReqState = {
-  data: ClusterLocksResponse;
+  data: SqlApiResponse<ClusterLocksResponse>;
   lastError: Error;
   valid: boolean;
 };
@@ -28,7 +28,10 @@ const clusterLocksSlice = createSlice({
   name: `${DOMAIN_NAME}/clusterLocks`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<ClusterLocksResponse>) => {
+    received: (
+      state,
+      action: PayloadAction<SqlApiResponse<ClusterLocksResponse>>,
+    ) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;

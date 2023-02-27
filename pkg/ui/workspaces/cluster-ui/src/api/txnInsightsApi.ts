@@ -170,12 +170,13 @@ export async function getTxnInsightsContentionDetailsApi(
 
   // Get contention results for requested transaction.
 
-  const contentionResults = await getContentionDetailsApi({
+  const contentionResponse = await getContentionDetailsApi({
     waitingTxnID: req.txnExecutionID,
     waitingStmtID: null,
     start: null,
     end: null,
   });
+  const contentionResults = contentionResponse.results;
 
   if (contentionResults.length === 0) {
     return;

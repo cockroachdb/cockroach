@@ -21,6 +21,7 @@ import {
   selectAppName,
   selectRecentTransactions,
   selectExecutionStatus,
+  selectClusterLocksMaxApiSizeReached,
 } from "src/selectors/recentExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
@@ -58,6 +59,7 @@ export const mapStateToRecentTransactionsPageProps = (
   executionStatus: selectExecutionStatus(),
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
+  maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
 });
 
 export const mapDispatchToRecentTransactionsPageProps = (

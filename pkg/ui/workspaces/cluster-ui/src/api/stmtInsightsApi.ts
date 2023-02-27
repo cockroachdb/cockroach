@@ -180,12 +180,14 @@ async function addStmtContentionInfoApi(
       continue;
     }
 
-    event.contentionEvents = await getContentionDetailsApi({
+    const contentionResults = await getContentionDetailsApi({
       waitingTxnID: null,
       waitingStmtID: event.statementExecutionID,
       start: null,
       end: null,
     });
+
+    event.contentionEvents = contentionResults.results;
   }
 }
 
