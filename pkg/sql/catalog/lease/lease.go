@@ -502,7 +502,7 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 			// Case 1: we didn't join an in-progress call and the lease is still
 			// valid.
 			break
-		} else if attemptsMade > 1 {
+		} else if attemptsMade > 0 {
 			// Case 2: more than one acquisition has happened and the lease is still
 			// valid.
 			break
