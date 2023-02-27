@@ -453,6 +453,10 @@ const (
 	// Cloud cluster, etc.).
 	V23_1_MVCCRangeTombstonesUnconditionallyEnabled
 
+	// V23_1TenantCapabilities is the version where tenant capabilities can be
+	// set.
+	V23_1TenantCapabilities
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -781,6 +785,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 58},
+	},
+	{
+		Key:     V23_1TenantCapabilities,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 60},
 	},
 
 	// *************************************************
