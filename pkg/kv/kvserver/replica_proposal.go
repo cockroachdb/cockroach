@@ -45,15 +45,7 @@ import (
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
 type ProposalData struct {
-	// The caller's context, used for logging proposals, reproposals, message
-	// sends, but not command application. In order to enable safely tracing events
-	// beneath, modifying this ctx field in *ProposalData requires holding the
-	// raftMu.
-	ctx context.Context
-
-	// An optional tracing span bound to the proposal. Will be cleaned
-	// up when the proposal finishes.
-	sp *tracing.Span
+	// The following fields are set at ProposalData creation time.
 
 	// idKey uniquely identifies this proposal.
 	// TODO(andrei): idKey is legacy at this point: We could easily key commands
@@ -63,36 +55,16 @@ type ProposalData struct {
 	// however, moved to happen later, at proposal time.
 	idKey kvserverbase.CmdIDKey
 
-	// proposedAtTicks is the (logical) time at which this command was
-	// last (re-)proposed.
-	proposedAtTicks int
+	// The caller's context, used for logging proposals, reproposals, message
+	// sends, but not command application. In order to enable safely tracing events
+	// beneath, modifying this ctx field in *ProposalData requires holding the
+	// raftMu.
+	ctx context.Context
 
-	// createdAtTicks is the (logical) time at which this command was
-	// *first* proposed.
-	createdAtTicks int
-
-	// command is serialized and proposed to raft. In the event of
-	// reproposals its MaxLeaseIndex field is mutated.
-	command *kvserverpb.RaftCommand
-
-	// encodedCommand is the encoded Raft command, with an optional prefix
-	// containing the command ID.
-	encodedCommand []byte
-
-	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
-	// proposal has been passed to raft modifying this field requires holding the
-	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
-	// passed to r.mu.quotaReleaseQueue.
-	quotaAlloc *quotapool.IntAlloc
-
-	// ec.done is called after command application to update the timestamp
-	// cache and optionally release latches and exits lock wait-queues.
-	ec endCmds
-
-	// applied is set when the a command finishes application. It is used to
-	// avoid reproposing a failed proposal if an earlier version of the same
-	// proposal succeeded in applying.
-	applied bool
+	// leaseStatus represents the lease under which the Request was evaluated and
+	// under which this proposal is being made. For lease requests, this is the
+	// previous lease that the requester was aware of.
+	leaseStatus kvserverpb.LeaseStatus
 
 	// doneCh is used to signal the waiting RPC handler (the contents of
 	// proposalResult come from LocalEvalResult).
@@ -100,12 +72,6 @@ type ProposalData struct {
 	// Attention: this channel is not to be signaled directly downstream of Raft.
 	// Always use ProposalData.finishApplication().
 	doneCh chan proposalResult
-
-	// Local contains the results of evaluating the request tying the upstream
-	// evaluation of the request to the downstream application of the command.
-	// Nil when the proposal came from another node (i.e. the evaluation wasn't
-	// done here).
-	Local *result.LocalResult
 
 	// Request is the client's original BatchRequest.
 	// TODO(tschottdorf): tests which use TestingCommandFilter use this.
@@ -117,14 +83,65 @@ type ProposalData struct {
 	// booleans.
 	Request *kvpb.BatchRequest
 
-	// leaseStatus represents the lease under which the Request was evaluated and
-	// under which this proposal is being made. For lease requests, this is the
-	// previous lease that the requester was aware of.
-	leaseStatus kvserverpb.LeaseStatus
+	// The following fields reflect the result of evaluating `Request`.
+
+	// command is serialized and proposed to raft. Its MaxLeaseIndex and
+	// ClosedTimestamp fields are filled in late, when flushing from the
+	// proposal buffer.
+	// In the event of reproposals the MaxLeaseIndex field is mutated
+	// again.
+	command *kvserverpb.RaftCommand
+
+	// Local contains the results of evaluating the request tying the upstream
+	// evaluation of the request to the downstream application of the command.
+	// Nil when the proposal came from another node (i.e. the evaluation wasn't
+	// done here).
+	Local *result.LocalResult
+
+	// The following fields are set in evalAndPropose.
+
+	// An optional tracing span bound to the proposal. Will be cleaned up when the
+	// proposal finishes. This is set only if the proposal is for a pipelined
+	// write, i.e. the caller (and thus its trace span) isn't around by the time
+	// this command gets applied.
+	sp *tracing.Span
+
+	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
+	// proposal has been passed to raft modifying this field requires holding the
+	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
+	// passed to r.mu.quotaReleaseQueue.
+	quotaAlloc *quotapool.IntAlloc
+
+	// ec.done is called after command application to update the timestamp
+	// cache and optionally release latches and exits lock wait-queues.
+	ec endCmds
+
+	// The fields below are set in `propBuf.Insert` (via (*Replica).propose).
 
 	// tok identifies the request to the propBuf. Once the proposal is made, the
 	// token will be used to stop tracking this request.
 	tok TrackedRequestToken
+
+	// The fields below are set in (*Replica).registerProposalLocked.
+
+	// proposedAtTicks is the (logical) time at which this command was
+	// last (re-)proposed.
+	// createdAtTicks is the (logical) time at which this command was
+	// *first* proposed.
+	proposedAtTicks, createdAtTicks int
+
+	// The fields below are set in (*propBuf).FlushedLockedWithRaftGroup.
+
+	// encodedCommand is the encoded Raft command. The `command.MaxLeaseIndex`
+	// and `command.ClosedTimestamp` fields will be populated before encoding.
+	encodedCommand []byte
+
+	// The following fields are set in command application (below raft).
+
+	// applied is set when the a command finishes application. It is used to
+	// avoid reproposing a failed proposal if an earlier version of the same
+	// proposal succeeded in applying.
+	applied bool
 }
 
 // Supersedes takes the MaxLeaseIndex of a RaftCommand obtained from a log
