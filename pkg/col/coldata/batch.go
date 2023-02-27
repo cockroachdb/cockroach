@@ -72,12 +72,8 @@ type Batch interface {
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
 	// or memory blowup issues. It unsets the selection and sets the length to
-	// 0.
-	//
-	// Notably, it deeply resets the datum-backed vectors and returns the number
-	// of bytes released as a result of the reset. Callers should update the
-	// allocator (which the batch was instantiated from) accordingly unless they
-	// guarantee that the batch doesn't have any datum-backed vectors.
+	// 0. Notably, it deeply resets the datum-backed vectors and returns the
+	// number of bytes released as a result of the reset.
 	ResetInternalBatch() int64
 	// String returns a pretty representation of this batch.
 	String() string

@@ -183,11 +183,6 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 	return coldata.NewMemBatchNoCols(typs, capacity)
 }
 
-// ResetBatch resets the batch while keeping the memory accounting updated.
-func (a *Allocator) ResetBatch(batch coldata.Batch) {
-	a.ReleaseMemory(batch.ResetInternalBatch())
-}
-
 // truncateToMemoryLimit returns the largest batch capacity that is still within
 // the memory limit for the given type schema. The returned value is at most
 // minDesiredCapacity and at least 1.
@@ -311,7 +306,7 @@ func (a *Allocator) resetMaybeReallocate(
 		}
 		if useOldBatch {
 			reallocated = false
-			a.ResetBatch(oldBatch)
+			a.ReleaseMemory(oldBatch.ResetInternalBatch())
 			newBatch = oldBatch
 		} else {
 			a.ReleaseMemory(oldBatchMemSize)
