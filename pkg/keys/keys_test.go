@@ -772,3 +772,28 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 		})
 	}
 }
+
+func TestLockTableSingleKeyNext_Equivalent(t *testing.T) {
+	testCases := []struct {
+		key roachpb.Key
+	}{
+		{key: roachpb.Key("foo")},
+		{key: roachpb.Key("a")},
+		{key: roachpb.Key("")},
+		// Causes a doubly-local range local key.
+		{key: RangeDescriptorKey(roachpb.RKey("baz"))},
+	}
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			next := test.key.Next()
+			want, _ := LockTableSingleKey(next, nil)
+
+			got, _ := LockTableSingleNextKey(test.key, nil)
+			require.Equal(t, want, got)
+
+			k, err := DecodeLockTableSingleKey(got)
+			require.NoError(t, err)
+			require.Equal(t, next, k)
+		})
+	}
+}

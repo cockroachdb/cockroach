@@ -487,6 +487,24 @@ func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
 	return buf, buf
 }
 
+// LockTableSingleNextKey is equivalent to LockTableSingleKey(key.Next(), buf)
+// but avoids an extra allocation in cases where key.Next() must allocate.
+func LockTableSingleNextKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
+	keyLen := len(LocalRangeLockTablePrefix) + len(LockTableSingleKeyInfix) + encoding.EncodeNextBytesSize(key)
+	if cap(buf) < keyLen {
+		buf = make([]byte, 0, keyLen)
+	} else {
+		buf = buf[:0]
+	}
+	// Don't unwrap any local prefix on key using Addr(key). This allow for
+	// doubly-local lock table keys. For example, local range descriptor keys can
+	// be locked during split and merge transactions.
+	buf = append(buf, LocalRangeLockTablePrefix...)
+	buf = append(buf, LockTableSingleKeyInfix...)
+	buf = encoding.EncodeNextBytesAscending(buf, key)
+	return buf, buf
+}
+
 // DecodeLockTableSingleKey decodes the single-key lock table key to return the key
 // that was locked.
 func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error) {
