@@ -113,6 +113,14 @@ func (w tsWeight) TSVectorPGEncoding() (byte, error) {
 	return 0, errors.Errorf("invalid tsvector weight %d", w)
 }
 
+func (w tsWeight) val() int {
+	b, err := w.TSVectorPGEncoding()
+	if err != nil {
+		panic(err)
+	}
+	return int(b)
+}
+
 // matches returns true if the receiver is matched by the input tsquery weight.
 func (w tsWeight) matches(queryWeight tsWeight) bool {
 	if queryWeight == weightAny {
