@@ -78,6 +78,8 @@ func (a *Authorizer) HasCapabilityForBatch(
 				continue
 			}
 			capabilityName = tenantcapabilitiespb.CanAdminSplit
+		case *kvpb.AdminUnsplitRequest:
+			capabilityName = tenantcapabilitiespb.CanAdminUnsplit
 		default:
 			// No capability checks for any other type of request.
 			continue

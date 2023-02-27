@@ -67,6 +67,8 @@ var TenantCapabilityNames = func() []TenantCapabilityName {
 const (
 	// CanAdminSplit maps to TenantCapabilities.CanAdminSplit.
 	CanAdminSplit TenantCapabilityName = iota + valueOffset // can_admin_split
+	// CanAdminUnsplit maps to TenantCapabilities.CanAdminUnsplit.
+	CanAdminUnsplit // can_admin_unsplit
 	// CanViewNodeInfo maps to TenantCapabilities.CanViewNodeInfo.
 	CanViewNodeInfo // can_view_node_info
 	// CanViewTSDBMetrics maps to TenantCapabilities.CanViewTSDBMetrics.
@@ -77,6 +79,8 @@ func (t *TenantCapabilities) getFlagFieldRef(capabilityName TenantCapabilityName
 	switch capabilityName {
 	case CanAdminSplit:
 		return &t.CanAdminSplit
+	case CanAdminUnsplit:
+		return &t.CanAdminUnsplit
 	case CanViewNodeInfo:
 		return &t.CanViewNodeInfo
 	case CanViewTSDBMetrics:

@@ -498,10 +498,11 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x89\x89", "/Tenant/10/Table/104/1/1"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			queryCapability:     tenantcapabilitiespb.CanAdminUnsplit,
 		},
 		{
 			desc: "ALTER INDEX x UNSPLIT AT",
@@ -517,10 +518,11 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xfe\x92\xf0\x8a\x89", "/Tenant/10/Table/104/2/1"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			queryCapability:     tenantcapabilitiespb.CanAdminUnsplit,
 		},
 		{
 			desc:  "ALTER TABLE x UNSPLIT ALL",
@@ -533,10 +535,11 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x89\x89", "/Tenant/10/Table/104/1/1"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			queryCapability:     tenantcapabilitiespb.CanAdminUnsplit,
 		},
 		{
 			desc: "ALTER INDEX x UNSPLIT ALL",
@@ -552,10 +555,11 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xfe\x92\xf0\x8a\x89", "/Tenant/10/Table/104/2/1"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			queryCapability:     tenantcapabilitiespb.CanAdminUnsplit,
 		},
 		{
 			desc:  "ALTER TABLE x SCATTER",

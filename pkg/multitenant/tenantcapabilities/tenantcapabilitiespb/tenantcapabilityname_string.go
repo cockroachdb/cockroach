@@ -9,13 +9,14 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[CanAdminSplit-1]
-	_ = x[CanViewNodeInfo-2]
-	_ = x[CanViewTSDBMetrics-3]
+	_ = x[CanAdminUnsplit-2]
+	_ = x[CanViewNodeInfo-3]
+	_ = x[CanViewTSDBMetrics-4]
 }
 
-const _TenantCapabilityName_name = "can_admin_splitcan_view_node_infocan_view_tsdb_metrics"
+const _TenantCapabilityName_name = "can_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metrics"
 
-var _TenantCapabilityName_index = [...]uint8{0, 15, 33, 54}
+var _TenantCapabilityName_index = [...]uint8{0, 15, 32, 50, 71}
 
 func (i TenantCapabilityName) String() string {
 	i -= 1

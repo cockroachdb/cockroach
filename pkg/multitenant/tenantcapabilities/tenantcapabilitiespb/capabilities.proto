@@ -45,4 +45,8 @@ message TenantCapabilities {
   // TODO(davidh): Revise this once tenant-scoped metrics are implemented in
   // https://github.com/cockroachdb/cockroach/issues/96438
   bool can_view_tsdb_metrics = 3 [(gogoproto.customname) = "CanViewTSDBMetrics"];
+
+  // CanAdminUnsplit if set to true, grants the tenant the ability to
+  // successfully perform `AdminUnsplit` requests.
+  bool can_admin_unsplit = 4;
 };
