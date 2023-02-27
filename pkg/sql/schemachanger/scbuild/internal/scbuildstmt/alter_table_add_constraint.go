@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -39,7 +41,7 @@ func alterTableAddConstraint(
 ) {
 	switch d := t.ConstraintDef.(type) {
 	case *tree.UniqueConstraintTableDef:
-		if d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+		if d.PrimaryKey {
 			alterTableAddPrimaryKey(b, tn, tbl, t)
 		} else if d.WithoutIndex {
 			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
@@ -57,8 +59,11 @@ func alterTableAddConstraint(
 func alterTableAddPrimaryKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
 ) {
-	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
+	if t.ValidationBehavior == tree.ValidationSkip {
+		panic(sqlerrors.NewUnsupportedUnvalidatedConstraintError(catconstants.ConstraintTypePK))
+	}
 
+	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
 	// Ensure that there is a default rowid column.
 	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(

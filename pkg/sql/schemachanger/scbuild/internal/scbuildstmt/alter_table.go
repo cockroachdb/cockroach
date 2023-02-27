@@ -52,7 +52,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
 	) bool {
-		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey {
 			// Support ALTER TABLE ... ADD PRIMARY KEY
 			return true
 		} else if ok && d.WithoutIndex {
@@ -85,6 +85,7 @@ var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversio
 	"ADD_CHECK_DEFAULT":                clusterversion.V23_1,
 	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1,
 	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1,
+	"ADD_PRIMARY_KEY_SKIP":             clusterversion.V23_1,
 	"ADD_CHECK_SKIP":                   clusterversion.V23_1,
 	"ADD_UNIQUE_WITHOUT_INDEX_SKIP":    clusterversion.V23_1,
 	"ADD_FOREIGN_KEY_SKIP":             clusterversion.V23_1,
