@@ -2940,3 +2940,15 @@ ALTER TABLE t_96648 DROP CONSTRAINT check_i, DROP CONSTRAINT check_i1;
 
 statement ok
 DROP TABLE t_96648
+
+# This subtests ensures we cannot add an unvalidated PK constraint
+subtest add_unvalidated_pk_96729
+
+statement ok
+CREATE TABLE t_96729 (i INT NOT NULL)
+
+statement error PRIMARY KEY constraints cannot be marked NOT VALID
+ALTER TABLE t_96729 ADD PRIMARY KEY (i) NOT VALID;
+
+statement ok
+ALTER TABLE t_96729 ADD PRIMARY KEY (i);

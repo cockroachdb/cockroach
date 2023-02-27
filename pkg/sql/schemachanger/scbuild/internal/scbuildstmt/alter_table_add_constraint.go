@@ -39,7 +39,7 @@ func alterTableAddConstraint(
 ) {
 	switch d := t.ConstraintDef.(type) {
 	case *tree.UniqueConstraintTableDef:
-		if d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+		if d.PrimaryKey {
 			alterTableAddPrimaryKey(b, tn, tbl, t)
 		} else if d.WithoutIndex {
 			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
@@ -57,8 +57,11 @@ func alterTableAddConstraint(
 func alterTableAddPrimaryKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
 ) {
-	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
+	if t.ValidationBehavior == tree.ValidationSkip {
+		panic(errors.New("PRIMARY KEY constraints cannot be marked NOT VALID"))
+	}
 
+	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
 	// Ensure that there is a default rowid column.
 	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(
