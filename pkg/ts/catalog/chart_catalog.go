@@ -2494,6 +2494,14 @@ var charts = []sectionDescription{
 				Metrics: []string{"sql.mem.internal.session.current"},
 			},
 			{
+				Title:   "Prepared Statements All",
+				Metrics: []string{"sql.mem.internal.session.prepared.max"},
+			},
+			{
+				Title:   "Prepared Statements Current",
+				Metrics: []string{"sql.mem.internal.session.prepared.current"},
+			},
+			{
 				Title:   "Txn All",
 				Metrics: []string{"sql.mem.internal.txn.max"},
 			},
@@ -2513,6 +2521,14 @@ var charts = []sectionDescription{
 			{
 				Title:   "Max",
 				Metrics: []string{"sql.mem.sql.session.max"},
+			},
+			{
+				Title:   "Prepared Statements Current",
+				Metrics: []string{"sql.mem.sql.session.prepared.current"},
+			},
+			{
+				Title:   "Prepared Statements Max",
+				Metrics: []string{"sql.mem.sql.session.prepared.max"},
 			},
 		},
 	},
