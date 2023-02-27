@@ -13,11 +13,13 @@ package scbuildstmt
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -235,6 +237,12 @@ func maybeDropDependentFKConstraints(
 	// shouldDropFK returns true if it is a dependent FK and no uniqueness-providing
 	// replacement can be found.
 	shouldDropFK := func(fkReferencedColIDs []catid.ColumnID) bool {
+		// Until the appropriate version gate is hit, we still do not allow
+		// dropping foreign keys in any the context of secondary indexes.
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+			panic(scerrors.NotImplementedErrorf(nil, "dropping FK constraints"+
+				" as a result of `DROP INDEX CASCADE` is not supported yet."))
+		}
 		return canToBeDroppedConstraintServeFK(fkReferencedColIDs) &&
 			!hasColsUniquenessConstraintOtherThan(b, tableID, fkReferencedColIDs, toBeDroppedConstraintID)
 	}

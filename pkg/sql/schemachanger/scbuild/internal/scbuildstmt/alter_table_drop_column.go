@@ -13,6 +13,7 @@ package scbuildstmt
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -246,6 +247,12 @@ func dropColumn(
 				undroppedSeqBackrefsToCheck.Add(e.SequenceID)
 			}
 		case *scpb.FunctionBody:
+			// Until the appropriate version gate is hit, we still do not allow
+			// dropping function bodies.
+			if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+				panic(scerrors.NotImplementedErrorf(nil, "dropping functions is"+
+					"not allowed yet."))
+			}
 			if behavior != tree.DropCascade {
 				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
 				panic(sqlerrors.NewDependentObjectErrorf(
@@ -255,6 +262,12 @@ func dropColumn(
 			}
 			dropCascadeDescriptor(b, e.FunctionID)
 		case *scpb.UniqueWithoutIndexConstraint:
+			// Until the appropriate version gate is hit, we still do not allow
+			// dropping unique without index constraints.
+			if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+				panic(scerrors.NotImplementedErrorf(nil, "dropping without"+
+					"index constraints is not allowed."))
+			}
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
 			alterTableDropConstraint(b, tn, tbl, &tree.AlterTableDropConstraint{
@@ -263,6 +276,12 @@ func dropColumn(
 				DropBehavior: behavior,
 			})
 		case *scpb.UniqueWithoutIndexConstraintUnvalidated:
+			// Until the appropriate version gate is hit, we still do not allow
+			// dropping unique without index constraints.
+			if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+				panic(scerrors.NotImplementedErrorf(nil, "dropping without"+
+					"index constraints is not allowed."))
+			}
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
 			alterTableDropConstraint(b, tn, tbl, &tree.AlterTableDropConstraint{
