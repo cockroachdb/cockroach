@@ -254,7 +254,7 @@ type TableHelpers interface {
 	// wrapped expression
 	PartialIndexPredicateExpression(
 		tableID catid.DescID, expr tree.Expr,
-	) *scpb.Expression
+	) tree.Expr
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
