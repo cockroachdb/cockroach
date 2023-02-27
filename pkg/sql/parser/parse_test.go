@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -28,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var issueLinkRE = regexp.MustCompile("https://go.crdb.dev/issue-v/([0-9]+)/.*")
@@ -744,5 +747,23 @@ func BenchmarkParse(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetTypeFromValidSQLSyntax(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+
+	const numRuns = 1000
+	for i := 0; i < numRuns; i++ {
+		orig := randgen.RandType(rng)
+		typeRef, err := parser.GetTypeFromValidSQLSyntax(orig.SQLString())
+		require.NoError(t, err)
+		actual, ok := tree.GetStaticallyKnownType(typeRef)
+		require.True(t, ok)
+		// TODO(yuzefovich): ideally, we'd assert that the returned type is
+		// equal to the original one; however, there are some subtle differences
+		// at the moment (like the width might only be set on the returned
+		// type), so we simply assert that the OIDs are the same.
+		require.Equal(t, orig.Oid(), actual.Oid())
 	}
 }
