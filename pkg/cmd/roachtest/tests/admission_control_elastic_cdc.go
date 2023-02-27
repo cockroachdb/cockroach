@@ -96,6 +96,13 @@ func registerElasticControlForCDC(r registry.Registry) {
 						if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 							return err
 						}
+						// By default, each changefeed can use up to 512MB of memory from root monitor.
+						// We will start 10 changefeeds, and potentially, we can reserve 5GB from main
+						// memory monitor.  That's a bit too much when running this test on smaller, 8G
+						// machines.  Lower the memory allowance.
+						if _, err := db.Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '128MB'"); err != nil {
+							return err
+						}
 					}
 
 					stopFeeds(db) // stop stray feeds (from repeated runs against the same cluster for ex.)
