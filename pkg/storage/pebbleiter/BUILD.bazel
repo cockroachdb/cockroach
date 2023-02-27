@@ -14,6 +14,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/pebbleiter",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
     ],
