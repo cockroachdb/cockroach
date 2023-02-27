@@ -13,7 +13,7 @@ import classNames from "classnames/bind";
 import React from "react";
 
 import { Duration } from "./duration";
-import { JobStatusVisual, isRetrying, jobToVisual } from "./jobOptions";
+import { JobStatusVisual, jobToVisual } from "./jobOptions";
 import {
   JobStatusBadge,
   ProgressBar,
@@ -54,7 +54,6 @@ export const JobStatus: React.FC<JobStatusProps> = ({
         </div>
       );
     case JobStatusVisual.ProgressBarWithDuration: {
-      const jobIsRetrying = isRetrying(job.status);
       return (
         <div>
           <ProgressBar
@@ -63,7 +62,6 @@ export const JobStatus: React.FC<JobStatusProps> = ({
             showPercentage={true}
           />
           <Duration job={job} className={cx("jobs-table__duration")} />
-          {jobIsRetrying && <RetryingStatusBadge />}
           {job.running_status && (
             <div className={cx("jobs-table__running-status")}>
               {job.running_status}

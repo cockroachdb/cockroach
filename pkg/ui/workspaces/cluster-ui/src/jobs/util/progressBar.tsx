@@ -12,7 +12,7 @@ import { Line } from "rc-progress";
 import React from "react";
 import { Badge } from "src/badge";
 
-import { jobStatusToBadgeStatus, jobStatusToBadgeText } from "./jobOptions";
+import { jobStatusToBadgeStatus } from "./jobOptions";
 
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
@@ -25,8 +25,7 @@ export class JobStatusBadge extends React.PureComponent<{ jobStatus: string }> {
   render(): React.ReactElement {
     const jobStatus = this.props.jobStatus;
     const badgeStatus = jobStatusToBadgeStatus(jobStatus);
-    const badgeText = jobStatusToBadgeText(jobStatus);
-    return <Badge status={badgeStatus} text={badgeText} />;
+    return <Badge status={badgeStatus} text={jobStatus} />;
   }
 }
 
