@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
@@ -230,6 +232,18 @@ func evaluateBatch(
 		cantDeferWTOE bool
 	}
 
+	// Only collect the scan stats if the tracing is enabled.
+	var ss *roachpb.ScanStats
+	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
+		ss = &roachpb.ScanStats{}
+		defer func() {
+			if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
+				// Only record non-empty ScanStats.
+				sp.RecordStructured(ss)
+			}
+		}()
+	}
+
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state
 	// across the slots in the batch while we execute them, this code could come
 	// out a lot less ad-hoc.
@@ -271,7 +285,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, baHeader, args, reply, g, st, ui)
+			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -475,6 +489,7 @@ func evaluateCommand(
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	ss *roachpb.ScanStats,
 	h roachpb.Header,
 	args roachpb.Request,
 	reply roachpb.Response,
@@ -496,6 +511,7 @@ func evaluateCommand(
 			Args:        args,
 			Now:         now,
 			Stats:       ms,
+			ScanStats:   ss,
 			Concurrency: g,
 			Uncertainty: ui,
 		}
