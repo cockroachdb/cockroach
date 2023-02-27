@@ -93,6 +93,9 @@ export const tableStatsClusterSetting = docsURL(
 export const performanceBestPractices = docsURL(
   "performance-best-practices-overview",
 );
+export const stmtPerformanceRules = docsURL(
+  "make-queries-fast.html#sql-statement-performance-rules",
+);
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion =
