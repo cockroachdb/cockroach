@@ -265,6 +265,35 @@ func NewColumnReferencedByComputedColumnError(droppingColumn, computedColumn str
 	)
 }
 
+// NewColumnReferencedByPartialIndex is returned when we drop a column that is
+// referenced in a partial index's predicate.
+func NewColumnReferencedByPartialIndex(droppingColumn, partialIndex string) error {
+	return errors.WithIssueLink(errors.WithHint(
+		pgerror.Newf(
+			pgcode.InvalidColumnReference,
+			"column %q cannot be dropped because it is referenced by partial index %q",
+			droppingColumn, partialIndex,
+		),
+		"drop the partial index first, then drop the column",
+	), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/pull/97372"})
+}
+
+// NewColumnReferencedByPartialUniqueWithoutIndexConstraint is almost the same as
+// NewColumnReferencedByPartialIndex except it's used when dropping column that is
+// referenced in a partial unique without index constraint's predicate.
+func NewColumnReferencedByPartialUniqueWithoutIndexConstraint(
+	droppingColumn, partialUWIConstraint string,
+) error {
+	return errors.WithIssueLink(errors.WithHint(
+		pgerror.Newf(
+			pgcode.InvalidColumnReference,
+			"column %q cannot be dropped because it is referenced by partial unique constraint %q",
+			droppingColumn, partialUWIConstraint,
+		),
+		"drop the unique constraint first, then drop the column",
+	), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/pull/97372"})
+}
+
 // NewUniqueConstraintReferencedByForeignKeyError generates an error to be
 // returned when dropping a unique constraint that is relied upon by an
 // inbound foreign key constraint.
