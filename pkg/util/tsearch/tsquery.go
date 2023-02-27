@@ -495,12 +495,13 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 				}
 				tokens = append(tokens, term)
 			}
-			lexeme, ok, err := TSLexize(config, lexemeTokens[j])
+			lexeme, stopWord, err := TSLexize(config, lexemeTokens[j])
 			if err != nil {
 				return TSQuery{}, err
 			}
-			if !ok {
+			if stopWord {
 				foundStopwords = true
+				continue
 			}
 			tokens = append(tokens, tsTerm{lexeme: lexeme, positions: tok.positions})
 		}

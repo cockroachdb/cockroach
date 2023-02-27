@@ -113,6 +113,14 @@ func (w tsWeight) TSVectorPGEncoding() (byte, error) {
 	return 0, errors.Errorf("invalid tsvector weight %d", w)
 }
 
+func (w tsWeight) val() int {
+	b, err := w.TSVectorPGEncoding()
+	if err != nil {
+		panic(err)
+	}
+	return int(b)
+}
+
 // matches returns true if the receiver is matched by the input tsquery weight.
 func (w tsWeight) matches(queryWeight tsWeight) bool {
 	if queryWeight == weightAny {
@@ -231,6 +239,10 @@ func (t tsTerm) matchesWeight(targetWeight tsWeight) bool {
 	return false
 }
 
+func (t tsTerm) isPrefixMatch() bool {
+	return len(t.positions) >= 1 && t.positions[0].weight&weightStar != 0
+}
+
 // TSVector is a sorted list of terms, each of which is a lexeme that might have
 // an associated position within an original document.
 type TSVector []tsTerm
@@ -323,16 +335,16 @@ func TSParse(input string) []string {
 // TSLexize implements the "dictionary" construct that's exposed via ts_lexize.
 // It gets invoked once per input token to produce an output lexeme during
 // routines like to_tsvector and to_tsquery.
-// It can return false in the second parameter to indicate a stopword was found.
-func TSLexize(config string, token string) (lexeme string, notAStopWord bool, err error) {
-	stopwords, notAStopWord := stopwordsMap[config]
-	if !notAStopWord {
+// It can return true in the second parameter to indicate a stopword was found.
+func TSLexize(config string, token string) (lexeme string, stopWord bool, err error) {
+	stopwords, ok := stopwordsMap[config]
+	if !ok {
 		return "", false, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
 	}
 
 	lower := strings.ToLower(token)
 	if _, ok := stopwords[lower]; ok {
-		return "", false, nil
+		return "", true, nil
 	}
 	stemmer, err := getStemmer(config)
 	if err != nil {
@@ -340,7 +352,7 @@ func TSLexize(config string, token string) (lexeme string, notAStopWord bool, er
 	}
 	env := snowballstem.NewEnv(lower)
 	stemmer(env)
-	return env.Current(), true, nil
+	return env.Current(), false, nil
 }
 
 // DocumentToTSVector parses an input document into lexemes, removes stop words,
@@ -350,17 +362,18 @@ func DocumentToTSVector(config string, input string) (TSVector, error) {
 	tokens := TSParse(input)
 	vector := make(TSVector, 0, len(tokens))
 	for i := range tokens {
-		lexeme, ok, err := TSLexize(config, tokens[i])
+		lexeme, stopWord, err := TSLexize(config, tokens[i])
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		if stopWord {
 			continue
 		}
 
 		term := tsTerm{lexeme: lexeme}
 		pos := i + 1
 		if i > maxTSVectorPosition {
+			// Postgres silently truncates positions larger than 16383 to 16383.
 			pos = maxTSVectorPosition
 		}
 		term.positions = []tsPosition{{position: uint16(pos)}}
