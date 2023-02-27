@@ -84,7 +84,6 @@ type delimitedProducer struct {
 	reader    *bufio.Reader
 	row       []rune
 	err       error
-	eof       bool
 }
 
 var _ importRowProducer = &delimitedProducer{}
@@ -94,26 +93,14 @@ func (d *delimitedProducer) Scan() bool {
 	d.row = nil
 	var r rune
 	var w int
-	nextLiteral := false
-	fieldEnclosed := false
+	var gotEncloser, inEnclosedField, inEscapeSeq, inField bool
 
 	for {
 		r, w, d.err = d.reader.ReadRune()
 		if d.err == io.EOF {
-			d.eof = true
 			d.err = nil
+			return d.row != nil
 		}
-
-		if d.eof {
-			if d.row != nil {
-				return true
-			}
-			if nextLiteral {
-				d.err = io.ErrUnexpectedEOF
-			}
-			return false
-		}
-
 		if d.err != nil {
 			return false
 		}
@@ -130,23 +117,34 @@ func (d *delimitedProducer) Scan() bool {
 			r = rune(raw)
 		}
 
-		if r == d.opts.RowSeparator && !nextLiteral && !fieldEnclosed {
+		if d.opts.Enclose != roachpb.MySQLOutfileOptions_Never {
+			// We only care about well-formed, enclosed fields (i.e. fields that
+			// start and end with the encloser rune with no additional runes either
+			// before or after the field). More precisely: 1) an encloser only
+			// starts a field if it is at the start of a row or immediately follows
+			// a field terminator and 2) an encloser only ends a field if it is
+			// immediately followed by the field terminator rune.
+			// We let FillDatums take care of reporting and handling any errors.
+			if inEnclosedField && gotEncloser && (r == d.opts.FieldSeparator || r == d.opts.RowSeparator) {
+				inEnclosedField = false
+			}
+			gotEncloser = r == d.opts.Encloser
+			if gotEncloser && !inField {
+				inEnclosedField = true
+			}
+		}
+
+		if r == d.opts.RowSeparator && !inEscapeSeq && !inEnclosedField {
 			return true
 		}
 
-		d.row = append(d.row, r)
+		inField = !(r == d.opts.FieldSeparator)
 
 		if d.opts.HasEscape {
-			nextLiteral = !nextLiteral && r == d.opts.Escape
+			inEscapeSeq = !inEscapeSeq && r == d.opts.Escape
 		}
 
-		if d.opts.Enclose != roachpb.MySQLOutfileOptions_Never && r == d.opts.Encloser {
-			// We only care about well formed, enclosed fields (i.e. ones that start with
-			// enclose rune.  If we see enclose character anywhere else, then we either
-			// close the opened enclosing, or we treat this as an invalid enclosing,
-			// and let FillDatums below take care of reporting and handling any errors.
-			fieldEnclosed = len(d.row) == 1
-		}
+		d.row = append(d.row, r)
 	}
 }
 
