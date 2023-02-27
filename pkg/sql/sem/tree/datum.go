@@ -5796,7 +5796,7 @@ func InferTypes(vals []string) []types.Family {
 // with a reasonable previous datum that is smaller than the given one.
 //
 // The return value is undefined if Datum.IsMin returns true or if the value is
-// NaN of an infinity (for floats and decimals).
+// NaN or an infinity (for floats and decimals).
 func DatumPrev(
 	datum Datum, evalCtx *EvalContext, collationEnv *CollationEnvironment,
 ) (Datum, bool) {
@@ -5833,16 +5833,6 @@ func DatumPrev(
 			return nil, false
 		}
 		return NewDString(prev), true
-	case *DCollatedString:
-		prev, ok := prevString(d.Contents)
-		if !ok {
-			return nil, false
-		}
-		c, err := NewDCollatedString(prev, d.Locale, collationEnv)
-		if err != nil {
-			return nil, false
-		}
-		return c, true
 	case *DBytes:
 		prev, ok := prevString(string(*d))
 		if !ok {
@@ -5855,8 +5845,8 @@ func DatumPrev(
 		return NewDInterval(prev, types.DefaultIntervalTypeMetadata), true
 	default:
 		// TODO(yuzefovich): consider adding support for other datums that don't
-		// have Datum.Prev implementation (DBitArray, DGeography, DGeometry,
-		// DBox2D, DJSON, DArray).
+		// have Datum.Prev implementation (DCollatedString, DBitArray,
+		// DGeography, DGeometry, DBox2D, DJSON, DArray).
 		return datum.Prev(evalCtx)
 	}
 }
@@ -5867,7 +5857,7 @@ func DatumPrev(
 // with a reasonable next datum that is greater than the given one.
 //
 // The return value is undefined if Datum.IsMax returns true or if the value is
-// NaN of an infinity (for floats and decimals).
+// NaN or an infinity (for floats and decimals).
 func DatumNext(
 	datum Datum, evalCtx *EvalContext, collationEnv *CollationEnvironment,
 ) (Datum, bool) {
@@ -5885,24 +5875,13 @@ func DatumNext(
 			return nil, false
 		}
 		return &next, true
-	case *DCollatedString:
-		s := NewDString(d.Contents)
-		next, ok := s.Next(evalCtx)
-		if !ok {
-			return nil, false
-		}
-		c, err := NewDCollatedString(string(*next.(*DString)), d.Locale, collationEnv)
-		if err != nil {
-			return nil, false
-		}
-		return c, true
 	case *DInterval:
 		next := d.Add(duration.MakeDuration(1000000 /* nanos */, 0 /* days */, 0 /* months */))
 		return NewDInterval(next, types.DefaultIntervalTypeMetadata), true
 	default:
 		// TODO(yuzefovich): consider adding support for other datums that don't
-		// have Datum.Next implementation (DGeography, DGeometry, DBox2D,
-		// DJSON).
+		// have Datum.Next implementation (DCollatedString, DGeography,
+		// DGeometry, DBox2D, DJSON).
 		return datum.Next(evalCtx)
 	}
 }
