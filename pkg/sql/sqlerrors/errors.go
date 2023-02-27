@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -169,6 +170,11 @@ func NewDatabaseAlreadyExistsError(name string) error {
 // NewSchemaAlreadyExistsError creates an error for a preexisting schema.
 func NewSchemaAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", name)
+}
+
+func NewUnsupportedUnvalidatedConstraintError(constraintType catconstants.ConstraintType) error {
+	return pgerror.Newf(pgcode.FeatureNotSupported,
+		"%v constraints cannot be marked NOT VALID", constraintType)
 }
 
 // WrapErrorWhileConstructingObjectAlreadyExistsErr is used to wrap an error
