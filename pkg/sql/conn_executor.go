@@ -850,6 +850,13 @@ func (s *Server) newConnExecutor(
 		memMetrics.SessionMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
 	)
+	sessionPreparedMon := mon.NewMonitor(
+		"session prepared statements",
+		mon.MemoryResource,
+		memMetrics.SessionPreparedCurBytesCount,
+		memMetrics.SessionPreparedMaxBytesHist,
+		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
+	)
 	// The txn monitor is started in txnState.resetForNewSQLTxn().
 	txnMon := mon.NewMonitor(
 		"txn",
@@ -867,6 +874,7 @@ func (s *Server) newConnExecutor(
 		clientComm:          clientComm,
 		mon:                 sessionRootMon,
 		sessionMon:          sessionMon,
+		sessionPreparedMon:  sessionPreparedMon,
 		sessionDataStack:    sdMutIterator.sds,
 		dataMutatorIterator: sdMutIterator,
 		state: txnState{
@@ -1164,10 +1172,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
+		ex.sessionPreparedMon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
 		ex.mon.Stop(ctx)
 	} else {
 		ex.state.mon.EmergencyStop(ctx)
+		ex.sessionPreparedMon.EmergencyStop(ctx)
 		ex.sessionMon.EmergencyStop(ctx)
 		ex.mon.EmergencyStop(ctx)
 	}
@@ -1213,6 +1223,9 @@ type connExecutor struct {
 	// statistics for result sets (which escape transactions).
 	mon        *mon.BytesMonitor
 	sessionMon *mon.BytesMonitor
+
+	// sessionPreparedMon tracks memory usage by prepared statements.
+	sessionPreparedMon *mon.BytesMonitor
 	// memMetrics contains the metrics that statements executed on this connection
 	// will contribute to.
 	memMetrics MemoryMetrics
@@ -1740,6 +1753,7 @@ func (ex *connExecutor) activate(
 	// single threaded, and the point of buffering is just to avoid contention.
 	ex.mon.Start(ctx, parentMon, reserved)
 	ex.sessionMon.Start(ctx, ex.mon, mon.BoundAccount{})
+	ex.sessionPreparedMon.Start(ctx, ex.sessionMon, mon.BoundAccount{})
 
 	// Enable the trace if configured.
 	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
