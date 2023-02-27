@@ -1253,15 +1253,13 @@ func setupAndInitializeLoggingAndProfiling(
 	info := build.GetInfo()
 	log.Ops.Infof(ctx, "%s", log.SafeManaged(info.Short()))
 
-	initTraceDir(ctx, serverCfg.InflightTraceDirName)
-	initCPUProfile(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings)
-	initBlockProfile()
-	initMutexProfile()
-
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
 	stopper = stop.NewStopper()
+	initTraceDir(ctx, serverCfg.InflightTraceDirName)
+	initBlockProfile()
+	initMutexProfile()
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil

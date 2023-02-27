@@ -329,6 +329,7 @@ func startTenantInternal(
 		args.stopper,
 		args.GoroutineDumpDirName,
 		args.HeapProfileDirName,
+		args.CPUProfileDirName,
 		args.runtime,
 		args.sessionRegistry,
 	); err != nil {
