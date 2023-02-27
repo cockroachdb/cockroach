@@ -176,8 +176,8 @@ const planRegressionInsight = (execType: InsightExecEnum): Insight => {
 
 const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
   const description =
-    `This ${execType} was slow because a good plan was not available, whether ` +
-    `due to outdated statistics or missing indexes.`;
+    `This ${execType} was slow because a good plan was unavailable; ` +
+    `possible reasons include outdated statistics or missing indexes.`;
   return {
     name: InsightNameEnum.suboptimalPlan,
     label: "Suboptimal Plan",
