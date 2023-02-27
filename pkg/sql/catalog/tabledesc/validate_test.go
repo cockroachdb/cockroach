@@ -2474,6 +2474,12 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:   1,
+						Type: types.Int,
+					},
+				},
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -2490,6 +2496,12 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:   1,
+						Type: types.Int,
+					},
+				},
 			}},
 		},
 		{ // 2
@@ -3029,6 +3041,64 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					},
 				},
 			},
+		},
+		{ // 26
+			err: `validate origin columns [1] in FK "fk": column-id "1" does not exist`,
+			desc: descpb.TableDescriptor{
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []descpb.ColumnID{1},
+						OriginTableID:       51,
+						OriginColumnIDs:     []descpb.ColumnID{1},
+					},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+			}},
+		},
+		{ // 27
+			err: `validate referenced columns [1] in FK "fk": column-id "1" does not exist`,
+			desc: descpb.TableDescriptor{
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:   1,
+						Type: types.Int,
+					},
+				},
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []descpb.ColumnID{1},
+						OriginTableID:       51,
+						OriginColumnIDs:     []descpb.ColumnID{1},
+					},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+			}},
 		},
 	}
 

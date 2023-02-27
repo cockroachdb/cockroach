@@ -485,6 +485,17 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
 	}
+	// Check columns used in FK exist in both tables.
+	for _, colID := range fk.OriginColumnIDs {
+		if _, err := catalog.MustFindColumnByID(desc, colID); err != nil {
+			return errors.Wrapf(err, "validate origin columns %v in FK %q", fk.OriginColumnIDs, fk.Name)
+		}
+	}
+	for _, colID := range fk.ReferencedColumnIDs {
+		if _, err := catalog.MustFindColumnByID(referencedTable, colID); err != nil {
+			return errors.Wrapf(err, "validate referenced columns %v in FK %q", fk.ReferencedColumnIDs, fk.Name)
+		}
+	}
 	return nil
 }
 
