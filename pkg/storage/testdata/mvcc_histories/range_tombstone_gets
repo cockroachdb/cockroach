@@ -3,13 +3,13 @@
 # Sets up the following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
 #
 #  T
-#  6                 [e6]
+#  6                 [e6]                                     o6
 #  5                      f5
 #  4          o-----------------------o   o-------o  [j-l)@4 has localTs=3
 #  3  x          d3       f3
-#  2  o---------------o           h2
+#  2  o---------------o           h2                      o--------o
 #  1  a1  x   c1          f1
-#     a   b   c   d   e   f   g   h   i   j   k   l
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o    p
 #
 run ok
 put k=a ts=1 v=a1
@@ -21,12 +21,14 @@ del k=a ts=3
 put k=d ts=3 v=d3
 put k=f ts=3 v=f3
 put k=h ts=2 v=h2
+del_range_ts k=n end=p ts=2
 del_range_ts k=c end=i ts=4
 put k=f ts=5 v=f5
 del_range_ts k=j end=l ts=4 localTs=3
 with t=A
   txn_begin k=e ts=6
   put k=e v=e6
+put k=o ts=6 v=o6
 ----
 del: "b": found key false
 del: "a": found key false
@@ -36,6 +38,7 @@ rangekey: {a-c}/[2.000000000,0=/<empty>]
 rangekey: {c-e}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
 rangekey: {e-i}/[4.000000000,0=/<empty>]
 rangekey: {j-l}/[4.000000000,0={localTs=3.000000000,0}/<empty>]
+rangekey: {n-p}/[2.000000000,0=/<empty>]
 data: "a"/3.000000000,0 -> /<empty>
 data: "a"/1.000000000,0 -> /BYTES/a1
 data: "b"/1.000000000,0 -> /<empty>
@@ -47,6 +50,7 @@ data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/3.000000000,0 -> /BYTES/f3
 data: "f"/1.000000000,0 -> /BYTES/f1
 data: "h"/2.000000000,0 -> /BYTES/h2
+data: "o"/6.000000000,0 -> /BYTES/o6
 
 # Run gets for all keys and all timestamps.
 run ok
@@ -241,6 +245,87 @@ get: "k" -> <no data>
 get: "k" -> /<empty> @4.000000000,0
 get: "k" -> /<empty> @4.000000000,0
 
+run ok
+get k=l ts=1
+get k=l ts=2
+get k=l ts=3
+get k=l ts=4
+get k=l ts=5
+get k=l ts=6
+get k=l ts=1 tombstones
+get k=l ts=2 tombstones
+get k=l ts=3 tombstones
+get k=l ts=4 tombstones
+get k=l ts=5 tombstones
+get k=l ts=6 tombstones
+----
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+get: "l" -> <no data>
+
+run ok
+get k=n ts=1
+get k=n ts=2
+get k=n ts=3
+get k=n ts=4
+get k=n ts=5
+get k=n ts=6
+get k=n ts=1 tombstones
+get k=n ts=2 tombstones
+get k=n ts=3 tombstones
+get k=n ts=4 tombstones
+get k=n ts=5 tombstones
+get k=n ts=6 tombstones
+----
+get: "n" -> <no data>
+get: "n" -> <no data>
+get: "n" -> <no data>
+get: "n" -> <no data>
+get: "n" -> <no data>
+get: "n" -> <no data>
+get: "n" -> <no data>
+get: "n" -> /<empty> @2.000000000,0
+get: "n" -> /<empty> @2.000000000,0
+get: "n" -> /<empty> @2.000000000,0
+get: "n" -> /<empty> @2.000000000,0
+get: "n" -> /<empty> @2.000000000,0
+
+run ok
+get k=o ts=1
+get k=o ts=2
+get k=o ts=3
+get k=o ts=4
+get k=o ts=5
+get k=o ts=6
+get k=o ts=1 tombstones
+get k=o ts=2 tombstones
+get k=o ts=3 tombstones
+get k=o ts=4 tombstones
+get k=o ts=5 tombstones
+get k=o ts=6 tombstones
+----
+get: "o" -> <no data>
+get: "o" -> <no data>
+get: "o" -> <no data>
+get: "o" -> <no data>
+get: "o" -> <no data>
+get: "o" -> /BYTES/o6 @6.000000000,0
+get: "o" -> <no data>
+get: "o" -> /<empty> @2.000000000,0
+get: "o" -> /<empty> @2.000000000,0
+get: "o" -> /<empty> @2.000000000,0
+get: "o" -> /<empty> @2.000000000,0
+get: "o" -> /BYTES/o6 @6.000000000,0
+
 # failOnMoreRecent: c
 run error
 get k=c ts=1 failOnMoreRecent
@@ -397,3 +482,19 @@ get k=k ts=1 globalUncertaintyLimit=4 localUncertaintyLimit=3
 ----
 get: "k" -> <no data>
 error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 (local=3.000000000,0) within uncertainty interval `t <= (local=3.000000000,0, global=0,0)`; observed timestamps: []
+
+# Test a particular case where:
+# - a tombstone must be synthesized due to a range tombstone
+# - the uncertainty limit is such that we must check for uncertainty
+# - the only point at the key is not visible at the read timstamp, but is also
+#   not outside the uncertainty limit
+#
+# In these circumstances, the scanner will seekVersion to find the first visible
+# key (there is none), invalidating the underlying Pebble iterator. Although the
+# underlying Pebble iterator has been invalidated, the scanner should still
+# succeed in synthesizing a tombstone at the range key timestamp retrieved
+# before the iterator was invalidated.
+run ok
+get k=o ts=5 tombstones globalUncertaintyLimit=6 localUncertaintyLimit=5
+----
+get: "o" -> /<empty> @2.000000000,0
