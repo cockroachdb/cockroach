@@ -24,6 +24,7 @@ import {
   performanceBestPractices,
   performanceTuningRecipes,
   statementsRetries,
+  stmtPerformanceRules,
 } from "../util";
 import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
@@ -152,6 +153,12 @@ function descriptionCell(
     </>
   );
 
+  const learnMoreSuboptimalPlan = (
+    <Anchor href={stmtPerformanceRules} target="_blank">
+      Learn more
+    </Anchor>
+  );
+
   const indexLink = isCockroachCloud
     ? EncodeDatabasesToIndexUri(
         insightRec.database,
@@ -243,7 +250,7 @@ function descriptionCell(
           {stmtLink}
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
-            {insightRec.details.description}
+            {insightRec.details.description} {learnMoreSuboptimalPlan}
           </div>
           {insightRec.execution.indexRecommendations && (
             <div className={cx("description-item")}>
