@@ -54,6 +54,8 @@ func (t *TenantCapabilities) Cap(
 	switch capabilityID {
 	case tenantcapabilities.CanAdminSplit:
 		return boolCap{&t.CanAdminSplit}
+	case tenantcapabilities.CanAdminUnsplit:
+		return boolCap{&t.CanAdminUnsplit}
 	case tenantcapabilities.CanViewNodeInfo:
 		return boolCap{&t.CanViewNodeInfo}
 	case tenantcapabilities.CanViewTSDBMetrics:
@@ -69,6 +71,8 @@ func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityI
 	switch capabilityID {
 	case tenantcapabilities.CanAdminSplit:
 		return t.CanAdminSplit
+	case tenantcapabilities.CanAdminUnsplit:
+		return t.CanAdminUnsplit
 	case tenantcapabilities.CanViewNodeInfo:
 		return t.CanViewNodeInfo
 	case tenantcapabilities.CanViewTSDBMetrics:

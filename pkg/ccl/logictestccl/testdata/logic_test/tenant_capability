@@ -32,6 +32,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "no-capabilities-tenant
 ----
 capability_id          capability_value
 can_admin_split        false
+can_admin_unsplit      false
 can_view_node_info     false
 can_view_tsdb_metrics  false
 
@@ -50,6 +51,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-no-val
 ----
 capability_id          capability_value
 can_admin_split        true
+can_admin_unsplit      false
 can_view_node_info     false
 can_view_tsdb_metrics  false
 
@@ -61,6 +63,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-no-val
 ----
 capability_id          capability_value
 can_admin_split        false
+can_admin_unsplit      false
 can_view_node_info     false
 can_view_tsdb_metrics  false
 
@@ -79,6 +82,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-with-v
 ----
 capability_id          capability_value
 can_admin_split        true
+can_admin_unsplit      false
 can_view_node_info     false
 can_view_tsdb_metrics  false
 
@@ -97,6 +101,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-with-e
 ----
 capability_id          capability_value
 can_admin_split        true
+can_admin_unsplit      false
 can_view_node_info     false
 can_view_tsdb_metrics  false
 
@@ -115,6 +120,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "multiple-capability-te
 ----
 capability_id          capability_value
 can_admin_split        true
+can_admin_unsplit      false
 can_view_node_info     true
 can_view_tsdb_metrics  false
 
@@ -126,6 +132,7 @@ SELECT capability_id, capability_value FROM [SHOW TENANT "multiple-capability-te
 ----
 capability_id          capability_value
 can_admin_split        false
+can_admin_unsplit      false
 can_view_node_info     false
 can_view_tsdb_metrics  false
 

@@ -45,12 +45,6 @@ SELECT * FROM crdb_internal.kv_node_status
 
 # Cannot perform operations that issue Admin requests.
 
-statement error operation is unsupported in multi-tenancy mode
-ALTER TABLE kv UNSPLIT AT VALUES ('foo')
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER TABLE kv UNSPLIT ALL
-
 statement error tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled
 ALTER TABLE kv SCATTER
 

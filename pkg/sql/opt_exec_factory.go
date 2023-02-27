@@ -1985,20 +1985,13 @@ func (ef *execFactory) ConstructAlterTableSplit(
 func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
-
-	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		execCfg,
+		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX UNSPLIT AT",
 	); err != nil {
 		return nil, err
 	}
-
-	if err := execCfg.RequireSystemTenant(); err != nil {
-		return nil, err
-	}
-
 	return &unsplitNode{
 		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).idx,
@@ -2008,15 +2001,11 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
-	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		execCfg,
+		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX UNSPLIT ALL",
 	); err != nil {
-		return nil, err
-	}
-	if err := execCfg.RequireSystemTenant(); err != nil {
 		return nil, err
 	}
 	return &unsplitAllNode{
