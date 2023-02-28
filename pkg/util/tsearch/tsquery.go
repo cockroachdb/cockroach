@@ -81,6 +81,24 @@ func (o tsOperator) pgwireEncoding() byte {
 	panic(errors.AssertionFailedf("no pgwire encoding for operator %d", o))
 }
 
+func (o tsOperator) String() string {
+	switch o {
+	case not:
+		return "!"
+	case and:
+		return "&"
+	case or:
+		return "|"
+	case followedby:
+		return "<->"
+	case lparen:
+		return "("
+	case rparen:
+		return ")"
+	}
+	panic(errors.AssertionFailedf("no string for operator %d", o))
+}
+
 func tsOperatorFromPgwireEncoding(b byte) (tsOperator, error) {
 	switch b {
 	case 1:
@@ -404,4 +422,108 @@ func (p *tsQueryParser) parseTSExpr(minBindingPower int) (*tsNode, error) {
 
 func (p *tsQueryParser) syntaxError() (*tsNode, error) {
 	return nil, pgerror.Newf(pgcode.Syntax, "syntax error in TSQuery: %s", p.input)
+}
+
+// ToTSQuery implements the to_tsquery builtin, which lexes an input, performs
+// stopwording and normalization on the tokens, and returns a parsed query.
+func ToTSQuery(config string, input string) (TSQuery, error) {
+	return toTSQuery(config, invalid, input)
+}
+
+// PlainToTSQuery implements the plainto_tsquery builtin, which lexes an input,
+// performs stopwording and normalization on the tokens, and returns a parsed
+// query, interposing the & operator between each token.
+func PlainToTSQuery(config string, input string) (TSQuery, error) {
+	return toTSQuery(config, and, input)
+}
+
+// PhraseToTSQuery implements the phraseto_tsquery builtin, which lexes an input,
+// performs stopwording and normalization on the tokens, and returns a parsed
+// query, interposing the <-> operator between each token.
+func PhraseToTSQuery(config string, input string) (TSQuery, error) {
+	return toTSQuery(config, followedby, input)
+}
+
+// toTSQuery implements the to_tsquery builtin, which lexes an input,
+// performs stopwording and normalization on the tokens, and returns a parsed
+// query. If the interpose operator is not invalid, it's interposed between each
+// token in the input.
+func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, error) {
+	switch config {
+	case "simple":
+	default:
+		return TSQuery{}, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
+	}
+
+	vector, err := lexTSQuery(input)
+	if err != nil {
+		return TSQuery{}, err
+	}
+	tokens := make(TSVector, 0, len(vector))
+	for i := range vector {
+		tok := vector[i]
+
+		foundOperator := tok.operator != invalid
+		var lexemeTokens []string
+
+		if !foundOperator {
+			// Try parsing the token.
+			lexemeTokens = TSParse(tok.lexeme)
+		}
+
+		// If we found an operator or were able to parse lexemes from the token,
+		// add the interpose operator if there is one.
+		if interpose != invalid && i > 0 && (foundOperator || len(lexemeTokens) > 0) {
+			term := tsTerm{operator: interpose}
+			if interpose == followedby {
+				term.followedN = 1
+			}
+			tokens = append(tokens, term)
+		}
+
+		if foundOperator {
+			tokens = append(tokens, tok)
+			continue
+		}
+
+		if len(lexemeTokens) == 0 {
+			// We ate some whitespace or whitespace-like text with no tokens.
+			continue
+		}
+
+		// When we support more than just the simple configuration, we'll also
+		// want to remove stopwords, which will affect the interposing, but we can
+		// worry about that later.
+		// Additionally, if we're doing phraseto_tsquery, if we remove a stopword,
+		// we need to make sure to increase the "followedN" of the followedby
+		// operator. For example, phraseto_tsquery('hello a deer') will return
+		// 'hello <2> deer', since the a stopword would be removed.
+
+		tokInterpose := interpose
+		if tokInterpose == invalid {
+			tokInterpose = followedby
+		}
+		for j := range lexemeTokens {
+			if j > 0 {
+				// We found more than one lexeme in our token, so we need to add all of them
+				// to the query, connected by our interpose operator.
+				// If we aren't running with an interpose, like in to_tsquery, Postgres
+				// uses the <-> operator to connect multiple lexemes from a single token.
+				term := tsTerm{operator: tokInterpose}
+				if tokInterpose == followedby {
+					term.followedN = 1
+				}
+				tokens = append(tokens, term)
+			}
+			lexeme, err := TSLexize(config, lexemeTokens[j])
+			if err != nil {
+				return TSQuery{}, err
+			}
+			tokens = append(tokens, tsTerm{lexeme: lexeme})
+		}
+	}
+
+	// Now create the operator tree.
+	queryParser := tsQueryParser{terms: tokens, input: input}
+	return queryParser.parse()
 }
