@@ -360,6 +360,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/funcdesc",
+        "//pkg/sql/catalog/funcinfo",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/nstree",
