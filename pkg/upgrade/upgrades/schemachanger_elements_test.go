@@ -50,17 +50,16 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 		waitType   int
 	}{
 		{
-			"running schema change that will have a deprecated waitForSchemaChangerElementMigration element",
-			nil,
-			func(t *testing.T, sqlDB *gosql.DB) error {
+			name: "running schema change that will have a deprecated waitForSchemaChangerElementMigration element",
+			run: func(t *testing.T, sqlDB *gosql.DB) error {
 				_, err := sqlDB.Exec("SET sql_safe_updates=off")
 				require.NoError(t, err)
 				_, err = sqlDB.Exec("ALTER TABLE t DROP COLUMN b")
 				require.ErrorContains(t, err, "was paused before it completed with reason: pause point \"newschemachanger.before.exec\" hit")
 				return nil
 			},
-			true,
-			WaitForSchemaChangeCompletion,
+			unpauseJob: true,
+			waitType:   WaitForSchemaChangeCompletion,
 		},
 		{
 			"running schema change that will have no deprecated elements",
@@ -117,7 +116,7 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 				schemaChangeAllowedToComplete chan struct{}
 				waitedForJob                  chan struct{}
 				jobIsPaused                   chan struct{}
-				readyToQuery                  int64
+				readyToQuery                  int64 = 0
 			)
 			scJobID := int64(jobspb.InvalidJobID)
 			params.Knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
@@ -142,9 +141,8 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 				if targetJobID := jobspb.JobID(atomic.LoadInt64(&scJobID)); targetJobID != jobspb.InvalidJobID {
 					for _, j := range jobs {
 						// The upgrade is waiting for the job...
-						if j == targetJobID && atomic.LoadInt64(&readyToQuery) > 0 {
+						if j == targetJobID && atomic.CompareAndSwapInt64(&readyToQuery, 1, 0) {
 							atomic.StoreInt64(&scJobID, int64(jobspb.InvalidJobID))
-							atomic.StoreInt64(&readyToQuery, 0)
 							waitedForJob <- struct{}{}
 						}
 					}
@@ -167,7 +165,6 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 			schemaChangeAllowedToComplete = make(chan struct{})
 			waitedForJob = make(chan struct{})
 			jobIsPaused = make(chan struct{})
-			atomic.StoreInt64(&readyToQuery, 0)
 			g.GoCtx(func(ctx context.Context) error {
 				err := tc.run(t, sqlDB)
 				jobIsPaused <- struct{}{}
