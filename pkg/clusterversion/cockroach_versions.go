@@ -444,6 +444,15 @@ const (
 	// backfilled.
 	V23_1DatabaseRoleSettingsRoleIDColumnBackfilled
 
+	// V23_1_MVCCRangeTombstonesUnconditionallyEnabled is a version gate at and
+	// after which Cockroach will always write MVCC Range Tombstones, regardless
+	// of the value of the storage.mvcc.range_tombstones.enabled cluster setting.
+	// Prior to this version, it was possible for a cluster to be writing MVCC
+	// Range Tombstones, but only if the cluster had been opted in manually, under
+	// a specific set of circumstances (i.e. appropriate 22.2.x version, Cockroach
+	// Cloud cluster, etc.).
+	V23_1_MVCCRangeTombstonesUnconditionallyEnabled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -768,6 +777,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1DatabaseRoleSettingsRoleIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 56},
+	},
+	{
+		Key:     V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 58},
 	},
 
 	// *************************************************

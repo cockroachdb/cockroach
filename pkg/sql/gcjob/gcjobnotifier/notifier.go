@@ -156,7 +156,7 @@ func (n *Notifier) run(_ context.Context) {
 		}
 	})
 	tombstonesEnableChanges := make(chan struct{}, 1)
-	storage.MVCCRangeTombstonesEnabled.SetOnChange(&n.settings.SV, func(ctx context.Context) {
+	storage.MVCCRangeTombstonesEnabledInMixedClusters.SetOnChange(&n.settings.SV, func(ctx context.Context) {
 		select {
 		case tombstonesEnableChanges <- struct{}{}:
 		default:
