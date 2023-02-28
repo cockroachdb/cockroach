@@ -22,7 +22,7 @@ BEGIN
 END;
 $$ LANGUAGE made_up_language
 
-statement error .*cannot set leakproof on function with non-immutable volatility: STABLE.*
+statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string

@@ -87,6 +87,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		Name:       n.FuncName.Object(),
 	})
 
+	validateFunctionLeakProof(n.Options, catpb.DefaultFunctionLeakProof, catpb.DefaultFunctionVolatility)
 	var lang catpb.Function_Language
 	var fnBodyStr string
 	for _, option := range n.Options {
@@ -173,5 +174,32 @@ func validateFunctionRelationReferences(
 				"the function cannot refer to other databases",
 				name.String()))
 		}
+	}
+}
+
+func validateFunctionLeakProof(
+	options tree.FunctionOptions, curLeakProof bool, curVolatility catpb.Function_Volatility,
+) {
+	for _, option := range options {
+		switch t := option.(type) {
+		case tree.FunctionVolatility:
+			v, err := funcdesc.VolatilityToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			curVolatility = v
+		case tree.FunctionLeakproof:
+			curLeakProof = bool(t)
+		}
+	}
+
+	if curLeakProof && curVolatility != catpb.Function_IMMUTABLE {
+		panic(
+			pgerror.Newf(
+				pgcode.InvalidFunctionDefinition,
+				"cannot set leakproof on function with non-immutable volatility: %s",
+				curVolatility.String(),
+			),
+		)
 	}
 }
