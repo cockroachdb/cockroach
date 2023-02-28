@@ -21,11 +21,12 @@ import (
 // TODO(kvoli): The single key interface is expensive when parsed. Consider
 // pre-aggregating load events into batches to amortize this cost.
 type LoadEvent struct {
-	Key       int64
-	Writes    int64
-	WriteSize int64
-	Reads     int64
-	ReadSize  int64
+	Key         int64
+	Writes      int64
+	WriteSize   int64
+	Reads       int64
+	ReadSize    int64
+	BaseCPUTime int64
 }
 
 // LoadBatch is a sorted list of load events.
