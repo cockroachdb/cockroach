@@ -369,6 +369,10 @@ type Planner interface {
 	// statements.
 	IsANSIDML() bool
 
+	// EnforceHomeRegion returns true if the statement being planned is an ANSI
+	// DML statement and the enforce_home_region session setting is true.
+	EnforceHomeRegion() bool
+
 	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
 	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
 

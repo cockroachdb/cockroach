@@ -341,8 +341,8 @@ func newJoinReader(
 		return nil, err
 	}
 
-	errorOnLookup := spec.RemoteOnlyLookups && flowCtx.EvalCtx.SessionData().EnforceHomeRegion &&
-		flowCtx.EvalCtx.Planner != nil && flowCtx.EvalCtx.Planner.IsANSIDML()
+	errorOnLookup := spec.RemoteOnlyLookups &&
+		flowCtx.EvalCtx.Planner != nil && flowCtx.EvalCtx.Planner.EnforceHomeRegion()
 
 	jr := &joinReader{
 		fetchSpec:                         spec.FetchSpec,
@@ -1020,8 +1020,8 @@ func (jr *joinReader) readInput() (
 	return jrPerformingLookup, outRow, nil
 }
 
-var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-	"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
+var noHomeRegionError = execinfra.NewDynamicQueryHasNoHomeRegionError(pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+	"Query has no home region. Try using a lower LIMIT value or running the query from a different region."))
 
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
