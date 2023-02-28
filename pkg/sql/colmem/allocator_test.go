@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -527,7 +528,18 @@ func TestEstimateBatchSizeBytes(t *testing.T) {
 	numCols := rng.Intn(10) + 1
 	typs := make([]*types.T, numCols)
 	for i := range typs {
-		typs[i] = randgen.RandType(rng)
+		for {
+			typs[i] = randgen.RandType(rng)
+			// We ignore all datum-backed types. This is due to mismatch in how
+			// we account for unset elements in EstimateBatchSizeBytes (where we
+			// include the estimated implementation size) and datumVec.Size
+			// (where unset elements remain nil for which we only include the
+			// DatumOverhead). This exception is ok given that we still perform
+			// the correct accounting after the actual elements are set.
+			if typeconv.TypeFamilyToCanonicalTypeFamily(typs[i].Family()) != typeconv.DatumVecCanonicalTypeFamily {
+				break
+			}
+		}
 	}
 	const numRuns = 10
 	for run := 0; run < numRuns; run++ {
