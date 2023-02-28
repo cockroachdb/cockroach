@@ -170,15 +170,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.4.darwin-amd64.tar.gz", "6fa1e9087b36fba65625869c885ca9c6f1db734306d8e74836b212248c20d55d"),
-        "darwin_arm64": ("go1.19.4.darwin-arm64.tar.gz", "bb3bc5d7655b9637cfe2b5e90055dee93b0ead50e2ffd091df320d1af1ca853f"),
-        "freebsd_amd64": ("go1.19.4.freebsd-amd64.tar.gz", "84489ebb63f1757b79574d7345c647bd40bc6414cecb868c93e24476c2d2b9b6"),
-        "linux_amd64": ("go1.19.4.linux-amd64.tar.gz", "e52774e4d6a0bb5bcc5a0f1d11e337929de826b40c99c408283b8854336d9dc4"),
-        "linux_arm64": ("go1.19.4.linux-arm64.tar.gz", "8bb193126fea46dca70658b7916b458a22fddb8e37d6deb463f14e10d6f06552"),
-        "windows_amd64": ("go1.19.4.windows-amd64.tar.gz", "ced538537d190c03e6e4bffb3b60049794d70f09af7900bd8419b44245b2b5dc"),
+        "darwin_amd64": ("go1.19.6.darwin-amd64.tar.gz", "1d4c893d34183143eb79e8be18f099014f9d91786eabf51bf124a84f6a6f7345"),
+        "darwin_arm64": ("go1.19.6.darwin-arm64.tar.gz", "dfbf3e4686dd7fee7a9c0223c52b124c1af5f02508baf07e1e59489cd9df2a90"),
+        "freebsd_amd64": ("go1.19.6.freebsd-amd64.tar.gz", "f4b432ebe462a6edd6131e94360b9f0fb3b8136bba39caeacb4aa22a89ba1dd8"),
+        "linux_amd64": ("go1.19.6.linux-amd64.tar.gz", "d78cb765b95fe10f559cc6a5d59841f23b9252911af4f2a322ba3f804e2bbcda"),
+        "linux_arm64": ("go1.19.6.linux-arm64.tar.gz", "2ae769c5367b21f82a4fb25a1cf5cb42625431b82a6d34e7aa120083d607b316"),
+        "windows_amd64": ("go1.19.6.windows-amd64.tar.gz", "1f8233566b6604d72b73665e0047c9647a226581892e64d4b460cec1cb39657e"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20221219-000617/{}"],
-    version = "1.19.4",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230227-221815/{}"],
+    version = "1.19.6",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
