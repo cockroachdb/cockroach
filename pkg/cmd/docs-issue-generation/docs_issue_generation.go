@@ -205,7 +205,7 @@ var (
 	releaseJustificationRE = regexp.MustCompile(`(?i)release justification:.*`)
 	prNumberRE             = regexp.MustCompile(`Related PR: \[?https://github.com/cockroachdb/cockroach/pull/(\d+)\D`)
 	commitShaRE            = regexp.MustCompile(`Commit: \[?https://github.com/cockroachdb/cockroach/commit/(\w+)\W`)
-	exalateJiraRefRE       = regexp.MustCompile(`\\n` + exalateJiraRefPart + `\\n`)
+	exalateJiraRefRE       = regexp.MustCompile(exalateJiraRefPart)
 )
 
 const (
@@ -223,7 +223,7 @@ func docsIssueGeneration(params parameters) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	docsIssues := constructDocsIssues(prs)
+	docsIssues := constructDocsIssues(prs, params.Token)
 	if params.DryRun {
 		fmt.Printf("Start time: %#v\n", params.StartTime.Format(time.RFC3339))
 		fmt.Printf("End time: %#v\n", params.EndTime.Format(time.RFC3339))
@@ -669,8 +669,14 @@ func containsBugFix(message string) bool {
 	return false
 }
 
+// org/repo#issue: PROJECT-NUMBER
+
 // getJiraIssueFromGitHubIssue takes a GitHub issue and returns the appropriate Jira key from the issue body.
-func getJiraIssueFromGitHubIssue(org, repo string, issue int, token string) string {
+// getJiraIssueFromGitHubIssue is specified as a function closure to allow for testing
+// of getJiraIssueFromGitHubIssue* methods.
+var getJiraIssueFromGitHubIssue = func(org, repo string, issue int, token string) string {
+	jiraGHIssueCache := make(map[string]string)
+	key := fmt.Sprintf("%s/%s#%d", org, repo, issue)
 	query := `query ($org: String!, $repo: String!, $issue: Int!) {
 		repository(owner: $org, name: $repo) {
 			issue(number: $issue) {
@@ -694,25 +700,50 @@ func getJiraIssueFromGitHubIssue(org, repo string, issue int, token string) stri
 	if len(exalateRef) > 0 {
 		jiraIssue = jiraIssuePartRE.FindString(exalateRef)
 	}
+	jiraGHIssueCache[key] = jiraIssue
 	return jiraIssue
 }
 
-func getJiraIssueFromRef(ref string) string {
-	if ghURLPartRE.MatchString(ref) || jiraURLPartRE.MatchString(ref) {
+func Split(r rune) bool {
+	return r == '/' || r == '#'
+}
+
+func getJiraIssueFromRef(ref, token string) string {
+	if jiraIssuePartRE.MatchString(ref) {
 		return ref
+	} else if jiraURLPartRE.MatchString(ref) {
+		return strings.Replace(ref, "https://cockroachlabs.atlassian.net/browse/", "", 1)
 	} else if ghIssueRepoPartRE.MatchString(ref) {
-		split := strings.Split(ref, "#")
-		return "https://github.com/" + split[0] + "/issues/" + split[1]
+		split := strings.FieldsFunc(ref, Split)
+		issueNumber, err := strconv.Atoi(split[2])
+		if err != nil {
+			fmt.Println(err)
+			return ""
+		}
+		return getJiraIssueFromGitHubIssue(split[0], split[1], issueNumber, token)
 	} else if ghIssuePartRE.MatchString(ref) {
-		return "https://github.com/cockroachdb/cockroach/issues/" + strings.Replace(ref, "#", "", 1)
-	} else if jiraIssuePartRE.MatchString(ref) {
-		return "https://cockroachlabs.atlassian.net/browse/" + ref
+		issueNumber, err := strconv.Atoi(strings.Replace(ref, "#", "", 1))
+		if err != nil {
+			fmt.Println(err)
+			return ""
+		}
+		return getJiraIssueFromGitHubIssue("cockroachdb", "cockroach", issueNumber, token)
+	} else if ghURLPartRE.MatchString(ref) {
+		replace1 := strings.Replace(ref, "https://github.com/", "", 1)
+		replace2 := strings.Replace(replace1, "/issues", "", 1)
+		split := strings.FieldsFunc(replace2, Split)
+		issueNumber, err := strconv.Atoi(split[2])
+		if err != nil {
+			fmt.Println(err)
+			return ""
+		}
+		return getJiraIssueFromGitHubIssue(split[0], split[1], issueNumber, token)
 	} else {
 		return "Malformed epic/issue ref (" + ref + ")"
 	}
 }
 
-func extractIssueEpicRefs(prBody, commitBody string) string {
+func extractIssueEpicRefs(prBody, commitBody, token string) string {
 	refInfo := epicIssueRefInfo{
 		epicRefs:        extractEpicIDs(commitBody + "\n" + prBody),
 		epicNone:        containsEpicNone(commitBody + "\n" + prBody),
@@ -724,21 +755,21 @@ func extractIssueEpicRefs(prBody, commitBody string) string {
 	if len(refInfo.epicRefs) > 0 {
 		builder.WriteString("Epic:")
 		for x := range refInfo.epicRefs {
-			builder.WriteString(" " + getJiraIssueFromRef(x))
+			builder.WriteString(" " + getJiraIssueFromRef(x, token))
 		}
 		builder.WriteString("\n")
 	}
 	if len(refInfo.issueCloseRefs) > 0 {
 		builder.WriteString("Fixes:")
 		for x := range refInfo.issueCloseRefs {
-			builder.WriteString(" " + getJiraIssueFromRef(x))
+			builder.WriteString(" " + getJiraIssueFromRef(x, token))
 		}
 		builder.WriteString("\n")
 	}
 	if len(refInfo.issueInformRefs) > 0 {
 		builder.WriteString("Informs:")
 		for x := range refInfo.issueInformRefs {
-			builder.WriteString(" " + getJiraIssueFromRef(x))
+			builder.WriteString(" " + getJiraIssueFromRef(x, token))
 		}
 		builder.WriteString("\n")
 	}
@@ -750,11 +781,11 @@ func extractIssueEpicRefs(prBody, commitBody string) string {
 
 // getIssues takes a list of commits from GitHub as well as the PR number associated with those commits and outputs a
 // formatted list of docs issues with valid release notes
-func constructDocsIssues(prs []cockroachPR) []docsIssue {
+func constructDocsIssues(prs []cockroachPR, token string) []docsIssue {
 	var result []docsIssue
 	for _, pr := range prs {
 		for _, commit := range pr.Commits {
-			rns := formatReleaseNotes(commit.MessageBody, pr.Number, pr.Body, commit.Sha)
+			rns := formatReleaseNotes(commit.MessageBody, pr.Number, pr.Body, commit.Sha, token)
 			for i, rn := range rns {
 				x := docsIssue{
 					sourceCommitSha: commit.Sha,
@@ -783,13 +814,13 @@ func formatTitle(title string, prNumber int, index int, totalLength int) string 
 
 // formatReleaseNotes generates a list of docsIssue bodies for the docs repo based on a given CRDB sha
 func formatReleaseNotes(
-	commitMessage string, prNumber int, prBody string, crdbSha string,
+	commitMessage string, prNumber int, prBody, crdbSha, token string,
 ) []string {
 	rnBodySlice := []string{}
 	if releaseNoteNoneRE.MatchString(commitMessage) {
 		return rnBodySlice
 	}
-	epicIssueRefs := extractIssueEpicRefs(prBody, commitMessage)
+	epicIssueRefs := extractIssueEpicRefs(prBody, commitMessage, token)
 	splitString := strings.Split(commitMessage, "\n")
 	releaseNoteLines := []string{}
 	var rnBody string
