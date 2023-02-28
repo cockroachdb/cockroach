@@ -1860,3 +1860,24 @@ INSERT INTO t_97296 VALUES (0.0, 5, 32);
 
 statement ok
 ALTER TABLE t_97296 ALTER PRIMARY KEY USING COLUMNS (b, a);
+
+# This subtest ensures we properly support ALTER PRIMARY KEY USING HASH
+subtest alter_primary_key_using_hash_96730
+
+statement ok
+CREATE TABLE t_96730 (i INT PRIMARY KEY, j INT NOT NULL, k STRING NOT NULL, FAMILY "primary" (i, j, k));
+
+statement ok
+ALTER TABLE t_96730 ALTER PRIMARY KEY USING COLUMNS (j, k) USING HASH
+
+query TT
+SHOW CREATE TABLE t_96730
+----
+t_96730  CREATE TABLE public.t_96730 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           k STRING NOT NULL,
+           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(j, k)), 16:::INT8)) VIRTUAL,
+           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
+           UNIQUE INDEX t_96730_i_key (i ASC)
+         )

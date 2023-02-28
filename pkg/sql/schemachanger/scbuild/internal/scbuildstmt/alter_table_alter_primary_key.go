@@ -70,7 +70,6 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	// TODO (xiang): This section contains all fall-back cases and need to
 	// be removed to fully support `ALTER PRIMARY KEY`.
 	fallBackIfConcurrentSchemaChange(b, t, tbl.TableID)
-	fallBackIfRequestToBeSharded(t)
 	fallBackIfShardedIndexExists(b, t, tbl.TableID)
 	fallBackIfPartitionedIndexExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
@@ -93,7 +92,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	// Handle special case where the old primary key is the hidden rowid column.
 	// In this case, drop this column if it is not referenced anywhere.
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
-	if !checkIfRowIDColumnCanBeDropped(b, rowidToDrop) {
+	if !checkIfColumnCanBeDropped(b, rowidToDrop) {
 		rowidToDrop = nil
 	}
 
@@ -137,12 +136,31 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	}
 	out.apply(b.Drop)
 	checkIfConstraintNameAlreadyExists(b, tbl, t)
-	sharding := makeShardedDescriptor(b, t)
+
+	// Set up sharding.
+	var sharding *catpb.ShardedDescriptor
+	var shardColID catid.ColumnID
+	if t.Sharded != nil {
+		columnNames := make([]string, len(t.Columns))
+		for i, col := range t.Columns {
+			columnNames[i] = string(col.Column)
+		}
+		sharding, shardColID = ensureShardColAndMakeShardDesc(b, tbl, columnNames,
+			t.Sharded.ShardBuckets, t.StorageParams, t.n)
+		inColumns = append(inColumns, indexColumnSpec{})
+		copy(inColumns[1:], inColumns)
+		inColumns[0] = indexColumnSpec{
+			columnID: shardColID,
+			kind:     scpb.IndexColumn_KEY,
+		}
+	}
+
 	var sourcePrimaryIndexElem *scpb.PrimaryIndex
 	if rowidToDrop == nil {
 		// We're NOT dropping the rowid column => do one primary index swap.
 		in, tempIn := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
 		in.primary.Sharding = sharding
+		tempIn.temporary.Sharding = sharding
 		if t.Name != "" {
 			in.name.Name = string(t.Name)
 		}
@@ -183,9 +201,10 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 		dropColumn(b, tn, tbl, t.n, rowidToDrop, elts, tree.DropRestrict)
 	}
 
-	// Construct and add elements for a unique secondary index created on
-	// the old primary key columns.
-	// This is a CRDB unique feature that exists in the legacy schema changer.
+	// Create a unique index on the old primary key columns, if applicable.
+	// This is a CRDB unique feature to not regress on performance after altering PK.
+	// Note that it has to precede recreating all secondary indexes because it is
+	// possible we need to recreate this unique index.
 	maybeAddUniqueIndexForOldPrimaryKey(b, tn, tbl, t, oldPrimaryIndexElem, newPrimaryIndexElem, rowidToDrop)
 }
 
@@ -317,14 +336,6 @@ func fallBackIfConcurrentSchemaChange(b BuildCtx, t alterPrimaryKeySpec, tableID
 				ns.Name, ns.Name))
 		}
 	})
-}
-
-// fallBackIfRequestToBeSharded panics with an unimplemented error
-// if it is requested to be hash-sharded.
-func fallBackIfRequestToBeSharded(t alterPrimaryKeySpec) {
-	if t.Sharded != nil {
-		panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY USING HASH is not yet supported."))
-	}
 }
 
 // fallBackIfPartitionedIndexExists panics with an unimplemented error
@@ -561,31 +572,6 @@ func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrim
 	})
 }
 
-// makeShardedDescriptor construct a sharded descriptor for the new primary key.
-// Return nil if the new primary key is not hash-sharded.
-func makeShardedDescriptor(b BuildCtx, t alterPrimaryKeySpec) *catpb.ShardedDescriptor {
-	if t.Sharded == nil {
-		return nil
-	}
-
-	shardBuckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(),
-		t.Sharded.ShardBuckets, t.StorageParams)
-	if err != nil {
-		panic(err)
-	}
-	columnNames := make([]string, len(t.Columns))
-	for i, col := range t.Columns {
-		columnNames[i] = col.Column.String()
-	}
-
-	return &catpb.ShardedDescriptor{
-		IsSharded:    true,
-		Name:         tabledesc.GetShardColumnName(columnNames, shardBuckets),
-		ShardBuckets: shardBuckets,
-		ColumnNames:  columnNames,
-	}
-}
-
 // recreateAllSecondaryIndexes recreates all secondary indexes. While the key
 // columns remain the same in the face of a primary key change, the key suffix
 // columns or the stored columns may not.
@@ -693,7 +679,8 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	tn *tree.TableName,
 	tbl *scpb.Table,
 	t alterPrimaryKeySpec,
-	oldPrimaryIndex, newPrimaryIndex *scpb.PrimaryIndex,
+	oldPrimaryIndex *scpb.PrimaryIndex,
+	newPrimaryIndex *scpb.PrimaryIndex,
 	rowidToDrop *scpb.Column,
 ) {
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
@@ -702,8 +689,8 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 		return
 	}
 	sec, temp := addNewUniqueSecondaryIndexAndTempIndex(b, tbl, oldPrimaryIndex)
-	addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
-		b, tn, tbl, t, oldPrimaryIndex.IndexID, sec.IndexID, temp.IndexID)
+	addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, t,
+		oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, sec.IndexID, temp.IndexID)
 	addIndexNameForNewUniqueSecondaryIndex(b, tbl, sec.IndexID)
 }
 
@@ -748,6 +735,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 	tbl *scpb.Table,
 	t alterPrimaryKeySpec,
 	oldPrimaryIndexID catid.IndexID,
+	newPrimaryIndexID catid.IndexID,
 	newUniqueSecondaryIndexID catid.IndexID,
 	temporaryIndexIDForNewUniqueSecondaryIndex catid.IndexID,
 ) {
@@ -778,38 +766,25 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 	}
 
 	// SUFFIX_KEY columns = new primary index columns - old primary key columns
-	// First find column IDs and dirs by their names, as specified in t.Columns.
-	newPrimaryIndexKeyColumnIDs := make([]catid.ColumnID, len(t.Columns))
-	newPrimaryIndexKeyColumnDirs := make([]catenumpb.IndexColumn_Direction, len(t.Columns))
-	allColumnsNameToIDMapping := getAllColumnsNameToIDMapping(b, tbl.TableID)
-	for i, col := range t.Columns {
-		if colID, exist := allColumnsNameToIDMapping[string(col.Column)]; !exist {
-			panic(fmt.Sprintf("table %v does not have a column named %v", tn.String(), col.Column))
-		} else {
-			newPrimaryIndexKeyColumnIDs[i] = colID
-			newPrimaryIndexKeyColumnDirs[i] = indexColumnDirection(col.Direction)
-		}
-	}
-
 	// Add each column that is not in the old primary key as a SUFFIX_KEY column.
 	var ord uint32 = 0
-	for i, keyColIDInNewPrimaryIndex := range newPrimaryIndexKeyColumnIDs {
-		if !descpb.ColumnIDs(oldPrimaryIndexKeyColumnIDs).Contains(keyColIDInNewPrimaryIndex) {
+	for _, keyColInNewPrimaryIndex := range mustRetrieveKeyIndexColumns(b, tbl.TableID, newPrimaryIndexID) {
+		if !descpb.ColumnIDs(oldPrimaryIndexKeyColumnIDs).Contains(keyColInNewPrimaryIndex.ColumnID) {
 			b.Add(&scpb.IndexColumn{
 				TableID:       tbl.TableID,
 				IndexID:       newUniqueSecondaryIndexID,
-				ColumnID:      keyColIDInNewPrimaryIndex,
+				ColumnID:      keyColInNewPrimaryIndex.ColumnID,
 				OrdinalInKind: ord,
 				Kind:          scpb.IndexColumn_KEY_SUFFIX,
-				Direction:     newPrimaryIndexKeyColumnDirs[i],
+				Direction:     keyColInNewPrimaryIndex.Direction,
 			})
 			b.Add(&scpb.IndexColumn{
 				TableID:       tbl.TableID,
 				IndexID:       temporaryIndexIDForNewUniqueSecondaryIndex,
-				ColumnID:      keyColIDInNewPrimaryIndex,
+				ColumnID:      keyColInNewPrimaryIndex.ColumnID,
 				OrdinalInKind: ord,
 				Kind:          scpb.IndexColumn_KEY_SUFFIX,
-				Direction:     newPrimaryIndexKeyColumnDirs[i],
+				Direction:     keyColInNewPrimaryIndex.Direction,
 			})
 			ord++
 		}
@@ -987,39 +962,48 @@ func getPrimaryIndexDefaultRowIDColumn(
 	return column
 }
 
-// checkIfRowIDColumnCanBeDropped returns true iff the rowid column is not
-// referenced anywhere, and can therefore be dropped.
-func checkIfRowIDColumnCanBeDropped(b BuildCtx, rowidToDrop *scpb.Column) bool {
-	if rowidToDrop == nil {
+// checkIfColumnCanBeDropped returns true iff the column is not referenced
+// anywhere, and can therefore be dropped.
+func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
+	if columnToDrop == nil {
 		return false
 	}
 	canBeDropped := true
-	walkDropColumnDependencies(b, rowidToDrop, func(e scpb.Element) {
+	walkDropColumnDependencies(b, columnToDrop, func(e scpb.Element) {
 		if !canBeDropped {
 			return
 		}
 		switch e := e.(type) {
 		case *scpb.Column:
-			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
+			if e.TableID != columnToDrop.TableID || e.ColumnID != columnToDrop.ColumnID {
 				canBeDropped = false
 			}
 		case *scpb.ColumnDefaultExpression:
-			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
+			if e.TableID != columnToDrop.TableID || e.ColumnID != columnToDrop.ColumnID {
 				canBeDropped = false
 			}
 		case *scpb.ColumnOnUpdateExpression:
-			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
+			if e.TableID != columnToDrop.TableID || e.ColumnID != columnToDrop.ColumnID {
 				canBeDropped = false
 			}
-		case *scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint, *scpb.ForeignKeyConstraint:
+		case *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint:
 			canBeDropped = false
+		case *scpb.CheckConstraint:
+			// If the check constraint is from the to-be-dropped, hash-sharded column,
+			// then we conclude this (hash-sharded) column be can dropped, even if a
+			// check constraint references it.
+			if e.TableID == columnToDrop.TableID && e.FromHashShardedColumn && e.ColumnIDs[0] == columnToDrop.ColumnID {
+				canBeDropped = true
+			} else {
+				canBeDropped = false
+			}
 		case *scpb.View, *scpb.Sequence:
 			canBeDropped = false
 		case *scpb.SecondaryIndex:
 			isOnlyKeySuffixColumn := true
-			indexElts := b.QueryByID(rowidToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
+			indexElts := b.QueryByID(columnToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
 			scpb.ForEachIndexColumn(indexElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
-				if rowidToDrop.ColumnID == ic.ColumnID && ic.Kind != scpb.IndexColumn_KEY_SUFFIX {
+				if columnToDrop.ColumnID == ic.ColumnID && ic.Kind != scpb.IndexColumn_KEY_SUFFIX {
 					isOnlyKeySuffixColumn = false
 				}
 			})
@@ -1054,4 +1038,28 @@ func getSortedAllColumnIDsInTable(b BuildCtx, tableID catid.DescID) (res []catid
 		return res[i] < res[j]
 	})
 	return res
+}
+
+// ensureShardColAndMakeShardDesc ensures that we added the shard column (and
+// its check constraint), if the shard column is not already present, and
+// construct a sharded descriptor for it.
+func ensureShardColAndMakeShardDesc(
+	b BuildCtx,
+	tbl *scpb.Table,
+	columnNames []string,
+	shardBuckets tree.Expr,
+	storageParams tree.StorageParams,
+	n tree.NodeFormatter,
+) (*catpb.ShardedDescriptor, catid.ColumnID) {
+	buckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(), shardBuckets, storageParams)
+	if err != nil {
+		panic(err)
+	}
+	shardColName, shardColID := maybeCreateAndAddShardCol(b, int(buckets), tbl, columnNames, n)
+	return &catpb.ShardedDescriptor{
+		IsSharded:    true,
+		Name:         shardColName,
+		ShardBuckets: buckets,
+		ColumnNames:  columnNames,
+	}, shardColID
 }
