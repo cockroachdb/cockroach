@@ -993,43 +993,71 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		return err
 	}
 
-	// Populate the known_hosts file with both internal and external IPs of all
-	// of the nodes in the cluster. Note that as a side effect, this creates the
-	// known hosts file in unhashed format, working around a limitation of jsch
+	// Populate the known_hosts file with both internal and external IPs of all of
+	// the nodes in the cluster. Internal IPs are populated within its provider
+	// peers only, and external IPs are populated for all providers. Note that as
+	// a side effect, this creates the known hosts file in unhashed format,
+	// working around a limitation of
+	// jsch
 	// (which is used in jepsen tests).
-	ips := make([]string, len(c.Nodes), len(c.Nodes)*2)
+
+	// Build a list of the first VM for each provider.
+	mu := syncutil.Mutex{}
+	ips := make(map[string][]string)
+	providersFirstVM := make([]int, 0)
+	for index, vm := range c.VMs {
+		if _, ok := ips[vm.Provider]; !ok {
+			// Use the map to ensure we only add the first VM for each provider.
+			ips[vm.Provider] = make([]string, 0)
+			providersFirstVM = append(providersFirstVM, index)
+		}
+	}
+	// Build a list of internal IPs for each provider.
 	if err := c.Parallel(l, "retrieving hosts", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
+		provider := c.VMs[node-1].Provider
 		res := &RunResultDetails{Node: node}
-		for j := 0; j < 20 && ips[i] == ""; j++ {
+		ip := ""
+		for j := 0; j < 20 && ip == ""; j++ {
 			var err error
-			ips[i], err = c.GetInternalIP(l, ctx, node)
+			ip, err = c.GetInternalIP(l, ctx, node)
 			if err != nil {
 				res.Err = errors.Wrapf(err, "pgurls")
 				return res, res.Err
 			}
 			time.Sleep(time.Second)
 		}
-		if ips[i] == "" {
+		if ip == "" {
 			res.Err = fmt.Errorf("retrieved empty IP address")
 			return res, res.Err
 		}
+		mu.Lock()
+		ips[provider] = append(ips[provider], ip)
+		mu.Unlock()
 		return res, nil
 	}, DefaultSSHRetryOpts); err != nil {
 		return err
 	}
 
+	// Get public IPs for all nodes.
+	publicIps := make([]string, 0, len(c.Nodes))
 	for _, i := range c.Nodes {
-		ips = append(ips, c.Host(i))
+		publicIps = append(publicIps, c.Host(i))
 	}
-	var knownHostsData []byte
-	if err := c.Parallel(l, "scanning hosts", 1, 0, func(i int) (*RunResultDetails, error) {
-		node := c.Nodes[i]
+
+	providerKnownHostData := make(map[string][]byte)
+	if err := c.Parallel(l, "scanning hosts", len(providersFirstVM), 0, func(i int) (*RunResultDetails, error) {
+		vmIndex := providersFirstVM[i]
+		node := Node(vmIndex + 1)
+		// Scan a combination of all remote IPs and local IPs pertaining to this
+		// node's cloud provider.
+		provider := c.VMs[vmIndex].Provider
+		scanIps := append(ips[provider], publicIps...)
 
 		// ssh-keyscan may return fewer than the desired number of entries if the
 		// remote nodes are not responding yet, so we loop until we have a scan that
-		// found host keys for all of the IPs. Merge the newly scanned keys with the
-		// existing list to make this process idempotent.
+		// found host keys for all the public IPs. Merge the newly scanned keys
+		// with the existing list to make this process idempotent.
 		cmd := `
 set -e
 tmp="$(tempfile -d ~/.ssh -p 'roachprod' )"
@@ -1038,8 +1066,8 @@ on_exit() {
 }
 trap on_exit EXIT
 for i in {1..20}; do
-  ssh-keyscan -T 60 -t rsa ` + strings.Join(ips, " ") + ` > "${tmp}"
-  if [[ "$(wc < ${tmp} -l)" -eq "` + fmt.Sprint(len(ips)) + `" ]]; then
+  ssh-keyscan -T 60 -t rsa ` + strings.Join(scanIps, " ") + ` > "${tmp}"
+  if [[ "$(wc < ${tmp} -l)" -eq "` + fmt.Sprint(len(scanIps)) + `" ]]; then
     [[ -f .ssh/known_hosts ]] && cat .ssh/known_hosts >> "${tmp}"
     sort -u < "${tmp}"
     exit 0
@@ -1064,7 +1092,9 @@ exit 1
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "%s: stderr:\n%s", cmd, res.Stderr)
 		}
-		knownHostsData = stdout.Bytes()
+		mu.Lock()
+		providerKnownHostData[provider] = stdout.Bytes()
+		mu.Unlock()
 		return res, nil
 	}, DefaultSSHRetryOpts); err != nil {
 		return err
@@ -1072,6 +1102,7 @@ exit 1
 
 	if err := c.Parallel(l, "distributing known_hosts", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
+		provider := c.VMs[node-1].Provider
 		const cmd = `
 known_hosts_data="$(cat)"
 set -e
@@ -1103,7 +1134,7 @@ fi
 		sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-known-hosts"))
 		defer sess.Close()
 
-		sess.SetStdin(bytes.NewReader(knownHostsData))
+		sess.SetStdin(bytes.NewReader(providerKnownHostData[provider]))
 		out, cmdErr := sess.CombinedOutput(ctx)
 		res := newRunResultDetails(node, cmdErr)
 		res.CombinedOut = out
