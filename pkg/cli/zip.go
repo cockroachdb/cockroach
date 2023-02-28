@@ -29,11 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // zipRequest abstracts a possible server API call to one of the API
@@ -162,9 +165,25 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 
 		resp, err := serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
 		if err != nil {
-			return s.fail(err)
+			if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
+				// For pre-v23.1 clusters, this endpoint in not implemented, proceed with
+				// only querying the system tenant.
+				resp, sErr := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+				if sErr != nil {
+					return s.fail(errors.CombineErrors(err, sErr))
+				}
+				tenants = append(tenants, &serverpb.Tenant{
+					TenantId:   &roachpb.SystemTenantID,
+					TenantName: catconstants.SystemTenantName,
+					SqlAddr:    resp.SQLAddress.String(),
+					RpcAddr:    serverCfg.Addr,
+				})
+			} else {
+				return s.fail(err)
+			}
+		} else {
+			tenants = resp.Tenants
 		}
-		tenants = resp.Tenants
 		s.done()
 
 		return nil
