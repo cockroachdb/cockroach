@@ -66,6 +66,8 @@ const (
 	NOSQLLOGIN
 	VIEWCLUSTERSETTING
 	NOVIEWCLUSTERSETTING
+	VIEWJOB
+	NOVIEWJOB
 )
 
 // ControlChangefeedDeprecationNoticeMsg is a user friendly notice which should be shown when CONTROLCHANGEFEED is used
@@ -103,6 +105,8 @@ var toSQLStmts = map[Option]string{
 	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITYREDACTED'`,
 	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWCLUSTERSETTING') ON CONFLICT DO NOTHING`,
 	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWCLUSTERSETTING'`,
+	VIEWJOB:                `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWJOB') ON CONFLICT DO NOTHING`,
+	NOVIEWJOB:              `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWJOB'`,
 }
 
 // toSQLStmtsWithID is a map of Kind -> SQL statement string for applying the
@@ -134,6 +138,8 @@ var toSQLStmtsWithID = map[Option]string{
 	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITYREDACTED'`,
 	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
 	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWCLUSTERSETTING'`,
+	VIEWJOB:                `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWJOB', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWJOB:              `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWJOB'`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -169,6 +175,8 @@ var ByName = map[string]Option{
 	"NOSQLLOGIN":             NOSQLLOGIN,
 	"VIEWCLUSTERSETTING":     VIEWCLUSTERSETTING,
 	"NOVIEWCLUSTERSETTING":   NOVIEWCLUSTERSETTING,
+	"VIEWJOB":                VIEWJOB,
+	"NOVIEWJOB":              NOVIEWJOB,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -321,7 +329,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&SQLLOGIN.Mask() != 0 &&
 			roleOptionBits&NOSQLLOGIN.Mask() != 0) ||
 		(roleOptionBits&VIEWCLUSTERSETTING.Mask() != 0 &&
-			roleOptionBits&NOVIEWCLUSTERSETTING.Mask() != 0) {
+			roleOptionBits&NOVIEWCLUSTERSETTING.Mask() != 0) ||
+		(roleOptionBits&VIEWJOB.Mask() != 0 &&
+			roleOptionBits&NOVIEWJOB.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil

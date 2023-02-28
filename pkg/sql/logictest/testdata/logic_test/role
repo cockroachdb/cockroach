@@ -918,6 +918,15 @@ ALTER ROLE testrole WITH CREATEROLE CREATEROLE
 statement error pq: redundant role options
 ALTER ROLE testrole WITH NOCREATEROLE NOCREATEROLE
 
+statement error pq: conflicting role options
+ALTER ROLE testrole WITH VIEWJOB NOVIEWJOB
+
+statement error pq: redundant role options
+ALTER ROLE testrole WITH VIEWJOB VIEWJOB
+
+statement error pq: redundant role options
+ALTER ROLE testrole WITH NOVIEWJOB NOVIEWJOB
+
 statement ok
 CREATE ROLE rolewithcreate WITH CREATEROLE
 

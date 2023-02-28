@@ -3135,3 +3135,21 @@ CREATE TABLE public.t_twocol (
   CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0 (id, a)
 )
+
+# This subtests ensures we cannot add an unvalidated PK constraint
+subtest add_unvalidated_pk_96729
+
+statement ok
+CREATE TABLE t_96729 (i INT NOT NULL)
+
+statement error pgcode 0A000 PRIMARY KEY constraints cannot be marked NOT VALID
+ALTER TABLE t_96729 ADD PRIMARY KEY (i) NOT VALID;
+
+statement ok
+ALTER TABLE t_96729 ADD PRIMARY KEY (i);
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t_96729
+----
+table_name  constraint_name  constraint_type  details              validated
+t_96729     t_96729_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)  true
