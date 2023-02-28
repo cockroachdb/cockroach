@@ -72,8 +72,6 @@ func MakePromise[T any]() Future[T] {
 //	 })
 //	Clearly, in the above example, the call to WhenCompleted will deadlock
 //	because we attempt to execute callback function with the lock held.
-//	If it is too unwieldy for the caller to guarantee lock safety,
-//	use WhenReadyAsync instead.
 func (f *future[T]) WhenReady(fn func(v T, err error)) {
 	f.runOrDefer(fn)
 }
