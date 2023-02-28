@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1913,7 +1914,8 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 					firstTable)
 			} else if gatewayRegion != homeRegion {
 				return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-					`Query is not running in its home region. Try running the query from region '%s'.`,
+					`%s. Try running the query from region '%s'.`,
+					execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 					homeRegion,
 				)
 			}
@@ -1978,8 +1980,8 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 		var errCode pgcode.Code
 		if ok {
 			errCode = pgcode.QueryNotRunningInHomeRegion
-			errorStringBuilder.WriteString("Query is not running in its home region.")
-			errorStringBuilder.WriteString(fmt.Sprintf(` Try running the query from region '%s'.`, homeRegion))
+			errorStringBuilder.WriteString(execinfra.QueryNotRunningInHomeRegionMessagePrefix)
+			errorStringBuilder.WriteString(fmt.Sprintf(`. Try running the query from region '%s'.`, homeRegion))
 		} else if distribute.Input.Op() != opt.LookupJoinOp {
 			// More detailed error message handling for lookup join occurs in the
 			// execbuilder.
@@ -2214,7 +2216,8 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 					)
 				} else if gatewayRegion != homeRegion {
 					return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-						`Query is not running in its home region. Try running the query from region '%s'.`,
+						`%s. Try running the query from region '%s'.`,
+						execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 						homeRegion,
 					)
 				}
@@ -2445,7 +2448,8 @@ func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (er
 					)
 				} else if gatewayRegion != homeRegion {
 					return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-						`Query is not running in its home region. Try running the query from region '%s'.`,
+						`%s. Try running the query from region '%s'.`,
+						execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 						homeRegion,
 					)
 				}

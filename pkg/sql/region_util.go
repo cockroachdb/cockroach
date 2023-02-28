@@ -2394,6 +2394,11 @@ func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
 }
 
+// EnforceHomeRegion is part of the eval.Planner interface.
+func (p *planner) EnforceHomeRegion() bool {
+	return p.EvalContext().SessionData().EnforceHomeRegion && p.stmt.IsANSIDML()
+}
+
 // GetRangeDescByID is part of the eval.Planner interface.
 func (p *planner) GetRangeDescByID(
 	ctx context.Context, rangeID roachpb.RangeID,
