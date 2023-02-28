@@ -4189,6 +4189,7 @@ func (s *adminServer) GetTracingSnapshot(
 			ProcessedTags:        tags,
 			Current:              s.Current,
 			CurrentRecordingMode: s.CurrentRecordingMode.ToProto(),
+			ChildrenMetadata:     s.ChildrenMetadata,
 		}
 	}
 
