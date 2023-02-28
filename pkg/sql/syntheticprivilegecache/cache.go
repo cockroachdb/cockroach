@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -189,9 +188,6 @@ func (c *Cache) readFromStorage(
 func (c *Cache) Start(ctx context.Context) {
 	if err := c.stopper.RunAsyncTask(ctx, "syntheticprivilegecache-warm", func(ctx context.Context) {
 		defer close(c.warmed)
-		if !c.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SystemPrivilegesTable) {
-			return
-		}
 		start := timeutil.Now()
 		if err := c.start(ctx); err != nil {
 			log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)

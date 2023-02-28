@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -202,11 +201,10 @@ func updateRoleOptions(
 	roleName username.SQLUsername,
 	telemetryOp string,
 ) (rowsAffected int, err error) {
-	withID := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn)
 	// Get a map of statements to execute for role options and their values.
 	stmts, err := roleOptions.GetSQLStmts(func(o roleoption.Option) {
 		sqltelemetry.IncIAMOptionCounter(telemetryOp, strings.ToLower(o.String()))
-	}, withID)
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -230,16 +228,14 @@ func updateRoleOptions(
 			}
 		}
 
-		if withID {
-			idRow, err := params.p.InternalSQLTxn().QueryRowEx(
-				params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
-				`SELECT user_id FROM system.users WHERE username = $1`, roleName.Normalized(),
-			)
-			if err != nil {
-				return 0, err
-			}
-			qargs = append(qargs, tree.MustBeDOid(idRow[0]))
+		idRow, err := params.p.InternalSQLTxn().QueryRowEx(
+			params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+			`SELECT user_id FROM system.users WHERE username = $1`, roleName.Normalized(),
+		)
+		if err != nil {
+			return 0, err
 		}
+		qargs = append(qargs, tree.MustBeDOid(idRow[0]))
 
 		affected, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
