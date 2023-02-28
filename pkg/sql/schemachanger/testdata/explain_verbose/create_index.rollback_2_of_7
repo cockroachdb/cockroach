@@ -65,7 +65,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
     │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   └── • 9 Mutation operations
+    │   └── • 11 Mutation operations
     │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 2
@@ -101,6 +101,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
     │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 105
     │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 106
@@ -141,7 +147,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
         │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
         │             rule: "index removed before garbage collection"
         │
-        └── • 5 Mutation operations
+        └── • 7 Mutation operations
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 2
@@ -162,11 +168,21 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 105
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
             │     DescriptorID: 106
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
                   DescriptorIDsToRemove:
+                  - 104
+                  - 105
                   - 106
                   IsNonCancelable: true
                   JobID: 1

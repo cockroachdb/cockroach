@@ -62,7 +62,7 @@ upsert descriptor #104
   -    - 1
   -    name: idx
   -    partitioning: {}
-  -    predicate: i > 0
+  -    predicate: i > 0:::INT8
   -    sharded: {}
   -    version: 4
   +  indexes: []
@@ -86,7 +86,7 @@ upsert descriptor #104
   +      - 1
   +      name: idx
   +      partitioning: {}
-  +      predicate: i > 0
+  +      predicate: i > 0:::INT8
   +      sharded: {}
   +      version: 4
   +    mutationId: 1
@@ -168,7 +168,7 @@ upsert descriptor #104
   -    - 1
   -    name: idx
   -    partitioning: {}
-  -    predicate: i > 0
+  -    predicate: i > 0:::INT8
   -    sharded: {}
   -    version: 4
   +  indexes: []
@@ -192,7 +192,7 @@ upsert descriptor #104
   +      - 1
   +      name: idx
   +      partitioning: {}
-  +      predicate: i > 0
+  +      predicate: i > 0:::INT8
   +      sharded: {}
   +      version: 4
   +    mutationId: 1
@@ -236,7 +236,7 @@ upsert descriptor #104
   -      name: idx
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
-  -      predicate: i > 0
+  -      predicate: i > 0:::INT8
          sharded: {}
          version: 4
        mutationId: 1

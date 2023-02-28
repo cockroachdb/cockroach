@@ -63,7 +63,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 8 Mutation operations
+│       └── • 9 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -74,9 +74,15 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │     IsSecondaryIndex: true
 │           │
 │           ├── • SetAddedIndexPartialPredicate
-│           │     Expr: (v = 'a')
+│           │     Expr: v = b'@':::@100104
 │           │     IndexID: 2
 │           │     TableID: 106
+│           │
+│           ├── • UpdateTableBackReferencesInTypes
+│           │     BackReferencedTableID: 106
+│           │     TypeIDs:
+│           │     - 104
+│           │     - 105
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 2
@@ -204,7 +210,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 15 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -219,9 +225,15 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │     TableID: 106
 │           │
 │           ├── • SetAddedIndexPartialPredicate
-│           │     Expr: (v = 'a')
+│           │     Expr: v = b'@':::@100104
 │           │     IndexID: 2
 │           │     TableID: 106
+│           │
+│           ├── • UpdateTableBackReferencesInTypes
+│           │     BackReferencedTableID: 106
+│           │     TypeIDs:
+│           │     - 104
+│           │     - 105
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 2
@@ -263,6 +275,14 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │     TableID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 104
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 105
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 106
 │           │     Initialize: true
 │           │
@@ -270,6 +290,8 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │                 Authorization:
 │                   UserName: root
 │                 DescriptorIDs:
+│                 - 104
+│                 - 105
 │                 - 106
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
@@ -303,11 +325,17 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │       └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │   │   │             rule: "temp index data exists as soon as temp index accepts writes"
 │   │   │
-│   │   └── • 3 Mutation operations
+│   │   └── • 5 Mutation operations
 │   │       │
 │   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
 │   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 104
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 105
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
 │   │       │     DescriptorID: 106
@@ -352,11 +380,17 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │       └── • PreviousStagePrecedence dependency from BACKFILLED SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
-│   │   └── • 3 Mutation operations
+│   │   └── • 5 Mutation operations
 │   │       │
 │   │       ├── • MakeBackfillingIndexDeleteOnly
 │   │       │     IndexID: 2
 │   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 104
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 105
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
 │   │       │     DescriptorID: 106
@@ -375,11 +409,17 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
-│   │   └── • 3 Mutation operations
+│   │   └── • 5 Mutation operations
 │   │       │
 │   │       ├── • MakeBackfilledIndexMerging
 │   │       │     IndexID: 2
 │   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 104
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 105
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
 │   │       │     DescriptorID: 106
@@ -415,11 +455,17 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │       └── • PreviousStagePrecedence dependency from MERGED SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
-│   │   └── • 3 Mutation operations
+│   │   └── • 5 Mutation operations
 │   │       │
 │   │       ├── • MakeMergedIndexWriteOnly
 │   │       │     IndexID: 2
 │   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 104
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 105
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
 │   │       │     DescriptorID: 106
@@ -488,7 +534,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
     │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 9 Mutation operations
     │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
@@ -511,6 +557,12 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │       │     IndexID: 3
     │       │     Kind: 1
     │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 105
     │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 106
@@ -542,7 +594,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
         │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
         │             rule: "index removed before garbage collection"
         │
-        └── • 4 Mutation operations
+        └── • 6 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 3
@@ -555,11 +607,21 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 105
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
             │     DescriptorID: 106
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
                   DescriptorIDsToRemove:
+                  - 104
+                  - 105
                   - 106
                   IsNonCancelable: true
                   JobID: 1
