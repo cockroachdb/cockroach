@@ -20925,48 +20925,31 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
   └ *colexec.orderedAggregator
     └ *colexecproj.projMultFloat64Float64Op
       └ *colexecprojconst.projMinusFloat64ConstFloat64Op
-        └ *colexec.caseOp
-          ├ *colexec.bufferOp
-          │ └ *colexecjoin.hashJoiner
-          │   ├ *colexecsel.selEQBytesBytesConstOp
-          │   │ └ *colexec.selectInOpBytes
-          │   │   └ *colfetcher.ColBatchScan
-          │   └ *colexecsel.selGEInt64Int64ConstOp
-          │     └ *colfetcher.ColBatchScan
-          ├ *colexecbase.constBoolOp
-          │ └ *colexec.orProjOp
-          │   ├ *colexec.bufferOp
-          │   ├ *colexec.andProjOp
-          │   │ ├ *colexec.andProjOp
-          │   │ │ ├ *colexec.andProjOp
-          │   │ │ │ ├ *colexec.andProjOp
-          │   │ │ │ │ ├ *colexecprojconst.projEQBytesBytesConstOp
-          │   │ │ │ │ └ *colexec.projectInOpBytes
-          │   │ │ │ └ *colexecprojconst.projGEFloat64Float64ConstOp
-          │   │ │ └ *colexecprojconst.projLEFloat64Float64ConstOp
-          │   │ └ *colexecprojconst.projLEInt64Int64ConstOp
-          │   └ *colexec.andProjOp
-          │     ├ *colexec.andProjOp
-          │     │ ├ *colexec.andProjOp
-          │     │ │ ├ *colexec.andProjOp
-          │     │ │ │ ├ *colexecprojconst.projEQBytesBytesConstOp
-          │     │ │ │ └ *colexec.projectInOpBytes
-          │     │ │ └ *colexecprojconst.projGEFloat64Float64ConstOp
-          │     │ └ *colexecprojconst.projLEFloat64Float64ConstOp
-          │     └ *colexecprojconst.projLEInt64Int64ConstOp
-          ├ *colexecbase.constBoolOp
-          │ └ *colexec.andProjOp
-          │   ├ *colexec.bufferOp
-          │   ├ *colexec.andProjOp
-          │   │ ├ *colexec.andProjOp
-          │   │ │ ├ *colexec.andProjOp
-          │   │ │ │ ├ *colexecprojconst.projEQBytesBytesConstOp
-          │   │ │ │ └ *colexec.projectInOpBytes
-          │   │ │ └ *colexecprojconst.projGEFloat64Float64ConstOp
-          │   │ └ *colexecprojconst.projLEFloat64Float64ConstOp
-          │   └ *colexecprojconst.projLEInt64Int64ConstOp
-          └ *colexecbase.constBoolOp
-            └ *colexec.bufferOp
+        └ *colexec.UnorderedDistinct
+          └ *colexec.SerialUnorderedSynchronizer
+            ├ *rowexec.joinReader
+            │ └ *rowexec.joinReader
+            │   └ *colexec.selectInOpBytes
+            │     └ *colexecsel.selEQBytesBytesConstOp
+            │       └ *colexecsel.selLEInt64Int64ConstOp
+            │         └ *colexecsel.selGEInt64Int64ConstOp
+            │           └ *colfetcher.ColBatchScan
+            └ *colexec.UnorderedDistinct
+              └ *colexec.SerialUnorderedSynchronizer
+                ├ *rowexec.joinReader
+                │ └ *rowexec.joinReader
+                │   └ *colexec.selectInOpBytes
+                │     └ *colexecsel.selEQBytesBytesConstOp
+                │       └ *colexecsel.selLEInt64Int64ConstOp
+                │         └ *colexecsel.selGEInt64Int64ConstOp
+                │           └ *colfetcher.ColBatchScan
+                └ *rowexec.joinReader
+                  └ *rowexec.joinReader
+                    └ *colexec.selectInOpBytes
+                      └ *colexecsel.selEQBytesBytesConstOp
+                        └ *colexecsel.selLEInt64Int64ConstOp
+                          └ *colexecsel.selGEInt64Int64ConstOp
+                            └ *colfetcher.ColBatchScan
 
 # Query 20
 query T

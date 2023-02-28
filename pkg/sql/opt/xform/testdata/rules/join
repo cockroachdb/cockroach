@@ -7362,13 +7362,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:16 n.geom:17!null
-      ├── key columns: [21] = [14]
+      ├── key columns: [61] = [14]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:21!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:61!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10, n.geom:24) AND (st_dwithin(c.geom:10, n.geom:24, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:24))
+      │    │    └── st_coveredby(c.geom:10, n.geom:64) AND (st_dwithin(c.geom:10, n.geom:64, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:64))
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -7511,12 +7511,12 @@ project
 
 # It's not possible to generate an inverted join when there is an OR with a
 # non-geospatial function.
-opt expect-not=GenerateInvertedJoins
+opt expect-not=GenerateInvertedJoins disable=SplitDisjunctionOfJoinTerms
 SELECT
   n.name, c.boroname
 FROM nyc_census_blocks AS c
 JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
-ON ST_Covers(c.geom, n.geom) OR n.name LIKE 'Upper%'
+ON ST_Covers(c.geom, n.geom) OR n.name LIKE c.boroname || 'Upper%'
 ----
 project
  ├── columns: name:16 boroname:9
@@ -7530,7 +7530,7 @@ project
       │    ├── columns: name:16 n.geom:17
       │    └── flags: force-index=nyc_neighborhoods_geo_idx
       └── filters
-           └── st_covers(c.geom:10, n.geom:17) OR (name:16 LIKE 'Upper%') [outer=(10,16,17), immutable]
+           └── st_covers(c.geom:10, n.geom:17) OR (name:16 LIKE (c.boroname:9 || 'Upper%')) [outer=(9,10,16,17), immutable]
 
 # Semi-joins are supported by converting them to a paired-join consisting of
 # an inner inverted join followed by a left semi lookup join.
@@ -9792,66 +9792,66 @@ project
       │    ├── right columns: a:25 b:26 c:27
       │    ├── cardinality: [0 - 2]
       │    ├── ordering: +1
-      │    ├── project
-      │    │    ├── columns: a:13!null b:14 c:15
+      │    ├── semi-join (lookup pqr@q)
+      │    │    ├── columns: a:13!null b:14 c:15!null
+      │    │    ├── key columns: [14 105] = [19 18]
+      │    │    ├── lookup columns are key
       │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: (13)
-      │    │    ├── fd: (13)-->(14,15), (15)~~>(13,14)
-      │    │    ├── ordering: +13 [actual: ]
-      │    │    └── project
-      │    │         ├── columns: a:13!null b:14!null c:15!null q:19!null r:20!null
-      │    │         ├── cardinality: [0 - 1]
-      │    │         ├── key: ()
-      │    │         ├── fd: ()-->(13-15,19,20), (15)==(20), (20)==(15), (14)==(19), (19)==(14)
-      │    │         └── inner-join (lookup zz)
-      │    │              ├── columns: a:13!null b:14!null c:15!null p:18!null q:19!null r:20!null
-      │    │              ├── key columns: [13] = [13]
-      │    │              ├── lookup columns are key
-      │    │              ├── cardinality: [0 - 1]
-      │    │              ├── key: ()
-      │    │              ├── fd: ()-->(13-15,18-20), (19)==(14), (15)==(20), (20)==(15), (14)==(19)
-      │    │              ├── inner-join (lookup zz@idx_c)
-      │    │              │    ├── columns: a:13!null c:15!null p:18!null q:19 r:20!null
-      │    │              │    ├── key columns: [20] = [15]
-      │    │              │    ├── lookup columns are key
-      │    │              │    ├── cardinality: [0 - 1]
-      │    │              │    ├── key: ()
-      │    │              │    ├── fd: ()-->(13,15,18-20), (20)==(15), (15)==(20)
-      │    │              │    ├── scan pqr
-      │    │              │    │    ├── columns: p:18!null q:19 r:20
-      │    │              │    │    ├── constraint: /18: [/0 - /0]
-      │    │              │    │    ├── cardinality: [0 - 1]
-      │    │              │    │    ├── key: ()
-      │    │              │    │    └── fd: ()-->(18-20)
-      │    │              │    └── filters (true)
-      │    │              └── filters
-      │    │                   └── q:19 = b:14 [outer=(14,19), constraints=(/14: (/NULL - ]; /19: (/NULL - ]), fd=(14)==(19), (19)==(14)]
-      │    └── semi-join (lookup pqr@q)
-      │         ├── columns: a:25!null b:26 c:27!null
-      │         ├── key columns: [26 121] = [31 30]
-      │         ├── lookup columns are key
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(13-15)
+      │    │    ├── project
+      │    │    │    ├── columns: "lookup_join_const_col_@18":105!null a:13!null b:14 c:15!null
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(13-15,105)
+      │    │    │    ├── index-join zz
+      │    │    │    │    ├── columns: a:13!null b:14 c:15!null
+      │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    ├── key: ()
+      │    │    │    │    ├── fd: ()-->(13-15)
+      │    │    │    │    └── scan zz@idx_c
+      │    │    │    │         ├── columns: a:13!null c:15!null
+      │    │    │    │         ├── constraint: /15: [/0 - /0]
+      │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │         ├── key: ()
+      │    │    │    │         └── fd: ()-->(13,15)
+      │    │    │    └── projections
+      │    │    │         └── 0 [as="lookup_join_const_col_@18":105]
+      │    │    └── filters (true)
+      │    └── project
+      │         ├── columns: a:25!null b:26 c:27
       │         ├── cardinality: [0 - 1]
-      │         ├── key: ()
-      │         ├── fd: ()-->(25-27)
-      │         ├── project
-      │         │    ├── columns: "lookup_join_const_col_@30":121!null a:25!null b:26 c:27!null
-      │         │    ├── cardinality: [0 - 1]
-      │         │    ├── key: ()
-      │         │    ├── fd: ()-->(25-27,121)
-      │         │    ├── index-join zz
-      │         │    │    ├── columns: a:25!null b:26 c:27!null
-      │         │    │    ├── cardinality: [0 - 1]
-      │         │    │    ├── key: ()
-      │         │    │    ├── fd: ()-->(25-27)
-      │         │    │    └── scan zz@idx_c
-      │         │    │         ├── columns: a:25!null c:27!null
-      │         │    │         ├── constraint: /27: [/0 - /0]
-      │         │    │         ├── cardinality: [0 - 1]
-      │         │    │         ├── key: ()
-      │         │    │         └── fd: ()-->(25,27)
-      │         │    └── projections
-      │         │         └── 0 [as="lookup_join_const_col_@30":121]
-      │         └── filters (true)
+      │         ├── key: (25)
+      │         ├── fd: (25)-->(26,27), (27)~~>(25,26)
+      │         ├── ordering: +25 [actual: ]
+      │         └── project
+      │              ├── columns: a:25!null b:26!null c:27!null q:31!null r:32!null
+      │              ├── cardinality: [0 - 1]
+      │              ├── key: ()
+      │              ├── fd: ()-->(25-27,31,32), (27)==(32), (32)==(27), (26)==(31), (31)==(26)
+      │              └── inner-join (lookup zz)
+      │                   ├── columns: a:25!null b:26!null c:27!null p:30!null q:31!null r:32!null
+      │                   ├── key columns: [25] = [25]
+      │                   ├── lookup columns are key
+      │                   ├── cardinality: [0 - 1]
+      │                   ├── key: ()
+      │                   ├── fd: ()-->(25-27,30-32), (31)==(26), (27)==(32), (32)==(27), (26)==(31)
+      │                   ├── inner-join (lookup zz@idx_c)
+      │                   │    ├── columns: a:25!null c:27!null p:30!null q:31 r:32!null
+      │                   │    ├── key columns: [32] = [27]
+      │                   │    ├── lookup columns are key
+      │                   │    ├── cardinality: [0 - 1]
+      │                   │    ├── key: ()
+      │                   │    ├── fd: ()-->(25,27,30-32), (32)==(27), (27)==(32)
+      │                   │    ├── scan pqr
+      │                   │    │    ├── columns: p:30!null q:31 r:32
+      │                   │    │    ├── constraint: /30: [/0 - /0]
+      │                   │    │    ├── cardinality: [0 - 1]
+      │                   │    │    ├── key: ()
+      │                   │    │    └── fd: ()-->(30-32)
+      │                   │    └── filters (true)
+      │                   └── filters
+      │                        └── q:31 = b:26 [outer=(26,31), constraints=(/26: (/NULL - ]; /31: (/NULL - ]), fd=(26)==(31), (31)==(26)]
       └── aggregations
            ├── const-agg [as=b:2, outer=(2)]
            │    └── b:2
