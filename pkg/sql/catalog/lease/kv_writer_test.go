@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -79,9 +80,10 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 
 	ie := s.InternalExecutor().(isql.Executor)
 	codec := s.LeaseManager().(*Manager).Codec()
+	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 	w := teeWriter{
 		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),
-		b: newKVWriter(codec, kvDB, lease2ID),
+		b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher),
 	}
 	start := kvDB.Clock().Now()
 	groups := generateWriteOps(2<<10, 1<<10)

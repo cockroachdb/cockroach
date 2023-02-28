@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -253,6 +254,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.InternalDB,
 			cfgCpy.Clock,
 			cfgCpy.Settings,
+			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
