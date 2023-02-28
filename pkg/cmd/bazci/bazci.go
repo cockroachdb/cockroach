@@ -205,6 +205,7 @@ func (s *monitorBuildServer) handleBuildEvent(
 			outputDir = strings.ReplaceAll(outputDir, ":", "/")
 			outputDir = filepath.Join("bazel-testlogs", outputDir)
 			summary := bazelBuildEvent.GetTestSummary()
+			lastAttempt := summary.AttemptCount
 			for _, testResult := range s.testResults[label] {
 				outputDir := outputDir
 				if testResult.run > 1 {
@@ -213,8 +214,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if summary != nil && summary.ShardCount > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
 				}
-				if testResult.attempt > 1 {
-					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
+				// Only upload results of last attempt.
+				if testResult.attempt != lastAttempt {
+					continue
 				}
 				if testResult.testResult == nil {
 					continue
