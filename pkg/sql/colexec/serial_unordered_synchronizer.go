@@ -98,7 +98,8 @@ func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 			if s.serialInputIdxExclusiveUpperBound > 0 && s.curSerialInputIdx >= int(s.serialInputIdxExclusiveUpperBound) {
-				colexecerror.ExpectedError(s.exceedsInputIdxExclusiveUpperBoundError)
+				err := execinfra.NewDynamicQueryHasNoHomeRegionError(s.exceedsInputIdxExclusiveUpperBoundError)
+				colexecerror.ExpectedError(err)
 			}
 		} else {
 			return b
