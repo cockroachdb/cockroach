@@ -19,6 +19,8 @@ go_library(
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
     ],
