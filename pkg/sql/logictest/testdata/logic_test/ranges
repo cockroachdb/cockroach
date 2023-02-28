@@ -598,26 +598,25 @@ subtest show_range_table_for_row_columns
 statement ok
 CREATE TABLE tbl_for_row(i INT PRIMARY KEY);
 
-# TODO(#96136): Re-enable this test after making it deterministic.
-# query TTIITTTTT colnames
-# SHOW RANGE FROM TABLE tbl_for_row FOR ROW (0)
-# ----
-# start_key                     end_key  range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
-# <before:/Table/130/1/"\x80">  …        94        1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
+# Ignore non-deterministic range_id.
+query TT_ITTTTT colnames
+SHOW RANGE FROM TABLE tbl_for_row FOR ROW (0)
+----
+start_key                     end_key       range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
+<before:/Table/130/1/"\x80">  <after:/Max>  _         1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
 
 subtest end
 
 subtest show_range_index_for_row_columns
 
+# Ignore non-deterministic range_id.
 statement ok
 CREATE TABLE tbl_with_idx_for_row(i INT, INDEX idx (i));
 
-# TODO(#96136): Re-enable this test after making it deterministic.
-# query TTIITTTTT colnames
-# query TTIITTTTT colnames
-# SHOW RANGE FROM INDEX tbl_with_idx_for_row@idx FOR ROW (NULL, 0)
-# ----
-# start_key                     end_key  range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
-# <before:/Table/130/1/"\x80">  …        94        1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
+query TT_ITTTTT colnames
+SHOW RANGE FROM INDEX tbl_with_idx_for_row@idx FOR ROW (NULL, 0)
+----
+start_key                     end_key       range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
+<before:/Table/130/1/"\x80">  <after:/Max>  _         1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
 
 subtest end
