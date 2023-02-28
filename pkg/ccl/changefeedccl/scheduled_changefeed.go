@@ -573,20 +573,24 @@ func doCreateChangefeedSchedule(
 	}
 
 	createChangefeedopts := changefeedbase.MakeStatementOptions(spec.createChangefeedOptions)
-	if !createChangefeedopts.IsInitialScanSpecified() {
+	initialScanSpecifiedByUser := createChangefeedopts.IsInitialScanSpecified()
+	if !initialScanSpecifiedByUser {
 		log.Infof(ctx, "Initial scan type not specified, forcing %s option", changefeedbase.OptInitialScanOnly)
 		spec.Options = append(spec.Options, tree.KVOption{
-			Key: changefeedbase.OptInitialScanOnly,
+			Key:   changefeedbase.OptInitialScan,
+			Value: tree.NewStrVal("only"),
 		})
-		spec.createChangefeedOptions[changefeedbase.OptInitialScanOnly] = ""
+		spec.createChangefeedOptions[changefeedbase.OptInitialScan] = "only"
+
+		p.BufferClientNotice(ctx, pgnotice.Newf("added missing initial_scan='only' option to schedule changefeed"))
 	} else {
 		initialScanType, err := createChangefeedopts.GetInitialScanType()
 		if err != nil {
 			return err
 		}
 		if initialScanType != changefeedbase.OnlyInitialScan {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "%s must be `only` or %s must be specified for scheduled changefeeds",
-				changefeedbase.OptInitialScan, changefeedbase.OptInitialScanOnly)
+			return pgerror.Newf(pgcode.InvalidParameterValue, "%s must be `only` for scheduled changefeeds",
+				changefeedbase.OptInitialScan)
 		}
 	}
 
@@ -624,6 +628,11 @@ func doCreateChangefeedSchedule(
 	if err = dryRunCreateChangefeed(
 		ctx, p, es.ScheduleID(), createChangefeedNode,
 	); err != nil {
+		// We do not know for sure that implicitly passing initial_scan_only caused
+		// the pgcode.InvalidParameterValue, but it may have.
+		if !initialScanSpecifiedByUser && pgerror.GetPGCode(err) == pgcode.InvalidParameterValue {
+			err = errors.WithHintf(err, "scheduled changefeeds implicitly pass the option %s='only'", changefeedbase.OptInitialScan)
+		}
 		return errors.Wrapf(err, "Failed to dry run create changefeed")
 	}
 

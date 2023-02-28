@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -608,7 +610,7 @@ func (s StatementOptions) GetInitialScanType() (InitialScanType, error) {
 
 	if noInitialScanSet && initialScanOnlySet {
 		return InitialScan, errors.Errorf(
-			`cannot specify both %s and %s`, OptInitialScanOnly,
+			`cannot specify both %s='only' and %s`, OptInitialScan,
 			OptNoInitialScan)
 	}
 
@@ -977,7 +979,10 @@ func describeEnum(strs ...string) string {
 // ValidateForCreateChangefeed checks that the provided options are
 // valid for a CREATE CHANGEFEED statement using the type assertions
 // in ChangefeedOptionExpectValues.
-func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool) error {
+func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool) (e error) {
+	defer func() {
+		e = pgerror.Wrap(e, pgcode.InvalidParameterValue, "")
+	}()
 	err := s.validateAgainst(ChangefeedOptionExpectValues)
 	if err != nil {
 		return err
@@ -989,13 +994,13 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 	validateInitialScanUnsupportedOptions := func(errMsg string) error {
 		for o := range InitialScanOnlyUnsupportedOptions {
 			if _, ok := s.m[o]; ok {
-				return errors.Newf(`cannot specify both %s and %s`, errMsg, o)
+				return errors.Newf(`cannot specify both %s='only' and %s`, OptInitialScan, o)
 			}
 		}
 		return nil
 	}
 	if scanType == OnlyInitialScan {
-		if err := validateInitialScanUnsupportedOptions(OptInitialScanOnly); err != nil {
+		if err := validateInitialScanUnsupportedOptions(fmt.Sprintf("%s='only'", OptInitialScan)); err != nil {
 			return err
 		}
 	} else {
