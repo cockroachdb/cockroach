@@ -2947,18 +2947,10 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 				return err
 			}
 
-			roleOptionsHasIDColumn := r.execCfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn)
 			insertRoleOption := `INSERT INTO system.role_options ("username", "option", "value", "user_id") VALUES ($1, $2, $3, $4)`
-			if !roleOptionsHasIDColumn {
-				insertRoleOption = `INSERT INTO system.role_options ("username", "option", "value") VALUES ($1, $2, $3)`
-			}
-
 			for _, roleOption := range roleOptions {
 				if roleID, ok := newUsernames[roleOption[0].String()]; ok {
-					args := []interface{}{roleOption[0], roleOption[1], roleOption[2]}
-					if roleOptionsHasIDColumn {
-						args = append(args, roleID)
-					}
+					args := []interface{}{roleOption[0], roleOption[1], roleOption[2], roleID}
 					if _, err = txn.Exec(ctx, "insert-non-existent-role-options", txn.KV(),
 						insertRoleOption, args...); err != nil {
 						return err

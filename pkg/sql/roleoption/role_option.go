@@ -80,39 +80,6 @@ const ControlChangefeedDeprecationNoticeMsg = "The role option CONTROLCHANGEFEED
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{
-	CREATEROLE:             `INSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE') ON CONFLICT DO NOTHING`,
-	NOCREATEROLE:           `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
-	LOGIN:                  `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
-	NOLOGIN:                `INSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN') ON CONFLICT DO NOTHING`,
-	VALIDUNTIL:             `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
-	CONTROLJOB:             `INSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB') ON CONFLICT DO NOTHING`,
-	NOCONTROLJOB:           `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLJOB'`,
-	CONTROLCHANGEFEED:      `INSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLCHANGEFEED') ON CONFLICT DO NOTHING`,
-	NOCONTROLCHANGEFEED:    `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLCHANGEFEED'`,
-	CREATEDB:               `INSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEDB') ON CONFLICT DO NOTHING`,
-	NOCREATEDB:             `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEDB'`,
-	CREATELOGIN:            `INSERT INTO system.role_options (username, option) VALUES ($1, 'CREATELOGIN') ON CONFLICT DO NOTHING`,
-	NOCREATELOGIN:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATELOGIN'`,
-	VIEWACTIVITY:           `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITY') ON CONFLICT DO NOTHING`,
-	NOVIEWACTIVITY:         `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITY'`,
-	CANCELQUERY:            `INSERT INTO system.role_options (username, option) VALUES ($1, 'CANCELQUERY') ON CONFLICT DO NOTHING`,
-	NOCANCELQUERY:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CANCELQUERY'`,
-	MODIFYCLUSTERSETTING:   `INSERT INTO system.role_options (username, option) VALUES ($1, 'MODIFYCLUSTERSETTING') ON CONFLICT DO NOTHING`,
-	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND option = 'MODIFYCLUSTERSETTING'`,
-	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOSQLLOGIN'`,
-	NOSQLLOGIN:             `INSERT INTO system.role_options (username, option) VALUES ($1, 'NOSQLLOGIN') ON CONFLICT DO NOTHING`,
-	VIEWACTIVITYREDACTED:   `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITYREDACTED') ON CONFLICT DO NOTHING`,
-	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITYREDACTED'`,
-	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWCLUSTERSETTING') ON CONFLICT DO NOTHING`,
-	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWCLUSTERSETTING'`,
-	VIEWJOB:                `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWJOB') ON CONFLICT DO NOTHING`,
-	NOVIEWJOB:              `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWJOB'`,
-}
-
-// toSQLStmtsWithID is a map of Kind -> SQL statement string for applying the
-// option to the role.
-// toSQLStmtsWithID differs from toSQLStmts by including IDs.
-var toSQLStmtsWithID = map[Option]string{
 	CREATEROLE:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATEROLE', $2) ON CONFLICT DO NOTHING`,
 	NOCREATEROLE:           `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATEROLE'`,
 	LOGIN:                  `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'NOLOGIN'`,
@@ -237,9 +204,7 @@ func MakeListFromKVOptions(
 
 // GetSQLStmts returns a map of SQL stmts to apply each role option.
 // Maps stmts to values (value of the role option).
-func (rol List) GetSQLStmts(
-	onRoleOption func(Option), withID bool,
-) (map[string]*RoleOption, error) {
+func (rol List) GetSQLStmts(onRoleOption func(Option)) (map[string]*RoleOption, error) {
 	if len(rol) <= 0 {
 		return nil, nil
 	}
@@ -265,9 +230,6 @@ func (rol List) GetSQLStmts(
 		}
 
 		stmt := toSQLStmts[ro.Option]
-		if withID {
-			stmt = toSQLStmtsWithID[ro.Option]
-		}
 		stmts[stmt] = ro
 	}
 
