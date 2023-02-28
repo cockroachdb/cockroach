@@ -7212,6 +7212,7 @@ the tracing UI.
 | processed_tags | [SpanTag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag) | repeated |  | [reserved](#support-status) |
 | current | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  | current is set if the span is still alive (i.e. still present in the active spans registry). | [reserved](#support-status) |
 | current_recording_mode | [cockroach.util.tracing.tracingpb.RecordingMode](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.util.tracing.tracingpb.RecordingMode) |  | current_recording_mode represents the span's current recording mode. This is not set if current == false. | [reserved](#support-status) |
+| children_metadata | [TracingSpan.ChildrenMetadataEntry](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSpan.ChildrenMetadataEntry) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -7250,6 +7251,20 @@ of the tracing UI.
 | ----- | ---- | ----- | ----------- | -------------- |
 | key | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
 | val | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSpan.ChildrenMetadataEntry"></a>
+#### TracingSpan.ChildrenMetadataEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  |  |
+| value | [cockroach.util.tracing.tracingpb.OperationMetadata](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.util.tracing.tracingpb.OperationMetadata) |  |  |  |
 
 
 
