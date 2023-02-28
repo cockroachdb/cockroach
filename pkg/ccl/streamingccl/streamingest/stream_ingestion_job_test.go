@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -43,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -403,25 +402,15 @@ func TestCutoverFractionProgressed(t *testing.T) {
 
 	ctx := context.Background()
 
-	respRecvd := make(chan struct{})
-	continueRevert := make(chan struct{})
-	defer close(continueRevert)
+	progressUpdated := make(chan struct{})
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
-					for _, ru := range br.Responses {
-						switch ru.GetInner().(type) {
-						case *kvpb.RevertRangeResponse:
-							respRecvd <- struct{}{}
-							<-continueRevert
-						}
-					}
-					return nil
-				},
-			},
 			Streaming: &sql.StreamingTestingKnobs{
 				OverrideRevertRangeBatchSize: 1,
+				CutoverProgressShouldUpdate:  func() bool { return true },
+				OnCutoverProgressUpdate: func() {
+					progressUpdated <- struct{}{}
+				},
 			},
 		},
 		DisableDefaultTestTenant: true,
@@ -476,66 +465,43 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	metrics := registry.MetricsStruct().StreamIngest.(*Metrics)
 	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
 
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		defer close(respRecvd)
-		revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, jobID)
-		require.NoError(t, err)
-		require.True(t, revert)
-		return nil
-	})
-
 	loadProgress := func() jobspb.Progress {
 		j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
 		require.NoError(t, err)
 		return j.Progress()
 	}
-	progressMap := map[string]bool{
-		"0.00": false,
-		"0.17": false,
-		"0.33": false,
-		"0.50": false,
-		"0.67": false,
-		"0.83": false,
-	}
-	var expectedRanges int64 = 6
-	g.GoCtx(func(ctx context.Context) error {
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case _, ok := <-respRecvd:
-				if !ok {
-					return nil
-				}
-				sip := loadProgress()
-				curProgress := sip.GetFractionCompleted()
-				s := fmt.Sprintf("%.2f", curProgress)
-				if _, ok := progressMap[s]; !ok {
-					t.Fatalf("unexpected progress fraction %s", s)
-				}
-				// We sometimes see the same progress, which is valid, no need to update
-				// the expected range count.
-				if expectedRanges != metrics.ReplicationCutoverProgress.Value() {
-					// There is progress, which means that another range was reverted,
-					// updated the expected range count.
-					expectedRanges--
-				}
-				require.Equal(t, expectedRanges, metrics.ReplicationCutoverProgress.Value())
-				progressMap[s] = true
-				continueRevert <- struct{}{}
-			}
-		}
-	})
-	require.NoError(t, g.Wait())
-	sip := loadProgress()
-	require.Equal(t, sip.GetFractionCompleted(), float32(1))
-	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
 
-	// Ensure we have hit all our expected progress fractions.
-	for k, v := range progressMap {
-		if !v {
-			t.Fatalf("failed to see progress fraction %s", k)
+	var lastRangesLeft int64 = 6
+	var lastFraction float32 = 0
+	var progressUpdates = 0
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		for range progressUpdated {
+			sip := loadProgress()
+			curProgress := sip.GetFractionCompleted()
+			progressUpdates++
+			if lastFraction > curProgress {
+				return errors.Newf("unexpected progress fraction: %f > %f", lastFraction, curProgress)
+			}
+			rangesLeft := metrics.ReplicationCutoverProgress.Value()
+			if lastRangesLeft < rangesLeft {
+				return errors.Newf("unexpected range count from metric: %d > %d", rangesLeft, lastRangesLeft)
+			}
+			lastRangesLeft = rangesLeft
+			lastFraction = curProgress
 		}
-	}
+		return nil
+	})
+
+	revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, replicationJob)
+	require.NoError(t, err)
+	require.True(t, revert)
+
+	close(progressUpdated)
+	require.NoError(t, g.Wait())
+
+	sip := loadProgress()
+	require.Equal(t, float32(1), sip.GetFractionCompleted())
+	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
+	require.True(t, progressUpdates > 1)
 }
