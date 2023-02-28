@@ -37,6 +37,7 @@ go_library(
         "default_privilege.go",
         "doc.go",
         "expression.go",
+        "function.go",
         "job_id.go",
         "multiregion.go",
         "privilege.go",

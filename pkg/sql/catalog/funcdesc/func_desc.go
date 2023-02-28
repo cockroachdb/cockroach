@@ -82,8 +82,8 @@ func NewMutableFunctionDescriptor(
 					ReturnSet: returnSet,
 				},
 				Lang:              catpb.Function_SQL,
-				Volatility:        catpb.Function_VOLATILE,
-				LeakProof:         false,
+				Volatility:        catpb.DefaultFunctionVolatility,
+				LeakProof:         catpb.DefaultFunctionLeakProof,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
 				Privileges:        privs,
 				Version:           1,
@@ -207,7 +207,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		}
 	}
 
-	vea.Report(CheckLeakProofVolatility(desc))
+	vea.Report(mustMatchLeakProofVolatility(desc.LeakProof, desc.Volatility))
 
 	for i, dep := range desc.DependedOnBy {
 		if dep.ID == descpb.InvalidID {
@@ -836,14 +836,36 @@ func IsOIDUserDefinedFunc(oid oid.Oid) bool {
 	return catid.IsOIDUserDefined(oid)
 }
 
-// CheckLeakProofVolatility returns an error when a function is defined as
+// ValidateLeakProofVolatility returns an error when a function is defined as
 // leakproof but not immutable. See more details in comments for volatility.V.
-func CheckLeakProofVolatility(fn catalog.FunctionDescriptor) error {
-	if fn.GetLeakProof() && fn.GetVolatility() != catpb.Function_IMMUTABLE {
-		return pgerror.Newf(
-			pgcode.InvalidFunctionDefinition,
+func ValidateLeakProofVolatility(
+	options tree.FunctionOptions, curLeakProof bool, curVolatility catpb.Function_Volatility,
+) error {
+	for _, option := range options {
+		switch t := option.(type) {
+		case tree.FunctionVolatility:
+			v, err := VolatilityToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			curVolatility = v
+		case tree.FunctionLeakproof:
+			curLeakProof = bool(t)
+		}
+	}
+
+	if err := mustMatchLeakProofVolatility(curLeakProof, curVolatility); err != nil {
+		return pgerror.Wrap(err, pgcode.InvalidFunctionDefinition, "invalid volatility")
+	}
+
+	return nil
+}
+
+func mustMatchLeakProofVolatility(leakProof bool, vol catpb.Function_Volatility) error {
+	if leakProof && vol != catpb.Function_IMMUTABLE {
+		return errors.Newf(
 			"cannot set leakproof on function with non-immutable volatility: %s",
-			fn.GetVolatility().String(),
+			vol.String(),
 		)
 	}
 	return nil

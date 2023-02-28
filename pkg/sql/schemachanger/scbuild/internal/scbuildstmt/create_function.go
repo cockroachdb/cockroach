@@ -87,6 +87,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		Name:       n.FuncName.Object(),
 	})
 
+	validateFunctionLeakProof(n.Options, catpb.DefaultFunctionLeakProof, catpb.DefaultFunctionVolatility)
 	var lang catpb.Function_Language
 	var fnBodyStr string
 	for _, option := range n.Options {
@@ -173,5 +174,13 @@ func validateFunctionRelationReferences(
 				"the function cannot refer to other databases",
 				name.String()))
 		}
+	}
+}
+
+func validateFunctionLeakProof(
+	options tree.FunctionOptions, curLeakProof bool, curVolatility catpb.Function_Volatility,
+) {
+	if err := funcdesc.ValidateLeakProofVolatility(options, curLeakProof, curVolatility); err != nil {
+		panic(err)
 	}
 }

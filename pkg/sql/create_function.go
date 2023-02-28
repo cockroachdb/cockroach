@@ -111,14 +111,15 @@ func (*createFunctionNode) Close(ctx context.Context)           {}
 func (n *createFunctionNode) createNewFunction(
 	udfDesc *funcdesc.Mutable, scDesc *schemadesc.Mutable, params runParams,
 ) error {
+	if err := funcdesc.ValidateLeakProofVolatility(n.cf.Options, udfDesc.GetLeakProof(), udfDesc.GetVolatility()); err != nil {
+		return err
+	}
+
 	for _, option := range n.cf.Options {
 		err := setFuncOption(params, udfDesc, option)
 		if err != nil {
 			return err
 		}
-	}
-	if err := funcdesc.CheckLeakProofVolatility(udfDesc); err != nil {
-		return err
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -188,15 +189,14 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	}
 
 	resetFuncOption(udfDesc)
+	if err := funcdesc.ValidateLeakProofVolatility(n.cf.Options, udfDesc.GetLeakProof(), udfDesc.GetVolatility()); err != nil {
+		return err
+	}
 	for _, option := range n.cf.Options {
 		err := setFuncOption(params, udfDesc, option)
 		if err != nil {
 			return err
 		}
-	}
-
-	if err := funcdesc.CheckLeakProofVolatility(udfDesc); err != nil {
-		return err
 	}
 
 	// Removing all existing references before adding new references.

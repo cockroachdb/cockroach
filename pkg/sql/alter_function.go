@@ -74,6 +74,11 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 	if err := tree.ValidateFuncOptions(n.n.Options); err != nil {
 		return err
 	}
+
+	if err := funcdesc.ValidateLeakProofVolatility(n.n.Options, fnDesc.GetLeakProof(), fnDesc.GetVolatility()); err != nil {
+		return err
+	}
+
 	for _, option := range n.n.Options {
 		// Note that language and function body cannot be altered, and it's blocked
 		// from parser level with "common_func_opt_item" syntax.
@@ -83,10 +88,6 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		if err := setFuncOption(params, fnDesc, option); err != nil {
 			return err
 		}
-	}
-
-	if err := funcdesc.CheckLeakProofVolatility(fnDesc); err != nil {
-		return err
 	}
 
 	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
