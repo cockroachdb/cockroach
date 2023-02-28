@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -116,6 +117,14 @@ func (w *walkCtx) walkRoot() {
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
 	case catalog.FunctionDescriptor:
+		if !w.clusterVersion.IsActive(clusterversion.V23_1) {
+			panic(
+				scerrors.NotImplementedErrorf(
+					nil, // n
+					"function relevant elements and rules are not supported until fully upgraded to 23.1",
+				),
+			)
+		}
 		w.walkFunction(d)
 	default:
 		panic(errors.AssertionFailedf("unexpected descriptor type %T: %+v",

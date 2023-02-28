@@ -424,6 +424,7 @@ func (p *planner) dropIndexByName(
 	}
 
 	var droppedViews []string
+	var depsToDrop catalog.DescriptorIDSet
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
 			// Ensure that we have DROP privilege on all dependent views
@@ -432,34 +433,15 @@ func (p *planner) dropIndexByName(
 			if err != nil {
 				return err
 			}
-			depDesc, err := p.getDescForCascade(
-				ctx, "index", idx.GetName(), tableDesc.ParentID, tableRef.ID, behavior,
-			)
-			if err != nil {
-				return err
-			}
-			switch t := depDesc.(type) {
-			case *tabledesc.Mutable:
-				viewJobDesc := fmt.Sprintf("removing view %q dependent on index %q which is being dropped",
-					t.Name, idx.GetName())
-				cascadedViews, err := p.removeDependentView(ctx, tableDesc, t, viewJobDesc)
-				if err != nil {
-					return err
-				}
-
-				qualifiedView, err := p.getQualifiedTableName(ctx, t)
-				if err != nil {
-					return err
-				}
-
-				droppedViews = append(droppedViews, qualifiedView.FQString())
-				droppedViews = append(droppedViews, cascadedViews...)
-			case *funcdesc.Mutable:
-				if err := p.removeDependentFunction(ctx, tableDesc, t); err != nil {
-					return err
-				}
-			}
+			depsToDrop.Add(tableRef.ID)
 		}
+	}
+
+	droppedViews, err = p.removeDependents(
+		ctx, tableDesc, depsToDrop, "index", idx.GetName(), behavior,
+	)
+	if err != nil {
+		return err
 	}
 
 	// Overwriting tableDesc.Index may mess up with the idx object we collected above. Make a copy.
@@ -532,4 +514,46 @@ func (p *planner) dropIndexByName(
 			MutationID:          uint32(mutationID),
 			CascadeDroppedViews: droppedViews,
 		})
+}
+
+func (p *planner) removeDependents(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	depsToDrop catalog.DescriptorIDSet,
+	typeName string,
+	objName string,
+	dropBehavior tree.DropBehavior,
+) (droppedViews []string, err error) {
+	for _, descId := range depsToDrop.Ordered() {
+		depDesc, err := p.getDescForCascade(
+			ctx, typeName, objName, tableDesc.ParentID, descId, dropBehavior,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if depDesc.Dropped() {
+			continue
+		}
+		switch t := depDesc.(type) {
+		case *tabledesc.Mutable:
+			jobDesc := fmt.Sprintf("removing view %q dependent on %s %q which is being dropped",
+				t.Name, typeName, objName)
+			cascadedViews, err := p.removeDependentView(ctx, tableDesc, t, jobDesc)
+			if err != nil {
+				return nil, err
+			}
+			qualifiedView, err := p.getQualifiedTableName(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+
+			droppedViews = append(droppedViews, cascadedViews...)
+			droppedViews = append(droppedViews, qualifiedView.FQString())
+		case *funcdesc.Mutable:
+			if err := p.removeDependentFunction(ctx, tableDesc, t); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return nil, nil
 }
