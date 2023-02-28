@@ -10,11 +10,7 @@
 
 package future
 
-import (
-	"sync"
-
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 // Future represents a value which will become ready in the future.
 type Future[T any] struct {
@@ -37,10 +33,7 @@ type future[T any] struct {
 	err   error
 }
 
-type resultCallback[T any] struct {
-	fn    func(v T, err error)
-	async bool
-}
+type resultCallback[T any] func(v T, err error)
 
 // MakeErrFuture constructs future which returns an error.
 func MakeErrFuture[T any](err error) Future[T] {
@@ -83,25 +76,18 @@ func MakePromise[T any]() Future[T] {
 //	If it is too unwieldy for the caller to guarantee lock safety,
 //	use WhenReadyAsync instead.
 func (f *future[T]) WhenReady(fn func(v T, err error)) {
-	f.runOrDefer(fn, false)
-}
-
-// WhenReadyAsync is similar to WhenReady but executes provided callback on a
-// separate go routine.
-func (f *future[T]) WhenReadyAsync(fn func(v T, err error)) {
-	f.runOrDefer(fn, true)
+	f.runOrDefer(fn)
 }
 
 // runOrDefer executes fn if future is ready, or queues it in the queue.
-func (f *future[T]) runOrDefer(fn func(v T, err error), async bool) {
+func (f *future[T]) runOrDefer(fn func(v T, err error)) {
 	f.mu.Lock()
-	cb := resultCallback[T]{fn: fn, async: async}
 
 	if f.mu.done == closedChan {
 		f.mu.Unlock()
-		f.runClosures(cb)
+		f.runClosures(fn)
 	} else {
-		f.mu.whenReady = append(f.mu.whenReady, cb)
+		f.mu.whenReady = append(f.mu.whenReady, fn)
 		f.mu.Unlock()
 	}
 }
@@ -159,36 +145,22 @@ func (f *future[T]) ready(v T, err error) {
 	f.runClosures(whenReady...)
 }
 
-// runClosures is a helper to execute list of closures either inline or on
-// another go routine.
+// runClosures invokes the closures synchronously, one by one.
 func (f *future[T]) runClosures(closures ...resultCallback[T]) {
-	if len(closures) == 0 {
-		return
+	for _, fn := range closures {
+		fn(f.value, f.err)
 	}
-
-	var wg sync.WaitGroup
-	for _, cb := range closures {
-		if cb.async {
-			wg.Add(1)
-			go func(fn func(v T, err error)) {
-				defer wg.Done()
-				fn(f.value, f.err)
-			}(cb.fn)
-		} else {
-			cb.fn(f.value, f.err)
-		}
-	}
-	wg.Wait()
 }
 
-// whenReady returns a channel that can be selected on to wait
-// for future to become ready.
+// whenReady returns the channel that signals the future, creating
+// it if necessary.
 func (f *future[T]) whenReady() chan struct{} {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if f.mu.done == nil {
 		f.mu.done = make(chan struct{})
 	}
-	defer f.mu.Unlock()
 	return f.mu.done
 }
 

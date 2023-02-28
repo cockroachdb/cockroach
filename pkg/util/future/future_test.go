@@ -44,10 +44,10 @@ func TestPromise(t *testing.T) {
 	// More than one WhenReady handler may be added.
 	ready1 := make(chan struct{})
 	ready2 := make(chan struct{})
-	f.WhenReadyAsync(func(v int, err error) {
+	f.WhenReady(func(v int, err error) {
 		close(ready1)
 	})
-	f.WhenReady(func(v int, err error) { // Could have used Defer instead.
+	f.WhenReady(func(v int, err error) {
 		close(ready2)
 	})
 	fErr := future.MakePromise[int]()
