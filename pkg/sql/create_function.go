@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -44,17 +43,6 @@ type createFunctionNode struct {
 func (n *createFunctionNode) ReadingOwnWrites() {}
 
 func (n *createFunctionNode) startExec(params runParams) error {
-	if !params.EvalContext().Settings.Version.IsActive(
-		params.ctx,
-		clusterversion.TODODelete_V22_2SchemaChangeSupportsCreateFunction,
-	) {
-		// TODO(chengxiong): remove this version gate in 23.1.
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"cannot run CREATE FUNCTION before system is fully upgraded to v22.2",
-		)
-	}
-
 	if n.cf.RoutineBody != nil {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
