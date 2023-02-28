@@ -316,7 +316,10 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
 		}
 	}
-
+	// Don't bother waiting if we're ignoring the values; just say so now.
+	if settings.IsIgnoringAllUpdates() {
+		return errors.New("setting updated will not take effect in this process due to manual override")
+	}
 	return waitForSettingUpdate(params.ctx, params.extendedEvalCtx.ExecCfg,
 		n.setting, n.value == nil /* reset */, n.name, expectedEncodedValue)
 }
