@@ -264,10 +264,11 @@ config  BYTES  true   NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.lease
 ----
-descID      INT8       false  NULL  ·  {primary}  false
-version     INT8       false  NULL  ·  {primary}  false
-nodeID      INT8       false  NULL  ·  {primary}  false
-expiration  TIMESTAMP  false  NULL  ·  {primary}  false
+descID       INT8       false  NULL  ·  {primary}  false
+version      INT8       false  NULL  ·  {primary}  false
+nodeID       INT8       false  NULL  ·  {primary}  false
+expiration   TIMESTAMP  false  NULL  ·  {primary}  false
+crdb_region  BYTES      false  NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.eventlog
