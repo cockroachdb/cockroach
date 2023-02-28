@@ -20,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -99,14 +101,15 @@ func (*createFunctionNode) Close(ctx context.Context)           {}
 func (n *createFunctionNode) createNewFunction(
 	udfDesc *funcdesc.Mutable, scDesc *schemadesc.Mutable, params runParams,
 ) error {
+	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
+		return err
+	}
+
 	for _, option := range n.cf.Options {
 		err := setFuncOption(params, udfDesc, option)
 		if err != nil {
 			return err
 		}
-	}
-	if err := funcdesc.CheckLeakProofVolatility(udfDesc); err != nil {
-		return err
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -176,15 +179,14 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	}
 
 	resetFuncOption(udfDesc)
+	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
+		return err
+	}
 	for _, option := range n.cf.Options {
 		err := setFuncOption(params, udfDesc, option)
 		if err != nil {
 			return err
 		}
-	}
-
-	if err := funcdesc.CheckLeakProofVolatility(udfDesc); err != nil {
-		return err
 	}
 
 	// Removing all existing references before adding new references.
@@ -390,7 +392,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
 	switch t := option.(type) {
 	case tree.FunctionVolatility:
-		v, err := funcdesc.VolatilityToProto(t)
+		v, err := funcinfo.VolatilityToProto(t)
 		if err != nil {
 			return err
 		}
@@ -398,13 +400,13 @@ func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.Func
 	case tree.FunctionLeakproof:
 		udfDesc.SetLeakProof(bool(t))
 	case tree.FunctionNullInputBehavior:
-		v, err := funcdesc.NullInputBehaviorToProto(t)
+		v, err := funcinfo.NullInputBehaviorToProto(t)
 		if err != nil {
 			return err
 		}
 		udfDesc.SetNullInputBehavior(v)
 	case tree.FunctionLanguage:
-		v, err := funcdesc.FunctionLangToProto(t)
+		v, err := funcinfo.FunctionLangToProto(t)
 		if err != nil {
 			return err
 		}
@@ -441,7 +443,7 @@ func makeFunctionParam(
 		Name: string(param.Name),
 	}
 	var err error
-	pbParam.Class, err = funcdesc.ParamClassToProto(param.Class)
+	pbParam.Class, err = funcinfo.ParamClassToProto(param.Class)
 	if err != nil {
 		return descpb.FunctionDescriptor_Parameter{}, err
 	}
@@ -464,4 +466,19 @@ func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {
 		return false, err
 	}
 	return desc.DescriptorType() == catalog.Table, nil
+}
+
+// validateVolatilityInOptions checks if the volatility values in the given list
+// of function options, if any, can be applied to the function descriptor.
+func validateVolatilityInOptions(
+	options tree.FunctionOptions, fnDesc catalog.FunctionDescriptor,
+) error {
+	vp := funcinfo.MakeVolatilityProperties(fnDesc.GetVolatility(), fnDesc.GetLeakProof())
+	if err := vp.Apply(options); err != nil {
+		return err
+	}
+	if err := vp.Validate(); err != nil {
+		return sqlerrors.NewInvalidVolatilityError(err)
+	}
+	return nil
 }

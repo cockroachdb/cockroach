@@ -228,7 +228,7 @@ func TestValidateFuncDesc(t *testing.T) {
 			},
 		},
 		{
-			"cannot set leakproof on function with non-immutable volatility: VOLATILE",
+			"leak proof function must be immutable, but got volatility: VOLATILE",
 			descpb.FunctionDescriptor{
 				Name:           "f",
 				ID:             funcDescID,
