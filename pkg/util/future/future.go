@@ -13,7 +13,6 @@ package future
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -30,7 +29,7 @@ type future[T any] struct {
 	mu struct {
 		syncutil.Mutex
 		ready     bool
-		done      atomic.Value // of chan struct{}, created lazily.
+		done      chan struct{} // created lazily
 		whenReady []resultCallback[T]
 	}
 
@@ -97,10 +96,9 @@ func (f *future[T]) WhenReadyAsync(fn func(v T, err error)) {
 // runOrDefer executes fn if future is ready, or queues it in the queue.
 func (f *future[T]) runOrDefer(fn func(v T, err error), async bool) {
 	f.mu.Lock()
-	c, _ := f.mu.done.Load().(chan struct{})
 	cb := resultCallback[T]{fn: fn, async: async}
 
-	if c == closedChan {
+	if f.mu.done == closedChan {
 		f.mu.Unlock()
 		f.runClosures(cb)
 	} else {
@@ -149,11 +147,10 @@ func (f *future[T]) ready(v T, err error) {
 	f.value = v
 	f.err = err
 
-	d, _ := f.mu.done.Load().(chan struct{})
-	if d == nil {
-		f.mu.done.Store(closedChan)
+	if f.mu.done == nil {
+		f.mu.done = closedChan
 	} else {
-		close(d)
+		close(f.mu.done)
 	}
 
 	whenReady := f.mu.whenReady
@@ -189,13 +186,11 @@ func (f *future[T]) runClosures(closures ...resultCallback[T]) {
 // for future to become ready.
 func (f *future[T]) whenReady() chan struct{} {
 	f.mu.Lock()
-	d, _ := f.mu.done.Load().(chan struct{})
-	if d == nil {
-		d = make(chan struct{})
-		f.mu.done.Store(d)
+	if f.mu.done == nil {
+		f.mu.done = make(chan struct{})
 	}
-	f.mu.Unlock()
-	return d
+	defer f.mu.Unlock()
+	return f.mu.done
 }
 
 var closedChan = func() chan struct{} {
