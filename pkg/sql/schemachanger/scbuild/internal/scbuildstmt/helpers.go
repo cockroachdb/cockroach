@@ -226,14 +226,23 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
 			break
+		case *scpb.Namespace, *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
+			*scpb.TableLocalitySecondaryRegion:
+			// These can be safely skipped and will be cleaned up on their own because
+			// of dependents cleaned up above.
 		case
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
 			*scpb.CheckConstraint,
+			*scpb.CheckConstraintUnvalidated,
 			*scpb.ForeignKeyConstraint,
+			*scpb.ForeignKeyConstraintUnvalidated,
 			*scpb.SequenceOwner,
 			*scpb.DatabaseRegionConfig:
 			b.Drop(e)
+		default:
+			panic(errors.AssertionFailedf("un-dropped backref %T (%v) should be either be"+
+				"dropped or skipped", e, target))
 		}
 	})
 }
