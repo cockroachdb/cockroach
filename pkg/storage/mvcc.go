@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -74,8 +75,9 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDurationWithMaximum(1*time.Second),
 )
 
-// MVCCRangeTombstonesEnabled enables writing of MVCC range tombstones.
-// Currently, this is used for schema GC and import cancellation rollbacks.
+// MVCCRangeTombstonesEnabledInMixedClusters enables writing of MVCC range
+// tombstones. Currently, this is used for schema GC and import cancellation
+// rollbacks.
 //
 // Note that any executing jobs may not pick up this change, so these need to be
 // waited out before being certain that the setting has taken effect.
@@ -83,18 +85,25 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 // If disabled after being enabled, this will prevent new range tombstones from
 // being written, but already written tombstones will remain until GCed. The
 // above note on jobs also applies in this case.
-var MVCCRangeTombstonesEnabled = settings.RegisterBoolSetting(
+//
+// If the version of the cluster is at or beyond the version
+// V23_1_MVCCRangeTombstonesUnconditionallyEnabled, the feature is
+// unconditionally enabled.
+var MVCCRangeTombstonesEnabledInMixedClusters = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"storage.mvcc.range_tombstones.enabled",
-	"enables the use of MVCC range tombstones",
+	"controls the use of MVCC range tombstones in mixed version clusters; range tombstones are always on in 23.1 clusters",
 	true)
 
-// CanUseMVCCRangeTombstones returns true if the caller can begin writing
-// MVCC range tombstones, by setting DeleteRangeRequest.UseRangeTombstone.
-// It requires the MVCCRangeTombstones version gate to be active, and the
-// setting storage.mvcc.range_tombstones.enabled to be enabled.
+// CanUseMVCCRangeTombstones returns true if the caller can begin writing MVCC
+// range tombstones, by setting DeleteRangeRequest.UseRangeTombstone. It
+// requires the storage.mvcc.range_tombstones.enabled cluster setting to be
+// enabled, OR the cluster version is at or beyond the
+// V23_1_MVCCRangeTombstonesUnconditionallyEnabled version (i.e. in 23.1, the
+// feature is unconditionally enabled).
 func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	return MVCCRangeTombstonesEnabled.Get(&st.SV)
+	return st.Version.IsActive(ctx, clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled) ||
+		MVCCRangeTombstonesEnabledInMixedClusters.Get(&st.SV)
 }
 
 // MaxIntentsPerWriteIntentError sets maximum number of intents returned in
