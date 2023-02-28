@@ -155,9 +155,7 @@ func _COMPUTE_PARTITIONS_SIZES(_HAS_SEL bool) { // */}}
 				r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
 				r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 				r.partitionsState.idx = 0
-				// This batch has only a single INT column, so no memory is ever
-				// released on the ResetInternalBatch() call.
-				_ = r.partitionsState.runningSizes.ResetInternalBatch()
+				r.partitionsState.runningSizes.ResetInternalBatch()
 			}
 		}
 	}
@@ -189,9 +187,7 @@ func _COMPUTE_PEER_GROUPS_SIZES(_HAS_SEL bool) { // */}}
 				r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
 				r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 				r.peerGroupsState.idx = 0
-				// This batch has only a single INT column, so no memory is ever
-				// released on the ResetInternalBatch() call.
-				_ = r.peerGroupsState.runningSizes.ResetInternalBatch()
+				r.peerGroupsState.runningSizes.ResetInternalBatch()
 			}
 		}
 	}
@@ -478,7 +474,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			}
 			// {{end}}
 
-			r.allocator.ResetBatch(r.output)
+			r.output.ResetInternalBatch()
 			// First, we copy over the buffered up columns.
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {

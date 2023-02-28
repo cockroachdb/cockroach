@@ -33,6 +33,7 @@ go_test(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
+        "//pkg/col/typeconv",
         "//pkg/settings/cluster",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecutils",
