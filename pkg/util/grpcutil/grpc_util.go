@@ -62,8 +62,10 @@ func IsTimeout(err error) bool {
 	return false
 }
 
-// IsConnectionUnavailable checks if grpc code is codes.Unavailable which is
-// set when we are not able to establish connection to remote node.
+// IsConnectionUnavailable checks if grpc code is either codes.Unavailable which
+// is set when we are not able to establish connection to remote node or
+// codes.FailedPrecondition when node itself blocked access to remote node
+// because it is marked as decommissioned in the local tombstone storage.
 func IsConnectionUnavailable(err error) bool {
 	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
 		return s.Code() == codes.Unavailable || s.Code() == codes.FailedPrecondition
