@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,7 +51,7 @@ type rbrEncoder struct {
 }
 
 func (e *rbrEncoder) encode(session sqlliveness.SessionID) (roachpb.Key, error) {
-	region, uuid, err := UnsafeDecodeSessionID(session)
+	region, _, err := UnsafeDecodeSessionID(session)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +63,7 @@ func (e *rbrEncoder) encode(session sqlliveness.SessionID) (roachpb.Key, error) 
 
 	key := e.indexPrefix()
 	key = encoding.EncodeBytesAscending(key, region)
-	key = encoding.EncodeBytesAscending(key, uuid)
+	key = encoding.EncodeBytesAscending(key, session.UnsafeBytes())
 	return keys.MakeFamilyKey(key, columnFamilyID), nil
 }
 
@@ -74,22 +73,17 @@ func (e *rbrEncoder) decode(key roachpb.Key) (sqlliveness.SessionID, error) {
 	}
 	rem := key[len(e.rbrIndex):]
 
-	rem, region, err := encoding.DecodeBytesAscending(rem, nil)
+	rem, _, err := encoding.DecodeBytesAscending(rem, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to decode region from session key")
 	}
 
-	rem, rawUUID, err := encoding.DecodeBytesAscending(rem, nil)
+	rem, id, err := encoding.DecodeBytesAscending(rem, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to decode uuid from session key")
 	}
 
-	id, err := uuid.FromBytes(rawUUID)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to convert uuid bytes to uuid id for session key")
-	}
-
-	return MakeSessionID(region, id)
+	return sqlliveness.SessionID(id), nil
 }
 
 func (e *rbrEncoder) indexPrefix() roachpb.Key {
