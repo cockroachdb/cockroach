@@ -31,6 +31,7 @@ import "antd/lib/switch/style";
 import Long from "long";
 import { Button } from "src/button";
 import { useHistory } from "react-router-dom";
+import { SpanMetadataTable } from "./spanMetadataTable";
 
 const cx = classNames.bind(styles);
 
@@ -108,8 +109,6 @@ const SpanStatus: React.FC<{
 
 export const SpanComponent: React.FC<{
   snapshot: GetTracingSnapshotResponse;
-  sort: SortSetting;
-  changeSortSetting: (_: SortSetting) => void;
   spanDetailsURL: (_: Long) => string;
   span: Span;
 
@@ -126,8 +125,6 @@ export const SpanComponent: React.FC<{
 }> = props => {
   const {
     snapshot,
-    sort,
-    changeSortSetting,
     span,
     spanDetailsURL,
     snapshotError,
@@ -139,6 +136,7 @@ export const SpanComponent: React.FC<{
   const snapshotID = snapshot?.snapshot.snapshot_id;
   const spans = snapshot?.snapshot.spans;
   const spanID = span?.span_id;
+
   const childFilteredSnapshot = useMemo(() => {
     return {
       ...snapshot?.snapshot,
@@ -167,6 +165,10 @@ export const SpanComponent: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [nodeID, snapshotID, spanID],
   );
+  const [childSpanSortSetting, setChildSpanSortSetting] =
+    useState<SortSetting>();
+
+  const childrenMetadata = span?.children_metadata;
 
   const history = useHistory();
   return (
@@ -230,6 +232,21 @@ export const SpanComponent: React.FC<{
           />
         </section>
       )}
+      {childrenMetadata?.length > 0 && (
+        <section className={cx("span-section")}>
+          <h3 className={commonStyles("base-heading")}>
+            Aggregated Child Span Metadata
+          </h3>
+          <Loading
+            loading={snapshotLoading}
+            page={"snapshots"}
+            error={snapshotError}
+            render={() => (
+              <SpanMetadataTable childrenMetadata={childrenMetadata} />
+            )}
+          />
+        </section>
+      )}
       {childFilteredSnapshot.spans?.length > 0 && (
         <section className={cx("span-section")}>
           <h3 className={commonStyles("base-heading")}>Child Spans</h3>
@@ -240,8 +257,8 @@ export const SpanComponent: React.FC<{
             render={() => (
               <SpanTable
                 snapshot={childFilteredSnapshot}
-                setSort={changeSortSetting}
-                sort={sort}
+                setSort={setChildSpanSortSetting}
+                sort={childSpanSortSetting}
                 spanDetailsURL={spanDetailsURL}
               />
             )}

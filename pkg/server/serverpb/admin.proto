@@ -25,6 +25,7 @@ import "roachpb/metadata.proto";
 import "roachpb/data.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
@@ -1396,6 +1397,11 @@ message TracingSnapshot {
   map<string, string> stacks = 4;
 }
 
+message NamedOperationMetadata {
+  string name = 1;
+  util.tracing.tracingpb.OperationMetadata metadata = 2 [(gogoproto.nullable) = false];
+}
+
 // TracingSpan represents a span, in a form slightly processed for the use of
 // the tracing UI.
 message TracingSpan {
@@ -1412,6 +1418,7 @@ message TracingSpan {
   // current_recording_mode represents the span's current recording mode. This is
   // not set if current == false.
   util.tracing.tracingpb.RecordingMode current_recording_mode = 9;
+  repeated NamedOperationMetadata children_metadata = 10;
 }
 
 // SpanTag represents a tag on a tracing span, in a form processed for the use
