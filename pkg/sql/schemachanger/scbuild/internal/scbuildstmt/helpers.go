@@ -230,7 +230,9 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
 			*scpb.CheckConstraint,
+			*scpb.CheckConstraintUnvalidated,
 			*scpb.ForeignKeyConstraint,
+			*scpb.ForeignKeyConstraintUnvalidated,
 			*scpb.SequenceOwner,
 			*scpb.DatabaseRegionConfig:
 			b.Drop(e)

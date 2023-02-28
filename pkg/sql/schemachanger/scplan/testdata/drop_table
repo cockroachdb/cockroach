@@ -15,7 +15,8 @@ CREATE TABLE defaultdb.shipments (
     customer_id INT,
     randcol INT DEFAULT nextval('defaultdb.sq2'),
     CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
-    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer)
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer),
+    CONSTRAINT fk_customers2 FOREIGN KEY (customer_id) REFERENCES customers(id) NOT VALID
   );
 CREATE INDEX partialidx ON defaultdb.shipments (status, customer_id) WHERE (status = 'waiting');
 CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier;
@@ -26,19 +27,23 @@ COMMENT ON INDEX defaultdb.shipments@shipments_pkey IS 'pkey is good';
 COMMENT ON CONSTRAINT fk_customers ON defaultdb.shipments IS 'customer is not god';
 CREATE FUNCTION defaultdb.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 ALTER TABLE shipments ADD COLUMN udfcol INT;
+ALTER TABLE shipments ADD CHECK (currval('defaultdb.SQ2') > 0) NOT VALID;
 ALTER TABLE shipments ALTER COLUMN udfcol SET DEFAULT f1();
 ----
+
 
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 20 MutationType ops
+StatementPhase stage 1 of 1 with 22 MutationType ops
   transitions:
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -74,6 +79,13 @@ StatementPhase stage 1 of 1 with 20 MutationType ops
     *scop.SetConstraintName
       ConstraintID: 3
       Name: crdb_internal_constraint_3_name_placeholder
+      TableID: 109
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 4
+      TableID: 109
+    *scop.SetConstraintName
+      ConstraintID: 4
+      Name: crdb_internal_constraint_4_name_placeholder
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
@@ -134,6 +146,8 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], ABSENT] -> PUBLIC
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], VALIDATED] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
@@ -155,7 +169,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 119 MutationType ops
+PreCommitPhase stage 2 of 2 with 126 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -209,11 +223,15 @@ PreCommitPhase stage 2 of 2 with 119 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -255,6 +273,13 @@ PreCommitPhase stage 2 of 2 with 119 MutationType ops
     *scop.SetConstraintName
       ConstraintID: 3
       Name: crdb_internal_constraint_3_name_placeholder
+      TableID: 109
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 4
+      TableID: 109
+    *scop.SetConstraintName
+      ConstraintID: 4
+      Name: crdb_internal_constraint_4_name_placeholder
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
@@ -298,6 +323,10 @@ PreCommitPhase stage 2 of 2 with 119 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 111
+    *scop.SetConstraintName
+      ConstraintID: 5
+      Name: crdb_internal_constraint_5_name_placeholder
+      TableID: 109
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 2
       OriginTableID: 109
@@ -311,6 +340,13 @@ PreCommitPhase stage 2 of 2 with 119 MutationType ops
       ReferencedTableID: 105
     *scop.RemoveForeignKeyConstraint
       ConstraintID: 3
+      TableID: 109
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 4
+      OriginTableID: 109
+      ReferencedTableID: 104
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 4
       TableID: 109
     *scop.DrainDescriptorName
       Namespace:
@@ -473,6 +509,13 @@ PreCommitPhase stage 2 of 2 with 119 MutationType ops
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 109
+    *scop.RemoveCheckConstraint
+      ConstraintID: 5
+      TableID: 109
+    *scop.UpdateTableBackReferencesInSequences
+      BackReferencedTableID: 109
+      SequenceIDs:
+      - 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -740,6 +783,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 15 MutationType ops
 deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
+- from: [CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1204,11 +1251,27 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT]
+  to:   [CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependents removed right before simple constraint
+- from: [ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
   kind: Precedence
   rule: dependents removed before constraint
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before constraint
+- from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1246,6 +1309,18 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: cross-descriptor constraint is absent before referencing descriptor is dropped
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
+  kind: Precedence
+  rule: constraint no longer public before dependents
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: cross-descriptor constraint is absent before referencing descriptor is dropped
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
+  to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: constraint no longer public before dependents
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
@@ -1536,6 +1611,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [TableData:{DescID: 109, ReferencedDescID: 100}, DROPPED]
   kind: SameStagePrecedence
   rule: table removed right before garbage collection
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -1852,6 +1931,743 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [View:{DescID: 111}, ABSENT]
   kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
+
+ops
+DROP TABLE defaultdb.customers CASCADE;
+----
+StatementPhase stage 1 of 1 with 3 MutationType ops
+  transitions:
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+  ops:
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 3
+      TableID: 105
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 2
+      TableID: 109
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 4
+      TableID: 109
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 7 MutationType ops
+  transitions:
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
+  ops:
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 3
+      TableID: 105
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 2
+      TableID: 109
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 4
+      TableID: 109
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 109
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      - 109
+      JobID: 1
+      NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 43 MutationType ops
+        pending
+      Statements:
+      - statement: DROP TABLE defaultdb.customers CASCADE
+        redactedstatement: DROP TABLE ‹defaultdb›.public.‹customers› CASCADE
+        statementtag: DROP TABLE
+PostCommitNonRevertiblePhase stage 1 of 2 with 47 MutationType ops
+  transitions:
+    [[Namespace:{DescID: 104, Name: customers, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
+    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 104, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: email, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: customers_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
+    [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
+  ops:
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 3
+      OriginTableID: 105
+      ReferencedTableID: 104
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 3
+      TableID: 105
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 2
+      OriginTableID: 109
+      ReferencedTableID: 104
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 2
+      TableID: 109
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 4
+      OriginTableID: 109
+      ReferencedTableID: 104
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 4
+      TableID: 109
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 104
+    *scop.RemoveObjectParent
+      ObjectID: 104
+      ParentSchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 104
+      ElementType: scpb.ColumnFamily
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 104
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 104
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 104
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 104
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 104
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 104
+    *scop.MakePublicSecondaryIndexWriteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 104
+        Name: customers
+        SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 104
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: root
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 104
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 104
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 104
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 104
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 104
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 2
+      Name: crdb_internal_index_2_name_placeholder
+      TableID: 104
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 104
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 104
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 2
+      TableID: 104
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 2
+      Kind: 1
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 2
+      TableID: 104
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 109
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
+  transitions:
+    [[Table:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.customers CASCADE
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.customers CASCADE
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 2
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.customers CASCADE
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 109
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      - 105
+      - 109
+      IsNonCancelable: true
+      JobID: 1
+
+deps
+DROP TABLE defaultdb.customers CASCADE;
+----
+- from: [Column:{DescID: 104, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 104, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 104, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 1}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 1}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 104, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 104, Name: email, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 2}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 2}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 104, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 104, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 104, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 104, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [ColumnFamily:{DescID: 104, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 104, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 104, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 104, Name: email, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 104, Name: email, ColumnID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 104, Name: id, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 104, Name: id, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 104, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 104, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 1}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: cross-descriptor constraint is absent before referenced descriptor is dropped
+- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, PUBLIC]
+  to:   [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, VALIDATED]
+  kind: PreviousStagePrecedence
+  rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
+- from: [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, VALIDATED]
+  to:   [ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedDescID: 104}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: cross-descriptor constraint is absent before referenced descriptor is dropped
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, PUBLIC]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
+  kind: PreviousStagePrecedence
+  rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: cross-descriptor constraint is absent before referenced descriptor is dropped
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, PUBLIC]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
+  kind: PreviousStagePrecedence
+  rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
+- from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
+  to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexData:{DescID: 104, IndexID: 1}, DROPPED]
+  to:   [IndexData:{DescID: 104, IndexID: 2}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexName:{DescID: 104, Name: customers_pkey, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexName:{DescID: 104, Name: customers_pkey, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 104, Name: customers, ReferencedDescID: 100}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 104}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, ABSENT]
+  to:   [IndexData:{DescID: 104, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, VALIDATED]
+  to:   [IndexName:{DescID: 104, Name: customers_pkey, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents, excluding columns
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 104, IndexID: 2}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index no longer public before index name
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, VALIDATED]
+  to:   [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents, excluding columns
+- from: [Table:{DescID: 104}, ABSENT]
+  to:   [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Column:{DescID: 104, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Column:{DescID: 104, ColumnID: 2}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Column:{DescID: 104, ColumnID: 4294967294}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Column:{DescID: 104, ColumnID: 4294967295}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnFamily:{DescID: 104, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnName:{DescID: 104, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnName:{DescID: 104, Name: email, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnName:{DescID: 104, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnName:{DescID: 104, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent constraint
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [IndexName:{DescID: 104, Name: customers_pkey, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Namespace:{DescID: 104, Name: customers, ReferencedDescID: 100}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Owner:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 2}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent index
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent index
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: descriptor dropped in transaction before removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 104, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 104, IndexID: 2}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  to:   [Table:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 
 setup
 CREATE TYPE defaultdb.greeting AS ENUM ('hello');

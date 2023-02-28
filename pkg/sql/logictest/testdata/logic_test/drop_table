@@ -138,3 +138,35 @@ DROP TABLE t_with_not_valid_constraints_1;
 
 statement ok
 DROP TABLE t_with_not_valid_constraints_2;
+
+# Tests for #97783 where unvalidated FK references were not cleaned up
+subtest drop_table_with_not_valid_fk_and_check
+
+statement ok
+CREATE TABLE t_not_valid_src (i INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE TABLE t_not_valid_dst (i INT PRIMARY KEY, j INT, c CHAR);
+
+statement ok
+CREATE SEQUENCE t_not_valid_sq;
+
+statement ok;
+ALTER TABLE t_not_valid_dst ADD CONSTRAINT v_fk FOREIGN KEY(j) REFERENCES t_not_valid_src(i) NOT VALID;
+
+statement ok
+ALTER TABLE t_not_valid_dst ADD CHECK (j > currval('t_not_valid_sq')) NOT VALID;
+
+statement ok
+DROP TABLE t_not_valid_src CASCADE;
+
+statement ok;
+DROP SEQUENCE t_not_valid_sq CASCADE;
+
+# Sequence related check constraint should be cleaned, so inserts should work.
+# Also the destination descriptor should be valid after the FK clean up. Note:
+# skip on older configs since this is an existing bug, not a new regression.
+skipif config local-mixed-22.2-23.1
+skipif config local-legacy-schema-changer
+statement ok
+INSERT INTO t_not_valid_dst VALUES(5,5,5);
