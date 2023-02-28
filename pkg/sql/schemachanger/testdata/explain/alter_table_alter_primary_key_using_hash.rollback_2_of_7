@@ -1,0 +1,76 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+
+/* test */
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count=3);
+EXPLAIN (ddl) rollback at post-commit stage 2 of 7;
+----
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 21 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY Column:{DescID: 104, ColumnID: 3}
+      │    │    ├── PUBLIC        → ABSENT      ColumnName:{DescID: 104, Name: crdb_internal_j_shard_3, ColumnID: 3}
+      │    │    ├── WRITE_ONLY    → ABSENT      ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 2}
+      │    │    ├── WRITE_ONLY    → ABSENT      CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+      │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 4, SourceIndexID: 1}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+      │    │    ├── BACKFILL_ONLY → ABSENT      SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
+      │    │    └── PUBLIC        → ABSENT      IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
+      │    └── 23 Mutation operations
+      │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":2,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":2,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"Kind":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":5,"Kind":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Kind":1,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":1,"Ordinal":1,"TableID":104}
+      │         ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":104}
+      │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
+      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 8 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104, ColumnID: 3}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 2}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 4, SourceIndexID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 3}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 4}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 5}
+           └── 9 Mutation operations
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -257,8 +257,7 @@ func newUndefinedOpclassError(opclass tree.Name) error {
 
 // checkColumnAccessibilityForIndex validate that any columns that are explicitly referenced in a column for storage or
 // as a key are either accessible and not system columns.
-func checkColumnAccessibilityForIndex(colName string, columnElts ElementResultSet, store bool) {
-	_, _, column := scpb.FindColumn(columnElts)
+func checkColumnAccessibilityForIndex(colName string, column *scpb.Column, store bool) {
 	if column.IsInaccessible {
 		panic(pgerror.Newf(
 			pgcode.UndefinedColumn,
@@ -556,40 +555,34 @@ func addColumnsForSecondaryIndex(
 	for i, columnNode := range n.Columns {
 		colName := columnNode.Column
 		if columnNode.Expr != nil {
-			tbl := relation.(*scpb.Table)
-			colNameStr := maybeCreateVirtualColumnForIndex(b, &n.Table, tbl, columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
+			colNameStr := maybeCreateVirtualColumnForIndex(b, &n.Table, relation.(*scpb.Table), columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
 			colName = tree.Name(colNameStr)
 			if !expressionTelemtryCounted {
 				b.IncrementSchemaChangeIndexCounter("expression")
 				expressionTelemtryCounted = true
 			}
 		}
-		colElts := b.ResolveColumn(tableID, colName, ResolveParams{
-			RequiredPrivilege: privilege.CREATE,
-		})
-		_, _, column := scpb.FindColumn(colElts)
-		_, _, columnType := scpb.FindColumnType(colElts)
-		invertedKind := processColNodeType(b, n, idxSpec, string(colName), columnNode, columnType, i == lastColumnIdx)
+		colID := getColumnIDFromColumnName(b, tableID, colName)
+		if colID == 0 {
+			panic(colinfo.NewUndefinedColumnError(string(colName)))
+		}
+		columnTypeElem := mustRetrieveColumnTypeElem(b, tableID, colID)
+		columnElem := mustRetrieveColumnElem(b, tableID, colID)
 		// Column should be accessible.
 		if columnNode.Expr == nil {
-			checkColumnAccessibilityForIndex(string(colName), colElts, false)
+			checkColumnAccessibilityForIndex(string(colName), columnElem, false)
 		}
 		keyColNames[i] = string(colName)
-		direction := catenumpb.IndexColumn_ASC
-		if columnNode.Direction == tree.Descending {
-			direction = catenumpb.IndexColumn_DESC
-		}
-		ic := &scpb.IndexColumn{
+		idxSpec.columns = append(idxSpec.columns, &scpb.IndexColumn{
 			TableID:       idxSpec.secondary.TableID,
 			IndexID:       idxSpec.secondary.IndexID,
-			ColumnID:      column.ColumnID,
+			ColumnID:      colID,
 			OrdinalInKind: uint32(i),
 			Kind:          scpb.IndexColumn_KEY,
-			Direction:     direction,
-			InvertedKind:  invertedKind,
-		}
-		idxSpec.columns = append(idxSpec.columns, ic)
-		keyColIDs.Add(column.ColumnID)
+			Direction:     indexColumnDirection(columnNode.Direction),
+			InvertedKind:  processColNodeType(b, n, idxSpec, string(colName), columnNode, columnTypeElem, i == lastColumnIdx),
+		})
+		keyColIDs.Add(colID)
 	}
 	// Set the key suffix column IDs.
 	// We want to find the key column IDs
@@ -637,7 +630,7 @@ func addColumnsForSecondaryIndex(
 			RequiredPrivilege: privilege.CREATE,
 		})
 		_, _, column := scpb.FindColumn(colElts)
-		checkColumnAccessibilityForIndex(storingNode.String(), colElts, true)
+		checkColumnAccessibilityForIndex(storingNode.String(), column, true)
 		c := &scpb.IndexColumn{
 			TableID:       idxSpec.secondary.TableID,
 			IndexID:       idxSpec.secondary.IndexID,
@@ -650,25 +643,13 @@ func addColumnsForSecondaryIndex(
 	// Set up sharding.
 	if n.Sharded != nil {
 		b.IncrementSchemaChangeIndexCounter("hash_sharded")
-		buckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(), n.Sharded.ShardBuckets, n.StorageParams)
-		if err != nil {
-			panic(err)
-		}
-		shardColName := maybeCreateAndAddShardCol(b, int(buckets), relation.(*scpb.Table), keyColNames, n)
-		idxSpec.secondary.Sharding = &catpb.ShardedDescriptor{
-			IsSharded:    true,
-			Name:         shardColName,
-			ShardBuckets: buckets,
-			ColumnNames:  keyColNames,
-		}
-		colElts := b.ResolveColumn(tableID, tree.Name(shardColName), ResolveParams{
-			RequiredPrivilege: privilege.CREATE,
-		})
-		_, _, column := scpb.FindColumn(colElts)
+		sharding, shardColID, _ := ensureShardColAndMakeShardDesc(b, relation.(*scpb.Table), keyColNames,
+			n.Sharded.ShardBuckets, n.StorageParams, n)
+		idxSpec.secondary.Sharding = sharding
 		indexColumn := &scpb.IndexColumn{
 			IndexID:       idxSpec.secondary.IndexID,
-			TableID:       column.TableID,
-			ColumnID:      column.ColumnID,
+			TableID:       tableID,
+			ColumnID:      shardColID,
 			OrdinalInKind: 0,
 			Kind:          scpb.IndexColumn_KEY,
 			Direction:     catenumpb.IndexColumn_ASC,
@@ -676,7 +657,7 @@ func addColumnsForSecondaryIndex(
 		// Remove the sharded column if it's there in the primary
 		// index already, before adding it.
 		for pos, ic := range idxSpec.columns {
-			if ic.ColumnID == column.ColumnID {
+			if ic.ColumnID == shardColID {
 				idxSpec.columns = append(idxSpec.columns[:pos], idxSpec.columns[pos+1:]...)
 				break
 			}
@@ -690,7 +671,7 @@ func addColumnsForSecondaryIndex(
 // buckets.
 func maybeCreateAndAddShardCol(
 	b BuildCtx, shardBuckets int, tbl *scpb.Table, colNames []string, n tree.NodeFormatter,
-) (shardColName string) {
+) (shardColName string, shardColID catid.ColumnID, shardColCkConstraintID catid.ConstraintID) {
 	shardColName = tabledesc.GetShardColumnName(colNames, int32(shardBuckets))
 	elts := b.QueryByID(tbl.TableID)
 	// TODO(ajwerner): In what ways is the column referenced by
@@ -711,14 +692,19 @@ func maybeCreateAndAddShardCol(
 		}
 	})
 	if existingShardColID != 0 {
-		return shardColName
+		scpb.ForEachCheckConstraint(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.CheckConstraint) {
+			if e.FromHashShardedColumn && e.ColumnIDs[0] == existingShardColID {
+				shardColCkConstraintID = e.ConstraintID
+			}
+		})
+		return shardColName, existingShardColID, shardColCkConstraintID
 	}
 	expr := schemaexpr.MakeHashShardComputeExpr(colNames, shardBuckets)
 	parsedExpr, err := parser.ParseExpr(*expr)
 	if err != nil {
 		panic(err)
 	}
-	shardColID := b.NextTableColumnID(tbl)
+	shardColID = b.NextTableColumnID(tbl)
 	spec := addColumnSpec{
 		tbl: tbl,
 		col: &scpb.Column{
@@ -761,9 +747,10 @@ func maybeCreateAndAddShardCol(
 				checkConstraintBucketValues.String()),
 			err))
 	}
+	shardColCkConstraintID = b.NextTableConstraintID(tbl.TableID)
 	shardCheckConstraint := &scpb.CheckConstraint{
 		TableID:      tbl.TableID,
-		ConstraintID: b.NextTableConstraintID(tbl.TableID),
+		ConstraintID: shardColCkConstraintID,
 		Expression: scpb.Expression{
 			Expr:                catpb.Expression(checkConstraintBucketValues.String()),
 			ReferencedColumnIDs: []catid.ColumnID{shardColID},
@@ -773,12 +760,12 @@ func maybeCreateAndAddShardCol(
 	b.Add(shardCheckConstraint)
 	shardCheckConstraintName := &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.TableID,
-		ConstraintID: shardCheckConstraint.ConstraintID,
+		ConstraintID: shardColCkConstraintID,
 		Name:         generateUniqueCheckConstraintName(b, tbl.TableID, chkConstraintExpr),
 	}
 	b.Add(shardCheckConstraintName)
 
-	return shardColName
+	return shardColName, shardColID, shardColCkConstraintID
 }
 
 func maybeCreateVirtualColumnForIndex(

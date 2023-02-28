@@ -1574,6 +1574,9 @@ func ValidateConstraint(
 			return txn.WithSyntheticDescriptors(
 				[]catalog.Descriptor{tableDesc},
 				func() error {
+					if skip, err := canSkipCheckValidation(tableDesc, ck); err != nil || skip {
+						return err
+					}
 					violatingRow, formattedCkExpr, err := validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.GetExpr(),
 						tableDesc.(*tabledesc.Mutable), indexIDForValidation)
 					if err != nil {
@@ -1628,6 +1631,29 @@ func ValidateConstraint(
 			return errors.AssertionFailedf("validation of unsupported constraint type")
 		}
 	})
+}
+
+// canSkipCheckValidation returns true if
+//  1. ck is from a hash-sharded column (because the shard column's computed
+//     expression is a modulo operation and thus the check constraint is
+//     valid by construction).
+//  2. ck is a NOT-NULL check and the column is a shard column (because shard
+//     column is a computed column and thus not null by construction).
+func canSkipCheckValidation(
+	tableDesc catalog.TableDescriptor, ck catalog.CheckConstraint,
+) (bool, error) {
+	if ck.IsHashShardingConstraint() {
+		return true, nil
+	}
+	if ck.IsNotNullColumnConstraint() {
+		colID := ck.GetReferencedColumnID(0)
+		col, err := catalog.MustFindColumnByID(tableDesc, colID)
+		if err != nil {
+			return false, err
+		}
+		return tableDesc.IsShardColumn(col), nil
+	}
+	return false, nil
 }
 
 // ValidateInvertedIndexes checks that the indexes have entries for

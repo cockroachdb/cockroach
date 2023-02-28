@@ -78,6 +78,8 @@ func init() {
 
 // alterTableChecks determines if the entire set of alter table commands
 // are supported.
+// One side-effect is that this function will modify `n` when it hoists
+// add column constraints.
 func alterTableChecks(
 	n *tree.AlterTable,
 	mode sessiondatapb.NewSchemaChangerMode,
