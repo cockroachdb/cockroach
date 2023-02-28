@@ -1088,7 +1088,7 @@ func (p *Processor) syncEventAndRegistrationSpan(span roachpb.Span) {
 	}
 }
 
-func notifyWhenDone(f future.Future[*kvpb.Error]) chan *kvpb.Error {
+func notifyWhenDone(f future.Future[struct{}]) chan *kvpb.Error {
 	ch := make(chan *kvpb.Error, 1)
 	f.WhenReady(func(pErr *kvpb.Error, err error) {
 		if err != nil {

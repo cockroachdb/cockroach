@@ -212,7 +212,7 @@ func (ls *Stores) SendWithWriteBytes(
 // when the rangefeed is complete.
 func (ls *Stores) RangeFeedPromise(
 	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
-) future.Future[*kvpb.Error] {
+) future.Future[struct{}] {
 	ctx := stream.Context()
 	if args.RangeID == 0 {
 		log.Fatal(ctx, "rangefeed request missing range ID")
@@ -222,7 +222,7 @@ func (ls *Stores) RangeFeedPromise(
 
 	store, err := ls.GetStore(args.Replica.StoreID)
 	if err != nil {
-		return future.MakeCompletedFuture(kvpb.NewError(err))
+		return future.MakeErrFuture[struct{}](err)
 	}
 
 	return store.RangeFeedPromise(args, stream)

@@ -137,21 +137,21 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeedPromise(
 	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, pacer *admission.Pacer,
-) future.Future[*kvpb.Error] {
+) future.Future[struct{}] {
 	ctx := r.AnnotateCtx(stream.Context())
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
-		return future.MakeCompletedFuture(kvpb.NewError(err))
+		return future.MakeErrFuture[struct{}](err)
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
 		if err := stream.Send(&kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{
 			Error: *err,
 		}}); err != nil {
-			return future.MakeCompletedFuture(kvpb.NewError(err))
+			return future.MakeErrFuture[struct{}](err)
 		}
-		return future.MakeCompletedFuture[*kvpb.Error](nil)
+		return future.MakeCompletedFuture[struct{}](struct{}{})
 	}
 
 	// If the RangeFeed is performing a catch-up scan then it will observe all
@@ -179,7 +179,7 @@ func (r *Replica) RangeFeedPromise(
 		usingCatchUpIter = true
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
-			return future.MakeCompletedFuture(kvpb.NewError(err))
+			return future.MakeErrFuture[struct{}](err)
 		}
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
@@ -203,7 +203,7 @@ func (r *Replica) RangeFeedPromise(
 	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
 		iterSemRelease()
-		return future.MakeCompletedFuture(kvpb.NewError(err))
+		return future.MakeErrFuture[struct{}](err)
 	}
 
 	// Register the stream with a catch-up iterator.
@@ -220,7 +220,7 @@ func (r *Replica) RangeFeedPromise(
 			return i
 		}
 	}
-	done := future.MakePromise[*kvpb.Error]()
+	done := future.MakePromise[struct{}]()
 	p := r.registerWithRangefeedRaftMuLocked(
 		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, done,
 	)
@@ -324,7 +324,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
-	done future.Future[*kvpb.Error],
+	done future.Future[struct{}],
 ) *rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
 
@@ -394,7 +394,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// due to stopping, but before it enters the quiescing state, then the select
 	// below will fall through to the panic.
 	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
-		done.SetValue(kvpb.NewError(err))
+		done.SetErr(err)
 		return nil
 	}
 
@@ -407,7 +407,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
-			done.SetValue(kvpb.NewError(&kvpb.NodeUnavailableError{}))
+			done.SetErr(&kvpb.NodeUnavailableError{})
 			return nil
 		default:
 			panic("unexpected Stopped processor")

@@ -479,7 +479,7 @@ func (p *Processor) Register(
 	withDiff bool,
 	stream Stream,
 	disconnectFn func(),
-	done future.Future[*kvpb.Error],
+	done future.Future[struct{}],
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,

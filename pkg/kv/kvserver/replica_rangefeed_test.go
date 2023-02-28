@@ -91,11 +91,8 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 func waitRangeFeed(
 	store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream,
 ) *kvpb.Error {
-	res, err := store.RangeFeedPromise(req, stream).Get()
-	if err != nil {
-		return kvpb.NewError(err)
-	}
-	return res
+	_, err := store.RangeFeedPromise(req, stream).Get()
+	return kvpb.NewError(err)
 }
 
 func TestReplicaRangefeed(t *testing.T) {
@@ -995,11 +992,8 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			rfErr, err := store.RangeFeedPromise(&req, stream).Get()
-			if err != nil {
-				rfErr = kvpb.NewError(err)
-			}
-			streamErrC <- rfErr
+			_, err := store.RangeFeedPromise(&req, stream).Get()
+			streamErrC <- kvpb.NewError(err)
 		}()
 
 		// Check the error.
@@ -1020,11 +1014,8 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			rfErr, err := store.RangeFeedPromise(&req, stream).Get()
-			if err != nil {
-				rfErr = kvpb.NewError(err)
-			}
-			streamErrC <- rfErr
+			_, err := store.RangeFeedPromise(&req, stream).Get()
+			streamErrC <- kvpb.NewError(err)
 		}()
 
 		// Wait for the first checkpoint event.

@@ -1416,17 +1416,10 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
 
-	pErr, err := n.stores.RangeFeedPromise(args, stream).Get()
-	if err != nil {
-		// Got stream context error, probably won't be able to propagate it to the stream,
-		// but give it a try anyway.
-		pErr = kvpb.NewError(err)
-	}
-
-	if pErr != nil {
+	if _, err := n.stores.RangeFeedPromise(args, stream).Get(); err != nil {
 		var event kvpb.RangeFeedEvent
 		event.SetValue(&kvpb.RangeFeedError{
-			Error: *pErr,
+			Error: *kvpb.NewError(err),
 		})
 		return stream.Send(&event)
 	}
@@ -1499,16 +1492,13 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 		f := n.stores.RangeFeedPromise(req, &sink)
 		streams.Store(req.StreamID, unsafe.Pointer(&f))
-		f.WhenReady(func(pErr *kvpb.Error, err error) {
+		f.WhenReady(func(_ struct{}, err error) {
 			streams.Delete(req.StreamID)
 
 			if err != nil {
-				pErr = kvpb.NewError(err)
-			}
-			if pErr != nil {
 				var event kvpb.RangeFeedEvent
 				event.SetValue(&kvpb.RangeFeedError{
-					Error: *pErr,
+					Error: *kvpb.NewError(err),
 				})
 				// Sending could fail, but if it did, the stream is broken anyway, so
 				// nothing we can do with this error.

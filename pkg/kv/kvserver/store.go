@@ -2755,21 +2755,21 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // complete.
 func (s *Store) RangeFeedPromise(
 	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
-) future.Future[*kvpb.Error] {
+) future.Future[struct{}] {
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
-			return future.MakeCompletedFuture(pErr)
+			return future.MakeErrFuture[struct{}](pErr.GoError())
 		}
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return future.MakeCompletedFuture(kvpb.NewError(err))
+		return future.MakeErrFuture[struct{}](err)
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return future.MakeCompletedFuture(kvpb.NewError(err))
+		return future.MakeErrFuture[struct{}](err)
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -2777,8 +2777,7 @@ func (s *Store) RangeFeedPromise(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return future.MakeCompletedFuture(
-			kvpb.NewError(kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())))
+		return future.MakeErrFuture[struct{}](kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
 	}
 
 	tenID, _ := repl.TenantID()

@@ -429,11 +429,8 @@ func waitReplicaRangeFeed(
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-f.Done():
-		pErr, err := f.Get()
-		if err != nil {
-			return err
-		}
-		return pErr.GoError()
+		_, err := f.Get()
+		return err
 	}
 }
 

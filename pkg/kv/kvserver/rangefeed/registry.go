@@ -93,7 +93,7 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	done   future.Future[*kvpb.Error]
+	done   future.Future[struct{}]
 	unreg  func()
 	// Internal.
 	id   int64
@@ -129,7 +129,7 @@ func newRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	done future.Future[*kvpb.Error],
+	done future.Future[struct{}],
 ) registration {
 	r := registration{
 		span:                   span,
@@ -287,7 +287,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.SetValue(pErr)
+		r.done.SetErr(pErr.GoError())
 	}
 }
 
@@ -505,7 +505,7 @@ func (reg *registry) Disconnect(span roachpb.Span) {
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *kvpb.Error) {
-		r.done.SetValue(pErr)
+		r.done.SetErr(pErr.GoError())
 		return true, pErr
 	})
 }
