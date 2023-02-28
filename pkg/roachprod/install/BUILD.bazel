@@ -39,6 +39,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
     ],
 )
