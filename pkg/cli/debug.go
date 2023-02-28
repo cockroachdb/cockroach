@@ -1408,6 +1408,7 @@ func init() {
 	DebugCmd.AddCommand(debugDoctorCmd)
 
 	DebugCmd.AddCommand(declarativeValidateCorpus)
+	DebugCmd.AddCommand(declarativePrintRules)
 
 	debugStatementBundleCmd.AddCommand(statementBundleRecreateCmd)
 	DebugCmd.AddCommand(debugStatementBundleCmd)
