@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -103,6 +104,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		s.InternalDB().(isql.DB),
 		execCfg.Clock,
 		execCfg.Settings,
+		s.SettingsWatcher().(*settingswatcher.SettingsWatcher),
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},
 		stopper,
