@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -514,20 +515,29 @@ func registerRestore(r registry.Registry) {
 			},
 		})
 	}
+	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
+		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
 
-	withPauseDataset := dataBank2TB{}
-	withPauseTestName := fmt.Sprintf("restore%s/nodes=%d/with-pause", withPauseDataset.name(), 10)
-	withPauseTimeout := 3 * time.Hour
+	withPauseSpecs := restoreSpecs{
+		hardware: makeHardwareSpecs(hardwareSpecs{}),
+		backup: makeBackupSpecs(
+			backupSpecs{workload: tpceRestore{customers: 5000},
+				version: "v22.2.1"}),
+		timeout: 3 * time.Hour,
+	}
+	withPauseTestName := withPauseSpecs.computeName("pause", false)
+
 	r.Add(registry.TestSpec{
 		Name:    withPauseTestName,
 		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: r.MakeClusterSpec(10),
-		Timeout: withPauseTimeout,
+		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r),
+		Timeout: withPauseSpecs.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			m := c.NewMonitor(ctx)
 
+			withPauseSpecs.getRuntimeSpecs(ctx, t, c, withPauseTestName)
 			// Run the disk usage logger in the monitor to guarantee its
 			// having terminated when the test ends.
 			dul := NewDiskUsageLogger(t, c)
@@ -537,47 +547,52 @@ func registerRestore(r registry.Registry) {
 
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
-			maxPauses := 3
+
+			pauseAtProgress := []float32{0.2, 0.45, 0.7}
+			for i := range pauseAtProgress {
+				// Add up to 10% to the pause point.
+				pauseAtProgress[i] = pauseAtProgress[i] + float32(rand.Intn(10))/100
+			}
+			pauseIndex := 0
+			// Spin up go routine which pauses and resumes the Restore job three times.
 			m.Go(func(ctx context.Context) error {
 				// Wait until the restore job has been created.
 				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
 				require.NoError(t, err)
+				sql := sqlutils.MakeSQLRunner(conn)
 
 				// The job should be created fairly quickly once the roachtest starts.
 				done := ctx.Done()
 				jobID := <-jobIDCh
 
-				// The test has historically taken ~30 minutes to complete, if we pause
-				// every 15 minutes we're likely to get at least one pause during the
-				// duration of the test. We'll likely get more because the restore after
-				// resume slows down due to compaction debt.
-				//
-				// Limit the number of pauses to 3 to ensure that the test doesn't get
-				// into a pause-resume-slowdown spiral that eventually times out.
-				pauseJobTick := time.NewTicker(time.Minute * 15)
-				defer pauseJobTick.Stop()
+				jobProgressTick := time.NewTicker(time.Minute * 1)
+				defer jobProgressTick.Stop()
 				for {
-					if maxPauses == 0 {
+					if pauseIndex == len(pauseAtProgress) {
 						t.L().Printf("RESTORE job was paused a maximum number of times; allowing the job to complete")
 						return nil
 					}
-
 					select {
 					case <-done:
 						return ctx.Err()
 					case <-jobCompleteCh:
 						return nil
-					case <-pauseJobTick.C:
-						t.L().Printf("pausing RESTORE job")
+					case <-jobProgressTick.C:
+						var fraction float32
+						sql.QueryRow(t, `SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1`,
+							jobID).Scan(&fraction)
+						t.L().Printf("RESTORE Progress %.2f", fraction)
+						if fraction < pauseAtProgress[pauseIndex] {
+							continue
+						}
+						t.L().Printf("pausing RESTORE job since progress is greater than %.2f", pauseAtProgress[pauseIndex])
 						// Pause the job and wait for it to transition to a paused state.
-						_, err = conn.ExecContext(ctx, `PAUSE JOB $1`, jobID)
+						_, err := conn.Query(`PAUSE JOB $1`, jobID)
 						if err != nil {
 							// The pause job request should not fail unless the job has already succeeded,
 							// in which case, the test should gracefully succeed.
 							var status string
-							errStatusCheck := conn.QueryRow(
-								`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
-							require.NoError(t, errStatusCheck)
+							sql.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
 							if status == "succeeded" {
 								return nil
 							}
@@ -585,33 +600,29 @@ func registerRestore(r registry.Registry) {
 						require.NoError(t, err)
 						testutils.SucceedsSoon(t, func() error {
 							var status string
-							err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
-							require.NoError(t, err)
+							sql.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
 							if status != "paused" {
 								return errors.Newf("expected status `paused` but found %s", status)
 							}
 							t.L().Printf("paused RESTORE job")
-							maxPauses--
+							pauseIndex++
 							return nil
 						})
 
 						t.L().Printf("resuming RESTORE job")
-						// Resume the job.
-						_, err = conn.ExecContext(ctx, `RESUME JOB $1`, jobID)
-						require.NoError(t, err)
+						sql.Exec(t, `RESUME JOB $1`, jobID)
 					}
 				}
 			})
 
-			tick, perfBuf := initBulkJobPerfArtifacts(withPauseTestName, withPauseTimeout)
 			m.Go(func(ctx context.Context) error {
 				defer dul.Done()
 				defer hc.Done()
 				defer close(jobCompleteCh)
 				defer close(jobIDCh)
 				t.Status(`running restore`)
-				tick()
-				jobID, err := withPauseDataset.runRestoreDetached(ctx, t, c)
+				metricCollector := withPauseSpecs.initRestorePerfMetrics(ctx, durationGauge)
+				jobID, err := withPauseSpecs.runDetached(ctx, "DATABASE tpce")
 				require.NoError(t, err)
 				jobIDCh <- jobID
 
@@ -626,7 +637,6 @@ func registerRestore(r registry.Registry) {
 					if isJobComplete {
 						succeededJobTick.Stop()
 						jobCompleteCh <- struct{}{}
-						tick()
 						break
 					}
 
@@ -646,16 +656,7 @@ func registerRestore(r registry.Registry) {
 						}
 					}
 				}
-
-				// Upload the perf artifacts to any one of the nodes so that the test
-				// runner copies it into an appropriate directory path.
-				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-				if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
-					log.Errorf(ctx, "failed to create perf dir: %+v", err)
-				}
-				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
-				}
+				metricCollector()
 				return nil
 			})
 			m.Wait()
@@ -663,12 +664,13 @@ func registerRestore(r registry.Registry) {
 			// the m.Wait( ) call above; therefore, at this point, the restore job
 			// should have succeeded. This final check ensures this test is actually
 			// doing its job: causing the restore job to pause at least once.
-			require.NotEqual(t, 3, maxPauses, "the job should have paused at least once")
+			require.NotEqual(t, 0, pauseIndex, "the job should have paused at least once")
 		},
-	})
 
-	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
-		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
+		// TODO(msbutler): to test the correctness of checkpointing, we should
+		// restore the same fixture without pausing it and fingerprint both restored
+		// databases.
+	})
 
 	for _, sp := range []restoreSpecs{
 		{
@@ -706,15 +708,11 @@ func registerRestore(r registry.Registry) {
 		// - restore/tpce/400GB/encryption
 	} {
 		sp := sp
-		clusterOpts := make([]spec.Option, 0)
-		clusterOpts = append(clusterOpts, spec.CPU(sp.hardware.cpus))
-		if sp.hardware.volumeSize != 0 {
-			clusterOpts = append(clusterOpts, spec.VolumeSize(sp.hardware.volumeSize))
-		}
+		testName := sp.computeName("", false)
 		r.Add(registry.TestSpec{
-			Name:    sp.computeName(false),
+			Name:    testName,
 			Owner:   registry.OwnerDisasterRecovery,
-			Cluster: r.MakeClusterSpec(sp.hardware.nodes, clusterOpts...),
+			Cluster: sp.hardware.makeClusterSpecs(r),
 			Timeout: sp.timeout,
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
@@ -722,7 +720,7 @@ func registerRestore(r registry.Registry) {
 			Tags:              sp.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
-				t.L().Printf("Full test specs: %s", sp.computeName(true))
+				t.L().Printf("Full test specs: %s", sp.computeName("", true))
 
 				if c.Spec().Cloud != sp.backup.cloud {
 					// For now, only run the test on the cloud provider that also stores the backup.
@@ -739,33 +737,16 @@ func registerRestore(r registry.Registry) {
 				hc := NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
-				sp.getRuntimeSpecs(ctx, t, c)
-
-				// TODO(msbutler): merge disk usage tracker and logger
-				dut, err := NewDiskUsageTracker(c, t.L())
-				require.NoError(t, err)
+				sp.getRuntimeSpecs(ctx, t, c, testName)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
-					startTime := timeutil.Now()
-					if err := sp.run(ctx, c); err != nil {
+					metricCollector := sp.initRestorePerfMetrics(ctx, durationGauge)
+					if err := sp.run(ctx, ""); err != nil {
 						return err
 					}
-					// TODO (msbutler): export disk size once prom server scrapes the roachtest process.
-					promLabel := registry.PromSub(strings.Replace(sp.computeName(false), "restore/", "", 1)) + "_seconds"
-					testDuration := timeutil.Since(startTime).Seconds()
-					durationGauge.WithLabelValues(promLabel).Set(testDuration)
-
-					// compute throughput as MB / node / second.
-					du := dut.GetDiskUsage(ctx, c.All())
-					throughput := float64(du) / (float64(sp.hardware.nodes) * testDuration)
-					t.L().Printf("Usage %d , Nodes %d , Duration %f\n; Throughput: %f mb / node / second",
-						du,
-						sp.hardware.nodes,
-						testDuration,
-						throughput)
-					recordPerf(ctx, t, c, sp.computeName(false), int64(throughput))
+					metricCollector()
 					return nil
 				})
 				m.Wait()
@@ -793,12 +774,21 @@ type hardwareSpecs struct {
 	volumeSize int
 }
 
-// String prints the hardware specs. If full==true, verbose specs are printed.
-func (hw hardwareSpecs) String(full bool) string {
+func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
+	clusterOpts := make([]spec.Option, 0)
+	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
+	if hw.volumeSize != 0 {
+		clusterOpts = append(clusterOpts, spec.VolumeSize(hw.volumeSize))
+	}
+	return r.MakeClusterSpec(hw.nodes, clusterOpts...)
+}
+
+// String prints the hardware specs. If verbose==true, verbose specs are printed.
+func (hw hardwareSpecs) String(verbose bool) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("/nodes=%d", hw.nodes))
 	builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
-	if full {
+	if verbose {
 		builder.WriteString(fmt.Sprintf("/volSize=%dGB", hw.volumeSize))
 	}
 	return builder.String()
@@ -856,16 +846,16 @@ type backupSpecs struct {
 
 // String returns a stringified version of the backup specs. Note that the
 // backup version, backup directory, and AOST are never included.
-func (bs backupSpecs) String(full bool) string {
+func (bs backupSpecs) String(verbose bool) string {
 	var builder strings.Builder
 	builder.WriteString("/" + bs.workload.String())
 
-	if full || bs.backupProperties != defaultBackupSpecs.backupProperties {
+	if verbose || bs.backupProperties != defaultBackupSpecs.backupProperties {
 		builder.WriteString("/" + bs.backupProperties)
 	}
 	builder.WriteString("/" + bs.cloud)
 
-	if full || bs.backupsIncluded != defaultBackupSpecs.backupsIncluded {
+	if verbose || bs.backupsIncluded != defaultBackupSpecs.backupsIncluded {
 		builder.WriteString("/" + fmt.Sprintf("backupsIncluded=%d", bs.backupsIncluded))
 	}
 	return builder.String()
@@ -936,6 +926,8 @@ func (tpce tpceRestore) String() string {
 	var builder strings.Builder
 	builder.WriteString("tpce/")
 	switch tpce.customers {
+	case 5000:
+		builder.WriteString("80GB")
 	case 25000:
 		builder.WriteString("400GB")
 	case 500000:
@@ -953,34 +945,94 @@ type restoreSpecs struct {
 	backup   backupSpecs
 	timeout  time.Duration
 	tags     []string
+
+	t        test.Test
+	c        cluster.Cluster
+	testName string
 }
 
-func (sp *restoreSpecs) computeName(full bool) string {
-	return "restore" + sp.backup.String(full) + sp.hardware.String(full)
+func (sp *restoreSpecs) computeName(prefix string, verbose bool) string {
+	if prefix != "" {
+		prefix = "/" + prefix
+	}
+	return "restore" + prefix + sp.backup.String(verbose) + sp.hardware.String(verbose)
 }
 
-func (sp *restoreSpecs) restoreCmd() string {
-	return fmt.Sprintf(`./cockroach sql --insecure -e "RESTORE FROM %s IN %s AS OF SYSTEM TIME '%s'"`,
-		sp.backup.fullBackupDir, sp.backup.backupCollection(), sp.backup.aost)
+func (sp *restoreSpecs) restoreCmd(target, opts string) string {
+	return fmt.Sprintf(`./cockroach sql --insecure -e "RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s"`,
+		target, sp.backup.fullBackupDir, sp.backup.backupCollection(), sp.backup.aost, opts)
 }
 
-func (sp *restoreSpecs) getRuntimeSpecs(ctx context.Context, t test.Test, c cluster.Cluster) {
+func (sp *restoreSpecs) getRuntimeSpecs(
+	ctx context.Context, t test.Test, c cluster.Cluster, testName string,
+) {
+	sp.t = t
+	sp.c = c
+	sp.testName = testName
+
 	var aost string
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := sp.c.Conn(ctx, sp.t.L(), 1)
 	err := conn.QueryRowContext(ctx, sp.backup.getAostCmd()).Scan(&aost)
-	require.NoError(t, err)
+	require.NoError(sp.t, err)
 	sp.backup.aost = aost
 }
 
-func (sp *restoreSpecs) run(ctx context.Context, c cluster.Cluster) error {
-	if err := c.RunE(ctx, c.Node(1), sp.restoreCmd()); err != nil {
-		return errors.Wrapf(err, "full test specs: %s", sp.computeName(true))
-	}
-	return nil
+// run executes the restore, where target injects a restore target into the restore command.
+// Examples:
+// - "DATABASE tpce" will execute a database restore on the tpce cluster.
+// - "" will execute a cluster restore.
+func (sp *restoreSpecs) run(ctx context.Context, target string) error {
+	return sp.c.RunE(ctx, sp.c.Node(1), sp.restoreCmd(target, ""))
 }
 
-// recordPerf exports a single perf metric for the given test to roachperf.
-func recordPerf(
+func (sp *restoreSpecs) runDetached(ctx context.Context, target string) (jobspb.JobID, error) {
+	if err := sp.c.RunE(ctx, sp.c.Node(1), sp.restoreCmd(target, "WITH DETACHED")); err != nil {
+		return 0, err
+	}
+
+	db, err := sp.c.ConnE(ctx, sp.t.L(), sp.c.Node(1)[0])
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
+	}
+	var jobID jobspb.JobID
+	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
+		return 0, err
+	}
+	return jobID, nil
+}
+
+// initRestorePerfMetrics returns a function that will collect restore throughput at the end of
+// the test.
+//
+// TODO(msbutler): only export metrics to test-eng prometheus server once it begins scraping
+// nightly roachtest runs.
+func (sp *restoreSpecs) initRestorePerfMetrics(
+	ctx context.Context, durationGauge *prometheus.GaugeVec,
+) func() {
+	dut, err := NewDiskUsageTracker(sp.c, sp.t.L())
+	require.NoError(sp.t, err)
+	startTime := timeutil.Now()
+	startDu := dut.GetDiskUsage(ctx, sp.c.All())
+
+	return func() {
+		promLabel := registry.PromSub(strings.Replace(sp.testName, "restore/", "", 1)) + "_seconds"
+		testDuration := timeutil.Since(startTime).Seconds()
+		durationGauge.WithLabelValues(promLabel).Set(testDuration)
+
+		// compute throughput as MB / node / second.
+		du := dut.GetDiskUsage(ctx, sp.c.All())
+		throughput := float64(du-startDu) / (float64(sp.hardware.nodes) * testDuration)
+		sp.t.L().Printf("Usage %d , Nodes %d , Duration %f\n; Throughput: %f mb / node / second",
+			du,
+			sp.hardware.nodes,
+			testDuration,
+			throughput)
+		exportToRoachperf(ctx, sp.t, sp.c, sp.testName, int64(throughput))
+	}
+}
+
+// exportToRoachperf exports a single perf metric for the given test to roachperf.
+func exportToRoachperf(
 	ctx context.Context, t test.Test, c cluster.Cluster, testName string, metric int64,
 ) {
 
