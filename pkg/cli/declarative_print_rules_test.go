@@ -12,6 +12,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -43,7 +44,13 @@ func TestDeclarativeRules(t *testing.T) {
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-rules", "invalid_version"), func(t *testing.T, td *datadriven.TestData) string {
-			return invalidOut
+			// Do not display the present current version within the output,
+			// for testing purposes. This can change from build to build, and
+			// need changes for every version bump.
+			return strings.Replace(invalidOut,
+				" "+clusterversion.ByKey(clusterversion.V23_1).String()+"\n",
+				" latest\n",
+				-1)
 		})
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-rules", "oprules"), func(t *testing.T, td *datadriven.TestData) string {
 			return opOut
