@@ -155,7 +155,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 119 MutationType ops
+PreCommitPhase stage 2 of 2 with 120 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -542,6 +542,11 @@ PreCommitPhase stage 2 of 2 with 119 MutationType ops
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 2
       TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
