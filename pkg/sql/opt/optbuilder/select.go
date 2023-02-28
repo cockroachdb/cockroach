@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -576,6 +577,24 @@ func (b *Builder) buildScan(
 	// is disallowed when EnforceHomeRegion is true.
 	if b.evalCtx.SessionData().EnforceHomeRegion && parser.IsANSIDML(b.stmt) {
 		errorOnInvalidMultiregionDB(b.ctx, b.evalCtx, tabMeta)
+		// Populate the remote regions touched by the multiregion database used in
+		// this query. If a query dynamically errors out as having no home region,
+		// the query will be replanned with each of the remote regions,
+		// one-at-a-time, with AOST follower_read_timestamp(). If one of these
+		// retries doesn't error out, that region will be reported to the user as
+		// the query's home region.
+		if len(b.evalCtx.RemoteRegions) == 0 {
+			if regionsNames, ok := tabMeta.GetRegionsInDatabase(b.ctx, b.evalCtx.Planner); ok {
+				if gatewayRegion, ok := b.evalCtx.Locality.Find("region"); ok {
+					b.evalCtx.RemoteRegions = make(catpb.RegionNames, 0, len(regionsNames))
+					for _, regionName := range regionsNames {
+						if string(regionName) != gatewayRegion {
+							b.evalCtx.RemoteRegions = append(b.evalCtx.RemoteRegions, regionName)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}

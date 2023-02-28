@@ -7,6 +7,7 @@ go_library(
     name = "execinfra",
     srcs = [
         "base.go",
+        "errors.go",
         "flow_context.go",
         "metrics.go",
         "outboxbase.go",

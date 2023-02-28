@@ -463,6 +463,11 @@ func (f *fakeGetMultiregionConfigPlanner) IsANSIDML() bool {
 	return false
 }
 
+// EnforceHomeRegion is part of the eval.Planner interface.
+func (f *fakeGetMultiregionConfigPlanner) EnforceHomeRegion() bool {
+	return false
+}
+
 // GetRangeDescByID is part of the eval.Planner interface.
 func (ep *fakeGetMultiregionConfigPlanner) GetRangeDescByID(
 	context.Context, roachpb.RangeID,

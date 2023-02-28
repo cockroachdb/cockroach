@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -92,8 +93,13 @@ type Context struct {
 	// are no tiers, then the node's location is not known. Example:
 	//
 	//   [region=us,dc=east]
-	//
+	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
+
+	// OriginalLocality is the initial Locality at the time the connection was
+	// established. Since Locality may be overridden in some paths, this provides
+	// a means of restoring the original Locality.
+	OriginalLocality roachpb.Locality
 
 	Tracer *tracing.Tracer
 
@@ -250,6 +256,11 @@ type Context struct {
 
 	// ParseHelper makes date parsing more efficient.
 	ParseHelper pgdate.ParseHelper
+
+	// RemoteRegions contains the slice of remote regions in a multiregion
+	// database which owns a table accessed by the current SQL request.
+	// This slice is only populated during the optbuild stage.
+	RemoteRegions catpb.RegionNames
 }
 
 // DescIDGenerator generates unique descriptor IDs.

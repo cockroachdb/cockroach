@@ -34,8 +34,9 @@ statement ok
 CREATE TABLE t1 (a INT, b INT, c INT, primary key(a)) LOCALITY REGIONAL BY ROW;
 
 statement ok
-INSERT INTO t1 (crdb_region, a, b, c) VALUES ('ap-southeast-2', 1, 1, 1);
+INSERT INTO t1 (crdb_region, a, b, c) VALUES ('us-east-1', 1, 1, 1);
 INSERT INTO t1 (crdb_region, a, b, c) VALUES ('ca-central-1', 2, 1, 1);
+INSERT INTO t1 (crdb_region, a, b, c) VALUES ('ap-southeast-2', 3, 1, 1);
 
 statement ok
 CREATE TABLE parent (
@@ -74,6 +75,10 @@ CREATE TABLE messages_rbt (
     PRIMARY KEY (account_id),
     INDEX msg_idx(message)
 ) LOCALITY REGIONAL BY TABLE
+
+# Sleep so that the follow_read_timestamp() used by phase 3 dynamic checking
+# of a query's home region isn't executing before the tables existed.
+sleep 5s
 
 statement ok
 CREATE TABLE messages_rbr (
@@ -844,21 +849,68 @@ INSERT INTO parent (crdb_region, p_id) VALUES('ca-central-1', 2);
 statement ok
 INSERT INTO child (crdb_region, c_id, c_p_id) VALUES('ap-southeast-2', 11, 2);
 
-subtest enforce_home_region_phase_2
+subtest enforce_home_region_phase_2_3
+
+retry
+statement ok
+INSERT INTO messages_rbr (crdb_region, account_id, message) VALUES ('us-east-1', 2, 'Hola, Region!');
+INSERT INTO messages_rbr (crdb_region, account_id, message) VALUES ('ca-central-1', 3, 'Guten Tag, Region!');
+
+retry
+statement ok
+INSERT INTO messages_global SELECT * FROM messages_rbr WHERE crdb_region != 'ap-southeast-2'
 
 statement ok
 SET enforce_home_region = true;
 
 # Querying the row in the local region succeeds.
 query III retry
-SELECT * FROM t1 WHERE a=1;
+SELECT * FROM t1 WHERE a=3;
 ----
-1  1  1
+3  1  1
 
-# Querying the row in the remote region errors out.
+## Phase 3, dynamically detect a query's home region.
+# Querying a row in a remote region errors out, and indicates the home region.
 retry
-statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\.
+statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\.
+SELECT * FROM t1 WHERE a=1;
+
+# Phase 3, dynamically detect a query's home region.
+# Querying a row in a remote region errors out, and indicates the home region.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
 SELECT * FROM t1 WHERE a=2;
+
+retry
+statement ok
+PREPARE s1 AS SELECT * FROM t1 WHERE a=$1
+
+# Phase 3, dynamically detect a query's home region.
+# Prepared statement accessing a row in a remote region errors out,
+# and indicates the home region.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
+EXECUTE s1('2')
+
+statement ok
+BEGIN
+
+statement ok
+SAVEPOINT foo
+
+# Phase 3, dynamically detect a query's home region.
+# An explicit transaction accessing a remote region errors out,
+# and indicates the home region.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
+SELECT * FROM t1 WHERE a=2;
+
+# Verify we can still roll back to the savepoint.
+statement ok
+ROLLBACK TO SAVEPOINT foo
+
+statement ok
+COMMIT
 
 # Locality-optimized join in the local region succeeds.
 query III retry
@@ -886,6 +938,14 @@ SELECT rbr.message FROM messages_rbr rbr, (SELECT * FROM messages_rbt ORDER BY a
 ----
 Hello, Region!
 
+# Phase 3, dynamically detect a query's home region.
+# Locality-optimized lookup join should report a query's home region.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\.
+SELECT rbr.message FROM messages_rbr rbr, (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg
+       WHERE rbr.account_id = rbg.account_id LIMIT 1
+
+
 # Locality-optimized semijoin in the local region succeeds.
 query T retry
 SELECT message FROM (SELECT * FROM messages_rbt ORDER BY account_id LIMIT 1) rbt WHERE account_id IN
@@ -903,7 +963,7 @@ SELECT message FROM (SELECT * FROM messages_rbt ORDER BY account_id LIMIT 2) rbt
 
 # Locality-optimized semijoin in the local region with an ordered join reader
 # succeeds.
-query I
+query I retry
 SELECT account_id FROM (SELECT * FROM messages_rbt ORDER BY account_id LIMIT 1) rbt WHERE account_id IN
                      (SELECT account_id FROM messages_rbr rbr) ORDER BY 1 LIMIT 1;
 ----
@@ -935,6 +995,13 @@ SELECT message FROM (SELECT * FROM messages_rbt ORDER BY account_id LIMIT 1) rbt
                      (SELECT account_id FROM messages_rbr rbr) LIMIT 1
 ----
 
+# Phase 3, dynamically detect a query's home region.
+# Locality-optimized lookup antijoin should report a query's home region.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\.
+SELECT message FROM (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg WHERE account_id NOT IN
+                     (SELECT account_id FROM messages_rbr rbr) LIMIT 1
+
 # Locality-optimized antijoin reading into a remote region fails.
 retry
 statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\.
@@ -959,6 +1026,72 @@ retry
 statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\.
 SELECT rbr.message FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt
        ON rbr.account_id = rbt.account_id LIMIT 2
+
+# Run a locality-optimized scan that dynamically detects the home region with
+# tracing.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
+SET TRACING = "on", kv, results;
+SELECT * FROM t1 WHERE a=2;
+SET TRACING = off
+
+# All of the batch requests should be sent to (n1,s1) only.
+query T
+SELECT
+    CASE WHEN message LIKE '%sending%'
+      THEN SUBSTRING(message FOR 14 FROM 6) || SUBSTRING(message FOR 20 FROM POSITION('to' IN message))
+      ELSE message END
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'output row%' OR message LIKE '%sending%' OR message LIKE 'execution%'
+ORDER BY
+    "ordinality" ASC
+----
+sending batch to (n1,s1):1
+execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region.
+sending batch to (n1,s1):1
+output row: [2 1 1]
+
+# Run a locality-optimized join that dynamically detects the home region with
+# tracing.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\.
+SET TRACING = "on", kv, results;
+SELECT rbr.message FROM messages_rbr rbr, (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg
+       WHERE rbr.account_id = rbg.account_id LIMIT 1;
+SET TRACING = off
+
+# All of the batch requests should be sent to (n1,s1) only.
+query T
+SELECT
+    CASE WHEN message LIKE '%sending%'
+      THEN SUBSTRING(message FOR 14 FROM POSITION('sending' IN message)) || SUBSTRING(message FOR 12 FROM POSITION('to' IN message))
+      ELSE message END
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'output row%' OR message LIKE '%sending%' OR message LIKE 'execution%'
+ORDER BY
+    "ordinality" ASC
+----
+sending batch to (n1,s1):1
+execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region.
+sending batch to (n1,s1):1
+output row: [2 1 1]
+sending batch to (n1,s1):1
+output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region.']
+sending batch to (n1,s1):1
+output row: ['output row: [2 1 1]']
+sending batch to (n1,s1):1
+sending batch to (n1,s1):1
+execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region.
+sending batch to (n1,s1):1
+sending batch to (n1,s1):1
+execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region.
+sending batch to (n1,s1):1
+sending batch to (n1,s1):1
+output row: ['Hola, Region!']
 
 statement ok
 RESET enforce_home_region
