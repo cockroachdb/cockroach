@@ -50,6 +50,7 @@ const (
 	mergeTestXMLsSubcmd     = "merge-test-xmls"
 	mungeTestXMLSubcmd      = "munge-test-xml"
 	beaverHubServerEndpoint = "https://beaver-hub-server-jjd2v2r2dq-uk.a.run.app/process"
+	maxTestAttempts         = 3
 )
 
 type builtArtifact struct {
@@ -213,8 +214,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if summary != nil && summary.ShardCount > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
 				}
-				if testResult.attempt > 1 {
-					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
+				// Only upload results of first successful attempt or last attempt.
+				if testResult.attempt < maxTestAttempts && testResult.testResult.Status == bes.TestStatus_FAILED {
+					continue
 				}
 				if testResult.testResult == nil {
 					continue
