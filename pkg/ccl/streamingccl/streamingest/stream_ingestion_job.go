@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -31,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -554,71 +554,35 @@ func maybeRevertToCutoverTimestamp(
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
 
-	origNRanges := -1
 	payload := ingestionJob.Payload()
 	progress := ingestionJob.Progress()
-	spans := []roachpb.Span{payload.GetStreamIngestion().Span}
-	updateJobProgress := func() error {
-		if spans == nil {
-			return nil
-		}
-		nRanges, err := sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), spans)
-		if err != nil {
-			return err
-		}
-		m := jobRegistry.MetricsStruct().StreamIngest.(*Metrics)
-		m.ReplicationCutoverProgress.Update(int64(nRanges))
-		if origNRanges == -1 {
-			origNRanges = nRanges
-		}
-		return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			if nRanges < origNRanges {
-				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
-				if err := ingestionJob.WithTxn(txn).FractionProgressed(
-					ctx, jobs.FractionUpdater(fractionRangesFinished),
-				); err != nil {
-					return jobs.SimplifyInvalidStatusError(err)
-				}
-			}
-			return nil
-		})
-	}
 
+	spanToRevert := payload.GetStreamIngestion().Span
 	cutoverTime := progress.GetStreamIngest().CutoverTime
-	for len(spans) != 0 {
-		if err := updateJobProgress(); err != nil {
-			log.Warningf(ctx, "failed to update replication job progress: %+v", err)
-		}
-		var b kv.Batch
-		for _, span := range spans {
-			b.AddRawRequest(&kvpb.RevertRangeRequest{
-				RequestHeader: kvpb.RequestHeader{
-					Key:    span.Key,
-					EndKey: span.EndKey,
-				},
-				TargetTime: cutoverTime,
-			})
-		}
-		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
-		if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
-			b.Header.MaxSpanRequestKeys = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
-		}
-		if err := db.Run(ctx, &b); err != nil {
-			return false, err
-		}
 
-		spans = spans[:0]
-		for _, raw := range b.RawResponse().Responses {
-			r := raw.GetRevertRange()
-			if r.ResumeSpan != nil {
-				if !r.ResumeSpan.Valid() {
-					return false, errors.Errorf("invalid resume span: %s", r.ResumeSpan)
-				}
-				spans = append(spans, *r.ResumeSpan)
-			}
-		}
+	progMetric := jobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicationCutoverProgress
+	minProgressUpdateInterval := 15 * time.Second
+	progUpdater, err := newCutoverProgressTracker(ctx, p, spanToRevert, ingestionJob, progMetric, minProgressUpdateInterval)
+	if err != nil {
+		return false, err
 	}
-	return true, updateJobProgress()
+
+	batchSize := int64(sql.RevertTableDefaultBatchSize)
+	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
+		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
+	}
+	if err := sql.RevertSpans(ctx,
+		db,
+		[]roachpb.Span{spanToRevert},
+		cutoverTime,
+		// TODO(ssd): It should be safe for us to ingore the
+		// GC threshold. Why weren't we before?
+		false, /* ignoreGCThreshold */
+		batchSize,
+		progUpdater.onCompletedCallback); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
@@ -699,6 +663,96 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 
 		return nil
 	})
+}
+
+// cutoverProgressTracker updates the job progress and the given
+// metric with the number of ranges still remainng to revert during
+// the cutover process.
+type cutoverProgressTracker struct {
+	minProgressUpdateInterval time.Duration
+	progMetric                *metric.Gauge
+	job                       *jobs.Job
+
+	remainingSpans     roachpb.SpanGroup
+	lastUpdatedAt      time.Time
+	originalRangeCount int
+
+	getRangeCount                   func(context.Context, roachpb.Spans) (int, error)
+	onJobProgressUpdate             func()
+	overrideShouldUpdateJobProgress func(int) bool
+}
+
+func newCutoverProgressTracker(
+	ctx context.Context,
+	p sql.JobExecContext,
+	spanToRevert roachpb.Span,
+	job *jobs.Job,
+	progMetric *metric.Gauge,
+	minProgressUpdateInterval time.Duration,
+) (*cutoverProgressTracker, error) {
+	var sg roachpb.SpanGroup
+	sg.Add(spanToRevert)
+
+	nRanges, err := sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), sg.Slice())
+	if err != nil {
+		return nil, err
+	}
+	c := &cutoverProgressTracker{
+		job:                       job,
+		progMetric:                progMetric,
+		minProgressUpdateInterval: minProgressUpdateInterval,
+
+		remainingSpans:     sg,
+		originalRangeCount: nRanges,
+
+		getRangeCount: func(ctx context.Context, sps roachpb.Spans) (int, error) {
+			return sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), sg.Slice())
+		},
+	}
+	if testingKnobs := p.ExecCfg().StreamingTestingKnobs; testingKnobs != nil {
+		c.overrideShouldUpdateJobProgress = testingKnobs.CutoverProgressShouldUpdate
+		c.onJobProgressUpdate = testingKnobs.OnCutoverProgressUpdate
+	}
+	return c, nil
+
+}
+
+func (c *cutoverProgressTracker) shouldUpdateJobProgress(rangeCount int) bool {
+	if c.overrideShouldUpdateJobProgress != nil {
+		return c.overrideShouldUpdateJobProgress(rangeCount)
+	}
+	return (rangeCount < c.originalRangeCount) && (timeutil.Since(c.lastUpdatedAt) >= c.minProgressUpdateInterval)
+}
+
+func (c *cutoverProgressTracker) updateJobProgress(ctx context.Context, sp []roachpb.Span) error {
+	nRanges, err := c.getRangeCount(ctx, sp)
+	if err != nil {
+		return err
+	}
+	c.progMetric.Update(int64(nRanges))
+	if !c.shouldUpdateJobProgress(nRanges) {
+		return nil
+	}
+
+	fractionRangesFinished := float32(c.originalRangeCount-nRanges) / float32(c.originalRangeCount)
+	if err := c.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionRangesFinished)); err != nil {
+		return jobs.SimplifyInvalidStatusError(err)
+	}
+	c.lastUpdatedAt = timeutil.Now()
+	if c.onJobProgressUpdate != nil {
+		c.onJobProgressUpdate()
+	}
+	return nil
+}
+
+func (c *cutoverProgressTracker) onCompletedCallback(
+	ctx context.Context, completed roachpb.Span,
+) error {
+	c.remainingSpans.Sub(completed)
+	if err := c.updateJobProgress(ctx, c.remainingSpans.Slice()); err != nil {
+		log.Warningf(ctx, "failed to update job progress: %v", err)
+	}
+	return nil
 }
 
 func (s *streamIngestionResumer) ForceRealSpan() bool { return true }

@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -403,25 +401,15 @@ func TestCutoverFractionProgressed(t *testing.T) {
 
 	ctx := context.Background()
 
-	respRecvd := make(chan struct{})
-	continueRevert := make(chan struct{})
-	defer close(continueRevert)
+	progressUpdated := make(chan struct{})
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
-					for _, ru := range br.Responses {
-						switch ru.GetInner().(type) {
-						case *kvpb.RevertRangeResponse:
-							respRecvd <- struct{}{}
-							<-continueRevert
-						}
-					}
-					return nil
-				},
-			},
 			Streaming: &sql.StreamingTestingKnobs{
 				OverrideRevertRangeBatchSize: 1,
+				CutoverProgressShouldUpdate:  func(_ int) bool { return true },
+				OnCutoverProgressUpdate: func() {
+					progressUpdated <- struct{}{}
+				},
 			},
 		},
 		DisableDefaultTestTenant: true,
@@ -478,7 +466,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		defer close(respRecvd)
+		defer close(progressUpdated)
 		revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, jobID)
 		require.NoError(t, err)
 		require.True(t, revert)
@@ -491,20 +479,20 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		return j.Progress()
 	}
 	progressMap := map[string]bool{
-		"0.00": false,
 		"0.17": false,
 		"0.33": false,
 		"0.50": false,
 		"0.67": false,
 		"0.83": false,
+		"1.00": false,
 	}
-	var expectedRanges int64 = 6
+	var expectedRanges int64 = 5
 	g.GoCtx(func(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case _, ok := <-respRecvd:
+			case _, ok := <-progressUpdated:
 				if !ok {
 					return nil
 				}
@@ -523,7 +511,6 @@ func TestCutoverFractionProgressed(t *testing.T) {
 				}
 				require.Equal(t, expectedRanges, metrics.ReplicationCutoverProgress.Value())
 				progressMap[s] = true
-				continueRevert <- struct{}{}
 			}
 		}
 	})
