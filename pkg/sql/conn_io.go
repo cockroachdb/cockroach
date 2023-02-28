@@ -885,7 +885,6 @@ type CopyInResult interface {
 // produces no output for the client.
 type CopyOutResult interface {
 	ResultBase
-	RestrictedCommandResult
 }
 
 // ClientLock is an interface returned by ClientComm.lockCommunication(). It

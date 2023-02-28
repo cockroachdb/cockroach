@@ -333,29 +333,54 @@ func TestCopyFromTimeout(t *testing.T) {
 	)
 	defer cleanup()
 
-	conn, err := pgx.Connect(ctx, pgURL.String())
-	require.NoError(t, err)
+	t.Run("copy from", func(t *testing.T) {
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
 
-	_, err = conn.Exec(ctx, "CREATE TABLE t (a INT PRIMARY KEY)")
-	require.NoError(t, err)
+		_, err = conn.Exec(ctx, "CREATE TABLE t (a INT PRIMARY KEY)")
+		require.NoError(t, err)
 
-	_, err = conn.Exec(ctx, "SET transaction_timeout = '100ms'")
-	require.NoError(t, err)
+		_, err = conn.Exec(ctx, "SET transaction_timeout = '100ms'")
+		require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx)
-	require.NoError(t, err)
+		tx, err := conn.Begin(ctx)
+		require.NoError(t, err)
 
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 2})
-	require.ErrorContains(t, err, "query execution canceled due to transaction timeout")
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 2})
+		require.ErrorContains(t, err, "query execution canceled due to transaction timeout")
 
-	err = tx.Rollback(ctx)
-	require.NoError(t, err)
+		err = tx.Rollback(ctx)
+		require.NoError(t, err)
 
-	_, err = conn.Exec(ctx, "SET statement_timeout = '200ms'")
-	require.NoError(t, err)
+		_, err = conn.Exec(ctx, "SET statement_timeout = '200ms'")
+		require.NoError(t, err)
 
-	_, err = conn.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 2})
-	require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+		_, err = conn.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 2})
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+	})
+
+	t.Run("copy to", func(t *testing.T) {
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SET transaction_timeout = '100ms'")
+		require.NoError(t, err)
+
+		tx, err := conn.Begin(ctx)
+		require.NoError(t, err)
+
+		_, err = tx.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+		require.ErrorContains(t, err, "query execution canceled due to transaction timeout")
+
+		err = tx.Rollback(ctx)
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SET statement_timeout = '200ms'")
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+	})
 }
 
 func TestShowQueriesIncludesCopy(t *testing.T) {

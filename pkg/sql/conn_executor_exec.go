@@ -496,7 +496,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
+	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() && ex.executorType != executorTypeInternal {
 		timerDuration :=
 			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 
