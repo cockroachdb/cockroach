@@ -811,6 +811,11 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
 }
 
+// SettingsWatcher is part of the TestTenantInterface.
+func (t *TestTenant) SettingsWatcher() interface {} {
+	return t.SQLServer.settingsWatcher
+}
+
 // WaitForTenantEndKeySplit is part of the TestTenantInterface.
 func (t *TestTenant) WaitForTenantEndKeySplit(ctx context.Context) error {
 	// Wait until the tenant end key split happens.
@@ -1190,6 +1195,11 @@ func (ts *TestServer) GetStores() interface{} {
 // ClusterSettings returns the ClusterSettings.
 func (ts *TestServer) ClusterSettings() *cluster.Settings {
 	return ts.Cfg.Settings
+}
+
+// SettingsWatcher is part of the TestTenantInterface.
+func (ts *TestServer) SettingsWatcher() interface{} {
+	return ts.sqlServer.settingsWatcher
 }
 
 // Engines returns the TestServer's engines.
