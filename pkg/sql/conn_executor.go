@@ -2138,18 +2138,9 @@ func (ex *connExecutor) execCmd() error {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
 		res = ex.clientComm.CreateCopyOutResult(pos)
+		stmtCtx := withStatement(ctx, tcmd.Stmt)
+		ev, payload = ex.execCopyOut(stmtCtx, tcmd)
 
-		// Handle conn executor state transitions.
-		switch ex.machine.CurState().(type) {
-		case stateNoTxn:
-			ev, payload = ex.execStmtInNoTxnState(ctx, tcmd.Stmt, res.(CopyOutResult))
-		case stateOpen:
-			ev, payload = ex.execCopyOut(ctx, tcmd)
-		case stateAborted:
-			ev, payload = ex.execStmtInAbortedState(ctx, tcmd.Stmt, res.(CopyOutResult))
-		case stateCommitWait:
-			ev, payload = ex.execStmtInCommitWaitState(ctx, tcmd.Stmt, res.(CopyOutResult))
-		}
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
 		// - stats use ex.statsCollector, not ex.phasetimes.
@@ -2452,77 +2443,208 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 
 func (ex *connExecutor) execCopyOut(
 	ctx context.Context, cmd CopyOut,
-) (fsm.Event, fsm.EventPayload) {
-	err := func() error {
-		ex.incrementStartedStmtCounter(cmd.Stmt)
+) (retEv fsm.Event, retPayload fsm.EventPayload) {
+	// First handle connExecutor state transitions.
+	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
+		return ex.beginImplicitTxn(ctx, cmd.ParsedStmt.AST)
+	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
+		return ex.makeErrEvent(sqlerrors.NewTransactionAbortedError("" /* customMsg */), cmd.ParsedStmt.AST)
+	}
+
+	ex.incrementStartedStmtCounter(cmd.Stmt)
+	var numOutputRows int
+	var cancelQuery context.CancelFunc
+	ctx, cancelQuery = contextutil.WithCancel(ctx)
+	queryID := ex.generateID()
+	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+
+	defer func() {
+		ex.removeActiveQuery(queryID, cmd.Stmt)
+		cancelQuery()
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		if !payloadHasError(retPayload) {
+			ex.incrementExecutedStmtCounter(cmd.Stmt)
+		}
 		var copyErr error
-		var numOutputRows int
-		var cancelQuery context.CancelFunc
-		ctx, cancelQuery = contextutil.WithCancel(ctx)
-		queryID := ex.generateID()
+		if p, ok := retPayload.(payloadWithError); ok {
+			copyErr = p.errorCause()
+			log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, copyErr)
+		}
 
 		// Log the query for sampling.
-		defer func() {
-			ex.removeActiveQuery(queryID, cmd.Stmt)
-			cancelQuery()
-			// These fields are not available in COPY, so use the empty value.
-			f := tree.NewFmtCtx(tree.FmtHideConstants)
-			f.FormatNode(cmd.Stmt)
-			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-				f.CloseAndGetString(),
-				copyErr != nil,
-				ex.implicitTxn(),
-				ex.planner.CurrentDatabase(),
-			)
-			var stats topLevelQueryStats
-			ex.planner.maybeLogStatement(
-				ctx,
-				ex.executorType,
-				true, /* isCopy */
-				int(ex.state.mu.autoRetryCounter),
-				ex.extraTxnState.txnCounter,
-				numOutputRows,
-				0, /* bulkJobId */
-				copyErr,
-				ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-				&ex.extraTxnState.hasAdminRoleCache,
-				ex.server.TelemetryLoggingMetrics,
-				stmtFingerprintID,
-				&stats,
-			)
-		}()
-
-		stmtTS := ex.server.cfg.Clock.PhysicalTime()
-		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
-		ex.resetPlanner(ctx, &ex.planner, ex.state.mu.txn, stmtTS)
-		ex.setCopyLoggingFields(cmd.ParsedStmt)
-
-		return ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
-			// We'll always have a txn on the planner since we called resetPlanner
-			// above.
-			txn := ex.planner.Txn()
-			ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
-
-			var err error
-			if numOutputRows, err = runCopyTo(ctx, &ex.planner, txn, cmd); err != nil {
-				return err
-			}
-
-			// Finalize execution by sending the statement tag and number of rows read.
-			dummy := tree.CopyTo{}
-			tag := []byte(dummy.StatementTag())
-			tag = append(tag, ' ')
-			tag = strconv.AppendInt(tag, int64(numOutputRows), 10 /* base */)
-			return cmd.Conn.SendCommandComplete(tag)
-		})
+		// These fields are not available in COPY, so use the empty value.
+		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f.FormatNode(cmd.Stmt)
+		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
+			f.CloseAndGetString(),
+			copyErr != nil,
+			ex.implicitTxn(),
+			ex.planner.CurrentDatabase(),
+		)
+		var stats topLevelQueryStats
+		ex.planner.maybeLogStatement(
+			ctx,
+			ex.executorType,
+			true, /* isCopy */
+			int(ex.state.mu.autoRetryCounter),
+			ex.extraTxnState.txnCounter,
+			numOutputRows,
+			0, /* bulkJobId */
+			copyErr,
+			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			&ex.extraTxnState.hasAdminRoleCache,
+			ex.server.TelemetryLoggingMetrics,
+			stmtFingerprintID,
+			&stats,
+		)
 	}()
-	if err != nil {
-		log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, err)
-		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{
-			err: err,
+
+	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+	ex.resetPlanner(ctx, &ex.planner, ex.state.mu.txn, stmtTS)
+	ex.setCopyLoggingFields(cmd.ParsedStmt)
+
+	var queryTimeoutTicker *time.Timer
+	var txnTimeoutTicker *time.Timer
+	queryTimedOut := false
+	txnTimedOut := false
+
+	// queryDoneAfterFunc and txnDoneAfterFunc will be allocated only when
+	// queryTimeoutTicker or txnTimeoutTicker is non-nil.
+	var queryDoneAfterFunc chan struct{}
+	var txnDoneAfterFunc chan struct{}
+
+	defer func(ctx context.Context) {
+		if queryTimeoutTicker != nil {
+			if !queryTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// queryTimedOut.
+				<-queryDoneAfterFunc
+			}
+		}
+		if txnTimeoutTicker != nil {
+			if !txnTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// txnTimedOut.
+				<-txnDoneAfterFunc
+			}
+		}
+
+		// Detect context cancelation and overwrite whatever error might have been
+		// set on the result before. The idea is that once the query's context is
+		// canceled, all sorts of actors can detect the cancelation and set all
+		// sorts of errors on the result. Rather than trying to impose discipline
+		// in that jungle, we just overwrite them all here with an error that's
+		// nicer to look at for the client.
+		if ctx.Err() != nil {
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(false),
+			}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+		}
+
+		// If the query timed out, we intercept the error, payload, and event here
+		// for the same reasons we intercept them for canceled queries above.
+		// Overriding queries with a QueryTimedOut error needs to happen after
+		// we've checked for canceled queries as some queries may be canceled
+		// because of a timeout, in which case the appropriate error to return to
+		// the client is one that indicates the timeout, rather than the more general
+		// query canceled error. It's important to note that a timed out query may
+		// not have been canceled (eg. We never even start executing a query
+		// because the timeout has already expired), and therefore this check needs
+		// to happen outside the canceled query check above.
+		if queryTimedOut {
+			// A timed out query should never produce retryable errors/events/payloads
+			// so we intercept and overwrite them all here.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(false),
+			}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
+		} else if txnTimedOut {
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(false),
+			}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
+		}
+	}(ctx)
+
+	if ex.sessionData().StmtTimeout > 0 {
+		timerDuration :=
+			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+		// There's no need to proceed with execution if the timer has already expired.
+		if timerDuration < 0 {
+			queryTimedOut = true
+			return ex.makeErrEvent(sqlerrors.QueryTimeoutError, cmd.Stmt)
+		}
+		queryDoneAfterFunc = make(chan struct{}, 1)
+		queryTimeoutTicker = time.AfterFunc(
+			timerDuration,
+			func() {
+				cancelQuery()
+				queryTimedOut = true
+				queryDoneAfterFunc <- struct{}{}
+			})
+	}
+	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
+		timerDuration :=
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
+
+		// If the timer already expired, but the transaction is not yet aborted,
+		// we should error immediately without executing. If the timer
+		// expired but the transaction already is aborted, then we should still
+		// proceed with executing the statement in order to get a
+		// TransactionAbortedError.
+		_, txnAborted := ex.machine.CurState().(stateAborted)
+
+		if timerDuration < 0 && !txnAborted {
+			txnTimedOut = true
+			return ex.makeErrEvent(sqlerrors.TxnTimeoutError, cmd.Stmt)
+		}
+
+		if timerDuration > 0 {
+			txnDoneAfterFunc = make(chan struct{}, 1)
+			txnTimeoutTicker = time.AfterFunc(
+				timerDuration,
+				func() {
+					cancelQuery()
+					txnTimedOut = true
+					txnDoneAfterFunc <- struct{}{}
+				})
 		}
 	}
-	ex.incrementExecutedStmtCounter(cmd.Stmt)
+
+	if copyErr := ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
+		ex.mu.Lock()
+		queryMeta, ok := ex.mu.ActiveQueries[queryID]
+		if !ok {
+			return errors.AssertionFailedf("query %d not in registry", queryID)
+		}
+		queryMeta.phase = executing
+		ex.mu.Unlock()
+
+		// We'll always have a txn on the planner since we called resetPlanner
+		// above.
+		txn := ex.planner.Txn()
+		var err error
+		if numOutputRows, err = runCopyTo(ctx, &ex.planner, txn, cmd); err != nil {
+			return err
+		}
+
+		// Finalize execution by sending the statement tag and number of rows read.
+		dummy := tree.CopyTo{}
+		tag := []byte(dummy.StatementTag())
+		tag = append(tag, ' ')
+		tag = strconv.AppendInt(tag, int64(numOutputRows), 10 /* base */)
+		return cmd.Conn.SendCommandComplete(tag)
+	}); copyErr != nil {
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
+		return ev, payload
+	}
 	return nil, nil
 }
 
@@ -2562,6 +2684,7 @@ func (ex *connExecutor) execCopyIn(
 	defer func() {
 		ex.removeActiveQuery(queryID, cmd.Stmt)
 		cancelQuery()
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		if !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
@@ -2597,9 +2720,12 @@ func (ex *connExecutor) execCopyIn(
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
 
 	var cm copyMachineInterface
-	var copyErr error
 	// Log the query for sampling.
 	defer func() {
+		var copyErr error
+		if p, ok := retPayload.(payloadWithError); ok {
+			copyErr = p.errorCause()
+		}
 		var numInsertedRows int
 		if cm != nil {
 			numInsertedRows = cm.numInsertedRows()
@@ -2617,6 +2743,7 @@ func (ex *connExecutor) execCopyIn(
 		ex.planner.maybeLogStatement(ctx, ex.executorType, true, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, numInsertedRows, 0 /* bulkJobId */, copyErr, ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
+	var copyErr error
 	if isCopyToExternalStorage(cmd) {
 		cm, copyErr = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, &ex.planner, ex.state.mon)
 	} else {
@@ -2679,7 +2806,6 @@ func (ex *connExecutor) execCopyIn(
 			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		cm.Close(ctx)
 
 		// If the query timed out, we intercept the error, payload, and event here
