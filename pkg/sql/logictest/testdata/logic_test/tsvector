@@ -240,3 +240,38 @@ EXPLAIN SELECT * FROM a@a_a_idx WHERE a @@ b
 statement ok
 CREATE TABLE t95680 (c1 FLOAT NOT NULL, c2 TSVECTOR NOT NULL, INVERTED INDEX (c1 ASC, c2 ASC));
 INSERT INTO t95680 VALUES (1.0::FLOAT, e'\'kCrLZNl\' \'sVDj\' \'yO\' \'z\':54C,440B,519C,794B':::TSVECTOR);
+
+# More tests for these functions live in pkg/util/tsearch/testdata
+query IT
+SELECT * FROM ts_parse('default', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+----
+1  Hello
+1  this
+1  is
+1  a
+1  parsi
+1  ng
+1  t
+1  est
+1  1
+1  234
+1  4
+1  case324
+
+query T
+SELECT * FROM to_tsvector('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+----
+'1':9 '234':10 '4':11 'a':4 'case324':12 'est':8 'hello':1 'is':3 'ng':6 'parsi':5 't':7 'this':2
+
+query T
+SELECT * FROM phraseto_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+----
+'hello' <-> 'this' <-> 'is' <-> 'a' <-> 'parsi' <-> 'ng' <-> 't' <-> 'est' <-> '1' <-> '234' <-> '4' <-> 'case324'
+
+query T
+SELECT * FROM to_tsquery('simple', 'a | b & c <-> d')
+----
+'a' | 'b' & 'c' <-> 'd'
+
+query error syntax
+SELECT * FROM to_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
