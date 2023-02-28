@@ -37,17 +37,16 @@ type resultCallback[T any] func(v T, err error)
 
 // MakeErrFuture constructs future which returns an error.
 func MakeErrFuture[T any](err error) Future[T] {
-	var zero T
-	f := &future[T]{}
-	f.ready(zero, err)
-	return Future[T]{f}
+	f := MakePromise[T]()
+	f.SetErr(err)
+	return f
 }
 
 // MakeCompletedFuture constructs future which returns specified value.
 func MakeCompletedFuture[T any](v T) Future[T] {
-	f := &future[T]{}
-	f.ready(v, nil)
-	return Future[T]{f}
+	f := MakePromise[T]()
+	f.SetValue(v)
+	return f
 }
 
 // MakePromise constructs future where the caller promises to set the value or
