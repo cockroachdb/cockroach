@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -29,6 +30,67 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+// dynamicQueryHasNoHomeRegionError is a wrapper for a
+// "query has no home region" error to flag the query as retryable.
+type dynamicQueryHasNoHomeRegionError struct {
+	err error
+}
+
+// NewDynamicQueryHasNoHomeRegionError returns a dynamic no home region error
+// wrapping the original error. This error triggers a transaction retry.
+func NewDynamicQueryHasNoHomeRegionError(err error) error {
+	return &dynamicQueryHasNoHomeRegionError{err: err}
+}
+
+// dynamicQueryHasNoHomeRegionError implements the error interface.
+func (e *dynamicQueryHasNoHomeRegionError) Error() string {
+	return e.err.Error()
+}
+
+// ClientVisibleRetryError is detected by the pgwire layer and will convert
+// this error into an error to be retried. See pgcode.ClientVisibleRetryError.
+func (e *dynamicQueryHasNoHomeRegionError) ClientVisibleRetryError() {}
+
+// IsDynamicQueryHasNoHomeRegionError tests if `err` is a
+// dynamicQueryHasNoHomeRegionError.
+func IsDynamicQueryHasNoHomeRegionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// If the error is wrapped in a NotInternalError, skip to the root cause.
+	for {
+		if notInternalError, ok := err.(*colexecerror.NotInternalError); ok {
+			err = notInternalError.Cause()
+			continue
+		}
+		break
+	}
+	nhrErr := (*dynamicQueryHasNoHomeRegionError)(nil)
+	return errors.As(err, &nhrErr)
+}
+
+// MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError tests if `err` is a
+// dynamicQueryHasNoHomeRegionError. If it is, it returns the error embedded
+// in this structure (which should be a non-retryable error), otherwise returns
+// the original error.
+func MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// If the error is wrapped in a NotInternalError, skip to the root cause.
+	for {
+		if notInternalError, ok := err.(*colexecerror.NotInternalError); ok {
+			err = notInternalError.Cause()
+			continue
+		}
+		break
+	}
+	if nhrErr, ok := err.(*dynamicQueryHasNoHomeRegionError); ok {
+		return nhrErr.err
+	}
+	return err
+}
 
 // ConvertBatchError attempts to map a key-value error generated during a
 // key-value batch operating over the specified table to a user friendly SQL

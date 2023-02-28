@@ -1020,8 +1020,8 @@ func (jr *joinReader) readInput() (
 	return jrPerformingLookup, outRow, nil
 }
 
-var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-	"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
+var noHomeRegionError = row.NewDynamicQueryHasNoHomeRegionError(pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+	"Query has no home region. Try using a lower LIMIT value or running the query from a different region."))
 
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {

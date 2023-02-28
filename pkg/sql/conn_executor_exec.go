@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -745,7 +747,35 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmtCtx = ctx
 	}
 
-	if err := ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
+	var rollbackSP *tree.RollbackToSavepoint
+	var r *tree.ReleaseSavepoint
+	enforceHomeRegion := p.IsANSIDML() && p.EvalContext().SessionData().EnforceHomeRegion
+	if enforceHomeRegion && ex.state.mu.txn.IsOpen() {
+		// Create a savepoint at a point before which rows were read so that we can
+		// roll back to it, which will allow the txn to be modified with a
+		// historical timestamp (so that the locality-optimized ops used for error
+		// reporting can run locally and not incur latency).
+		s := &tree.Savepoint{Name: "enforce_home_region_sp"}
+		if err != nil {
+			return nil, nil, err
+		}
+		var event fsm.Event
+		var eventPayload fsm.EventPayload
+		if event, eventPayload, err = ex.execSavepointInOpenState(ctx, s, res); err != nil {
+			return event, eventPayload, err
+		}
+
+		r = &tree.ReleaseSavepoint{Savepoint: "enforce_home_region_sp"}
+		rollbackSP = &tree.RollbackToSavepoint{Savepoint: "enforce_home_region_sp"}
+		defer func() {
+			// The default case is to roll back the internally-generated savepoint
+			// after every request. We only need it if a retryable "query has no home
+			// region" error occurs.
+			ex.execRelease(ctx, r, res)
+		}()
+	}
+
+	if err = ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
 		stmtThresholdSpan.Finish()
 		return nil, nil, err
 	}
@@ -769,7 +799,45 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	if err := res.Err(); err != nil {
+	if err = res.Err(); err != nil {
+		if row.IsDynamicQueryHasNoHomeRegionError(err) {
+			if rollbackSP != nil {
+				// A retryable "query has no home region" error has occurred.
+				// Roll back to the internal savepoint in preparation for the next
+				// planning and execution of this query with a different gateway region.
+				p.StmtNoConstantsWithHomeRegionEnforced = p.stmt.StmtNoConstants
+				event, eventPayload := ex.execRollbackToSavepointInOpenState(
+					ctx, rollbackSP, res,
+				)
+				var etr fsm.Event
+				etr, _ = event.(eventTxnRestart)
+				if etr == nil || eventPayload != nil {
+					err = errors.AssertionFailedf(
+						"unable to roll back internal savepoint for enforce_home_region",
+					)
+					res.SetError(err)
+				} else if int(ex.state.mu.autoRetryCounter) == len(ex.planner.EvalContext().RemoteRegions) {
+					err = row.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
+					res.SetError(err)
+				}
+			} else {
+				internalError := errors.AssertionFailedf(
+					"unable to roll back internal savepoint for enforce_home_region",
+				)
+				res.SetError(internalError)
+			}
+		} else if row.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
+			// If we are retrying a dynamic "query has no home region" error and
+			// we get a different error message when executing with locality-optimized
+			// ops using a different local region (for example, relation does not
+			// exist, due to the AOST read), return the original error message in
+			// non-retryable form.
+			errorMessage := err.Error()
+			if !strings.HasPrefix(errorMessage, "Query is not running in its home region") {
+				err = row.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
+				res.SetError(err)
+			}
+		}
 		return makeErrEvent(err)
 	}
 
@@ -798,6 +866,7 @@ func (ex *connExecutor) execStmtInOpenState(
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
 // the timestamps of the transaction accordingly.
 func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) error {
+	p := &ex.planner
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		if _, ok := stmt.(*tree.ShowCommitTimestamp); ok {
 			return nil
@@ -805,8 +874,24 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		return errors.AssertionFailedf(
 			"cannot handle AOST clause without a transaction",
 		)
+	} else if row.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
+		asOfClause := tree.AsOfClause{Expr: followerReadTimestampExpr}
+		// Set the timestamp used by current_timestamp().
+		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause, asof.OptionAllowBoundedStaleness)
+		if err != nil {
+			return errors.AssertionFailedf(
+				"problem evaluating follower read timestamp for enforce_home_region dynamic error checking",
+			)
+		}
+		// Set up AOST in the txn so re-running of the query with different possible
+		// home regions does not have to read rows from remote regions.
+		p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+		if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+			return errors.AssertionFailedf(
+				"problem setting follower read timestamp for enforce_home_region dynamic error checking",
+			)
+		}
 	}
-	p := &ex.planner
 	asOf, err := p.isAsOf(ctx, stmt)
 	if err != nil {
 		return err
@@ -1321,6 +1406,28 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
 		res.SetError(limitsErr)
+	}
+	if res.Err() == nil && err == nil {
+		autoRetryReason := ex.state.mu.autoRetryReason
+		if row.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
+			if homeRegion, ok := planner.EvalContext().Locality.Find("region"); ok &&
+				planner.StmtNoConstantsWithHomeRegionEnforced == planner.stmt.StmtNoConstants {
+				// If this is the same query as ran when the dynamic "query has no home
+				// region" error occurred, but this time it didn't error out, report
+				// back the query's home region.
+				err = pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
+					`Query is not running in its home region. Try running the query from region '%s'.`,
+					homeRegion,
+				)
+				res.SetError(err)
+				return nil
+			}
+			// If for some reason we're not running the same query as before, report
+			// the original "query has no home region" error in non-retryable form.
+			err = row.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(autoRetryReason)
+			res.SetError(err)
+			return nil
+		}
 	}
 
 	return err

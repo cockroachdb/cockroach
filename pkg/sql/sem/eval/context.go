@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -94,6 +95,8 @@ type Context struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	OriginalLocality roachpb.Locality
 
 	Tracer *tracing.Tracer
 
@@ -250,6 +253,10 @@ type Context struct {
 
 	// ParseHelper makes date parsing more efficient.
 	ParseHelper pgdate.ParseHelper
+
+	// RemoteRegions contains the slice of remote regions in a multiregion
+	// database which owns a table accessed by the current SQL request.
+	RemoteRegions catpb.RegionNames
 }
 
 // DescIDGenerator generates unique descriptor IDs.
