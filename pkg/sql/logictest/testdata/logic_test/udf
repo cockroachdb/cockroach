@@ -22,7 +22,7 @@ BEGIN
 END;
 $$ LANGUAGE made_up_language
 
-statement error .*cannot set leakproof on function with non-immutable volatility: STABLE.*
+statement error pgcode 42P13 cannot set leakproof on function with non-immutable volatility: STABLE
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
@@ -1069,7 +1069,7 @@ $$
 statement error pq: IMMUTABLE: conflicting or redundant options
 ALTER FUNCTION f_test_alter_opt IMMUTABLE IMMUTABLE
 
-statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
+statement error pgcode 42P13 cannot set leakproof on function with non-immutable volatility: STABLE
 ALTER FUNCTION f_test_alter_opt STABLE LEAKPROOF
 
 statement ok
@@ -1419,7 +1419,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUA
 statement error pq: cannot change return type of existing function
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
-statement error pq: cannot set leakproof on function with non-immutable volatility: VOLATILE
+statement error pgcode 42P13 cannot set leakproof on function with non-immutable volatility: VOLATILE
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
 
 query T
