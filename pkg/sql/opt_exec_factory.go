@@ -19,7 +19,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1759,15 +1758,9 @@ func (ef *execFactory) ConstructDeleteRange(
 	var sb span.Builder
 	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
 
-	splitter := span.NoopSplitter()
-	canUsePointDelete := ef.planner.ExecCfg().Settings.Version.IsActive(
-		ef.ctx, clusterversion.TODODelete_V22_2DeleteRequestReturnKey,
+	splitter := span.MakeSplitterForDelete(
+		tabDesc, tabDesc.GetPrimaryIndex(), needed, true, /* forDelete */
 	)
-	if canUsePointDelete {
-		splitter = span.MakeSplitterForDelete(
-			tabDesc, tabDesc.GetPrimaryIndex(), needed, true, /* forDelete */
-		)
-	}
 	spans, err := sb.SpansFromConstraint(indexConstraint, splitter)
 	if err != nil {
 		return nil, err

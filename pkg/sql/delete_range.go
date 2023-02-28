@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -166,9 +165,8 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roachpb.Spans) {
 	ctx := params.ctx
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-	canUsePointDelete := params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2DeleteRequestReturnKey)
 	for _, span := range spans {
-		if span.EndKey == nil && canUsePointDelete {
+		if span.EndKey == nil {
 			if traceKV {
 				log.VEventf(ctx, 2, "Del %s", span.Key)
 			}
