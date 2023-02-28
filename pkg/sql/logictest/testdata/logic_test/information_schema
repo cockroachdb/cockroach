@@ -1560,6 +1560,7 @@ system              public             29_11_1_not_null                         
 system              public             29_11_2_not_null                                                                                                system         public        lease                            CHECK            NO             NO
 system              public             29_11_3_not_null                                                                                                system         public        lease                            CHECK            NO             NO
 system              public             29_11_4_not_null                                                                                                system         public        lease                            CHECK            NO             NO
+system              public             29_11_5_not_null                                                                                                system         public        lease                            CHECK            NO             NO
 system              public             primary                                                                                                         system         public        lease                            PRIMARY KEY      NO             NO
 system              public             29_21_1_not_null                                                                                                system         public        locations                        CHECK            NO             NO
 system              public             29_21_2_not_null                                                                                                system         public        locations                        CHECK            NO             NO
@@ -1779,6 +1780,7 @@ system              public             29_11_1_not_null                         
 system              public             29_11_2_not_null                                                                                                version IS NOT NULL
 system              public             29_11_3_not_null                                                                                                nodeID IS NOT NULL
 system              public             29_11_4_not_null                                                                                                expiration IS NOT NULL
+system              public             29_11_5_not_null                                                                                                crdb_region IS NOT NULL
 system              public             29_12_1_not_null                                                                                                timestamp IS NOT NULL
 system              public             29_12_2_not_null                                                                                                eventType IS NOT NULL
 system              public             29_12_3_not_null                                                                                                targetID IS NOT NULL
@@ -1983,6 +1985,7 @@ system         public        job_info                         job_id            
 system         public        job_info                         written                                                                                                   system              public             primary
 system         public        jobs                             id                                                                                                        system              public             primary
 system         public        join_tokens                      id                                                                                                        system              public             primary
+system         public        lease                            crdb_region                                                                                               system              public             primary
 system         public        lease                            descID                                                                                                    system              public             primary
 system         public        lease                            expiration                                                                                                system              public             primary
 system         public        lease                            nodeID                                                                                                    system              public             primary
@@ -2223,6 +2226,7 @@ system         public        jobs                             status            
 system         public        join_tokens                      expiration                                                                                                3
 system         public        join_tokens                      id                                                                                                        1
 system         public        join_tokens                      secret                                                                                                    2
+system         public        lease                            crdb_region                                                                                               5
 system         public        lease                            descID                                                                                                    1
 system         public        lease                            expiration                                                                                                4
 system         public        lease                            nodeID                                                                                                    3

@@ -127,18 +127,9 @@ var indexUsageComputeExprStr = indexUsageComputeExpr
 
 // These system tables are not part of the system config.
 const (
-	// Note: the column "nodeID" refers to the SQL instance ID.
-	// It is named "nodeID" for historical reasons.
-	LeaseTableSchema = `
-CREATE TABLE system.lease (
-  "descID"   INT8,
-  version    INT8,
-  "nodeID"   INT8,
-  expiration TIMESTAMP,
-  CONSTRAINT "primary" PRIMARY KEY ("descID", version, expiration, "nodeID")
-);`
-
-	MRLeaseTableSchema = `CREATE TABLE system.lease (
+	// Note: the column "nodeID" refers to the SQL instance ID. It is named
+	// "nodeID" for historical reasons.
+	LeaseTableSchema = `CREATE TABLE system.lease (
   "descID"     INT8,
   version      INT8,
   "nodeID"     INT8,
@@ -1326,40 +1317,40 @@ var (
 var (
 	// LeaseTable is the descriptor for the leases table.
 	LeaseTable = func() SystemTable {
-		if TestSupportMultiRegion() {
-			return makeSystemTable(
-				MRLeaseTableSchema,
-				systemTable(
-					catconstants.LeaseTableName,
-					keys.LeaseTableID,
-					[]descpb.ColumnDescriptor{
-						{Name: "descID", ID: 1, Type: types.Int},
-						{Name: "version", ID: 2, Type: types.Int},
-						{Name: "nodeID", ID: 3, Type: types.Int},
-						{Name: "expiration", ID: 4, Type: types.Timestamp},
-						{Name: "crdb_region", ID: 5, Type: types.Bytes},
+		return makeSystemTable(
+			LeaseTableSchema,
+			systemTable(
+				catconstants.LeaseTableName,
+				keys.LeaseTableID,
+				[]descpb.ColumnDescriptor{
+					{Name: "descID", ID: 1, Type: types.Int},
+					{Name: "version", ID: 2, Type: types.Int},
+					{Name: "nodeID", ID: 3, Type: types.Int},
+					{Name: "expiration", ID: 4, Type: types.Timestamp},
+					{Name: "crdb_region", ID: 5, Type: types.Bytes},
+				},
+				[]descpb.ColumnFamilyDescriptor{
+					{
+						Name:        "primary",
+						ID:          0,
+						ColumnNames: []string{"descID", "version", "nodeID", "expiration", "crdb_region"},
+						ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
 					},
-					[]descpb.ColumnFamilyDescriptor{
-						{
-							Name:        "primary",
-							ID:          0,
-							ColumnNames: []string{"descID", "version", "nodeID", "expiration", "crdb_region"},
-							ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
-						},
+				},
+				descpb.IndexDescriptor{
+					Name:           "primary",
+					ID:             2,
+					Unique:         true,
+					KeyColumnNames: []string{"crdb_region", "descID", "version", "expiration", "nodeID"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
+						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
 					},
-					descpb.IndexDescriptor{
-						Name:           "primary",
-						ID:             2,
-						Unique:         true,
-						KeyColumnNames: []string{"crdb_region", "descID", "version", "expiration", "nodeID"},
-						KeyColumnDirections: []catenumpb.IndexColumn_Direction{
-							catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
-							catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
-						},
-						KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
-					},
-				))
-		}
+					KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
+				},
+			))
+	}
+	V22_2_LeaseTable = func() SystemTable {
 		return makeSystemTable(
 			LeaseTableSchema,
 			systemTable(
