@@ -469,6 +469,11 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
 }
 
+// EnforceHomeRegion is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) EnforceHomeRegion() bool {
+	return false
+}
+
 // GetRangeDescByID is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) GetRangeDescByID(
 	context.Context, roachpb.RangeID,
