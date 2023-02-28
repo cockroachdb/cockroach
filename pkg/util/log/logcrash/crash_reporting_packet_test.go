@@ -250,7 +250,7 @@ func TestInternalErrorReporting(t *testing.T) {
 				`\*errutil.withPrefix: crdb_internal.force_assertion_error\(\)\n`+
 				`eval.go:\d+: \*withstack.withStack \(1\)\n`+
 				`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\)\n`+
-				`\*colexecerror.notInternalError\n`+
+				`\*colexecerror.NotInternalError\n`+
 				`\(check the extra data payloads\)`, p.Message[idx:])
 	}
 
@@ -267,7 +267,7 @@ func TestInternalErrorReporting(t *testing.T) {
 			"github.com/cockroachdb/errors/errutil/*errutil.withPrefix (*::)\n"+
 			"github.com/cockroachdb/errors/withstack/*withstack.withStack (*::)\n"+
 			"github.com/cockroachdb/errors/telemetrykeys/*telemetrykeys.withTelemetry (*::)\n"+
-			"github.com/cockroachdb/cockroach/pkg/sql/colexecerror/*colexecerror.notInternalError (*::)\n",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexecerror/*colexecerror.NotInternalError (*::)\n",
 			extra)
 	}
 

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -2978,10 +2979,12 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 )
 
 func errIsRetriable(err error) bool {
+	isDynamicQueryHasNoHomeRegionError := row.IsDynamicQueryHasNoHomeRegionError(err)
 	return errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) ||
 		scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID ||
 		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
 		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
+		isDynamicQueryHasNoHomeRegionError ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
@@ -3016,6 +3019,14 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	}
 
 	retriable := errIsRetriable(err)
+	if retriable && row.IsDynamicQueryHasNoHomeRegionError(err) {
+		// Retry only # of remote regions times if the retry is due to the
+		// enforce_home_region setting.
+		retriable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
+		if !retriable {
+			err = row.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
+		}
+	}
 	if retriable {
 		var rc rewindCapability
 		var canAutoRetry bool
@@ -3269,6 +3280,7 @@ func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
 	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon)
+	autoRetryReason := ex.state.mu.autoRetryReason
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp
 	// as there was a schema update in between. When retrying, we want to keep the
@@ -3276,9 +3288,15 @@ func (ex *connExecutor) resetPlanner(
 	// to the point just before our failed read to ensure we don't try to read
 	// data which may be after the schema change when we retry.
 	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
-	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
+	p.EvalContext().Locality = p.EvalContext().OriginalLocality
+	if err := autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		nextMax := minTSErr.MinTimestampBound
 		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
+	} else if row.IsDynamicQueryHasNoHomeRegionError(autoRetryReason) {
+		if int(ex.state.mu.autoRetryCounter) <= len(p.EvalContext().RemoteRegions) {
+			p.EvalContext().Locality =
+				p.EvalContext().Locality.CopyReplaceKeyValue("region", string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]))
+		}
 	} else if newTxn := txn == nil || p.extendedEvalCtx.Txn != txn; newTxn {
 		// Otherwise, only change the historical timestamps if this is a new txn.
 		// This is because resetPlanner can be called multiple times for the same

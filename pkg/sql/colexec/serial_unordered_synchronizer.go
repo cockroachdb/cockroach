@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -98,7 +99,8 @@ func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 			if s.serialInputIdxExclusiveUpperBound > 0 && s.curSerialInputIdx >= int(s.serialInputIdxExclusiveUpperBound) {
-				colexecerror.ExpectedError(s.exceedsInputIdxExclusiveUpperBoundError)
+				err := row.NewDynamicQueryHasNoHomeRegionError(s.exceedsInputIdxExclusiveUpperBoundError)
+				colexecerror.ExpectedError(err)
 			}
 		} else {
 			return b

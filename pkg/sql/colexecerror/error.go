@@ -74,10 +74,10 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		}
 
 		annotateErrorWithoutCode := true
-		var nie *notInternalError
+		var nie *NotInternalError
 		if errors.Is(err, context.Canceled) || errors.As(err, &nie) {
 			// We don't want to annotate the context cancellation and
-			// notInternalError errors in case they don't have a valid PG code
+			// NotInternalError errors in case they don't have a valid PG code
 			// so that the sentry report is not sent (errors with failed
 			// assertions get sentry reports).
 			annotateErrorWithoutCode = false
@@ -156,26 +156,26 @@ func NewStorageError(err error) *StorageError {
 	return &StorageError{error: err}
 }
 
-// notInternalError is an error that occurs not because the vectorized engine
+// NotInternalError is an error that occurs not because the vectorized engine
 // happens to be in an unexpected state (for example, it was caused by a
 // non-columnar builtin).
-// notInternalError will be returned to the client not as an
+// NotInternalError will be returned to the client not as an
 // "internal error" and without the stack trace.
-type notInternalError struct {
+type NotInternalError struct {
 	cause error
 }
 
-func newNotInternalError(err error) *notInternalError {
-	return &notInternalError{cause: err}
+func newNotInternalError(err error) *NotInternalError {
+	return &NotInternalError{cause: err}
 }
 
 var (
-	_ errors.Wrapper = &notInternalError{}
+	_ errors.Wrapper = &NotInternalError{}
 )
 
-func (e *notInternalError) Error() string { return e.cause.Error() }
-func (e *notInternalError) Cause() error  { return e.cause }
-func (e *notInternalError) Unwrap() error { return e.Cause() }
+func (e *NotInternalError) Error() string { return e.cause.Error() }
+func (e *NotInternalError) Cause() error  { return e.cause }
+func (e *NotInternalError) Unwrap() error { return e.Cause() }
 
 func decodeNotInternalError(
 	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
@@ -184,7 +184,7 @@ func decodeNotInternalError(
 }
 
 func init() {
-	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*NotInternalError)(nil)), decodeNotInternalError)
 }
 
 // InternalError simply panics with the provided object. It will always be
@@ -196,7 +196,7 @@ func InternalError(err error) {
 }
 
 // ExpectedError panics with the error that is wrapped by
-// notInternalError which will not be treated as internal error and
+// NotInternalError which will not be treated as internal error and
 // will not have a printed out stack trace. This method should be called to
 // propagate errors that the vectorized engine *expects* to occur.
 func ExpectedError(err error) {
