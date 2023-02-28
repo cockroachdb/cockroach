@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -62,16 +63,11 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false")
 
 	schema := systemschema.LeaseTableSchema
-	if systemschema.TestSupportMultiRegion() {
-		schema = systemschema.MRLeaseTableSchema
-	}
 	makeTable := func(name string) (id descpb.ID) {
 		tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
 		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
 		// The MR variant of the table uses a non-
-		if systemschema.TestSupportMultiRegion() {
-			MoveTablePrimaryIndexIDto2(ctx, t, s, id)
-		}
+		MoveTablePrimaryIndexIDto2(ctx, t, s, id)
 		return id
 	}
 	lease1ID := makeTable("lease1")
@@ -79,9 +75,10 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 
 	ie := s.InternalExecutor().(isql.Executor)
 	codec := s.LeaseManager().(*Manager).Codec()
+	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 	w := teeWriter{
 		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),
-		b: newKVWriter(codec, kvDB, lease2ID),
+		b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher),
 	}
 	start := kvDB.Clock().Now()
 	groups := generateWriteOps(2<<10, 1<<10)
@@ -205,13 +202,11 @@ func generateWriteOps(n, numGroups int) func() (_ []writeOp, wantMore bool) {
 			panic(err)
 		}
 		lf := leaseFields{
-			descID:     descpb.ID(rand.Intn(vals)),
-			version:    descpb.DescriptorVersion(rand.Intn(vals)),
-			instanceID: base.SQLInstanceID(rand.Intn(vals)),
-			expiration: *ts,
-		}
-		if systemschema.TestSupportMultiRegion() {
-			lf.regionPrefix = enum.One
+			descID:       descpb.ID(rand.Intn(vals)),
+			version:      descpb.DescriptorVersion(rand.Intn(vals)),
+			instanceID:   base.SQLInstanceID(rand.Intn(vals)),
+			expiration:   *ts,
+			regionPrefix: enum.One,
 		}
 		return lf
 	}

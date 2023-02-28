@@ -88,7 +88,7 @@ func migrations(codec keys.SQLCodec) (result []rbrMigration) {
 	return []rbrMigration{
 		sqlLivenessMigration(codec),
 		sqlInstanceMigration(codec),
-		// leaseMigration(codec),
+		leaseMigration(codec),
 	}
 }
 
@@ -110,15 +110,14 @@ func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
 	}
 }
 
-// TODO(jeffswenson): enable this migration
-//func leaseMigration(codec keys.SQLCodec) rbrMigration {
-//	descriptor := systemschema.LeaseTable()
-//	return rbrMigration{
-//		tableName:       "lease",
-//		keyMapper:       makeKeyMapper(codec, descriptor, 1),
-//		finalDescriptor: descriptor,
-//	}
-//}
+func leaseMigration(codec keys.SQLCodec) rbrMigration {
+	descriptor := systemschema.LeaseTable()
+	return rbrMigration{
+		tableName:       "lease",
+		keyMapper:       makeKeyMapper(codec, descriptor, 1),
+		finalDescriptor: descriptor,
+	}
+}
 
 type rbrMigration struct {
 	tableName       string

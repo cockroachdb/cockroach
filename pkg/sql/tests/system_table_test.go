@@ -232,6 +232,9 @@ func TestSystemTableLiterals(t *testing.T) {
 		case keys.SQLInstancesTableID:
 			gen.TableDescriptor.PrimaryIndex.ID = 2
 			gen.TableDescriptor.NextIndexID = 3
+		case keys.LeaseTableID:
+			gen.TableDescriptor.PrimaryIndex.ID = 2
+			gen.TableDescriptor.NextIndexID = 3
 		}
 
 		if desc.TableDesc().Equal(gen.TableDesc()) {
