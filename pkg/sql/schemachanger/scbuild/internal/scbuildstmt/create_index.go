@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -346,11 +345,6 @@ func processColNodeType(
 			// we're going to inverted index.
 			switch columnNode.OpClass {
 			case "gin_trgm_ops", "gist_trgm_ops":
-				if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.TODODelete_V22_2TrigramInvertedIndexes) {
-					panic(pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to create trigram inverted indexes",
-						clusterversion.ByKey(clusterversion.TODODelete_V22_2TrigramInvertedIndexes)))
-				}
 			case "":
 				panic(errors.WithHint(
 					pgerror.New(pgcode.UndefinedObject, "data type text has no default operator class for access method \"gin\""),

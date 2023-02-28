@@ -112,12 +112,6 @@ var upgrades = []upgradebase.Upgrade{
 		sampledStmtDiagReqsMigration,
 	),
 	upgrade.NewTenantUpgrade(
-		"add column locality to table system.sql_instances",
-		toCV(clusterversion.TODODelete_V22_2AlterSystemSQLInstancesAddLocality),
-		upgrade.NoPrecondition,
-		alterSystemSQLInstancesAddLocality,
-	),
-	upgrade.NewTenantUpgrade(
 		"add the system.external_connections table",
 		toCV(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable),
 		upgrade.NoPrecondition,
