@@ -76,9 +76,7 @@ func (s *fixedNumTuplesNoInputOp) Next() coldata.Batch {
 	if s.numTuplesLeft == 0 {
 		return coldata.ZeroBatch
 	}
-	// The internal batch has no columns, so no memory is ever released on the
-	// ResetInternalBatch() call.
-	_ = s.batch.ResetInternalBatch()
+	s.batch.ResetInternalBatch()
 	length := s.numTuplesLeft
 	if length > coldata.BatchSize() {
 		length = coldata.BatchSize()
