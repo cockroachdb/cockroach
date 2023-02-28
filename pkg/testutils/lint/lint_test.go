@@ -1580,6 +1580,7 @@ func TestLint(t *testing.T) {
 			// Test that the settings package does not import CRDB dependencies.
 			if importingPkg == settingsPkgPrefix && strings.HasPrefix(importedPkg, cockroachDB) {
 				switch {
+				case strings.HasSuffix(s, "envutil"):
 				case strings.HasSuffix(s, "humanizeutil"):
 				case strings.HasSuffix(s, "protoutil"):
 				case strings.HasSuffix(s, "testutils"):
