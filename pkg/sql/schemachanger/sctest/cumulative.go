@@ -995,11 +995,21 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 		}
 
 		stageChan := make(chan stage)
+		var closedStageChan bool // mark when stageChan is closed in the callback
 		ctx, cancel := context.WithCancel(context.Background())
 		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+
+				// If the plan has no post-commit stages, we'll close the
+				// stageChan eagerly.
 				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
-					if stageChan != nil {
+
+					// The other test goroutine will set stageChan to nil later on.
+					// We only want to close it once, and then we don't want to look
+					// at it again. Avoid the racy access to stageChan by consulting
+					// the bool.
+					if !closedStageChan {
+						closedStageChan = true
 						close(stageChan)
 					}
 					return nil
