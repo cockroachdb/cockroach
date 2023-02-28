@@ -126,9 +126,9 @@ func createAuthSessionToken(
 	// Create the session on the server to the server.
 	var id int64
 	err = sqlConn.ExecTxn(ctx, func(ctx context.Context, conn clisqlclient.TxBoundConn) error {
-		rows, err := conn.Query(ctx, fmt.Sprintf(
-			"SELECT crdb_internal.is_at_least_version('%s')",
-			clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn)))
+		rows, err := conn.Query(ctx,
+			"SELECT crdb_internal.is_at_least_version($1)",
+			clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn))
 		if err != nil {
 			return err
 		}
