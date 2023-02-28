@@ -408,7 +408,7 @@ func handleAddColumnFreshlyAddedPrimaryIndex(
 		Filter(isColumnFilter).
 		Filter(absentTargetFilter).
 		IsEmpty(); haveDroppingColumn {
-		panic(scerrors.NotImplementedErrorf(n, "DROP COLUMN after ADD COLUMN"))
+		panic(scerrors.NotImplementedErrorf(n, "ADD COLUMN after DROP COLUMN"))
 	}
 
 	var tempIndex *scpb.TemporaryIndex

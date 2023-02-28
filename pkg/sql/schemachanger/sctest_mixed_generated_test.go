@@ -85,6 +85,11 @@ func TestValidateMixedVersionElements_alter_table_alter_primary_key_drop_rowid(t
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_drop_rowid", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_alter_table_alter_primary_key_using_hash(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_using_hash", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_alter_table_alter_primary_key_vanilla(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
