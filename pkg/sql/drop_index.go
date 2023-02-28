@@ -555,5 +555,5 @@ func (p *planner) removeDependents(
 			}
 		}
 	}
-	return nil, nil
+	return droppedViews, nil
 }
