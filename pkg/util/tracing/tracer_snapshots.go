@@ -12,11 +12,15 @@ package tracing
 
 import (
 	"bufio"
+	"context"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -55,13 +59,28 @@ type snapshotWithID struct {
 //
 // Snapshots also include a dump of all the goroutine stack traces.
 func (t *Tracer) SaveSnapshot() SnapshotInfo {
+	return t.saveSnapshot(false)
+}
+
+// SaveAutomaticSnapshot is like SaveSnapshot but saves the snapshot created in
+// the "automatic" snapshots buffer instead of the manual snapshot buffer.
+func (t *Tracer) SaveAutomaticSnapshot() SnapshotInfo {
+	return t.saveSnapshot(true)
+}
+
+func (t *Tracer) saveSnapshot(automatic bool) SnapshotInfo {
 	snap := t.generateSnapshot()
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
 
 	snapshots := &t.snapshotsMu.snapshots
+	limit := maxSnapshots
+	if automatic {
+		snapshots = &t.snapshotsMu.autoSnapshots
+		limit = maxAutomaticSnapshots
+	}
 
-	if snapshots.Len() == maxSnapshots {
+	if snapshots.Len() >= limit {
 		snapshots.RemoveFirst()
 	}
 	var id SnapshotID
@@ -74,6 +93,9 @@ func (t *Tracer) SaveSnapshot() SnapshotInfo {
 		ID:            id,
 		SpansSnapshot: snap,
 	})
+	if automatic {
+		id = id * -1
+	}
 	return SnapshotInfo{
 		ID:         id,
 		CapturedAt: snap.CapturedAt,
@@ -97,6 +119,10 @@ func (t *Tracer) GetSnapshot(id SnapshotID) (SpansSnapshot, error) {
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
 	snapshots := &t.snapshotsMu.snapshots
+	if id < 0 {
+		snapshots = &t.snapshotsMu.autoSnapshots
+		id = id * -1
+	}
 
 	if snapshots.Len() == 0 {
 		return SpansSnapshot{}, errSnapshotDoesntExist
@@ -125,8 +151,9 @@ func (t *Tracer) GetSnapshots() []SnapshotInfo {
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
 	snapshots := &t.snapshotsMu.snapshots
+	autoSnapshots := &t.snapshotsMu.autoSnapshots
 
-	res := make([]SnapshotInfo, snapshots.Len())
+	res := make([]SnapshotInfo, snapshots.Len()+autoSnapshots.Len())
 	for i := 0; i < snapshots.Len(); i++ {
 		s := snapshots.Get(i)
 		res[i] = SnapshotInfo{
@@ -134,6 +161,14 @@ func (t *Tracer) GetSnapshots() []SnapshotInfo {
 			CapturedAt: s.CapturedAt,
 		}
 	}
+	for i := 0; i < autoSnapshots.Len(); i++ {
+		s := autoSnapshots.Get(i)
+		res[i] = SnapshotInfo{
+			ID:         s.ID * -1,
+			CapturedAt: s.CapturedAt,
+		}
+	}
+
 	return res
 }
 
@@ -195,5 +230,53 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 		Traces:     traces,
 		Stacks:     stackMap,
 		Err:        parseErr,
+	}
+}
+
+// PeriodicSnapshotsLoop runs until done closes, calling SaveAutomaticSnapshot
+// if enabled at the interval set by the trace.snapshot.rate setting.
+func (t *Tracer) PeriodicSnapshotsLoop(sv *settings.Values, done <-chan struct{}) {
+	if t.autoSnapRateChange == nil {
+		t.autoSnapRateChange = make(chan struct{}, 1)
+	} else if !buildutil.CrdbTestBuild {
+		panic("this tracer already started periodic snapshots")
+	}
+
+	periodicSnapshotInterval.SetOnChange(sv, func(_ context.Context) {
+		select {
+		case t.autoSnapRateChange <- struct{}{}:
+		default:
+		}
+	})
+
+	loop := func(rate time.Duration) (exiting bool) {
+		ticker := time.NewTicker(rate)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return true
+			case <-ticker.C:
+				t.SaveAutomaticSnapshot()
+			case <-t.autoSnapRateChange:
+				if periodicSnapshotInterval.Get(sv) != rate {
+					return false
+				}
+			}
+		}
+	}
+
+	for {
+		if rate := periodicSnapshotInterval.Get(sv); rate != 0 {
+			if loop(rate) {
+				return // loop hit done
+			}
+		} else {
+			select {
+			case <-done:
+				return
+			case <-t.autoSnapRateChange:
+			}
+		}
 	}
 }
