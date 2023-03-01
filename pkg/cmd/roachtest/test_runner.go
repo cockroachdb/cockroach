@@ -684,7 +684,12 @@ func (r *testRunner) runWorker(
 			}
 		} else {
 			c.setTest(t)
-			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+			if c.spec.NodeCount > 0 { // skip during tests
+				err = c.PutDefaultCockroach(ctx, l, t.Cockroach())
+			}
+			if err == nil {
+				err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+			}
 
 			if err == nil {
 				// Tell the cluster that, from now on, it will be run "on behalf of this
@@ -1127,9 +1132,7 @@ func (r *testRunner) collectClusterArtifacts(
 	// We only save artifacts for failed tests in CI, so this
 	// duplication is acceptable.
 	// NB: fetch the logs *first* in case one of the other steps
-	// below has problems. For example, `debug zip` is known to
-	// hang sometimes at the time of writing, see:
-	// https://github.com/cockroachdb/cockroach/issues/39620
+	// below has problems.
 	l.PrintfCtx(ctx, "collecting cluster logs")
 	// Do this before collecting logs to make sure the file gets
 	// downloaded below.
