@@ -75,6 +75,9 @@ export const SnapshotComponent: React.FC<{
         name: "Snapshot " + id + ": " + time,
         value: id,
       };
+      if (id < 0) {
+        out.name = "Auto-Snapshot " + id * -1 + ": " + time;
+      }
       if (id === snapshotID) {
         selectedName = out.name;
       }

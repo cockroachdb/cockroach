@@ -12,11 +12,13 @@ package tracing
 
 import (
 	"bufio"
+	"context"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -43,6 +45,7 @@ type SpansSnapshot struct {
 // SnapshotID identifies a spans snapshot. The ID can be used to retrieve a
 // specific snapshot from the Tracer.
 type SnapshotID int
+
 type snapshotWithID struct {
 	ID SnapshotID
 	SpansSnapshot
@@ -55,13 +58,28 @@ type snapshotWithID struct {
 //
 // Snapshots also include a dump of all the goroutine stack traces.
 func (t *Tracer) SaveSnapshot() SnapshotInfo {
+	return t.saveSnapshot(false)
+}
+
+// SaveAutomaticSnapshot is like SaveSnapshot but saves the snapshot created in
+// the "automatic" snapshots buffer instead of the manual snapshot buffer.
+func (t *Tracer) SaveAutomaticSnapshot() SnapshotInfo {
+	return t.saveSnapshot(true)
+}
+
+func (t *Tracer) saveSnapshot(automatic bool) SnapshotInfo {
 	snap := t.generateSnapshot()
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
 
 	snapshots := &t.snapshotsMu.snapshots
+	limit := maxSnapshots
+	if automatic {
+		snapshots = &t.snapshotsMu.autoSnapshots
+		limit = maxAutomaticSnapshots
+	}
 
-	if snapshots.Len() == maxSnapshots {
+	if snapshots.Len() >= limit {
 		snapshots.RemoveFirst()
 	}
 	var id SnapshotID
@@ -94,9 +112,22 @@ var errSnapshotDoesntExist = errors.New("the requested snapshot doesn't exist")
 // Note that SpansSpanshot has an Err field through which errors are returned.
 // In these error cases, the snapshot will be incomplete.
 func (t *Tracer) GetSnapshot(id SnapshotID) (SpansSnapshot, error) {
+	return t.getSnapshot(id, false)
+}
+
+// GetAutomaticSnapshot is a variant of GetSnapshot but for retrieving automatic
+// snapshots.
+func (t *Tracer) GetAutomaticSnapshot(id SnapshotID) (SpansSnapshot, error) {
+	return t.getSnapshot(id, true)
+}
+
+func (t *Tracer) getSnapshot(id SnapshotID, auto bool) (SpansSnapshot, error) {
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
 	snapshots := &t.snapshotsMu.snapshots
+	if auto {
+		snapshots = &t.snapshotsMu.autoSnapshots
+	}
 
 	if snapshots.Len() == 0 {
 		return SpansSnapshot{}, errSnapshotDoesntExist
@@ -129,6 +160,23 @@ func (t *Tracer) GetSnapshots() []SnapshotInfo {
 	res := make([]SnapshotInfo, snapshots.Len())
 	for i := 0; i < snapshots.Len(); i++ {
 		s := snapshots.Get(i)
+		res[i] = SnapshotInfo{
+			ID:         s.ID,
+			CapturedAt: s.CapturedAt,
+		}
+	}
+	return res
+}
+
+// GetAutomaticSnapshots returns info on all stored automatic span snapshots.
+func (t *Tracer) GetAutomaticSnapshots() []SnapshotInfo {
+	t.snapshotsMu.Lock()
+	defer t.snapshotsMu.Unlock()
+	autoSnapshots := &t.snapshotsMu.autoSnapshots
+
+	res := make([]SnapshotInfo, autoSnapshots.Len())
+	for i := 0; i < autoSnapshots.Len(); i++ {
+		s := autoSnapshots.Get(i)
 		res[i] = SnapshotInfo{
 			ID:         s.ID,
 			CapturedAt: s.CapturedAt,
@@ -196,5 +244,53 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 		Traces:     traces,
 		Stacks:     stackMap,
 		Err:        parseErr,
+	}
+}
+
+// PeriodicSnapshotsLoop runs until done closes, calling SaveAutomaticSnapshot
+// if enabled at the interval set by the trace.snapshot.rate setting.
+func (t *Tracer) PeriodicSnapshotsLoop(sv *settings.Values, done <-chan struct{}) {
+	ch := make(chan struct{}, 1)
+	periodicSnapshotInterval.SetOnChange(sv, func(_ context.Context) {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	})
+	t.runPeriodicSnapshotsLoop(sv, ch, done)
+}
+
+func (t *Tracer) runPeriodicSnapshotsLoop(
+	sv *settings.Values, settingChange, done <-chan struct{},
+) {
+	loop := func(rate time.Duration) (exiting bool) {
+		ticker := time.NewTicker(rate)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return true
+			case <-ticker.C:
+				t.SaveAutomaticSnapshot()
+			case <-settingChange:
+				if periodicSnapshotInterval.Get(sv) != rate {
+					return false
+				}
+			}
+		}
+	}
+
+	for {
+		if rate := periodicSnapshotInterval.Get(sv); rate != 0 {
+			if loop(rate) {
+				return // loop hit done
+			}
+		} else {
+			select {
+			case <-done:
+				return
+			case <-settingChange:
+			}
+		}
 	}
 }
