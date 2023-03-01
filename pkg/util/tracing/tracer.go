@@ -80,7 +80,8 @@ const (
 	maxLogsPerSpanExternal = 1000
 	// maxSnapshots limits the number of snapshots that a Tracer will hold in
 	// memory. Beyond this limit, each new snapshot evicts the oldest one.
-	maxSnapshots = 10
+	maxSnapshots          = 10
+	maxAutomaticSnapshots = 20 // TODO(dt): make this a setting
 )
 
 // These constants are used to form keys to represent tracing context
@@ -180,6 +181,14 @@ var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
 	"trace.span_registry.enabled",
 	"if set, ongoing traces can be seen at https://<ui>/#/debug/tracez",
 	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
+).WithPublic()
+
+var periodicSnapshotInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"trace.snapshot.rate",
+	"if non-zero, interval at which background trace snapshots are captured",
+	0,
+	settings.NonNegativeDuration,
 ).WithPublic()
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
@@ -313,7 +322,8 @@ type Tracer struct {
 		// snapshots stores the activeSpansRegistry snapshots taken during the
 		// Tracer's lifetime. The ring buffer will contain snapshots with contiguous
 		// IDs, from the oldest one to <oldest id> + maxSnapshots - 1.
-		snapshots ring.Buffer[snapshotWithID]
+		snapshots     ring.Buffer[snapshotWithID]
+		autoSnapshots ring.Buffer[snapshotWithID]
 	}
 
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
