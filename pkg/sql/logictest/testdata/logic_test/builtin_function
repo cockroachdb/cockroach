@@ -3732,9 +3732,9 @@ SELECT crdb_internal.hide_sql_constants('select _, _, _')
 SELECT _, _, _
 
 query T
-SELECT crdb_internal.hide_sql_constants(ARRAY('select 1', NULL, 'select ''hello''', ''))
+SELECT crdb_internal.hide_sql_constants(ARRAY('select 1', NULL, 'select ''hello''', '', 'not a sql stmt'))
 ----
-{"SELECT _",NULL,"SELECT '_'",""}
+{"SELECT _",NULL,"SELECT '_'","",""}
 
 query T
 SELECT crdb_internal.hide_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')

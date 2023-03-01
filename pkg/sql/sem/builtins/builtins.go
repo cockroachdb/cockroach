@@ -7746,11 +7746,10 @@ expires until the statement bundle is collected`,
 
 					if len(sql) != 0 {
 						parsed, err := parser.ParseOne(sql)
-						if err != nil {
-							return tree.NewDString(sqlNoConstants), nil //nolint:returnerrcheck
+						// Leave result as empty string on parsing error.
+						if err == nil {
+							sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 						}
-
-						sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 					}
 
 					if err := result.Append(tree.NewDString(sqlNoConstants)); err != nil {
