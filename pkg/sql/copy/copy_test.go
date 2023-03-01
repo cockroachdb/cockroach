@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -22,6 +21,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,14 +29,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -286,6 +290,182 @@ func TestCopyFromTransaction(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+// slowCopySource is a pgx.CopyFromSource that copies a fixed number of rows
+// and sleeps for 500 ms in between each one.
+type slowCopySource struct {
+	count int
+	total int
+}
+
+func (s *slowCopySource) Next() bool {
+	s.count++
+	return s.count < s.total
+}
+
+func (s *slowCopySource) Values() ([]interface{}, error) {
+	time.Sleep(500 * time.Millisecond)
+	return []interface{}{s.count}, nil
+}
+
+func (s *slowCopySource) Err() error {
+	return nil
+}
+
+var _ pgx.CopyFromSource = &slowCopySource{}
+
+// TestCopyFromTimeout checks that COPY FROM respects the statement_timeout
+// and transaction_timeout settings.
+func TestCopyFromTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		s.ServingSQLAddr(),
+		"TestCopyFromTimeout",
+		url.User(username.RootUser),
+	)
+	defer cleanup()
+
+	t.Run("copy from", func(t *testing.T) {
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "CREATE TABLE t (a INT PRIMARY KEY)")
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SET transaction_timeout = '100ms'")
+		require.NoError(t, err)
+
+		tx, err := conn.Begin(ctx)
+		require.NoError(t, err)
+
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 2})
+		require.ErrorContains(t, err, "query execution canceled due to transaction timeout")
+
+		err = tx.Rollback(ctx)
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SET statement_timeout = '200ms'")
+		require.NoError(t, err)
+
+		_, err = conn.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 2})
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+	})
+
+	t.Run("copy to", func(t *testing.T) {
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SET transaction_timeout = '100ms'")
+		require.NoError(t, err)
+
+		tx, err := conn.Begin(ctx)
+		require.NoError(t, err)
+
+		_, err = tx.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+		require.ErrorContains(t, err, "query execution canceled due to transaction timeout")
+
+		err = tx.Rollback(ctx)
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SET statement_timeout = '200ms'")
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+	})
+}
+
+func TestShowQueriesIncludesCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		s.ServingSQLAddr(),
+		"TestShowQueriesIncludesCopy",
+		url.User(username.RootUser),
+	)
+	defer cleanup()
+
+	showConn, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(t, err)
+	q := pgURL.Query()
+	q.Add("application_name", "app_name")
+	pgURL.RawQuery = q.Encode()
+	copyConn, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(t, err)
+	_, err = copyConn.Exec(ctx, "CREATE TABLE t (a INT PRIMARY KEY)")
+	require.NoError(t, err)
+
+	t.Run("copy to", func(t *testing.T) {
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			_, err = copyConn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+			return err
+		})
+
+		// The COPY query should use the specified app name. SucceedsSoon is used
+		// since COPY is being executed concurrently.
+		var appName string
+		testutils.SucceedsSoon(t, func() error {
+			err = showConn.QueryRow(ctx, "SELECT application_name FROM [SHOW QUERIES] WHERE query LIKE 'COPY (SELECT pg_sleep(1) %'").Scan(&appName)
+			if err != nil {
+				return err
+			}
+			if appName != "app_name" {
+				return errors.New("expected COPY to appear in SHOW QUERIES")
+			}
+			return nil
+		})
+
+		err = copyConn.PgConn().CancelRequest(ctx)
+		require.NoError(t, err)
+
+		// An error is expected, since the query was canceled.
+		err = g.Wait()
+		require.ErrorContains(t, err, "query execution canceled")
+	})
+
+	t.Run("copy from", func(t *testing.T) {
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := copyConn.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"a"}, &slowCopySource{total: 5})
+			return err
+		})
+
+		// The COPY query should use the specified app name. SucceedsSoon is used
+		// since COPY is being executed concurrently.
+		var appName string
+		testutils.SucceedsSoon(t, func() error {
+			err = showConn.QueryRow(ctx, "SELECT application_name FROM [SHOW QUERIES] WHERE query ILIKE 'COPY%t%a%FROM%'").Scan(&appName)
+			if err != nil {
+				return err
+			}
+			if appName != "app_name" {
+				return errors.New("expected COPY to appear in SHOW QUERIES")
+			}
+			return nil
+		})
+
+		err = copyConn.PgConn().CancelRequest(ctx)
+		require.NoError(t, err)
+
+		// An error is expected, since the query was canceled.
+		err = g.Wait()
+		require.ErrorContains(t, err, "query execution canceled")
+	})
 }
 
 // BenchmarkCopyFrom measures copy performance against a TestServer.
