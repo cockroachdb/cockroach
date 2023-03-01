@@ -360,9 +360,7 @@ const (
 
 	// V23_1EnsurePebbleFormatSSTableValueBlocks upgrades the Pebble format major
 	// version to FormatSSTableValueBlocks, which supports writing sstables in a
-	// new format containing value blocks (sstable.TableFormatPebblev3). As part
-	// of this upgrade, a preceding Pebble format major version
-	// (FormatPrePebblev1MarkedCompacted) upgrade also occurs.
+	// new format containing value blocks (sstable.TableFormatPebblev3).
 	//
 	// Only a Pebble version that has upgraded to FormatSSTableValueBlocks can
 	// read sstables with format sstable.TableFormatPebblev3 -- i.e., it is
