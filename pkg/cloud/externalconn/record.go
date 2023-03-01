@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // externalConnectionRecord is a reflective representation of a row in a
@@ -39,6 +40,7 @@ type externalConnectionRecord struct {
 	ConnectionType    string                         `col:"connection_type"`
 	ConnectionDetails connectionpb.ConnectionDetails `col:"connection_details"`
 	Owner             username.SQLUsername           `col:"owner"`
+	OwnerID           oid.Oid                        `col:"owner_id"`
 }
 
 // MutableExternalConnection is a mutable representation of an External
@@ -112,6 +114,11 @@ func LoadExternalConnection(
 	return ec, nil
 }
 
+// ConnectionName returns the connection_name.
+func (e *MutableExternalConnection) ConnectionName() string {
+	return e.rec.ConnectionName
+}
+
 // SetConnectionName updates the connection name.
 func (e *MutableExternalConnection) SetConnectionName(name string) {
 	e.rec.ConnectionName = name
@@ -151,9 +158,15 @@ func (e *MutableExternalConnection) SetOwner(owner username.SQLUsername) {
 	e.markDirty("owner")
 }
 
-// ConnectionName returns the connection_name.
-func (e *MutableExternalConnection) ConnectionName() string {
-	return e.rec.ConnectionName
+// OwnerID returns the user ID of the owner of the External Connection object.
+func (e *MutableExternalConnection) OwnerID() oid.Oid {
+	return e.rec.OwnerID
+}
+
+// SetOwnerID updates the External Connection object's owner user ID.
+func (e *MutableExternalConnection) SetOwnerID(id oid.Oid) {
+	e.rec.OwnerID = id
+	e.markDirty("owner_id")
 }
 
 // UnredactedConnectionStatement implements the External Connection interface.
@@ -181,6 +194,8 @@ func datumToNative(datum tree.Datum) (interface{}, error) {
 		return []byte(*d), nil
 	case *tree.DTimestamp:
 		return d.Time, nil
+	case *tree.DOid:
+		return d.Oid, nil
 	}
 	return nil, errors.Newf("cannot handle type %T", datum)
 }
@@ -279,9 +294,9 @@ func generatePlaceholders(n int) string {
 // table. If an error is returned, it is callers responsibility to handle it
 // (e.g. rollback transaction).
 func (e *MutableExternalConnection) Create(
-	ctx context.Context, txn isql.Txn, user username.SQLUsername,
+	ctx context.Context, txn isql.Txn, excludedCols map[string]bool,
 ) error {
-	cols, qargs, err := e.marshalChanges()
+	cols, qargs, err := e.marshalChanges(excludedCols)
 	if err != nil {
 		return err
 	}
@@ -320,11 +335,17 @@ func (e *MutableExternalConnection) Create(
 
 // marshalChanges marshals all changes in the in-memory representation and returns
 // the names of the columns and marshaled values.
-func (e *MutableExternalConnection) marshalChanges() ([]string, []interface{}, error) {
+func (e *MutableExternalConnection) marshalChanges(
+	excludedCols map[string]bool,
+) ([]string, []interface{}, error) {
 	var cols []string
 	var qargs []interface{}
 
 	for col := range e.dirty {
+		if excludedCols[col] {
+			continue
+		}
+
 		var arg tree.Datum
 		var err error
 
@@ -337,6 +358,8 @@ func (e *MutableExternalConnection) marshalChanges() ([]string, []interface{}, e
 			arg, err = marshalProto(&e.rec.ConnectionDetails)
 		case `owner`:
 			arg = tree.NewDString(e.rec.Owner.Normalized())
+		case `owner_id`:
+			arg = tree.NewDOid(e.rec.OwnerID)
 		default:
 			return nil, nil, errors.Newf("cannot marshal column %q", col)
 		}

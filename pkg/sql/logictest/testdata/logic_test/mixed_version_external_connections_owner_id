@@ -1,0 +1,51 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+# Create external connections in a mixed version cluster.
+
+statement ok
+CREATE user t
+
+statement ok
+GRANT SYSTEM EXTERNALCONNECTION TO t
+
+upgrade 1
+
+user t nodeidx=1
+
+statement ok
+CREATE EXTERNAL CONNECTION connection1 AS 'userfile:///connection1'
+
+user t nodeidx=2
+
+statement ok
+CREATE EXTERNAL CONNECTION connection2 AS 'userfile:///connection2'
+
+user root nodeidx=0
+
+query TT
+SELECT connection_name, owner FROM system.external_connections
+----
+connection1  t
+connection2  t
+
+# Wait for migrations to run and verify that owner_id column is now present.
+
+upgrade 0
+
+upgrade 2
+
+query B retry
+SELECT crdb_internal.is_at_least_version('1000022.2-76')
+----
+true
+
+query O
+SELECT user_id FROM system.users WHERE username = 't'
+----
+101
+
+query TTO
+SELECT connection_name, owner, owner_id FROM system.external_connections
+----
+connection1  t  101
+connection2  t  101
