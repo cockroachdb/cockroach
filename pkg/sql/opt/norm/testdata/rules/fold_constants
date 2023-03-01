@@ -843,6 +843,24 @@ values
  ├── fd: ()-->(1)
  └── ('2017-05-10 00:00:00+00',)
 
+# Regression test for #96447. FoldCast should not panic when attempting to fold
+# a typed NULL when FoldNullCast is disabled.
+norm disable=FoldNullCast
+SELECT NULL::INT::OID,
+  NULL::INT::REGTYPE,
+  NULL::INT::REGPROC,
+  NULL::INT::REGPROCEDURE,
+  NULL::INT::REGNAMESPACE,
+  NULL::STRING::REGCLASS
+----
+values
+ ├── columns: oid:1 regtype:2 regproc:3 regprocedure:4 regnamespace:5 regclass:6
+ ├── cardinality: [1 - 1]
+ ├── stable
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ └── (CAST(NULL AS INT8)::OID, CAST(NULL AS INT8)::REGTYPE, CAST(NULL AS INT8)::REGPROC, CAST(NULL AS INT8)::REGPROCEDURE, CAST(NULL AS INT8)::REGNAMESPACE, CAST(NULL AS STRING)::REGCLASS)
+
 # --------------------------------------------------
 # FoldAssignmentCast
 # --------------------------------------------------

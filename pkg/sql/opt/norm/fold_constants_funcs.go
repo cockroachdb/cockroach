@@ -348,14 +348,21 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			if err != nil {
 				return nil, false, err
 			}
-			dOid = tree.MustBeDOid(cDatum)
+			oid, ok := tree.AsDOid(cDatum)
+			if !ok {
+				return nil, false, nil
+			}
+			dOid = oid
 		default:
 			return nil, false, nil
 		}
 	case oid.T_regclass:
 		switch inputFamily {
 		case types.StringFamily:
-			s := tree.MustBeDString(datum)
+			s, ok := tree.AsDString(datum)
+			if !ok {
+				return nil, false, nil
+			}
 			tn, err := parser.ParseQualifiedTableName(string(s))
 			if err != nil {
 				return nil, true, err
