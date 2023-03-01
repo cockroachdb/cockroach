@@ -104,6 +104,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.FinalCovarSamp:          1,
 	execinfrapb.FinalCorr:               1,
 	execinfrapb.FinalSqrdiff:            3,
+	execinfrapb.ArrayUnnestAgg:          1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -262,7 +263,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 									execinfrapb.StExtent,
 									execinfrapb.StUnion,
 									execinfrapb.StCollect,
-									execinfrapb.ArrayAgg:
+									execinfrapb.ArrayAgg,
+									execinfrapb.ArrayUnnestAgg:
 									for _, typ := range aggFnInputTypes {
 										if typ.Family() == types.TupleFamily || (typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.TupleFamily) {
 											invalid = true

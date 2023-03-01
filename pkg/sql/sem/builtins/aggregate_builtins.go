@@ -112,6 +112,28 @@ var aggregates = map[string]builtinDefinition{
 		}),
 	),
 
+	"array_unnest_agg": setProps(tree.FunctionProperties{},
+		arrayBuiltin(func(t *types.T) tree.Overload {
+			tArray := types.MakeArray(t)
+			return makeAggOverloadWithReturnType(
+				[]*types.T{tArray},
+				func(args []tree.TypedExpr) *types.T {
+					if len(args) == 0 {
+						return tArray
+					}
+					// Whenever possible, use the expression's type, so we can
+					// properly handle aliased types that don't explicitly have
+					// overloads.
+					return args[0].ResolvedType()
+				},
+				newArrayUnnestAggregate,
+				"Unnests the selected arrays into elements that are then aggregated into a single array.",
+				volatility.Immutable,
+				true, /* calledOnNullInput */
+			)
+		}),
+	),
+
 	"avg": makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
@@ -1219,6 +1241,7 @@ var _ eval.AggregateFunc = &regressionAvgXAggregate{}
 var _ eval.AggregateFunc = &regressionAvgYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
+const sizeOfArrayUnnestAggregate = int64(unsafe.Sizeof(arrayUnnestAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
 const sizeOfRegressionAccumulatorDecimalBase = int64(unsafe.Sizeof(regressionAccumulatorDecimalBase{}))
 const sizeOfFinalRegressionAccumulatorDecimalBase = int64(unsafe.Sizeof(finalRegressionAccumulatorDecimalBase{}))
@@ -1464,6 +1487,70 @@ func (a *arrayAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *arrayAggregate) Size() int64 {
 	return sizeOfArrayAggregate
+}
+
+type arrayUnnestAggregate struct {
+	arr *tree.DArray
+	// Note that we do not embed singleDatumAggregateBase struct to help with
+	// memory accounting because arrayUnnestAggregate stores multiple datums
+	// inside of arr.
+	acc mon.BoundAccount
+}
+
+func newArrayUnnestAggregate(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &arrayUnnestAggregate{
+		arr: tree.NewDArray(params[0].ArrayContents()),
+		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+	}
+}
+
+// Add unnests the passed datum into elements which are then accumulated into
+// the array.
+func (a *arrayUnnestAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum == tree.DNull {
+		return a.arr.Append(datum)
+	}
+	array, ok := datum.(*tree.DArray)
+	if !ok {
+		return errors.AssertionFailedf("got %T when *tree.DArray is expected", datum)
+	}
+	for _, d := range array.Array {
+		if err := a.acc.Grow(ctx, int64(d.Size())); err != nil {
+			return err
+		}
+		if err := a.arr.Append(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Result returns a copy of the array of all datums passed to Add.
+func (a *arrayUnnestAggregate) Result() (tree.Datum, error) {
+	if len(a.arr.Array) > 0 {
+		arrCopy := *a.arr
+		return &arrCopy, nil
+	}
+	return tree.DNull, nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *arrayUnnestAggregate) Reset(ctx context.Context) {
+	a.arr = tree.NewDArray(a.arr.ParamTyp)
+	a.acc.Empty(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *arrayUnnestAggregate) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *arrayUnnestAggregate) Size() int64 {
+	return sizeOfArrayUnnestAggregate
 }
 
 type avgAggregate struct {

@@ -857,6 +857,7 @@ message AggregatorSpec {
     FINAL_COVAR_SAMP = 58;
     FINAL_CORR = 59;
     FINAL_SQRDIFF = 60;
+    ARRAY_UNNEST_AGG = 61;
   }
 
   enum Type {

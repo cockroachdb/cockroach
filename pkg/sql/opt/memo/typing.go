@@ -196,6 +196,7 @@ func init() {
 	// a large number of possible overloads or where ReturnType depends on
 	// argument types.
 	typingFuncMap[opt.ArrayAggOp] = typeArrayAgg
+	typingFuncMap[opt.ArrayUnnestAggOp] = typeAsFirstArg
 	typingFuncMap[opt.MaxOp] = typeAsFirstArg
 	typingFuncMap[opt.MinOp] = typeAsFirstArg
 	typingFuncMap[opt.ConstAggOp] = typeAsFirstArg
