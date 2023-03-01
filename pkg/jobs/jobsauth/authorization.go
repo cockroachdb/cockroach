@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 // An AccessLevel is used to indicate how strict an authorization check should
@@ -56,6 +57,9 @@ func RegisterAuthorizer(typ jobspb.Type, fn Authorizer) {
 type AuthorizationAccessor interface {
 	// CheckPrivilegeForTableID mirrors sql.AuthorizationAccessor.
 	CheckPrivilegeForTableID(ctx context.Context, tableID descpb.ID, privilege privilege.Kind) error
+
+	// HasPrivilege mirrors sql.AuthorizationAccessor.
+	HasPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername) (bool, error)
 
 	// HasRoleOption mirrors sql.AuthorizationAccessor.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
@@ -102,7 +106,7 @@ func Authorize(
 		return err
 	}
 
-	hasViewJob, err := a.HasRoleOption(ctx, roleoption.VIEWJOB)
+	hasViewJob, err := a.HasPrivilege(ctx, &syntheticprivilege.GlobalPrivilege{}, privilege.VIEWJOB, a.User())
 	if err != nil {
 		return err
 	}
@@ -132,6 +136,6 @@ func Authorize(
 		return check(ctx, a, jobID, payload)
 	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s privilege for job $d",
-		a.User(), roleoption.CONTROLJOB, jobID)
+		"user %s does not have privileges for job $d",
+		a.User(), jobID)
 }
