@@ -2400,7 +2400,7 @@ func (c *clusterImpl) NewMonitor(ctx context.Context, opts ...option.Option) clu
 func (c *clusterImpl) StartGrafana(
 	ctx context.Context, l *logger.Logger, promCfg *prometheus.Config,
 ) error {
-	return roachprod.StartGrafana(ctx, l, c.name, "", promCfg)
+	return roachprod.StartGrafana(ctx, l, c.name, "", nil, promCfg)
 }
 
 func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {

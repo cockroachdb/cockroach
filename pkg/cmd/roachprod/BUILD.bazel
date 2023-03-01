@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build",
+        "//pkg/cmd/roachprod/grafana",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
