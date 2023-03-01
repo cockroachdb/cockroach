@@ -9,7 +9,7 @@
 
 # disabled to run within tenant as they don't have access to the
 # storage.mvcc.range_tombstones.enabled cluster setting
-new-cluster name=s1 disable-tenant
+new-cluster name=s1 beforeVersion=23_1_MVCCTombstones disable-tenant
 ----
 
 ###########
