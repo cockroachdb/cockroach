@@ -30,13 +30,13 @@ import (
 var adminPrefix = "/_admin/v1/"
 
 func getAdminJSONProto(
-	ts serverutils.TestServerInterface, path string, response protoutil.Message,
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
 ) error {
 	return getAdminJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 func getAdminJSONProtoWithAdminOption(
-	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, adminPrefix+path, response, isAdmin)
 }
@@ -194,4 +194,41 @@ func TestListTenants(t *testing.T) {
 		require.NotEmpty(t, tenant.SqlAddr)
 	}
 	require.True(t, appTenantFound, "test tenant not found")
+}
+
+func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	})
+	_, err := db.Exec("CREATE TABLE test (id int)")
+	require.NoError(t, err)
+	_, err = db.Exec("INSERT INTO test VALUES (1)")
+	require.NoError(t, err)
+
+	// DatabaseDetails
+	dbResp := &serverpb.DatabaseDetailsResponse{}
+	err = getAdminJSONProto(st, "databases/defaultdb", dbResp)
+	require.NoError(t, err)
+
+	require.Equal(t, dbResp.TableNames[0], "public.test")
+
+	// TableStats
+	tableStatsResp := &serverpb.TableStatsResponse{}
+	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test/stats", tableStatsResp)
+	require.NoError(t, err)
+
+	require.Greater(t, tableStatsResp.Stats.LiveBytes, int64(0))
+
+	// TableDetails
+	tableDetailsResp := &serverpb.TableDetailsResponse{}
+	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp)
+	require.NoError(t, err)
+
+	require.Greater(t, tableDetailsResp.DataLiveBytes, int64(0))
 }

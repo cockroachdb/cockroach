@@ -670,7 +670,7 @@ func (s *adminServer) getDatabaseTableSpans(
 		if err != nil {
 			return nil, err
 		}
-		tableSpans[tableName] = generateTableSpan(tableID)
+		tableSpans[tableName] = generateTableSpan(tableID, s.sqlServer.execCfg.Codec)
 	}
 	return tableSpans, nil
 }
@@ -1161,7 +1161,7 @@ func (s *adminServer) tableDetailsHelper(
 	// Get the number of ranges in the table. We get the key span for the table
 	// data. Then, we count the number of ranges that make up that key span.
 	{
-		tableSpan := generateTableSpan(tableID)
+		tableSpan := generateTableSpan(tableID, s.sqlServer.execCfg.Codec)
 		tableRSpan, err := keys.SpanAddr(tableSpan)
 		if err != nil {
 			return nil, err
@@ -1190,8 +1190,8 @@ func (s *adminServer) tableDetailsHelper(
 //
 // NOTE: this doesn't make sense for interleaved (children) table. As of
 // 03/2018, callers around here use it anyway.
-func generateTableSpan(tableID descpb.ID) roachpb.Span {
-	tableStartKey := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
+func generateTableSpan(tableID descpb.ID, codec keys.SQLCodec) roachpb.Span {
+	tableStartKey := codec.TablePrefix(uint32(tableID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
 }
@@ -1223,7 +1223,7 @@ func (s *adminServer) TableStats(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	tableSpan := generateTableSpan(tableID)
+	tableSpan := generateTableSpan(tableID, s.sqlServer.execCfg.Codec)
 
 	r, err := s.statsForSpan(ctx, tableSpan)
 	if err != nil {

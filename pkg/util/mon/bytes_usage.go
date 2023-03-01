@@ -16,6 +16,7 @@ import (
 	"io"
 	"math"
 	"math/bits"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -196,6 +197,31 @@ type BytesMonitor struct {
 		// maxBytesHist is the metric object used to track the high watermark of bytes
 		// allocated by the monitor during its lifetime.
 		maxBytesHist metric.IHistogram
+
+		// head is the head of the doubly-linked list of children of this
+		// monitor.
+		// NOTE: a child's mutex **cannot** be acquired while holding this
+		// monitor's lock since it could lead to deadlocks. The main allocation
+		// code path (reserveBytes() and releaseBytes()) might acquire the
+		// parent's lock, so only locking "upwards" is allowed while keeping the
+		// current monitor's lock.
+		head *BytesMonitor
+
+		// numChildren is the number of children of this BytesMonitor (i.e. the
+		// number of nodes in the linked list).
+		numChildren int
+
+		// stopped indicates whether this monitor has been stopped.
+		stopped bool
+	}
+
+	// parentMu encompasses the fields that must be accessed while holding the
+	// mutex of the parent monitor.
+	parentMu struct {
+		// prevSibling and nextSibling are references to the previous and the
+		// next siblings of this monitor (i.e. the previous and the next nodes
+		// in the doubly-linked list of children of the parent monitor).
+		prevSibling, nextSibling *BytesMonitor
 	}
 
 	// name identifies this monitor in logging messages.
@@ -235,6 +261,90 @@ type BytesMonitor struct {
 	noteworthyUsageBytes int64
 
 	settings *cluster.Settings
+}
+
+// MonitorState describes the current state of a single monitor.
+type MonitorState struct {
+	// Level tracks how many "generations" away the current monitor is from the
+	// root.
+	Level int
+	// Name is the name of the monitor.
+	Name string
+	// ID is the "id" of the monitor (its address converted to int64).
+	ID int64
+	// ParentID is the "id" of the parent monitor (parent's address converted to
+	// int64), or 0 if the monitor doesn't have a parent.
+	ParentID int64
+	// Used is amount of bytes currently used by the monitor (as reported by
+	// curBudget.used). This doesn't include the usage registered with the
+	// reserved account.
+	Used int64
+	// ReservedUsed is amount of bytes currently consumed from the reserved
+	// account, or 0 if no reserved account was provided in Start.
+	ReservedUsed int64
+	// ReservedReserved is amount of bytes reserved in the reserved account, or
+	// 0 if no reserved account was provided in Start.
+	ReservedReserved int64
+}
+
+// TraverseTree traverses the tree of monitors rooted in the BytesMonitor. The
+// passed-in callback is called for each non-stopped monitor. If the callback
+// returns an error, the traversal stops immediately.
+//
+// Note that this state can be inconsistent since a parent's state is recorded
+// before its children without synchronization with children being stopped.
+// Namely, the parent's MonitorState might include the state of the monitors
+// that don't get the callback called on their MonitorState.
+func (mm *BytesMonitor) TraverseTree(monitorStateCb func(MonitorState) error) error {
+	return mm.traverseTree(0 /* level */, monitorStateCb)
+}
+
+// traverseTree recursively traverses the tree of monitors rooted in the current
+// monitor. If the monitor is stopped, then the tree is not traversed and the
+// callback is not called.
+func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState) error) error {
+	mm.mu.Lock()
+	if mm.mu.stopped {
+		// The monitor has been stopped, so it should be ignored.
+		mm.mu.Unlock()
+		return nil
+	}
+	var reservedUsed, reservedReserved int64
+	if mm.reserved != nil {
+		reservedUsed = mm.reserved.used
+		reservedReserved = mm.reserved.reserved
+	}
+	id := uintptr(unsafe.Pointer(mm))
+	var parentID uintptr
+	if parent := mm.mu.curBudget.mon; parent != nil {
+		parentID = uintptr(unsafe.Pointer(parent))
+	}
+	monitorState := MonitorState{
+		Level:            level,
+		Name:             string(mm.name),
+		ID:               int64(id),
+		ParentID:         int64(parentID),
+		Used:             mm.mu.curBudget.used,
+		ReservedUsed:     reservedUsed,
+		ReservedReserved: reservedReserved,
+	}
+	// Note that we cannot call traverseTree on the children while holding mm's
+	// lock since it could lead to deadlocks. Instead, we store all children as
+	// of right now, and then export them after unlocking ourselves.
+	children := make([]*BytesMonitor, 0, mm.mu.numChildren)
+	for c := mm.mu.head; c != nil; c = c.parentMu.nextSibling {
+		children = append(children, c)
+	}
+	mm.mu.Unlock()
+	if err := monitorStateCb(monitorState); err != nil {
+		return err
+	}
+	for _, c := range children {
+		if err := c.traverseTree(level+1, monitorStateCb); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // maxAllocatedButUnusedBlocks determines the maximum difference between the
@@ -366,6 +476,7 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	mm.mu.curAllocated = 0
 	mm.mu.maxAllocated = 0
 	mm.mu.curBudget = pool.MakeBoundAccount()
+	mm.mu.stopped = false
 	mm.reserved = reserved
 	if log.V(2) {
 		poolname := redact.RedactableString("(none)")
@@ -376,6 +487,18 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 			mm.name,
 			humanizeutil.IBytes(mm.reserved.used),
 			poolname)
+	}
+	if pool != nil {
+		// If we have a "parent" monitor, then register mm as its child by
+		// making it the head of the doubly-linked list.
+		pool.mu.Lock()
+		if s := pool.mu.head; s != nil {
+			s.parentMu.prevSibling = mm
+			mm.parentMu.nextSibling = s
+		}
+		pool.mu.head = mm
+		pool.mu.numChildren++
+		pool.mu.Unlock()
 	}
 }
 
@@ -433,8 +556,10 @@ func (mm *BytesMonitor) Limit() int64 {
 const bytesMaxUsageLoggingThreshold = 100 * 1024
 
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
-	// NB: No need to lock mm.mu here, when StopMonitor() is called the
-	// monitor is not shared any more.
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.mu.stopped = true
+
 	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
 		log.InfofDepth(ctx, 1, "%s, bytes usage max %s",
 			mm.name,
@@ -457,6 +582,24 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 		// in sql/mem_metrics.go.
 		val := int64(1000 * math.Log(float64(mm.mu.maxAllocated)) / math.Ln10)
 		mm.mu.maxBytesHist.RecordValue(val)
+	}
+
+	if parent := mm.mu.curBudget.mon; parent != nil {
+		// If we have a "parent" monitor, then unregister mm from the list of
+		// the parent's children.
+		parent.mu.Lock()
+		prev, next := mm.parentMu.prevSibling, mm.parentMu.nextSibling
+		if parent.mu.head == mm {
+			parent.mu.head = next
+		}
+		if prev != nil {
+			prev.parentMu.nextSibling = next
+		}
+		if next != nil {
+			next.parentMu.prevSibling = prev
+		}
+		parent.mu.numChildren--
+		parent.mu.Unlock()
 	}
 
 	// Disable the pool for further allocations, so that further
