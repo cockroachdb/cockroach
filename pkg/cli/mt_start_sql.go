@@ -92,7 +92,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 			stopper,
 			serverCfg.BaseConfig,
 			serverCfg.SQLConfig,
-			nil, /* parentRecorder */
 			nil, /* tenantNameContainer */
 		)
 		if err != nil {
