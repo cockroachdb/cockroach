@@ -100,22 +100,23 @@ SELECT
     variance(DISTINCT f),
     xor_agg(DISTINCT s::BYTES),
     array_agg(DISTINCT i),
+    array_cat_agg(DISTINCT arr),
     json_agg(DISTINCT j),
     regr_count(DISTINCT i, f)
 FROM a
 ----
 scalar-group-by
- ├── columns: count:9!null sum:11 sum_int:12 avg:13 stddev:14 variance:15 xor_agg:17 array_agg:18 json_agg:19 regr_count:20!null
+ ├── columns: count:9!null sum:11 sum_int:12 avg:13 stddev:14 variance:15 xor_agg:17 array_agg:18 array_cat_agg:19 json_agg:20 regr_count:21!null
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(9,11-15,17-20)
+ ├── fd: ()-->(9,11-15,17-21)
  ├── project
- │    ├── columns: column10:10 column16:16 i:2 f:3 j:5
+ │    ├── columns: column10:10 column16:16 i:2 f:3 j:5 arr:6
  │    ├── immutable
  │    ├── fd: (2)-->(10)
  │    ├── scan a
- │    │    └── columns: i:2 f:3 s:4 j:5
+ │    │    └── columns: i:2 f:3 s:4 j:5 arr:6
  │    └── projections
  │         ├── i:2 > 5 [as=column10:10, outer=(2)]
  │         └── s:4::BYTES [as=column16:16, outer=(4), immutable]
@@ -146,10 +147,13 @@ scalar-group-by
       ├── agg-distinct [as=array_agg:18, outer=(2)]
       │    └── array-agg
       │         └── i:2
-      ├── agg-distinct [as=json_agg:19, outer=(5)]
+      ├── agg-distinct [as=array_cat_agg:19, outer=(6)]
+      │    └── array-cat-agg
+      │         └── arr:6
+      ├── agg-distinct [as=json_agg:20, outer=(5)]
       │    └── json-agg
       │         └── j:5
-      └── agg-distinct [as=regr_count:20, outer=(2,3)]
+      └── agg-distinct [as=regr_count:21, outer=(2,3)]
            └── regression-count
                 ├── i:2
                 └── f:3

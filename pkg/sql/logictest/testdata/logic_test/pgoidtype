@@ -92,7 +92,7 @@ WHERE relname = 'pg_constraint'
 query OOOO
 SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'pg_catalog.upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-upper  upper  upper  833
+upper  upper  upper  855
 
 query error pq: invalid function signature: invalid.more.pg_catalog.upper: at or near ".": syntax error
 SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
@@ -100,7 +100,7 @@ SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 query OOO
 SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-upper  upper  833
+upper  upper  855
 
 query error pq: unknown function: blah\(ignored\)\(\): function undefined
 SELECT 'blah(ignored)'::REGPROC

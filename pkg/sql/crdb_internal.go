@@ -5723,7 +5723,7 @@ SELECT
   crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
   max(sampled_plan),
   aggregation_interval,
-  array_remove(array_agg(index_rec), NULL) AS index_recommendations
+  array_remove(array_cat_agg(index_recommendations), NULL) AS index_recommendations
 FROM (
   SELECT
       aggregated_ts,
@@ -5753,7 +5753,6 @@ FROM (
       FROM
           system.statement_statistics
 )
-LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
 GROUP BY
   aggregated_ts,
   fingerprint_id,
