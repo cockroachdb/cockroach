@@ -301,6 +301,7 @@ timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time
 trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
+trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
 version	version	22.2	set the active cluster version in the format '<major>.<minor>'

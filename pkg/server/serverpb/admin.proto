@@ -1124,6 +1124,8 @@ message ListTracingSnapshotsResponse {
 }
 
 message SnapshotInfo {
+  // SnapshotID identifies a specific snapshot which can be requested via a
+  // GetTracingSnapshotRequest. Negative IDs are used for "automatic" snapshots.
   int64 snapshot_id = 1 [(gogoproto.customname) = "SnapshotID"];
   google.protobuf.Timestamp captured_at = 2 [(gogoproto.stdtime) = true];
 }
@@ -1135,6 +1137,8 @@ message TakeTracingSnapshotResponse {
 }
 
 message GetTracingSnapshotRequest {
+  // SnapshotId indicates which snapshot is requested. ID may be negative when
+  // requesting an "automatic" snapshot; see ListTracingSnapshotsResponse.
   int64 snapshot_id = 1;
 }
 
