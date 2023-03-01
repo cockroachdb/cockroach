@@ -3110,6 +3110,9 @@ func getMostSignificantOverload(
 				matchIdx = k
 			}
 		}
+		if !foundMatch {
+			return QualifiedOverload{}, ambiguousError()
+		}
 		return qualifiedOverloads[oImpls[matchIdx]], nil
 	}
 
