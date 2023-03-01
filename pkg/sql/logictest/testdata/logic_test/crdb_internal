@@ -84,6 +84,7 @@ crdb_internal  regions                          table  admin  NULL  NULL
 crdb_internal  schema_changes                   table  admin  NULL  NULL
 crdb_internal  session_trace                    table  admin  NULL  NULL
 crdb_internal  session_variables                table  admin  NULL  NULL
+crdb_internal  show_tenant_capabilities_cache   table  admin  NULL  NULL
 crdb_internal  statement_statistics             view   admin  NULL  NULL
 crdb_internal  super_regions                    table  admin  NULL  NULL
 crdb_internal  system_jobs                      table  admin  NULL  NULL

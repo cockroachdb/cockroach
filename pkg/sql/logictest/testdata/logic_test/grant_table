@@ -97,6 +97,7 @@ test           crdb_internal       regions                                public
 test           crdb_internal       schema_changes                         public   SELECT          false
 test           crdb_internal       session_trace                          public   SELECT          false
 test           crdb_internal       session_variables                      public   SELECT          false
+test           crdb_internal       show_tenant_capabilities_cache         public   SELECT          false
 test           crdb_internal       statement_statistics                   public   SELECT          false
 test           crdb_internal       super_regions                          public   SELECT          false
 test           crdb_internal       system_jobs                            public   SELECT          false

@@ -622,6 +622,7 @@ regions                                NULL
 schema_changes                         NULL
 session_trace                          NULL
 session_variables                      NULL
+show_tenant_capabilities_cache         NULL
 statement_statistics                   NULL
 super_regions                          NULL
 system_jobs                            NULL

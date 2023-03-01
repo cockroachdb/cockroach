@@ -97,6 +97,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/1/crdb_internal.node_txn_execution_insights.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
+[node 1] retrieving SQL data for crdb_internal.show_tenant_capabilities_cache... writing output: debug/nodes/1/crdb_internal.show_tenant_capabilities_cache.txt... done
 [node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... converting to JSON... writing binary output: debug/nodes/1/gossip.json... done
 [node 1] requesting data for debug/nodes/1/enginestats... received response... converting to JSON... writing binary output: debug/nodes/1/enginestats.json... done
@@ -237,6 +238,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 2] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/2/crdb_internal.node_txn_stats.txt...
 [node 2] retrieving SQL data for crdb_internal.node_txn_stats: last request failed: dial tcp ...
 [node 2] retrieving SQL data for crdb_internal.node_txn_stats: creating error output: debug/nodes/2/crdb_internal.node_txn_stats.txt.err.txt... done
+[node 2] retrieving SQL data for crdb_internal.show_tenant_capabilities_cache... writing output: debug/nodes/2/crdb_internal.show_tenant_capabilities_cache.txt...
+[node 2] retrieving SQL data for crdb_internal.show_tenant_capabilities_cache: last request failed: dial tcp ...
+[node 2] retrieving SQL data for crdb_internal.show_tenant_capabilities_cache: creating error output: debug/nodes/2/crdb_internal.show_tenant_capabilities_cache.txt.err.txt... done
 [node 2] requesting data for debug/nodes/2/details... received response...
 [node 2] requesting data for debug/nodes/2/details: last request failed: rpc error: ...
 [node 2] requesting data for debug/nodes/2/details: creating error output: debug/nodes/2/details.json.err.txt... done
@@ -290,6 +294,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 3] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/3/crdb_internal.node_transactions.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/3/crdb_internal.node_txn_execution_insights.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/3/crdb_internal.node_txn_stats.txt... done
+[node 3] retrieving SQL data for crdb_internal.show_tenant_capabilities_cache... writing output: debug/nodes/3/crdb_internal.show_tenant_capabilities_cache.txt... done
 [node 3] requesting data for debug/nodes/3/details... received response... converting to JSON... writing binary output: debug/nodes/3/details.json... done
 [node 3] requesting data for debug/nodes/3/gossip... received response... converting to JSON... writing binary output: debug/nodes/3/gossip.json... done
 [node 3] requesting data for debug/nodes/3/enginestats... received response... converting to JSON... writing binary output: debug/nodes/3/enginestats.json... done

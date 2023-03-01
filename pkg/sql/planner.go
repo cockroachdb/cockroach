@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -709,6 +710,12 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 // IsActive implements the Planner interface.
 func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 	return p.execCfg.Settings.Version.IsActive(ctx, key)
+}
+
+// GetTenantCapabilitiesCache returns a copy of the eventually consistent
+// in-memory tenant capabilities cache.
+func (p *planner) GetTenantCapabilitiesCache() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+	return p.ExecCfg().TenantCapabilitiesReader.GetCapabilitiesMap()
 }
 
 // QueryRowEx executes the supplied SQL statement and returns a single row, or

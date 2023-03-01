@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -197,6 +198,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalActiveRangeFeedsTable:              crdbInternalActiveRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
+		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -7540,5 +7542,70 @@ CREATE TABLE crdb_internal.node_memory_monitors (
 			)
 		}
 		return p.extendedEvalCtx.ExecCfg.RootMemoryMonitor.TraverseTree(monitorStateCb)
+	},
+}
+
+var crdbInternalShowTenantCapabilitiesCache = virtualSchemaTable{
+	comment: `eventually consisten in-memory tenant capability cache for this node`,
+	schema: `
+CREATE TABLE crdb_internal.show_tenant_capabilities_cache (
+  tenant_id        INT,
+  capability_name  STRING,
+  capability_value STRING
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+
+		const op = "show_tenant_capabilities_cache"
+		if err := p.RequireAdminRole(ctx, op); err != nil {
+			return err
+		}
+		if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+			return err
+		}
+
+		type tenantCapabilitiesEntry struct {
+			tenantID           roachpb.TenantID
+			tenantCapabilities tenantcapabilitiespb.TenantCapabilities
+		}
+		tenantCapabilitiesMap := p.ExecCfg().TenantCapabilitiesReader.GetCapabilitiesMap()
+		tenantCapabilitiesEntries := make([]tenantCapabilitiesEntry, 0, len(tenantCapabilitiesMap))
+		for tenantID, tenantCapabilities := range tenantCapabilitiesMap {
+			tenantCapabilitiesEntries = append(
+				tenantCapabilitiesEntries,
+				tenantCapabilitiesEntry{
+					tenantID:           tenantID,
+					tenantCapabilities: tenantCapabilities,
+				},
+			)
+		}
+		// Sort by tenant ID.
+		sort.Slice(tenantCapabilitiesEntries, func(i, j int) bool {
+			return tenantCapabilitiesEntries[i].tenantID.ToUint64() < tenantCapabilitiesEntries[j].tenantID.ToUint64()
+		})
+		for _, tenantCapabilitiesEntry := range tenantCapabilitiesEntries {
+			tenantID := tree.NewDInt(tree.DInt(tenantCapabilitiesEntry.tenantID.ToUint64()))
+			if err := addRow(
+				tenantID,
+				tree.NewDString(tenantcapabilitiespb.CanAdminSplit.String()),
+				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanAdminSplit)),
+			); err != nil {
+				return err
+			}
+			if err := addRow(
+				tenantID,
+				tree.NewDString(tenantcapabilitiespb.CanViewNodeInfo.String()),
+				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanViewNodeInfo)),
+			); err != nil {
+				return err
+			}
+			if err := addRow(
+				tenantID,
+				tree.NewDString(tenantcapabilitiespb.CanViewTSDBMetrics.String()),
+				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanViewTSDBMetrics)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }

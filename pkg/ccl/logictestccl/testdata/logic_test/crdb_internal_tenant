@@ -92,6 +92,7 @@ crdb_internal  regions                          table  admin  NULL  NULL
 crdb_internal  schema_changes                   table  admin  NULL  NULL
 crdb_internal  session_trace                    table  admin  NULL  NULL
 crdb_internal  session_variables                table  admin  NULL  NULL
+crdb_internal  show_tenant_capabilities_cache   table  admin  NULL  NULL
 crdb_internal  statement_statistics             view   admin  NULL  NULL
 crdb_internal  super_regions                    table  admin  NULL  NULL
 crdb_internal  system_jobs                      table  admin  NULL  NULL
@@ -611,3 +612,17 @@ node_id  application_name     key                   statement_ids               
 0        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
 0        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
 0        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2
+
+subtest show_tenant_capabilities_cache
+
+user testuser
+
+statement error only users with the admin role are allowed to show_tenant_capabilities_cache
+SELECT * FROM crdb_internal.show_tenant_capabilities_cache
+
+user root
+
+statement error only the system tenant can show_tenant_capabilities_cache other tenants
+SELECT * FROM crdb_internal.show_tenant_capabilities_cache
+
+subtest end

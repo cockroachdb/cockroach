@@ -462,6 +462,7 @@ crdb_internal       regions
 crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
+crdb_internal       show_tenant_capabilities_cache
 crdb_internal       statement_statistics
 crdb_internal       super_regions
 crdb_internal       system_jobs
@@ -798,6 +799,7 @@ regions
 schema_changes
 session_trace
 session_variables
+show_tenant_capabilities_cache
 statement_statistics
 super_regions
 system_jobs
@@ -1174,6 +1176,7 @@ system         crdb_internal       regions                                SYSTEM
 system         crdb_internal       schema_changes                         SYSTEM VIEW  NO                  1
 system         crdb_internal       session_trace                          SYSTEM VIEW  NO                  1
 system         crdb_internal       session_variables                      SYSTEM VIEW  NO                  1
+system         crdb_internal       show_tenant_capabilities_cache         SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       super_regions                          SYSTEM VIEW  NO                  1
 system         crdb_internal       system_jobs                            SYSTEM VIEW  NO                  1
@@ -2953,6 +2956,7 @@ NULL     public   system         crdb_internal       regions                    
 NULL     public   system         crdb_internal       schema_changes                         SELECT          NO            YES
 NULL     public   system         crdb_internal       session_trace                          SELECT          NO            YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
+NULL     public   system         crdb_internal       show_tenant_capabilities_cache         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       system_jobs                            SELECT          NO            YES
@@ -3577,6 +3581,7 @@ NULL     public   system         crdb_internal       regions                    
 NULL     public   system         crdb_internal       schema_changes                         SELECT          NO            YES
 NULL     public   system         crdb_internal       session_trace                          SELECT          NO            YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
+NULL     public   system         crdb_internal       show_tenant_capabilities_cache         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       system_jobs                            SELECT          NO            YES

@@ -34,6 +34,7 @@ type Watcher interface {
 // tenant capability state may be arbitrarily stale.
 type Reader interface {
 	GetCapabilities(id roachpb.TenantID) (_ tenantcapabilitiespb.TenantCapabilities, found bool)
+	GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
 }
 
 // Authorizer performs various kinds of capability checks for requests issued
