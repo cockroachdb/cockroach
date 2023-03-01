@@ -1,0 +1,87 @@
+# LogicTest: cockroach-go-testserver-22.2-master
+
+# Verify that all nodes are running 22.2 binaries.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+# Create external connections in a mixed version cluster.
+
+statement ok
+CREATE user t
+
+statement ok
+GRANT SYSTEM EXTERNALCONNECTION TO t
+
+upgrade 1
+
+user t nodeidx=1
+
+statement ok
+CREATE EXTERNAL CONNECTION connection1 AS 'userfile:///connection1'
+
+user t nodeidx=2
+
+statement ok
+CREATE EXTERNAL CONNECTION connection2 AS 'userfile:///connection2'
+
+user root nodeidx=0
+
+query TT
+SELECT connection_name, owner FROM system.external_connections
+----
+connection1  t
+connection2  t
+
+upgrade 0
+
+upgrade 2
+
+# Verify that all nodes are now running 23.1 binaries.
+
+query B nodeidx=0
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+query B nodeidx=1
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+query B nodeidx=2
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+# Wait for migrations to run and verify that owner_id column is now present.
+
+sleep 10s
+
+query B retry
+SELECT crdb_internal.is_at_least_version('1000022.2-68')
+----
+true
+
+query O
+SELECT user_id FROM system.users WHERE username = 't'
+----
+101
+
+query TTO
+SELECT connection_name, owner, owner_id FROM system.external_connections
+----
+connection1  t  101
+connection2  t  101
