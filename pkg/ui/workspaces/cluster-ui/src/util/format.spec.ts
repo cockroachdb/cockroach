@@ -16,6 +16,7 @@ import {
   byteUnits,
   HexStringToInt64String,
   FixFingerprintHexValue,
+  EncodeUriName,
 } from "./format";
 
 describe("Format utils", () => {
@@ -72,6 +73,20 @@ describe("Format utils", () => {
         "0b9111f22f2213b7",
       );
       expect(FixFingerprintHexValue("9111f22f2213b7")).toBe("009111f22f2213b7");
+    });
+  });
+
+  describe.only("EncodeUriName", () => {
+    it("decode simple string no special characters", () => {
+      expect(EncodeUriName("123abc")).toBe("123abc");
+    });
+
+    it("decode string with special characters", () => {
+      expect(EncodeUriName("12#_ab")).toBe("12%23_ab");
+    });
+
+    it("decode string with %", () => {
+      expect(EncodeUriName("12%abc")).toBe("12%252525abc");
     });
   });
 });
