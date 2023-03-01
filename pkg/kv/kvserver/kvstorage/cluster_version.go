@@ -25,27 +25,25 @@ import (
 )
 
 // WriteClusterVersion writes the given cluster version to the min version file
-// and to the store-local cluster version key. We only accept a raw engine to
-// ensure we're persisting the write durably.
+// and to the store-local cluster version key.
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	// We no longer read this key, but v22.2 still does. We continue writing the key
-	// for interoperability.
-	// TODO(radu): Remove this when we are no longer compatible with 22.2 (keeping
-	// just the SetMinVersion call).
-	err := storage.MVCCPutProto(
-		ctx,
-		eng,
-		nil,
-		keys.DeprecatedStoreClusterVersionKey(),
-		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
-		&cv,
-	)
-	if err != nil {
-		return err
+	if cv.Less(clusterversion.ByKey(clusterversion.V23_1DeprecateClusterVersionKey)) {
+		// We no longer read this key, but older versions still do. Continue writing
+		// the key for interoperability.
+		if err := storage.MVCCPutProto(
+			ctx,
+			eng,
+			nil,
+			keys.DeprecatedStoreClusterVersionKey(),
+			hlc.Timestamp{},
+			hlc.ClockTimestamp{},
+			nil,
+			&cv,
+		); err != nil {
+			return err
+		}
 	}
 	return eng.SetMinVersion(cv.Version)
 }
