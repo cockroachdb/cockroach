@@ -450,6 +450,7 @@ crdb_internal       node_queries
 crdb_internal       node_runtime_info
 crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
+crdb_internal       node_tenant_capabilities_cache
 crdb_internal       node_transaction_statistics
 crdb_internal       node_transactions
 crdb_internal       node_txn_execution_insights
@@ -786,6 +787,7 @@ node_queries
 node_runtime_info
 node_sessions
 node_statement_statistics
+node_tenant_capabilities_cache
 node_transaction_statistics
 node_transactions
 node_txn_execution_insights
@@ -1162,6 +1164,7 @@ system         crdb_internal       node_queries                           SYSTEM
 system         crdb_internal       node_runtime_info                      SYSTEM VIEW  NO                  1
 system         crdb_internal       node_sessions                          SYSTEM VIEW  NO                  1
 system         crdb_internal       node_statement_statistics              SYSTEM VIEW  NO                  1
+system         crdb_internal       node_tenant_capabilities_cache         SYSTEM VIEW  NO                  1
 system         crdb_internal       node_transaction_statistics            SYSTEM VIEW  NO                  1
 system         crdb_internal       node_transactions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       node_txn_execution_insights            SYSTEM VIEW  NO                  1
@@ -2941,6 +2944,7 @@ NULL     public   system         crdb_internal       node_queries               
 NULL     public   system         crdb_internal       node_runtime_info                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_sessions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       node_statement_statistics              SELECT          NO            YES
+NULL     public   system         crdb_internal       node_tenant_capabilities_cache         SELECT          NO            YES
 NULL     public   system         crdb_internal       node_transaction_statistics            SELECT          NO            YES
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_txn_execution_insights            SELECT          NO            YES
@@ -3565,6 +3569,7 @@ NULL     public   system         crdb_internal       node_queries               
 NULL     public   system         crdb_internal       node_runtime_info                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_sessions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       node_statement_statistics              SELECT          NO            YES
+NULL     public   system         crdb_internal       node_tenant_capabilities_cache         SELECT          NO            YES
 NULL     public   system         crdb_internal       node_transaction_statistics            SELECT          NO            YES
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_txn_execution_insights            SELECT          NO            YES

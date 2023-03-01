@@ -320,6 +320,7 @@ go_library(
         "//pkg/multitenant",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/multitenantcpu",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/obs",
         "//pkg/obsservice/obspb",
