@@ -170,12 +170,6 @@ func usersRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) (retErr error) {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn) {
-		return defaultSystemTableRestoreFunc(
-			ctx, deps, txn, systemTableName, tempTableName,
-		)
-	}
-
 	hasIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "user_id")
 	if err != nil {
 		return err
