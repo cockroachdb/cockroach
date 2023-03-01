@@ -2,11 +2,12 @@ subtest other
 
 statement ok
 CREATE TABLE kv (
-  k INT PRIMARY KEY,
-  v INT,
-  w INT,
-  s STRING,
-  i INTERVAL
+  k   INT PRIMARY KEY,
+  v   INT,
+  w   INT,
+  s   STRING,
+  i   INTERVAL,
+  arr INT[]
 )
 
 # Aggregate functions return NULL if there are no rows.
@@ -28,6 +29,11 @@ NULL
 # Aggregate functions return NULL if there are no rows.
 query T
 SELECT array_agg(1) FROM kv
+----
+NULL
+
+query T
+SELECT array_concat_agg('{1}'::INT[]) FROM kv
 ----
 NULL
 
@@ -61,6 +67,11 @@ SELECT array_agg(v) FROM kv
 NULL
 
 query T
+SELECT array_concat_agg(arr) FROM kv
+----
+NULL
+
+query T
 SELECT json_agg(v) FROM kv
 ----
 NULL
@@ -84,6 +95,17 @@ query T
 SELECT array_agg(1)
 ----
 {1}
+
+query T
+SELECT array_concat_agg('{1}'::INT[])
+----
+{1}
+
+# Array-concatenating empty arrays results in an empty array.
+query T
+SELECT array_concat_agg(arr) FROM [SELECT ('{}'::INT[]) AS arr FROM generate_series(1, 3)];
+----
+{}
 
 query T
 SELECT json_agg(1)
@@ -164,12 +186,12 @@ SELECT (SELECT COALESCE(max(1), 0) FROM generate_series(1,0))
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 'a', '1min'),
-(3, 4, 5, 'a', '2sec'),
-(5, NULL, 5, NULL, NULL),
-(6, 2, 3, 'b', '1ms'),
-(7, 2, 2, 'b', '4 days'),
-(8, 4, 2, 'A', '3 years')
+(1, 2, 3, 'a', '1min', '{1, 2, 3}'),
+(3, 4, 5, 'a', '2sec', '{3, 4, 5}'),
+(5, NULL, 5, NULL, NULL, NULL),
+(6, 2, 3, 'b', '1ms', '{6, 2, 3}'),
+(7, 2, 2, 'b', '4 days', '{7, 2, 2}'),
+(8, 4, 2, 'A', '3 years', '{8, 4, 2}')
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
@@ -185,6 +207,11 @@ query T
 SELECT array_agg(1) FROM kv
 ----
 {1,1,1,1,1,1}
+
+query T
+SELECT array_concat_agg('{1, 2}'::INT[]) FROM kv
+----
+{1,2,1,2,1,2,1,2,1,2,1,2}
 
 query T
 SELECT json_agg(1) FROM kv
@@ -595,9 +622,24 @@ SELECT array_agg(k) || 1 FROM (SELECT k FROM kv ORDER BY k)
 {1,3,5,6,7,8,1}
 
 query T
+SELECT array_concat_agg(arr) FROM (SELECT arr FROM kv ORDER BY k)
+----
+{1,2,3,3,4,5,NULL,6,2,3,7,2,2,8,4,2}
+
+query T
 SELECT array_agg(s) FROM kv WHERE s IS NULL
 ----
 {NULL}
+
+query T
+SELECT array_concat_agg(arr) FROM kv WHERE arr IS NULL
+----
+{NULL}
+
+query TT
+SELECT array_concat_agg(arr ORDER BY k), array_concat_agg(NULL::INT[]) FROM kv WHERE arr IS NOT NULL
+----
+{1,2,3,3,4,5,6,2,3,7,2,2,8,4,2}  {NULL,NULL,NULL,NULL,NULL}
 
 query T
 SELECT json_agg(s) FROM kv WHERE s IS NULL
@@ -2866,7 +2908,8 @@ statement ok
 CREATE TABLE tab (
   col1 INT PRIMARY KEY,
   col2 INT,
-  col3 STRING
+  col3 STRING,
+  arr  INT[]
 )
 
 # Ordered aggregations when there are no rows.
@@ -2876,7 +2919,8 @@ SELECT array_agg(col1 ORDER BY col2) FROM TAB
 NULL
 
 statement ok
-INSERT INTO tab VALUES (-3, 7, 'a'), (-2, 6, 'a'), (-1, 5, 'a'), (0, 7, 'b'), (1, 5, 'b'), (2, 6, 'b')
+INSERT INTO tab VALUES (-3, 7, 'a', '{-3, 7}'), (-2, 6, 'a', '{-2, 6}'), (-1, 5, 'a', '{-1, 5}'),
+  (0, 7, 'b', '{0, 7}'), (1, 5, 'b', '{1, 5}'), (2, 6, 'b', '{2, 6}')
 
 query T colnames
 SELECT array_agg(col1 ORDER BY col1) FROM tab
@@ -2885,10 +2929,22 @@ array_agg
 {-3,-2,-1,0,1,2}
 
 query T colnames
+SELECT array_concat_agg(arr ORDER BY col1) FROM tab
+----
+array_concat_agg
+{-3,7,-2,6,-1,5,0,7,1,5,2,6}
+
+query T colnames
 SELECT array_agg(col1 ORDER BY col2*100+col1) FROM tab
 ----
 array_agg
 {-1,1,-2,2,-3,0}
+
+query T colnames
+SELECT array_concat_agg(arr ORDER BY col2*100+col1) FROM tab
+----
+array_concat_agg
+{-1,5,1,5,-2,6,2,6,-3,7,0,7}
 
 query T colnames
 SELECT json_agg(col1 ORDER BY col1) FROM tab
