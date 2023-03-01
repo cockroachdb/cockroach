@@ -45,4 +45,14 @@ message TenantCapabilities {
   // TODO(davidh): Revise this once tenant-scoped metrics are implemented in
   // https://github.com/cockroachdb/cockroach/issues/96438
   bool can_view_tsdb_metrics = 3 [(gogoproto.customname) = "CanViewTSDBMetrics"];
+
+  Int32Range test_range_1 = 4;
+
+  Int32Range test_range_2 = 5;
 };
+
+message Int32Range {
+  option (gogoproto.equal) = true;
+  int32 min = 1;
+  int32 max = 2;
+}

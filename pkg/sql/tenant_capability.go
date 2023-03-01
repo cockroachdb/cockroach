@@ -60,6 +60,8 @@ func (p *planner) AlterTenantCapability(
 			var desiredType *types.T
 			if _, ok := tenantcapabilitiespb.BoolCapabilityNameFromString(capabilityNameString); ok {
 				desiredType = types.Bool
+			} else if _, _, ok := tenantcapabilitiespb.Int32RangeCapabilityNameFromString(capabilityNameString); ok {
+				desiredType = types.Int
 			} else {
 				return nil, errors.Newf("unknown capability: %q", capabilityNameString)
 			}

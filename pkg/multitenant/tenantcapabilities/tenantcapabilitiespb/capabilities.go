@@ -13,6 +13,7 @@ package tenantcapabilitiespb
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // valueOffset sets the iota offset to make sure the 0 value is not a valid
@@ -97,4 +98,82 @@ func (t *TenantCapabilities) SetBoolCapability(
 	capabilityName BoolCapabilityName, capabilityValue bool,
 ) {
 	*t.getBoolFieldRef(capabilityName) = capabilityValue
+}
+
+// Int32RangeCapabilityName is a pseudo-enum of valid bool capability names.
+type Int32RangeCapabilityName int32
+
+// IsSet returns true if the capability name has a non-zero value.
+func (t Int32RangeCapabilityName) IsSet() bool {
+	return t >= valueOffset
+}
+
+var int32RangeToInt32RangeCapabilityName = stringToCapabilityNameMap[Int32RangeCapabilityName](
+	_Int32RangeCapabilityName_index[:],
+	_Int32RangeCapabilityName_name,
+)
+
+// Int32RangeCapabilityNameFromString converts a string to a
+// Int32RangeCapabilityName.
+func Int32RangeCapabilityNameFromString(s string) (Int32RangeCapabilityName, bool, bool) {
+	parts := strings.Split(s, ".")
+	if len(parts) != 2 {
+		return 0, false, false
+	}
+	capabilityName, ok := int32RangeToInt32RangeCapabilityName[parts[0]]
+	return capabilityName, parts[1] == "min", ok
+}
+
+// Int32RangeCapabilityNames is a slice of all Int32Range capability names
+// sorted lexicographically.
+var Int32RangeCapabilityNames = func() []Int32RangeCapabilityName {
+	capabilityNames := make([]Int32RangeCapabilityName, 0, len(int32RangeToInt32RangeCapabilityName))
+	for _, capabilityName := range int32RangeToInt32RangeCapabilityName {
+		capabilityNames = append(capabilityNames, capabilityName)
+	}
+	sort.Slice(capabilityNames, func(i, j int) bool {
+		return capabilityNames[i] < capabilityNames[j]
+	})
+	return capabilityNames
+}()
+
+//go:generate stringer -type=Int32RangeCapabilityName -linecomment
+const (
+	// TestRange1 is a test capability
+	TestRange1 Int32RangeCapabilityName = iota + valueOffset // test_range_1
+	// TestRange2 is a test capability
+	TestRange2 // test_range_2
+)
+
+func (t *TenantCapabilities) getInt32RangeFieldRef(
+	capabilityName Int32RangeCapabilityName,
+) **Int32Range {
+	switch capabilityName {
+	case TestRange1:
+		return &t.TestRange_1
+	case TestRange2:
+		return &t.TestRange_2
+	default:
+		panic(fmt.Sprintf("unknown capability: %q", capabilityName))
+	}
+}
+
+// GetInt32RangeCapability returns the value of the corresponding Int32Range
+// capability.
+func (t *TenantCapabilities) GetInt32RangeCapability(
+	capabilityName Int32RangeCapabilityName,
+) Int32Range {
+	ref := *t.getInt32RangeFieldRef(capabilityName)
+	if ref == nil {
+		return Int32Range{}
+	}
+	return *ref
+}
+
+// SetInt32RangeCapability returns the value of the corresponding Int32Range
+// capability.
+func (t *TenantCapabilities) SetInt32RangeCapability(
+	capabilityName Int32RangeCapabilityName, capabilityValue Int32Range,
+) {
+	*t.getInt32RangeFieldRef(capabilityName) = &capabilityValue
 }

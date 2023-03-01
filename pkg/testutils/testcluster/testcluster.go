@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -1778,7 +1777,7 @@ func (tc *TestCluster) SplitTable(
 
 // WaitForTenantCapabilities implements TestClusterInterface.
 func (tc *TestCluster) WaitForTenantCapabilities(
-	t *testing.T, tenID roachpb.TenantID, capabilityNames ...tenantcapabilitiespb.BoolCapabilityName,
+	t *testing.T, tenID roachpb.TenantID, tenantCapabilityParams serverutils.TenantCapabilityParams,
 ) {
 	for i, ts := range tc.Servers {
 		testutils.SucceedsSoon(t, func() error {
@@ -1786,20 +1785,31 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 				return nil
 			}
 
-			if len(capabilityNames) > 0 {
-				missingCapabilityError := func(capabilityName tenantcapabilitiespb.BoolCapabilityName) error {
-					return errors.Newf("server=%d tenant %s does not have capability %q", i, tenID, capabilityName)
-				}
-				capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
-				if !found {
-					return missingCapabilityError(capabilityNames[0])
-				}
+			capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
+			if !found {
+				return errors.Newf("server=%d tenant %s does not have capabilities %q", i, tenID)
+			}
 
-				for _, capabilityName := range capabilityNames {
-					capabilityValue := capabilities.GetBoolCapability(capabilityName)
-					if !capabilityValue {
-						return missingCapabilityError(capabilityName)
-					}
+			for _, capabilityParam := range tenantCapabilityParams.BoolCapabilityParams {
+				capabilityName := capabilityParam.Name
+				expectedCapabilityValue := capabilityParam.Value
+				actualCapabilityValue := capabilities.GetBoolCapability(capabilityName)
+				if expectedCapabilityValue != actualCapabilityValue {
+					return errors.Newf(
+						"server=%d tenant %s capability %q expected %t actual %t",
+						i, tenID, capabilityName, expectedCapabilityValue, actualCapabilityValue,
+					)
+				}
+			}
+			for _, capabilityParam := range tenantCapabilityParams.Int32RangeCapabilityParams {
+				capabilityName := capabilityParam.Name
+				expectedCapabilityValue := capabilityParam.Value
+				actualCapabilityValue := capabilities.GetInt32RangeCapability(capabilityName)
+				if expectedCapabilityValue != actualCapabilityValue {
+					return errors.Newf(
+						"server=%d tenant %s capability %q expected %+v actual %+v",
+						i, tenID, capabilityName, expectedCapabilityValue, actualCapabilityValue,
+					)
 				}
 			}
 			return nil

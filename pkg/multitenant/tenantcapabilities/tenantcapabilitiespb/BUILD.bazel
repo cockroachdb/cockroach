@@ -26,6 +26,7 @@ go_library(
     srcs = [
         "capabilities.go",
         ":boolcapabilityname-stringer",  # keep
+        ":int32rangecapabilityname-stringer",  # keep
     ],
     embed = [":tenantcapabilitiespb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
@@ -37,6 +38,13 @@ stringer(
     src = "capabilities.go",
     additional_args = ["--linecomment"],
     typ = "BoolCapabilityName",
+)
+
+stringer(
+    name = "int32rangecapabilityname-stringer",
+    src = "capabilities.go",
+    additional_args = ["--linecomment"],
+    typ = "Int32RangeCapabilityName",
 )
 
 go_test(

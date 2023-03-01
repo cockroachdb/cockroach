@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -118,6 +119,20 @@ func (n *showTenantNode) getTenantValues(
 				name:  capabilityName.String(),
 				value: strconv.FormatBool(capabilities.GetBoolCapability(capabilityName)),
 			})
+		}
+		for _, capabilityName := range tenantcapabilitiespb.Int32RangeCapabilityNames {
+			capabilityNameString := capabilityName.String()
+			capabilityValue := capabilities.GetInt32RangeCapability(capabilityName)
+			showTenantNodeCapabilities = append(showTenantNodeCapabilities, []showTenantNodeCapability{
+				{
+					name:  fmt.Sprintf("%s.min", capabilityNameString),
+					value: strconv.Itoa(int(capabilityValue.Min)),
+				},
+				{
+					name:  fmt.Sprintf("%s.max", capabilityNameString),
+					value: strconv.Itoa(int(capabilityValue.Max)),
+				},
+			}...)
 		}
 		values.capabilities = showTenantNodeCapabilities
 	}

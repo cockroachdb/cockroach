@@ -234,9 +234,22 @@ type TestClusterInterface interface {
 
 	// WaitForTenantCapabilities waits until all servers have the specified
 	// tenant capabilities for the specified tenant ID.
-	// Only boolean capabilities are currently supported as we wait for the
-	// specified capabilities to have a "true" value.
-	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, ...tenantcapabilitiespb.BoolCapabilityName)
+	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, TenantCapabilityParams)
+}
+
+type TenantCapabilityParams struct {
+	BoolCapabilityParams       []BoolCapabilityParam
+	Int32RangeCapabilityParams []Int32RangeCapabilityParam
+}
+
+type BoolCapabilityParam struct {
+	Name  tenantcapabilitiespb.BoolCapabilityName
+	Value bool
+}
+
+type Int32RangeCapabilityParam struct {
+	Name  tenantcapabilitiespb.Int32RangeCapabilityName
+	Value tenantcapabilitiespb.Int32Range
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.
