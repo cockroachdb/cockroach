@@ -7,6 +7,14 @@ SET a = _ -- literals removed
 SET a = 3 -- identifiers removed
 
 parse
+SET search_path = none
+----
+SET search_path = "none" -- normalized!
+SET search_path = ("none") -- fully parenthesized
+SET search_path = "none" -- literals removed
+SET search_path = _ -- identifiers removed
+
+parse
 EXPLAIN SET a = 3
 ----
 EXPLAIN SET a = 3

@@ -2667,6 +2667,7 @@ generic_set ::=
 
 extra_var_value ::=
 	'ON'
+	| 'NONE'
 	| cockroachdb_extra_reserved_keyword
 
 show_backup_options_list ::=
