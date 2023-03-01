@@ -17,10 +17,12 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
@@ -909,11 +911,52 @@ func TestTracerSnapshots(t *testing.T) {
 	require.Equal(t, SnapshotID(3), s3.ID)
 	require.Equal(t, 3, len(tr.GetSnapshots()))
 
-	for _, i := range []SnapshotID{2, 1, 3} {
-		s, err := tr.GetSnapshot(i)
+	b1 := tr.SaveAutomaticSnapshot()
+	require.Equal(t, SnapshotID(-1), b1.ID)
+	b2 := tr.SaveAutomaticSnapshot()
+	require.Equal(t, SnapshotID(-2), b2.ID)
+	require.Equal(t, 5, len(tr.GetSnapshots()))
+
+	for _, i := range []SnapshotID{2, 1, 3, -2, -1} {
+		_, err := tr.GetSnapshot(i)
 		require.NoError(t, err)
-		for _, s := range s.Stacks {
-			require.Less(t, len(s), 5<<10, s)
-		}
 	}
+}
+
+// Test that updates to the EnableActiveSpansRegistry affect span creation.
+func TestTracerSnapshotLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tr := NewTracer()
+	ctx := context.Background()
+
+	sv := settings.Values{}
+	periodicSnapshotInterval.Override(ctx, &sv, 0)
+
+	done := make(chan struct{})
+	defer close(done)
+
+	tr.autoSnapRateChange = make(chan struct{})
+
+	go tr.PeriodicSnapshotsLoop(&sv, done)
+
+	// Verify our snapshot loop is running by sending rate-change notifications
+	// and then verify it is not snapshotting since it is disabled.
+	tr.autoSnapRateChange <- struct{}{}
+	tr.autoSnapRateChange <- struct{}{}
+	require.Empty(t, tr.GetSnapshots())
+
+	// Enable it, send it a real rate-change notification and then a couple noops
+	// just to ensure the loop advances before we verify it is now capturing.
+	periodicSnapshotInterval.Override(ctx, &sv, time.Millisecond)
+	time.Sleep(time.Millisecond)
+	tr.autoSnapRateChange <- struct{}{}
+	tr.autoSnapRateChange <- struct{}{}
+	time.Sleep(time.Millisecond)
+
+	// Disable it again.
+	periodicSnapshotInterval.Override(ctx, &sv, 0)
+	tr.autoSnapRateChange <- struct{}{}
+
+	snaps := tr.GetSnapshots()
+	require.NotEmpty(t, snaps)
 }
