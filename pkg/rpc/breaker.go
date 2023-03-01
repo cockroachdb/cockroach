@@ -175,7 +175,7 @@ func newPeerBreaker(rpcCtx *Context, k connKey) *circuitbreaker.Breaker {
 		},
 		EventHandler: &circuitbreaker.EventLogger{
 			Log: func(buf redact.StringBuilder) {
-				log.Infof(rpcCtx.MasterCtx, "%s", buf)
+				log.Health.Infof(rpcCtx.MasterCtx, "%s", buf)
 			},
 		},
 	})

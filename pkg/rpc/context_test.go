@@ -1599,6 +1599,15 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
 	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
 
+	var hbDecommission atomic.Value
+	hbDecommission.Store(false)
+	clientCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) (bool, error) {
+		if hbDecommission.Load().(bool) {
+			return true, errors.Errorf("target node n%s is decommissioned", req.TargetNodeID)
+		}
+		return false, nil
+	}
+
 	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -1638,7 +1647,7 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	// Close last anotherConn to simulate network disruption.
 	err = anotherConn.Close() // nolint:grpcconnclose
 	require.NoError(t, err)
-
+	hbDecommission.Store(true)
 	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()

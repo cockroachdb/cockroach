@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -135,6 +136,15 @@ func TestConnHealth(t *testing.T) {
 	defer stopper.Stop(ctx)
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
 
+	var hbDecommission atomic.Value
+	hbDecommission.Store(false)
+	rpcCtx.OnOutgoingPing = func(ctx context.Context, req *rpc.PingRequest) (bool, error) {
+		if hbDecommission.Load().(bool) {
+			return true, errors.Errorf("target node n%s is decommissioned", req.TargetNodeID)
+		}
+		return false, nil
+	}
+
 	// When no connection exists, we expect ConnHealth to return ErrNoConnection.
 	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
 
@@ -181,7 +191,7 @@ func TestConnHealth(t *testing.T) {
 
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
-	require.NoError(t, nd.rpcContext.RemoveNodeConnections(staticNodeID))
+	hbDecommission.Store(true)
 	require.Eventually(t, func() bool {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
 	}, time.Second, 10*time.Millisecond)
