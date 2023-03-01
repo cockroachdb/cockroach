@@ -103,6 +103,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/knz/strtime"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -7741,6 +7742,64 @@ expires until the statement bundle is collected`,
 			},
 			Info:       "Converts integer size (in bytes) into the human-readable form.",
 			Volatility: volatility.Leakproof,
+		},
+	),
+	"crdb_internal.redactable_sql_constants": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		stringOverload1(
+			func(_ context.Context, _ *eval.Context, sql string) (tree.Datum, error) {
+				parsed, err := parser.ParseOne(sql)
+				if err != nil {
+					// If parsing was unsuccessful, mark the entire string as redactable.
+					return tree.NewDString(string(redact.Sprintf("%s", sql))), nil //nolint:returnerrcheck
+				}
+				fmtFlags := tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+				sqlRedactable := tree.AsStringWithFlags(parsed.AST, fmtFlags)
+				return tree.NewDString(sqlRedactable), nil
+			},
+			types.String,
+			"Surrounds constants in SQL statement with redaction markers. String provided must "+
+				"contain at most 1 statement.",
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				result := tree.NewDArray(types.String)
+
+				for _, sqlDatum := range arr.Array {
+					if sqlDatum == tree.DNull {
+						if err := result.Append(tree.DNull); err != nil {
+							return nil, err
+						}
+						continue
+					}
+
+					sql := string(tree.MustBeDString(sqlDatum))
+					sqlRedactable := ""
+
+					parsed, err := parser.ParseOne(sql)
+					if err != nil {
+						// If parsing was unsuccessful, mark the entire string as redactable.
+						sqlRedactable = string(redact.Sprintf("%s", sql))
+					} else {
+						fmtFlags := tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+						sqlRedactable = tree.AsStringWithFlags(parsed.AST, fmtFlags)
+					}
+					if err := result.Append(tree.NewDString(sqlRedactable)); err != nil {
+						return nil, err
+					}
+				}
+
+				return result, nil
+			},
+			Info: "Surrounds constants with redaction markers for each element in an array of SQL " +
+				"statements. Note that maximum 1 statement is permitted per string element.",
+			Volatility: volatility.Immutable,
 		},
 	),
 }

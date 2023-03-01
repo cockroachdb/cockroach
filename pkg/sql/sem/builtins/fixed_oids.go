@@ -2342,6 +2342,8 @@ var builtinOidsArray = []string{
 	2368: `pg_advisory_unlock_shared(key: int) -> bool`,
 	2369: `pg_advisory_unlock_shared(key1: int4, key2: int4) -> bool`,
 	2370: `pg_advisory_unlock_all() -> void`,
+	2371: `crdb_internal.redactable_sql_constants(val: string) -> string`,
+	2372: `crdb_internal.redactable_sql_constants(val: string[]) -> string[]`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
