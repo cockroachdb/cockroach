@@ -2045,31 +2045,155 @@ scalar-group-by
  ├── project
  │    ├── columns: column30:30!null
  │    ├── immutable
- │    ├── inner-join (hash)
+ │    ├── project
  │    │    ├── columns: l_partkey:2!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipinstruct:14!null l_shipmode:15!null p_partkey:19!null p_brand:22!null p_size:24!null p_container:25!null
- │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    ├── fd: ()-->(14), (19)-->(22,24,25), (2)==(19), (19)==(2)
- │    │    ├── select
- │    │    │    ├── columns: l_partkey:2!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipinstruct:14!null l_shipmode:15!null
- │    │    │    ├── fd: ()-->(14)
- │    │    │    ├── scan lineitem
- │    │    │    │    └── columns: l_partkey:2!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipinstruct:14!null l_shipmode:15!null
- │    │    │    └── filters
- │    │    │         ├── l_shipmode:15 IN ('AIR', 'AIR REG') [outer=(15), constraints=(/15: [/'AIR' - /'AIR'] [/'AIR REG' - /'AIR REG']; tight)]
- │    │    │         └── l_shipinstruct:14 = 'DELIVER IN PERSON' [outer=(14), constraints=(/14: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; tight), fd=()-->(14)]
- │    │    ├── select
- │    │    │    ├── columns: p_partkey:19!null p_brand:22!null p_size:24!null p_container:25!null
- │    │    │    ├── key: (19)
- │    │    │    ├── fd: (19)-->(22,24,25)
- │    │    │    ├── scan part
- │    │    │    │    ├── columns: p_partkey:19!null p_brand:22!null p_size:24!null p_container:25!null
- │    │    │    │    ├── key: (19)
- │    │    │    │    └── fd: (19)-->(22,24,25)
- │    │    │    └── filters
- │    │    │         └── p_size:24 >= 1 [outer=(24), constraints=(/24: [/1 - ]; tight)]
- │    │    └── filters
- │    │         ├── p_partkey:19 = l_partkey:2 [outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ]), fd=(2)==(19), (19)==(2)]
- │    │         └── ((((((p_brand:22 = 'Brand#12') AND (p_container:25 IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG'))) AND (l_quantity:5 >= 1.0)) AND (l_quantity:5 <= 11.0)) AND (p_size:24 <= 5)) OR (((((p_brand:22 = 'Brand#23') AND (p_container:25 IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG'))) AND (l_quantity:5 >= 10.0)) AND (l_quantity:5 <= 20.0)) AND (p_size:24 <= 10))) OR (((((p_brand:22 = 'Brand#34') AND (p_container:25 IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG'))) AND (l_quantity:5 >= 20.0)) AND (l_quantity:5 <= 30.0)) AND (p_size:24 <= 15)) [outer=(5,22,24,25), constraints=(/5: [/1.0 - /30.0]; /22: [/'Brand#12' - /'Brand#12'] [/'Brand#23' - /'Brand#23'] [/'Brand#34' - /'Brand#34']; /24: (/NULL - /15]; /25: [/'LG BOX' - /'LG BOX'] [/'LG CASE' - /'LG CASE'] [/'LG PACK' - /'LG PACK'] [/'LG PKG' - /'LG PKG'] [/'MED BAG' - /'MED BAG'] [/'MED BOX' - /'MED BOX'] [/'MED PACK' - /'MED PACK'] [/'MED PKG' - /'MED PKG'] [/'SM BOX' - /'SM BOX'] [/'SM CASE' - /'SM CASE'] [/'SM PACK' - /'SM PACK'] [/'SM PKG' - /'SM PKG'])]
+ │    │    └── distinct-on
+ │    │         ├── columns: l_orderkey:1!null l_partkey:2!null l_linenumber:4!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipinstruct:14!null l_shipmode:15!null p_partkey:19!null p_brand:22!null p_size:24!null p_container:25!null
+ │    │         ├── grouping columns: l_orderkey:1!null l_linenumber:4!null p_partkey:19!null
+ │    │         ├── key: (1,4,19)
+ │    │         ├── fd: (2)==(19), (19)==(2), (1,4,19)-->(2,5-7,14,15,22,24,25)
+ │    │         ├── union-all
+ │    │         │    ├── columns: l_orderkey:1!null l_partkey:2!null l_linenumber:4!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_shipinstruct:14!null l_shipmode:15!null p_partkey:19!null p_brand:22!null p_size:24!null p_container:25!null
+ │    │         │    ├── left columns: l_orderkey:32 l_partkey:33 l_linenumber:35 l_quantity:36 l_extendedprice:37 l_discount:38 l_shipinstruct:45 l_shipmode:46 p_partkey:50 p_brand:53 p_size:55 p_container:56
+ │    │         │    ├── right columns: l_orderkey:61 l_partkey:62 l_linenumber:64 l_quantity:65 l_extendedprice:66 l_discount:67 l_shipinstruct:74 l_shipmode:75 p_partkey:79 p_brand:82 p_size:84 p_container:85
+ │    │         │    ├── fd: (2)==(19), (19)==(2)
+ │    │         │    ├── inner-join (lookup lineitem)
+ │    │         │    │    ├── columns: l_orderkey:32!null l_partkey:33!null l_linenumber:35!null l_quantity:36!null l_extendedprice:37!null l_discount:38!null l_shipinstruct:45!null l_shipmode:46!null p_partkey:50!null p_brand:53!null p_size:55!null p_container:56!null
+ │    │         │    │    ├── key columns: [32 35] = [32 35]
+ │    │         │    │    ├── lookup columns are key
+ │    │         │    │    ├── key: (32,35)
+ │    │         │    │    ├── fd: ()-->(45,53), (32,35)-->(33,36-38,46), (50)-->(55,56), (33)==(50), (50)==(33)
+ │    │         │    │    ├── inner-join (lookup lineitem@l_pk)
+ │    │         │    │    │    ├── columns: l_orderkey:32!null l_partkey:33!null l_linenumber:35!null p_partkey:50!null p_brand:53!null p_size:55!null p_container:56!null
+ │    │         │    │    │    ├── key columns: [50] = [33]
+ │    │         │    │    │    ├── key: (32,35)
+ │    │         │    │    │    ├── fd: ()-->(53), (50)-->(55,56), (32,35)-->(33), (33)==(50), (50)==(33)
+ │    │         │    │    │    ├── select
+ │    │         │    │    │    │    ├── columns: p_partkey:50!null p_brand:53!null p_size:55!null p_container:56!null
+ │    │         │    │    │    │    ├── key: (50)
+ │    │         │    │    │    │    ├── fd: ()-->(53), (50)-->(55,56)
+ │    │         │    │    │    │    ├── scan part
+ │    │         │    │    │    │    │    ├── columns: p_partkey:50!null p_brand:53!null p_size:55!null p_container:56!null
+ │    │         │    │    │    │    │    ├── key: (50)
+ │    │         │    │    │    │    │    └── fd: (50)-->(53,55,56)
+ │    │         │    │    │    │    └── filters
+ │    │         │    │    │    │         ├── (p_size:55 >= 1) AND (p_size:55 <= 5) [outer=(55), constraints=(/55: [/1 - /5]; tight)]
+ │    │         │    │    │    │         ├── p_brand:53 = 'Brand#12' [outer=(53), constraints=(/53: [/'Brand#12' - /'Brand#12']; tight), fd=()-->(53)]
+ │    │         │    │    │    │         └── p_container:56 IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG') [outer=(56), constraints=(/56: [/'SM BOX' - /'SM BOX'] [/'SM CASE' - /'SM CASE'] [/'SM PACK' - /'SM PACK'] [/'SM PKG' - /'SM PKG']; tight)]
+ │    │         │    │    │    └── filters (true)
+ │    │         │    │    └── filters
+ │    │         │    │         ├── (l_quantity:36 >= 1.0) AND (l_quantity:36 <= 11.0) [outer=(36), constraints=(/36: [/1.0 - /11.0]; tight)]
+ │    │         │    │         ├── l_shipmode:46 IN ('AIR', 'AIR REG') [outer=(46), constraints=(/46: [/'AIR' - /'AIR'] [/'AIR REG' - /'AIR REG']; tight)]
+ │    │         │    │         └── l_shipinstruct:45 = 'DELIVER IN PERSON' [outer=(45), constraints=(/45: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; tight), fd=()-->(45)]
+ │    │         │    └── project
+ │    │         │         ├── columns: l_orderkey:61!null l_partkey:62!null l_linenumber:64!null l_quantity:65!null l_extendedprice:66!null l_discount:67!null l_shipinstruct:74!null l_shipmode:75!null p_partkey:79!null p_brand:82!null p_size:84!null p_container:85!null
+ │    │         │         ├── key: (61,64)
+ │    │         │         ├── fd: ()-->(74), (61,64)-->(62,65-67,75), (79)-->(82,84,85), (62)==(79), (79)==(62)
+ │    │         │         └── distinct-on
+ │    │         │              ├── columns: l_orderkey:61!null l_partkey:62!null l_linenumber:64!null l_quantity:65!null l_extendedprice:66!null l_discount:67!null l_shipinstruct:74!null l_shipmode:75!null p_partkey:79!null p_brand:82!null p_size:84!null p_container:85!null
+ │    │         │              ├── grouping columns: l_orderkey:61!null l_linenumber:64!null p_partkey:79!null
+ │    │         │              ├── key: (61,64,79)
+ │    │         │              ├── fd: (62)==(79), (79)==(62), (61,64,79)-->(62,65-67,74,75,82,84,85)
+ │    │         │              ├── union-all
+ │    │         │              │    ├── columns: l_orderkey:61!null l_partkey:62!null l_linenumber:64!null l_quantity:65!null l_extendedprice:66!null l_discount:67!null l_shipinstruct:74!null l_shipmode:75!null p_partkey:79!null p_brand:82!null p_size:84!null p_container:85!null
+ │    │         │              │    ├── left columns: l_orderkey:90 l_partkey:91 l_linenumber:93 l_quantity:94 l_extendedprice:95 l_discount:96 l_shipinstruct:103 l_shipmode:104 p_partkey:108 p_brand:111 p_size:113 p_container:114
+ │    │         │              │    ├── right columns: l_orderkey:119 l_partkey:120 l_linenumber:122 l_quantity:123 l_extendedprice:124 l_discount:125 l_shipinstruct:132 l_shipmode:133 p_partkey:137 p_brand:140 p_size:142 p_container:143
+ │    │         │              │    ├── fd: (62)==(79), (79)==(62)
+ │    │         │              │    ├── inner-join (lookup lineitem)
+ │    │         │              │    │    ├── columns: l_orderkey:90!null l_partkey:91!null l_linenumber:93!null l_quantity:94!null l_extendedprice:95!null l_discount:96!null l_shipinstruct:103!null l_shipmode:104!null p_partkey:108!null p_brand:111!null p_size:113!null p_container:114!null
+ │    │         │              │    │    ├── key columns: [90 93] = [90 93]
+ │    │         │              │    │    ├── lookup columns are key
+ │    │         │              │    │    ├── key: (90,93)
+ │    │         │              │    │    ├── fd: ()-->(103,111), (90,93)-->(91,94-96,104), (108)-->(113,114), (91)==(108), (108)==(91)
+ │    │         │              │    │    ├── inner-join (lookup lineitem@l_pk)
+ │    │         │              │    │    │    ├── columns: l_orderkey:90!null l_partkey:91!null l_linenumber:93!null p_partkey:108!null p_brand:111!null p_size:113!null p_container:114!null
+ │    │         │              │    │    │    ├── key columns: [108] = [91]
+ │    │         │              │    │    │    ├── key: (90,93)
+ │    │         │              │    │    │    ├── fd: ()-->(111), (108)-->(113,114), (90,93)-->(91), (91)==(108), (108)==(91)
+ │    │         │              │    │    │    ├── select
+ │    │         │              │    │    │    │    ├── columns: p_partkey:108!null p_brand:111!null p_size:113!null p_container:114!null
+ │    │         │              │    │    │    │    ├── key: (108)
+ │    │         │              │    │    │    │    ├── fd: ()-->(111), (108)-->(113,114)
+ │    │         │              │    │    │    │    ├── scan part
+ │    │         │              │    │    │    │    │    ├── columns: p_partkey:108!null p_brand:111!null p_size:113!null p_container:114!null
+ │    │         │              │    │    │    │    │    ├── key: (108)
+ │    │         │              │    │    │    │    │    └── fd: (108)-->(111,113,114)
+ │    │         │              │    │    │    │    └── filters
+ │    │         │              │    │    │    │         ├── (p_size:113 >= 1) AND (p_size:113 <= 15) [outer=(113), constraints=(/113: [/1 - /15]; tight)]
+ │    │         │              │    │    │    │         ├── p_brand:111 = 'Brand#34' [outer=(111), constraints=(/111: [/'Brand#34' - /'Brand#34']; tight), fd=()-->(111)]
+ │    │         │              │    │    │    │         └── p_container:114 IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG') [outer=(114), constraints=(/114: [/'LG BOX' - /'LG BOX'] [/'LG CASE' - /'LG CASE'] [/'LG PACK' - /'LG PACK'] [/'LG PKG' - /'LG PKG']; tight)]
+ │    │         │              │    │    │    └── filters (true)
+ │    │         │              │    │    └── filters
+ │    │         │              │    │         ├── (l_quantity:94 >= 20.0) AND (l_quantity:94 <= 30.0) [outer=(94), constraints=(/94: [/20.0 - /30.0]; tight)]
+ │    │         │              │    │         ├── l_shipmode:104 IN ('AIR', 'AIR REG') [outer=(104), constraints=(/104: [/'AIR' - /'AIR'] [/'AIR REG' - /'AIR REG']; tight)]
+ │    │         │              │    │         └── l_shipinstruct:103 = 'DELIVER IN PERSON' [outer=(103), constraints=(/103: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; tight), fd=()-->(103)]
+ │    │         │              │    └── inner-join (lookup lineitem)
+ │    │         │              │         ├── columns: l_orderkey:119!null l_partkey:120!null l_linenumber:122!null l_quantity:123!null l_extendedprice:124!null l_discount:125!null l_shipinstruct:132!null l_shipmode:133!null p_partkey:137!null p_brand:140!null p_size:142!null p_container:143!null
+ │    │         │              │         ├── key columns: [119 122] = [119 122]
+ │    │         │              │         ├── lookup columns are key
+ │    │         │              │         ├── key: (119,122)
+ │    │         │              │         ├── fd: ()-->(132,140), (119,122)-->(120,123-125,133), (137)-->(142,143), (120)==(137), (137)==(120)
+ │    │         │              │         ├── inner-join (lookup lineitem@l_pk)
+ │    │         │              │         │    ├── columns: l_orderkey:119!null l_partkey:120!null l_linenumber:122!null p_partkey:137!null p_brand:140!null p_size:142!null p_container:143!null
+ │    │         │              │         │    ├── key columns: [137] = [120]
+ │    │         │              │         │    ├── key: (119,122)
+ │    │         │              │         │    ├── fd: ()-->(140), (137)-->(142,143), (119,122)-->(120), (120)==(137), (137)==(120)
+ │    │         │              │         │    ├── select
+ │    │         │              │         │    │    ├── columns: p_partkey:137!null p_brand:140!null p_size:142!null p_container:143!null
+ │    │         │              │         │    │    ├── key: (137)
+ │    │         │              │         │    │    ├── fd: ()-->(140), (137)-->(142,143)
+ │    │         │              │         │    │    ├── scan part
+ │    │         │              │         │    │    │    ├── columns: p_partkey:137!null p_brand:140!null p_size:142!null p_container:143!null
+ │    │         │              │         │    │    │    ├── key: (137)
+ │    │         │              │         │    │    │    └── fd: (137)-->(140,142,143)
+ │    │         │              │         │    │    └── filters
+ │    │         │              │         │    │         ├── (p_size:142 >= 1) AND (p_size:142 <= 10) [outer=(142), constraints=(/142: [/1 - /10]; tight)]
+ │    │         │              │         │    │         ├── p_brand:140 = 'Brand#23' [outer=(140), constraints=(/140: [/'Brand#23' - /'Brand#23']; tight), fd=()-->(140)]
+ │    │         │              │         │    │         └── p_container:143 IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG') [outer=(143), constraints=(/143: [/'MED BAG' - /'MED BAG'] [/'MED BOX' - /'MED BOX'] [/'MED PACK' - /'MED PACK'] [/'MED PKG' - /'MED PKG']; tight)]
+ │    │         │              │         │    └── filters (true)
+ │    │         │              │         └── filters
+ │    │         │              │              ├── (l_quantity:123 >= 10.0) AND (l_quantity:123 <= 20.0) [outer=(123), constraints=(/123: [/10.0 - /20.0]; tight)]
+ │    │         │              │              ├── l_shipmode:133 IN ('AIR', 'AIR REG') [outer=(133), constraints=(/133: [/'AIR' - /'AIR'] [/'AIR REG' - /'AIR REG']; tight)]
+ │    │         │              │              └── l_shipinstruct:132 = 'DELIVER IN PERSON' [outer=(132), constraints=(/132: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; tight), fd=()-->(132)]
+ │    │         │              └── aggregations
+ │    │         │                   ├── const-agg [as=l_partkey:62, outer=(62)]
+ │    │         │                   │    └── l_partkey:62
+ │    │         │                   ├── const-agg [as=l_quantity:65, outer=(65)]
+ │    │         │                   │    └── l_quantity:65
+ │    │         │                   ├── const-agg [as=l_extendedprice:66, outer=(66)]
+ │    │         │                   │    └── l_extendedprice:66
+ │    │         │                   ├── const-agg [as=l_discount:67, outer=(67)]
+ │    │         │                   │    └── l_discount:67
+ │    │         │                   ├── const-agg [as=l_shipinstruct:74, outer=(74)]
+ │    │         │                   │    └── l_shipinstruct:74
+ │    │         │                   ├── const-agg [as=l_shipmode:75, outer=(75)]
+ │    │         │                   │    └── l_shipmode:75
+ │    │         │                   ├── const-agg [as=p_brand:82, outer=(82)]
+ │    │         │                   │    └── p_brand:82
+ │    │         │                   ├── const-agg [as=p_size:84, outer=(84)]
+ │    │         │                   │    └── p_size:84
+ │    │         │                   └── const-agg [as=p_container:85, outer=(85)]
+ │    │         │                        └── p_container:85
+ │    │         └── aggregations
+ │    │              ├── const-agg [as=l_partkey:2, outer=(2)]
+ │    │              │    └── l_partkey:2
+ │    │              ├── const-agg [as=l_quantity:5, outer=(5)]
+ │    │              │    └── l_quantity:5
+ │    │              ├── const-agg [as=l_extendedprice:6, outer=(6)]
+ │    │              │    └── l_extendedprice:6
+ │    │              ├── const-agg [as=l_discount:7, outer=(7)]
+ │    │              │    └── l_discount:7
+ │    │              ├── const-agg [as=l_shipinstruct:14, outer=(14)]
+ │    │              │    └── l_shipinstruct:14
+ │    │              ├── const-agg [as=l_shipmode:15, outer=(15)]
+ │    │              │    └── l_shipmode:15
+ │    │              ├── const-agg [as=p_brand:22, outer=(22)]
+ │    │              │    └── p_brand:22
+ │    │              ├── const-agg [as=p_size:24, outer=(24)]
+ │    │              │    └── p_size:24
+ │    │              └── const-agg [as=p_container:25, outer=(25)]
+ │    │                   └── p_container:25
  │    └── projections
  │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column30:30, outer=(6,7), immutable]
  └── aggregations

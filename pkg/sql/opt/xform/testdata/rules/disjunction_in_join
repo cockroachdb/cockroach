@@ -25,6 +25,31 @@ CREATE TABLE d(d1 INT, d2 INT, d3 INT, d4 INT,
                INDEX d (d1) STORING (d2, d3, d4))
 ----
 
+exec-ddl
+CREATE TABLE e (
+  e1 INT PRIMARY KEY,
+  e2 INT NOT NULL,
+  e3 INT NOT NULL,
+  e4 STRING NOT NULL,
+  e5 INT NULL,
+  INDEX (e2 ASC, e3 ASC, e4 ASC),
+  INDEX (e5 ASC),
+  INDEX (e3 ASC, e5 ASC, e4 ASC),
+  INDEX (e3 ASC) WHERE e4 IN ('a', 'b')
+)
+----
+
+exec-ddl
+CREATE TABLE f (
+  f1 INT PRIMARY KEY,
+  f2 INT NULL,
+  f3 INT NULL,
+  f4 INT NOT NULL,
+  INDEX (f3 ASC),
+  INDEX (f2 ASC) STORING (f3)
+)
+----
+
 # --------------------------------------------------
 # InnerJoin
 # --------------------------------------------------
@@ -366,40 +391,40 @@ project
       │    ├── columns: b1:1 b2:2 b3:3 b4:4 b.rowid:5!null d1:8 d2:9 d3:10 d4:11 d.rowid:12!null
       │    ├── left columns: b1:15 b2:16 b3:17 b4:18 b.rowid:19 d1:22 d2:23 d3:24 d4:25 d.rowid:26
       │    ├── right columns: b1:29 b2:30 b3:31 b4:32 b.rowid:33 d1:36 d2:37 d3:38 d4:39 d.rowid:40
-      │    ├── inner-join (hash)
-      │    │    ├── columns: b1:15 b2:16 b3:17!null b4:18 b.rowid:19!null d1:22 d2:23 d3:24!null d4:25 d.rowid:26!null
+      │    ├── inner-join (cross)
+      │    │    ├── columns: b1:15!null b2:16!null b3:17 b4:18 b.rowid:19!null d1:22 d2:23 d3:24 d4:25 d.rowid:26!null
       │    │    ├── key: (19,26)
-      │    │    ├── fd: (19)-->(15-18), (26)-->(22-25), (17)==(24), (24)==(17)
-      │    │    ├── scan b
-      │    │    │    ├── columns: b1:15 b2:16 b3:17 b4:18 b.rowid:19!null
-      │    │    │    ├── key: (19)
-      │    │    │    └── fd: (19)-->(15-18)
+      │    │    ├── fd: (19)-->(15-18), (15)==(16), (16)==(15), (26)-->(22-25)
       │    │    ├── scan d
       │    │    │    ├── columns: d1:22 d2:23 d3:24 d4:25 d.rowid:26!null
       │    │    │    ├── key: (26)
       │    │    │    └── fd: (26)-->(22-25)
-      │    │    └── filters
-      │    │         └── b3:17 = d3:24 [outer=(17,24), constraints=(/17: (/NULL - ]; /24: (/NULL - ]), fd=(17)==(24), (24)==(17)]
-      │    └── inner-join (cross)
-      │         ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null d1:36 d2:37 d3:38 d4:39 d.rowid:40!null
+      │    │    ├── select
+      │    │    │    ├── columns: b1:15!null b2:16!null b3:17 b4:18 b.rowid:19!null
+      │    │    │    ├── key: (19)
+      │    │    │    ├── fd: (19)-->(15-18), (15)==(16), (16)==(15)
+      │    │    │    ├── scan b@b_b1_b2_idx
+      │    │    │    │    ├── columns: b1:15!null b2:16 b3:17 b4:18 b.rowid:19!null
+      │    │    │    │    ├── constraint: /15/16/19: (/NULL - ]
+      │    │    │    │    ├── key: (19)
+      │    │    │    │    └── fd: (19)-->(15-18)
+      │    │    │    └── filters
+      │    │    │         └── b1:15 = b2:16 [outer=(15,16), constraints=(/15: (/NULL - ]; /16: (/NULL - ]), fd=(15)==(16), (16)==(15)]
+      │    │    └── filters (true)
+      │    └── inner-join (hash)
+      │         ├── columns: b1:29 b2:30 b3:31!null b4:32 b.rowid:33!null d1:36 d2:37 d3:38!null d4:39 d.rowid:40!null
       │         ├── key: (33,40)
-      │         ├── fd: (33)-->(29-32), (29)==(30), (30)==(29), (40)-->(36-39)
+      │         ├── fd: (33)-->(29-32), (40)-->(36-39), (31)==(38), (38)==(31)
+      │         ├── scan b
+      │         │    ├── columns: b1:29 b2:30 b3:31 b4:32 b.rowid:33!null
+      │         │    ├── key: (33)
+      │         │    └── fd: (33)-->(29-32)
       │         ├── scan d
       │         │    ├── columns: d1:36 d2:37 d3:38 d4:39 d.rowid:40!null
       │         │    ├── key: (40)
       │         │    └── fd: (40)-->(36-39)
-      │         ├── select
-      │         │    ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null
-      │         │    ├── key: (33)
-      │         │    ├── fd: (33)-->(29-32), (29)==(30), (30)==(29)
-      │         │    ├── scan b@b_b1_b2_idx
-      │         │    │    ├── columns: b1:29!null b2:30 b3:31 b4:32 b.rowid:33!null
-      │         │    │    ├── constraint: /29/30/33: (/NULL - ]
-      │         │    │    ├── key: (33)
-      │         │    │    └── fd: (33)-->(29-32)
-      │         │    └── filters
-      │         │         └── b1:29 = b2:30 [outer=(29,30), constraints=(/29: (/NULL - ]; /30: (/NULL - ]), fd=(29)==(30), (30)==(29)]
-      │         └── filters (true)
+      │         └── filters
+      │              └── b3:31 = d3:38 [outer=(31,38), constraints=(/31: (/NULL - ]; /38: (/NULL - ]), fd=(31)==(38), (38)==(31)]
       └── aggregations
            ├── const-agg [as=b1:1, outer=(1)]
            │    └── b1:1
@@ -461,103 +486,103 @@ project
       │    ├── columns: b1:1!null b2:2!null b3:3 b4:4 b.rowid:5!null d1:8!null d2:9 d3:10 d4:11 d.rowid:12!null
       │    ├── left columns: b1:29 b2:30 b3:31 b4:32 b.rowid:33 d1:36 d2:37 d3:38 d4:39 d.rowid:40
       │    ├── right columns: b1:43 b2:44 b3:45 b4:46 b.rowid:47 d1:50 d2:51 d3:52 d4:53 d.rowid:54
-      │    ├── inner-join (lookup d@d)
+      │    ├── project
       │    │    ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null d1:36!null d2:37 d3:38 d4:39 d.rowid:40!null
-      │    │    ├── key columns: [29] = [36]
       │    │    ├── key: (33,40)
-      │    │    ├── fd: (33)-->(29-32), (40)-->(36-39), (29)==(36), (36)==(29)
-      │    │    ├── distinct-on
-      │    │    │    ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null
-      │    │    │    ├── grouping columns: b.rowid:33!null
-      │    │    │    ├── key: (33)
-      │    │    │    ├── fd: (33)-->(29-32)
-      │    │    │    ├── union-all
-      │    │    │    │    ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null
-      │    │    │    │    ├── left columns: b1:57 b2:58 b3:59 b4:60 b.rowid:61
-      │    │    │    │    ├── right columns: b1:64 b2:65 b3:66 b4:67 b.rowid:68
-      │    │    │    │    ├── scan b@b_b1_b2_idx
-      │    │    │    │    │    ├── columns: b1:57!null b2:58!null b3:59 b4:60 b.rowid:61!null
-      │    │    │    │    │    ├── constraint: /57/58/61
-      │    │    │    │    │    │    ├── [/0/0 - /0/0]
-      │    │    │    │    │    │    └── [/0/5 - /0/5]
-      │    │    │    │    │    ├── key: (61)
-      │    │    │    │    │    └── fd: ()-->(57), (61)-->(58-60)
-      │    │    │    │    └── select
-      │    │    │    │         ├── columns: b1:64!null b2:65!null b3:66 b4:67 b.rowid:68!null
-      │    │    │    │         ├── key: (68)
-      │    │    │    │         ├── fd: ()-->(65), (68)-->(64,66,67)
-      │    │    │    │         ├── scan b@b_b2_idx
-      │    │    │    │         │    ├── columns: b1:64 b2:65!null b3:66 b4:67 b.rowid:68!null
-      │    │    │    │         │    ├── constraint: /65/68: [/5 - /5]
-      │    │    │    │         │    ├── key: (68)
-      │    │    │    │         │    └── fd: ()-->(65), (68)-->(64,66,67)
-      │    │    │    │         └── filters
-      │    │    │    │              └── (b1:64 = 5) OR ((b1:64 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL)) [outer=(64), constraints=(/64: (/NULL - ]; tight)]
-      │    │    │    └── aggregations
-      │    │    │         ├── const-agg [as=b1:29, outer=(29)]
-      │    │    │         │    └── b1:29
-      │    │    │         ├── const-agg [as=b2:30, outer=(30)]
-      │    │    │         │    └── b2:30
-      │    │    │         ├── const-agg [as=b3:31, outer=(31)]
-      │    │    │         │    └── b3:31
-      │    │    │         └── const-agg [as=b4:32, outer=(32)]
-      │    │    │              └── b4:32
-      │    │    └── filters (true)
-      │    └── project
+      │    │    ├── fd: ()-->(29), (33)-->(30-32), (40)-->(36-39)
+      │    │    └── distinct-on
+      │    │         ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null d1:36!null d2:37 d3:38 d4:39 d.rowid:40!null
+      │    │         ├── grouping columns: b.rowid:33!null d.rowid:40!null
+      │    │         ├── key: (33,40)
+      │    │         ├── fd: (33,40)-->(29-32,36-39)
+      │    │         ├── union-all
+      │    │         │    ├── columns: b1:29!null b2:30!null b3:31 b4:32 b.rowid:33!null d1:36!null d2:37 d3:38 d4:39 d.rowid:40!null
+      │    │         │    ├── left columns: b1:57 b2:58 b3:59 b4:60 b.rowid:61 d1:64 d2:65 d3:66 d4:67 d.rowid:68
+      │    │         │    ├── right columns: b1:71 b2:72 b3:73 b4:74 b.rowid:75 d1:78 d2:79 d3:80 d4:81 d.rowid:82
+      │    │         │    ├── inner-join (lookup d@d)
+      │    │         │    │    ├── columns: b1:57!null b2:58!null b3:59 b4:60 b.rowid:61!null d1:64!null d2:65 d3:66 d4:67 d.rowid:68!null
+      │    │         │    │    ├── key columns: [58] = [64]
+      │    │         │    │    ├── key: (61,68)
+      │    │         │    │    ├── fd: ()-->(57), (61)-->(58-60), (68)-->(64-67), (58)==(64), (64)==(58)
+      │    │         │    │    ├── scan b@b_b1_b2_idx
+      │    │         │    │    │    ├── columns: b1:57!null b2:58!null b3:59 b4:60 b.rowid:61!null
+      │    │         │    │    │    ├── constraint: /57/58/61: (/0/NULL - /0]
+      │    │         │    │    │    ├── key: (61)
+      │    │         │    │    │    └── fd: ()-->(57), (61)-->(58-60)
+      │    │         │    │    └── filters
+      │    │         │    │         └── ((d1:64 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL)) OR (d1:64 = 5) [outer=(64), constraints=(/64: (/NULL - ]; tight)]
+      │    │         │    └── inner-join (lookup d@d)
+      │    │         │         ├── columns: b1:71!null b2:72!null b3:73 b4:74 b.rowid:75!null d1:78!null d2:79 d3:80 d4:81 d.rowid:82!null
+      │    │         │         ├── key columns: [71] = [78]
+      │    │         │         ├── key: (75,82)
+      │    │         │         ├── fd: ()-->(71,78), (75)-->(72-74), (82)-->(79-81), (71)==(78), (78)==(71)
+      │    │         │         ├── scan b@b_b1_b2_idx
+      │    │         │         │    ├── columns: b1:71!null b2:72!null b3:73 b4:74 b.rowid:75!null
+      │    │         │         │    ├── constraint: /71/72/75
+      │    │         │         │    │    ├── [/0/0 - /0/0]
+      │    │         │         │    │    └── [/0/5 - /0/5]
+      │    │         │         │    ├── key: (75)
+      │    │         │         │    └── fd: ()-->(71), (75)-->(72-74)
+      │    │         │         └── filters (true)
+      │    │         └── aggregations
+      │    │              ├── const-agg [as=b1:29, outer=(29)]
+      │    │              │    └── b1:29
+      │    │              ├── const-agg [as=b2:30, outer=(30)]
+      │    │              │    └── b2:30
+      │    │              ├── const-agg [as=b3:31, outer=(31)]
+      │    │              │    └── b3:31
+      │    │              ├── const-agg [as=b4:32, outer=(32)]
+      │    │              │    └── b4:32
+      │    │              ├── const-agg [as=d1:36, outer=(36)]
+      │    │              │    └── d1:36
+      │    │              ├── const-agg [as=d2:37, outer=(37)]
+      │    │              │    └── d2:37
+      │    │              ├── const-agg [as=d3:38, outer=(38)]
+      │    │              │    └── d3:38
+      │    │              └── const-agg [as=d4:39, outer=(39)]
+      │    │                   └── d4:39
+      │    └── inner-join (lookup d@d)
       │         ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null d1:50!null d2:51 d3:52 d4:53 d.rowid:54!null
+      │         ├── key columns: [43] = [50]
       │         ├── key: (47,54)
-      │         ├── fd: ()-->(43), (47)-->(44-46), (54)-->(50-53)
-      │         └── distinct-on
-      │              ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null d1:50!null d2:51 d3:52 d4:53 d.rowid:54!null
-      │              ├── grouping columns: b.rowid:47!null d.rowid:54!null
-      │              ├── key: (47,54)
-      │              ├── fd: (47,54)-->(43-46,50-53)
-      │              ├── union-all
-      │              │    ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null d1:50!null d2:51 d3:52 d4:53 d.rowid:54!null
-      │              │    ├── left columns: b1:71 b2:72 b3:73 b4:74 b.rowid:75 d1:78 d2:79 d3:80 d4:81 d.rowid:82
-      │              │    ├── right columns: b1:85 b2:86 b3:87 b4:88 b.rowid:89 d1:92 d2:93 d3:94 d4:95 d.rowid:96
-      │              │    ├── inner-join (lookup d@d)
-      │              │    │    ├── columns: b1:71!null b2:72!null b3:73 b4:74 b.rowid:75!null d1:78!null d2:79 d3:80 d4:81 d.rowid:82!null
-      │              │    │    ├── key columns: [72] = [78]
-      │              │    │    ├── key: (75,82)
-      │              │    │    ├── fd: ()-->(71), (75)-->(72-74), (82)-->(78-81), (72)==(78), (78)==(72)
-      │              │    │    ├── scan b@b_b1_b2_idx
-      │              │    │    │    ├── columns: b1:71!null b2:72!null b3:73 b4:74 b.rowid:75!null
-      │              │    │    │    ├── constraint: /71/72/75: (/0/NULL - /0]
-      │              │    │    │    ├── key: (75)
-      │              │    │    │    └── fd: ()-->(71), (75)-->(72-74)
-      │              │    │    └── filters
-      │              │    │         └── ((d1:78 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL)) OR (d1:78 = 5) [outer=(78), constraints=(/78: (/NULL - ]; tight)]
-      │              │    └── inner-join (lookup d@d)
-      │              │         ├── columns: b1:85!null b2:86!null b3:87 b4:88 b.rowid:89!null d1:92!null d2:93 d3:94 d4:95 d.rowid:96!null
-      │              │         ├── key columns: [85] = [92]
-      │              │         ├── key: (89,96)
-      │              │         ├── fd: ()-->(85,92), (89)-->(86-88), (96)-->(93-95), (85)==(92), (92)==(85)
-      │              │         ├── scan b@b_b1_b2_idx
-      │              │         │    ├── columns: b1:85!null b2:86!null b3:87 b4:88 b.rowid:89!null
-      │              │         │    ├── constraint: /85/86/89
-      │              │         │    │    ├── [/0/0 - /0/0]
-      │              │         │    │    └── [/0/5 - /0/5]
-      │              │         │    ├── key: (89)
-      │              │         │    └── fd: ()-->(85), (89)-->(86-88)
-      │              │         └── filters (true)
-      │              └── aggregations
-      │                   ├── const-agg [as=b1:43, outer=(43)]
-      │                   │    └── b1:43
-      │                   ├── const-agg [as=b2:44, outer=(44)]
-      │                   │    └── b2:44
-      │                   ├── const-agg [as=b3:45, outer=(45)]
-      │                   │    └── b3:45
-      │                   ├── const-agg [as=b4:46, outer=(46)]
-      │                   │    └── b4:46
-      │                   ├── const-agg [as=d1:50, outer=(50)]
-      │                   │    └── d1:50
-      │                   ├── const-agg [as=d2:51, outer=(51)]
-      │                   │    └── d2:51
-      │                   ├── const-agg [as=d3:52, outer=(52)]
-      │                   │    └── d3:52
-      │                   └── const-agg [as=d4:53, outer=(53)]
-      │                        └── d4:53
+      │         ├── fd: (47)-->(43-46), (54)-->(50-53), (43)==(50), (50)==(43)
+      │         ├── distinct-on
+      │         │    ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null
+      │         │    ├── grouping columns: b.rowid:47!null
+      │         │    ├── key: (47)
+      │         │    ├── fd: (47)-->(43-46)
+      │         │    ├── union-all
+      │         │    │    ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null
+      │         │    │    ├── left columns: b1:115 b2:116 b3:117 b4:118 b.rowid:119
+      │         │    │    ├── right columns: b1:122 b2:123 b3:124 b4:125 b.rowid:126
+      │         │    │    ├── scan b@b_b1_b2_idx
+      │         │    │    │    ├── columns: b1:115!null b2:116!null b3:117 b4:118 b.rowid:119!null
+      │         │    │    │    ├── constraint: /115/116/119
+      │         │    │    │    │    ├── [/0/0 - /0/0]
+      │         │    │    │    │    └── [/0/5 - /0/5]
+      │         │    │    │    ├── key: (119)
+      │         │    │    │    └── fd: ()-->(115), (119)-->(116-118)
+      │         │    │    └── select
+      │         │    │         ├── columns: b1:122!null b2:123!null b3:124 b4:125 b.rowid:126!null
+      │         │    │         ├── key: (126)
+      │         │    │         ├── fd: ()-->(123), (126)-->(122,124,125)
+      │         │    │         ├── scan b@b_b2_idx
+      │         │    │         │    ├── columns: b1:122 b2:123!null b3:124 b4:125 b.rowid:126!null
+      │         │    │         │    ├── constraint: /123/126: [/5 - /5]
+      │         │    │         │    ├── key: (126)
+      │         │    │         │    └── fd: ()-->(123), (126)-->(122,124,125)
+      │         │    │         └── filters
+      │         │    │              └── (b1:122 = 5) OR ((b1:122 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL)) [outer=(122), constraints=(/122: (/NULL - ]; tight)]
+      │         │    └── aggregations
+      │         │         ├── const-agg [as=b1:43, outer=(43)]
+      │         │         │    └── b1:43
+      │         │         ├── const-agg [as=b2:44, outer=(44)]
+      │         │         │    └── b2:44
+      │         │         ├── const-agg [as=b3:45, outer=(45)]
+      │         │         │    └── b3:45
+      │         │         └── const-agg [as=b4:46, outer=(46)]
+      │         │              └── b4:46
+      │         └── filters (true)
       └── aggregations
            ├── const-agg [as=b1:1, outer=(1)]
            │    └── b1:1
@@ -690,6 +715,222 @@ project
            └── const-agg [as=d4:10, outer=(10)]
                 └── d4:10
 
+# Same test as above, but with the order of variables in equality conditions
+# swapped.
+opt expect=SplitDisjunctionOfJoinTerms
+SELECT * FROM a, d WHERE (d2 = a1 AND d1 = a2) OR (d4 = a3 AND d3 = a4)
+----
+project
+ ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null d1:7 d2:8 d3:9 d4:10
+ └── distinct-on
+      ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null d1:7 d2:8 d3:9 d4:10 rowid:11!null
+      ├── grouping columns: a1:1!null a2:2!null a3:3!null a4:4!null rowid:11!null
+      ├── key: (1-4,11)
+      ├── fd: (1-4,11)-->(7-10)
+      ├── union-all
+      │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null d1:7 d2:8 d3:9 d4:10 rowid:11!null
+      │    ├── left columns: a1:14 a2:15 a3:16 a4:17 d1:20 d2:21 d3:22 d4:23 rowid:24
+      │    ├── right columns: a1:27 a2:28 a3:29 a4:30 d1:33 d2:34 d3:35 d4:36 rowid:37
+      │    ├── inner-join (hash)
+      │    │    ├── columns: a1:14!null a2:15!null a3:16!null a4:17!null d1:20!null d2:21!null d3:22 d4:23 rowid:24!null
+      │    │    ├── key: (16,17,24)
+      │    │    ├── fd: (24)-->(20-23), (14)==(21), (21)==(14), (15)==(20), (20)==(15)
+      │    │    ├── scan a
+      │    │    │    ├── columns: a1:14!null a2:15!null a3:16!null a4:17!null
+      │    │    │    └── key: (14-17)
+      │    │    ├── scan d
+      │    │    │    ├── columns: d1:20 d2:21 d3:22 d4:23 rowid:24!null
+      │    │    │    ├── key: (24)
+      │    │    │    └── fd: (24)-->(20-23)
+      │    │    └── filters
+      │    │         ├── d2:21 = a1:14 [outer=(14,21), constraints=(/14: (/NULL - ]; /21: (/NULL - ]), fd=(14)==(21), (21)==(14)]
+      │    │         └── d1:20 = a2:15 [outer=(15,20), constraints=(/15: (/NULL - ]; /20: (/NULL - ]), fd=(15)==(20), (20)==(15)]
+      │    └── inner-join (hash)
+      │         ├── columns: a1:27!null a2:28!null a3:29!null a4:30!null d1:33 d2:34 d3:35!null d4:36!null rowid:37!null
+      │         ├── key: (27,28,37)
+      │         ├── fd: (37)-->(33-36), (29)==(36), (36)==(29), (30)==(35), (35)==(30)
+      │         ├── scan a
+      │         │    ├── columns: a1:27!null a2:28!null a3:29!null a4:30!null
+      │         │    └── key: (27-30)
+      │         ├── scan d
+      │         │    ├── columns: d1:33 d2:34 d3:35 d4:36 rowid:37!null
+      │         │    ├── key: (37)
+      │         │    └── fd: (37)-->(33-36)
+      │         └── filters
+      │              ├── d4:36 = a3:29 [outer=(29,36), constraints=(/29: (/NULL - ]; /36: (/NULL - ]), fd=(29)==(36), (36)==(29)]
+      │              └── d3:35 = a4:30 [outer=(30,35), constraints=(/30: (/NULL - ]; /35: (/NULL - ]), fd=(30)==(35), (35)==(30)]
+      └── aggregations
+           ├── const-agg [as=d1:7, outer=(7)]
+           │    └── d1:7
+           ├── const-agg [as=d2:8, outer=(8)]
+           │    └── d2:8
+           ├── const-agg [as=d3:9, outer=(9)]
+           │    └── d3:9
+           └── const-agg [as=d4:10, outer=(10)]
+                └── d4:10
+
+# We should be able to split the disjunction even though the predicates are
+# equalities but not equijoin expressions.
+opt expect=SplitDisjunctionOfJoinTerms
+SELECT e.*
+FROM
+  e
+  INNER JOIN f ON f.f3 = e.e2
+WHERE
+  e.e5 = 30
+  OR (e.e3 = 10 AND f.f2 = 20)
+----
+project
+ ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ ├── fd: (1)-->(2-5)
+ └── project
+      ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f2:9 f3:10!null
+      ├── fd: (1)-->(2-5), (2)==(10), (10)==(2)
+      └── distinct-on
+           ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
+           ├── grouping columns: e1:1!null f1:8!null
+           ├── key: (1,8)
+           ├── fd: (2)==(10), (10)==(2), (1,8)-->(2-5,9,10)
+           ├── union-all
+           │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
+           │    ├── left columns: e1:14 e2:15 e3:16 e4:17 e5:18 f1:21 f2:22 f3:23
+           │    ├── right columns: e1:27 e2:28 e3:29 e4:30 e5:31 f1:34 f2:35 f3:36
+           │    ├── fd: (2)==(10), (10)==(2)
+           │    ├── inner-join (lookup f)
+           │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null f1:21!null f2:22 f3:23!null
+           │    │    ├── key columns: [21] = [21]
+           │    │    ├── lookup columns are key
+           │    │    ├── key: (14,21)
+           │    │    ├── fd: ()-->(18), (14)-->(15-17), (21)-->(22,23), (15)==(23), (23)==(15)
+           │    │    ├── inner-join (lookup f@f_f3_idx)
+           │    │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null f1:21!null f3:23!null
+           │    │    │    ├── key columns: [15] = [23]
+           │    │    │    ├── key: (14,21)
+           │    │    │    ├── fd: ()-->(18), (14)-->(15-17), (21)-->(23), (15)==(23), (23)==(15)
+           │    │    │    ├── index-join e
+           │    │    │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null
+           │    │    │    │    ├── key: (14)
+           │    │    │    │    ├── fd: ()-->(18), (14)-->(15-17)
+           │    │    │    │    └── scan e@e_e5_idx
+           │    │    │    │         ├── columns: e1:14!null e5:18!null
+           │    │    │    │         ├── constraint: /18/14: [/30 - /30]
+           │    │    │    │         ├── key: (14)
+           │    │    │    │         └── fd: ()-->(18)
+           │    │    │    └── filters (true)
+           │    │    └── filters (true)
+           │    └── inner-join (hash)
+           │         ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31 f1:34!null f2:35!null f3:36!null
+           │         ├── key: (27,34)
+           │         ├── fd: ()-->(29,35), (27)-->(28,30,31), (34)-->(36), (28)==(36), (36)==(28)
+           │         ├── index-join e
+           │         │    ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31
+           │         │    ├── key: (27)
+           │         │    ├── fd: ()-->(29), (27)-->(28,30,31)
+           │         │    └── scan e@e_e3_e5_e4_idx
+           │         │         ├── columns: e1:27!null e3:29!null e4:30!null e5:31
+           │         │         ├── constraint: /29/31/30/27: [/10 - /10]
+           │         │         ├── key: (27)
+           │         │         └── fd: ()-->(29), (27)-->(30,31)
+           │         ├── scan f@f_f2_idx
+           │         │    ├── columns: f1:34!null f2:35!null f3:36
+           │         │    ├── constraint: /35/34: [/20 - /20]
+           │         │    ├── key: (34)
+           │         │    └── fd: ()-->(35), (34)-->(36)
+           │         └── filters
+           │              └── f3:36 = e2:28 [outer=(28,36), constraints=(/28: (/NULL - ]; /36: (/NULL - ]), fd=(28)==(36), (36)==(28)]
+           └── aggregations
+                ├── const-agg [as=e2:2, outer=(2)]
+                │    └── e2:2
+                ├── const-agg [as=e3:3, outer=(3)]
+                │    └── e3:3
+                ├── const-agg [as=e4:4, outer=(4)]
+                │    └── e4:4
+                ├── const-agg [as=e5:5, outer=(5)]
+                │    └── e5:5
+                ├── const-agg [as=f2:9, outer=(9)]
+                │    └── f2:9
+                └── const-agg [as=f3:10, outer=(10)]
+                     └── f3:10
+
+# We should be able to split the disjunction even though the predicates are
+# not equalities.
+opt expect=SplitDisjunctionOfJoinTerms
+SELECT e.*
+FROM
+  e
+  INNER JOIN f ON f.f3 = e.e2
+WHERE
+  (e.e5 > 30 AND e.e5 < 40)
+  OR (e.e4 IN ('a', 'b') AND f.f2 < 20 AND f.f2 > 10)
+----
+project
+ ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ ├── fd: (1)-->(2-5)
+ └── project
+      ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f2:9 f3:10!null
+      ├── fd: (1)-->(2-5), (2)==(10), (10)==(2)
+      └── distinct-on
+           ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
+           ├── grouping columns: e1:1!null f1:8!null
+           ├── key: (1,8)
+           ├── fd: (2)==(10), (10)==(2), (1,8)-->(2-5,9,10)
+           ├── union-all
+           │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
+           │    ├── left columns: e1:14 e2:15 e3:16 e4:17 e5:18 f1:21 f2:22 f3:23
+           │    ├── right columns: e1:27 e2:28 e3:29 e4:30 e5:31 f1:34 f2:35 f3:36
+           │    ├── fd: (2)==(10), (10)==(2)
+           │    ├── inner-join (hash)
+           │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null f1:21!null f2:22 f3:23!null
+           │    │    ├── key: (14,21)
+           │    │    ├── fd: (14)-->(15-18), (21)-->(22,23), (15)==(23), (23)==(15)
+           │    │    ├── scan f@f_f2_idx
+           │    │    │    ├── columns: f1:21!null f2:22 f3:23
+           │    │    │    ├── key: (21)
+           │    │    │    └── fd: (21)-->(22,23)
+           │    │    ├── index-join e
+           │    │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null
+           │    │    │    ├── key: (14)
+           │    │    │    ├── fd: (14)-->(15-18)
+           │    │    │    └── scan e@e_e5_idx
+           │    │    │         ├── columns: e1:14!null e5:18!null
+           │    │    │         ├── constraint: /18/14: [/31 - /39]
+           │    │    │         ├── key: (14)
+           │    │    │         └── fd: (14)-->(18)
+           │    │    └── filters
+           │    │         └── f3:23 = e2:15 [outer=(15,23), constraints=(/15: (/NULL - ]; /23: (/NULL - ]), fd=(15)==(23), (23)==(15)]
+           │    └── inner-join (hash)
+           │         ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31 f1:34!null f2:35!null f3:36!null
+           │         ├── key: (27,34)
+           │         ├── fd: (27)-->(28-31), (34)-->(35,36), (28)==(36), (36)==(28)
+           │         ├── scan f@f_f2_idx
+           │         │    ├── columns: f1:34!null f2:35!null f3:36
+           │         │    ├── constraint: /35/34: [/11 - /19]
+           │         │    ├── key: (34)
+           │         │    └── fd: (34)-->(35,36)
+           │         ├── index-join e
+           │         │    ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31
+           │         │    ├── key: (27)
+           │         │    ├── fd: (27)-->(28-31)
+           │         │    └── scan e@e_e3_idx,partial
+           │         │         ├── columns: e1:27!null e3:29!null
+           │         │         ├── key: (27)
+           │         │         └── fd: (27)-->(29)
+           │         └── filters
+           │              └── f3:36 = e2:28 [outer=(28,36), constraints=(/28: (/NULL - ]; /36: (/NULL - ]), fd=(28)==(36), (36)==(28)]
+           └── aggregations
+                ├── const-agg [as=e2:2, outer=(2)]
+                │    └── e2:2
+                ├── const-agg [as=e3:3, outer=(3)]
+                │    └── e3:3
+                ├── const-agg [as=e4:4, outer=(4)]
+                │    └── e4:4
+                ├── const-agg [as=e5:5, outer=(5)]
+                │    └── e5:5
+                ├── const-agg [as=f2:9, outer=(9)]
+                │    └── f2:9
+                └── const-agg [as=f3:10, outer=(10)]
+                     └── f3:10
+
 #########################
 # Uncorrelated semijoin #
 #########################
@@ -721,7 +962,7 @@ select
                 │         └── (d1:7 = 4) OR (d2:8 = 50) [outer=(7,8)]
                 └── 1
 
-opt expect-not=SplitDisjunctionOfJoinTerms
+opt expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM a WHERE EXISTS (SELECT 1 FROM c, d WHERE d1 = 4 OR c2 = 50 HAVING sum(d4) > 40)
 ----
 select
@@ -744,14 +985,55 @@ select
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    ├── fd: ()-->(21)
-                │    ├── inner-join (cross)
-                │    │    ├── columns: c2:8 d1:14 d4:17
-                │    │    ├── scan c
-                │    │    │    └── columns: c2:8
-                │    │    ├── scan d
-                │    │    │    └── columns: d1:14 d4:17
-                │    │    └── filters
-                │    │         └── (d1:14 = 4) OR (c2:8 = 50) [outer=(8,14)]
+                │    ├── distinct-on
+                │    │    ├── columns: c2:8 c.rowid:11!null d1:14 d4:17 d.rowid:18!null
+                │    │    ├── grouping columns: c.rowid:11!null d.rowid:18!null
+                │    │    ├── key: (11,18)
+                │    │    ├── fd: (11,18)-->(8,14,17)
+                │    │    ├── union-all
+                │    │    │    ├── columns: c2:8 c.rowid:11!null d1:14 d4:17 d.rowid:18!null
+                │    │    │    ├── left columns: c2:24 c.rowid:27 d1:30 d4:33 d.rowid:34
+                │    │    │    ├── right columns: c2:38 c.rowid:41 d1:44 d4:47 d.rowid:48
+                │    │    │    ├── inner-join (cross)
+                │    │    │    │    ├── columns: c2:24 c.rowid:27!null d1:30!null d4:33 d.rowid:34!null
+                │    │    │    │    ├── key: (27,34)
+                │    │    │    │    ├── fd: ()-->(30), (27)-->(24), (34)-->(33)
+                │    │    │    │    ├── scan c
+                │    │    │    │    │    ├── columns: c2:24 c.rowid:27!null
+                │    │    │    │    │    ├── key: (27)
+                │    │    │    │    │    └── fd: (27)-->(24)
+                │    │    │    │    ├── scan d@d
+                │    │    │    │    │    ├── columns: d1:30!null d4:33 d.rowid:34!null
+                │    │    │    │    │    ├── constraint: /30/34: [/4 - /4]
+                │    │    │    │    │    ├── key: (34)
+                │    │    │    │    │    └── fd: ()-->(30), (34)-->(33)
+                │    │    │    │    └── filters (true)
+                │    │    │    └── inner-join (cross)
+                │    │    │         ├── columns: c2:38!null c.rowid:41!null d1:44 d4:47 d.rowid:48!null
+                │    │    │         ├── key: (41,48)
+                │    │    │         ├── fd: ()-->(38), (48)-->(44,47)
+                │    │    │         ├── scan d
+                │    │    │         │    ├── columns: d1:44 d4:47 d.rowid:48!null
+                │    │    │         │    ├── key: (48)
+                │    │    │         │    └── fd: (48)-->(44,47)
+                │    │    │         ├── select
+                │    │    │         │    ├── columns: c2:38!null c.rowid:41!null
+                │    │    │         │    ├── key: (41)
+                │    │    │         │    ├── fd: ()-->(38)
+                │    │    │         │    ├── scan c
+                │    │    │         │    │    ├── columns: c2:38 c.rowid:41!null
+                │    │    │         │    │    ├── key: (41)
+                │    │    │         │    │    └── fd: (41)-->(38)
+                │    │    │         │    └── filters
+                │    │    │         │         └── c2:38 = 50 [outer=(38), constraints=(/38: [/50 - /50]; tight), fd=()-->(38)]
+                │    │    │         └── filters (true)
+                │    │    └── aggregations
+                │    │         ├── const-agg [as=c2:8, outer=(8)]
+                │    │         │    └── c2:8
+                │    │         ├── const-agg [as=d1:14, outer=(14)]
+                │    │         │    └── d1:14
+                │    │         └── const-agg [as=d4:17, outer=(17)]
+                │    │              └── d4:17
                 │    └── aggregations
                 │         └── sum [as=sum:21, outer=(17)]
                 │              └── d4:17
@@ -1042,39 +1324,39 @@ project
       │         │    ├── columns: c1:7 c.rowid:11!null d1:14 d.rowid:18!null
       │         │    ├── left columns: c1:34 c.rowid:38 d1:41 d.rowid:45
       │         │    ├── right columns: c1:48 c.rowid:52 d1:55 d.rowid:59
-      │         │    ├── inner-join (hash)
-      │         │    │    ├── columns: c1:34!null c.rowid:38!null d1:41!null d.rowid:45!null
+      │         │    ├── inner-join (cross)
+      │         │    │    ├── columns: c1:34 c.rowid:38!null d1:41 d.rowid:45!null
       │         │    │    ├── key: (38,45)
-      │         │    │    ├── fd: (38)-->(34), (45)-->(41), (34)==(41), (41)==(34)
-      │         │    │    ├── scan c
-      │         │    │    │    ├── columns: c1:34 c.rowid:38!null
-      │         │    │    │    ├── key: (38)
-      │         │    │    │    └── fd: (38)-->(34)
+      │         │    │    ├── fd: ()-->(34), (45)-->(41)
       │         │    │    ├── scan d
       │         │    │    │    ├── columns: d1:41 d.rowid:45!null
       │         │    │    │    ├── key: (45)
       │         │    │    │    └── fd: (45)-->(41)
-      │         │    │    └── filters
-      │         │    │         └── c1:34 = d1:41 [outer=(34,41), constraints=(/34: (/NULL - ]; /41: (/NULL - ]), fd=(34)==(41), (41)==(34)]
-      │         │    └── inner-join (cross)
-      │         │         ├── columns: c1:48 c.rowid:52!null d1:55 d.rowid:59!null
+      │         │    │    ├── select
+      │         │    │    │    ├── columns: c1:34 c.rowid:38!null
+      │         │    │    │    ├── key: (38)
+      │         │    │    │    ├── fd: ()-->(34)
+      │         │    │    │    ├── scan c
+      │         │    │    │    │    ├── columns: c1:34 c.rowid:38!null
+      │         │    │    │    │    ├── key: (38)
+      │         │    │    │    │    └── fd: (38)-->(34)
+      │         │    │    │    └── filters
+      │         │    │    │         └── c1:34 IS NULL [outer=(34), constraints=(/34: [/NULL - /NULL]; tight), fd=()-->(34)]
+      │         │    │    └── filters (true)
+      │         │    └── inner-join (hash)
+      │         │         ├── columns: c1:48!null c.rowid:52!null d1:55!null d.rowid:59!null
       │         │         ├── key: (52,59)
-      │         │         ├── fd: ()-->(48), (59)-->(55)
+      │         │         ├── fd: (52)-->(48), (59)-->(55), (48)==(55), (55)==(48)
+      │         │         ├── scan c
+      │         │         │    ├── columns: c1:48 c.rowid:52!null
+      │         │         │    ├── key: (52)
+      │         │         │    └── fd: (52)-->(48)
       │         │         ├── scan d
       │         │         │    ├── columns: d1:55 d.rowid:59!null
       │         │         │    ├── key: (59)
       │         │         │    └── fd: (59)-->(55)
-      │         │         ├── select
-      │         │         │    ├── columns: c1:48 c.rowid:52!null
-      │         │         │    ├── key: (52)
-      │         │         │    ├── fd: ()-->(48)
-      │         │         │    ├── scan c
-      │         │         │    │    ├── columns: c1:48 c.rowid:52!null
-      │         │         │    │    ├── key: (52)
-      │         │         │    │    └── fd: (52)-->(48)
-      │         │         │    └── filters
-      │         │         │         └── c1:48 IS NULL [outer=(48), constraints=(/48: [/NULL - /NULL]; tight), fd=()-->(48)]
-      │         │         └── filters (true)
+      │         │         └── filters
+      │         │              └── c1:48 = d1:55 [outer=(48,55), constraints=(/48: (/NULL - ]; /55: (/NULL - ]), fd=(48)==(55), (55)==(48)]
       │         └── aggregations
       │              ├── const-agg [as=c1:7, outer=(7)]
       │              │    └── c1:7
@@ -1110,39 +1392,39 @@ anti-join (cross)
  │         │    ├── columns: c1:8 c.rowid:12!null d1:15 d.rowid:19!null
  │         │    ├── left columns: c1:22 c.rowid:26 d1:29 d.rowid:33
  │         │    ├── right columns: c1:36 c.rowid:40 d1:43 d.rowid:47
- │         │    ├── inner-join (hash)
- │         │    │    ├── columns: c1:22!null c.rowid:26!null d1:29!null d.rowid:33!null
+ │         │    ├── inner-join (cross)
+ │         │    │    ├── columns: c1:22 c.rowid:26!null d1:29 d.rowid:33!null
  │         │    │    ├── key: (26,33)
- │         │    │    ├── fd: (26)-->(22), (33)-->(29), (22)==(29), (29)==(22)
- │         │    │    ├── scan c
- │         │    │    │    ├── columns: c1:22 c.rowid:26!null
- │         │    │    │    ├── key: (26)
- │         │    │    │    └── fd: (26)-->(22)
+ │         │    │    ├── fd: ()-->(22), (33)-->(29)
  │         │    │    ├── scan d
  │         │    │    │    ├── columns: d1:29 d.rowid:33!null
  │         │    │    │    ├── key: (33)
  │         │    │    │    └── fd: (33)-->(29)
- │         │    │    └── filters
- │         │    │         └── c1:22 = d1:29 [outer=(22,29), constraints=(/22: (/NULL - ]; /29: (/NULL - ]), fd=(22)==(29), (29)==(22)]
- │         │    └── inner-join (cross)
- │         │         ├── columns: c1:36 c.rowid:40!null d1:43 d.rowid:47!null
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: c1:22 c.rowid:26!null
+ │         │    │    │    ├── key: (26)
+ │         │    │    │    ├── fd: ()-->(22)
+ │         │    │    │    ├── scan c
+ │         │    │    │    │    ├── columns: c1:22 c.rowid:26!null
+ │         │    │    │    │    ├── key: (26)
+ │         │    │    │    │    └── fd: (26)-->(22)
+ │         │    │    │    └── filters
+ │         │    │    │         └── c1:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+ │         │    │    └── filters (true)
+ │         │    └── inner-join (hash)
+ │         │         ├── columns: c1:36!null c.rowid:40!null d1:43!null d.rowid:47!null
  │         │         ├── key: (40,47)
- │         │         ├── fd: ()-->(36), (47)-->(43)
+ │         │         ├── fd: (40)-->(36), (47)-->(43), (36)==(43), (43)==(36)
+ │         │         ├── scan c
+ │         │         │    ├── columns: c1:36 c.rowid:40!null
+ │         │         │    ├── key: (40)
+ │         │         │    └── fd: (40)-->(36)
  │         │         ├── scan d
  │         │         │    ├── columns: d1:43 d.rowid:47!null
  │         │         │    ├── key: (47)
  │         │         │    └── fd: (47)-->(43)
- │         │         ├── select
- │         │         │    ├── columns: c1:36 c.rowid:40!null
- │         │         │    ├── key: (40)
- │         │         │    ├── fd: ()-->(36)
- │         │         │    ├── scan c
- │         │         │    │    ├── columns: c1:36 c.rowid:40!null
- │         │         │    │    ├── key: (40)
- │         │         │    │    └── fd: (40)-->(36)
- │         │         │    └── filters
- │         │         │         └── c1:36 IS NULL [outer=(36), constraints=(/36: [/NULL - /NULL]; tight), fd=()-->(36)]
- │         │         └── filters (true)
+ │         │         └── filters
+ │         │              └── c1:36 = d1:43 [outer=(36,43), constraints=(/36: (/NULL - ]; /43: (/NULL - ]), fd=(36)==(43), (43)==(36)]
  │         └── aggregations
  │              ├── const-agg [as=c1:8, outer=(8)]
  │              │    └── c1:8
@@ -1172,39 +1454,39 @@ anti-join (cross)
  │    │         │    ├── columns: c1:8 c2:9 c.rowid:12!null d1:15 d.rowid:19!null
  │    │         │    ├── left columns: c1:23 c2:24 c.rowid:27 d1:30 d.rowid:34
  │    │         │    ├── right columns: c1:37 c2:38 c.rowid:41 d1:44 d.rowid:48
- │    │         │    ├── inner-join (hash)
- │    │         │    │    ├── columns: c1:23!null c2:24 c.rowid:27!null d1:30!null d.rowid:34!null
+ │    │         │    ├── inner-join (cross)
+ │    │         │    │    ├── columns: c1:23 c2:24 c.rowid:27!null d1:30 d.rowid:34!null
  │    │         │    │    ├── key: (27,34)
- │    │         │    │    ├── fd: (27)-->(23,24), (34)-->(30), (23)==(30), (30)==(23)
- │    │         │    │    ├── scan c
- │    │         │    │    │    ├── columns: c1:23 c2:24 c.rowid:27!null
- │    │         │    │    │    ├── key: (27)
- │    │         │    │    │    └── fd: (27)-->(23,24)
+ │    │         │    │    ├── fd: ()-->(23), (27)-->(24), (34)-->(30)
  │    │         │    │    ├── scan d
  │    │         │    │    │    ├── columns: d1:30 d.rowid:34!null
  │    │         │    │    │    ├── key: (34)
  │    │         │    │    │    └── fd: (34)-->(30)
- │    │         │    │    └── filters
- │    │         │    │         └── c1:23 = d1:30 [outer=(23,30), constraints=(/23: (/NULL - ]; /30: (/NULL - ]), fd=(23)==(30), (30)==(23)]
- │    │         │    └── inner-join (cross)
- │    │         │         ├── columns: c1:37 c2:38 c.rowid:41!null d1:44 d.rowid:48!null
+ │    │         │    │    ├── select
+ │    │         │    │    │    ├── columns: c1:23 c2:24 c.rowid:27!null
+ │    │         │    │    │    ├── key: (27)
+ │    │         │    │    │    ├── fd: ()-->(23), (27)-->(24)
+ │    │         │    │    │    ├── scan c
+ │    │         │    │    │    │    ├── columns: c1:23 c2:24 c.rowid:27!null
+ │    │         │    │    │    │    ├── key: (27)
+ │    │         │    │    │    │    └── fd: (27)-->(23,24)
+ │    │         │    │    │    └── filters
+ │    │         │    │    │         └── c1:23 IS NULL [outer=(23), constraints=(/23: [/NULL - /NULL]; tight), fd=()-->(23)]
+ │    │         │    │    └── filters (true)
+ │    │         │    └── inner-join (hash)
+ │    │         │         ├── columns: c1:37!null c2:38 c.rowid:41!null d1:44!null d.rowid:48!null
  │    │         │         ├── key: (41,48)
- │    │         │         ├── fd: ()-->(37), (41)-->(38), (48)-->(44)
+ │    │         │         ├── fd: (41)-->(37,38), (48)-->(44), (37)==(44), (44)==(37)
+ │    │         │         ├── scan c
+ │    │         │         │    ├── columns: c1:37 c2:38 c.rowid:41!null
+ │    │         │         │    ├── key: (41)
+ │    │         │         │    └── fd: (41)-->(37,38)
  │    │         │         ├── scan d
  │    │         │         │    ├── columns: d1:44 d.rowid:48!null
  │    │         │         │    ├── key: (48)
  │    │         │         │    └── fd: (48)-->(44)
- │    │         │         ├── select
- │    │         │         │    ├── columns: c1:37 c2:38 c.rowid:41!null
- │    │         │         │    ├── key: (41)
- │    │         │         │    ├── fd: ()-->(37), (41)-->(38)
- │    │         │         │    ├── scan c
- │    │         │         │    │    ├── columns: c1:37 c2:38 c.rowid:41!null
- │    │         │         │    │    ├── key: (41)
- │    │         │         │    │    └── fd: (41)-->(37,38)
- │    │         │         │    └── filters
- │    │         │         │         └── c1:37 IS NULL [outer=(37), constraints=(/37: [/NULL - /NULL]; tight), fd=()-->(37)]
- │    │         │         └── filters (true)
+ │    │         │         └── filters
+ │    │         │              └── c1:37 = d1:44 [outer=(37,44), constraints=(/37: (/NULL - ]; /44: (/NULL - ]), fd=(37)==(44), (44)==(37)]
  │    │         └── aggregations
  │    │              ├── const-agg [as=c1:8, outer=(8)]
  │    │              │    └── c1:8
@@ -1271,7 +1553,7 @@ select
                      │                   └── b2:8
                      └── 1
 
-opt expect-not=SplitDisjunctionOfJoinTerms
+opt expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM a WHERE NOT EXISTS (SELECT 1 FROM c, d WHERE d1 = 4 OR c2 = 50 or d2+c3 > 5)
 ----
 select
@@ -1594,39 +1876,39 @@ anti-join (cross)
  │    │         │    ├── columns: c1:7 c.rowid:11!null d1:14 d.rowid:18!null
  │    │         │    ├── left columns: c1:22 c.rowid:26 d1:29 d.rowid:33
  │    │         │    ├── right columns: c1:36 c.rowid:40 d1:43 d.rowid:47
- │    │         │    ├── inner-join (hash)
- │    │         │    │    ├── columns: c1:22!null c.rowid:26!null d1:29!null d.rowid:33!null
+ │    │         │    ├── inner-join (cross)
+ │    │         │    │    ├── columns: c1:22 c.rowid:26!null d1:29 d.rowid:33!null
  │    │         │    │    ├── key: (26,33)
- │    │         │    │    ├── fd: (26)-->(22), (33)-->(29), (22)==(29), (29)==(22)
- │    │         │    │    ├── scan c
- │    │         │    │    │    ├── columns: c1:22 c.rowid:26!null
- │    │         │    │    │    ├── key: (26)
- │    │         │    │    │    └── fd: (26)-->(22)
+ │    │         │    │    ├── fd: ()-->(22), (33)-->(29)
  │    │         │    │    ├── scan d
  │    │         │    │    │    ├── columns: d1:29 d.rowid:33!null
  │    │         │    │    │    ├── key: (33)
  │    │         │    │    │    └── fd: (33)-->(29)
- │    │         │    │    └── filters
- │    │         │    │         └── c1:22 = d1:29 [outer=(22,29), constraints=(/22: (/NULL - ]; /29: (/NULL - ]), fd=(22)==(29), (29)==(22)]
- │    │         │    └── inner-join (cross)
- │    │         │         ├── columns: c1:36 c.rowid:40!null d1:43 d.rowid:47!null
+ │    │         │    │    ├── select
+ │    │         │    │    │    ├── columns: c1:22 c.rowid:26!null
+ │    │         │    │    │    ├── key: (26)
+ │    │         │    │    │    ├── fd: ()-->(22)
+ │    │         │    │    │    ├── scan c
+ │    │         │    │    │    │    ├── columns: c1:22 c.rowid:26!null
+ │    │         │    │    │    │    ├── key: (26)
+ │    │         │    │    │    │    └── fd: (26)-->(22)
+ │    │         │    │    │    └── filters
+ │    │         │    │    │         └── c1:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+ │    │         │    │    └── filters (true)
+ │    │         │    └── inner-join (hash)
+ │    │         │         ├── columns: c1:36!null c.rowid:40!null d1:43!null d.rowid:47!null
  │    │         │         ├── key: (40,47)
- │    │         │         ├── fd: ()-->(36), (47)-->(43)
+ │    │         │         ├── fd: (40)-->(36), (47)-->(43), (36)==(43), (43)==(36)
+ │    │         │         ├── scan c
+ │    │         │         │    ├── columns: c1:36 c.rowid:40!null
+ │    │         │         │    ├── key: (40)
+ │    │         │         │    └── fd: (40)-->(36)
  │    │         │         ├── scan d
  │    │         │         │    ├── columns: d1:43 d.rowid:47!null
  │    │         │         │    ├── key: (47)
  │    │         │         │    └── fd: (47)-->(43)
- │    │         │         ├── select
- │    │         │         │    ├── columns: c1:36 c.rowid:40!null
- │    │         │         │    ├── key: (40)
- │    │         │         │    ├── fd: ()-->(36)
- │    │         │         │    ├── scan c
- │    │         │         │    │    ├── columns: c1:36 c.rowid:40!null
- │    │         │         │    │    ├── key: (40)
- │    │         │         │    │    └── fd: (40)-->(36)
- │    │         │         │    └── filters
- │    │         │         │         └── c1:36 IS NULL [outer=(36), constraints=(/36: [/NULL - /NULL]; tight), fd=()-->(36)]
- │    │         │         └── filters (true)
+ │    │         │         └── filters
+ │    │         │              └── c1:36 = d1:43 [outer=(36,43), constraints=(/36: (/NULL - ]; /43: (/NULL - ]), fd=(36)==(43), (43)==(36)]
  │    │         └── aggregations
  │    │              ├── const-agg [as=c1:7, outer=(7)]
  │    │              │    └── c1:7
@@ -2138,23 +2420,35 @@ project
  │         │              │    │    ├── columns: b1:23 b2:24 b3:25 b.rowid:27!null
  │         │              │    │    ├── key: (27)
  │         │              │    │    ├── fd: (27)-->(23-25)
- │         │              │    │    └── inner-join (hash)
- │         │              │    │         ├── columns: b1:23 b2:24!null b3:25 b.rowid:27!null c2:31!null
- │         │              │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │              │    │    └── project
+ │         │              │    │         ├── columns: b1:23 b2:24 b3:25 b.rowid:27!null
  │         │              │    │         ├── key: (27)
- │         │              │    │         ├── fd: (27)-->(23-25), (24)==(31), (31)==(24)
- │         │              │    │         ├── scan b
- │         │              │    │         │    ├── columns: b1:23 b2:24 b3:25 b.rowid:27!null
- │         │              │    │         │    ├── key: (27)
- │         │              │    │         │    └── fd: (27)-->(23-25)
- │         │              │    │         ├── distinct-on
- │         │              │    │         │    ├── columns: c2:31
- │         │              │    │         │    ├── grouping columns: c2:31
- │         │              │    │         │    ├── key: (31)
- │         │              │    │         │    └── scan c
- │         │              │    │         │         └── columns: c2:31
- │         │              │    │         └── filters
- │         │              │    │              └── c2:31 = b2:24 [outer=(24,31), constraints=(/24: (/NULL - ]; /31: (/NULL - ]), fd=(24)==(31), (31)==(24)]
+ │         │              │    │         ├── fd: (27)-->(23-25)
+ │         │              │    │         └── inner-join (cross)
+ │         │              │    │              ├── columns: b1:23 b2:24 b3:25 b.rowid:27!null c2:31
+ │         │              │    │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │              │    │              ├── key: (27)
+ │         │              │    │              ├── fd: ()-->(31), (27)-->(23-25)
+ │         │              │    │              ├── scan b
+ │         │              │    │              │    ├── columns: b1:23 b2:24 b3:25 b.rowid:27!null
+ │         │              │    │              │    ├── key: (27)
+ │         │              │    │              │    └── fd: (27)-->(23-25)
+ │         │              │    │              ├── limit
+ │         │              │    │              │    ├── columns: c2:31
+ │         │              │    │              │    ├── cardinality: [0 - 1]
+ │         │              │    │              │    ├── key: ()
+ │         │              │    │              │    ├── fd: ()-->(31)
+ │         │              │    │              │    ├── select
+ │         │              │    │              │    │    ├── columns: c2:31
+ │         │              │    │              │    │    ├── fd: ()-->(31)
+ │         │              │    │              │    │    ├── limit hint: 1.00
+ │         │              │    │              │    │    ├── scan c
+ │         │              │    │              │    │    │    ├── columns: c2:31
+ │         │              │    │              │    │    │    └── limit hint: 100.00
+ │         │              │    │              │    │    └── filters
+ │         │              │    │              │    │         └── c2:31 IS NULL [outer=(31), constraints=(/31: [/NULL - /NULL]; tight), fd=()-->(31)]
+ │         │              │    │              │    └── 1
+ │         │              │    │              └── filters (true)
  │         │              │    └── project
  │         │              │         ├── columns: b1:37 b2:38 b3:39 b.rowid:41!null
  │         │              │         ├── key: (41)
@@ -2193,35 +2487,23 @@ project
  │         │              │              │         ├── columns: b1:205 b2:206 b3:207 b.rowid:209!null
  │         │              │              │         ├── key: (209)
  │         │              │              │         ├── fd: (209)-->(205-207)
- │         │              │              │         └── project
- │         │              │              │              ├── columns: b1:205 b2:206 b3:207 b.rowid:209!null
+ │         │              │              │         └── inner-join (hash)
+ │         │              │              │              ├── columns: b1:205 b2:206!null b3:207 b.rowid:209!null c2:213!null
+ │         │              │              │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         │              │              │              ├── key: (209)
- │         │              │              │              ├── fd: (209)-->(205-207)
- │         │              │              │              └── inner-join (cross)
- │         │              │              │                   ├── columns: b1:205 b2:206 b3:207 b.rowid:209!null c2:213
- │         │              │              │                   ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │              │              │                   ├── key: (209)
- │         │              │              │                   ├── fd: ()-->(213), (209)-->(205-207)
- │         │              │              │                   ├── scan b
- │         │              │              │                   │    ├── columns: b1:205 b2:206 b3:207 b.rowid:209!null
- │         │              │              │                   │    ├── key: (209)
- │         │              │              │                   │    └── fd: (209)-->(205-207)
- │         │              │              │                   ├── limit
- │         │              │              │                   │    ├── columns: c2:213
- │         │              │              │                   │    ├── cardinality: [0 - 1]
- │         │              │              │                   │    ├── key: ()
- │         │              │              │                   │    ├── fd: ()-->(213)
- │         │              │              │                   │    ├── select
- │         │              │              │                   │    │    ├── columns: c2:213
- │         │              │              │                   │    │    ├── fd: ()-->(213)
- │         │              │              │                   │    │    ├── limit hint: 1.00
- │         │              │              │                   │    │    ├── scan c
- │         │              │              │                   │    │    │    ├── columns: c2:213
- │         │              │              │                   │    │    │    └── limit hint: 100.00
- │         │              │              │                   │    │    └── filters
- │         │              │              │                   │    │         └── c2:213 IS NULL [outer=(213), constraints=(/213: [/NULL - /NULL]; tight), fd=()-->(213)]
- │         │              │              │                   │    └── 1
- │         │              │              │                   └── filters (true)
+ │         │              │              │              ├── fd: (209)-->(205-207), (206)==(213), (213)==(206)
+ │         │              │              │              ├── scan b
+ │         │              │              │              │    ├── columns: b1:205 b2:206 b3:207 b.rowid:209!null
+ │         │              │              │              │    ├── key: (209)
+ │         │              │              │              │    └── fd: (209)-->(205-207)
+ │         │              │              │              ├── distinct-on
+ │         │              │              │              │    ├── columns: c2:213
+ │         │              │              │              │    ├── grouping columns: c2:213
+ │         │              │              │              │    ├── key: (213)
+ │         │              │              │              │    └── scan c
+ │         │              │              │              │         └── columns: c2:213
+ │         │              │              │              └── filters
+ │         │              │              │                   └── c2:213 = b2:206 [outer=(206,213), constraints=(/206: (/NULL - ]; /213: (/NULL - ]), fd=(206)==(213), (213)==(206)]
  │         │              │              └── aggregations
  │         │              │                   ├── const-agg [as=b1:37, outer=(37)]
  │         │              │                   │    └── b1:37
@@ -2268,23 +2550,35 @@ project
  │    │         │    │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
  │    │         │    │    ├── key: (28)
  │    │         │    │    ├── fd: (28)-->(24-26)
- │    │         │    │    └── inner-join (hash)
- │    │         │    │         ├── columns: b1:24 b2:25!null b3:26 b.rowid:28!null c2:32!null
- │    │         │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         │    │    └── project
+ │    │         │    │         ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
  │    │         │    │         ├── key: (28)
- │    │         │    │         ├── fd: (28)-->(24-26), (25)==(32), (32)==(25)
- │    │         │    │         ├── scan b
- │    │         │    │         │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
- │    │         │    │         │    ├── key: (28)
- │    │         │    │         │    └── fd: (28)-->(24-26)
- │    │         │    │         ├── distinct-on
- │    │         │    │         │    ├── columns: c2:32
- │    │         │    │         │    ├── grouping columns: c2:32
- │    │         │    │         │    ├── key: (32)
- │    │         │    │         │    └── scan c
- │    │         │    │         │         └── columns: c2:32
- │    │         │    │         └── filters
- │    │         │    │              └── c2:32 = b2:25 [outer=(25,32), constraints=(/25: (/NULL - ]; /32: (/NULL - ]), fd=(25)==(32), (32)==(25)]
+ │    │         │    │         ├── fd: (28)-->(24-26)
+ │    │         │    │         └── inner-join (cross)
+ │    │         │    │              ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null c2:32
+ │    │         │    │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         │    │              ├── key: (28)
+ │    │         │    │              ├── fd: ()-->(32), (28)-->(24-26)
+ │    │         │    │              ├── scan b
+ │    │         │    │              │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
+ │    │         │    │              │    ├── key: (28)
+ │    │         │    │              │    └── fd: (28)-->(24-26)
+ │    │         │    │              ├── limit
+ │    │         │    │              │    ├── columns: c2:32
+ │    │         │    │              │    ├── cardinality: [0 - 1]
+ │    │         │    │              │    ├── key: ()
+ │    │         │    │              │    ├── fd: ()-->(32)
+ │    │         │    │              │    ├── select
+ │    │         │    │              │    │    ├── columns: c2:32
+ │    │         │    │              │    │    ├── fd: ()-->(32)
+ │    │         │    │              │    │    ├── limit hint: 1.00
+ │    │         │    │              │    │    ├── scan c
+ │    │         │    │              │    │    │    ├── columns: c2:32
+ │    │         │    │              │    │    │    └── limit hint: 100.00
+ │    │         │    │              │    │    └── filters
+ │    │         │    │              │    │         └── c2:32 IS NULL [outer=(32), constraints=(/32: [/NULL - /NULL]; tight), fd=()-->(32)]
+ │    │         │    │              │    └── 1
+ │    │         │    │              └── filters (true)
  │    │         │    └── project
  │    │         │         ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
  │    │         │         ├── key: (42)
@@ -2323,35 +2617,23 @@ project
  │    │         │              │         ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
  │    │         │              │         ├── key: (210)
  │    │         │              │         ├── fd: (210)-->(206-208)
- │    │         │              │         └── project
- │    │         │              │              ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
+ │    │         │              │         └── inner-join (hash)
+ │    │         │              │              ├── columns: b1:206 b2:207!null b3:208 b.rowid:210!null c2:214!null
+ │    │         │              │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │         │              │              ├── key: (210)
- │    │         │              │              ├── fd: (210)-->(206-208)
- │    │         │              │              └── inner-join (cross)
- │    │         │              │                   ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null c2:214
- │    │         │              │                   ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │         │              │                   ├── key: (210)
- │    │         │              │                   ├── fd: ()-->(214), (210)-->(206-208)
- │    │         │              │                   ├── scan b
- │    │         │              │                   │    ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
- │    │         │              │                   │    ├── key: (210)
- │    │         │              │                   │    └── fd: (210)-->(206-208)
- │    │         │              │                   ├── limit
- │    │         │              │                   │    ├── columns: c2:214
- │    │         │              │                   │    ├── cardinality: [0 - 1]
- │    │         │              │                   │    ├── key: ()
- │    │         │              │                   │    ├── fd: ()-->(214)
- │    │         │              │                   │    ├── select
- │    │         │              │                   │    │    ├── columns: c2:214
- │    │         │              │                   │    │    ├── fd: ()-->(214)
- │    │         │              │                   │    │    ├── limit hint: 1.00
- │    │         │              │                   │    │    ├── scan c
- │    │         │              │                   │    │    │    ├── columns: c2:214
- │    │         │              │                   │    │    │    └── limit hint: 100.00
- │    │         │              │                   │    │    └── filters
- │    │         │              │                   │    │         └── c2:214 IS NULL [outer=(214), constraints=(/214: [/NULL - /NULL]; tight), fd=()-->(214)]
- │    │         │              │                   │    └── 1
- │    │         │              │                   └── filters (true)
+ │    │         │              │              ├── fd: (210)-->(206-208), (207)==(214), (214)==(207)
+ │    │         │              │              ├── scan b
+ │    │         │              │              │    ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
+ │    │         │              │              │    ├── key: (210)
+ │    │         │              │              │    └── fd: (210)-->(206-208)
+ │    │         │              │              ├── distinct-on
+ │    │         │              │              │    ├── columns: c2:214
+ │    │         │              │              │    ├── grouping columns: c2:214
+ │    │         │              │              │    ├── key: (214)
+ │    │         │              │              │    └── scan c
+ │    │         │              │              │         └── columns: c2:214
+ │    │         │              │              └── filters
+ │    │         │              │                   └── c2:214 = b2:207 [outer=(207,214), constraints=(/207: (/NULL - ]; /214: (/NULL - ]), fd=(207)==(214), (214)==(207)]
  │    │         │              └── aggregations
  │    │         │                   ├── const-agg [as=b1:38, outer=(38)]
  │    │         │                   │    └── b1:38
@@ -2969,6 +3251,161 @@ inner-join (hash)
  └── filters
       └── a1:1 = b1:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
+# We should be able to split the disjunction even though the predicates are
+# equalities but not equijoin expressions.
+opt expect=SplitDisjunctionOfJoinTerms
+SELECT
+  e.*
+FROM
+  e
+WHERE EXISTS (
+  SELECT *
+  FROM f
+  WHERE (e5 = 30 OR (e3 = 10 AND f2 = 20)) AND f3 = e2
+);
+----
+project
+ ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── distinct-on
+      ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+      ├── grouping columns: e1:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
+      ├── union-all
+      │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+      │    ├── left columns: e1:14 e2:15 e3:16 e4:17 e5:18
+      │    ├── right columns: e1:27 e2:28 e3:29 e4:30 e5:31
+      │    ├── semi-join (lookup f@f_f3_idx)
+      │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null
+      │    │    ├── key columns: [15] = [23]
+      │    │    ├── key: (14)
+      │    │    ├── fd: ()-->(18), (14)-->(15-17)
+      │    │    ├── index-join e
+      │    │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null
+      │    │    │    ├── key: (14)
+      │    │    │    ├── fd: ()-->(18), (14)-->(15-17)
+      │    │    │    └── scan e@e_e5_idx
+      │    │    │         ├── columns: e1:14!null e5:18!null
+      │    │    │         ├── constraint: /18/14: [/30 - /30]
+      │    │    │         ├── key: (14)
+      │    │    │         └── fd: ()-->(18)
+      │    │    └── filters (true)
+      │    └── semi-join (hash)
+      │         ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31
+      │         ├── key: (27)
+      │         ├── fd: ()-->(29), (27)-->(28,30,31)
+      │         ├── index-join e
+      │         │    ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31
+      │         │    ├── key: (27)
+      │         │    ├── fd: ()-->(29), (27)-->(28,30,31)
+      │         │    └── scan e@e_e3_e5_e4_idx
+      │         │         ├── columns: e1:27!null e3:29!null e4:30!null e5:31
+      │         │         ├── constraint: /29/31/30/27: [/10 - /10]
+      │         │         ├── key: (27)
+      │         │         └── fd: ()-->(29), (27)-->(30,31)
+      │         ├── scan f@f_f2_idx
+      │         │    ├── columns: f2:35!null f3:36
+      │         │    ├── constraint: /35/34: [/20 - /20]
+      │         │    └── fd: ()-->(35)
+      │         └── filters
+      │              └── f3:36 = e2:28 [outer=(28,36), constraints=(/28: (/NULL - ]; /36: (/NULL - ]), fd=(28)==(36), (36)==(28)]
+      └── aggregations
+           ├── const-agg [as=e2:2, outer=(2)]
+           │    └── e2:2
+           ├── const-agg [as=e3:3, outer=(3)]
+           │    └── e3:3
+           ├── const-agg [as=e4:4, outer=(4)]
+           │    └── e4:4
+           └── const-agg [as=e5:5, outer=(5)]
+                └── e5:5
+
+# We should be able to split the disjunction even though the predicates are
+# not equalities.
+opt expect=SplitDisjunctionOfJoinTerms
+SELECT
+  e.*
+FROM
+  e
+WHERE EXISTS (
+  SELECT *
+  FROM f
+  WHERE (
+    (e.e5 > 30 AND e.e5 < 40)
+    OR (e.e4 IN ('a', 'b') AND f.f2 < 20 AND f.f2 > 10)
+  ) AND f3 = e2
+)
+----
+project
+ ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── distinct-on
+      ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+      ├── grouping columns: e1:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
+      ├── union-all
+      │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+      │    ├── left columns: e1:14 e2:15 e3:16 e4:17 e5:18
+      │    ├── right columns: e1:27 e2:28 e3:29 e4:30 e5:31
+      │    ├── project
+      │    │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null
+      │    │    ├── key: (14)
+      │    │    ├── fd: (14)-->(15-18)
+      │    │    └── inner-join (hash)
+      │    │         ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null f3:23!null
+      │    │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │         ├── key: (14)
+      │    │         ├── fd: (14)-->(15-18), (15)==(23), (23)==(15)
+      │    │         ├── distinct-on
+      │    │         │    ├── columns: f3:23
+      │    │         │    ├── grouping columns: f3:23
+      │    │         │    ├── internal-ordering: +23
+      │    │         │    ├── key: (23)
+      │    │         │    └── scan f@f_f3_idx
+      │    │         │         ├── columns: f3:23
+      │    │         │         └── ordering: +23
+      │    │         ├── index-join e
+      │    │         │    ├── columns: e1:14!null e2:15!null e3:16!null e4:17!null e5:18!null
+      │    │         │    ├── key: (14)
+      │    │         │    ├── fd: (14)-->(15-18)
+      │    │         │    └── scan e@e_e5_idx
+      │    │         │         ├── columns: e1:14!null e5:18!null
+      │    │         │         ├── constraint: /18/14: [/31 - /39]
+      │    │         │         ├── key: (14)
+      │    │         │         └── fd: (14)-->(18)
+      │    │         └── filters
+      │    │              └── f3:23 = e2:15 [outer=(15,23), constraints=(/15: (/NULL - ]; /23: (/NULL - ]), fd=(15)==(23), (23)==(15)]
+      │    └── semi-join (hash)
+      │         ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31
+      │         ├── key: (27)
+      │         ├── fd: (27)-->(28-31)
+      │         ├── index-join e
+      │         │    ├── columns: e1:27!null e2:28!null e3:29!null e4:30!null e5:31
+      │         │    ├── key: (27)
+      │         │    ├── fd: (27)-->(28-31)
+      │         │    └── scan e@e_e3_idx,partial
+      │         │         ├── columns: e1:27!null e3:29!null
+      │         │         ├── key: (27)
+      │         │         └── fd: (27)-->(29)
+      │         ├── scan f@f_f2_idx
+      │         │    ├── columns: f2:35!null f3:36
+      │         │    └── constraint: /35/34: [/11 - /19]
+      │         └── filters
+      │              └── f3:36 = e2:28 [outer=(28,36), constraints=(/28: (/NULL - ]; /36: (/NULL - ]), fd=(28)==(36), (36)==(28)]
+      └── aggregations
+           ├── const-agg [as=e2:2, outer=(2)]
+           │    └── e2:2
+           ├── const-agg [as=e3:3, outer=(3)]
+           │    └── e3:3
+           ├── const-agg [as=e4:4, outer=(4)]
+           │    └── e4:4
+           └── const-agg [as=e5:5, outer=(5)]
+                └── e5:5
+
+
 #######################
 # Correlated antijoin #
 #######################
@@ -3413,6 +3850,73 @@ inner-join (lookup a)
  │                   └── c2:44 = b2:37 [outer=(37,44), constraints=(/37: (/NULL - ]; /44: (/NULL - ]), fd=(37)==(44), (44)==(37)]
  └── filters (true)
 
+# We should be able to split the disjunction even though the predicates are
+# equalities but not equijoin expressions.
+# TODO(rytaft): investigate whether bad stats are causing us to select the
+# wrong plan.
+opt expect=SplitDisjunctionOfAntiJoinTerms
+SELECT
+  e.*
+FROM
+  e
+WHERE NOT EXISTS (
+  SELECT *
+  FROM f
+  WHERE ((e5 = 30 AND f2 = 40) OR (e3 = 10 AND f2 = 20)) AND f3 = e2
+);
+----
+anti-join (hash)
+ ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ │    ├── partial index predicates
+ │    │    └── e_e3_idx: filters
+ │    │         └── e4:4 IN ('a', 'b') [outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan f@f_f2_idx
+ │    └── columns: f2:9 f3:10
+ └── filters
+      ├── ((e5:5 = 30) AND (f2:9 = 40)) OR ((e3:3 = 10) AND (f2:9 = 20)) [outer=(3,5,9), constraints=(/9: [/20 - /20] [/40 - /40])]
+      └── f3:10 = e2:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+
+# We should be able to split the disjunction even though the predicates are
+# not equalities.
+# TODO(rytaft): investigate whether bad stats are causing us to select the
+# wrong plan.
+opt expect=SplitDisjunctionOfAntiJoinTerms
+SELECT
+  e.*
+FROM
+  e
+WHERE NOT EXISTS (
+  SELECT *
+  FROM f
+  WHERE (
+    (e.e5 > 30 AND e.e5 < 40)
+    OR (e.e4 IN ('a', 'b') AND f.f2 < 20 AND f.f2 > 10)
+  ) AND f3 = e2
+)
+----
+anti-join (hash)
+ ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5
+ │    ├── partial index predicates
+ │    │    └── e_e3_idx: filters
+ │    │         └── e4:4 IN ('a', 'b') [outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan f@f_f2_idx
+ │    └── columns: f2:9 f3:10
+ └── filters
+      ├── ((e5:5 > 30) AND (e5:5 < 40)) OR (((e4:4 IN ('a', 'b')) AND (f2:9 < 20)) AND (f2:9 > 10)) [outer=(4,5,9)]
+      └── f3:10 = e2:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+
 # NOT IN subquery
 opt expect=SplitDisjunctionOfJoinTerms
 SELECT d3,d1,d2 FROM d WHERE d1 NOT IN (SELECT b1 FROM b WHERE EXISTS (SELECT 1 FROM c WHERE c2=b2 OR c2=b3))
@@ -3579,28 +4083,85 @@ inner-join (cross)
  └── filters
       └── (((t1.a1:1 = t2.a1:7) OR (t1.a1:1 = t2.a2:8)) AND (t1.a2:2 = t2.a2:8)) OR (((t2.a1:7 = (t1.a1:1 + 1)) OR (t2.a2:8 = (t1.a1:1 + 4))) AND ((t2.a2:8 = (t1.a2:2 + 8)) OR (t2.a2:8 = (t1.a2:2 + 9)))) [outer=(1,2,7,8), immutable, constraints=(/8: (/NULL - ])]
 
-# Negative Tests
-# No equijoin terms. Must be at least one equality predicate referencing
-# columns from both tables.
-opt expect-not=SplitDisjunctionOfJoinTerms
-SELECT * FROM a t1, a t2 WHERE (t1.a2 = 1 OR t2.a2 = 1)
+# We can split the disjunction here even if the setting
+# optimizer_use_improved_split_disjunction_for_joins is false, since we
+# don't require bare variables on either side of the join equalities.
+opt expect=SplitDisjunctionOfJoinTerms set=optimizer_use_improved_split_disjunction_for_joins=false
+SELECT * FROM a t1, a t2 WHERE (t1.a2 = t2.a2+1 OR t1.a3 = t2.a3+1) AND (t1.a1 = t2.a1+1 OR t1.a4 = t2.a4+1)
 ----
-inner-join (cross)
+project
  ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null a1:7!null a2:8!null a3:9!null a4:10!null
+ ├── immutable
  ├── key: (1-4,7-10)
- ├── scan a [as=t1]
- │    ├── columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null
- │    └── key: (1-4)
- ├── scan a [as=t2]
- │    ├── columns: t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
- │    └── key: (7-10)
- └── filters
-      └── (t1.a2:2 = 1) OR (t2.a2:8 = 1) [outer=(2,8)]
+ └── distinct-on
+      ├── columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+      ├── grouping columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+      ├── immutable
+      ├── key: (1-4,7-10)
+      └── union-all
+           ├── columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+           ├── left columns: t1.a1:13 t1.a2:14 t1.a3:15 t1.a4:16 t2.a1:19 t2.a2:20 t2.a3:21 t2.a4:22
+           ├── right columns: t1.a1:25 t1.a2:26 t1.a3:27 t1.a4:28 t2.a1:31 t2.a2:32 t2.a3:33 t2.a4:34
+           ├── immutable
+           ├── project
+           │    ├── columns: t1.a1:13!null t1.a2:14!null t1.a3:15!null t1.a4:16!null t2.a1:19!null t2.a2:20!null t2.a3:21!null t2.a4:22!null
+           │    ├── immutable
+           │    ├── key: (13,15,16,19-22)
+           │    ├── fd: (20)-->(14)
+           │    └── inner-join (hash)
+           │         ├── columns: t1.a1:13!null t1.a2:14!null t1.a3:15!null t1.a4:16!null t2.a1:19!null t2.a2:20!null t2.a3:21!null t2.a4:22!null column37:37!null
+           │         ├── immutable
+           │         ├── key: (13,15,16,19-22)
+           │         ├── fd: (20)-->(37), (14)==(37), (37)==(14)
+           │         ├── scan a [as=t1]
+           │         │    ├── columns: t1.a1:13!null t1.a2:14!null t1.a3:15!null t1.a4:16!null
+           │         │    └── key: (13-16)
+           │         ├── project
+           │         │    ├── columns: column37:37!null t2.a1:19!null t2.a2:20!null t2.a3:21!null t2.a4:22!null
+           │         │    ├── immutable
+           │         │    ├── key: (19-22)
+           │         │    ├── fd: (20)-->(37)
+           │         │    ├── scan a [as=t2]
+           │         │    │    ├── columns: t2.a1:19!null t2.a2:20!null t2.a3:21!null t2.a4:22!null
+           │         │    │    └── key: (19-22)
+           │         │    └── projections
+           │         │         └── t2.a2:20 + 1 [as=column37:37, outer=(20), immutable]
+           │         └── filters
+           │              ├── (t1.a1:13 = (t2.a1:19 + 1)) OR (t1.a4:16 = (t2.a4:22 + 1)) [outer=(13,16,19,22), immutable]
+           │              └── t1.a2:14 = column37:37 [outer=(14,37), constraints=(/14: (/NULL - ]; /37: (/NULL - ]), fd=(14)==(37), (37)==(14)]
+           └── project
+                ├── columns: t1.a1:25!null t1.a2:26!null t1.a3:27!null t1.a4:28!null t2.a1:31!null t2.a2:32!null t2.a3:33!null t2.a4:34!null
+                ├── immutable
+                ├── key: (25,26,28,31-34)
+                ├── fd: (33)-->(27)
+                └── inner-join (hash)
+                     ├── columns: t1.a1:25!null t1.a2:26!null t1.a3:27!null t1.a4:28!null t2.a1:31!null t2.a2:32!null t2.a3:33!null t2.a4:34!null column38:38!null
+                     ├── immutable
+                     ├── key: (25,26,28,31-34)
+                     ├── fd: (33)-->(38), (27)==(38), (38)==(27)
+                     ├── scan a [as=t1]
+                     │    ├── columns: t1.a1:25!null t1.a2:26!null t1.a3:27!null t1.a4:28!null
+                     │    └── key: (25-28)
+                     ├── project
+                     │    ├── columns: column38:38!null t2.a1:31!null t2.a2:32!null t2.a3:33!null t2.a4:34!null
+                     │    ├── immutable
+                     │    ├── key: (31-34)
+                     │    ├── fd: (33)-->(38)
+                     │    ├── scan a [as=t2]
+                     │    │    ├── columns: t2.a1:31!null t2.a2:32!null t2.a3:33!null t2.a4:34!null
+                     │    │    └── key: (31-34)
+                     │    └── projections
+                     │         └── t2.a3:33 + 1 [as=column38:38, outer=(33), immutable]
+                     └── filters
+                          ├── (t1.a1:25 = (t2.a1:31 + 1)) OR (t1.a4:28 = (t2.a4:34 + 1)) [outer=(25,28,31,34), immutable]
+                          └── t1.a3:27 = column38:38 [outer=(27,38), constraints=(/27: (/NULL - ]; /38: (/NULL - ]), fd=(27)==(38), (38)==(27)]
 
-# No equijoin terms. Must be at least one equality predicate referencing
-# columns from both tables.
-opt expect-not=SplitDisjunctionOfJoinTerms
-SELECT * FROM a t1, a t2 WHERE (t1.a2 > t2.a2 AND t1.a3 > t2.a3 OR t2.a2 = 1)
+# Negative Tests.
+# No interesting terms. Must be at least one equality predicate referencing
+# columns from both tables if optimizer_use_improved_split_disjunction_for_joins
+# is false.
+opt expect-not=SplitDisjunctionOfJoinTerms set=optimizer_use_improved_split_disjunction_for_joins=false
+SELECT * FROM a t1, a t2 WHERE (t1.a2 > t2.a2 AND t1.a3 > t2.a3 OR t2.a2 = 2)
 ----
 inner-join (cross)
  ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null a1:7!null a2:8!null a3:9!null a4:10!null
@@ -3612,7 +4173,7 @@ inner-join (cross)
  │    ├── columns: t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
  │    └── key: (7-10)
  └── filters
-      └── ((t1.a2:2 > t2.a2:8) AND (t1.a3:3 > t2.a3:9)) OR (t2.a2:8 = 1) [outer=(2,3,8,9), constraints=(/8: (/NULL - ])]
+      └── ((t1.a2:2 > t2.a2:8) AND (t1.a3:3 > t2.a3:9)) OR (t2.a2:8 = 2) [outer=(2,3,8,9), constraints=(/8: (/NULL - ])]
 
 # Outer join not supported with this optimization
 opt expect-not=SplitDisjunctionOfJoinTerms
@@ -3762,10 +4323,11 @@ project
                           └── t1.a2:2
 
 # The conjuncts under the top-level disjunct contain no equijoin terms, and
-# neither do the nested simple predicates.
-opt expect-not=SplitDisjunctionOfJoinTerms
-SELECT * FROM a t1, a t2 WHERE (((t1.a1 > t1.a1 OR t1.a1 <= t1.a2) AND (t1.a2 > t2.a2+1 OR t1.a1 <= t1.a2-1)) OR
-                                ((t1.a1 > t1.a1+5 OR t1.a1 <= t1.a2+5) AND (t1.a2 > t2.a2+7 OR t1.a1 <= t1.a2-9)))
+# neither do the nested simple predicates. The rule does not fire in this
+# case if optimizer_use_improved_split_disjunction_for_joins is false.
+opt expect-not=SplitDisjunctionOfJoinTerms set=optimizer_use_improved_split_disjunction_for_joins=false
+SELECT * FROM a t1, a t2 WHERE (((t1.a1 > t2.a1 OR t1.a1 <= t2.a2) AND (t1.a2 > t2.a2+1 OR t1.a1 <= t2.a2-1)) OR
+                                ((t1.a1 > t2.a1+5 OR t1.a1 <= t2.a2+5) AND (t1.a2 > t2.a2+7 OR t1.a1 <= t2.a2-9)))
 ----
 inner-join (cross)
  ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null a1:7!null a2:8!null a3:9!null a4:10!null
@@ -3778,10 +4340,10 @@ inner-join (cross)
  │    ├── columns: t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
  │    └── key: (7-10)
  └── filters
-      └── ((((t1.a1:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL)) OR (t1.a1:1 <= t1.a2:2)) AND ((t1.a2:2 > (t2.a2:8 + 1)) OR (t1.a1:1 <= (t1.a2:2 - 1)))) OR (((t1.a1:1 > (t1.a1:1 + 5)) OR (t1.a1:1 <= (t1.a2:2 + 5))) AND ((t1.a2:2 > (t2.a2:8 + 7)) OR (t1.a1:1 <= (t1.a2:2 - 9)))) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ])]
+      └── (((t1.a1:1 > t2.a1:7) OR (t1.a1:1 <= t2.a2:8)) AND ((t1.a2:2 > (t2.a2:8 + 1)) OR (t1.a1:1 <= (t2.a2:8 - 1)))) OR (((t1.a1:1 > (t2.a1:7 + 5)) OR (t1.a1:1 <= (t2.a2:8 + 5))) AND ((t1.a2:2 > (t2.a2:8 + 7)) OR (t1.a1:1 <= (t2.a2:8 - 9)))) [outer=(1,2,7,8), immutable, constraints=(/1: (/NULL - ])]
 
 # Can't consume both OR terms with a join to a single Scan relation. Both sides
-# of each equijoin predicate must be applied on a simple Scan or Select.
+# of each interesting predicate must be applied on a simple Scan or Select.
 opt expect-not=SplitDisjunctionOfJoinTerms
 SELECT * FROM a t2 INNER JOIN a t1 ON TRUE LEFT OUTER JOIN a t3 ON (t1.a1 = t3.a1 OR t2.a2 = t3.a2)
 ----

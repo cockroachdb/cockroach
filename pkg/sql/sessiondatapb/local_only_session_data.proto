@@ -312,6 +312,12 @@ message LocalOnlySessionData {
   // DeclareCursorStatementTimeoutEnabled controls whether statement timeouts
   // apply during DECLARE CURSOR.
   bool declare_cursor_statement_timeout_enabled = 90;
+  // OptimizerUseImprovedSplitDisjunctionForJoins enables the optimizer to split
+  // disjunctions (OR expressions) in more cases in join conditions by building a
+  // UNION of two join expressions. If this setting is true, all disjunctions in
+  // inner, semi, and anti joins will be split. If false, only disjunctions
+  // potentially containing an equijoin condition will be split.
+  bool optimizer_use_improved_split_disjunction_for_joins = 91;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
