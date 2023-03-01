@@ -264,7 +264,7 @@ func TestAdminDebugAuth(t *testing.T) {
 	}
 
 	// Authenticated as non-admin.
-	client, err = ts.GetAuthenticatedHTTPClient(false)
+	client, err = ts.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestAdminDebugAuth(t *testing.T) {
 	}
 
 	// Authenticated as admin.
-	client, err = ts.GetAuthenticatedHTTPClient(true)
+	client, err = ts.GetAuthenticatedHTTPClient(true, serverutils.SingleTenantSession)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +390,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	// We have to create the non-admin user before calling
 	// "GRANT ... TO authenticatedUserNameNoAdmin".
 	// This is done in "GetAuthenticatedHTTPClient".
-	if _, err := ts.GetAuthenticatedHTTPClient(false); err != nil {
+	if _, err := ts.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1613,7 +1613,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
 		// Creating this client causes a user to be created, which causes jobs
 		// to be created, so we do it up-front rather than inside the test.
-		_, err := s.GetAuthenticatedHTTPClient(isAdmin)
+		_, err := s.GetAuthenticatedHTTPClient(isAdmin, serverutils.SingleTenantSession)
 		if err != nil {
 			t.Fatal(err)
 		}

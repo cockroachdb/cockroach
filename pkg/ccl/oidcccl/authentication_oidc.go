@@ -307,7 +307,7 @@ var ConfigureOIDC = func(
 			return
 		}
 		if !valid {
-			log.Error(ctx, "OIDC: invalid client cooke and state token pair")
+			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
