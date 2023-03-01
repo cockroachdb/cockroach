@@ -798,14 +798,6 @@ var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKL
 // code does not depend on CCL code.
 var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (*EncryptionEnv, error)
 
-// StoreIDSetter is used to set the store id in the log.
-type StoreIDSetter interface {
-	// SetStoreID can be used to atomically set the store
-	// id as a tag in the pebble logs. Once set, the store id will be visible
-	// in pebble logs in cockroach.
-	SetStoreID(ctx context.Context, storeID int32)
-}
-
 // SetCompactionConcurrency will return the previous compaction concurrency.
 func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
 	prevConcurrency := atomic.SwapUint64(&p.atomic.compactionConcurrency, n)
@@ -813,14 +805,24 @@ func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
 }
 
 // SetStoreID adds the store id to pebble logs.
-func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) {
+func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	if p == nil {
-		return
+		return nil
 	}
-	if p.storeIDPebbleLog == nil {
-		return
+	if p.storeIDPebbleLog != nil {
+		p.storeIDPebbleLog.Set(ctx, storeID)
 	}
-	p.storeIDPebbleLog.Set(ctx, storeID)
+	// Note that SetCreatorID only does something if shared storage is configured
+	// in the pebble options. The version gate protects against accidentally
+	// setting the creator ID on an older store.
+	// TODO(radu): we don't yet have a complete story about how we will transition
+	// an existing store to use shared storage.
+	if p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
+		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ResolveEncryptedEnvOptions creates the EncryptionEnv and associated file
