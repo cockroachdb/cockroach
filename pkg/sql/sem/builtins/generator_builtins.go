@@ -15,6 +15,8 @@ import (
 	"context"
 	gojson "encoding/json"
 	"math/rand"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -574,6 +577,20 @@ The last argument is a JSONB object containing the following optional fields:
 - "seed": the seed to use for the pseudo-random generator (default: random).`+
 				randidentcfg.ConfigDoc,
 			volatility.Volatile,
+		),
+	),
+	"crdb_internal.show_tenant_capabilities_cache": makeBuiltin(
+		tree.FunctionProperties{},
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			showTenantCapabilitiesCacheType,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				return &showTenantCapabilitiesCacheGenerator{
+					p: evalCtx.Planner,
+				}, nil
+			},
+			`Returns the in-memory tenant capability cache for this node`,
+			volatility.Stable,
 		),
 	),
 }
@@ -2895,3 +2912,92 @@ func makeIdentGenerator(
 		count: count,
 	}, nil
 }
+
+var showTenantCapabilitiesCacheType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.String, types.String},
+	[]string{"tenant_id", "capability_name", "capability_value"},
+)
+
+type showTenantCapabilitiesCacheGenerator struct {
+	p eval.Planner
+
+	// eval.ValueGenerator state
+	tenantIndex       int
+	tenantEntries     []tenantEntry
+	capabilityIndex   int
+	capabilityEntries []capabilityEntry
+}
+
+type capabilityEntry struct {
+	name  string
+	value string
+}
+
+type tenantEntry struct {
+	tenantID           roachpb.TenantID
+	tenantCapabilities tenantcapabilitiespb.TenantCapabilities
+}
+
+var _ eval.ValueGenerator = &showTenantCapabilitiesCacheGenerator{}
+
+func (s *showTenantCapabilitiesCacheGenerator) ResolvedType() *types.T {
+	return showTenantCapabilitiesCacheType
+}
+
+func (s *showTenantCapabilitiesCacheGenerator) Start(context.Context, *kv.Txn) error {
+	for tenantID, tenantCapabilities := range s.p.GetTenantCapabilitiesCache() {
+		s.tenantEntries = append(
+			s.tenantEntries,
+			tenantEntry{
+				tenantID:           tenantID,
+				tenantCapabilities: tenantCapabilities,
+			},
+		)
+	}
+	sort.Slice(s.tenantEntries, func(i, j int) bool {
+		return s.tenantEntries[i].tenantID.ToUint64() < s.tenantEntries[j].tenantID.ToUint64()
+	})
+	s.tenantIndex = -1
+	s.capabilityIndex = -1
+	return nil
+}
+
+func (s *showTenantCapabilitiesCacheGenerator) Next(context.Context) (bool, error) {
+	if s.capabilityIndex == len(s.capabilityEntries)-1 {
+		s.capabilityIndex = 0
+		s.tenantIndex++
+		if s.tenantIndex == len(s.tenantEntries) {
+			return false, nil
+		}
+		tenantCapabilities := s.tenantEntries[s.tenantIndex].tenantCapabilities
+		s.capabilityEntries = []capabilityEntry{
+			{
+				name:  tenantcapabilitiespb.CanAdminSplit.String(),
+				value: strconv.FormatBool(tenantCapabilities.CanAdminSplit),
+			},
+			{
+				name:  tenantcapabilitiespb.CanViewNodeInfo.String(),
+				value: strconv.FormatBool(tenantCapabilities.CanViewNodeInfo),
+			},
+			{
+				name:  tenantcapabilitiespb.CanViewTSDBMetrics.String(),
+				value: strconv.FormatBool(tenantCapabilities.CanViewTSDBMetrics),
+			},
+		}
+	} else {
+		s.capabilityIndex++
+	}
+	return true, nil
+}
+
+func (s *showTenantCapabilitiesCacheGenerator) Values() (tree.Datums, error) {
+	tenantCapabilitiesCacheEntry := s.tenantEntries[s.tenantIndex]
+	capabilityEntry := s.capabilityEntries[s.capabilityIndex]
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(tenantCapabilitiesCacheEntry.tenantID.ToUint64())),
+		tree.NewDString(capabilityEntry.name),
+		tree.NewDString(capabilityEntry.value),
+	}, nil
+}
+
+func (s *showTenantCapabilitiesCacheGenerator) Close(context.Context) {}

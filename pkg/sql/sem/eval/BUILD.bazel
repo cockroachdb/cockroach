@@ -45,6 +45,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",

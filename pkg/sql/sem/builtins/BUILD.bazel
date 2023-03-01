@@ -51,6 +51,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/password",

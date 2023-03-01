@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -371,6 +372,10 @@ type Planner interface {
 
 	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
 	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
+
+	// GetTenantCapabilitiesCache gets the eventually consistent cache of tenant
+	// capabilities.
+	GetTenantCapabilitiesCache() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

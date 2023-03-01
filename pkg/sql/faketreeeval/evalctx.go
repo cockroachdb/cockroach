@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -165,6 +166,10 @@ func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
 // errors.
 type DummyEvalPlanner struct {
 	Monitor *mon.BytesMonitor
+}
+
+func (ep *DummyEvalPlanner) GetTenantCapabilitiesCache() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+	return map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities{}
 }
 
 // ResolveOIDFromString is part of the Planner interface.

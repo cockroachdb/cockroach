@@ -85,6 +85,17 @@ func (w *Watcher) GetCapabilities(
 	return cp, found
 }
 
+// GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
+func (w *Watcher) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	result := make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities, len(w.mu.store))
+	for tenID, cp := range w.mu.store {
+		result[tenID] = cp
+	}
+	return result
+}
+
 // capabilityEntrySize is an estimate for a (tenantID, capability) pair that the
 // rangefeed buffer tracks. This is extremely conservative for now, given we
 // don't have too many capabilities in the system. We should re-evaluate this

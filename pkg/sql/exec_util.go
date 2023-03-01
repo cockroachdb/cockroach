@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1372,6 +1373,8 @@ type ExecutorConfig struct {
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
+
+	TenantCapabilitiesReader tenantcapabilities.Reader
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

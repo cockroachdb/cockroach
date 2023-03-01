@@ -2051,6 +2051,7 @@ var builtinOidsArray = []string{
 	2076: `plainto_tsquery(config: string, text: string) -> tsquery`,
 	2077: `ts_parse(parser_name: string, document: string) -> tuple{int AS tokid, string AS token}`,
 	2078: `crdb_internal.humanize_bytes(val: int) -> string`,
+	2079: `crdb_internal.show_tenant_capabilities_cache() -> tuple{int AS tenant_id, string AS capability_name, string AS capability_value}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

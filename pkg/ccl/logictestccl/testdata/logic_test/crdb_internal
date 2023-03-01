@@ -176,3 +176,37 @@ SELECT crdb_internal.stream_ingestion_stats_json(1);
 
 query error pq: crdb_internal\.stream_ingestion_stats_pb\(\): unimplemented
 SELECT crdb_internal.stream_ingestion_stats_pb(1);
+
+subtest show_tenant_capabilities_cache
+
+statement ok
+SELECT crdb_internal.create_tenant(5)
+
+query ITT colnames,retry
+SELECT (row).tenant_id, (row).capability_name, (row).capability_value
+FROM [SELECT crdb_internal.show_tenant_capabilities_cache() AS row]
+----
+tenant_id  capability_name        capability_value
+1          can_admin_split        false
+1          can_view_node_info     false
+1          can_view_tsdb_metrics  false
+5          can_admin_split        false
+5          can_view_node_info     false
+5          can_view_tsdb_metrics  false
+
+statement ok
+ALTER TENANT 5 GRANT CAPABILITY can_admin_split
+
+query ITT colnames,retry
+SELECT (row).tenant_id, (row).capability_name, (row).capability_value
+FROM [SELECT crdb_internal.show_tenant_capabilities_cache() AS row]
+----
+tenant_id  capability_name        capability_value
+1          can_admin_split        true
+1          can_view_node_info     false
+1          can_view_tsdb_metrics  false
+5          can_admin_split        false
+5          can_view_node_info     false
+5          can_view_tsdb_metrics  false
+
+subtest end

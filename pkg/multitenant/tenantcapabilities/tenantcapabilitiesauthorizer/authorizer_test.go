@@ -120,8 +120,8 @@ func (m mockReader) updateState(updates []*tenantcapabilities.Update) {
 	}
 }
 
-// GetCapabilities implements the tenantcapabilities.Reader interface.
-func (m mockReader) GetCapabilities(
+// GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
+func (m mockReader) GetCapabilitiesByID(
 	id roachpb.TenantID,
 ) (tenantcapabilitiespb.TenantCapabilities, bool) {
 	cp, found := m[id]
