@@ -199,10 +199,10 @@ CREATE OR REPLACE FUNCTION _(IN _ INT8)
 error
 CREATE OR REPLACE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1 END
 ----
-at or near "end": syntax error
+at or near "EOF": syntax error
 DETAIL: source SQL:
 CREATE OR REPLACE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1 END
-                                                                                   ^
+                                                                                      ^
 HINT: try \h CREATE FUNCTION
 
 error

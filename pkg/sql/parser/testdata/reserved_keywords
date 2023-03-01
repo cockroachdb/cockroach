@@ -96,14 +96,13 @@ SELECT (index((index))), (index((index))), (index.index((index))) -- fully paren
 SELECT index(index), index(index), index.index(index) -- literals removed
 SELECT index(_), index(_), index.index(_) -- identifiers removed
 
-# Note: this is also an error in PostgreSQL.
-error
+parse
 SELECT index index FROM a
 ----
-at or near "index": syntax error
-DETAIL: source SQL:
-SELECT index index FROM a
-             ^
+SELECT index AS index FROM a -- normalized!
+SELECT (index) AS index FROM a -- fully parenthesized
+SELECT index AS index FROM a -- literals removed
+SELECT _ AS _ FROM _ -- identifiers removed
 
 parse
 INSERT INTO t VALUES (1) RETURNING index, index
