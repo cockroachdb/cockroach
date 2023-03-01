@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT)
+CREATE TABLE a (x INT PRIMARY KEY, y INT, arr INT[])
 ----
 
 exec-ddl
@@ -14,51 +14,51 @@ ORDER BY y
 LIMIT 10
 ----
 limit
- ├── columns: y:2(int!null) x:5(string!null) c:9(int!null)
+ ├── columns: y:2(int!null) x:6(string!null) c:10(int!null)
  ├── internal-ordering: +2
  ├── cardinality: [0 - 10]
  ├── immutable
- ├── fd: (2)-->(9)
+ ├── fd: (2)-->(10)
  ├── ordering: +2
  ├── sort
- │    ├── columns: y:2(int!null) b.x:5(string!null) c:9(int!null)
+ │    ├── columns: y:2(int!null) b.x:6(string!null) c:10(int!null)
  │    ├── immutable
- │    ├── fd: (2)-->(9)
+ │    ├── fd: (2)-->(10)
  │    ├── ordering: +2
  │    ├── limit hint: 10.00
  │    └── project
- │         ├── columns: c:9(int!null) y:2(int!null) b.x:5(string!null)
+ │         ├── columns: c:10(int!null) y:2(int!null) b.x:6(string!null)
  │         ├── immutable
- │         ├── fd: (2)-->(9)
+ │         ├── fd: (2)-->(10)
  │         ├── select
- │         │    ├── columns: a.x:1(int!null) y:2(int!null) a.crdb_internal_mvcc_timestamp:3(decimal) a.tableoid:4(oid) b.x:5(string!null) z:6(decimal!null) b.crdb_internal_mvcc_timestamp:7(decimal) b.tableoid:8(oid)
+ │         │    ├── columns: a.x:1(int!null) y:2(int!null) arr:3(int[]) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid) b.x:6(string!null) z:7(decimal!null) b.crdb_internal_mvcc_timestamp:8(decimal) b.tableoid:9(oid)
  │         │    ├── immutable
- │         │    ├── key: (1,5)
- │         │    ├── fd: (1)-->(2-4), (5)-->(6-8)
+ │         │    ├── key: (1,6)
+ │         │    ├── fd: (1)-->(2-5), (6)-->(7-9)
  │         │    ├── inner-join (cross)
- │         │    │    ├── columns: a.x:1(int!null) y:2(int) a.crdb_internal_mvcc_timestamp:3(decimal) a.tableoid:4(oid) b.x:5(string!null) z:6(decimal!null) b.crdb_internal_mvcc_timestamp:7(decimal) b.tableoid:8(oid)
- │         │    │    ├── key: (1,5)
- │         │    │    ├── fd: (1)-->(2-4), (5)-->(6-8)
+ │         │    │    ├── columns: a.x:1(int!null) y:2(int) arr:3(int[]) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid) b.x:6(string!null) z:7(decimal!null) b.crdb_internal_mvcc_timestamp:8(decimal) b.tableoid:9(oid)
+ │         │    │    ├── key: (1,6)
+ │         │    │    ├── fd: (1)-->(2-5), (6)-->(7-9)
  │         │    │    ├── scan a
- │         │    │    │    ├── columns: a.x:1(int!null) y:2(int) a.crdb_internal_mvcc_timestamp:3(decimal) a.tableoid:4(oid)
+ │         │    │    │    ├── columns: a.x:1(int!null) y:2(int) arr:3(int[]) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
  │         │    │    │    ├── key: (1)
- │         │    │    │    └── fd: (1)-->(2-4)
+ │         │    │    │    └── fd: (1)-->(2-5)
  │         │    │    ├── scan b
- │         │    │    │    ├── columns: b.x:5(string!null) z:6(decimal!null) b.crdb_internal_mvcc_timestamp:7(decimal) b.tableoid:8(oid)
- │         │    │    │    ├── key: (5)
- │         │    │    │    └── fd: (5)-->(6-8)
+ │         │    │    │    ├── columns: b.x:6(string!null) z:7(decimal!null) b.crdb_internal_mvcc_timestamp:8(decimal) b.tableoid:9(oid)
+ │         │    │    │    ├── key: (6)
+ │         │    │    │    └── fd: (6)-->(7-9)
  │         │    │    └── filters (true)
  │         │    └── filters
- │         │         └── and [type=bool, outer=(1,2,5), immutable, constraints=(/2: [/2 - ])]
+ │         │         └── and [type=bool, outer=(1,2,6), immutable, constraints=(/2: [/2 - ])]
  │         │              ├── gt [type=bool]
  │         │              │    ├── variable: y:2 [type=int]
  │         │              │    └── const: 1 [type=int]
  │         │              └── eq [type=bool]
  │         │                   ├── cast: STRING [type=string]
  │         │                   │    └── variable: a.x:1 [type=int]
- │         │                   └── variable: b.x:5 [type=string]
+ │         │                   └── variable: b.x:6 [type=string]
  │         └── projections
- │              └── plus [as=c:9, type=int, outer=(2), immutable]
+ │              └── plus [as=c:10, type=int, outer=(2), immutable]
  │                   ├── variable: y:2 [type=int]
  │                   └── const: 1 [type=int]
  └── const: 10 [type=int]
@@ -71,33 +71,33 @@ ORDER BY y
 LIMIT 10
 ----
 project
- ├── columns: y:2(int!null) x:5(string!null) c:10(int!null)
+ ├── columns: y:2(int!null) x:6(string!null) c:11(int!null)
  ├── cardinality: [0 - 10]
  ├── immutable
- ├── fd: (2)-->(10)
+ ├── fd: (2)-->(11)
  ├── ordering: +2
  ├── limit
- │    ├── columns: y:2(int!null) b.x:5(string!null) column9:9(string!null)
+ │    ├── columns: y:2(int!null) b.x:6(string!null) column10:10(string!null)
  │    ├── internal-ordering: +2
  │    ├── cardinality: [0 - 10]
  │    ├── immutable
- │    ├── fd: (5)==(9), (9)==(5)
+ │    ├── fd: (6)==(10), (10)==(6)
  │    ├── ordering: +2
  │    ├── inner-join (lookup b)
- │    │    ├── columns: y:2(int!null) b.x:5(string!null) column9:9(string!null)
- │    │    ├── key columns: [9] = [5]
+ │    │    ├── columns: y:2(int!null) b.x:6(string!null) column10:10(string!null)
+ │    │    ├── key columns: [10] = [6]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── fd: (5)==(9), (9)==(5)
+ │    │    ├── fd: (6)==(10), (10)==(6)
  │    │    ├── ordering: +2
  │    │    ├── limit hint: 10.00
  │    │    ├── sort
- │    │    │    ├── columns: y:2(int!null) column9:9(string!null)
+ │    │    │    ├── columns: y:2(int!null) column10:10(string!null)
  │    │    │    ├── immutable
  │    │    │    ├── ordering: +2
  │    │    │    ├── limit hint: 100.00
  │    │    │    └── project
- │    │    │         ├── columns: column9:9(string!null) y:2(int!null)
+ │    │    │         ├── columns: column10:10(string!null) y:2(int!null)
  │    │    │         ├── immutable
  │    │    │         ├── select
  │    │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
@@ -112,12 +112,12 @@ project
  │    │    │         │              ├── variable: y:2 [type=int]
  │    │    │         │              └── const: 1 [type=int]
  │    │    │         └── projections
- │    │    │              └── cast: STRING [as=column9:9, type=string, outer=(1), immutable]
+ │    │    │              └── cast: STRING [as=column10:10, type=string, outer=(1), immutable]
  │    │    │                   └── variable: a.x:1 [type=int]
  │    │    └── filters (true)
  │    └── const: 10 [type=int]
  └── projections
-      └── plus [as=c:10, type=int, outer=(2), immutable]
+      └── plus [as=c:11, type=int, outer=(2), immutable]
            ├── variable: y:2 [type=int]
            └── const: 1 [type=int]
 
@@ -128,47 +128,47 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~24KB, required=[presentation: y:2,x:5,c:10] [ordering: +2])
+memo (optimized, ~24KB, required=[presentation: y:2,x:6,c:11] [ordering: +2])
  ├── G1: (project G2 G3 y x)
- │    ├── [presentation: y:2,x:5,c:10] [ordering: +2]
+ │    ├── [presentation: y:2,x:6,c:11] [ordering: +2]
  │    │    ├── best: (project G2="[ordering: +2]" G3 y x)
- │    │    └── cost: 1762.72
+ │    │    └── cost: 1772.82
  │    └── []
  │         ├── best: (project G2 G3 y x)
- │         └── cost: 1762.72
+ │         └── cost: 1772.82
  ├── G2: (limit G4 G5 ordering=+2) (top-k G4 &{10 +2 })
  │    ├── [ordering: +2]
  │    │    ├── best: (limit G4="[ordering: +2] [limit hint: 10.00]" G5 ordering=+2)
- │    │    └── cost: 1762.51
+ │    │    └── cost: 1772.61
  │    └── []
  │         ├── best: (limit G4="[ordering: +2] [limit hint: 10.00]" G5 ordering=+2)
- │         └── cost: 1762.51
+ │         └── cost: 1772.61
  ├── G3: (projections G6)
- ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G7 G10 b,keyCols=[9],outCols=(2,5,9)) (merge-join G8 G7 G10 inner-join,+5,+9)
+ ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G7 G10 b,keyCols=[10],outCols=(2,6,10)) (merge-join G8 G7 G10 inner-join,+6,+10)
  │    ├── [ordering: +2] [limit hint: 10.00]
- │    │    ├── best: (lookup-join G7="[ordering: +2] [limit hint: 100.00]" G10 b,keyCols=[9],outCols=(2,5,9))
- │    │    └── cost: 1762.40
+ │    │    ├── best: (lookup-join G7="[ordering: +2] [limit hint: 100.00]" G10 b,keyCols=[10],outCols=(2,6,10))
+ │    │    └── cost: 1772.50
  │    └── []
  │         ├── best: (inner-join G8 G7 G9)
- │         └── cost: 2165.16
+ │         └── cost: 2175.26
  ├── G5: (const 10)
  ├── G6: (plus G11 G12)
  ├── G7: (project G13 G14 y)
+ │    ├── [ordering: +10]
+ │    │    ├── best: (sort G7)
+ │    │    └── cost: 1164.48
  │    ├── [ordering: +2] [limit hint: 100.00]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1154.38
- │    ├── [ordering: +9]
- │    │    ├── best: (sort G7)
- │    │    └── cost: 1154.38
+ │    │    └── cost: 1164.48
  │    └── []
  │         ├── best: (project G13 G14 y)
- │         └── cost: 1085.14
- ├── G8: (scan b,cols=(5))
- │    ├── [ordering: +5]
- │    │    ├── best: (scan b,cols=(5))
+ │         └── cost: 1095.24
+ ├── G8: (scan b,cols=(6))
+ │    ├── [ordering: +6]
+ │    │    ├── best: (scan b,cols=(6))
  │    │    └── cost: 1058.32
  │    └── []
- │         ├── best: (scan b,cols=(5))
+ │         ├── best: (scan b,cols=(6))
  │         └── cost: 1058.32
  ├── G9: (filters G15)
  ├── G10: (filters)
@@ -177,22 +177,22 @@ memo (optimized, ~24KB, required=[presentation: y:2,x:5,c:10] [ordering: +2])
  ├── G13: (select G16 G17)
  │    ├── [ordering: +2] [limit hint: 100.00]
  │    │    ├── best: (sort G13)
- │    │    └── cost: 1147.69
+ │    │    └── cost: 1157.79
  │    └── []
  │         ├── best: (select G16 G17)
- │         └── cost: 1078.45
+ │         └── cost: 1088.55
  ├── G14: (projections G18)
  ├── G15: (eq G19 G20)
  ├── G16: (scan a,cols=(1,2))
  │    ├── [ordering: +2] [limit hint: 300.00]
  │    │    ├── best: (sort G16)
- │    │    └── cost: 1307.90
+ │    │    └── cost: 1318.00
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1068.42
+ │         └── cost: 1078.52
  ├── G17: (filters G21)
  ├── G18: (cast G22 STRING)
- ├── G19: (variable column9)
+ ├── G19: (variable column10)
  ├── G20: (variable b.x)
  ├── G21: (gt G11 G12)
  └── G22: (variable a.x)
@@ -242,21 +242,21 @@ memo (optimized, ~8KB, required=[presentation: x:1])
  ├── G1: (project G2 G3 x)
  │    └── [presentation: x:1]
  │         ├── best: (project G2 G3 x)
- │         └── cost: 9.10
+ │         └── cost: 9.11
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── []
  │         ├── best: (select G6 G7)
- │         └── cost: 9.08
+ │         └── cost: 9.09
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1068.42
+ │         └── cost: 1078.52
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan a,cols=(1,2),constrained)
- │         └── cost: 9.05
+ │         └── cost: 9.06
  ├── G7: (filters G9)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G13)
@@ -268,29 +268,29 @@ memo (optimized, ~8KB, required=[presentation: x:1])
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized, ~9KB, required=[presentation: x:11,y:12])
- ├── G1: (union G2 G3) (union G2 G3 ordering=+11,+12)
- │    └── [presentation: x:11,y:12]
+memo (optimized, ~9KB, required=[presentation: x:13,y:14])
+ ├── G1: (union G2 G3) (union G2 G3 ordering=+13,+14)
+ │    └── [presentation: x:13,y:14]
  │         ├── best: (union G2 G3)
- │         └── cost: 2207.49
+ │         └── cost: 2227.69
  ├── G2: (scan a,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan a,cols=(1,2))
- │    │    └── cost: 1068.42
+ │    │    └── cost: 1078.52
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1068.42
+ │         └── cost: 1078.52
  ├── G3: (project G4 G5)
- │    ├── [ordering: +9,+10]
+ │    ├── [ordering: +11,+12]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1348.89
+ │    │    └── cost: 1358.99
  │    └── []
  │         ├── best: (project G4 G5)
- │         └── cost: 1098.44
- ├── G4: (scan a,cols=(5,6))
+ │         └── cost: 1108.54
+ ├── G4: (scan a,cols=(6,7))
  │    └── []
- │         ├── best: (scan a,cols=(5,6))
- │         └── cost: 1068.42
+ │         ├── best: (scan a,cols=(6,7))
+ │         └── cost: 1078.52
  ├── G5: (projections G6 G7)
  ├── G6: (plus G8 G9)
  ├── G7: (plus G10 G9)
@@ -301,15 +301,15 @@ memo (optimized, ~9KB, required=[presentation: x:11,y:12])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
-memo (optimized, ~5KB, required=[presentation: array_agg:5])
+memo (optimized, ~5KB, required=[presentation: array_agg:6])
  ├── G1: (scalar-group-by G2 G3 cols=())
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
- │         └── cost: 1068.35
+ │         └── cost: 1078.45
  ├── G2: (scan a,cols=(1))
  │    └── []
  │         ├── best: (scan a,cols=(1))
- │         └── cost: 1058.32
+ │         └── cost: 1068.42
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable x)
@@ -317,20 +317,20 @@ memo (optimized, ~5KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a) GROUP BY y
 ----
-memo (optimized, ~5KB, required=[presentation: array_agg:5])
+memo (optimized, ~7KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1100.47
+ │         └── cost: 1110.57
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1099.45
+ │         └── cost: 1109.55
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1068.42
+ │         └── cost: 1078.52
  ├── G5: (aggregations G6)
  ├── G6: (array-agg G7)
  └── G7: (variable x)
@@ -338,21 +338,77 @@ memo (optimized, ~5KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
-memo (optimized, ~4KB, required=[presentation: array_agg:5])
+memo (optimized, ~5KB, required=[presentation: array_agg:6])
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
- │         └── cost: 1317.93
+ │         └── cost: 1328.03
  ├── G2: (scan a,cols=(1,2))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1307.90
+ │    │    └── cost: 1318.00
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1068.42
+ │         └── cost: 1078.52
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable x)
+
+memo
+SELECT array_concat_agg(arr) FROM (SELECT * FROM a)
+----
+memo (optimized, ~5KB, required=[presentation: array_concat_agg:6])
+ ├── G1: (scalar-group-by G2 G3 cols=())
+ │    └── [presentation: array_concat_agg:6]
+ │         ├── best: (scalar-group-by G2 G3 cols=())
+ │         └── cost: 1078.45
+ ├── G2: (scan a,cols=(3))
+ │    └── []
+ │         ├── best: (scan a,cols=(3))
+ │         └── cost: 1068.42
+ ├── G3: (aggregations G4)
+ ├── G4: (array-concat-agg G5)
+ └── G5: (variable arr)
+
+memo
+SELECT array_concat_agg(arr) FROM (SELECT * FROM a) GROUP BY y
+----
+memo (optimized, ~7KB, required=[presentation: array_concat_agg:6])
+ ├── G1: (project G2 G3 array_concat_agg)
+ │    └── [presentation: array_concat_agg:6]
+ │         ├── best: (project G2 G3 array_concat_agg)
+ │         └── cost: 1110.57
+ ├── G2: (group-by G4 G5 cols=(2))
+ │    └── []
+ │         ├── best: (group-by G4 G5 cols=(2))
+ │         └── cost: 1109.55
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(2,3))
+ │    └── []
+ │         ├── best: (scan a,cols=(2,3))
+ │         └── cost: 1078.52
+ ├── G5: (aggregations G6)
+ ├── G6: (array-concat-agg G7)
+ └── G7: (variable arr)
+
+memo
+SELECT array_concat_agg(arr) FROM (SELECT * FROM a ORDER BY y)
+----
+memo (optimized, ~5KB, required=[presentation: array_concat_agg:6])
+ ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
+ │    └── [presentation: array_concat_agg:6]
+ │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
+ │         └── cost: 1328.03
+ ├── G2: (scan a,cols=(2,3))
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1318.00
+ │    └── []
+ │         ├── best: (scan a,cols=(2,3))
+ │         └── cost: 1078.52
+ ├── G3: (aggregations G4)
+ ├── G4: (array-concat-agg G5)
+ └── G5: (variable arr)
 
 memo
 SELECT DISTINCT info FROM [EXPLAIN SELECT 123 AS k]

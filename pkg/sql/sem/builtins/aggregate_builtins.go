@@ -112,6 +112,28 @@ var aggregates = map[string]builtinDefinition{
 		}),
 	),
 
+	"array_concat_agg": setProps(tree.FunctionProperties{},
+		arrayBuiltin(func(t *types.T) tree.Overload {
+			tArray := types.MakeArray(t)
+			return makeAggOverloadWithReturnType(
+				[]*types.T{tArray},
+				func(args []tree.TypedExpr) *types.T {
+					if len(args) == 0 {
+						return tArray
+					}
+					// Whenever possible, use the expression's type, so we can
+					// properly handle aliased types that don't explicitly have
+					// overloads.
+					return args[0].ResolvedType()
+				},
+				newArrayConcatAggregate,
+				"Unnests the selected arrays into elements that are then aggregated into a single array.",
+				volatility.Immutable,
+				true, /* calledOnNullInput */
+			)
+		}),
+	),
+
 	"avg": makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
@@ -1219,6 +1241,7 @@ var _ eval.AggregateFunc = &regressionAvgXAggregate{}
 var _ eval.AggregateFunc = &regressionAvgYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
+const sizeOfArrayConcatAggregate = int64(unsafe.Sizeof(arrayConcatAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
 const sizeOfRegressionAccumulatorDecimalBase = int64(unsafe.Sizeof(regressionAccumulatorDecimalBase{}))
 const sizeOfFinalRegressionAccumulatorDecimalBase = int64(unsafe.Sizeof(finalRegressionAccumulatorDecimalBase{}))
@@ -1464,6 +1487,78 @@ func (a *arrayAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *arrayAggregate) Size() int64 {
 	return sizeOfArrayAggregate
+}
+
+type arrayConcatAggregate struct {
+	arr *tree.DArray
+	// Note that we do not embed singleDatumAggregateBase struct to help with
+	// memory accounting because arrayConcatAggregate stores multiple datums
+	// inside of arr.
+	acc mon.BoundAccount
+	// seenNonNull tracks whether at least one non-NULL datum was added. This is
+	// needed to handle a case of only empty arrays added correctly (we want to
+	// return an empty array too rather that NULL).
+	seenNonNull bool
+}
+
+func newArrayConcatAggregate(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &arrayConcatAggregate{
+		arr: tree.NewDArray(params[0].ArrayContents()),
+		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+	}
+}
+
+// Add unnests the passed datum into elements which are then accumulated into
+// the array.
+func (a *arrayConcatAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum == tree.DNull {
+		// If we're given a NULL array, then we don't have any elements to
+		// include.
+		return nil
+	}
+	array, ok := datum.(*tree.DArray)
+	if !ok {
+		return errors.AssertionFailedf("got %T when *tree.DArray is expected", datum)
+	}
+	a.seenNonNull = true
+	for _, d := range array.Array {
+		if err := a.acc.Grow(ctx, int64(d.Size())); err != nil {
+			return err
+		}
+		if err := a.arr.Append(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Result returns a copy of the array of all datums passed to Add.
+func (a *arrayConcatAggregate) Result() (tree.Datum, error) {
+	if len(a.arr.Array) > 0 || a.seenNonNull {
+		arrCopy := *a.arr
+		return &arrCopy, nil
+	}
+	return tree.DNull, nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *arrayConcatAggregate) Reset(ctx context.Context) {
+	a.arr = tree.NewDArray(a.arr.ParamTyp)
+	a.acc.Empty(ctx)
+	a.seenNonNull = false
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *arrayConcatAggregate) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *arrayConcatAggregate) Size() int64 {
+	return sizeOfArrayConcatAggregate
 }
 
 type avgAggregate struct {
