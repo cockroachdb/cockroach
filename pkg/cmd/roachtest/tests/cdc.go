@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -513,7 +514,8 @@ func (ct *cdcTester) startGrafana() {
 		WithPrometheusNode(ct.workloadNode.InstallNodes()[0]).
 		WithCluster(ct.crdbNodes.InstallNodes()).
 		WithNodeExporter(ct.crdbNodes.InstallNodes()).
-		WithGrafanaDashboard("https://go.crdb.dev/p/changefeed-roachtest-grafana-dashboard")
+		WithGrafanaDashboardJSON(grafana.ChangefeedRoachtestGrafanaDashboardJSON)
+
 	cfg.Grafana.Enabled = true
 
 	ct.promCfg = cfg

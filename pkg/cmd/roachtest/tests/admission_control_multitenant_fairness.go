@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -146,7 +147,7 @@ func runMultiTenantFairness(
 	promCfg.WithPrometheusNode(promNode.InstallNodes()[0])
 	promCfg.WithNodeExporter(crdbNode.InstallNodes())
 	promCfg.WithCluster(crdbNode.InstallNodes())
-	promCfg.WithGrafanaDashboard("https://go.crdb.dev/p/multi-tenant-fairness-grafana")
+	promCfg.WithGrafanaDashboardJSON(grafana.MultiTenantFairnessGrafanaJSON)
 
 	setRateLimit := func(ctx context.Context, val int) {
 		db := c.Conn(ctx, t.L(), crdbNodeID)

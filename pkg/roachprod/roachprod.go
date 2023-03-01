@@ -1413,10 +1413,11 @@ func StartGrafana(
 	l *logger.Logger,
 	clusterName string,
 	grafanaURL string,
+	grafanaJSON []string,
 	promCfg *prometheus.Config, // passed iff grafanaURL is empty
 ) error {
-	if grafanaURL != "" && promCfg != nil {
-		return errors.New("cannot pass grafanaURL and a non empty promCfg")
+	if (grafanaURL != "" || len(grafanaJSON) > 0) && promCfg != nil {
+		return errors.New("cannot pass grafanaURL or grafanaJSON and a non empty promCfg")
 	}
 	if err := LoadClusters(); err != nil {
 		return err
@@ -1447,6 +1448,9 @@ func StartGrafana(
 		promCfg.Grafana.Enabled = true
 		if grafanaURL != "" {
 			promCfg.WithGrafanaDashboard(grafanaURL)
+		}
+		for _, str := range grafanaJSON {
+			promCfg.WithGrafanaDashboardJSON(str)
 		}
 	}
 	_, err = prometheus.Init(ctx, l, c, *promCfg)
