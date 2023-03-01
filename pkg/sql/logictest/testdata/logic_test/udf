@@ -3152,3 +3152,14 @@ query I
 SELECT public.abs(-1)
 ----
 99
+
+subtest regression_97854
+
+# Regression test for #97854.
+statement ok
+CREATE FUNCTION f_97854 (i INT) RETURNS CHAR LANGUAGE SQL AS $$ SELECT 'i' $$;
+CREATE FUNCTION f_97854 (f FLOAT) RETURNS CHAR LANGUAGE SQL AS $$ SELECT 'f' $$;
+
+# TODO(#88318): In Postgres, the float overload is chosen.
+statement error pgcode 42725 ambiguous call: f_97854\(decimal\).*
+SELECT f_97854(1.0)
