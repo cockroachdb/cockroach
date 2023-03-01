@@ -4091,13 +4091,24 @@ func (s *adminServer) ListTracingSnapshots(
 	}
 
 	snapshotInfo := s.sqlServer.cfg.Tracer.GetSnapshots()
-	snapshots := make([]*serverpb.SnapshotInfo, len(snapshotInfo))
+	autoSnapshotInfo := s.sqlServer.cfg.Tracer.GetAutomaticSnapshots()
+	snapshots := make([]*serverpb.SnapshotInfo, 0, len(snapshotInfo)+len(autoSnapshotInfo))
 	for i := range snapshotInfo {
 		si := snapshotInfo[i]
-		snapshots[i] = &serverpb.SnapshotInfo{
+		snapshots = append(snapshots, &serverpb.SnapshotInfo{
 			SnapshotID: int64(si.ID),
 			CapturedAt: &si.CapturedAt,
-		}
+		})
+	}
+	for i := range autoSnapshotInfo {
+		si := autoSnapshotInfo[i]
+		snapshots = append(snapshots, &serverpb.SnapshotInfo{
+			// Flip the IDs of automatic snapshots to negative so we can tell when the
+			// client asks for one of these that we should look for it in the auto
+			// snapshots not the regular ones.
+			SnapshotID: int64(si.ID * -1),
+			CapturedAt: &si.CapturedAt,
+		})
 	}
 	resp := &serverpb.ListTracingSnapshotsResponse{
 		Snapshots: snapshots,
@@ -4163,7 +4174,14 @@ func (s *adminServer) GetTracingSnapshot(
 
 	id := tracing.SnapshotID(req.SnapshotId)
 	tr := s.sqlServer.cfg.Tracer
-	snapshot, err := tr.GetSnapshot(id)
+	var snapshot tracing.SpansSnapshot
+	// If the ID is negative it indicates it is an automatic snapshot, so flip it
+	// back to positive and fetch it from the automatic API instead.
+	if id < 0 {
+		snapshot, err = tr.GetAutomaticSnapshot(id * -1)
+	} else {
+		snapshot, err = tr.GetSnapshot(id)
+	}
 	if err != nil {
 		return nil, err
 	}
