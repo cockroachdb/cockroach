@@ -141,7 +141,8 @@ type MetricsRecorder struct {
 		storeRegistries map[roachpb.StoreID]*metric.Registry
 		stores          map[roachpb.StoreID]storeMetrics
 
-		tenantRecorders map[roachpb.TenantID]*MetricsRecorder
+		// tenantRegistries contains the registries for shared-process tenants.
+		tenantRegistries map[roachpb.TenantID]*metric.Registry
 	}
 
 	// WriteNodeStatus is a potentially long-running method (with a network
@@ -176,15 +177,16 @@ func NewMetricsRecorder(
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
-	mr.mu.tenantRecorders = make(map[roachpb.TenantID]*MetricsRecorder)
+	mr.mu.tenantRegistries = make(map[roachpb.TenantID]*metric.Registry)
 	return mr
 }
 
-func (mr *MetricsRecorder) AddTenantRecorder(rec *MetricsRecorder) {
+// AddTenantRegistry adds shared-process tenant's registry.
+func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *metric.Registry) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	mr.mu.tenantRecorders[rec.tenantID] = rec
+	mr.mu.tenantRegistries[tenantID] = rec
 }
 
 // AddNode adds the Registry from an initialized node, along with its descriptor
@@ -274,8 +276,8 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
 	}
-	for _, ten := range mr.mu.tenantRecorders {
-		ten.ScrapeIntoPrometheus(pm)
+	for _, tenantRegistry := range mr.mu.tenantRegistries {
+		pm.ScrapeRegistry(tenantRegistry, includeChildMetrics)
 	}
 }
 
