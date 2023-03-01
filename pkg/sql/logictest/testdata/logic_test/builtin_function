@@ -3796,3 +3796,84 @@ select crdb_internal.job_payload_type('invalid'::BYTES);
 
 query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid type in job payload protocol message: Payload.Type called on a payload with an unknown details type: <nil>
 select crdb_internal.job_payload_type('');
+
+subtest crdb_internal.redactable_sql_constants
+query T
+SELECT crdb_internal.redactable_sql_constants(NULL)
+----
+NULL
+
+query T
+SELECT crdb_internal.redactable_sql_constants('')
+----
+‹›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('SELECT 1, 2, 3')
+----
+SELECT ‹1›, ‹2›, ‹3›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('UPDATE mytable SET col = ''abc'' WHERE key = 0')
+----
+UPDATE mytable SET col = ‹'abc'› WHERE key = ‹0›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('not a sql statement')
+----
+‹not a sql statement›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('1')
+----
+‹1›
+
+statement error unknown signature: crdb_internal.redactable_sql_constants\(int\)
+SELECT crdb_internal.redactable_sql_constants(1)
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY[]::string[])
+----
+{}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY[''])
+----
+{‹›}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY[NULL])
+----
+{NULL}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY['banana'])
+----
+{‹banana›}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', ''])
+----
+{"SELECT ‹1›",NULL,"SELECT ‹'hello'›",‹›}
+
+query T
+SELECT crdb_internal.redactable_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')
+----
+SELECT ‹'yes'› IN (‹'no'›, ‹'maybe'›, ‹'yes'›)
+
+query T
+SELECT crdb_internal.redactable_sql_constants(e'\r')
+----
+‹›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('SELECT crdb_internal.redactable_sql_constants('''')')
+----
+SELECT crdb_internal.redactable_sql_constants(‹''›)
+
+query T
+SELECT crdb_internal.redactable_sql_constants(create_statement)
+FROM crdb_internal.create_statements
+WHERE descriptor_name = 'foo'
+----
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
