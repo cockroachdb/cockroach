@@ -17,9 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -82,8 +81,8 @@ func NewMutableFunctionDescriptor(
 					ReturnSet: returnSet,
 				},
 				Lang:              catpb.Function_SQL,
-				Volatility:        catpb.Function_VOLATILE,
-				LeakProof:         false,
+				Volatility:        catpb.DefaultFunctionVolatility,
+				LeakProof:         catpb.DefaultFunctionLeakProof,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
 				Privileges:        privs,
 				Version:           1,
@@ -207,7 +206,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		}
 	}
 
-	vea.Report(CheckLeakProofVolatility(desc))
+	vp := funcinfo.MakeVolatilityProperties(desc.Volatility, desc.LeakProof)
+	vea.Report(vp.Validate())
 
 	for i, dep := range desc.DependedOnBy {
 		if dep.ID == descpb.InvalidID {
@@ -834,17 +834,4 @@ func UserDefinedFunctionOIDToID(oid oid.Oid) descpb.ID {
 // IsOIDUserDefinedFunc returns true if an oid is a user-defined function oid.
 func IsOIDUserDefinedFunc(oid oid.Oid) bool {
 	return catid.IsOIDUserDefined(oid)
-}
-
-// CheckLeakProofVolatility returns an error when a function is defined as
-// leakproof but not immutable. See more details in comments for volatility.V.
-func CheckLeakProofVolatility(fn catalog.FunctionDescriptor) error {
-	if fn.GetLeakProof() && fn.GetVolatility() != catpb.Function_IMMUTABLE {
-		return pgerror.Newf(
-			pgcode.InvalidFunctionDefinition,
-			"cannot set leakproof on function with non-immutable volatility: %s",
-			fn.GetVolatility().String(),
-		)
-	}
-	return nil
 }

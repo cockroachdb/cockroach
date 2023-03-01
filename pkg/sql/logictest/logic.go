@@ -4132,7 +4132,10 @@ func RunLogicTest(
 		}()
 	}
 
-	if *defaultWorkmem {
+	// Testing sql.distsql.temp_storage.workmem metamorphically isn't needed
+	// when rewriting logic test files, so we disable workmem randomization if
+	// the --rewrite flag is present.
+	if *defaultWorkmem || *rewriteResultsInTestfiles {
 		serverArgs.DisableWorkmemRandomization = true
 	}
 

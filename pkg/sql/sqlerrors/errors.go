@@ -329,6 +329,12 @@ func NewAggInAggError() error {
 	return pgerror.New(pgcode.Grouping, "aggregate function calls cannot be nested")
 }
 
+// NewInvalidVolatilityError creates an error for the case when provided
+// volatility options are not valid through CREATE/REPLACE/ALTER FUNCTION.
+func NewInvalidVolatilityError(err error) error {
+	return pgerror.Wrap(err, pgcode.InvalidFunctionDefinition, "invalid volatility")
+}
+
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")
