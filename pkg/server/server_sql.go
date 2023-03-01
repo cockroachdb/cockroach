@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -381,6 +382,8 @@ type sqlServerArgs struct {
 
 	// tenantTimeSeriesServer is used to make TSDB queries by the DB Console.
 	tenantTimeSeriesServer *ts.TenantServer
+
+	tenantCapabilitiesReader sql.SystemTenantOnly[tenantcapabilities.Reader]
 }
 
 type monitorAndMetrics struct {
@@ -975,6 +978,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeStatsFetcher:          rangeStatsFetcher,
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
+		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

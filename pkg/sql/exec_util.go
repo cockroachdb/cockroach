@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1174,6 +1175,45 @@ type nodeStatusGenerator interface {
 	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
 }
 
+// SystemTenantOnly wraps an object in the ExecutorConfig that is only
+// available when accessed by the system tenant.
+type SystemTenantOnly[T any] interface {
+	// Get returns either the wrapped object if accessed by the system tenant
+	// or an error if accessed by a secondary tenant.
+	Get(op string) (t T, err error)
+}
+
+type systemTenantOnly[T any] struct {
+	wrapped T
+}
+
+// Get implements SystemTenantOnly.
+func (s *systemTenantOnly[T]) Get(string) (t T, err error) {
+	return s.wrapped, nil
+}
+
+// MakeSystemTenantOnly returns a SystemTenantOnly where SystemTenantOnly.Get
+// returns t.
+func MakeSystemTenantOnly[T any](t T) SystemTenantOnly[T] {
+	return &systemTenantOnly[T]{wrapped: t}
+}
+
+type emptySystemTenantOnly[T any] struct{}
+
+// Get implements SystemTenantOnly.
+func (emptySystemTenantOnly[T]) Get(op string) (t T, err error) {
+	err = errors.Newf("operation %s supported only by system tenant", op)
+	return
+}
+
+var empty = &emptySystemTenantOnly[any]{}
+
+// EmptySystemTenantOnly returns a SystemTenantOnly where SystemTenantOnly.Get
+// returns an error.
+func EmptySystemTenantOnly[T any]() SystemTenantOnly[T] {
+	return (*emptySystemTenantOnly[T])(empty)
+}
+
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
@@ -1372,6 +1412,8 @@ type ExecutorConfig struct {
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
+
+	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

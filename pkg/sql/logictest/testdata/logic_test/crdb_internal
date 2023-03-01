@@ -72,6 +72,7 @@ crdb_internal  node_queries                     table  admin  NULL  NULL
 crdb_internal  node_runtime_info                table  admin  NULL  NULL
 crdb_internal  node_sessions                    table  admin  NULL  NULL
 crdb_internal  node_statement_statistics        table  admin  NULL  NULL
+crdb_internal  node_tenant_capabilities_cache   table  admin  NULL  NULL
 crdb_internal  node_transaction_statistics      table  admin  NULL  NULL
 crdb_internal  node_transactions                table  admin  NULL  NULL
 crdb_internal  node_txn_execution_insights      table  admin  NULL  NULL

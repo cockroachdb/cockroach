@@ -93,6 +93,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_runtime_info... writing output: debug/nodes/1/crdb_internal.node_runtime_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_sessions... writing output: debug/nodes/1/crdb_internal.node_sessions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/1/crdb_internal.node_statement_statistics.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_tenant_capabilities_cache... writing output: debug/nodes/1/crdb_internal.node_tenant_capabilities_cache.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/1/crdb_internal.node_transaction_statistics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/1/crdb_internal.node_txn_execution_insights.txt... done
@@ -191,6 +192,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 3] retrieving SQL data for crdb_internal.node_runtime_info... writing output: debug/nodes/3/crdb_internal.node_runtime_info.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_sessions... writing output: debug/nodes/3/crdb_internal.node_sessions.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/3/crdb_internal.node_statement_statistics.txt... done
+[node 3] retrieving SQL data for crdb_internal.node_tenant_capabilities_cache... writing output: debug/nodes/3/crdb_internal.node_tenant_capabilities_cache.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/3/crdb_internal.node_transaction_statistics.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/3/crdb_internal.node_transactions.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/3/crdb_internal.node_txn_execution_insights.txt... done

@@ -80,6 +80,7 @@ crdb_internal  node_queries                     table  admin  NULL  NULL
 crdb_internal  node_runtime_info                table  admin  NULL  NULL
 crdb_internal  node_sessions                    table  admin  NULL  NULL
 crdb_internal  node_statement_statistics        table  admin  NULL  NULL
+crdb_internal  node_tenant_capabilities_cache   table  admin  NULL  NULL
 crdb_internal  node_transaction_statistics      table  admin  NULL  NULL
 crdb_internal  node_transactions                table  admin  NULL  NULL
 crdb_internal  node_txn_execution_insights      table  admin  NULL  NULL
@@ -611,3 +612,17 @@ node_id  application_name     key                   statement_ids               
 0        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
 0        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
 0        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2
+
+subtest node_tenant_capabilities_cache
+
+user testuser
+
+statement error only users with the admin role are allowed to node_tenant_capabilities_cache
+SELECT * FROM crdb_internal.node_tenant_capabilities_cache
+
+user root
+
+statement error operation node_tenant_capabilities_cache supported only by system tenant
+SELECT * FROM crdb_internal.node_tenant_capabilities_cache
+
+subtest end

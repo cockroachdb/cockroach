@@ -110,6 +110,8 @@ func TestDataDriven(t *testing.T) {
 
 type mockReader map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
 
+var _ tenantcapabilities.Reader = mockReader{}
+
 func (m mockReader) updateState(updates []*tenantcapabilities.Update) {
 	for _, update := range updates {
 		if update.Deleted {
@@ -126,4 +128,9 @@ func (m mockReader) GetCapabilities(
 ) (tenantcapabilitiespb.TenantCapabilities, bool) {
 	cp, found := m[id]
 	return cp, found
+}
+
+// GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
+func (m mockReader) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+	return m
 }
