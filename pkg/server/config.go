@@ -517,6 +517,10 @@ type SQLConfig struct {
 	// LocalKVServerInfo is set in configs for shared-process tenants. It contains
 	// info for making Batch requests to the local KV server without using gRPC.
 	LocalKVServerInfo *LocalKVServerInfo
+
+	// NodeMetricsRecorder is the node's MetricRecorder; the tenant's metrics will
+	// be recorded with it. Nil if this is not a shared-process tenant.
+	NodeMetricsRecorder *status.MetricsRecorder
 }
 
 // LocalKVServerInfo is used to group information about the local KV server
