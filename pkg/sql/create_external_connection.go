@@ -68,6 +68,8 @@ func (p *planner) parseExternalConnection(
 func (p *planner) createExternalConnection(
 	params runParams, n *tree.CreateExternalConnection,
 ) error {
+	txn := p.InternalSQLTxn()
+
 	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to create an External Connection",
@@ -134,8 +136,17 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
+	row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT user_id FROM system.users WHERE username = $1`,
+		p.User(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to get owner ID for External Connection")
+	}
+	ownerID := tree.MustBeDOid(row[0]).Oid
+	ex.SetOwnerID(ownerID)
 
-	txn := p.InternalSQLTxn()
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.
 	if err := ex.Create(params.ctx, txn, p.User()); err != nil {
