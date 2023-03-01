@@ -169,7 +169,7 @@ func NewSeparateProcessTenantServer(
 	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, nil /* parentRecorder */, tenantNameContainer, instanceIDContainer)
 }
 
-// NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
+// NewSharedProcessTenantServer creates a tenant-specific, SQL-only
 // server against a KV backend, with defaults appropriate for a
 // SQLServer that is not located in the same process as a KVServer.
 //
