@@ -7742,11 +7742,10 @@ expires until the statement bundle is collected`,
 
 					if len(sql) != 0 {
 						parsed, err := parser.ParseOne(sql)
-						if err != nil {
-							return tree.NewDString(sqlNoConstants), nil //nolint:returnerrcheck
+						// Leave result as empty string on parsing error.
+						if err == nil {
+							sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 						}
-
-						sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 					}
 
 					if err := result.Append(tree.NewDString(sqlNoConstants)); err != nil {
@@ -7759,6 +7758,24 @@ expires until the statement bundle is collected`,
 			Info: "Hide constants for each element in an array of SQL statements." +
 				"Note that maximum 1 statement is permitted per string element.",
 			Volatility: volatility.Immutable,
+		},
+	),
+	"crdb_internal.humanize_bytes": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				b := tree.MustBeDInt(args[0])
+				return tree.NewDString(string(humanizeutil.IBytes(int64(b)))), nil
+			},
+			Info:       "Converts integer size (in bytes) into the human-readable form.",
+			Volatility: volatility.Leakproof,
 		},
 	),
 }

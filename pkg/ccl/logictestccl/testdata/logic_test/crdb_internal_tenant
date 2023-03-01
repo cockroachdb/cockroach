@@ -74,6 +74,7 @@ crdb_internal  node_contention_events           table  admin  NULL  NULL
 crdb_internal  node_distsql_flows               table  admin  NULL  NULL
 crdb_internal  node_execution_insights          table  admin  NULL  NULL
 crdb_internal  node_inflight_trace_spans        table  admin  NULL  NULL
+crdb_internal  node_memory_monitors             table  admin  NULL  NULL
 crdb_internal  node_metrics                     table  admin  NULL  NULL
 crdb_internal  node_queries                     table  admin  NULL  NULL
 crdb_internal  node_runtime_info                table  admin  NULL  NULL
