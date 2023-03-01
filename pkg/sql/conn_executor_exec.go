@@ -1026,8 +1026,26 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		}
 	}
 
-	if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
-		if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
+	if descsCol := ex.extraTxnState.descCollection; descsCol.HasUncommittedDescriptors() {
+		// If this is a schema change, and we've experienced a retry, then we
+		// make the operation more pessimistic by locking all the descriptors
+		// we are modifying and all the descriptors that those descriptors
+		// reference. It is certain that we have or will read those referenced
+		// descriptors before committing. Schema changes have a tendency to read
+		// many more descriptors than they write. There are situations where
+		// concurrency schema changes will need to read each other's descriptors
+		// but won't communicate the need for those descriptors not to change.
+		// By detecting restarts and locking descriptors, here, we may not prevent
+		// another restart, but we should prevent subsequent live-lock for future
+		// restarts.
+		if ex.hasRetried() {
+			if err := descsCol.LockDescriptorsForValidation(
+				ctx, ex.state.mu.txn,
+			); err != nil {
+				return err
+			}
+		}
+		if err := descsCol.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
 			return err
 		}
 
@@ -1059,6 +1077,12 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	}
 	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	return nil
+}
+
+func (ex *connExecutor) hasRetried() bool {
+	ex.state.mu.Lock()
+	defer ex.state.mu.Unlock()
+	return ex.state.mu.autoRetryCounter > 1 || ex.state.mu.txn.Epoch() > 1
 }
 
 // createJobs creates jobs for the records cached in schemaChangeJobRecords

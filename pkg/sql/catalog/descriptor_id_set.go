@@ -83,6 +83,11 @@ func (d DescriptorIDSet) Union(o DescriptorIDSet) DescriptorIDSet {
 	return DescriptorIDSet{set: d.set.Union(o.set)}
 }
 
+// UnionWith adds the members of o to d.
+func (d *DescriptorIDSet) UnionWith(o DescriptorIDSet) {
+	d.set.UnionWith(o.set)
+}
+
 // ConstraintIDSet stores an unordered set of descriptor ids.
 type ConstraintIDSet struct {
 	set intsets.Fast
