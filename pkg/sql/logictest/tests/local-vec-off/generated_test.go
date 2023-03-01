@@ -1703,6 +1703,13 @@ func TestLogic_show_transfer_state(
 	runLogicTest(t, "show_transfer_state")
 }
 
+func TestLogic_show_var(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_var")
+}
+
 func TestLogic_span_builtins(
 	t *testing.T,
 ) {

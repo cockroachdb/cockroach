@@ -2703,3 +2703,20 @@ distribution: local
 vectorized: true
 ·
 • create function
+
+subtest regression_97130
+
+statement ok
+CREATE FUNCTION f_97130() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $pre_search_path
+SHOW search_path
+
+statement ok
+SET search_path = public,public
+
+statement ok
+SELECT f_97130();
+
+statement ok
+SET search_path = $pre_search_path
