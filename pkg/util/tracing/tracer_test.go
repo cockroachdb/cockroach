@@ -17,10 +17,12 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
@@ -909,11 +911,54 @@ func TestTracerSnapshots(t *testing.T) {
 	require.Equal(t, SnapshotID(3), s3.ID)
 	require.Equal(t, 3, len(tr.GetSnapshots()))
 
-	for _, i := range []SnapshotID{2, 1, 3} {
-		s, err := tr.GetSnapshot(i)
+	b1 := tr.SaveAutomaticSnapshot()
+	require.Equal(t, SnapshotID(1), b1.ID)
+	b2 := tr.SaveAutomaticSnapshot()
+	require.Equal(t, SnapshotID(2), b2.ID)
+	require.Equal(t, 3, len(tr.GetSnapshots()))
+	require.Equal(t, 2, len(tr.GetAutomaticSnapshots()))
+
+	for _, i := range []SnapshotID{1, 2, 3} {
+		_, err := tr.GetSnapshot(i)
 		require.NoError(t, err)
-		for _, s := range s.Stacks {
-			require.Less(t, len(s), 5<<10, s)
-		}
 	}
+	for _, i := range []SnapshotID{1, 2} {
+		_, err := tr.GetAutomaticSnapshot(i)
+		require.NoError(t, err)
+	}
+}
+
+func TestTracerSnapshotLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tr := NewTracer()
+	ctx := context.Background()
+
+	sv := settings.Values{}
+	periodicSnapshotInterval.Override(ctx, &sv, 0)
+
+	setting, done, testKnob := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	defer close(done)
+	defer close(testKnob)
+
+	go tr.runPeriodicSnapshotsLoop(&sv, setting, done, testKnob)
+
+	// Verify our snapshot loop is running by sending rate-change notifications
+	// and then verify it is not snapshotting since it is disabled.
+	setting <- struct{}{}
+	setting <- struct{}{}
+	require.Empty(t, tr.GetAutomaticSnapshots())
+
+	periodicSnapshotInterval.Override(ctx, &sv, time.Microsecond)
+	// Notify of the setting change; it might have noticed anyway if the previous
+	// loop hadn't gone past the setting read yet, so use a non-blocking send just in case it is
+	// already waiting in the post-snap testing knob.
+	select {
+	case setting <- struct{}{}:
+	default:
+	}
+	// Now wait for the snapshot.
+	testKnob <- struct{}{}
+
+	snaps := tr.GetAutomaticSnapshots()
+	require.NotEmpty(t, snaps)
 }
