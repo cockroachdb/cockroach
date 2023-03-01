@@ -271,7 +271,7 @@ func TestGCJobRetry(t *testing.T) {
 	failed.Store(false)
 	cs := cluster.MakeTestingClusterSettings()
 	gcjob.EmptySpanPollInterval.Override(ctx, &cs.SV, 100*time.Millisecond)
-	storage.MVCCRangeTombstonesEnabled.Override(ctx, &cs.SV, true)
+	storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &cs.SV, true)
 	params := base.TestServerArgs{Settings: cs}
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{

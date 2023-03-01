@@ -6262,7 +6262,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	mkArgs := func() base.TestServerArgs {
 		s := cluster.MakeTestingClusterSettings()
-		storage.MVCCRangeTombstonesEnabled.Override(ctx, &s.SV, true)
+		storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &s.SV, true)
 		return base.TestServerArgs{
 			Settings:      s,
 			ExternalIODir: baseDir,
