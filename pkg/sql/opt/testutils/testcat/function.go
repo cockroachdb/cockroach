@@ -95,6 +95,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 	overload := &tree.Overload{
 		Types:             argTypes,
 		ReturnType:        tree.FixedReturnType(retType),
+		IsUDF:             true,
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,

@@ -539,7 +539,7 @@ func (b *Builder) buildFunction(
 	}
 
 	overload := f.ResolvedOverload()
-	if overload.Body != "" {
+	if overload.IsUDF {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
 
