@@ -7,6 +7,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/security/password",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_xdg_go_pbkdf2//:pbkdf2",
         "@com_github_xdg_go_scram//:scram",
