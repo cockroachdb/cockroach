@@ -804,6 +804,11 @@ define ArrayAgg {
 }
 
 [Scalar, Aggregate]
+define ArrayCatAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define Avg {
     Input ScalarExpr
 }
