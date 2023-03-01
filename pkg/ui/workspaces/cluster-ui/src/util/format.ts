@@ -304,11 +304,14 @@ export function capitalize(str: string): string {
   return str[0].toUpperCase() + str.substring(1);
 }
 
-export function EncodeUriName(name: string) {
-  return encodeURIComponent(name);
+export function EncodeUriName(name: string): string {
+  // When a string has a '%' on it, the URI needs to have '%2525' instead, so this
+  // function replaces '%25' with '%252525' because when the link is created
+  // we have [%25]2525 -> %2525 (which is then used as the URI)
+  return encodeURIComponent(name).replace(/%25/g, "%252525");
 }
 
-export function EncodeDatabasesUri(db: string) {
+export function EncodeDatabasesUri(db: string): string {
   return `/databases/${EncodeUriName(db)}`;
 }
 
@@ -317,13 +320,13 @@ export function EncodeDatabasesToIndexUri(
   schema: string,
   table: string,
   indexName: string,
-) {
+): string {
   return `${EncodeDatabasesUri(db)}/${EncodeUriName(schema)}/${EncodeUriName(
     table,
   )}/${EncodeUriName(indexName)}`;
 }
 
-export function EncodeDatabaseTableUri(db: string, table: string) {
+export function EncodeDatabaseTableUri(db: string, table: string): string {
   return `${EncodeDatabaseUri(db)}/table/${EncodeUriName(table)}`;
 }
 
@@ -331,12 +334,12 @@ export function EncodeDatabaseTableIndexUri(
   db: string,
   table: string,
   indexName: string,
-) {
+): string {
   return `${EncodeDatabaseTableUri(db, table)}/index/${EncodeUriName(
     indexName,
   )}`;
 }
 
-export function EncodeDatabaseUri(db: string) {
+export function EncodeDatabaseUri(db: string): string {
   return `/database/${EncodeUriName(db)}`;
 }
