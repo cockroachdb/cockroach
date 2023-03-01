@@ -173,19 +173,19 @@ SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCH
 user testuser
 
 # testuser should no longer have the ability to control jobs.
-statement error pq: user testuser does not have CONTROLJOB privilege
+statement error pq: user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)
 
-statement error pq: user testuser does not have CONTROLJOB privilege
+statement error pq: user testuser does not have privileges for job
 CANCEL JOB (SELECT $job_id)
 
-statement error pq: user testuser does not have CONTROLJOB privilege
+statement error pq: user testuser does not have privileges for job
 RESUME JOB (SELECT $job_id)
 
 user root
 
 statement ok
-ALTER ROLE testuser VIEWJOB
+GRANT SYSTEM VIEWJOB TO testuser
 
 user testuser
 
@@ -202,7 +202,42 @@ SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
 user root
 
 statement ok
-ALTER ROLE testuser NOVIEWJOB
+REVOKE SYSTEM VIEWJOB FROM testuser
+
+user testuser
+
+# testuser can only see their own job
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
+----
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
+
+user root
+
+statement ok
+CREATE ROLE jobviewer
+
+statement ok
+GRANT SYSTEM VIEWJOB TO jobviewer
+
+statement ok
+GRANT jobviewer TO testuser
+
+user testuser
+
+# testuser should be able to see all jobs
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
+----
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1                   testuser2
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.t2                   root
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
+
+user root
+statement ok
+REVOKE jobviewer FROM testuser
 
 user testuser
 
