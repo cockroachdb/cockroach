@@ -1071,11 +1071,11 @@ func makeTenantSQLServerArgs(
 		sqlCfg.TenantID, tenantNameContainer, nil /* nodeLiveness */, nil, /* remoteClocks */
 		clock.WallClock(), st)
 	// Note: If the tenant is in-process, we attach this tenant's metric
-	// recorder to the parentRecorder held by the system tenant. This
+	// registry to the parentRecorder held by the system tenant. This
 	// ensures that generated Prometheus metrics from the system tenant
 	// include metrics from this in-process tenant.
 	if parentRecorder != nil {
-		parentRecorder.AddTenantRecorder(recorder)
+		parentRecorder.AddTenantRegistry(sqlCfg.TenantID, registry)
 	}
 
 	var runtime *status.RuntimeStatSampler
