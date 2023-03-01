@@ -2178,6 +2178,7 @@ system         public        external_connections             connection_name   
 system         public        external_connections             connection_type                                                                                           4
 system         public        external_connections             created                                                                                                   2
 system         public        external_connections             owner                                                                                                     6
+system         public        external_connections             owner_id                                                                                                  7
 system         public        external_connections             updated                                                                                                   3
 system         pg_extension  geography_columns                coord_dimension                                                                                           5
 system         pg_extension  geography_columns                f_geography_column                                                                                        4

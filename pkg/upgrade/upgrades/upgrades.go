@@ -275,6 +275,18 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		cleanUpRegionalByTableIndex,
 	),
+	upgrade.NewTenantUpgrade(
+		"add owner_id column to system.external_connections table",
+		toCV(clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn),
+		upgrade.NoPrecondition,
+		alterExternalConnectionsTableAddOwnerIDColumn,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill owner_id column in system.external_connections table",
+		toCV(clusterversion.V23_1ExternalConnectionsTableOwnerIDColumnBackfilled),
+		upgrade.NoPrecondition,
+		backfillExternalConnectionsTableOwnerIDColumn,
+	),
 }
 
 func init() {
