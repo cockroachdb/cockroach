@@ -7718,7 +7718,7 @@ expires until the statement bundle is collected`,
 				return tree.NewDString(sqlNoConstants), nil
 			},
 			types.String,
-			"Removes constants from a SQL statement. String provided must contain at most"+
+			"Removes constants from a SQL statement. String provided must contain at most "+
 				"1 statement.",
 			volatility.Immutable,
 		),
@@ -7742,11 +7742,11 @@ expires until the statement bundle is collected`,
 
 					if len(sql) != 0 {
 						parsed, err := parser.ParseOne(sql)
-						if err != nil {
-							return tree.NewDString(sqlNoConstants), nil //nolint:returnerrcheck
+						// If parsing is unsuccessful, we append an empty string instead of
+						// returning an error.
+						if err == nil {
+							sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 						}
-
-						sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 					}
 
 					if err := result.Append(tree.NewDString(sqlNoConstants)); err != nil {
@@ -7756,7 +7756,7 @@ expires until the statement bundle is collected`,
 
 				return result, nil
 			},
-			Info: "Hide constants for each element in an array of SQL statements." +
+			Info: "Hide constants for each element in an array of SQL statements. " +
 				"Note that maximum 1 statement is permitted per string element.",
 			Volatility: volatility.Immutable,
 		},

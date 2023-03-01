@@ -3737,6 +3737,11 @@ SELECT crdb_internal.hide_sql_constants(ARRAY('select 1', NULL, 'select ''hello'
 {"SELECT _",NULL,"SELECT '_'",""}
 
 query T
+SELECT crdb_internal.hide_sql_constants(ARRAY['banana'])
+----
+{""}
+
+query T
 SELECT crdb_internal.hide_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')
 ----
 SELECT '_' IN ('_', '_', __more1_10__)
