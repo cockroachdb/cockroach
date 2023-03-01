@@ -49,6 +49,8 @@ type asyncProducerMock struct {
 	}
 }
 
+var _ sarama.AsyncProducer = (*asyncProducerMock)(nil)
+
 const unbuffered = 0
 
 func newAsyncProducerMock(bufSize int) *asyncProducerMock {
@@ -69,10 +71,25 @@ func (p *asyncProducerMock) Close() error {
 	close(p.errorsCh)
 	return nil
 }
+func (p *asyncProducerMock) IsTransactional() bool                   { panic(`unimplemented`) }
+func (p *asyncProducerMock) BeginTxn() error                         { panic(`unimplemented`) }
+func (p *asyncProducerMock) CommitTxn() error                        { panic(`unimplemented`) }
+func (p *asyncProducerMock) AbortTxn() error                         { panic(`unimplemented`) }
+func (p *asyncProducerMock) TxnStatus() sarama.ProducerTxnStatusFlag { panic(`unimplemented`) }
+func (p *asyncProducerMock) AddOffsetsToTxn(
+	_ map[string][]*sarama.PartitionOffsetMetadata, _ string,
+) error {
+	panic(`unimplemented`)
+}
+func (p *asyncProducerMock) AddMessageToTxn(_ *sarama.ConsumerMessage, _ string, _ *string) error {
+	panic(`unimplemented`)
+}
 
 type syncProducerMock struct {
 	overrideSend func(*sarama.ProducerMessage) error
 }
+
+var _ sarama.SyncProducer = (*syncProducerMock)(nil)
 
 func (p *syncProducerMock) SendMessage(
 	msg *sarama.ProducerMessage,
@@ -102,6 +119,20 @@ func (p *syncProducerMock) SendMessages(msgs []*sarama.ProducerMessage) error {
 	}
 	return nil
 }
+func (p *syncProducerMock) IsTransactional() bool                   { panic(`unimplemented`) }
+func (p *syncProducerMock) BeginTxn() error                         { panic(`unimplemented`) }
+func (p *syncProducerMock) CommitTxn() error                        { panic(`unimplemented`) }
+func (p *syncProducerMock) AbortTxn() error                         { panic(`unimplemented`) }
+func (p *syncProducerMock) TxnStatus() sarama.ProducerTxnStatusFlag { panic(`unimplemented`) }
+func (p *syncProducerMock) AddOffsetsToTxn(
+	_ map[string][]*sarama.PartitionOffsetMetadata, _ string,
+) error {
+	panic(`unimplemented`)
+}
+func (p *syncProducerMock) AddMessageToTxn(_ *sarama.ConsumerMessage, _ string, _ *string) error {
+	panic(`unimplemented`)
+}
+func (p *syncProducerMock) Close() error { panic(`unimplemented`) }
 
 // consumeAndSucceed consumes input messages and sends them to successes channel.
 // Returns function that must be called to stop this consumer
