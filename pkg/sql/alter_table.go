@@ -251,6 +251,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 					continue
 				}
 
+				if t.ValidationBehavior == tree.ValidationSkip {
+					return sqlerrors.NewUnsupportedUnvalidatedConstraintError(catconstants.ConstraintTypeUnique)
+				}
+
 				if err := validateColumnsAreAccessible(n.tableDesc, d.Columns); err != nil {
 					return err
 				}

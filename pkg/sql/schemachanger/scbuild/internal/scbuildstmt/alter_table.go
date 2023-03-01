@@ -52,11 +52,10 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
 	) bool {
-		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey {
-			// Support ALTER TABLE ... ADD PRIMARY KEY
-			return true
-		} else if ok && d.WithoutIndex {
+		if _, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok {
+			// Support ALTER TABLE ... ADD PRIMARY KEY [NOT VALID]
 			// Support ALTER TABLE ... ADD UNIQUE WITHOUT INDEX [NOT VALID]
+			// Support ALTER TABLE ... ADD UNIQUE [NOT VALID]
 			return true
 		}
 
@@ -82,10 +81,12 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 // E.g. "ADD_PRIMARY_KEY_DEFAULT", "ADD_CHECK_SKIP", "ADD_FOREIGN_KEY_DEFAULT", etc.
 var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
 	"ADD_PRIMARY_KEY_DEFAULT":          clusterversion.V22_2,
+	"ADD_UNIQUE_DEFAULT":               clusterversion.V23_1,
 	"ADD_CHECK_DEFAULT":                clusterversion.V23_1,
 	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1,
 	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1,
 	"ADD_PRIMARY_KEY_SKIP":             clusterversion.V23_1,
+	"ADD_UNIQUE_SKIP":                  clusterversion.V23_1,
 	"ADD_CHECK_SKIP":                   clusterversion.V23_1,
 	"ADD_UNIQUE_WITHOUT_INDEX_SKIP":    clusterversion.V23_1,
 	"ADD_FOREIGN_KEY_SKIP":             clusterversion.V23_1,

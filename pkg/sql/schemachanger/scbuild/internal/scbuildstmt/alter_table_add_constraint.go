@@ -45,6 +45,17 @@ func alterTableAddConstraint(
 			alterTableAddPrimaryKey(b, tn, tbl, t)
 		} else if d.WithoutIndex {
 			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
+		} else {
+			if t.ValidationBehavior == tree.ValidationSkip {
+				panic(sqlerrors.NewUnsupportedUnvalidatedConstraintError(catconstants.ConstraintTypeUnique))
+			}
+			CreateIndex(b, &tree.CreateIndex{
+				Name:      d.Name,
+				Table:     *tn,
+				Unique:    true,
+				Columns:   d.Columns,
+				Predicate: d.Predicate,
+			})
 		}
 	case *tree.CheckConstraintTableDef:
 		alterTableAddCheck(b, tn, tbl, t)
