@@ -166,7 +166,7 @@ func NewSeparateProcessTenantServer(
 	tenantNameContainer *roachpb.TenantNameContainer,
 ) (*SQLServerWrapper, error) {
 	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance()
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, nil /* parentRecorder */, tenantNameContainer, instanceIDContainer)
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer)
 }
 
 // NewSharedProcessTenantServer creates a tenant-specific, SQL-only
@@ -180,14 +180,13 @@ func NewSharedProcessTenantServer(
 	stopper *stop.Stopper,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
 ) (*SQLServerWrapper, error) {
 	if baseCfg.IDContainer.Get() == 0 {
 		return nil, errors.AssertionFailedf("programming error: NewSharedProcessTenantServer called before NodeID was assigned.")
 	}
 	instanceIDContainer := base.NewSQLIDContainerForNode(baseCfg.IDContainer)
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer, instanceIDContainer)
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer)
 }
 
 // newTenantServer constructs a SQLServerWrapper.
@@ -198,7 +197,6 @@ func newTenantServer(
 	stopper *stop.Stopper,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	instanceIDContainer *base.SQLIDContainer,
 ) (*SQLServerWrapper, error) {
@@ -212,7 +210,7 @@ func newTenantServer(
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer, instanceIDContainer)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -618,6 +616,24 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlServer.cfg.HTTPAdvertiseAddr,
 		s.sqlServer.cfg.SQLAdvertiseAddr,
 	)
+	// If there's a higher-level recorder, we link our metrics registry to it.
+	if s.sqlCfg.NodeMetricsRecorder != nil {
+		s.sqlCfg.NodeMetricsRecorder.AddTenantRegistry(s.sqlCfg.TenantID, s.registry)
+		// TODO(aadityasondhi): Unlink the tenant registry if the tenant is stopped.
+		// See #97889.
+	} else {
+		// Export statistics to graphite, if enabled by configuration. We only do
+		// this if there isn't a higher-level recorder; if there is, that one takes
+		// responsibility for exporting to Graphite.
+		var graphiteOnce sync.Once
+		graphiteEndpoint.SetOnChange(&s.ClusterSettings().SV, func(context.Context) {
+			if graphiteEndpoint.Get(&s.ClusterSettings().SV) != "" {
+				graphiteOnce.Do(func() {
+					startGraphiteStatsExporter(workersCtx, s.stopper, s.recorder, s.ClusterSettings())
+				})
+			}
+		})
+	}
 
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
@@ -633,16 +649,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			return err
 		}
 	}
-
-	// Export statistics to graphite, if enabled by configuration.
-	var graphiteOnce sync.Once
-	graphiteEndpoint.SetOnChange(&s.ClusterSettings().SV, func(context.Context) {
-		if graphiteEndpoint.Get(&s.ClusterSettings().SV) != "" {
-			graphiteOnce.Do(func() {
-				startGraphiteStatsExporter(workersCtx, s.stopper, s.recorder, s.ClusterSettings())
-			})
-		}
-	})
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
@@ -886,7 +892,6 @@ func makeTenantSQLServerArgs(
 	stopper *stop.Stopper,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	instanceIDContainer *base.SQLIDContainer,
 ) (sqlServerArgs, error) {
@@ -1070,13 +1075,6 @@ func makeTenantSQLServerArgs(
 	recorder := status.NewMetricsRecorder(
 		sqlCfg.TenantID, tenantNameContainer, nil /* nodeLiveness */, nil, /* remoteClocks */
 		clock.WallClock(), st)
-	// Note: If the tenant is in-process, we attach this tenant's metric
-	// registry to the parentRecorder held by the system tenant. This
-	// ensures that generated Prometheus metrics from the system tenant
-	// include metrics from this in-process tenant.
-	if parentRecorder != nil {
-		parentRecorder.AddTenantRegistry(sqlCfg.TenantID, registry)
-	}
 
 	var runtime *status.RuntimeStatSampler
 	if baseCfg.RuntimeStatSampler != nil {
