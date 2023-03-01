@@ -1797,7 +1797,7 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 
 				for _, capabilityName := range capabilityNames {
 					capabilityValue := capabilities.GetBoolCapability(capabilityName)
-					if !capabilityValue {
+					if capabilityValue == nil || !*capabilityValue {
 						return missingCapabilityError(capabilityName)
 					}
 				}

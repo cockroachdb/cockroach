@@ -36,8 +36,9 @@ type tenantValues struct {
 }
 
 type showTenantNodeCapability struct {
-	name  string
-	value string
+	name   string
+	value  string
+	source string
 }
 
 type showTenantNode struct {
@@ -114,9 +115,11 @@ func (n *showTenantNode) getTenantValues(
 		capabilities := tenantInfo.Capabilities
 		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilitiespb.BoolCapabilityNames))
 		for _, capabilityName := range tenantcapabilitiespb.BoolCapabilityNames {
+			capabilityValue, source := tenantcapabilitiespb.GetBoolCapabilityWithDefault(capabilities, capabilityName)
 			showTenantNodeCapabilities = append(showTenantNodeCapabilities, showTenantNodeCapability{
-				name:  capabilityName.String(),
-				value: strconv.FormatBool(capabilities.GetBoolCapability(capabilityName)),
+				name:   capabilityName.String(),
+				value:  strconv.FormatBool(capabilityValue),
+				source: source,
 			})
 		}
 		values.capabilities = showTenantNodeCapabilities
@@ -262,6 +265,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		result = append(result,
 			tree.NewDString(capability.name),
 			tree.NewDString(capability.value),
+			tree.NewDString(capability.source),
 		)
 	}
 

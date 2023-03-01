@@ -128,12 +128,13 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 		capabilityNameString := capability.Name
 		typedExpr := n.typedExprs[i]
 		if capabilityName, ok := tenantcapabilitiespb.BoolCapabilityNameFromString(capabilityNameString); ok {
-			capabilityValue := false
+			var capabilityValue *bool
 			if !n.n.IsRevoke {
-				capabilityValue, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityNameString, typedExpr)
+				boolValue, err := paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityNameString, typedExpr)
 				if err != nil {
 					return err
 				}
+				capabilityValue = &boolValue
 			}
 			dst.SetBoolCapability(capabilityName, capabilityValue)
 		} else {

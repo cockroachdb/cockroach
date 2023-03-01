@@ -15,6 +15,13 @@ import (
 	"sort"
 )
 
+// defaultCapabilities overrides capability values with non-zero value defaults.
+var defaultCapabilities = TenantCapabilities{
+	CanAdminSplit: &BoolCapability{
+		Value: true,
+	},
+}
+
 // valueOffset sets the iota offset to make sure the 0 value is not a valid
 // enum value.
 const valueOffset = 1
@@ -74,7 +81,7 @@ const (
 	CanViewTSDBMetrics // can_view_tsdb_metrics
 )
 
-func (t *TenantCapabilities) getBoolFieldRef(capabilityName BoolCapabilityName) *bool {
+func (t *TenantCapabilities) getBoolFieldRef(capabilityName BoolCapabilityName) **BoolCapability {
 	switch capabilityName {
 	case CanAdminSplit:
 		return &t.CanAdminSplit
@@ -88,13 +95,39 @@ func (t *TenantCapabilities) getBoolFieldRef(capabilityName BoolCapabilityName) 
 }
 
 // GetBoolCapability returns the value of the corresponding flag capability.
-func (t *TenantCapabilities) GetBoolCapability(capabilityName BoolCapabilityName) bool {
-	return *t.getBoolFieldRef(capabilityName)
+func (t *TenantCapabilities) GetBoolCapability(capabilityName BoolCapabilityName) *bool {
+	ref := *t.getBoolFieldRef(capabilityName)
+	if ref == nil {
+		return nil
+	}
+	return &ref.Value
+}
+
+// GetBoolCapabilityWithDefault returns the value of the corresponding flag capability.
+func GetBoolCapabilityWithDefault(
+	t TenantCapabilities, capabilityName BoolCapabilityName,
+) (bool, string) {
+	capabilityValue := t.GetBoolCapability(capabilityName)
+	if capabilityValue != nil {
+		return *capabilityValue, "user"
+	}
+	capabilityValue = defaultCapabilities.GetBoolCapability(capabilityName)
+	result := false
+	if capabilityValue != nil {
+		result = *capabilityValue
+	}
+	return result, "default"
 }
 
 // SetBoolCapability sets the value of the corresponding flag capability.
 func (t *TenantCapabilities) SetBoolCapability(
-	capabilityName BoolCapabilityName, capabilityValue bool,
+	capabilityName BoolCapabilityName, capabilityValue *bool,
 ) {
-	*t.getBoolFieldRef(capabilityName) = capabilityValue
+	var boolCapability *BoolCapability
+	if capabilityValue != nil {
+		boolCapability = &BoolCapability{
+			Value: *capabilityValue,
+		}
+	}
+	*t.getBoolFieldRef(capabilityName) = boolCapability
 }

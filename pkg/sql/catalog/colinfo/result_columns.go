@@ -300,6 +300,7 @@ var TenantColumnsWithReplication = ResultColumns{
 var TenantColumnsWithCapabilities = ResultColumns{
 	{Name: "capability_name", Typ: types.String},
 	{Name: "capability_value", Typ: types.String},
+	{Name: "capability_source", Typ: types.String},
 }
 
 // RangesNoLeases is the schema for crdb_internal.ranges_no_leases.

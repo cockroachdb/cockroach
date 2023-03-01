@@ -82,7 +82,8 @@ func (a *Authorizer) HasCapabilityForBatch(
 			// No capability checks for any other type of request.
 			continue
 		}
-		if !cp.GetBoolCapability(capabilityName) {
+		ok, _ := tenantcapabilitiespb.GetBoolCapabilityWithDefault(cp, capabilityName)
+		if !ok {
 			return errors.Newf("tenant %s does not have capability %q", tenID, capabilityName)
 		}
 	}
@@ -106,7 +107,8 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 			tenID,
 		)
 	}
-	if !cp.CanViewNodeInfo {
+	ok, _ := tenantcapabilitiespb.GetBoolCapabilityWithDefault(cp, tenantcapabilitiespb.CanViewNodeInfo)
+	if !ok {
 		return errors.Newf("tenant %s does not have capability to query cluster node metadata", tenID)
 	}
 	return nil
@@ -124,7 +126,8 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 			tenID,
 		)
 	}
-	if !cp.CanViewTSDBMetrics {
+	ok, _ := tenantcapabilitiespb.GetBoolCapabilityWithDefault(cp, tenantcapabilitiespb.CanViewTSDBMetrics)
+	if !ok {
 		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
 	}
 	return nil
