@@ -120,31 +120,31 @@ func TestMetricsRecorderTenants(t *testing.T) {
 	nodeDescTenant := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(1),
 	}
-	reg2 := metric.NewRegistry()
+	regTenant := metric.NewRegistry()
 	stTenant := cluster.MakeTestingClusterSettings()
-	id, err := roachpb.MakeTenantID(123)
+	tenantID, err := roachpb.MakeTenantID(123)
 	require.NoError(t, err)
 
 	appNameContainer := roachpb.NewTenantNameContainer("application")
 	recorderTenant := NewMetricsRecorder(
-		id,
+		tenantID,
 		appNameContainer,
 		nil, /* nodeLiveness */
 		nil, /* remoteClocks */
 		manual,
 		stTenant,
 	)
-	recorderTenant.AddNode(reg2, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorderTenant.AddNode(regTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	g := metric.NewGauge(metric.Metadata{Name: "some_metric"})
 	reg1.AddMetric(g)
 	g.Update(123)
 
 	g2 := metric.NewGauge(metric.Metadata{Name: "some_metric"})
-	reg2.AddMetric(g2)
+	regTenant.AddMetric(g2)
 	g2.Update(456)
 
-	recorder.AddTenantRecorder(recorderTenant)
+	recorder.AddTenantRegistry(tenantID, regTenant)
 
 	buf := bytes.NewBuffer([]byte{})
 	err = recorder.PrintAsText(buf)
