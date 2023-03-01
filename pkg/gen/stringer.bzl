@@ -12,6 +12,7 @@ STRINGER_SRCS = [
     "//pkg/kv/kvserver/closedts/sidetransport:cantclosereason_string.go",
     "//pkg/kv/kvserver:refreshraftreason_string.go",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi:boolcapabilityname_string.go",
+    "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi:int32rangecapabilityname_string.go",
     "//pkg/sql/catalog/catalogkeys:commenttype_string.go",
     "//pkg/sql/catalog/catpb:privilegedescversion_string.go",
     "//pkg/sql/catalog/descpb:formatversion_string.go",

@@ -64,6 +64,8 @@ func (p *planner) AlterTenantCapability(
 			var desiredType *types.T
 			if _, ok := tenantcapabilitiesapi.BoolCapabilityNameFromString(capabilityNameString); ok {
 				desiredType = types.Bool
+			} else if _, _, ok := tenantcapabilitiesapi.Int32RangeCapabilityNameFromString(capabilityNameString); ok {
+				desiredType = types.Int
 			} else {
 				return nil, errors.Newf("unknown capability: %q", capabilityNameString)
 			}
@@ -140,6 +142,22 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 				}
 			}
 			dst.SetBoolCapability(capabilityName, capabilityValue)
+		} else if capabilityName, isMin, ok := tenantcapabilitiesapi.Int32RangeCapabilityNameFromString(capabilityNameString); ok {
+			capabilityValue := dst.GetInt32RangeCapability(capabilityName)
+			int32Value := int32(0)
+			if !n.n.IsRevoke {
+				int64Value, err := paramparse.DatumAsInt(ctx, p.EvalContext(), capabilityNameString, typedExpr)
+				if err != nil {
+					return err
+				}
+				int32Value = int32(int64Value)
+			}
+			if isMin {
+				capabilityValue.Min = int32Value
+			} else {
+				capabilityValue.Max = int32Value
+			}
+			dst.SetInt32RangeCapability(capabilityName, capabilityValue)
 		} else {
 			return errors.Newf("unknown capability: %q", capabilityNameString)
 		}

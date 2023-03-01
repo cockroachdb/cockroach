@@ -10,7 +10,10 @@
 
 package tenantcapabilitiesapi
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // valueOffset sets the iota offset to make sure the 0 value is not a valid
 // enum value.
@@ -81,3 +84,39 @@ type TenantCapabilities interface {
 	// SetBoolCapability sets the value of the corresponding bool capability.
 	SetBoolCapability(BoolCapabilityName, bool)
 }
+
+// Int32RangeCapabilityName is a pseudo-enum of valid bool capability names.
+type Int32RangeCapabilityName int32
+
+// IsSet returns true if the capability name has a non-zero value.
+func (t Int32RangeCapabilityName) IsSet() bool {
+	return t >= valueOffset
+}
+
+var int32RangeToInt32RangeCapabilityNameMap = stringToCapabilityNameMap[Int32RangeCapabilityName](
+	_Int32RangeCapabilityName_index[:],
+	_Int32RangeCapabilityName_name,
+)
+
+// Int32RangeCapabilityNameFromString converts a string to a
+// Int32RangeCapabilityName.
+func Int32RangeCapabilityNameFromString(s string) (Int32RangeCapabilityName, bool, bool) {
+	parts := strings.Split(s, ".")
+	if len(parts) != 2 {
+		return 0, false, false
+	}
+	capabilityName, ok := int32RangeToInt32RangeCapabilityNameMap[parts[0]]
+	return capabilityName, parts[1] == "min", ok
+}
+
+// Int32RangeCapabilityNames is a slice of all Int32Range capability names
+// sorted lexicographically.
+var Int32RangeCapabilityNames = capabilityNames(int32RangeToInt32RangeCapabilityNameMap)
+
+//go:generate stringer -type=Int32RangeCapabilityName -linecomment
+const (
+	// TestRange1 is a test capability
+	TestRange1 Int32RangeCapabilityName = iota + valueOffset // test_range_1
+	// TestRange2 is a test capability
+	TestRange2 // test_range_2
+)

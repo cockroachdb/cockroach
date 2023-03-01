@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "api.go",
         ":boolcapabilityname-stringer",  # keep
+        ":int32rangecapabilityname-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi",
     visibility = ["//visibility:public"],
@@ -17,6 +18,13 @@ stringer(
     src = "api.go",
     additional_args = ["--linecomment"],
     typ = "BoolCapabilityName",
+)
+
+stringer(
+    name = "int32rangecapabilityname-stringer",
+    src = "api.go",
+    additional_args = ["--linecomment"],
+    typ = "Int32RangeCapabilityName",
 )
 
 get_x_data(name = "get_x_data")

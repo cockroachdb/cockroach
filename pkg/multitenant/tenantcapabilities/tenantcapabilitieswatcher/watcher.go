@@ -86,10 +86,10 @@ func (w *Watcher) GetCapabilities(
 }
 
 // GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
-func (w *Watcher) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+func (w *Watcher) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiesapi.TenantCapabilities {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	result := make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities, len(w.mu.store))
+	result := make(map[roachpb.TenantID]tenantcapabilitiesapi.TenantCapabilities, len(w.mu.store))
 	for tenID, cp := range w.mu.store {
 		result[tenID] = cp
 	}

@@ -34,6 +34,10 @@ capability_name        capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 subtest end
 
@@ -52,6 +56,10 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
@@ -63,6 +71,10 @@ capability_name        capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 subtest end
 
@@ -81,6 +93,10 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 subtest end
 
@@ -99,6 +115,10 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 subtest end
 
@@ -117,6 +137,10 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     true
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
@@ -128,5 +152,46 @@ capability_name        capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
+
+subtest end
+
+subtest int32range_capability
+
+statement ok
+CREATE TENANT "int32range-tenant"
+
+statement ok
+ALTER TENANT "int32range-tenant" GRANT CAPABILITY test_range_1.min=100, test_range_1.max=200
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "int32range-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+test_range_1.min       100
+test_range_1.max       200
+test_range_2.min       0
+test_range_2.max       0
+
+statement ok
+ALTER TENANT "int32range-tenant" REVOKE CAPABILITY test_range_1.min, test_range_1.max
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "int32range-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+test_range_1.min       0
+test_range_1.max       0
+test_range_2.min       0
+test_range_2.max       0
 
 subtest end

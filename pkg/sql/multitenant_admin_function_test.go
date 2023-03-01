@@ -320,17 +320,25 @@ func (tc testCase) runTest(
 		capabilityNames = caps
 		if len(capabilityNames) > 0 {
 			var builder strings.Builder
+			var tenantCapabilityParams serverutils.TenantCapabilityParams
 			for i, capabilityName := range capabilityNames {
 				if i > 0 {
 					builder.WriteString(", ")
 				}
 				builder.WriteString(capabilityName.String())
+				tenantCapabilityParams.BoolCapabilityParams = append(
+					tenantCapabilityParams.BoolCapabilityParams,
+					serverutils.BoolCapabilityParam{
+						Name:  capabilityName,
+						Value: true,
+					},
+				)
 			}
 			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s", builder.String())
 			_, err := systemDB.ExecContext(ctx, query, tenantID.ToUint64())
 			require.NoError(t, err, query)
 			waitForTenantCapabilitiesFns = append(waitForTenantCapabilitiesFns, func() {
-				testCluster.WaitForTenantCapabilities(t, tenantID, capabilityNames...)
+				testCluster.WaitForTenantCapabilities(t, tenantID, tenantCapabilityParams)
 			})
 		}
 	}
