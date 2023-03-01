@@ -19,6 +19,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -32,6 +33,7 @@ import (
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/skiputil"
 	"github.com/cockroachdb/errors"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
@@ -65,6 +67,7 @@ var (
 	port                    int
 	artifactsDir            string
 	githubPostFormatterName string
+	skippedTests            map[skiputil.Test]bool
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -223,7 +226,12 @@ func (s *monitorBuildServer) handleBuildEvent(
 					if output.Name == "test.log" || output.Name == "test.xml" {
 						src := strings.TrimPrefix(output.GetUri(), "file://")
 						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
-						if err := doCopy(src, dst); err != nil {
+						testXmlOptions := bazelutil.TestXmlOpts{
+							Failed:       summary.OverallStatus == bes.TestStatus_FAILED,
+							TargetName:   label,
+							SkippedTests: skippedTests,
+						}
+						if err := doCopy(src, dst, testXmlOptions); err != nil {
 							return nil, err
 						}
 						if output.Name == "test.xml" {
@@ -252,7 +260,7 @@ func (s *monitorBuildServer) Finalize() error {
 				}
 				for _, set := range outputGroup.FileSets {
 					for _, artifact := range s.namedSetsOfFiles[set.Id] {
-						if err := doCopy(artifact.src, filepath.Join(artifactsDir, "bazel-bin", artifact.dst)); err != nil {
+						if err := doCopy(artifact.src, filepath.Join(artifactsDir, "bazel-bin", artifact.dst), bazelutil.TestXmlOpts{}); err != nil {
 							return err
 						}
 					}
@@ -282,6 +290,13 @@ func init() {
 		8998,
 		"port to run the bazci server on",
 	)
+	var err error
+	skippedTests, err = skiputil.GetSkippedTests()
+	if err != nil {
+		// Do not fail the run if we fail to get the list of skipped lists.
+		log.Println(err)
+	}
+	log.Println(skippedTests)
 }
 
 func getRunEnvForBeaverHub() string {
@@ -373,7 +388,7 @@ func mungeTestXMLs(args []string) error {
 			return err
 		}
 		var buf bytes.Buffer
-		err = bazelutil.MungeTestXML(contents, &buf)
+		err = bazelutil.MungeTestXML(contents, &buf, bazelutil.TestXmlOpts{})
 		if err != nil {
 			return err
 		}
@@ -403,8 +418,10 @@ func mergeTestXMLs(args []string) error {
 }
 
 // doCopy copies from the src file to the destination. Note that we will
-// also munge the schema of the src file if it is a test.xml.
-func doCopy(src, dst string) error {
+// also munge the schema of the src file if it is a test.xml. We may also
+// munge the contents of the src file if it is a test.xml and failed is true
+// to ignore skipped tests.
+func doCopy(src, dst string, testXmlOptions bazelutil.TestXmlOpts) error {
 	srcF, err := os.Open(src)
 	if err != nil {
 		return err
@@ -432,7 +449,7 @@ func doCopy(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		err = bazelutil.MungeTestXML(srcContent, dstF)
+		err = bazelutil.MungeTestXML(srcContent, dstF, testXmlOptions)
 	}
 	return err
 }

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -47,8 +46,9 @@ import (
 // upgraded and ensures that it is created at the final cluster version. It
 // also verifies that the version is correct after a restart
 func TestTenantUpgrade(t *testing.T) {
+	t.FailNow()
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 97076, "flaky test")
+	// skip.WithIssue(t, 97076, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(

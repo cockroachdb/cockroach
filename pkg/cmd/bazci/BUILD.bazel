@@ -13,6 +13,7 @@ go_library(
         "//pkg/build/bazel/bes",
         "//pkg/build/util",
         "//pkg/cmd/bazci/githubpost",
+        "//pkg/cmd/bazci/skiputil",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",

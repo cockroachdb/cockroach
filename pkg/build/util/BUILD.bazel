@@ -6,6 +6,7 @@ go_library(
     srcs = ["util.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/build/util",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/cmd/bazci/skiputil"],
 )
 
 go_test(

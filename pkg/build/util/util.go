@@ -19,7 +19,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/skiputil"
 )
 
 // Below are data structures representing the `test.xml` schema.
@@ -58,6 +61,12 @@ type XMLMessage struct {
 	Message  string     `xml:"message,attr"`
 	Attrs    []xml.Attr `xml:",any,attr"`
 	Contents string     `xml:",chardata"`
+}
+
+type TestXmlOpts struct {
+	Failed       bool
+	TargetName   string
+	SkippedTests map[skiputil.Test]bool
 }
 
 // OutputOfBinaryRule returns the path of the binary produced by the
@@ -122,12 +131,49 @@ func OutputsOfGenrule(target, xmlQueryOutput string) ([]string, error) {
 	return ret, nil
 }
 
+func ignoreSkippedTests(suite testSuite, opts TestXmlOpts) (testSuite, error) {
+	if !opts.Failed {
+		return suite, nil
+	}
+	affectedTestCases := 0
+	for i, tc := range suite.TestCases {
+		if tc.Failure != nil {
+			test := skiputil.Test{
+				// Some tests contain subtests indicated by a `/` but we are only interested in the test name.
+				TestName:       strings.Split(tc.Name, "/")[0],
+				TestTargetName: opts.TargetName,
+			}
+			if opts.SkippedTests[test] {
+				// Failed test is a skipped one so munge the result to ignore it.
+				affectedTestCases += 1
+				suite.TestCases[i].Skipped = &XMLMessage{
+					Message:  "Skipped",
+					Contents: "This test ran and failed but its result was ignored because it's flaky. " + suite.TestCases[i].Failure.Contents,
+				}
+				suite.TestCases[i].Failure = nil
+			}
+		}
+	}
+	for j, attr := range suite.Attrs {
+		if attr.Name.Local == "failures" {
+			// Decrement the failures count by the number of affected test cases.
+			parsedInt, _ := strconv.Atoi(suite.Attrs[j].Value)
+			suite.Attrs[j].Value = strconv.Itoa(parsedInt - affectedTestCases)
+		} else if attr.Name.Local == "skipped" {
+			// Increment the skipped count by the number of affected test cases.
+			parsedInt, _ := strconv.Atoi(suite.Attrs[j].Value)
+			suite.Attrs[j].Value = strconv.Itoa(parsedInt + affectedTestCases)
+		}
+	}
+	return suite, nil
+}
+
 // MungeTestXML parses and slightly munges the XML in the source file and writes
 // it to the output file. TeamCity kind of knows how to interpret the schema,
 // but the schema isn't *exactly* what it's expecting. By munging the XML's
 // here we ensure that the TC test view is as useful as possible.
 // Helper function meant to be used with maybeStageArtifact.
-func MungeTestXML(srcContent []byte, outFile io.Writer) error {
+func MungeTestXML(srcContent []byte, outFile io.Writer, opts TestXmlOpts) error {
 	// Parse the XML into a TestSuites struct.
 	suites := TestSuites{}
 	err := xml.Unmarshal(srcContent, &suites)
@@ -139,8 +185,14 @@ func MungeTestXML(srcContent []byte, outFile io.Writer) error {
 	if err != nil {
 		return err
 	}
+
 	// We only want the first test suite in the list of suites.
-	return writeToFile(&suites.Suites[0], outFile)
+	suite := suites.Suites[0]
+	suiteAfterIgnoringSkippedTests, err := ignoreSkippedTests(suite, opts)
+	if err != nil {
+		return err
+	}
+	return writeToFile(&suiteAfterIgnoringSkippedTests, outFile)
 }
 
 // MergeTestXMLs merges the given list of test suites into a single test suite,
