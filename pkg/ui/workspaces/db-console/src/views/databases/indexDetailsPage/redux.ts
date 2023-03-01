@@ -69,7 +69,7 @@ export const mapStateToProps = createSelector(
     )[0];
     const filteredIndexRecommendations =
       stats?.data?.index_recommendations.filter(
-        indexRec => indexRec.index_id === details.statistics.key.index_id,
+        indexRec => indexRec.index_id === details?.statistics.key.index_id,
       ) || [];
     const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
       let type: RecType = "Unknown";
