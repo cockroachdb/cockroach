@@ -446,7 +446,7 @@ func GetJSONProto(ts TestTenantInterface, path string, response protoutil.Messag
 func GetJSONProtoWithAdminOption(
 	ts TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
-	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin)
+	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
 	if err != nil {
 		return err
 	}
@@ -465,7 +465,7 @@ func PostJSONProto(ts TestTenantInterface, path string, request, response protou
 func PostJSONProtoWithAdminOption(
 	ts TestTenantInterface, path string, request, response protoutil.Message, isAdmin bool,
 ) error {
-	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin)
+	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
 	if err != nil {
 		return err
 	}

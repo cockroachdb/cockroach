@@ -34,7 +34,7 @@ func TestHSTS(t *testing.T) {
 	require.NoError(t, err)
 	defer httpClient.CloseIdleConnections()
 
-	secureClient, err := s.GetAuthenticatedHTTPClient(false)
+	secureClient, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
 	defer secureClient.CloseIdleConnections()
 

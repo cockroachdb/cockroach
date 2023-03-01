@@ -118,7 +118,7 @@ func TestListSessionsV2(t *testing.T) {
 	}
 
 	// A non-admin user cannot see sessions at all.
-	nonAdminClient, err := ts1.GetAuthenticatedHTTPClient(false)
+	nonAdminClient, err := ts1.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
 	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
 	require.NoError(t, err)

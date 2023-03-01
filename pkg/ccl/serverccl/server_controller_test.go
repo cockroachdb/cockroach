@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"testing"
 	"time"
@@ -312,4 +313,79 @@ func TestServerStartStop(t *testing.T) {
 		}
 		return errors.New("server still alive")
 	})
+}
+
+func TestServerControllerLoginLogout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
+	require.NoError(t, err)
+
+	resp, err := client.Post(s.AdminURL()+"/logout", "", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, 200, resp.StatusCode)
+	cookieNames := make([]string, len(resp.Cookies()))
+	cookieValues := make([]string, len(resp.Cookies()))
+	for i, c := range resp.Cookies() {
+		cookieNames[i] = c.Name
+		cookieValues[i] = c.Value
+	}
+	require.ElementsMatch(t, []string{"session", "multitenant-session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", "", ""}, cookieValues)
+
+	// Need a new server because the HTTP Client is memoized.
+	s2, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s2.Stopper().Stop(ctx)
+
+	clientMT, err := s2.GetAuthenticatedHTTPClient(false, serverutils.MultiTenantSession)
+	require.NoError(t, err)
+
+	respMT, err := clientMT.Get(s.AdminURL() + "/logout")
+	require.NoError(t, err)
+	defer respMT.Body.Close()
+
+	require.Equal(t, 200, respMT.StatusCode)
+	cookieNames = make([]string, len(resp.Cookies()))
+	cookieValues = make([]string, len(resp.Cookies()))
+	for i, c := range resp.Cookies() {
+		cookieNames[i] = c.Name
+		cookieValues[i] = c.Value
+	}
+	require.ElementsMatch(t, []string{"session", "multitenant-session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", "", ""}, cookieValues)
+
+	// Now using manual clients to simulate states that might be invalid
+	url, err := url.Parse(s2.AdminURL())
+	require.NoError(t, err)
+	cookieJar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	cookieJar.SetCookies(url, []*http.Cookie{
+		{
+			Name:  "multitenant-session",
+			Value: "abc-123",
+		},
+	})
+	clientMT.Jar = cookieJar
+
+	respBadCookie, err := clientMT.Get(s.AdminURL() + "/logout")
+	require.NoError(t, err)
+	defer respBadCookie.Body.Close()
+
+	require.Equal(t, 200, respMT.StatusCode)
+	cookieNames = make([]string, len(resp.Cookies()))
+	cookieValues = make([]string, len(resp.Cookies()))
+	for i, c := range resp.Cookies() {
+		cookieNames[i] = c.Name
+		cookieValues[i] = c.Value
+	}
+	require.ElementsMatch(t, []string{"session", "multitenant-session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", "", ""}, cookieValues)
 }
