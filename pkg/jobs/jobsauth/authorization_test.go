@@ -12,6 +12,7 @@ package jobsauth_test
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -29,11 +30,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type userPrivilege struct {
+	privilege.Kind
+	privilege.ObjectType
+}
+
+var viewJobGlobalPrivilege = userPrivilege{privilege.VIEWJOB, privilege.Global}
+
 type testAuthAccessor struct {
 	user username.SQLUsername
 
 	// set of role options that the user has
 	roleOptions map[roleoption.Option]struct{}
+
+	// set of privileges that the user has
+	userPrivileges map[userPrivilege]struct{}
 
 	// set of descriptors which the user has privilege.CHANGEFEED on
 	changeFeedPrivileges map[descpb.ID]struct{}
@@ -63,6 +74,23 @@ func (a *testAuthAccessor) CheckPrivilegeForTableID(
 		return pgerror.New(pgcode.InsufficientPrivilege, "foo")
 	}
 	return nil
+}
+
+// HasPrivilege is only implemented for the target user.
+func (a *testAuthAccessor) HasPrivilege(
+	ctx context.Context,
+	privilegeObject privilege.Object,
+	privilegeKind privilege.Kind,
+	sqlUsername username.SQLUsername,
+) (bool, error) {
+	if sqlUsername != a.user {
+		panic(fmt.Sprintf("testAuthAccessor does not implement HasPrivilege for user %s", sqlUsername))
+	}
+	_, ok := a.userPrivileges[userPrivilege{privilegeKind, privilegeObject.GetObjectType()}]
+	if ok {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (a *testAuthAccessor) HasRoleOption(
@@ -119,6 +147,7 @@ func TestAuthorization(t *testing.T) {
 
 		user                 username.SQLUsername
 		roleOptions          map[roleoption.Option]struct{}
+		userPrivileges       map[userPrivilege]struct{}
 		changeFeedPrivileges map[descpb.ID]struct{}
 		droppedDescriptors   map[descpb.ID]struct{}
 		admins               map[string]struct{}
@@ -206,19 +235,28 @@ func TestAuthorization(t *testing.T) {
 			accessLevel: jobsauth.ControlAccess,
 		},
 		{
-			name:        "viewjob-allows-read-access",
-			user:        username.MakeSQLUsernameFromPreNormalizedString("user1"),
-			roleOptions: map[roleoption.Option]struct{}{roleoption.VIEWJOB: {}},
-			admins:      map[string]struct{}{},
+			name:   "viewjob-required-for-read-access",
+			user:   username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			admins: map[string]struct{}{},
+
+			payload:     makeBackupPayload("user2"),
+			accessLevel: jobsauth.ViewAccess,
+			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "foo"),
+		},
+		{
+			name:           "viewjob-allows-read-access",
+			user:           username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			userPrivileges: map[userPrivilege]struct{}{viewJobGlobalPrivilege: {}},
+			admins:         map[string]struct{}{},
 
 			payload:     makeBackupPayload("user2"),
 			accessLevel: jobsauth.ViewAccess,
 		},
 		{
-			name:        "viewjob-disallows-control-access",
-			user:        username.MakeSQLUsernameFromPreNormalizedString("user1"),
-			roleOptions: map[roleoption.Option]struct{}{roleoption.VIEWJOB: {}},
-			admins:      map[string]struct{}{},
+			name:           "viewjob-disallows-control-access",
+			user:           username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			userPrivileges: map[userPrivilege]struct{}{viewJobGlobalPrivilege: {}},
+			admins:         map[string]struct{}{},
 
 			payload:     makeBackupPayload("user2"),
 			accessLevel: jobsauth.ControlAccess,
@@ -229,6 +267,7 @@ func TestAuthorization(t *testing.T) {
 			testAuth := &testAuthAccessor{
 				user:                 tc.user,
 				roleOptions:          tc.roleOptions,
+				userPrivileges:       tc.userPrivileges,
 				changeFeedPrivileges: tc.changeFeedPrivileges,
 				droppedDescriptors:   tc.droppedDescriptors,
 				admins:               tc.admins,

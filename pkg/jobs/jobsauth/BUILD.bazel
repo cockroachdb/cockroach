@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/syntheticprivilege",
     ],
 )
 
