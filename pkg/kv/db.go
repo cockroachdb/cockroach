@@ -855,6 +855,11 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 }
 
 // NewTxn creates a new RootTxn.
+//
+// Note: this is a low-level constructor for users who intend to manage
+// the lifecycle of the transaction manually (read: the sql layer). For
+// ad-hoc transactions against the KV layer, prefer db.Txn() or
+// db.TxnWithAdmissionControl().
 func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 	// Observed timestamps don't work with multi-tenancy. See:
 	//
