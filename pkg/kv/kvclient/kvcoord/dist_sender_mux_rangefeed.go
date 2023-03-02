@@ -12,16 +12,24 @@ package kvcoord
 
 import (
 	"context"
-	"sync"
+	"io"
+	"net"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -32,24 +40,15 @@ import (
 // rangefeeds. rangefeedMuxer caches MuxRangeFeed stream per node, and executes
 // each range feed request on an appropriate node.
 type rangefeedMuxer struct {
-	// eventCh receives events from all active muxStreams.
-	eventCh chan *kvpb.MuxRangeFeedEvent
-
 	// Context group controlling execution of MuxRangeFeed calls. When this group
-	// cancels, the entire muxer shuts down. The goroutines started in `g` will
-	// always return `nil` errors except when they detect that the mux is shutting
-	// down.
+	// cancels, the entire muxer shuts down.
 	g ctxgroup.Group
 
-	// When g cancels, demuxLoopDone gets closed.
-	demuxLoopDone chan struct{}
-
-	mu struct {
-		syncutil.Mutex
-
-		// map of active MuxRangeFeed clients.
-		clients map[roachpb.NodeID]*muxClientState
-	}
+	ds         *DistSender
+	cfg        rangeFeedConfig
+	registry   *rangeFeedRegistry
+	catchupSem *limit.ConcurrentRequestLimiter
+	eventCh    chan<- RangeFeedMessage
 
 	// Each call to start new range feed gets a unique ID which is echoed back
 	// by MuxRangeFeed rpc.  This is done as a safety mechanism to make sure
@@ -58,161 +57,251 @@ type rangefeedMuxer struct {
 	// Accessed atomically.
 	seqID int64
 
-	// producers is a map of all rangefeeds running across all nodes.
-	// streamID -> *channelRangeFeedEventProducer.
-	producers syncutil.IntMap
+	// muxClient is a nodeID -> *muxStreamOrError
+	muxClients syncutil.IntMap
 }
 
-// muxClientState is the state maintained for each MuxRangeFeed rpc.
-type muxClientState struct {
-	initCtx termCtx            // signaled when client ready to be used.
-	doneCtx terminationContext // signaled when client shuts down.
-
-	// RPC state. Valid only after initCtx.Done().
-	client kvpb.Internal_MuxRangeFeedClient
-	cancel context.CancelFunc
-
-	// Number of consumers (ranges) running on this node; accessed under rangefeedMuxer lock.
-	numStreams int
-}
-
-func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
-	m := &rangefeedMuxer{
-		eventCh:       make(chan *kvpb.MuxRangeFeedEvent),
-		demuxLoopDone: make(chan struct{}),
-		g:             g,
-	}
-
-	m.mu.clients = make(map[roachpb.NodeID]*muxClientState)
-	m.g.GoCtx(m.demuxLoop)
-
-	return m
-}
-
-// channelRangeFeedEventProducer is a rangeFeedEventProducer which receives
-// events on input channel, and returns events when Recv is called.
-type channelRangeFeedEventProducer struct {
-	// Event producer utilizes two contexts:
-	//
-	// - callerCtx connected to singleRangeFeed, i.e. a context that will cancel
-	//   if a single-range rangefeed fails (range stuck, parent ctx cancels).
-	// - muxClientCtx connected to receiveEventsFromNode, i.e. a streaming RPC to
-	//   a node serving multiple rangefeeds. This cancels if, for example, the
-	//   remote node goes down or there are networking issues.
-	//
-	// When singleRangeFeed blocks in Recv(), we have to respect cancellations in
-	// both contexts. The implementation of Recv() on this type does this.
-	callerCtx    context.Context
-	muxClientCtx terminationContext
-
-	streamID int64                     // stream ID for this producer.
-	eventCh  chan *kvpb.RangeFeedEvent // consumer event channel.
-}
-
-var _ kvpb.RangeFeedEventProducer = (*channelRangeFeedEventProducer)(nil)
-
-// Recv implements rangeFeedEventProducer interface.
-func (c *channelRangeFeedEventProducer) Recv() (*kvpb.RangeFeedEvent, error) {
-	select {
-	case <-c.callerCtx.Done():
-		return nil, c.callerCtx.Err()
-	case <-c.muxClientCtx.Done():
-		return nil, c.muxClientCtx.Err()
-	case e := <-c.eventCh:
-		return e, nil
-	}
-}
-
-// startMuxRangeFeed begins the execution of rangefeed for the specified
-// RangeFeedRequest.
-// The passed in client is only needed to establish MuxRangeFeed RPC.
-func (m *rangefeedMuxer) startMuxRangeFeed(
-	ctx context.Context, client rpc.RestrictedInternalClient, req *kvpb.RangeFeedRequest,
-) (kvpb.RangeFeedEventProducer, func(), error) {
-	ms, err := m.establishMuxConnection(ctx, client, req.Replica.NodeID)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	req.StreamID = atomic.AddInt64(&m.seqID, 1)
-	streamCtx := logtags.AddTag(ctx, "stream", req.StreamID)
-	producer := &channelRangeFeedEventProducer{
-		callerCtx:    streamCtx,
-		muxClientCtx: ms.doneCtx,
-		streamID:     req.StreamID,
-		eventCh:      make(chan *kvpb.RangeFeedEvent),
-	}
-	m.producers.Store(req.StreamID, unsafe.Pointer(producer))
-
+// muxRangeFeed is an entry point to establish MuxRangeFeed
+// RPC for the specified spans. Waits for rangefeed to complete.
+func muxRangeFeed(
+	ctx context.Context,
+	cfg rangeFeedConfig,
+	spans []SpanTimePair,
+	ds *DistSender,
+	rr *rangeFeedRegistry,
+	catchupSem *limit.ConcurrentRequestLimiter,
+	eventCh chan<- RangeFeedMessage,
+) (retErr error) {
 	if log.V(1) {
-		log.Info(streamCtx, "starting rangefeed")
+		log.Infof(ctx, "Establishing MuxRangeFeed (%s...; %d spans)", spans[0], len(spans))
+		start := timeutil.Now()
+		defer func() {
+			log.Infof(ctx, "MuxRangeFeed  terminating after %s with err=%v", timeutil.Since(start), retErr)
+		}()
 	}
 
-	cleanup := func() {
-		m.producers.Delete(req.StreamID)
+	m := &rangefeedMuxer{
+		g:          ctxgroup.WithContext(ctx),
+		registry:   rr,
+		ds:         ds,
+		cfg:        cfg,
+		catchupSem: catchupSem,
+		eventCh:    eventCh,
+	}
+	divideAllSpansOnRangeBoundaries(spans, m.startSingleRangeFeed, ds, &m.g)
+	return errors.CombineErrors(m.g.Wait(), ctx.Err())
+}
 
-		m.mu.Lock()
-		defer m.mu.Unlock()
+// muxStream represents MuxRangeFeed RPC established with a node.
+//
+// MuxRangeFeed is a bidirectional RPC: the muxStream.sender is the client ->
+// server portion of the stream, and muxStream.receiver is the server -> client
+// portion. Any number of RangeFeedRequests may be initiated with the server
+// (sender.Send). The server will send MuxRangeFeed for all the range feeds, and
+// those events are received via receiver.Recv. If an error occurs with one of
+// the logical range feeds, a MuxRangeFeedEvent describing the error will be
+// emitted.  This error can be handled appropriately, and rangefeed may be
+// restarted.  The sender and receiver may continue to be used to handle other
+// requests and events.  However, if either sender receiver return an  error
+// from their Send or Recv methods, the entire stream must be torn down, and all
+// active range feeds should be restarted.
+type muxStream struct {
+	sender   rangeFeedRequestSender
+	receiver muxRangeFeedEventReceiver
 
-		ms.numStreams--
-		if ms.numStreams == 0 {
-			delete(m.mu.clients, req.Replica.NodeID)
-			if log.V(1) {
-				log.InfofDepth(streamCtx, 1, "shut down inactive mux for node %d", req.Replica.NodeID)
-			}
-			ms.cancel()
+	streams syncutil.IntMap // streamID -> *activeMuxRangeFeed.
+
+	// mu must be held when starting rangefeeds.  Stores in streams
+	// must be protected by this mutex (streams itself is thread safe,
+	// the only reason why this mu is required to be held is to ensure
+	// correct synchronization between start of a new rangefeed feed, and
+	// mux node connection tear down).
+	mu struct {
+		syncutil.Mutex
+		closed bool
+	}
+}
+
+// muxStreamOrError is a tuple of mux stream connection or an error that
+// occurred while connecting to the node.
+type muxStreamOrError struct {
+	stream *muxStream
+	err    error
+}
+
+// activeMuxRangeFeed augments activeRangeFeed with additional state.
+type activeMuxRangeFeed struct {
+	*activeRangeFeed
+	token      rangecache.EvictionToken
+	startAfter hlc.Timestamp
+	catchupRes limit.Reservation
+}
+
+func (a *activeMuxRangeFeed) release() {
+	a.activeRangeFeed.release()
+	if a.catchupRes != nil {
+		a.catchupRes.Release()
+	}
+}
+
+// the "Send" portion of the kvpb.Internal_MuxRangeFeedClient
+type rangeFeedRequestSender interface {
+	Send(req *kvpb.RangeFeedRequest) error
+}
+
+// the "Recv" portion of the kvpb.Internal_MuxRangeFeedClient.
+type muxRangeFeedEventReceiver interface {
+	Recv() (*kvpb.MuxRangeFeedEvent, error)
+}
+
+// lockedRangeFeedRequestSender is a thread safe rangeFeedRequestSender.
+// This is needed since Send calls are not safe when called concurrently.
+type lockedRangeFeedRequestSender struct {
+	syncutil.Mutex
+	rangeFeedRequestSender
+}
+
+func (s *lockedRangeFeedRequestSender) Send(req *kvpb.RangeFeedRequest) error {
+	s.Lock()
+	defer s.Unlock()
+	return s.rangeFeedRequestSender.Send(req)
+}
+
+// startSingleRangeFeed looks up routing information for the
+// span, and begins execution of rangefeed.
+func (m *rangefeedMuxer) startSingleRangeFeed(
+	ctx context.Context, rs roachpb.RSpan, startAfter hlc.Timestamp, token rangecache.EvictionToken,
+) error {
+	// Bound the partial rangefeed to the partial span.
+	span := rs.AsRawSpanWithNoLocals()
+
+	var releaseTransport func()
+	maybeReleaseTransport := func() {
+		if releaseTransport != nil {
+			releaseTransport()
+			releaseTransport = nil
 		}
 	}
+	defer maybeReleaseTransport()
 
-	if err := ms.client.Send(req); err != nil {
-		cleanup()
-		return nil, nil, err
+	// Before starting single rangefeed, acquire catchup scan quota.
+	catchupRes, err := acquireCatchupScanQuota(ctx, m.ds, m.catchupSem)
+	if err != nil {
+		return err
 	}
-	return producer, cleanup, nil
+
+	// Register active mux range feed.
+	stream := &activeMuxRangeFeed{
+		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.ds.metrics.RangefeedRanges),
+		startAfter:      startAfter,
+		catchupRes:      catchupRes,
+		token:           token,
+	}
+	streamID := atomic.AddInt64(&m.seqID, 1)
+
+	// stream ownership gets transferred (indicated by setting stream to nil) when
+	// we successfully send request. If we fail to do so, cleanup.
+	defer func() {
+		if stream != nil {
+			stream.release()
+		}
+	}()
+
+	// Start a retry loop for sending the batch to the range.
+	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {
+		maybeReleaseTransport()
+
+		// If we've cleared the descriptor on failure, re-lookup.
+		if !token.Valid() {
+			var err error
+			ri, err := m.ds.getRoutingInfo(ctx, rs.Key, rangecache.EvictionToken{}, false)
+			if err != nil {
+				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
+				if !rangecache.IsRangeLookupErrorRetryable(err) {
+					return err
+				}
+				continue
+			}
+			token = ri
+		}
+
+		// Establish a RangeFeed for a single Range.
+		log.VEventf(ctx, 1, "MuxRangeFeed starting for range %s@%s (rangeID %d)",
+			span, startAfter, token.Desc().RangeID)
+		transport, err := newTransportForRange(ctx, token.Desc(), m.ds)
+		if err != nil {
+			log.VErrEventf(ctx, 1, "Failed to create transport for %s ", token.String())
+			continue
+		}
+		releaseTransport = transport.Release
+
+		for !transport.IsExhausted() {
+			args := makeRangeFeedRequest(span, token.Desc().RangeID, m.cfg.overSystemTable, startAfter, m.cfg.withDiff)
+			args.Replica = transport.NextReplica()
+			args.StreamID = streamID
+
+			rpcClient, err := transport.NextInternalClient(ctx)
+			if err != nil {
+				log.VErrEventf(ctx, 1, "RPC error connecting to replica %s: %s", args.Replica, err)
+				continue
+			}
+
+			conn, err := m.establishMuxConnection(ctx, rpcClient, args.Replica.NodeID)
+			if err != nil {
+				return err
+			}
+
+			if err := conn.startRangeFeed(streamID, stream, &args); err != nil {
+				log.VErrEventf(ctx, 1,
+					"RPC error establishing mux rangefeed to replica %s: %s", args.Replica, err)
+				continue
+			}
+			// We successfully established rangefeed, so the responsibility
+			// for releasing the stream is transferred to the mux go routine.
+			stream = nil
+			return nil
+		}
+
+		// If the transport is exhausted, we evict routing token and retry range
+		// resolution.
+		token.Evict(ctx)
+		token = rangecache.EvictionToken{}
+	}
+
+	return ctx.Err()
 }
 
 // establishMuxConnection establishes MuxRangeFeed RPC with the node.
 func (m *rangefeedMuxer) establishMuxConnection(
 	ctx context.Context, client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
-) (*muxClientState, error) {
-	// NB: the `ctx` in scope here belongs to a client for a single range feed, and must
-	// not influence the lifetime of the mux connection. At the time of writing, the caller
-	// is `singleRangeFeed` which calls into this method through its streamProducerFactory
-	// argument.
-	m.mu.Lock()
-	ms, found := m.mu.clients[nodeID]
-	if !found {
-		// Initialize muxClientState.
-		// Only initCtx is initialized here since we need to block on it.
-		// The rest of the initialization happens in startNodeMuxRangeFeed.
-		ms = &muxClientState{initCtx: makeTerminationContext()}
-		// Kick off client initialization on another Go routine.
-		// It is important that we start MuxRangeFeed RPC using long-lived
-		// context available in the main context group used for this muxer.
+) (*muxStream, error) {
+	ptr, exists := m.muxClients.LoadOrStore(int64(nodeID), unsafe.Pointer(future.Make[muxStreamOrError]()))
+	muxClient := (*future.Future[muxStreamOrError])(ptr)
+	if !exists {
+		// Start mux rangefeed go routine responsible for receiving MuxRangeFeedEvents.
 		m.g.GoCtx(func(ctx context.Context) error {
-			return m.startNodeMuxRangeFeed(ctx, ms, client, nodeID)
+			return m.startNodeMuxRangeFeed(ctx, client, nodeID, muxClient)
 		})
-		m.mu.clients[nodeID] = ms
 	}
-	ms.numStreams++
-	m.mu.Unlock()
 
 	// Ensure mux client is ready.
+	init := future.MakeAwaitableFuture(muxClient)
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-ms.initCtx.Done():
-		return ms, ms.initCtx.Err()
+	case <-init.Done():
+		c := init.Get()
+		return c.stream, c.err
 	}
 }
 
 // startNodeMuxRangeFeedLocked establishes MuxRangeFeed RPC with the node.
 func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	ctx context.Context,
-	ms *muxClientState,
 	client rpc.RestrictedInternalClient,
 	nodeID roachpb.NodeID,
-) error {
+	stream *future.Future[muxStreamOrError],
+) (retErr error) {
 	ctx = logtags.AddTag(ctx, "mux_n", nodeID)
 	// Add "generation" number to the context so that log messages and stacks can
 	// differentiate between multiple instances of mux rangefeed Go routine
@@ -222,141 +311,223 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	defer restore()
 
 	if log.V(1) {
-		log.Info(ctx, "Establishing MuxRangeFeed")
+		log.Infof(ctx, "Establishing MuxRangeFeed to node %d", nodeID)
 		start := timeutil.Now()
 		defer func() {
-			log.Infof(ctx, "MuxRangeFeed terminating after %s", timeutil.Since(start))
+			log.Infof(ctx, "MuxRangeFeed to node %d terminating after %s with err=%v",
+				nodeID, timeutil.Since(start), retErr)
 		}()
 	}
 
-	doneCtx := makeTerminationContext()
-	ms.doneCtx = &doneCtx
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	ms.cancel = func() {
-		cancel()
-		doneCtx.close(context.Canceled)
+	mux, err := client.MuxRangeFeed(ctx)
+	if err != nil {
+		return future.MustSet(stream, muxStreamOrError{err: err})
 	}
-	defer ms.cancel()
 
-	// NB: it is important that this Go routine never returns an error. Errors
-	// should be propagated to the caller either via initCtx.err, or doneCtx.err.
-	// We do this to make sure that this error does not kill entire context group.
-	// We want the caller (singleRangeFeed) to decide if this error is retry-able.
-	var err error
-	ms.client, err = client.MuxRangeFeed(ctx)
-	ms.initCtx.close(err)
-
-	if err == nil {
-		err = m.receiveEventsFromNode(ctx, ms)
+	ms := &muxStream{
+		sender:   &lockedRangeFeedRequestSender{rangeFeedRequestSender: mux},
+		receiver: mux,
 	}
-	doneCtx.close(err)
+	if err := future.MustSet(stream, muxStreamOrError{stream: ms}); err != nil {
+		return err
+	}
 
-	// We propagated error to the caller via init/done context.
-	return nil //nolint:returnerrcheck
+	stuckWatcher := newStuckRangeFeedCanceler(cancel, defaultStuckRangeThreshold(m.ds.st))
+	defer stuckWatcher.stop()
+
+	if recvErr := m.receiveEventsFromNode(ctx, nodeID, stuckWatcher, ms); recvErr != nil {
+		// Clear out this client, and restart all streams on this node.
+		// Note: there is a race here where we may delete this muxClient, while
+		// another go routine loaded it.  That's fine, since we would not
+		// be able to send new request on this stream anymore, and we'll retry
+		// against another node.
+		m.muxClients.Delete(int64(nodeID))
+
+		if recvErr == io.EOF {
+			recvErr = nil
+		}
+
+		return ms.closeWithRestart(func(_ int64, a *activeMuxRangeFeed) error {
+			return m.restartActiveRangeFeed(ctx, a, recvErr)
+		})
+	}
+
+	return nil
 }
 
-// demuxLoop de-multiplexes events and sends them to appropriate rangefeed event
-// consumer.
-func (m *rangefeedMuxer) demuxLoop(ctx context.Context) (retErr error) {
-	defer close(m.demuxLoopDone)
+// receiveEventsFromNode receives mux rangefeed events from a node.
+func (m *rangefeedMuxer) receiveEventsFromNode(
+	ctx context.Context, nodeID roachpb.NodeID, stuckWatcher *stuckRangeFeedCanceler, ms *muxStream,
+) error {
+	stuckThreshold := defaultStuckRangeThreshold(m.ds.st)
+	stuckCheckFreq := func() time.Duration {
+		if threshold := stuckThreshold(); threshold > 0 {
+			return threshold
+		}
+		return time.Minute
+	}
+	nextStuckCheck := timeutil.Now().Add(stuckCheckFreq())
 
+	var event *kvpb.MuxRangeFeedEvent
 	for {
+		if err := stuckWatcher.do(func() (err error) {
+			event, err = ms.receiver.Recv()
+			return err
+		}); err != nil {
+			return err
+		}
+
+		active := ms.lookupStream(event.StreamID)
+
+		// The stream may already have terminated. That's fine -- we may have
+		// encountered range split or similar rangefeed error, causing the caller to
+		// exit (and terminate this stream), but the server side stream termination
+		// is async and probabilistic (rangefeed registration output loop may have a
+		// checkpoint event available, *and* it may have context cancellation, but
+		// which one executes is a coin flip) and so it is possible that we may see
+		// additional event(s) arriving for a stream that is no longer active.
+		if active == nil {
+			if log.V(1) {
+				log.Infof(ctx, "received stray event stream %d: %v", event.StreamID, event)
+			}
+			continue
+		}
+
+		switch t := event.GetValue().(type) {
+		case *kvpb.RangeFeedCheckpoint:
+			if t.Span.Contains(active.Span) {
+				// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
+				if !t.ResolvedTS.IsEmpty() && active.catchupRes != nil {
+					active.catchupRes.Release()
+					active.catchupRes = nil
+				}
+				// Note that this timestamp means that all rows in the span with
+				// writes at or before the timestamp have now been seen. The
+				// Timestamp field in the request is exclusive, meaning if we send
+				// the request with exactly the ResolveTS, we'll see only rows after
+				// that timestamp.
+				active.startAfter.Forward(t.ResolvedTS)
+			}
+		case *kvpb.RangeFeedSSTable:
+		case *kvpb.RangeFeedError:
+			log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+			if active.catchupRes != nil {
+				m.ds.metrics.RangefeedErrorCatchup.Inc(1)
+			}
+			ms.streams.Delete(event.StreamID)
+			if err := m.restartActiveRangeFeed(ctx, active, t.Error.GoError()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		active.onRangeEvent(nodeID, event.RangeID, &event.RangeFeedEvent)
+		msg := RangeFeedMessage{RangeFeedEvent: &event.RangeFeedEvent, RegisteredSpan: active.Span}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case e := <-m.eventCh:
-			var producer *channelRangeFeedEventProducer
-			if v, found := m.producers.Load(e.StreamID); found {
-				producer = (*channelRangeFeedEventProducer)(v)
-			}
+		case m.eventCh <- msg:
+		}
 
-			// The stream may already have terminated (either producer is nil, or
-			// producer.muxClientCtx.Done()). That's fine -- we may have encountered range
-			// split or similar rangefeed error, causing the caller to exit (and
-			// terminate this stream), but the server side stream termination is async
-			// and probabilistic (rangefeed registration output loop may have a
-			// checkpoint event available, *and* it may have context cancellation, but
-			// which one executes is a coin flip) and so it is possible that we may
-			// see additional event(s) arriving for a stream that is no longer active.
-			if producer == nil {
-				if log.V(1) {
-					log.Infof(ctx, "received stray event stream %d: %v", e.StreamID, e)
-				}
-				continue
-			}
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case producer.eventCh <- &e.RangeFeedEvent:
-			case <-producer.callerCtx.Done():
-				if log.V(1) {
-					log.Infof(ctx, "received stray event, but caller exited: stream=%d: e=%v", e.StreamID, e)
-				}
-			case <-producer.muxClientCtx.Done():
-				if log.V(1) {
-					log.Infof(ctx, "received stray event, but node mux exited: stream=%d: e=%v", e.StreamID, e)
+		// Piggyback on this loop to check if any of the active ranges
+		// on this node appear to be stuck.
+		// NB: this does not notify the server in any way.  We may have to add
+		// a more complex protocol -- or better yet, figure out why ranges
+		// get stuck in the first place.
+		if timeutil.Now().Before(nextStuckCheck) {
+			if threshold := stuckThreshold(); threshold > 0 {
+				if err := ms.eachStream(func(id int64, a *activeMuxRangeFeed) error {
+					if !a.startAfter.IsEmpty() && timeutil.Since(a.startAfter.GoTime()) > stuckThreshold() {
+						ms.streams.Delete(id)
+						return m.restartActiveRangeFeed(ctx, a, errRestartStuckRange)
+					}
+					return nil
+				}); err != nil {
+					return err
 				}
 			}
+			nextStuckCheck = timeutil.Now().Add(stuckCheckFreq())
 		}
 	}
 }
 
-// terminationContext (inspired by context.Context) describes
-// termination information.
-type terminationContext interface {
-	Done() <-chan struct{}
-	Err() error
+// restartActiveRangeFeed restarts rangefeed after it encountered "reason" error.
+func (m *rangefeedMuxer) restartActiveRangeFeed(
+	ctx context.Context, active *activeMuxRangeFeed, reason error,
+) error {
+	if log.V(1) {
+		log.Infof(ctx, "RangeFeed %s@%s disconnected with last checkpoint %s ago: %v",
+			active.Span, active.StartAfter, timeutil.Since(active.Resolved.GoTime()), reason)
+	}
+	active.setLastError(reason)
+	active.release()
+
+	errInfo, err := handleRangefeedError(ctx, reason)
+	if err != nil {
+		// If this is an error we cannot recover from, terminate the rangefeed.
+		return err
+	}
+
+	if errInfo.evict && active.token.Valid() {
+		active.token.Evict(ctx)
+		active.token = rangecache.EvictionToken{}
+	}
+
+	rs, err := keys.SpanAddr(active.Span)
+	if err != nil {
+		return err
+	}
+
+	if errInfo.resolveSpan {
+		return divideSpanOnRangeBoundaries(ctx, m.ds, rs, active.startAfter, m.startSingleRangeFeed)
+	}
+	return m.startSingleRangeFeed(ctx, rs, active.startAfter, active.token)
 }
 
-// termCtx implements terminationContext, and allows error to be set.
-type termCtx struct {
-	sync.Once
-	done chan struct{}
-	err  error
+// startRangeFeed initiates rangefeed for the specified request running
+// on this node connection.  If no error returned, registers stream
+// with this connection.  Otherwise, stream is not registered.
+func (c *muxStream) startRangeFeed(
+	streamID int64, stream *activeMuxRangeFeed, req *kvpb.RangeFeedRequest,
+) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.closed {
+		return net.ErrClosed
+	}
+
+	if err := c.sender.Send(req); err != nil {
+		return err
+	}
+	c.streams.Store(streamID, unsafe.Pointer(stream))
+	return nil
 }
 
-func makeTerminationContext() termCtx {
-	return termCtx{done: make(chan struct{})}
+func (c *muxStream) lookupStream(streamID int64) *activeMuxRangeFeed {
+	v, ok := c.streams.Load(streamID)
+	if ok {
+		return (*activeMuxRangeFeed)(v)
+	}
+	return nil
 }
 
-func (tc *termCtx) Done() <-chan struct{} {
-	return tc.done
-}
-func (tc *termCtx) Err() error {
-	return tc.err
+func (c *muxStream) closeWithRestart(
+	restartFn func(streamID int64, a *activeMuxRangeFeed) error,
+) error {
+	c.mu.Lock()
+	c.mu.closed = true
+	c.mu.Unlock()
+	return c.eachStream(restartFn)
 }
 
-// close closes this context with specified error.
-func (tc *termCtx) close(err error) {
-	tc.Do(func() {
-		tc.err = err
-		close(tc.done)
+func (c *muxStream) eachStream(fn func(streamID int64, a *activeMuxRangeFeed) error) error {
+	var restartErr error
+	c.streams.Range(func(key int64, value unsafe.Pointer) bool {
+		restartErr = fn(key, (*activeMuxRangeFeed)(value))
+		return restartErr == nil
 	})
-}
-
-// receiveEventsFromNode receives mux rangefeed events, and forwards them to the
-// demuxLoop.
-// Passed in context must be the context used to create ms.client.
-func (m *rangefeedMuxer) receiveEventsFromNode(ctx context.Context, ms *muxClientState) error {
-	for {
-		event, streamErr := ms.client.Recv()
-
-		if streamErr != nil {
-			return streamErr
-		}
-
-		select {
-		case <-ctx.Done():
-			// Normally, when ctx is done, we would receive streamErr above.
-			// But it's possible that the context was canceled right after the last Recv(),
-			// and in that case we must exit.
-			return ctx.Err()
-		case <-m.demuxLoopDone:
-			// demuxLoop exited, and so should we (happens when main context group completes)
-			return errors.Wrapf(context.Canceled, "demux loop terminated")
-		case m.eventCh <- event:
-		}
-	}
+	return restartErr
 }
