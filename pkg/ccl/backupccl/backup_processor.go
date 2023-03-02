@@ -399,8 +399,9 @@ func runBackupProcessor(
 						// We set the DistSender response target bytes field to a sentinel
 						// value. The sentinel value of 1 forces the ExportRequest to paginate
 						// after creating a single SST.
-						TargetBytes: 1,
-						Timestamp:   span.end,
+						TargetBytes:                 1,
+						Timestamp:                   span.end,
+						ReturnElasticCPUResumeSpans: true,
 					}
 					if priority {
 						// This re-attempt is reading far enough in the past that we just want
