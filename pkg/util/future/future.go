@@ -61,9 +61,11 @@ func MakeCompletedErrorFuture(err error) *ErrorFuture {
 // MakeAwaitableFuture wraps underlying future so that the callers can wait
 // for future to become available.
 func MakeAwaitableFuture[T any](f *Future[T]) AwaitableFuture[T] {
-	if f.isReady() {
+	if ptr := f.value.Load(); ptr != nil && ptr.v != nil {
+		// Future already prepared; no need to wait for it to become ready.
 		return AwaitableFuture[T]{Future: f, done: closedChan}
 	}
+
 	done := make(chan struct{})
 	f.WhenReady(func(v T) {
 		close(done)
@@ -158,11 +160,6 @@ func (f *Future[T]) prepare(v T) {
 			}
 		}
 	}
-}
-
-func (f *Future[T]) isReady() bool {
-	ptr := f.value.Load()
-	return ptr != nil && ptr.v != nil
 }
 
 var closedChan = func() <-chan struct{} {
