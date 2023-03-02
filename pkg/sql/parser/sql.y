@@ -4089,6 +4089,21 @@ copy_generic_options:
   {
     $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatText, HasFormat: true}
   }
+| FORMAT SCONST
+  {
+    format := $2
+    switch format {
+    case "csv":
+      $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatCSV, HasFormat: true}
+    case "binary":
+      $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatBinary, HasFormat: true}
+    case "text":
+      $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatText, HasFormat: true}
+    default:
+      sqllex.Error("COPY format \"" + format + "\" not recognized")
+      return 1
+    }
+  }
 | DELIMITER string_or_placeholder
   {
     $$.val = &tree.CopyOptions{Delimiter: $2.expr()}
