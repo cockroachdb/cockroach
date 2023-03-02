@@ -4,13 +4,6 @@ load("@bazel_skylib//rules:analysis_test.bzl", "analysis_test")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load(":lint.bzl", "lint_binary")
 
-genrule(
-    name = "test_stamping",
-    outs = ["test_stamping.txt"],
-    cmd = """cat bazel-out/stable-status.txt | grep STABLE_BUILD > $@""",
-    stamp = True,
-)
-
 analysis_test(
     name = "test_nogo_configured",
     targets = select(
