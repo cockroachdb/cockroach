@@ -961,6 +961,9 @@ type tpccBenchSpec struct {
 	MinVersion string
 	// Tags to pass to testRegistryImpl.Add.
 	Tags []string
+	// EncryptionSupport determines if the benchmark uses encrypted stores (i.e.
+	// Encryption-At-Rest / EAR).
+	EncryptionSupport bool
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -1029,6 +1032,12 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		panic("unexpected")
 	}
 
+	encryptionSupport := registry.EncryptionAlwaysDisabled
+	if b.EncryptionSupport {
+		encryptionSupport = registry.EncryptionAlwaysEnabled
+		nameParts = append(nameParts, "enc=true")
+	}
+
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
@@ -1040,13 +1049,11 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    name,
-		Owner:   owner,
-		Cluster: nodes,
-		Tags:    b.Tags,
-		// NB: intentionally not enabling encryption-at-rest to produce
-		// consistent results.
-		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+		Name:              name,
+		Owner:             owner,
+		Cluster:           nodes,
+		Tags:              b.Tags,
+		EncryptionSupport: encryptionSupport,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
@@ -1500,6 +1507,34 @@ func registerTPCCBench(r registry.Registry) {
 
 			LoadWarehouses: 10000,
 			EstimatedMax:   8000,
+		},
+
+		// Encryption-At-Rest benchmarks. These are duplicates of variants above,
+		// using encrypted stores.
+		{
+			Nodes: 3,
+			CPUs:  4,
+
+			LoadWarehouses:    1000,
+			EstimatedMax:      325,
+			EncryptionSupport: true,
+		},
+		{
+			Nodes: 3,
+			CPUs:  16,
+
+			LoadWarehouses:    2000,
+			EstimatedMax:      1300,
+			EncryptionSupport: true,
+		},
+		{
+			Nodes: 12,
+			CPUs:  16,
+
+			LoadWarehouses:    10000,
+			EstimatedMax:      6000,
+			LoadConfig:        singlePartitionedLoadgen,
+			EncryptionSupport: true,
 		},
 	}
 
