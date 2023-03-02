@@ -1008,12 +1008,13 @@ func TestTracerStackHistory(t *testing.T) {
 	sp.MaybeRecordStackHistory(started)
 
 	rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)[0]
+	require.Len(t, rec.StructuredRecords, 3)
 	require.Len(t, rec.Logs, 3)
 	require.Len(t, rec.StructuredRecords, 3)
 	for i := range rec.Logs {
 		require.NotContains(t, rec.Logs[i].Message, "tracing.blockingFunc1")
 	}
-	require.Contains(t, rec.Logs[0].Message, "tracing.blockingCaller")
+	require.Contains(t, rec.Logs[0].Message, "tracing.blockingFunc2")
 	require.Contains(t, rec.Logs[1].Message, "tracing.blockingFunc3")
-	require.Contains(t, rec.Logs[2].Message, "tracing.blockingFunc2")
+	require.Contains(t, rec.Logs[2].Message, "tracing.blockingCaller")
 }
