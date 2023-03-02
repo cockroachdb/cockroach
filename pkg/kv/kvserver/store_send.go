@@ -58,6 +58,7 @@ func (s *Store) Send(
 func (s *Store) SendWithWriteBytes(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
+	startedAt := timeutil.Now()
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
@@ -204,6 +205,9 @@ func (s *Store) SendWithWriteBytes(
 		}
 
 		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
+		if timeutil.Since(startedAt) > slowRequestHistoricalStackThreshold.Get(&s.ClusterSettings().SV) {
+			repl.Tracer.MaybeRecordStackHistory(ctx, "slow kv request", startedAt)
+		}
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is

@@ -130,6 +130,13 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
+var slowRequestHistoricalStackThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.slow_requests.trace_stack_history.threshold",
+	`duration spent in processing above any available stack history is appended to its trace, if automatic trace snapshots are enabled`,
+	time.Second*30,
+)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
