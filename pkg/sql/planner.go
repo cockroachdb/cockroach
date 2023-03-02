@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -833,4 +834,47 @@ func (p *planner) GetReplicationStreamManager(
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
 	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+}
+
+// SpanStats returns a stats for the given span of keys.
+func (p *planner) SpanStats(
+	ctx context.Context, startKey roachpb.RKey, endKey roachpb.RKey,
+) (*roachpb.SpanStatsResponse, error) {
+	req := &roachpb.SpanStatsRequest{
+		NodeID:   "0",
+		StartKey: startKey,
+		EndKey:   endKey,
+	}
+	return p.ExecCfg().TenantStatusServer.SpanStats(ctx, req)
+}
+
+// GetDetailsForSpanStats ensures that the given database and table id exist.
+// No rows will be returned for database/table ids that do not correspond to an actual
+// database/table.
+func (p *planner) GetDetailsForSpanStats(
+	ctx context.Context, dbId int, tableId int,
+) (eval.InternalRows, error) {
+	query := `SELECT parent_id, table_id FROM crdb_internal.tables`
+	var args []interface{}
+
+	if tableId != 0 {
+		query += ` WHERE parent_id = $1 AND table_id = $2`
+		args = append(args, dbId, tableId)
+	} else if dbId != 0 {
+		query += ` WHERE parent_id = $1`
+		args = append(args, dbId)
+	} else {
+		// Some tables belonging to crdb_internal.tables are not affiliated with a database
+		// and have a parent_id of 0 (usually crdb_internal or pg catalog tables), which aren't useful to the user.
+		query += ` WHERE parent_id != $1`
+		args = append(args, dbId)
+	}
+
+	return p.QueryIteratorEx(
+		ctx,
+		"crdb_internal.database_span_stats",
+		sessiondata.NoSessionDataOverride,
+		query,
+		args...,
+	)
 }

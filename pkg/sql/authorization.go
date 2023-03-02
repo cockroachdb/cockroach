@@ -907,6 +907,8 @@ func (p *planner) HasOwnershipOnSchema(
 	return hasOwnership, nil
 }
 
+// HasViewActivityOrViewActivityRedactedRole implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
 func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error) {
 	if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 		return hasAdmin, err
