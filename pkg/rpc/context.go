@@ -2200,27 +2200,29 @@ func (m *connMap) RemoveNodeConnections(nodeID roachpb.NodeID) error {
 }
 
 func (m *connMap) OnDisconnect(k connKey, conn *Connection) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	mConn, found := m.mu.m[k]
+	mConn, found := m.Get(k)
 	if !found {
 		return errors.AssertionFailedf("no conn found for %+v", k)
 	}
-	if mConn.c != conn {
+	if mConn != conn {
 		return errors.AssertionFailedf("conn for %+v not identical to those for which removal was requested", k)
 	}
-	mConn.mu.Lock()
-	defer mConn.mu.Unlock()
-	mConn.mu.closed = true
-	if mConn.mu.disconnected.IsZero() {
-		mConn.mu.disconnected = timeutil.Now()
+	pc, found := m.GetPeer(k)
+	if !found {
+		return errors.AssertionFailedf("no peer found for %+v", k)
 	}
-	mConn.breaker.Report(errors.Errorf("disconnected from node: %s", conn.remoteNodeID))
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+	pc.mu.closed = true
+	if pc.mu.disconnected.IsZero() {
+		pc.mu.disconnected = timeutil.Now()
+	}
+	pc.breaker.Report(errors.Errorf("disconnected from node: %s", conn.remoteNodeID))
 	return nil
 }
 
 // TryInsert inits new peer and connection (if necessary). onReconnect function is called to restore connection.
-func (m *connMap) TryInsert(k connKey) (_ *Connection, _ *Peer, inserted bool) {
+func (m *connMap) TryInsert(k connKey) (_ *Connection, inserted bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -2229,7 +2231,7 @@ func (m *connMap) TryInsert(k connKey) (_ *Connection, _ *Peer, inserted bool) {
 	}
 
 	if c, lostRace := m.mu.m[k].conn(); lostRace {
-		return c, m.mu.m[k], false
+		return c, false
 	}
 
 	newConn := newConnectionToNodeID(k.nodeID, k.class)
@@ -2248,7 +2250,7 @@ func (m *connMap) TryInsert(k connKey) (_ *Connection, _ *Peer, inserted bool) {
 	m.mu.m[k].mu.Lock()
 	m.mu.m[k].mu.closed = false
 	m.mu.m[k].mu.Unlock()
-	return newConn, m.mu.m[k], true
+	return newConn, true
 }
 
 func maybeFatal(ctx context.Context, err error) {
@@ -2270,11 +2272,12 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	}
 	ctx := rpcCtx.makeDialCtx(target, remoteNodeID, class)
 
-	conn, pc, inserted := rpcCtx.m.TryInsert(k)
+	conn, inserted := rpcCtx.m.TryInsert(k)
 	if !inserted {
 		// Someone else won the race.
 		return conn
 	}
+	pc, _ := rpcCtx.m.GetPeer(k)
 	if pc.breaker == nil {
 		pc.breaker = newPeerBreaker(rpcCtx, k)
 	}
@@ -2469,7 +2472,9 @@ func (rpcCtx *Context) runHeartbeat(
 			var response *PingResponse
 			sendTime := rpcCtx.Clock.Now()
 			ping := func(ctx context.Context) error {
-				if isDecommissioned, err := interceptor(ctx, request); err != nil {
+				var err error
+				isDecommissioned, err := interceptor(ctx, request)
+				if err != nil {
 					if isDecommissioned {
 						pc.mu.Lock()
 						pc.mu.decommissioned = isDecommissioned
@@ -2477,7 +2482,6 @@ func (rpcCtx *Context) runHeartbeat(
 					}
 					return err
 				}
-				var err error
 				response, err = heartbeatClient.Ping(ctx, request)
 				return err
 			}

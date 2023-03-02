@@ -156,7 +156,7 @@ func newPeerBreaker(rpcCtx *Context, k connKey) *circuitbreaker.Breaker {
 						report(nil)
 						return
 					}
-					conn, _, inserted := rpcCtx.m.TryInsert(k)
+					conn, inserted := rpcCtx.m.TryInsert(k)
 					// initiate dialing and heartbeats only for new connections to avoid running
 					// heartbeats twice for the same connection.
 					if inserted {
