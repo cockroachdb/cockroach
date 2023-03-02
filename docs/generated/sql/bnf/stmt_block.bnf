@@ -325,6 +325,7 @@ opt_column_list ::=
 
 opt_with_copy_options ::=
 	opt_with copy_options_list
+	| opt_with '(' copy_generic_options_list ')'
 	| 
 
 opt_where_clause ::=
@@ -985,6 +986,9 @@ opt_with ::=
 copy_options_list ::=
 	( copy_options ) ( ( copy_options ) )*
 
+copy_generic_options_list ::=
+	( copy_generic_options ) ( ( ',' copy_generic_options ) )*
+
 where_clause ::=
 	'WHERE' a_expr
 
@@ -1120,7 +1124,11 @@ unreserved_keyword ::=
 	| 'FILTER'
 	| 'FIRST'
 	| 'FOLLOWING'
+	| 'FORMAT'
 	| 'FORCE'
+	| 'FORCE_NOT_NULL'
+	| 'FORCE_NULL'
+	| 'FORCE_QUOTE'
 	| 'FORCE_INDEX'
 	| 'FORCE_ZIGZAG'
 	| 'FORWARD'
@@ -2013,6 +2021,20 @@ copy_options ::=
 	| 'NULL' string_or_placeholder
 	| 'HEADER'
 	| 'QUOTE' 'SCONST'
+	| 'ESCAPE' 'SCONST'
+
+copy_generic_options ::=
+	'DESTINATION' string_or_placeholder
+	| 'FORMAT' 'BINARY'
+	| 'FORMAT' 'CSV'
+	| 'FORMAT' 'TEXT'
+	| 'DELIMITER' string_or_placeholder
+	| 'NULL' string_or_placeholder
+	| 'HEADER'
+	| 'HEADER' 'TRUE'
+	| 'HEADER' 'FALSE'
+	| 'QUOTE' 'SCONST'
+	| 'ESCAPE' 'SCONST'
 
 db_object_name_component ::=
 	name
@@ -3590,9 +3612,13 @@ bare_label_keywords ::=
 	| 'FLOAT'
 	| 'FOLLOWING'
 	| 'FORCE'
+	| 'FORCE_NOT_NULL'
+	| 'FORCE_NULL'
+	| 'FORCE_QUOTE'
 	| 'FORCE_INDEX'
 	| 'FORCE_ZIGZAG'
 	| 'FOREIGN'
+	| 'FORMAT'
 	| 'FORWARD'
 	| 'FREEZE'
 	| 'FULL'
