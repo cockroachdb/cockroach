@@ -145,19 +145,16 @@ func collectCombinedStatements(
 				app_name,
 				max(aggregated_ts) as aggregated_ts,
 				metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) AS sampled_plan,
-				aggregation_interval
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
-				metadata,
-				aggregation_interval
+				metadata
 		%s`, whereClause, orderAndLimit)
 
-	const expectedNumDatums = 8
+	const expectedNumDatums = 6
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -213,20 +210,10 @@ func collectCombinedStatements(
 			return nil, serverError(ctx, err)
 		}
 
-		planJSON := tree.MustBeDJSON(row[6]).JSON
-		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-
-		aggInterval := tree.MustBeDInterval(row[7]).Duration
-
 		stmt := serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
-				KeyData:             metadata.Key,
-				AggregatedTs:        aggregatedTs,
-				AggregationInterval: time.Duration(aggInterval.Nanos()),
+				KeyData:      metadata.Key,
+				AggregatedTs: aggregatedTs,
 			},
 			ID:    appstatspb.StmtFingerprintID(statementFingerprintID),
 			Stats: metadata.Stats,
@@ -257,17 +244,15 @@ func collectCombinedTransactions(
 				max(aggregated_ts) as aggregated_ts,
 				fingerprint_id,
 				metadata,
-				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics,
-				aggregation_interval
+				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
 			FROM crdb_internal.transaction_statistics %s
 			GROUP BY
 				app_name,
 				fingerprint_id,
-				metadata,
-				aggregation_interval
+				metadata
 			%s`, whereClause, orderAndLimit)
 
-	const expectedNumDatums = 6
+	const expectedNumDatums = 5
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-txns-by-interval", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -313,15 +298,12 @@ func collectCombinedTransactions(
 			return nil, serverError(ctx, err)
 		}
 
-		aggInterval := tree.MustBeDInterval(row[5]).Duration
-
 		txnStats := serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{
 			StatsData: appstatspb.CollectedTransactionStatistics{
 				StatementFingerprintIDs:  metadata.StatementFingerprintIDs,
 				App:                      app,
 				Stats:                    metadata.Stats,
 				AggregatedTs:             aggregatedTs,
-				AggregationInterval:      time.Duration(aggInterval.Nanos()),
 				TransactionFingerprintID: appstatspb.TransactionFingerprintID(fingerprintID),
 			},
 		}
@@ -376,7 +358,7 @@ func getStatementDetails(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit, settings)
+	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -719,7 +701,6 @@ func getStatementDetailsPerPlanHash(
 	whereClause string,
 	args []interface{},
 	limit int64,
-	settings *cluster.Settings,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
 
 	query := fmt.Sprintf(

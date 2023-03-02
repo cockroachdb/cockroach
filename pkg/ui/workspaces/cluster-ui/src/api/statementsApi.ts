@@ -138,7 +138,6 @@ export function convertStatementRawFormatToAggregatedStatistics(
   s: StatementRawFormat,
 ): AggregateStatistics {
   return {
-    aggregationInterval: s.agg_interval,
     applicationName: s.app_name,
     database: s.metadata.db,
     fullScan: s.metadata.fullScan,
