@@ -49,7 +49,6 @@ export const StatementTableCell = {
           statement={stmt.label}
           statementSummary={stmt.summary}
           aggregatedTs={stmt.aggregatedTs}
-          aggregationInterval={stmt.aggregationInterval}
           appNames={selectedApp}
           implicitTxn={stmt.implicitTxn}
           search={search}
@@ -187,7 +186,6 @@ export const StatementLinkTarget = (
 interface StatementLinkProps {
   statementFingerprintID: string;
   aggregatedTs?: number;
-  aggregationInterval?: number;
   appNames?: string[];
   implicitTxn: boolean;
   statement: string;
@@ -200,7 +198,6 @@ interface StatementLinkProps {
 
 export const StatementLink = ({
   statementFingerprintID,
-  aggregationInterval,
   appNames,
   implicitTxn,
   statement,
@@ -217,7 +214,6 @@ export const StatementLink = ({
 
   const linkProps = {
     statementFingerprintID,
-    aggregationInterval,
     appNames,
     implicitTxn,
   };
