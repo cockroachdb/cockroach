@@ -190,6 +190,14 @@ var iVal = settings.RegisterIntSetting(settings.SystemOnly,
 		return nil
 	})
 
+func TestNonNegativeDurationWithMinimum(t *testing.T) {
+	validator := settings.NonNegativeDurationWithMinimum(time.Minute)
+	require.NoError(t, validator(time.Minute))
+	require.NoError(t, validator(2*time.Minute))
+	require.Error(t, validator(59*time.Second))
+	require.Error(t, validator(-1*time.Second))
+}
+
 func TestValidation(t *testing.T) {
 	ctx := context.Background()
 	sv := &settings.Values{}

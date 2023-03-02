@@ -212,6 +212,21 @@ func NonNegativeDurationWithMaximum(maxValue time.Duration) func(time.Duration) 
 	}
 }
 
+// NonNegativeDurationWithMinimum returns a validation function can be passed
+// to RegisterDurationSetting.
+func NonNegativeDurationWithMinimum(minValue time.Duration) func(time.Duration) error {
+	return func(v time.Duration) error {
+		if err := NonNegativeDuration(v); err != nil {
+			return err
+		}
+		if v < minValue {
+			return errors.Errorf("cannot be set to a value smaller than %s",
+				minValue)
+		}
+		return nil
+	}
+}
+
 // PositiveDuration can be passed to RegisterDurationSetting.
 func PositiveDuration(v time.Duration) error {
 	if v <= 0 {
