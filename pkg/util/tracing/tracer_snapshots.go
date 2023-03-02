@@ -304,43 +304,27 @@ func (t *Tracer) runPeriodicSnapshotsLoop(
 // such automatic snapshots are available to be searched and if so at what
 // granularity.
 func (sp *Span) MaybeRecordStackHistory(since time.Time) {
-	if sp == nil {
-		return
-	}
-	t := sp.Tracer()
-	if !sp.IsVerbose() && !t.HasExternalSink() {
+	if sp == nil || !sp.i.hasVerboseSink() {
 		return
 	}
 
+	t := sp.Tracer()
 	id := int(goid.Get())
+
+	var prevStack string
+
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
-
-	// In the loop below that moves backwards through time looking for stacks, if
-	// a matching stack is found, it is stored in `stack` until the next iteration
-	// when it is actually recorded, so that only the diff to older stack, if any,
-	// found on that next iteration is what is recorded.
-	var stack string
-	var stackTime time.Time
-
-	for i := t.snapshotsMu.autoSnapshots.Len() - 1; i >= 0; i-- {
+	for i := 0; i < t.snapshotsMu.autoSnapshots.Len(); i++ {
 		s := t.snapshotsMu.autoSnapshots.Get(i)
-		var prevStack string
-		if s.CapturedAt.After(since) {
-			prevStack = s.Stacks[id]
+		if s.CapturedAt.Before(since) {
+			continue
 		}
-
-		// If a previous iteration stored a newer stack in `stack`, record it now,
-		// using any older stack found this iteration as the basis for diffing.
-		if stack != "" {
-			sp.RecordStructured(stackDelta(prevStack, stack, timeutil.Since(stackTime)))
+		stack, ok := s.Stacks[id]
+		if ok {
+			sp.RecordStructured(stackDelta(prevStack, stack, timeutil.Since(s.CapturedAt)))
+			prevStack = stack
 		}
-
-		if prevStack == "" {
-			return
-		}
-		stack = prevStack
-		stackTime = s.CapturedAt
 	}
 }
 
