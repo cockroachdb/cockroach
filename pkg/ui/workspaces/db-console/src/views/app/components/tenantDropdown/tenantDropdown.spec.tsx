@@ -21,7 +21,7 @@ jest.mock("src/redux/cookies", () => ({
 }));
 
 describe("TenantDropdown", () => {
-  it("returns null if there are no tenants in the multitenant-session cookie", () => {
+  it("returns null if there are no tenants in the session cookie", () => {
     (
       selectTenantsFromMultitenantSessionCookie as jest.MockedFn<
         typeof selectTenantsFromMultitenantSessionCookie
@@ -30,7 +30,7 @@ describe("TenantDropdown", () => {
     const wrapper = shallow(<TenantDropdown />);
     expect(wrapper.isEmptyRender());
   });
-  it("returns a dropdown list of tenant options if there are tenant in the multitenant-session cookie", () => {
+  it("returns a dropdown list of tenant options if there are tenant in the session cookie", () => {
     (
       selectTenantsFromMultitenantSessionCookie as jest.MockedFn<
         typeof selectTenantsFromMultitenantSessionCookie

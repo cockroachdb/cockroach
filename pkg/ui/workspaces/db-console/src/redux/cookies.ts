@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export const MULTITENANT_SESSION_COOKIE_NAME = "multitenant-session";
+export const MULTITENANT_SESSION_COOKIE_NAME = "session";
 
 export const getAllCookies = (): Map<string, string> => {
   const cookieMap: Map<string, string> = new Map();
@@ -26,7 +26,7 @@ export const getCookieValue = (cookieName: string): string => {
   return cookies.get(cookieName) || null;
 };
 
-// selectTenantsFromMultitenantSessionCookie formats the multitenant-session
+// selectTenantsFromMultitenantSessionCookie formats the session
 // cookie value and returns only the tenant names.
 export const selectTenantsFromMultitenantSessionCookie = (): string[] => {
   const cookies = getAllCookies();
