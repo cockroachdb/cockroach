@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -533,6 +534,9 @@ func (db *DB) Query(
 
 // queryChunk processes a chunk of a query; this will read the necessary data
 // from disk and apply the desired processing operations to generate a result.
+//
+// sourceSet is an output parameter that creates a set of all sources included
+// in the result.
 func (db *DB) queryChunk(
 	ctx context.Context,
 	query tspb.Query,
@@ -552,9 +556,9 @@ func (db *DB) queryChunk(
 	var data []kv.KeyValue
 	var err error
 	if len(query.Sources) == 0 {
-		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan)
+		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.TenantID)
 	} else {
-		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources)
+		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources, query.TenantID)
 	}
 
 	if err != nil {
@@ -592,8 +596,11 @@ func (db *DB) queryChunk(
 	}
 
 	// Add unique sources to the supplied source set.
+	// NB: we filter for only unique primary sources since we do not expose
+	// tenant sources on the API level.
 	for k := range sourceSpans {
-		sourceSet[k] = struct{}{}
+		source, _ := tsutil.DecodeSource(k)
+		sourceSet[source] = struct{}{}
 	}
 	return nil
 }
@@ -829,6 +836,7 @@ func (db *DB) readFromDatabase(
 	diskResolution Resolution,
 	timespan QueryTimespan,
 	sources []string,
+	tenantID roachpb.TenantID,
 ) ([]kv.KeyValue, error) {
 	// Iterate over all key timestamps which may contain data for the given
 	// sources, based on the given start/end time and the resolution.
@@ -837,8 +845,19 @@ func (db *DB) readFromDatabase(
 	kd := diskResolution.SlabDuration()
 	for currentTimestamp := startTimestamp; currentTimestamp <= timespan.EndNanos; currentTimestamp += kd {
 		for _, source := range sources {
-			key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
-			b.Get(key)
+			// If a TenantID is specified and is not the system tenant, only query
+			// data for that tenant source.
+			if tenantID.IsSet() && !tenantID.IsSystem() {
+				source = tsutil.MakeTenantSource(source, tenantID.String())
+				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+				b.Get(key)
+			} else {
+				// Otherwise, we scan  all keys that prefix match the source, since the system tenant
+				// reads all tenant time series.
+				startKey := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+				endKey := MakeDataKey(seriesName, source, diskResolution, currentTimestamp).PrefixEnd()
+				b.Scan(startKey, endKey)
+			}
 		}
 	}
 	if err := db.db.Run(ctx, b); err != nil {
@@ -846,11 +865,11 @@ func (db *DB) readFromDatabase(
 	}
 	var rows []kv.KeyValue
 	for _, result := range b.Results {
-		row := result.Rows[0]
-		if row.Value == nil {
+		if len(result.Rows) == 1 && result.Rows[0].Value == nil {
+			// This came from a Get that did not find the key.
 			continue
 		}
-		rows = append(rows, row)
+		rows = append(rows, result.Rows...)
 	}
 	return rows, nil
 }
@@ -860,7 +879,11 @@ func (db *DB) readFromDatabase(
 // optional limit is used when memory usage is being limited by the number of
 // keys, rather than by timespan.
 func (db *DB) readAllSourcesFromDatabase(
-	ctx context.Context, seriesName string, diskResolution Resolution, timespan QueryTimespan,
+	ctx context.Context,
+	seriesName string,
+	diskResolution Resolution,
+	timespan QueryTimespan,
+	tenantID roachpb.TenantID,
 ) ([]kv.KeyValue, error) {
 	// Based on the supplied timestamps and resolution, construct start and
 	// end keys for a scan that will return every key with data relevant to
@@ -878,7 +901,24 @@ func (db *DB) readAllSourcesFromDatabase(
 	if err := db.db.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	return b.Results[0].Rows, nil
+
+	if !tenantID.IsSet() || tenantID.IsSystem() {
+		return b.Results[0].Rows, nil
+	}
+
+	// Filter out rows that don't belong to the tenant source
+	var rows []kv.KeyValue
+	for _, row := range b.Results[0].Rows {
+		_, source, _, _, err := DecodeDataKey(row.Key)
+		if err != nil {
+			return nil, err
+		}
+		_, tenantSource := tsutil.DecodeSource(source)
+		if tenantSource == tenantID.String() {
+			rows = append(rows, row)
+		}
+	}
+	return rows, nil
 }
 
 // convertKeysToSpans converts a batch of KeyValues queried from disk into a
