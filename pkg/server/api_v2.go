@@ -204,7 +204,7 @@ func registerRoutes(
 		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption, false},
 		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption, false},
 		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption, false},
-		{"rules/", a.listRules, false, regularRole, noOption, false},
+		{"rules/", a.listRules, false, regularRole, noOption, true},
 
 		{"sql/", a.execSQL, true, regularRole, noOption, true},
 	}

@@ -1455,6 +1455,11 @@ message SetTraceRecordingTypeResponse{}
 
 // FeatureFlags within this struct are used within back-end/front-end code to show/hide features.
 message FeatureFlags {
-  // Whether the server is an instance of the Observability Service
+  // isObservabiliyService is true when the server is an instance of the Observability Service
   bool is_observability_service = 1;
+
+  // DisableKVLevelAdvancedDebug is true when the UI should remove options to certain KV-level
+  // debug operations. This is helpful in application tenant contexsts, where these requests
+  // can only return errors since the tenant cannot perform the operations.
+  bool disable_kv_level_advanced_debug= 2;
 }

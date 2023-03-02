@@ -693,6 +693,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
+		serverpb.FeatureFlags{
+			DisableKvLevelAdvancedDebug: true,
+		},
 	); err != nil {
 		return err
 	}

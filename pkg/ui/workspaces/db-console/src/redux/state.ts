@@ -37,6 +37,9 @@ import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
 import { initializeAnalytics } from "./analytics";
 import { DataFromServer } from "src/util/dataFromServer";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import IFeatureFlags = cockroach.server.serverpb.IFeatureFlags;
+import { createSelector } from "reselect";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -49,6 +52,7 @@ export interface AdminUIState {
   timeScale: TimeScaleState;
   uiData: UIDataState;
   login: LoginAPIState;
+  flags: IFeatureFlags;
 }
 
 const emptyDataFromServer: DataFromServer = {
@@ -62,6 +66,11 @@ const emptyDataFromServer: DataFromServer = {
   Tag: "",
   Version: "",
 };
+
+export const featureFlagSelector = createSelector(
+  (state: AdminUIState) => state.flags,
+  flags => flags,
+);
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
@@ -84,6 +93,8 @@ export function createAdminUIStore(
       timeScale: timeScaleReducer,
       uiData: uiDataReducer,
       login: loginReducer,
+      // We won't be updating the feature flags after they're loaded.
+      flags: () => dataFromServer.FeatureFlags,
     }),
     {
       login: {
@@ -94,6 +105,7 @@ export function createAdminUIStore(
         oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
         oidcButtonText: dataFromServer.OIDCButtonText,
       },
+      flags: dataFromServer.FeatureFlags,
     },
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
