@@ -224,6 +224,11 @@ func init() {
 // CastBuiltinNames contains all cast builtin names.
 var CastBuiltinNames = make(map[string]struct{})
 
+// CastBuiltinOIDs maps casts from tgt oid to src family to OIDs.
+// We base the second on family as casts are only defined once per family
+// in order to make type resolution non-ambiguous.
+var CastBuiltinOIDs = make(map[oid.Oid]map[types.Family]oid.Oid)
+
 func shouldMakeFromCastBuiltin(in *types.T) bool {
 	// Since type resolutions are based on families, prevent ambiguity where
 	// possible by using the "preferred" type for the family.

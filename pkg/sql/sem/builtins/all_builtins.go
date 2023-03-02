@@ -57,6 +57,13 @@ func init() {
 		for i, fn := range overloads {
 			signature := name + fn.Signature(true)
 			overloads[i].Oid = signatureMustHaveHardcodedOID(signature)
+			if _, ok := CastBuiltinNames[name]; ok {
+				retOid := fn.ReturnType(nil).Oid()
+				if _, ok := CastBuiltinOIDs[retOid]; !ok {
+					CastBuiltinOIDs[retOid] = make(map[types.Family]oid.Oid, len(overloads))
+				}
+				CastBuiltinOIDs[retOid][fn.Types.GetAt(0).Family()] = overloads[i].Oid
+			}
 		}
 		fDef := tree.NewFunctionDefinition(name, props, overloads)
 		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, tree.OidToQualifiedBuiltinOverload, fDef)
