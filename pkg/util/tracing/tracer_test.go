@@ -995,7 +995,7 @@ func TestTracerStackHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tr := NewTracer()
 
-	ctx, sp := tr.StartSpanCtx(context.Background(), "test", WithRecording(tracingpb.RecordingVerbose))
+	sp := tr.StartSpan("test", WithRecording(tracingpb.RecordingVerbose))
 	ch := make(chan struct{})
 	defer close(ch)
 	go func() {
@@ -1011,9 +1011,10 @@ func TestTracerStackHistory(t *testing.T) {
 	blockingFunc3(ch)
 	blockingCaller(ch)
 
-	tr.MaybeRecordStackHistory(ctx, "test", started)
+	sp.MaybeRecordStackHistory(started)
 
 	rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)[0]
+	require.Len(t, rec.StructuredRecords, 3)
 	require.Len(t, rec.Logs, 3)
 	for i := range rec.Logs {
 		require.NotContains(t, rec.Logs[i].Message, "tracing.blockingFunc1")

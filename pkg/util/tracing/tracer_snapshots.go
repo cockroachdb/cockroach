@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/petermattis/goid"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -305,7 +304,7 @@ func (t *Tracer) runPeriodicSnapshotsLoop(
 // request/op). See the "trace.snapshot.rate" setting for controlling whether
 // such automatic snapshots are available to be searched and if so at what
 // granularity.
-func (sp *Span) MaybeRecordStackHistory(op string, since time.Time) {
+func (sp *Span) MaybeRecordStackHistory(since time.Time) {
 	if sp == nil {
 		return
 	}
@@ -315,20 +314,53 @@ func (sp *Span) MaybeRecordStackHistory(op string, since time.Time) {
 	}
 
 	id := int(goid.Get())
-	callerFile, callerLine, _ := caller.Lookup(1)
-
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
 
+	// In the loop below that moves backwards through time looking for stacks, if
+	// a matching stack is found, it is stored in `stack` until the next iteration
+	// when it is actually recorded, so that only the diff to older stack, if any,
+	// found on that next iteration is what is recorded.
+	var stack string
+	var stackTime time.Time
+
 	for i := t.snapshotsMu.autoSnapshots.Len() - 1; i >= 0; i-- {
 		s := t.snapshotsMu.autoSnapshots.Get(i)
-		if s.CapturedAt.Before(since) {
+		var prevStack string
+		if s.CapturedAt.After(since) {
+			prevStack = s.Stacks[id]
+		}
+
+		// If a previous iteration stored a newer stack in `stack`, record it now,
+		// using any older stack found this iteration as the basis for diffing.
+		if stack != "" {
+			sp.RecordStructured(stackDelta(prevStack, stack, timeutil.Since(stackTime)))
+		}
+
+		if prevStack == "" {
 			return
 		}
-		if stack, ok := s.Stacks[id]; ok {
-			// TODO(dt): make this structured?
-			sp.Recordf("%s:%d: %s had following stack as of %.1fs ago: %s",
-				callerFile, callerLine, op, timeutil.Since(s.CapturedAt).Seconds(), stack)
+		stack = prevStack
+		stackTime = s.CapturedAt
+	}
+}
+
+func stackDelta(base, change string, age time.Duration) Structured {
+	if base == "" {
+		return &tracingpb.CapturedStack{Stack: change, Age: age}
+	}
+
+	var i, lines int
+	for i = range base {
+		c := base[len(base)-1-i]
+		if i > len(change) || change[len(change)-1-i] != c {
+			break
 		}
+		if c == '\n' {
+			lines++
+		}
+	}
+	return &tracingpb.CapturedStack{
+		Stack: change[:len(change)-i], SharedSuffix: int32(i), SharedLines: int32(lines),
 	}
 }
