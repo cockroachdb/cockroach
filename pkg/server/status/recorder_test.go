@@ -136,6 +136,10 @@ func TestMetricsRecorderTenants(t *testing.T) {
 	)
 	recorderTenant.AddNode(regTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
+	// ========================================
+	// Verify that the recorder exports metrics for tenants as text.
+	// ========================================
+
 	g := metric.NewGauge(metric.Metadata{Name: "some_metric"})
 	reg1.AddMetric(g)
 	g.Update(123)
@@ -178,6 +182,63 @@ func TestMetricsRecorderTenants(t *testing.T) {
 	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system"} 123`)
 	require.Contains(t, bufTenant.String(), `some_metric{tenant="application2"} 456`)
 
+	// ========================================
+	// Verify that the recorder processes tenant time series registries
+	// ========================================
+
+	expectedData := []tspb.TimeSeriesData{
+		// System tenant metrics
+		{
+			Name:   "cr.node.node-id",
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(1),
+				},
+			},
+		},
+		{
+			Name:   "cr.node.some_metric",
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(123),
+				},
+			},
+		},
+		// App tenant metrics
+		{
+			Name:   "cr.node.node-id",
+			Source: "1-123",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(nodeDesc.NodeID),
+				},
+			},
+		},
+		{
+			Name:   "cr.node.some_metric",
+			Source: "1-123",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(456),
+				},
+			},
+		},
+	}
+
+	actualData := recorder.GetTimeSeriesData()
+
+	// compare actual vs expected values
+	sort.Sort(byTimeAndName(actualData))
+	sort.Sort(byTimeAndName(expectedData))
+	if a, e := actualData, expectedData; !reflect.DeepEqual(a, e) {
+		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
+	}
 }
 
 // TestMetricsRecorder verifies that the metrics recorder properly formats the
