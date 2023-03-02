@@ -913,6 +913,7 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	testTxnContentionEventsTableHelper(t, ctx, conn, sqlDB)
+	testTxnContentionEventsTableWithDroppedInfo(t, ctx, conn, sqlDB)
 }
 
 func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
@@ -941,6 +942,51 @@ func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 	testTxnContentionEventsTableHelper(t, ctx, tSQL, sqlDB)
 }
 
+func causeContention(
+	t *testing.T, conn *gosql.DB, table string, insertValue string, updateValue string,
+) {
+	// Create a new connection, and then in a go routine have it start a
+	// transaction, update a row, sleep for a time, and then complete the
+	// transaction. With original connection attempt to update the same row
+	// being updated concurrently in the separate go routine, this will be
+	// blocked until the original transaction completes.
+	var wgTxnStarted sync.WaitGroup
+	wgTxnStarted.Add(1)
+
+	// Lock to wait for the txn to complete to avoid the test finishing
+	// before the txn is committed.
+	var wgTxnDone sync.WaitGroup
+	wgTxnDone.Add(1)
+
+	go func() {
+		defer wgTxnDone.Done()
+		tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
+		require.NoError(t, errTxn)
+		_, errTxn = tx.ExecContext(ctx,
+			fmt.Sprintf("INSERT INTO %s (id, s) VALUES ('test', $1);", table),
+			insertValue)
+		require.NoError(t, errTxn)
+		wgTxnStarted.Done()
+		_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.5);")
+		require.NoError(t, errTxn)
+		errTxn = tx.Commit()
+		require.NoError(t, errTxn)
+	}()
+
+	start := timeutil.Now()
+
+	// Need to wait for the txn to start to ensure lock contention.
+	wgTxnStarted.Wait()
+	// This will be blocked until the updateRowWithDelay finishes.
+	_, errUpdate := conn.ExecContext(
+		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test';", table), updateValue)
+	require.NoError(t, errUpdate)
+	end := timeutil.Now()
+	require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
+
+	wgTxnDone.Wait()
+}
+
 func testTxnContentionEventsTableHelper(
 	t *testing.T, ctx context.Context, conn *gosql.DB, sqlDB *sqlutils.SQLRunner,
 ) {
@@ -955,51 +1001,8 @@ func testTxnContentionEventsTableHelper(
 
 	sqlDB.Exec(t, "CREATE TABLE t (id string, s string);")
 
-	causeContention := func(insertValue string, updateValue string) {
-		// Create a new connection, and then in a go routine have it start a
-		// transaction, update a row, sleep for a time, and then complete the
-		// transaction. With original connection attempt to update the same row
-		// being updated concurrently in the separate go routine, this will be
-		// blocked until the original transaction completes.
-		var wgTxnStarted sync.WaitGroup
-		wgTxnStarted.Add(1)
-
-		// Lock to wait for the txn to complete to avoid the test finishing
-		// before the txn is committed.
-		var wgTxnDone sync.WaitGroup
-		wgTxnDone.Add(1)
-
-		go func() {
-			defer wgTxnDone.Done()
-			tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
-			require.NoError(t, errTxn)
-			_, errTxn = tx.ExecContext(ctx,
-				"INSERT INTO t (id, s) VALUES ('test', $1);",
-				insertValue)
-			require.NoError(t, errTxn)
-			wgTxnStarted.Done()
-			_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.5);")
-			require.NoError(t, errTxn)
-			errTxn = tx.Commit()
-			require.NoError(t, errTxn)
-		}()
-
-		start := timeutil.Now()
-
-		// Need to wait for the txn to start to ensure lock contention.
-		wgTxnStarted.Wait()
-		// This will be blocked until the updateRowWithDelay finishes.
-		_, errUpdate := conn.ExecContext(
-			ctx, "UPDATE t SET s = $1 where id = 'test';", updateValue)
-		require.NoError(t, errUpdate)
-		end := timeutil.Now()
-		require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
-
-		wgTxnDone.Wait()
-	}
-
-	causeContention("insert1", "update1")
-	causeContention("insert2", "update2")
+	causeContention(t, conn, "t", "insert1", "update1")
+	causeContention(t, conn, "t", "insert2", "update2")
 
 	rowCount := 0
 
@@ -1084,6 +1087,121 @@ func testTxnContentionEventsTableHelper(
 		"found 3 rows. It should only record first, but there is a chance based "+
 		"on sampling to get 2 rows.")
 
+}
+
+func testTxnContentionEventsTableWithDroppedInfo(
+	t *testing.T, ctx context.Context, conn *gosql.DB, sqlDB *sqlutils.SQLRunner,
+) {
+	sqlDB.Exec(
+		t,
+		`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = false;`)
+
+	// Reduce the resolution interval to speed up the test.
+	sqlDB.Exec(
+		t,
+		`SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'`)
+
+	rowCount := 0
+	query := `SELECT
+			database_name,
+			schema_name,
+			table_name,
+			index_name
+			FROM crdb_internal.transaction_contention_events tce
+			inner join (
+			select
+      fingerprint_id,
+			transaction_fingerprint_id,
+			metadata->'query' as query
+			from crdb_internal.statement_statistics t
+			where metadata->>'query' like 'UPDATE test.t2 SET %') stats
+			on stats.transaction_fingerprint_id = tce.waiting_txn_fingerprint_id
+			  and stats.fingerprint_id = tce.waiting_stmt_fingerprint_id`
+	var dbName, schemaName, tableName, indexName string
+
+	checkValues := func(expectedDB string, expectedSchema string, expectedTable string, expectedIndex string) {
+		testutils.SucceedsWithin(t, func() error {
+			rowCount = 0
+			rows, errVerify := conn.QueryContext(ctx, query)
+			if errVerify != nil {
+				return errVerify
+			}
+
+			for rows.Next() {
+				rowCount++
+				errVerify = rows.Scan(&dbName, &schemaName, &tableName, &indexName)
+				if errVerify != nil {
+					return errVerify
+				}
+
+				if dbName != expectedDB {
+					return fmt.Errorf("dbName should be %s: %s, %s, %s, %s", expectedDB, dbName, schemaName, tableName, indexName)
+				}
+
+				if schemaName != expectedSchema {
+					return fmt.Errorf("schemaName should be %s: %s, %s, %s, %s", expectedSchema, dbName, schemaName, tableName, indexName)
+				}
+
+				if tableName != expectedTable {
+					return fmt.Errorf("tableName should be %s: %s, %s, %s, %s", expectedTable, dbName, schemaName, tableName, indexName)
+				}
+
+				if indexName != expectedIndex {
+					return fmt.Errorf("indexName should be %s: %s, %s, %s, %s", expectedIndex, dbName, schemaName, tableName, indexName)
+				}
+			}
+
+			if rowCount < 1 {
+				return fmt.Errorf("transaction_contention_events did not return any rows")
+			}
+			return nil
+		}, 5*time.Second)
+	}
+
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "CREATE TABLE test.t2 (id string, s string);")
+	sqlDB.Exec(t, "CREATE INDEX idx_test ON test.t2 (id);")
+
+	causeContention(t, conn, "test.t2", "insert1", "update1")
+
+	// Test all values as is.
+	checkValues("test", "public", "t2", "idx_test")
+
+	// Test deleting the index.
+	sqlDB.Exec(t, "DROP INDEX test.t2@idx_test;")
+	checkValues("test", "public", "t2", "[dropped index]")
+
+	// Test deleting the table.
+	sqlDB.Exec(t, "DROP TABLE test.t2;")
+	checkValues("", "", "[dropped table]", "[dropped index]")
+
+	// Test deleting the database.
+	sqlDB.Exec(t, "DROP DATABASE test;")
+	checkValues("", "", "[dropped table]", "[dropped index]")
+
+	// New test deleting the database only.
+	query = `SELECT
+			database_name,
+			schema_name,
+			table_name,
+			index_name
+			FROM crdb_internal.transaction_contention_events tce
+			inner join (
+			select
+	   fingerprint_id,
+			transaction_fingerprint_id,
+			metadata->'query' as query
+			from crdb_internal.statement_statistics t
+			where metadata->>'query' like 'UPDATE test2.t3 SET %') stats
+			on stats.transaction_fingerprint_id = tce.waiting_txn_fingerprint_id
+			  and stats.fingerprint_id = tce.waiting_stmt_fingerprint_id`
+	sqlDB.Exec(t, "CREATE DATABASE test2")
+	sqlDB.Exec(t, "CREATE TABLE test2.t3 (id string, s string);")
+	sqlDB.Exec(t, "CREATE INDEX idx_test3 ON test2.t3 (id);")
+	causeContention(t, conn, "test2.t3", "insert1", "update1")
+
+	sqlDB.Exec(t, "DROP DATABASE test2;")
+	checkValues("", "", "[dropped table]", "[dropped index]")
 }
 
 // This test doesn't care about the contents of these virtual tables;
