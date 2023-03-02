@@ -1443,8 +1443,7 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 	sqlDB.ExecMultiple(b,
 		`CREATE SCHEMA sc1`,
 		`CREATE SCHEMA sc2`,
-		// TODO(chengxiong): uncomment this when #97400 is resolved.
-		//`CREATE FUNCTION abs(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$`,
+		`CREATE FUNCTION abs(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$`,
 		`CREATE FUNCTION sc1.udf(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$`,
 		`CREATE FUNCTION sc1.udf(val STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT val $$`,
 		`CREATE FUNCTION sc1.udf(val FLOAT) RETURNS FLOAT LANGUAGE SQL AS $$ SELECT val $$`,
@@ -1488,11 +1487,10 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 			name:    "builtin aggregate not called on null",
 			exprStr: "concat_agg(NULL)",
 		},
-		// TODO(chengxiong): uncomment this when #97400 is resolved.
-		//{
-		//	name:    "udf same name as builtin",
-		//	exprStr: "abs(123)",
-		//},
+		{
+			name:    "udf same name as builtin",
+			exprStr: "abs(123)",
+		},
 		{
 			name:    "udf across different schemas",
 			exprStr: "udf(123)",

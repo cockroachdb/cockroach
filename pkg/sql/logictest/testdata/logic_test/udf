@@ -3133,3 +3133,22 @@ SELECT f_97130();
 
 statement ok
 SET search_path = $pre_search_path
+
+subtest regression_97400
+
+# Make sure that creating a UDF with builtin function name is ok.
+statement ok
+CREATE FUNCTION abs(val INT) RETURNS INT
+CALLED ON NULL INPUT
+LANGUAGE SQL
+AS $$ SELECT val+100 $$;
+
+query I
+SELECT abs(-1)
+----
+1
+
+query I
+SELECT public.abs(-1)
+----
+99

@@ -32,8 +32,13 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	dbElts, scElts := b.ResolvePrefix(n.FuncName.ObjectNamePrefix, privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)
 	_, _, db := scpb.FindDatabase(dbElts)
+	_, _, scName := scpb.FindNamespace(scElts)
+	_, _, dbname := scpb.FindNamespace(dbElts)
 
-	validateParameters(b, n, db.DatabaseID)
+	n.FuncName.SchemaName = tree.Name(scName.Name)
+	n.FuncName.CatalogName = tree.Name(dbname.Name)
+
+	validateParameters(n)
 
 	existingFn := b.ResolveUDF(
 		&tree.FuncObj{
@@ -142,7 +147,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
 }
 
-func validateParameters(b BuildCtx, n *tree.CreateFunction, parentDBID descpb.ID) {
+func validateParameters(n *tree.CreateFunction) {
 	seen := make(map[tree.Name]struct{})
 	for _, param := range n.Params {
 		if param.Name != "" {
