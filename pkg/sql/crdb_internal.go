@@ -7471,30 +7471,37 @@ func getContentionEventInfo(
 	var tableDesc catalog.TableDescriptor
 	tableDesc, err = desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 	if err != nil {
-		return "", "", "", "", err
-	}
-
-	idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
-	if err != nil {
-		return "", "", "", "", err
-	}
-
-	dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
-	if err != nil {
-		return "", "", "", "", err
-	}
-
-	schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
-	if err != nil {
-		return "", "", "", "", err
+		return "", "", "[dropped table]", "[dropped index]", nil //nolint:returnerrcheck
 	}
 
 	var idxName string
+	idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
+	if err != nil {
+		idxName = "[dropped index]"
+	}
 	if idxDesc != nil {
 		idxName = idxDesc.GetName()
 	}
 
-	return schemaDesc.GetName(), dbDesc.GetName(), tableDesc.GetName(), idxName, nil
+	var databaseName string
+	dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+	if err != nil {
+		databaseName = "[dropped database]"
+	}
+	if dbDesc != nil {
+		databaseName = dbDesc.GetName()
+	}
+
+	var schName string
+	schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+	if err != nil {
+		schName = "[dropped schema]"
+	}
+	if dbDesc != nil {
+		schName = schemaDesc.GetName()
+	}
+
+	return schName, databaseName, tableDesc.GetName(), idxName, nil
 }
 
 var crdbInternalNodeMemoryMonitors = virtualSchemaTable{
