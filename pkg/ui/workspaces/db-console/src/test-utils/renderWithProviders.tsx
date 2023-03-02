@@ -13,7 +13,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import type { PreloadedState } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
 
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, flagsReducer } from "src/redux/state";
 import { createMemoryHistory } from "history";
 import { apiReducersReducer } from "src/redux/apiReducers";
 import { hoverReducer } from "src/redux/hover";
@@ -44,6 +44,7 @@ export function renderWithProviders(
       timeScale: timeScaleReducer,
       uiData: uiDataReducer,
       login: loginReducer,
+      flags: flagsReducer,
     },
     preloadedState,
   });

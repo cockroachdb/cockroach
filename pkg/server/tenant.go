@@ -692,7 +692,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			db:               s.db,
 		}), /* apiServer */
 		serverpb.FeatureFlags{
-			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
+			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
+			DisableKvLevelAdvancedDebug: true,
 		},
 	); err != nil {
 		return err
