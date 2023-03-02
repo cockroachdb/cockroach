@@ -426,3 +426,50 @@ query B
 SELECT 1 = ANY ROW()
 ----
 false
+
+# Regression test for #37793 - don't fold sub-operators with untyped NULL
+# operands during type-checking.
+query B
+SELECT NULL = ANY(ARRAY []::INTEGER[]);
+----
+false
+
+query B
+SELECT NULL = SOME(ARRAY []::INTEGER[]);
+----
+false
+
+query B
+SELECT NULL = ALL(ARRAY []::INTEGER[]);
+----
+true
+
+query B
+SELECT NULL = ANY(ARRAY [1]::INTEGER[]);
+----
+NULL
+
+query B
+SELECT NULL = SOME(ARRAY [1]::INTEGER[]);
+----
+NULL
+
+query B
+SELECT NULL = ALL(ARRAY [1]::INTEGER[]);
+----
+NULL
+
+query B
+SELECT NULL = ANY(NULL::INTEGER[]);
+----
+NULL
+
+query B
+SELECT NULL = SOME(NULL::INTEGER[]);
+----
+NULL
+
+query B
+SELECT NULL = ALL(NULL::INTEGER[]);
+----
+NULL
