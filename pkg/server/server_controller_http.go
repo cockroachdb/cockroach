@@ -72,7 +72,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
 		http.SetCookie(w, &http.Cookie{
-			Name:     MultitenantSessionCookieName,
+			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
@@ -193,7 +193,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		if len(tenantNameToSetCookieSlice) > 0 {
 			sessionsStr := createAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
 			cookie := http.Cookie{
-				Name:     MultitenantSessionCookieName,
+				Name:     SessionCookieName,
 				Value:    sessionsStr,
 				Path:     "/",
 				HttpOnly: false,
@@ -282,15 +282,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		}
 		// Clear session and tenant cookies after all logouts have completed.
 		cookie := http.Cookie{
-			Name:     MultitenantSessionCookieName,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Expires:  timeutil.Unix(0, 0),
-		}
-		http.SetCookie(w, &cookie)
-		cookie = http.Cookie{
-			Name:     TenantSelectCookieName,
+			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
@@ -298,7 +290,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		}
 		http.SetCookie(w, &cookie)
 		cookie = http.Cookie{
-			Name:     SessionCookieName,
+			Name:     TenantSelectCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,

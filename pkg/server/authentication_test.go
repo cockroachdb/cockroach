@@ -593,7 +593,7 @@ func TestLogoutClearsCookies(t *testing.T) {
 		require.Equal(t, "", c.Value)
 		cNames[i] = c.Name
 	}
-	require.ElementsMatch(t, cNames, []string{SessionCookieName, MultitenantSessionCookieName, TenantSelectCookieName})
+	require.ElementsMatch(t, cNames, []string{SessionCookieName, TenantSelectCookieName})
 }
 
 func TestLogout(t *testing.T) {
@@ -906,66 +906,78 @@ func TestFindSessionCookieValue(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	normalSessionStr := "abcd1234,system,efgh5678,app"
 	tests := []struct {
-		name          string
-		cookieArg     []*http.Cookie
-		resExpected   string
-		errorExpected bool
+		name              string
+		sessionCookie     *http.Cookie
+		tenantSelectValue string
+		resExpected       string
+		errorExpected     bool
 	}{
-		{"standard args", []*http.Cookie{
-			{
-				Name:  MultitenantSessionCookieName,
+		{
+			name: "standard args",
+			sessionCookie: &http.Cookie{
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
-			{
-				Name:  TenantSelectCookieName,
-				Value: "system",
-				Path:  "/",
-			},
-		}, "abcd1234", false},
-		{"no multitenant session cookie", []*http.Cookie{
-			{
-				Name:  TenantSelectCookieName,
-				Value: "system",
-				Path:  "/",
-			},
-		}, "", false},
-		{"no tenant cookie", []*http.Cookie{
-			{
-				Name:  MultitenantSessionCookieName,
+			tenantSelectValue: "system",
+			resExpected:       "abcd1234",
+			errorExpected:     false,
+		},
+		{
+			name:              "no multitenant session cookie",
+			sessionCookie:     nil,
+			tenantSelectValue: "system",
+			resExpected:       "",
+			errorExpected:     false,
+		},
+		{
+			name: "no tenant cookie",
+			sessionCookie: &http.Cookie{
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
-		}, "abcd1234", false},
-		{"empty string tenant cookie", []*http.Cookie{
-			{
-				Name:  MultitenantSessionCookieName,
+			resExpected:   "abcd1234",
+			errorExpected: false,
+		},
+		{
+			name: "empty string tenant cookie",
+			sessionCookie: &http.Cookie{
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
-			{
-				Name:  TenantSelectCookieName,
-				Value: "",
-				Path:  "/",
-			},
-		}, "abcd1234", false},
-		{"no tenant name match", []*http.Cookie{
-			{
-				Name:  MultitenantSessionCookieName,
+			tenantSelectValue: "",
+			resExpected:       "abcd1234",
+			errorExpected:     false,
+		},
+		{
+			name: "no tenant name match",
+			sessionCookie: &http.Cookie{
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
-			{
-				Name:  TenantSelectCookieName,
-				Value: "app2",
+			tenantSelectValue: "app2",
+			resExpected:       "",
+			errorExpected:     true,
+		},
+		{
+			name: "legacy session cookie",
+			sessionCookie: &http.Cookie{
+				Name:  SessionCookieName,
+				Value: "aaskjhf218==",
 				Path:  "/",
 			},
-		}, "", true},
+			tenantSelectValue: "",
+			resExpected:       "aaskjhf218==",
+			errorExpected:     false,
+		},
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("find-session-cookie/%s", test.name), func(t *testing.T) {
 			st := cluster.MakeClusterSettings()
-			res, err := findSessionCookieValue(st, test.cookieArg)
+			res, err := findSessionCookieValueForTenant(st, test.sessionCookie, test.tenantSelectValue)
 			require.Equal(t, test.resExpected, res)
 			require.Equal(t, test.errorExpected, err != nil)
 		})
