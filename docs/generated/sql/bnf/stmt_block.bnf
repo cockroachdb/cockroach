@@ -2028,6 +2028,7 @@ copy_generic_options ::=
 	| 'FORMAT' 'BINARY'
 	| 'FORMAT' 'CSV'
 	| 'FORMAT' 'TEXT'
+	| 'FORMAT' 'SCONST'
 	| 'DELIMITER' string_or_placeholder
 	| 'NULL' string_or_placeholder
 	| 'HEADER'
