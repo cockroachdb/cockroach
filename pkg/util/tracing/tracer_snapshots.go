@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/petermattis/goid"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -196,6 +198,7 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 		stacks = make([]byte, n)
 		nbytes := runtime.Stack(stacks, true /* all */)
 		if nbytes < len(stacks) {
+			stacks = stacks[:nbytes]
 			break
 		}
 	}
@@ -277,6 +280,41 @@ func (t *Tracer) PeriodicSnapshotsLoop(sv *settings.Values, done <-chan struct{}
 				return
 			case <-t.autoSnapRateChange:
 			}
+		}
+	}
+}
+
+// MaybeRecordStackHistory records in the span found in the passed context, if
+// there is one and it is verbose or has a sink, any stacks found for the
+// current goroutine in the currently stored tracer automatic snapshots, since
+// the passed time (generally when this goroutine started processing this
+// request/op). See the "trace.snapshot.rate" setting for controlling whether
+// such automatic snapshots are available to be searched and if so at what
+// granularity.
+func (t *Tracer) MaybeRecordStackHistory(ctx context.Context, op string, since time.Time) {
+	sp := SpanFromContext(ctx)
+	if sp == nil {
+		return
+	}
+	if !sp.IsVerbose() && !sp.Tracer().HasExternalSink() {
+		return
+	}
+
+	id := int(goid.Get())
+	callerFile, callerLine, _ := caller.Lookup(1)
+
+	t.snapshotsMu.Lock()
+	defer t.snapshotsMu.Unlock()
+
+	for i := t.snapshotsMu.autoSnapshots.Len() - 1; i >= 0; i-- {
+		s := t.snapshotsMu.autoSnapshots.Get(i)
+		if s.CapturedAt.Before(since) {
+			return
+		}
+		if stack, ok := s.Stacks[id]; ok {
+			// TODO(dt): make this structured?
+			sp.Recordf("%s:%d: %s had following stack as of %.1fs ago: %s",
+				callerFile, callerLine, op, timeutil.Since(s.CapturedAt).Seconds(), stack)
 		}
 	}
 }
