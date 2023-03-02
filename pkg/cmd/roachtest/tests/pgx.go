@@ -25,7 +25,7 @@ import (
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedPGXTag = "v4.15.0"
+var supportedPGXTag = "v5.3.1"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
