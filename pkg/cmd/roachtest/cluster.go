@@ -88,7 +88,6 @@ var (
 	// to make it global and operate on runCmd.Flags() directly.
 	overrideFlagset  *pflag.FlagSet
 	overrideNumNodes = -1
-	buildTag         string
 	clusterName      string
 	clusterWipe      bool
 	zonesF           string

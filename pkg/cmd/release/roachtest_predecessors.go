@@ -20,43 +20,43 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var versionMapFlags = struct {
+var roachtestPredecessorsFlags = struct {
 	file       string
 	versionStr string
 }{}
 
-var versionMapCmd = &cobra.Command{
-	Use:   "update-version-map",
-	Short: "Update roachtest version map",
-	Long:  "Updates the version map used in the version-upgrade roachtest acceptance test",
+var roachtestPredecessorsCmd = &cobra.Command{
+	Use:   "update-roachtest-predecessors",
+	Short: "Update roachtest predecessors version map",
+	Long:  "Updates the version map used in various upgrade roachtests",
 	RunE:  updateVersionMap,
 }
 
 func init() {
-	versionMapCmd.Flags().StringVar(&versionMapFlags.file, "version-map-file",
-		"pkg/cmd/roachtest/tests/predecessor_version.json", "version map json file")
-	versionMapCmd.Flags().StringVar(&versionMapFlags.versionStr, versionFlag, "", "cockroachdb version")
-	_ = versionMapCmd.MarkFlagRequired(versionFlag)
+	roachtestPredecessorsCmd.Flags().StringVar(&roachtestPredecessorsFlags.file, "version-map-file",
+		"pkg/cmd/roachtest/roachtestutil/clusterupgrade/predecessor_version.json", "version map json file")
+	roachtestPredecessorsCmd.Flags().StringVar(&roachtestPredecessorsFlags.versionStr, versionFlag, "", "cockroachdb version")
+	_ = roachtestPredecessorsCmd.MarkFlagRequired(versionFlag)
 }
 
 type versionMap map[string]string
 
 func updateVersionMap(_ *cobra.Command, _ []string) error {
 	// make sure we have the leading "v" in the version
-	versionMapFlags.versionStr = "v" + strings.TrimPrefix(versionMapFlags.versionStr, "v")
+	roachtestPredecessorsFlags.versionStr = "v" + strings.TrimPrefix(roachtestPredecessorsFlags.versionStr, "v")
 	var err error
-	version, err := semver.NewVersion(versionMapFlags.versionStr)
+	version, err := semver.NewVersion(roachtestPredecessorsFlags.versionStr)
 	if err != nil {
-		return fmt.Errorf("cannot parse version %s: %w", updateVersionsFlags.versionStr, err)
+		return fmt.Errorf("cannot parse version %s: %w", roachtestPredecessorsFlags.versionStr, err)
 	}
-	content, err := os.ReadFile(versionMapFlags.file)
+	content, err := os.ReadFile(roachtestPredecessorsFlags.file)
 	if err != nil {
-		return fmt.Errorf("cannot open %s: %w", versionMapFlags.file, err)
+		return fmt.Errorf("cannot open %s: %w", roachtestPredecessorsFlags.file, err)
 	}
 	var verMap versionMap
 	err = json.Unmarshal(content, &verMap)
 	if err != nil {
-		return fmt.Errorf("cannot unmarshal %s: %w", versionMapFlags.file, err)
+		return fmt.Errorf("cannot unmarshal %s: %w", roachtestPredecessorsFlags.file, err)
 	}
 	nextSeries := nextReleaseSeries(version)
 	// If there is no entry in the version map, probably this is the major version release case,
@@ -73,9 +73,9 @@ func updateVersionMap(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("cannot marshal: %w", err)
 	}
 	out = append(out, '\n')
-	err = os.WriteFile(versionMapFlags.file, out, 0644)
+	err = os.WriteFile(roachtestPredecessorsFlags.file, out, 0644)
 	if err != nil {
-		return fmt.Errorf("cannot write version map to %s: %w", versionMapFlags.file, err)
+		return fmt.Errorf("cannot write version map to %s: %w", roachtestPredecessorsFlags.file, err)
 	}
 	return nil
 }

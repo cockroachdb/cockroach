@@ -189,10 +189,7 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
-			if err != nil {
-				return err
-			}
+			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 			if !listBench {
 				tests.RegisterTests(&r)
 			} else {
@@ -251,12 +248,6 @@ runner itself.
 		},
 	}
 
-	// TODO(irfansharif): We could remove this by directly running `cockroach
-	// version` against the binary being tested, instead of what we do today
-	// which is defaulting to checking the last git release tag present in the
-	// local checkout.
-	runCmd.Flags().StringVar(
-		&buildTag, "build-tag", "", "build tag (auto-detect if empty)")
 	runCmd.Flags().StringVar(
 		&slackToken, "slack-token", "", "Slack bot token")
 	runCmd.Flags().BoolVar(
@@ -397,15 +388,12 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
-	r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
-	if err != nil {
-		return err
-	}
+	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 	register(&r)
 	cr := newClusterRegistry()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	runner := newTestRunner(cr, stopper, r.buildVersion)
+	runner := newTestRunner(cr, stopper)
 
 	filter := registry.NewTestFilter(cfg.args, cfg.runSkipped)
 	clusterType := roachprodCluster
@@ -475,7 +463,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
-	err = runner.Run(
+	err := runner.Run(
 		ctx, tests, cfg.count, cfg.parallelism, opt,
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
