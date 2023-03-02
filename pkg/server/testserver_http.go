@@ -155,7 +155,7 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 				return err
 			}
 			if session == serverutils.MultiTenantSession {
-				cookie.Name = MultitenantSessionCookieName
+				cookie.Name = SessionCookieName
 				cookie.Value = fmt.Sprintf("%s,%s", cookie.Value, ts.t.tenantName)
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
