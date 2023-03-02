@@ -130,5 +130,3 @@ query T
 SELECT f_table();
 ----
 (1,5)
-
-
