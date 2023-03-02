@@ -443,6 +443,7 @@ func (db *DB) Query(
 	diskResolution Resolution,
 	timespan QueryTimespan,
 	mem QueryMemoryContext,
+	secondarySource string,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	timespan.normalize()
 
@@ -487,7 +488,7 @@ func (db *DB) Query(
 
 		if maxTimespanWidth > timespan.width() {
 			if err := db.queryChunk(
-				ctx, query, resolution, timespan, mem, &result, sourceSet,
+				ctx, query, resolution, timespan, mem, &result, sourceSet, secondarySource,
 			); err != nil {
 				return nil, nil, err
 			}
@@ -503,7 +504,7 @@ func (db *DB) Query(
 					chunkTime.EndNanos = timespan.EndNanos
 				}
 				if err := db.queryChunk(
-					ctx, query, resolution, chunkTime, mem, &result, sourceSet,
+					ctx, query, resolution, chunkTime, mem, &result, sourceSet, secondarySource,
 				); err != nil {
 					return nil, nil, err
 				}
@@ -541,6 +542,7 @@ func (db *DB) queryChunk(
 	mem QueryMemoryContext,
 	dest *[]tspb.TimeSeriesDatapoint,
 	sourceSet map[string]struct{},
+	secondarySource string,
 ) error {
 	acc := mem.workerMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
@@ -554,7 +556,7 @@ func (db *DB) queryChunk(
 	if len(query.Sources) == 0 {
 		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan)
 	} else {
-		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources)
+		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources, secondarySource)
 	}
 
 	if err != nil {
@@ -568,6 +570,17 @@ func (db *DB) queryChunk(
 	}
 	if len(sourceSpans) == 0 {
 		return nil
+	}
+
+	// If a secondary source is specified and the source spans contain a source that
+	// does not match, remove it.
+	if secondarySource != "" {
+		for source := range sourceSpans {
+			_, source2 := DecodeSource(source)
+			if secondarySource != source2 {
+				delete(sourceSpans, source)
+			}
+		}
 	}
 
 	if timespan.SampleDurationNanos != diskResolution.SampleDuration() {
@@ -592,8 +605,11 @@ func (db *DB) queryChunk(
 	}
 
 	// Add unique sources to the supplied source set.
+	// NB: we filter for only unique primary sources since we do not expose
+	// secondary sources on the API level.
 	for k := range sourceSpans {
-		sourceSet[k] = struct{}{}
+		source, _ := DecodeSource(k)
+		sourceSet[source] = struct{}{}
 	}
 	return nil
 }
@@ -829,6 +845,7 @@ func (db *DB) readFromDatabase(
 	diskResolution Resolution,
 	timespan QueryTimespan,
 	sources []string,
+	secondarySource string,
 ) ([]kv.KeyValue, error) {
 	// Iterate over all key timestamps which may contain data for the given
 	// sources, based on the given start/end time and the resolution.
@@ -837,8 +854,18 @@ func (db *DB) readFromDatabase(
 	kd := diskResolution.SlabDuration()
 	for currentTimestamp := startTimestamp; currentTimestamp <= timespan.EndNanos; currentTimestamp += kd {
 		for _, source := range sources {
-			key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
-			b.Get(key)
+			// If a secondary source is specified, only query data for that tenant source.
+			if secondarySource != "" {
+				source = MakeSource(source, secondarySource)
+				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+				b.Get(key)
+			} else {
+				// In the case where a secondary source is not specified, we should scan
+				// all keys that prefix match the primary source.
+				startKey := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+				endKey := MakeDataKey(seriesName, source, diskResolution, currentTimestamp).PrefixEnd()
+				b.Scan(startKey, endKey)
+			}
 		}
 	}
 	if err := db.db.Run(ctx, b); err != nil {
@@ -846,11 +873,12 @@ func (db *DB) readFromDatabase(
 	}
 	var rows []kv.KeyValue
 	for _, result := range b.Results {
-		row := result.Rows[0]
-		if row.Value == nil {
-			continue
+		for _, row := range result.Rows {
+			if row.Value == nil {
+				continue
+			}
+			rows = append(rows, row)
 		}
-		rows = append(rows, row)
 	}
 	return rows, nil
 }

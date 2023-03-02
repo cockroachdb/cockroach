@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -155,7 +156,7 @@ func (a tenantAuthorizer) authorize(
 		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 
 	case "/cockroach.ts.tspb.TimeSeries/Query":
-		return a.capabilitiesAuthorizer.HasTSDBQueryCapability(ctx, tenID)
+		return a.authTSDBQuery(ctx, tenID, req.(*tspb.TimeSeriesQueryRequest))
 
 	default:
 		return authErrorf("unknown method %q", fullMethod)
@@ -375,6 +376,21 @@ func (a tenantAuthorizer) authSpanConfigConformance(
 		if err := validateSpan(tenID, sp); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (a tenantAuthorizer) authTSDBQuery(
+	ctx context.Context, id roachpb.TenantID, request *tspb.TimeSeriesQueryRequest,
+) error {
+	if !request.TenantID.IsSet() {
+		return authError("tsdb query with unspecified tenant not permitted")
+	}
+	if !request.TenantID.Equal(id) {
+		return authErrorf("tsdb query with invalid tenant not permitted")
+	}
+	if err := a.capabilitiesAuthorizer.HasTSDBQueryCapability(ctx, id); err != nil {
+		return authError(err.Error())
 	}
 	return nil
 }

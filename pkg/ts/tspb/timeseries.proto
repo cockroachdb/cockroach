@@ -122,6 +122,8 @@ message TimeSeriesQueryRequest {
   // query will be downsampled into periods of the supplied length. The
   // supplied duration must be a multiple of ten seconds.
   optional int64 sample_nanos = 4 [(gogoproto.nullable) = false];
+  // tenantID of the tenant requesting the query.
+  optional roachpb.TenantID tenant_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
 }
 
 // TimeSeriesQueryResponse is the standard response for time series queries

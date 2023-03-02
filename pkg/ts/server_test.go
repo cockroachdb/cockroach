@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -35,6 +36,9 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+// Dummy import to pull in kvtenantccl. This allows us to start tenants.
+var _ = kvtenantccl.Connector{}
 
 func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -293,6 +297,213 @@ func TestServerQueryStarvation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestServerQueryTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	tsrv := s.(*server.TestServer)
+
+	// Populate data directly.
+	tsdb := tsrv.TsDB()
+	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name:   "test.metric",
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          100.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          200.0,
+				},
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "1-10",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          1.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          2.0,
+				},
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          200.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          400.0,
+				},
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "2-10",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          4.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          5.0,
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// System tenant should aggregate across all tenants.
+	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:    "test.metric",
+					Sources: []string{"1"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          101.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          202.0,
+					},
+				},
+			},
+			{
+				Query: tspb.Query{
+					Name:    "test.metric",
+					Sources: []string{"1", "2"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          305.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          607.0,
+					},
+				},
+			},
+		},
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    "test.metric",
+				Sources: []string{"1"},
+			},
+			{
+				Name: "test.metric",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range systemResponse.Results {
+		sort.Strings(r.Sources)
+	}
+	require.Equal(t, expectedSystemResult, systemResponse)
+
+	// App tenant should only report metrics with its tenant ID in the secondary source field
+	expectedTenantResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:    "test.metric",
+					Sources: []string{"1"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          1.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          2.0,
+					},
+				},
+			},
+			{
+				Query: tspb.Query{
+					Name:    "test.metric",
+					Sources: []string{"1", "2"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          5.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          7.0,
+					},
+				},
+			},
+		},
+	}
+
+	tenant, _ := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+	tenantConn, err := tsrv.RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenantClient := tspb.NewTimeSeriesClient(tenantConn)
+	tenantResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    "test.metric",
+				Sources: []string{"1"},
+			},
+			{
+				Name: "test.metric",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range tenantResponse.Results {
+		sort.Strings(r.Sources)
+	}
+	require.Equal(t, expectedTenantResponse, tenantResponse)
 }
 
 // TestServerQueryMemoryManagement verifies that queries succeed under

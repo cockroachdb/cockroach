@@ -105,6 +105,7 @@ type TenantServer struct {
 	tspb.UnimplementedTimeSeriesServer
 
 	log.AmbientContext
+	tenantID      roachpb.TenantID
 	tenantConnect kvtenant.Connector
 }
 
@@ -118,6 +119,7 @@ func (t *TenantServer) Query(
 	ctx context.Context, req *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {
 	ctx = t.AnnotateCtx(ctx)
+	req.TenantID = t.tenantID
 	return t.tenantConnect.Query(ctx, req)
 }
 
@@ -134,10 +136,13 @@ func (s *TenantServer) RegisterGateway(
 	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }
 
-func MakeTenantServer(ambient log.AmbientContext, tenantConnect kvtenant.Connector) *TenantServer {
+func MakeTenantServer(
+	ambient log.AmbientContext, tenantConnect kvtenant.Connector, tenantID roachpb.TenantID,
+) *TenantServer {
 	return &TenantServer{
 		AmbientContext: ambient,
 		tenantConnect:  tenantConnect,
+		tenantID:       tenantID,
 	}
 }
 
@@ -309,12 +314,19 @@ func (s *Server) Query(
 						},
 					)
 
+					// If tenant ID is set and is a non-system ID, set it as secondary source.
+					var secondarySource string
+					if request.TenantID.IsSet() && !request.TenantID.IsSystem() {
+						secondarySource = request.TenantID.String()
+					}
+
 					datapoints, sources, err := s.db.Query(
 						ctx,
 						query,
 						Resolution10s,
 						timespan,
 						memContexts[queryIdx],
+						secondarySource,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{

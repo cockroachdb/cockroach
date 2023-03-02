@@ -12,6 +12,8 @@ package ts
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -112,6 +114,26 @@ func decodeDataKeySuffix(key roachpb.Key) (string, string, Resolution, int64, er
 	source := remainder
 
 	return string(name), string(source), resolution, timestamp, nil
+}
+
+// MakeSource creates a source given a primary and secondary (optional) source.
+// If a secondary source is specified, the returned source will be in the format
+// `[primary]-[secondary]`.
+func MakeSource(primarySource string, secondarySource string) string {
+	if secondarySource != "" {
+		return fmt.Sprintf("%s-%s", primarySource, secondarySource)
+	}
+	return primarySource
+}
+
+// DecodeSource splits a source into its individual components.
+func DecodeSource(source string) (primarySource string, secondarySource string) {
+	splitSources := strings.Split(source, "-")
+	primarySource = splitSources[0]
+	if len(splitSources) == 2 {
+		secondarySource = splitSources[1]
+	}
+	return primarySource, secondarySource
 }
 
 func prettyPrintKey(buf *redact.StringBuilder, key roachpb.Key) {
