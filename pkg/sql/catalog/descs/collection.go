@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -148,8 +146,10 @@ type Collection struct {
 //
 // TODO(ajwerner): Move all descriptor reading in catkv to use FOR SHARE
 // locking when that becomes available.
-func (tc *Collection) LockDescriptorsForValidation(ctx context.Context, txn *kv.Txn) error {
-	var toLock catalog.DescriptorIDSet
+func (tc *Collection) GetDescriptorsReferencedByUncommitted() (
+	toLock catalog.DescriptorIDSet,
+	_ error,
+) {
 	if err := tc.uncommitted.iterateUncommittedByID(func(descriptor catalog.Descriptor) error {
 		toLock.Add(descriptor.GetID())
 		deps, err := descriptor.GetReferencedDescIDs()
@@ -159,21 +159,9 @@ func (tc *Collection) LockDescriptorsForValidation(ctx context.Context, txn *kv.
 		toLock.UnionWith(deps)
 		return nil
 	}); err != nil {
-		return err
+		return catalog.DescriptorIDSet{}, err
 	}
-	var ba kvpb.BatchRequest
-	ba.Requests = make([]kvpb.RequestUnion, 0, toLock.Len())
-	gets := make([]kvpb.GetRequest, toLock.Len())
-	var i int
-	toLock.ForEach(func(id descpb.ID) {
-		req := &gets[i]
-		i++
-		req.Key = catalogkeys.MakeDescMetadataKey(tc.codec(), id)
-		req.KeyLocking = lock.Update
-		ba.Add(req)
-	})
-	_, err := txn.Send(ctx, &ba)
-	return err.GoError()
+	return toLock, nil
 }
 
 // FromTxn is a convenience function to extract a descs.Collection which is

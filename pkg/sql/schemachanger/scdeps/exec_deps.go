@@ -13,6 +13,7 @@ package scdeps
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -211,6 +214,28 @@ func (d *txnDeps) Run(ctx context.Context) error {
 	if d.batch == nil {
 		return nil
 	}
+	referencedIDs, err := d.descsCollection.GetDescriptorsReferencedByUncommitted()
+	if err != nil {
+		return err
+	}
+	requests := make([]kvpb.Request, referencedIDs.Len())
+	gets := make([]kvpb.GetRequest, referencedIDs.Len())
+	var i int
+	referencedIDs.ForEach(func(id descpb.ID) {
+		req := &gets[i]
+		requests[i] = req
+		i++
+		req.Key = catalogkeys.MakeDescMetadataKey(d.codec, id)
+		req.KeyLocking = lock.Update
+	})
+	d.batch.AddRawRequest(requests...)
+	reqs := d.batch.Requests()
+	sort.Slice(reqs, func(i, j int) bool {
+		return reqs[i].GetInner().Header().Key.Compare(
+			reqs[j].GetInner().Header().Key,
+		) < 0
+	})
+
 	if err := d.txn.KV().Run(ctx, d.batch); err != nil {
 		return errors.Wrap(err, "persisting catalog mutations")
 	}

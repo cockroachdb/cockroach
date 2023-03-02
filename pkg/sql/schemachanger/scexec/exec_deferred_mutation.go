@@ -193,20 +193,22 @@ func (s *deferredState) exec(
 			return err
 		}
 	}
-	for _, idx := range s.indexesToSplitAndScatter {
-		descs, err := c.MustReadImmutableDescriptors(ctx, idx.tableID)
-		if err != nil {
-			return err
+	/*
+		for _, idx := range s.indexesToSplitAndScatter {
+			descs, err := c.MustReadImmutableDescriptors(ctx, idx.tableID)
+			if err != nil {
+				return err
+			}
+			tableDesc := descs[0].(catalog.TableDescriptor)
+			idxDesc, err := catalog.MustFindIndexByID(tableDesc, idx.indexID)
+			if err != nil {
+				return err
+			}
+			if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
+				return err
+			}
 		}
-		tableDesc := descs[0].(catalog.TableDescriptor)
-		idxDesc, err := catalog.MustFindIndexByID(tableDesc, idx.indexID)
-		if err != nil {
-			return err
-		}
-		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
-			return err
-		}
-	}
+	*/
 	s.statsToRefresh.ForEach(q.AddTableForStatsRefresh)
 	// Note that we perform the system.jobs writes last in order to acquire locks
 	// on the job rows in question as late as possible. If a restart is

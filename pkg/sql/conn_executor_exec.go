@@ -1038,13 +1038,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		// By detecting restarts and locking descriptors, here, we may not prevent
 		// another restart, but we should prevent subsequent live-lock for future
 		// restarts.
-		if ex.hasRetried() {
-			if err := descsCol.LockDescriptorsForValidation(
-				ctx, ex.state.mu.txn,
-			); err != nil {
-				return err
-			}
-		}
+
 		if err := descsCol.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
 			return err
 		}
