@@ -38,7 +38,10 @@ func GetAllRevisions(
 	allRevs chan []VersionedValues,
 ) error {
 	for {
-		header := kvpb.Header{Timestamp: endTime}
+		header := kvpb.Header{
+			Timestamp:                   endTime,
+			ReturnElasticCPUResumeSpans: true,
+		}
 		req := &kvpb.ExportRequest{
 			RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 			StartTime:     startTime,

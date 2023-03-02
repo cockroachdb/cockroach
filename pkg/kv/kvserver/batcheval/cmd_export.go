@@ -237,7 +237,7 @@ func evalExport(
 				// chance to move the goroutine off CPU allowing other processes to make
 				// progress. The client is responsible for handling pagination of
 				// ExportRequests.
-				if resumeInfo.CPUOverlimit {
+				if resumeInfo.CPUOverlimit && h.ReturnElasticCPUResumeSpans {
 					// Note, since we have not exported any data we do not populate the
 					// `Files` field of the ExportResponse.
 					reply.ResumeSpan = &roachpb.Span{
@@ -247,14 +247,16 @@ func evalExport(
 					reply.ResumeReason = kvpb.RESUME_ELASTIC_CPU_LIMIT
 					break
 				} else {
-					// We should never come here. There should be no condition aside from
-					// resource constraints that results in an early exit without
-					// exporting any data. Regardless, if we have a resumeKey we
-					// immediately retry the ExportRequest from that key and timestamp
-					// onwards.
-					if !build.IsRelease() {
-						return result.Result{}, errors.AssertionFailedf("ExportRequest exited without " +
-							"exporting any data for an unknown reason; programming error")
+					if !resumeInfo.CPUOverlimit {
+						// We should never come here. There should be no condition aside from
+						// resource constraints that results in an early exit without
+						// exporting any data. Regardless, if we have a resumeKey we
+						// immediately retry the ExportRequest from that key and timestamp
+						// onwards.
+						if !build.IsRelease() {
+							return result.Result{}, errors.AssertionFailedf("ExportRequest exited without " +
+								"exporting any data for an unknown reason; programming error")
+						}
 					}
 					start = resumeInfo.ResumeKey.Key
 					resumeKeyTS = resumeInfo.ResumeKey.Timestamp
@@ -302,7 +304,7 @@ func evalExport(
 		// resuming our export from the resume key. This gives the scheduler a
 		// chance to take the current goroutine off CPU and allow other processes to
 		// progress.
-		if resumeInfo.CPUOverlimit {
+		if resumeInfo.CPUOverlimit && h.ReturnElasticCPUResumeSpans {
 			if resumeInfo.ResumeKey.Key != nil {
 				reply.ResumeSpan = &roachpb.Span{
 					Key:    resumeInfo.ResumeKey.Key,
