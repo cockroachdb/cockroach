@@ -326,9 +326,12 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		treecmp.ILike, treecmp.NotILike,
 		treecmp.SimilarTo, treecmp.NotSimilarTo,
 		treecmp.RegMatch, treecmp.NotRegMatch,
-		treecmp.RegIMatch, treecmp.NotRegIMatch,
-		treecmp.Any, treecmp.Some, treecmp.All:
+		treecmp.RegIMatch, treecmp.NotRegIMatch:
 		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+			return DNull
+		}
+	case treecmp.Any, treecmp.Some, treecmp.All:
+		if expr.TypedRight() == DNull {
 			return DNull
 		}
 	}
