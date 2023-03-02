@@ -268,7 +268,6 @@ const diagnosticsReportsInProgress: StatementDiagnosticsReport[] = [
 
 const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
 const lastUpdated = moment("Sep 15 2021 01:30:00 GMT");
-const aggregationInterval = 3600; // 1 hour
 
 export const mockStmt = (
   partialStmt: Partial<Omit<AggregateStatistics, "aggregatedFingerprintHexID">>,
@@ -285,7 +284,6 @@ export const mockStmt = (
     label: "SELECT 1",
     summary: "SELECT 1",
     aggregatedTs,
-    aggregationInterval,
     implicitTxn: true,
     database: "defaultdb",
     applicationName: "app",

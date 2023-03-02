@@ -1024,18 +1024,3 @@ export const statisticsTableTitles: StatisticTableTitleType = {
     );
   },
 };
-
-export function formatAggregationIntervalColumn(
-  aggregatedTs: number,
-  interval: number,
-): string {
-  const formatStr = "MMM D, H:mm";
-  const formatStrWithoutDay = "H:mm";
-  const start = moment.unix(aggregatedTs).utc();
-  const end = moment.unix(aggregatedTs + interval).utc();
-  const isSameDay = start.isSame(end, "day");
-
-  return `${start.format(formatStr)} - ${end.format(
-    isSameDay ? formatStrWithoutDay : formatStr,
-  )}`;
-}

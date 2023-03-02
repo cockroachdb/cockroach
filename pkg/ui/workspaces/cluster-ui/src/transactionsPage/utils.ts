@@ -106,7 +106,6 @@ export const aggregateStatements = (
         label: s.statement,
         summary: s.statement_summary,
         aggregatedTs: s.aggregated_ts,
-        aggregationInterval: s.aggregation_interval,
         implicitTxn: s.implicit_txn,
         database: s.database,
         applicationName: s.app,
