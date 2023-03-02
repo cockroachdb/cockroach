@@ -16,7 +16,7 @@ package tests
 var pgxBlocklist = blocklist{}
 
 var pgxIgnorelist = blocklist{
-	"v4.TestBeginIsoLevels": "We don't support isolation levels",
-	"v4.TestConnCopyFromFailServerSideMidwayAbortsWithoutWaiting": "https://github.com/cockroachdb/cockroach/issues/69291#issuecomment-906898940",
-	"v4.TestQueryEncodeError":                                     "This test checks the exact error message",
+	"v5.TestBeginIsoLevels": "We don't support isolation levels",
+	"v5.TestConnCopyFromFailServerSideMidwayAbortsWithoutWaiting": "https://github.com/cockroachdb/cockroach/issues/69291#issuecomment-906898940",
+	"v5.TestQueryEncodeError":                                     "This test checks the exact error message",
 }
