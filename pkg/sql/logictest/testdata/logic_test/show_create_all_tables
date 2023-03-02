@@ -434,3 +434,17 @@ CREATE TABLE public.t (
   FAMILY f2 (z),
   FAMILY f3 (h)
 );
+
+# Make sure database names with hypens work well.
+statement ok
+CREATE DATABASE "d-d";
+USE "d-d";
+CREATE TABLE t();
+SHOW CREATE ALL TABLES;
+
+# Make sure database names with quotes work well.
+statement ok
+CREATE DATABASE "a""bc";
+USE "a""bc";
+CREATE TABLE t();
+SHOW CREATE ALL SCHEMAS;
