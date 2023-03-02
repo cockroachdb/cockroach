@@ -72,6 +72,26 @@ type Batch struct {
 	rowsStaticIdx int
 }
 
+// GValue is a generic value for use in generic code.
+type GValue interface {
+	[]byte | roachpb.Value
+}
+
+// BulkSource is a generator interface for efficiently adding lots of requests.
+type BulkSource[T GValue] interface {
+	// Len will be called to batch allocate resources, the iterator should return
+	// exactly Len KVs.
+	Len() int
+	// Iter will be called to retrieve KVs and add them to the Batch.
+	Iter() BulkSourceIterator[T]
+}
+
+// BulkSourceIterator is the iterator interface for bulk put operations.
+type BulkSourceIterator[T GValue] interface {
+	// Next returns the next KV, calling this more than Len() times is undefined.
+	Next() (roachpb.Key, T)
+}
+
 // ApproximateMutationBytes returns the approximate byte size of the mutations
 // added to this batch via Put, CPut, InitPut, Del, etc methods. Mutations added
 // via AddRawRequest are not tracked.
@@ -428,6 +448,51 @@ func (b *Batch) Put(key, value interface{}) {
 	b.put(key, value, false)
 }
 
+// PutBytes allows an arbitrary number of PutRequests to be added to the batch.
+func (b *Batch) PutBytes(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.PutRequest
+		union kvpb.RequestUnion_Put
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.Put = pr
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetBytes(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
+// PutTuples allows multiple tuple value type puts to be added to the batch using
+// BulkSource interface.
+func (b *Batch) PutTuples(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.PutRequest
+		union kvpb.RequestUnion_Put
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.Put = pr
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetTuple(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
 // PutInline sets the value for a key, but does not maintain
 // multi-version values. The most recent value is always overwritten.
 // Inline values cannot be mutated transactionally and should be used
@@ -511,6 +576,58 @@ func (b *Batch) cputInternal(
 	b.initResult(1, 1, notRaw, nil)
 }
 
+// CPutTuplesEmpty allows multiple CPut tuple requests to be added to the batch
+// as tuples using the BulkSource interface. The values for these keys are
+// expected to be empty.
+func (b *Batch) CPutTuplesEmpty(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.ConditionalPutRequest
+		union kvpb.RequestUnion_ConditionalPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.ConditionalPut = pr
+		pr.AllowIfDoesNotExist = false
+		pr.ExpBytes = nil
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetTuple(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
+// CPutValuesEmpty allows multiple CPut tuple requests to be added to the batch
+// as roachpb.Values using the BulkSource interface. The values for these keys
+// are expected to be empty.
+func (b *Batch) CPutValuesEmpty(bs BulkSource[roachpb.Value]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.ConditionalPutRequest
+		union kvpb.RequestUnion_ConditionalPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.ConditionalPut = pr
+		pr.AllowIfDoesNotExist = false
+		pr.ExpBytes = nil
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value = v
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
 // InitPut sets the first value for a key to value. An ConditionFailedError is
 // reported if a value already exists for the key and it's not equal to the
 // value passed in. If failOnTombstones is set to true, tombstones will return
@@ -533,6 +650,52 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
+}
+
+// InitPutBytes allows multiple []byte value type InitPut requests to be added to
+// the batch using BulkSource interface.
+func (b *Batch) InitPutBytes(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.InitPutRequest
+		union kvpb.RequestUnion_InitPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.InitPut = pr
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetBytes(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
+// InitPutTuples allows multiple tuple value type InitPut to be added to the
+// batch using BulkSource interface.
+func (b *Batch) InitPutTuples(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.InitPutRequest
+		union kvpb.RequestUnion_InitPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.InitPut = pr
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetTuple(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -908,4 +1071,35 @@ func (b *Batch) barrier(s, e interface{}) {
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) bulkRequest(
+	numKeys int, requestFactory func() (req kvpb.RequestUnion, kvSize int),
+) {
+	n := len(b.reqs)
+	b.growReqs(numKeys)
+	newReqs := b.reqs[n:]
+	for i := 0; i < numKeys; i++ {
+		req, numBytes := requestFactory()
+		b.approxMutationReqBytes += numBytes
+		newReqs[i] = req
+	}
+	b.initResult(numKeys, numKeys, notRaw, nil)
+}
+
+// GetResult retrieves the Result and Result row KeyValue for a particular index.
+func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
+	origIdx := idx
+	for i := range b.Results {
+		r := &b.Results[i]
+		if idx < r.calls {
+			if idx < len(r.Rows) {
+				return r, r.Rows[idx], nil
+			} else {
+				return r, KeyValue{}, nil
+			}
+		}
+		idx -= r.calls
+	}
+	return nil, KeyValue{}, errors.AssertionFailedf("index %d outside of results: %+v", origIdx, b.Results)
 }
