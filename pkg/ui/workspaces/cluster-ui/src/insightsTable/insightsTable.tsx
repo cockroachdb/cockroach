@@ -392,6 +392,7 @@ const isIndexRec = (rec: InsightRecommendation) => {
     case "AlterIndex":
     case "CreateIndex":
     case "DropIndex":
+    case "ReplaceIndex":
       return true;
     default:
       return false;
