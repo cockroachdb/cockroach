@@ -1911,7 +1911,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"sql/col*",
 			":!sql/col*_test.go",
-			":!sql/colexec/colexectestutils/utils.go",
+			":!sql/colexec/colexectestutils/util.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1984,7 +1984,7 @@ func TestLint(t *testing.T) {
 			`\.(Append)\(`,
 			"--",
 			"sql/col*",
-			":!sql/colexec/colexecutils/utils.go",
+			":!sql/colexec/colexecutils/util.go",
 			":!sql/colmem/allocator_test.go",
 		)
 		if err != nil {

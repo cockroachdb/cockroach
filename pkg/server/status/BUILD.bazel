@@ -52,6 +52,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/ts/tspb",
+        "//pkg/ts/tsutil",
         "//pkg/util/cgroups",
         "//pkg/util/envutil",
         "//pkg/util/goschedstats",
