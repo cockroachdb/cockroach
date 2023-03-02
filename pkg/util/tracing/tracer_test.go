@@ -878,3 +878,22 @@ func TestTracerClusterSettings(t *testing.T) {
 	require.False(t, sp.IsNoop())
 	sp.Finish()
 }
+
+func TestTracerSnapshots(t *testing.T) {
+	tr := NewTracer()
+
+	s1 := tr.SaveSnapshot()
+	require.Equal(t, SnapshotID(1), s1.ID)
+	_ = tr.SaveSnapshot()
+	s3 := tr.SaveSnapshot()
+	require.Equal(t, SnapshotID(3), s3.ID)
+	require.Equal(t, 3, len(tr.GetSnapshots()))
+
+	for _, i := range []SnapshotID{2, 1, 3} {
+		s, err := tr.GetSnapshot(i)
+		require.NoError(t, err)
+		for _, s := range s.Stacks {
+			require.Less(t, len(s), 5<<10, s)
+		}
+	}
+}
