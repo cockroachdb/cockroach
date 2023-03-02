@@ -579,7 +579,10 @@ func sendExportRequestWithPriorityOverride(
 	span roachpb.Span,
 	startTS, endTS hlc.Timestamp,
 ) (kvpb.Response, error) {
-	header := kvpb.Header{Timestamp: endTS}
+	header := kvpb.Header{
+		Timestamp:                   endTS,
+		ReturnElasticCPUResumeSpans: true,
+	}
 	req := &kvpb.ExportRequest{
 		RequestHeader: kvpb.RequestHeaderFromSpan(span),
 		StartTime:     startTS,

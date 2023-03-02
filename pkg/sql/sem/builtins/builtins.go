@@ -7563,6 +7563,10 @@ expires until the statement bundle is collected`,
 					// specially in the future so as to allow the fingerprint to complete
 					// in the face of intents.
 					WaitPolicy: lock.WaitPolicy_Error,
+					// TODO(ssd): Setting this disables async sending in
+					// DistSender so it likely substantially impacts
+					// performance.
+					ReturnElasticCPUResumeSpans: true,
 				}
 				admissionHeader := kvpb.AdmissionHeader{
 					Priority:                 int32(admissionpb.BulkNormalPri),
