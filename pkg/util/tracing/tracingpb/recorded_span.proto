@@ -174,3 +174,12 @@ message NormalizedSpan {
   map<string, OperationMetadata> children_metadata = 9 [(gogoproto.nullable) = false];
   repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }
+
+message CapturedStack {
+  option (gogoproto.goproto_stringer) = false;
+  string stack = 1;
+  int32 shared_suffix = 2;
+  int32 shared_lines = 3;
+  int64 age = 4 [(gogoproto.casttype) = "time.Duration"];
+  // NEXT ID: 5.
+}
