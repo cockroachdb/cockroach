@@ -841,7 +841,17 @@ SELECT text('10.1.0.0/16'::INET)
 10.1.0.0/16
 
 query T
+SELECT '192.168.0.1'::INET::TEXT
+----
+192.168.0.1/32
+
+query T
 SELECT text('192.168.0.1/16'::INET)
+----
+192.168.0.1/16
+
+query T
+SELECT '192.168.0.1/16'::INET::TEXT
 ----
 192.168.0.1/16
 

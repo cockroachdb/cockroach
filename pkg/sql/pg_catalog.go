@@ -515,11 +515,17 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 			if ctxOrigin == cast.ContextOriginPgCast {
 				castCtx := cCtx.PGString()
 
+				castFunc := tree.DNull
+				if srcTyp, ok := types.OidToType[src]; ok {
+					if v, ok := builtins.CastBuiltinOIDs[tgt][srcTyp.Family()]; ok {
+						castFunc = tree.NewDOid(v)
+					}
+				}
 				_ = addRow(
 					h.CastOid(src, tgt),      // oid
 					tree.NewDOid(src),        // cast source
 					tree.NewDOid(tgt),        // casttarget
-					tree.DNull,               // castfunc
+					castFunc,                 // castfunc
 					tree.NewDString(castCtx), // castcontext
 					tree.DNull,               // castmethod
 				)

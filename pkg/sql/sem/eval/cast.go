@@ -13,6 +13,7 @@ package eval
 import (
 	"context"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -466,7 +467,11 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DUuid:
 			s = t.UUID.String()
 		case *tree.DIPAddr:
-			s = tree.AsStringWithFlags(d, tree.FmtBareStrings)
+			s = t.IPAddr.String()
+			// Ensure the string has a "/mask" suffix.
+			if strings.IndexByte(s, '/') == -1 {
+				s += "/" + strconv.Itoa(int(t.IPAddr.Mask))
+			}
 		case *tree.DString:
 			s = string(*t)
 		case *tree.DCollatedString:
