@@ -40,3 +40,15 @@ SHOW CREATE ALL SCHEMAS
 create_statement
 CREATE SCHEMA public;
 CREATE SCHEMA test2;
+
+# Make sure database names with hyphens work well.
+statement ok
+CREATE DATABASE "d-d";
+USE "d-d";
+SHOW CREATE ALL SCHEMAS;
+
+# Make sure database names with quotes work well.
+statement ok
+CREATE DATABASE "a""bc";
+USE "a""bc";
+SHOW CREATE ALL SCHEMAS;
