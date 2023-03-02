@@ -12,11 +12,12 @@ go_library(
         "metadata.go",
         "orchestration.go",
         "pick_sha.go",
+        "roachtest_predecessors.go",
         "sender.go",
         "sentry.go",
+        "set_cockroach_version.go",
         "templates.go",
         "update_versions.go",
-        "versionmap.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
     visibility = ["//visibility:private"],
@@ -42,8 +43,8 @@ go_test(
     name = "release_test",
     srcs = [
         "blockers_test.go",
+        "roachtest_predecessors_test.go",
         "sender_test.go",
-        "versionmap_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob([

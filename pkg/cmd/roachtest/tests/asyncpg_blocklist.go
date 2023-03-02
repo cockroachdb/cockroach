@@ -41,8 +41,6 @@ var asyncpgBlocklist = blocklist{
 	`test_codecs.TestCodecs.test_void`:                                                                    "unknown",
 	`test_connect.TestSettings.test_get_settings_01`:                                                      "unknown",
 	`test_copy.TestCopyFrom.test_copy_from_table_basics`:                                                  "no support for COPY TO - https://github.com/cockroachdb/cockroach/issues/85571",
-	`test_copy.TestCopyTo.test_copy_records_to_table_1`:                                                   "unsupported feature - https://github.com/cockroachdb/cockroach/issues/85572",
-	`test_copy.TestCopyTo.test_copy_records_to_table_async`:                                               "unsupported feature - https://github.com/cockroachdb/cockroach/issues/85572",
 	`test_copy.TestCopyTo.test_copy_to_table_basics`:                                                      "unknown",
 	`test_cursor.TestCursor.test_cursor_02`:                                                               "multiple active portals unsupported - https://github.com/cockroachdb/cockroach/issues/40195",
 	`test_cursor.TestCursor.test_cursor_04`:                                                               "unknown",

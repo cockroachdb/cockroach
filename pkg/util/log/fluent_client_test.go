@@ -30,7 +30,7 @@ import (
 func TestFluentClient(t *testing.T) {
 	// CLI tests are sensitive to the server version, but test binaries don't have
 	// a version injected. Pretend to be a very up-to-date version.
-	defer build.TestingOverrideTag("v999.0.0")()
+	defer build.TestingOverrideVersion("v999.0.0")()
 
 	defer leaktest.AfterTest(t)()
 	sc := ScopeWithoutShowLogs(t)

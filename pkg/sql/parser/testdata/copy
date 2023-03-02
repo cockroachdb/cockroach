@@ -195,6 +195,48 @@ COPY copytab FROM STDIN WITH (FORMAT BINARY) -- fully parenthesized
 COPY copytab FROM STDIN WITH (FORMAT BINARY) -- literals removed
 COPY _ FROM STDIN WITH (FORMAT BINARY) -- identifiers removed
 
+parse
+COPY "copytab" FROM STDIN (FORMAT  'text')
+----
+COPY copytab FROM STDIN WITH (FORMAT TEXT) -- normalized!
+COPY copytab FROM STDIN WITH (FORMAT TEXT) -- fully parenthesized
+COPY copytab FROM STDIN WITH (FORMAT TEXT) -- literals removed
+COPY _ FROM STDIN WITH (FORMAT TEXT) -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN (FORMAT  'csv')
+----
+COPY copytab FROM STDIN WITH (FORMAT CSV) -- normalized!
+COPY copytab FROM STDIN WITH (FORMAT CSV) -- fully parenthesized
+COPY copytab FROM STDIN WITH (FORMAT CSV) -- literals removed
+COPY _ FROM STDIN WITH (FORMAT CSV) -- identifiers removed
+
+parse
+COPY "copytab" FROM STDIN (FORMAT  'binary')
+----
+COPY copytab FROM STDIN WITH (FORMAT BINARY) -- normalized!
+COPY copytab FROM STDIN WITH (FORMAT BINARY) -- fully parenthesized
+COPY copytab FROM STDIN WITH (FORMAT BINARY) -- literals removed
+COPY _ FROM STDIN WITH (FORMAT BINARY) -- identifiers removed
+
+# Postgres does not normalize the format name to lower case, so this test
+# verifies that CRDB also does not.
+error
+COPY "copytab" FROM STDIN (FORMAT  'TEXT')
+----
+at or near "TEXT": syntax error: COPY format "TEXT" not recognized
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (FORMAT  'TEXT')
+                                   ^
+
+error
+COPY "copytab" FROM STDIN (FORMAT  'abc')
+----
+at or near "abc": syntax error: COPY format "abc" not recognized
+DETAIL: source SQL:
+COPY "copytab" FROM STDIN (FORMAT  'abc')
+                                   ^
+
 error
 COPY "copytab" FROM STDIN (FORMAT     csv, DELIMITER '/', ESCAPE '.', DELIMITER '%')
 ----

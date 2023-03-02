@@ -13,11 +13,6 @@ package main
 import "github.com/cockroachdb/cockroach/pkg/internal/team"
 
 func init() {
-	// Set a bogus build tag. Tests that make a testRegistry would otherwise end
-	// up shelling out to `git` which may not work (for example if the tests are
-	// run through bazel).
-	buildTag = "v99.99.99"
-	// Similar for TEAMS.yaml.
 	loadTeams = func() (team.Map, error) {
 		return map[team.Alias]team.Team{
 			ownerToAlias(OwnerUnitTest): {},
