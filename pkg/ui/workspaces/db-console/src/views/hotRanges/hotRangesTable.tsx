@@ -252,7 +252,12 @@ const HotRangesTable = ({
           val.table_name.startsWith("/") ? (
             val.table_name
           ) : (
-            <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
+            <Link
+              to={util.EncodeDatabaseTableUri(
+                val.database_name,
+                val.table_name,
+              )}
+            >
               {val.table_name}
             </Link>
           ),

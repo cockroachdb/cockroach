@@ -36,6 +36,7 @@ import {
   DATE_FORMAT_24_UTC,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
+  EncodeUriName,
 } from "src/util/format";
 import {
   ascendingAttr,
@@ -417,7 +418,7 @@ export class DatabaseTablePage extends React.Component<
       className: cx("index-stats-table__col-indexes"),
       cell: indexStat => (
         <Link
-          to={`${this.props.name}/index/${indexStat.indexName}`}
+          to={`${this.props.name}/index/${EncodeUriName(indexStat.indexName)}`}
           className={cx("icon__container")}
         >
           <IndexIcon className={cx("icon--s", "icon--primary")} />

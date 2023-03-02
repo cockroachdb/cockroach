@@ -23,6 +23,9 @@ import {
   limitText,
   Count,
   intersperse,
+  EncodeUriName,
+  EncodeDatabaseTableIndexUri,
+  EncodeDatabaseTableUri,
 } from "../../util";
 import { Anchor } from "../../anchor";
 import classNames from "classnames/bind";
@@ -219,7 +222,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
         return (
           <Link
             className={cx("regular-link")}
-            to={`/database/${database}/table/${table}/index/${idx}`}
+            to={EncodeDatabaseTableIndexUri(database, table, idx)}
             key={`${table}${idx}`}
           >
             {idx}
@@ -233,7 +236,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
         {newLine}
         <Link
           className={cx("bold-link")}
-          to={`/database/${database}/table/${table}`}
+          to={EncodeDatabaseTableUri(database, table)}
         >
           {table}
         </Link>
