@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,7 +71,7 @@ func getTopologicallySortedTableIDs(
 		SELECT dependson_id
 		FROM %s.crdb_internal.backward_dependencies
 		WHERE descriptor_id = $1
-		`, dbName)
+		`, lexbase.EscapeSQLIdent(dbName))
 		it, err := evalPlanner.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
@@ -159,7 +160,7 @@ func getTableIDs(
 		WHERE database_name = $1 
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
-		`, dbName)
+		`, lexbase.EscapeSQLIdent(dbName))
 	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
@@ -248,7 +249,7 @@ func getCreateStatement(
 			create_nofks
 		FROM %s.crdb_internal.create_statements
 		WHERE descriptor_id = $1
-	`, dbName)
+	`, lexbase.EscapeSQLIdent(dbName))
 	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
@@ -278,7 +279,7 @@ func getAlterStatements(
 			%s
 		FROM %s.crdb_internal.create_statements
 		WHERE descriptor_id = $1
-	`, statementType, dbName)
+	`, statementType, lexbase.EscapeSQLIdent(dbName))
 	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
