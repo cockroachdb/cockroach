@@ -505,6 +505,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/ts",
         "//pkg/ts/tspb",
+        "//pkg/ts/tsutil",
         "//pkg/ui",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
