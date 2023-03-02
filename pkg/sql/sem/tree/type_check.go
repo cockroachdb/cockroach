@@ -2102,10 +2102,6 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
-			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
-		}
-
 		switch rightReturn.Family() {
 		case types.ArrayFamily:
 			cmpTypeRight = rightReturn.ArrayContents()
