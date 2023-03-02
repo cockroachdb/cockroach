@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package heapprofiler
+package profiler
 
 import (
 	"context"
@@ -51,15 +51,18 @@ func NewStatsProfiler(
 		return nil, errors.AssertionFailedf("need to specify dir for NewStatsProfiler")
 	}
 
-	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), resetHighWaterMarkInterval)
-
 	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
 
 	hp := &StatsProfiler{
-		profiler{
-			store: newProfileStore(dumpStore, StatsFileNamePrefix, StatsFileNameSuffix, st),
-		},
+		profiler: makeProfiler(
+			newProfileStore(dumpStore, StatsFileNamePrefix, StatsFileNameSuffix, st),
+			zeroFloor,
+			envMemprofInterval,
+		),
 	}
+
+	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), hp.resetInterval())
+
 	return hp, nil
 }
 

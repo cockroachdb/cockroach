@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package heapprofiler
+package profiler
 
 import (
 	"context"
@@ -84,9 +84,11 @@ func NewActiveQueryProfiler(
 
 	log.Infof(ctx, "writing go query profiles to %s", log.SafeManaged(dir))
 	qp := &ActiveQueryProfiler{
-		profiler: profiler{
-			store: newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),
-		},
+		profiler: makeProfiler(
+			newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),
+			zeroFloor,
+			envMemprofInterval,
+		),
 		cgroupMemLimit: maxMem,
 	}
 	return qp, nil
