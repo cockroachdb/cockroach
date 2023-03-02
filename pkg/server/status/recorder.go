@@ -299,7 +299,8 @@ func (mr *MetricsRecorder) ExportToGraphite(
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by
-// CockroachDB's time series system.
+// CockroachDB's time series system. GetTimeSeriesData implements the DataSource
+// interface of the ts package.
 func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()

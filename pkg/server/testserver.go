@@ -1123,7 +1123,6 @@ func (ts *TestServer) StartTenant(
 		stopper,
 		baseCfg,
 		sqlCfg,
-		ts.recorder,
 		roachpb.NewTenantNameContainer(params.TenantName),
 	)
 	if err != nil {
