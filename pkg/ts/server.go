@@ -102,9 +102,11 @@ type Server struct {
 var _ tspb.TimeSeriesServer = &Server{}
 
 type TenantServer struct {
+	// NB: TenantServer only implements Query from tspb.TimeSeriesServer
 	tspb.UnimplementedTimeSeriesServer
 
 	log.AmbientContext
+	tenantID      roachpb.TenantID
 	tenantConnect kvtenant.Connector
 }
 
@@ -118,6 +120,9 @@ func (t *TenantServer) Query(
 	ctx context.Context, req *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {
 	ctx = t.AnnotateCtx(ctx)
+	for i := range req.Queries {
+		req.Queries[i].TenantID = t.tenantID
+	}
 	return t.tenantConnect.Query(ctx, req)
 }
 
@@ -134,10 +139,13 @@ func (s *TenantServer) RegisterGateway(
 	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }
 
-func MakeTenantServer(ambient log.AmbientContext, tenantConnect kvtenant.Connector) *TenantServer {
+func MakeTenantServer(
+	ambient log.AmbientContext, tenantConnect kvtenant.Connector, tenantID roachpb.TenantID,
+) *TenantServer {
 	return &TenantServer{
 		AmbientContext: ambient,
 		tenantConnect:  tenantConnect,
+		tenantID:       tenantID,
 	}
 }
 

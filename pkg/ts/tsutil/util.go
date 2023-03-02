@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package ts
+package tsutil
 
 import (
 	"encoding/gob"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
@@ -33,4 +35,22 @@ func DumpRawTo(src tspb.TimeSeries_DumpRawClient, out io.Writer) error {
 			return err
 		}
 	}
+}
+
+// MakeTenantSource creates a source given a NodeID and a TenantID
+func MakeTenantSource(nodeID string, tenantID string) string {
+	if tenantID != "" {
+		return fmt.Sprintf("%s-%s", nodeID, tenantID)
+	}
+	return nodeID
+}
+
+// DecodeSource splits a source into its individual components.
+func DecodeSource(source string) (primarySource string, secondarySource string) {
+	splitSources := strings.Split(source, "-")
+	primarySource = splitSources[0]
+	if len(splitSources) > 1 {
+		secondarySource = splitSources[1]
+	}
+	return primarySource, secondarySource
 }
