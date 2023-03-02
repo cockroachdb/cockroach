@@ -427,3 +427,17 @@ CREATE TABLE t_85418_2();
 CREATE TABLE dbs_85418(db STRING);
 INSERT INTO dbs_85418 VALUES ('db_85418_1'), ('db_85418_2');
 SELECT crdb_internal.show_create_all_tables(db) FROM dbs_85418;
+
+# Make sure database names with hyphens work well.
+statement ok
+CREATE DATABASE "d-d";
+USE "d-d";
+CREATE TABLE t();
+SELECT crdb_internal.show_create_all_tables('d-d');
+
+# Make sure database names with quotes work well.
+statement ok
+CREATE DATABASE "a""bc";
+USE "a""bc";
+CREATE TABLE t();
+SELECT crdb_internal.show_create_all_tables('a"bc');

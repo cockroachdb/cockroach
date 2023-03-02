@@ -50,3 +50,15 @@ SHOW CREATE ALL TYPES
 create_statement
 CREATE TYPE public.tableobj AS ENUM ('row', 'col');
 CREATE TYPE s.status AS ENUM ('a', 'b', 'c');
+
+# Make sure database names with hyphens work well.
+statement ok
+CREATE DATABASE "d-d";
+USE "d-d";
+SHOW CREATE ALL TYPES;
+
+# Make sure database names with quotes work well.
+statement ok
+CREATE DATABASE "a""bc";
+USE "a""bc";
+SHOW CREATE ALL TYPES;
