@@ -7660,7 +7660,7 @@ expires until the statement bundle is collected`,
 				}
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Immutable,
+			Volatility: volatility.Stable,
 		},
 	),
 	"crdb_internal.hide_sql_constants": makeBuiltin(tree.FunctionProperties{
