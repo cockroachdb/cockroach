@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -297,6 +298,12 @@ func TestTenantAuthRequest(t *testing.T) {
 	makeGetRangeDescriptorsReq := func(span roachpb.Span) *kvpb.GetRangeDescriptorsRequest {
 		return &kvpb.GetRangeDescriptorsRequest{
 			Span: span,
+		}
+	}
+
+	makeTimeseriesQueryReq := func(tenantID roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
+		return &tspb.TimeSeriesQueryRequest{
+			TenantID: tenantID,
 		}
 	}
 
@@ -817,6 +824,20 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 		},
+		"/cockroach.ts.tspb.TimeSeries/Query": {
+			{
+				req:    makeTimeseriesQueryReq(tenID),
+				expErr: noError,
+			},
+			{
+				req:    makeTimeseriesQueryReq(roachpb.TenantID{}),
+				expErr: `tsdb query with unspecified tenant not permitted`,
+			},
+			{
+				req:    makeTimeseriesQueryReq(roachpb.MustMakeTenantID(2)),
+				expErr: `tsdb query with invalid tenant not permitted`,
+			},
+		},
 
 		"/cockroach.rpc.Heartbeat/Ping": {
 			{req: &rpc.PingRequest{}, expErr: noError},
@@ -850,6 +871,12 @@ func TestTenantAuthRequest(t *testing.T) {
 func TestTenantAuthCapabilityChecks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	makeTimeseriesQueryReq := func(tenantID roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
+		return &tspb.TimeSeriesQueryRequest{
+			TenantID: tenantID,
+		}
+	}
+
 	tenID := roachpb.MustMakeTenantID(10)
 	for method, tests := range map[string][]struct {
 		req                 interface{}
@@ -872,6 +899,22 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 				)},
 				configureAuthorizer: func(authorizer *mockAuthorizer) {
 					authorizer.hasCapabilityForBatch = false
+				},
+				expErr: "tenant does not have capability",
+			},
+		},
+		"/cockroach.ts.tspb.TimeSeries/Query": {
+			{
+				req: makeTimeseriesQueryReq(tenID),
+				configureAuthorizer: func(authorizer *mockAuthorizer) {
+					authorizer.hasTSDBQueryCapability = true
+				},
+				expErr: "",
+			},
+			{
+				req: makeTimeseriesQueryReq(tenID),
+				configureAuthorizer: func(authorizer *mockAuthorizer) {
+					authorizer.hasTSDBQueryCapability = false
 				},
 				expErr: "tenant does not have capability",
 			},
