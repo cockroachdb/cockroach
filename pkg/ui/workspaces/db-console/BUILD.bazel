@@ -156,15 +156,24 @@ DEPENDENCIES = [
     "@npm_db_console//whatwg-fetch",
 ] + DEV_DEPENDENCIES
 
-WEBPACK_DATA_COMMON = [
+WEBPACK_DATA_COMMON = glob(
+    include = [
+        "assets/**",
+        "fonts/**",
+        "src/**",
+        "styl/**",
+    ],
+    exclude = [
+        "src/js/**",
+        "src/**/*.stories.tsx",
+        "src/**/*.spec.tsx",
+        "src/**/*.spec.ts",
+    ],
+) + [
     "babel.config.js",
     ".eslintrc.json",
     ".stylintrc",
-    "assets",
     "favicon.ico",
-    "fonts",
-    "src",
-    "styl",
     "tsconfig.json",
     "webpack.config.js",
     "//pkg/ui/workspaces/cluster-ui:cluster-ui",
