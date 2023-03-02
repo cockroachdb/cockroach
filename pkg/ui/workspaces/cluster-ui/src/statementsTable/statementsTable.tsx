@@ -222,7 +222,6 @@ export interface AggregateStatistics {
   // replaced with shortStatement otherwise.
   summary: string;
   aggregatedTs: number;
-  aggregationInterval: number;
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;

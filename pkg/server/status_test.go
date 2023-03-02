@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1490,6 +1491,9 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		}
 	}
 
+	// Flush stats, as combinedstmts reads only from system.
+	thirdServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
 	if err := getStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
@@ -1862,6 +1866,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
@@ -1900,6 +1906,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
 
+	testCluster.Server(2).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
 	var resp serverpb.StatementsResponse
 	// Test that non-admin without VIEWACTIVITY privileges cannot access.
 	err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
@@ -1907,7 +1915,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
 
-	testPath := func(path string, expectedStmts []string) {
+	verifyStmts := func(path string, expectedStmts []string, t *testing.T) {
 		// Hit query endpoint.
 		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
 			t.Fatal(err)
@@ -1937,8 +1945,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		sort.Strings(statementsInResponse)
 
 		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
-			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
-				expectedStmts, statementsInResponse, pretty.Sprint(resp))
+			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s\n path: %s",
+				expectedStmts, statementsInResponse, pretty.Sprint(resp), path)
 		}
 	}
 
@@ -1951,33 +1959,38 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-
-	// Test with no query params.
-	testPath("combinedstmts", expectedStatements)
-
 	oneMinAfterAggregatedTs := aggregatedTs + 60
-	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
-	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
-	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
-	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
-	// Test with start = 1 min after aggregatedTs; should give no results
-	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
 
-	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-	// Grant VIEWACTIVITYREDACTED.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+	t.Run("fetch_mode=combined, VIEWACTIVITY", func(t *testing.T) {
+		// Grant VIEWACTIVITY.
+		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
-	// Test with no query params.
-	testPath("combinedstmts", expectedStatements)
-	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
-	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
-	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
-	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
-	// Test with start = 1 min after aggregatedTs; should give no results
-	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
+		// Test with no query params.
+		verifyStmts("combinedstmts", expectedStatements, t)
+		// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, t)
+		// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs),
+			expectedStatements, t)
+		// Test with start = 1 min after aggregatedTs; should give no results
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, t)
+	})
+
+	t.Run("fetch_mode=combined, VIEWACTIVITYREDACTED", func(t *testing.T) {
+		// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+		// Grant VIEWACTIVITYREDACTED.
+		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+		// Test with no query params.
+		verifyStmts("combinedstmts", expectedStatements, t)
+		// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, t)
+		// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements, t)
+		// Test with start = 1 min after aggregatedTs; should give no results
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, t)
+	})
 }
 
 func TestStatusAPIStatementDetails(t *testing.T) {
@@ -1986,6 +1999,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	// The liveness session might expire before the stress race can finish.
 	skip.UnderStressRace(t, "expensive tests")
 
+	ctx := context.Background()
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
@@ -2020,6 +2034,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	for _, stmt := range statements {
 		thirdServerSQL.Exec(t, stmt)
 	}
+
 	query := `INSERT INTO posts VALUES (_, '_')`
 	fingerprintID := roachpb.ConstructStatementFingerprintID(query,
 		false, true, `roachblog`)
@@ -2043,6 +2058,9 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	testPath := func(path string, expected resultValues) {
+		// Need to flush since this EP reads only flushed data.
+		testCluster.Server(2).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
 		err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false)
 		require.NoError(t, err)
 		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
