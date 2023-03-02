@@ -593,7 +593,7 @@ func TestLogoutClearsCookies(t *testing.T) {
 		require.Equal(t, "", c.Value)
 		cNames[i] = c.Name
 	}
-	require.ElementsMatch(t, cNames, []string{SessionCookieName, MultitenantSessionCookieName, TenantSelectCookieName})
+	require.ElementsMatch(t, cNames, []string{SessionCookieName, SessionCookieName, TenantSelectCookieName})
 }
 
 func TestLogout(t *testing.T) {
@@ -913,7 +913,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 	}{
 		{"standard args", []*http.Cookie{
 			{
-				Name:  MultitenantSessionCookieName,
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -932,14 +932,14 @@ func TestFindSessionCookieValue(t *testing.T) {
 		}, "", false},
 		{"no tenant cookie", []*http.Cookie{
 			{
-				Name:  MultitenantSessionCookieName,
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
 		}, "abcd1234", false},
 		{"empty string tenant cookie", []*http.Cookie{
 			{
-				Name:  MultitenantSessionCookieName,
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -951,7 +951,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 		}, "abcd1234", false},
 		{"no tenant name match", []*http.Cookie{
 			{
-				Name:  MultitenantSessionCookieName,
+				Name:  SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -961,6 +961,13 @@ func TestFindSessionCookieValue(t *testing.T) {
 				Path:  "/",
 			},
 		}, "", true},
+		{"legacy session cookie", []*http.Cookie{
+			{
+				Name:  SessionCookieName,
+				Value: "aaskjhf218==",
+				Path:  "/",
+			},
+		}, "aaskjhf218==", false},
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("find-session-cookie/%s", test.name), func(t *testing.T) {

@@ -58,9 +58,6 @@ const (
 	secretLength = 16
 	// SessionCookieName is the name of the cookie used for HTTP auth.
 	SessionCookieName = "session"
-	// MultiTenantSessionCookieName is the name of the cookie used for HTTP auth
-	// when the cluster is multitenant.
-	MultitenantSessionCookieName = "multitenant-session"
 	// DemoLoginPath is the demo shell auto-login URL.
 	DemoLoginPath = "/demologin"
 )
@@ -816,18 +813,14 @@ func findAndDecodeSessionCookie(
 	var cookie *serverpb.SessionCookie
 	var err error
 	var sessionCookies []*http.Cookie
-	// Prioritize multitenant session cookies.
 	for _, c := range cookies {
-		if c.Name == MultitenantSessionCookieName {
-			sessionCookies = append([]*http.Cookie{c}, sessionCookies...)
-		} else if c.Name == SessionCookieName {
+		if c.Name == SessionCookieName {
 			sessionCookies = append(sessionCookies, c)
 		}
 	}
 	for _, sessionCookie := range sessionCookies {
 		found = true
-		// This case is if the multitenant session cookie is set.
-		if sessionCookie.Name == MultitenantSessionCookieName {
+		if sessionCookie.Name == SessionCookieName {
 			mtSessionVal, err := findSessionCookieValue(st, cookies)
 			if err != nil {
 				return cookie, apiInternalError(ctx, err)
@@ -860,6 +853,11 @@ func findAndDecodeSessionCookie(
 // string to indicate this.
 // e.g. tenant cookie value is "system" and multitenant-session cookie
 // value is "abcd1234,system,efgh5678,app" the output will be "abcd1234".
+//
+// In the case of legacy session cookies, where tenant names are not encoded
+// into the cookie value, we assume that the session belongs to defaultTenantSelect.
+// Note that these legacy session cookies only contained a single session string
+// as the cookie's value.
 func findSessionCookieValue(st *cluster.Settings, cookies []*http.Cookie) (string, error) {
 	if mtSessionStr := findMultitenantSessionCookieValue(cookies); mtSessionStr != "" {
 		tenantName := findTenantCookieValue(cookies)
@@ -867,6 +865,15 @@ func findSessionCookieValue(st *cluster.Settings, cookies []*http.Cookie) (strin
 			tenantName = defaultTenantSelect.Get(&st.SV)
 		}
 		sessionSlice := strings.Split(mtSessionStr, ",")
+		if len(sessionSlice) == 1 {
+			// If no separator was found in the cookie value, this is likely
+			// a cookie from a previous CRDB version where the cookie value
+			// contained a single session string without any tenant names encoded.
+			// To maintain backwards compatibility, assume this session belongs
+			// to the default tenant. In this case, the entire cookie value is
+			// the session string.
+			return mtSessionStr, nil
+		}
 		var encodedSession string
 		for idx, val := range sessionSlice {
 			if val == tenantName && idx > 0 {
@@ -894,11 +901,11 @@ func findTenantCookieValue(cookies []*http.Cookie) string {
 }
 
 // findMultitenantSessionCookieValue iterates through all request
-// cookies to find the value of the multitenant-session cookie.
+// cookies to find the value of the session cookie.
 // If not found, it return an empty string.
 func findMultitenantSessionCookieValue(cookies []*http.Cookie) string {
 	for _, c := range cookies {
-		if c.Name == MultitenantSessionCookieName {
+		if c.Name == SessionCookieName {
 			return c.Value
 		}
 	}
