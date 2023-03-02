@@ -895,6 +895,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock,
 		distSender,
 		rangestats.NewFetcher(db),
+		node,
 	)
 
 	keyVisualizerServer := &KeyVisualizerServer{
