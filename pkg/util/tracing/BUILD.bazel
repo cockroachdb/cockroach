@@ -24,6 +24,7 @@ go_library(
         "//pkg/settings",
         "//pkg/util",
         "//pkg/util/buildutil",
+        "//pkg/util/caller",
         "//pkg/util/envutil",
         "//pkg/util/iterutil",
         "//pkg/util/netutil/addr",
