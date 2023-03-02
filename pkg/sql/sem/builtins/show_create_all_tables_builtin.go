@@ -68,7 +68,7 @@ func getTopologicallySortedTableIDs(
 	for _, tid := range ids {
 		query := fmt.Sprintf(`
 		SELECT dependson_id
-		FROM %s.crdb_internal.backward_dependencies
+		FROM %q.crdb_internal.backward_dependencies
 		WHERE descriptor_id = $1
 		`, dbName)
 		it, err := evalPlanner.QueryIteratorEx(
@@ -155,7 +155,7 @@ func getTableIDs(
 ) (tableIDs []int64, retErr error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
-		FROM %s.crdb_internal.create_statements
+		FROM %q.crdb_internal.create_statements
 		WHERE database_name = $1 
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
@@ -246,7 +246,7 @@ func getCreateStatement(
 	query := fmt.Sprintf(`
 		SELECT
 			create_nofks
-		FROM %s.crdb_internal.create_statements
+		FROM %q.crdb_internal.create_statements
 		WHERE descriptor_id = $1
 	`, dbName)
 	row, err := evalPlanner.QueryRowEx(
@@ -276,7 +276,7 @@ func getAlterStatements(
 	query := fmt.Sprintf(`
 		SELECT
 			%s
-		FROM %s.crdb_internal.create_statements
+		FROM %q.crdb_internal.create_statements
 		WHERE descriptor_id = $1
 	`, statementType, dbName)
 	row, err := evalPlanner.QueryRowEx(

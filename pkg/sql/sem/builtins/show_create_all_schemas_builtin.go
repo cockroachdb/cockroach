@@ -30,7 +30,7 @@ func getSchemaIDs(
 ) (schemaIDs []int64, retErr error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
-		FROM %s.crdb_internal.create_schema_statements
+		FROM %q.crdb_internal.create_schema_statements
 		WHERE database_name = $1
 		`, dbName)
 	it, err := evalPlanner.QueryIteratorEx(
@@ -71,7 +71,7 @@ func getSchemaCreateStatement(
 	query := fmt.Sprintf(`
 		SELECT
 			create_statement
-		FROM %s.crdb_internal.create_schema_statements
+		FROM %q.crdb_internal.create_schema_statements
 		WHERE descriptor_id = $1
 	`, dbName)
 	row, err := evalPlanner.QueryRowEx(
