@@ -358,11 +358,11 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 
 	// Make sure rangefeed is retried even after 3 failures, then succeed and cancel context
 	// (which signals the rangefeed to shut down gracefully).
-	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(3).
 		Return(errors.New("rangefeed failed"))
-	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- kvcoord.RangeFeedMessage, ...kvcoord.RangeFeedOption) {
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, chan<- kvcoord.RangeFeedMessage, ...kvcoord.RangeFeedOption) {
 			cancel()
 		}).
 		Return(nil)
