@@ -666,3 +666,32 @@ CREATE VIEW bar_view AS (SELECT ARRAY['b'::bar])
 
 statement error pq: could not remove enum value "b" as it is being used in view "bar_view"
 ALTER TYPE bar DROP VALUE 'b'
+
+subtest regression_97975
+
+statement ok
+CREATE DATABASE db97975;
+USE db97975;
+
+statement ok
+CREATE TYPE enum_97975 as ENUM ('value1', 'value2');
+
+query T
+SHOW CREATE ALL TYPES;
+----
+CREATE TYPE public.enum_97975 AS ENUM ('value1', 'value2');
+
+statement ok
+SET experimental_enable_temp_tables = on;
+CREATE TEMPORARY TABLE tmp_table_97975 (id INT PRIMARY KEY);
+
+statement ok
+ALTER TYPE enum_97975 ADD VALUE 'value3';
+
+query T
+SHOW CREATE ALL TYPES;
+----
+CREATE TYPE public.enum_97975 AS ENUM ('value1', 'value2', 'value3');
+
+statement ok
+USE test;

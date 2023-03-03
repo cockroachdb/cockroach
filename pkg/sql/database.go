@@ -124,13 +124,20 @@ func (p *planner) forEachMutableTableInDatabase(
 	}
 	for _, d := range descs {
 		mutable := d.(*tabledesc.Mutable)
-		schemaName, found, err := lCtx.GetSchemaName(ctx, d.GetParentSchemaID(), d.GetParentID(), p.ExecCfg().Settings.Version)
-		if err != nil {
-			return err
+		var schemaName string
+		if mutable.Temporary {
+			schemaName = p.TemporarySchemaName()
+		} else {
+			sc, found, err := lCtx.GetSchemaName(ctx, d.GetParentSchemaID(), d.GetParentID(), p.ExecCfg().Settings.Version)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return errors.AssertionFailedf("schema id %d not found", d.GetParentSchemaID())
+			}
+			schemaName = sc
 		}
-		if !found {
-			return errors.AssertionFailedf("schema id %d not found", d.GetParentSchemaID())
-		}
+
 		if err := fn(ctx, schemaName, mutable); err != nil {
 			return err
 		}
