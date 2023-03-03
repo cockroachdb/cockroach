@@ -345,7 +345,9 @@ export class NodeGraphs extends React.Component<
 
     // Generate graphs for the current dashboard, wrapping each one in a
     // MetricsDataProvider with a unique key.
-    const graphs = dashboards[dashboard].component(dashboardProps);
+    const graphs = dashboards[dashboard]
+      .component(dashboardProps)
+      .filter(d => (canViewKvGraphs ? true : !d.props.isKvGraph));
     const graphComponents = _.map(graphs, (graph, idx) => {
       const key = `nodes.${dashboard}.${idx}`;
       return (
