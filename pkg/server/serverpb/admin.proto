@@ -1457,4 +1457,6 @@ message SetTraceRecordingTypeResponse{}
 message FeatureFlags {
   // Whether the server is an instance of the Observability Service
   bool is_observability_service = 1;
+  // Whether the logged in user is able to view KV-level metric dashboards.
+  bool can_view_kv_metric_dashboards = 2;
 }

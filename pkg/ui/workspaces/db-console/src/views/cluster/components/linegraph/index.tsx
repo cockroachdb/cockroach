@@ -47,6 +47,7 @@ import {
 import _ from "lodash";
 
 export interface LineGraphProps extends MetricsDataComponentProps {
+  isKvGraph?: boolean;
   title?: string;
   subtitle?: string;
   legend?: boolean;
@@ -158,6 +159,11 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     this.setNewTimeRange = this.setNewTimeRange.bind(this);
   }
+
+  static defaultProps: Partial<LineGraphProps> = {
+    // Marking a graph as not being KV-related is opt-in.
+    isKvGraph: true,
+  };
 
   // axis is copied from the nvd3 LineGraph component above
   axis = createSelector(
