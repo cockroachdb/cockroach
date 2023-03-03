@@ -15,7 +15,7 @@ export type SqlExecutionRequest = {
   execute?: boolean;
   timeout?: string; // Default 5s
   application_name?: string; // Defaults to '$ api-v2-sql'
-  database?: string; // Defaults to defaultDb
+  database?: string; // Defaults to system
   max_result_size?: number; // Default 10kib
 };
 
@@ -76,6 +76,11 @@ export const SQL_API_PATH = "/api/v2/sql/";
 export function executeSql<RowType>(
   req: SqlExecutionRequest,
 ): Promise<SqlExecutionResponse<RowType>> {
+  // TODO (maryliag) remove this part of code when cloud is updated with
+  // a new CRDB release.
+  if (!req.database) {
+    req.database = "system";
+  }
   return fetchDataJSON<SqlExecutionResponse<RowType>, SqlExecutionRequest>(
     SQL_API_PATH,
     req,
