@@ -200,6 +200,9 @@ CREATE TABLE json_arr2_rbt (
 statement ok
 SET enforce_home_region = true
 
+statement ok
+SET enforce_home_region_follower_reads_enabled = true
+
 ### Regression tests for issue #89875
 
 # Non-DML statements should not error out due to enforce_home_region.
@@ -652,6 +655,9 @@ CREATE TABLE messages (
 statement ok
 SET enforce_home_region = true
 
+statement ok
+SET enforce_home_region_follower_reads_enabled = true
+
 # Tables in non-multiregion databases have no home region.
 retry
 statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
@@ -862,6 +868,9 @@ INSERT INTO messages_global SELECT * FROM messages_rbr WHERE crdb_region != 'ap-
 
 statement ok
 SET enforce_home_region = true;
+
+statement ok
+SET enforce_home_region_follower_reads_enabled = true
 
 # Querying the row in the local region succeeds.
 query III retry

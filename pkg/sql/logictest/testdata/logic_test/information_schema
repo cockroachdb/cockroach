@@ -4971,6 +4971,7 @@ enable_seqscan                                        on
 enable_super_regions                                  off
 enable_zigzag_join                                    on
 enforce_home_region                                   off
+enforce_home_region_follower_reads_enabled            off
 escape_string_warning                                 on
 expect_and_ignore_not_visible_columns_in_copy         off
 experimental_computed_column_rewrites                 ·
