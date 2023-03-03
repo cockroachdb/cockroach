@@ -1031,6 +1031,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		eventsExporter:           eventsExporter,
 		admissionPacerFactory:    gcoords.Elastic,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
+		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
 	})
 	if err != nil {
 		return nil, err

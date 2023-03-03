@@ -179,6 +179,7 @@ const (
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
 	CrdbInternalDroppedRelationsViewID
+	CrdbInternalShowTenantCapabilitiesCacheTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
