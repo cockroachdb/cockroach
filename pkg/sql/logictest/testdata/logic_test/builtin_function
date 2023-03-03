@@ -3796,3 +3796,108 @@ select crdb_internal.job_payload_type('invalid'::BYTES);
 
 query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid type in job payload protocol message: Payload.Type called on a payload with an unknown details type: <nil>
 select crdb_internal.job_payload_type('');
+
+subtest crdb_internal.redactable_sql_constants
+query T
+SELECT crdb_internal.redactable_sql_constants(NULL)
+----
+NULL
+
+query T
+SELECT crdb_internal.redactable_sql_constants('')
+----
+‹›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('SELECT 1, 2, 3')
+----
+SELECT ‹1›, ‹2›, ‹3›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('UPDATE mytable SET col = ''abc'' WHERE key = 0')
+----
+UPDATE mytable SET col = ‹'abc'› WHERE key = ‹0›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('not a sql statement')
+----
+‹not a sql statement›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('1')
+----
+‹1›
+
+statement error unknown signature: crdb_internal.redactable_sql_constants\(int\)
+SELECT crdb_internal.redactable_sql_constants(1)
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY[]::string[])
+----
+{}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY[''])
+----
+{‹›}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY[NULL])
+----
+{NULL}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY['banana'])
+----
+{‹banana›}
+
+query T
+SELECT crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', ''])
+----
+{"SELECT ‹1›",NULL,"SELECT ‹'hello'›",‹›}
+
+query T
+SELECT crdb_internal.redactable_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')
+----
+SELECT ‹'yes'› IN (‹'no'›, ‹'maybe'›, ‹'yes'›)
+
+query T
+SELECT crdb_internal.redactable_sql_constants(e'\r')
+----
+‹›
+
+query T
+SELECT crdb_internal.redactable_sql_constants('SELECT crdb_internal.redactable_sql_constants('''')')
+----
+SELECT crdb_internal.redactable_sql_constants(‹''›)
+
+query T
+SELECT crdb_internal.redactable_sql_constants('WITH j AS (VALUES (0.1, false, ''{}''::jsonb, ARRAY[''x'', ''y'', ''''])) INSERT INTO i SELECT *, 7 FROM j WHERE true')
+----
+WITH j AS (VALUES (‹0.1›, ‹false›, ‹'{}'›::JSONB, ARRAY[‹'x'›, ‹'y'›, ‹''›])) INSERT INTO i SELECT *, ‹7› FROM j WHERE ‹true›
+
+query T
+SELECT crdb_internal.redactable_sql_constants(create_statement)
+FROM crdb_internal.create_statements
+WHERE descriptor_name = 'foo'
+----
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
+
+statement ok
+CREATE TABLE redactable_sql_constants_table (
+  a INT PRIMARY KEY,
+  b STRING DEFAULT 'yo' CHECK (b != 'grapefruit'),
+  c STRING AS (b || 'foo') VIRTUAL,
+  FAMILY (a, b),
+  INDEX (b) WHERE b > 'z'
+);
+
+query T
+SELECT crdb_internal.redactable_sql_constants(create_statement)
+FROM crdb_internal.create_statements
+WHERE descriptor_name = 'redactable_sql_constants_table'
+----
+CREATE TABLE public.redactable_sql_constants_table (a INT8 NOT NULL, b STRING NULL DEFAULT ‹'yo'›:::STRING, c STRING NULL AS (b || ‹'foo'›:::STRING) VIRTUAL, CONSTRAINT redactable_sql_constants_table_pkey PRIMARY KEY (a ASC), INDEX redactable_sql_constants_table_b_idx (b ASC) WHERE b > ‹'z'›:::STRING, FAMILY fam_0_a_b (a, b), CONSTRAINT check_b CHECK (b != ‹'grapefruit'›:::STRING))
+
+statement ok
+DROP TABLE redactable_sql_constants_table
