@@ -30,6 +30,11 @@ const (
 		"until end of transaction block"
 )
 
+// EnforceHomeRegionFurtherInfo is the suffix to append to every error returned
+// due to turning on the enforce_home_region session setting, and provides some
+// information for users or app developers.
+const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region"
+
 // NewTransactionAbortedError creates an error for trying to run a command in
 // the context of transaction that's in the aborted state. Any statement other
 // than ROLLBACK TO SAVEPOINT will return this error.
