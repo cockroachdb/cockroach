@@ -53,7 +53,7 @@ func IsRelease() bool {
 // SeemsOfficial reports whether this binary is likely to have come from an
 // official release channel.
 func SeemsOfficial() bool {
-	return channel == "official-binary" || channel == "source-archive"
+	return channel == "official-binary"
 }
 
 func computeBinaryVersion(versionTxt, revision string) string {
