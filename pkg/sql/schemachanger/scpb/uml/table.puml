@@ -327,10 +327,10 @@ object SchemaComment
 SchemaComment :  SchemaID
 SchemaComment :  Comment
 
-object ObjectParent
+object SchemaChild
 
-ObjectParent :  ObjectID
-ObjectParent :  ParentSchemaID
+SchemaChild :  ChildObjectID
+SchemaChild :  SchemaID
 
 object EnumTypeValue
 
@@ -469,11 +469,11 @@ Database <|-- DatabaseComment
 Database <|-- DatabaseData
 Schema <|-- SchemaParent
 Schema <|-- SchemaComment
-AliasType <|-- ObjectParent
-EnumType <|-- ObjectParent
-Table <|-- ObjectParent
-View <|-- ObjectParent
-Sequence <|-- ObjectParent
+AliasType <|-- SchemaChild
+EnumType <|-- SchemaChild
+Table <|-- SchemaChild
+View <|-- SchemaChild
+Sequence <|-- SchemaChild
 EnumType <|-- EnumTypeValue
 CompositeType <|-- CompositeTypeAttrType
 CompositeType <|-- CompositeTypeAttrName

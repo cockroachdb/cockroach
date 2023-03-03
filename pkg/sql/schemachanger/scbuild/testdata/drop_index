@@ -85,8 +85,8 @@ DROP INDEX idx3 CASCADE
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], indexId: 6, toId: 104}], usesRelationIds: [104], viewId: 105}
-- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 105, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 105, schemaId: 101}
 - [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 105}
 - [[ColumnName:{DescID: 105, Name: count, ColumnID: 1}, ABSENT], PUBLIC]
@@ -129,8 +129,8 @@ DROP INDEX v2@idx CASCADE
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 107}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], indexId: 2, toId: 106}], isMaterialized: true, usesRelationIds: [106], viewId: 107}
-- [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 107, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 107, schemaId: 101}
 - [[ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   {name: primary, tableId: 107}
 - [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]

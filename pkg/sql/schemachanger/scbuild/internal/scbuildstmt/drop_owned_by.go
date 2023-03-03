@@ -65,8 +65,8 @@ func DropOwnedBy(b BuildCtx, n *tree.DropOwnedBy) {
 	dbRefs := undroppedBackrefs(b, db.DatabaseID)
 	scpb.ForEachSchemaParent(dbRefs, func(_ scpb.Status, _ scpb.TargetStatus, sp *scpb.SchemaParent) {
 		schemaRefs := undroppedBackrefs(b, sp.SchemaID)
-		scpb.ForEachObjectParent(schemaRefs, func(_ scpb.Status, _ scpb.TargetStatus, op *scpb.ObjectParent) {
-			objects = append(objects, op.ObjectID)
+		scpb.ForEachSchemaChild(schemaRefs, func(_ scpb.Status, _ scpb.TargetStatus, op *scpb.SchemaChild) {
+			objects = append(objects, op.ChildObjectID)
 		})
 		objects = append(objects, sp.SchemaID)
 	})

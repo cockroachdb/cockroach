@@ -132,7 +132,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   ├── • Function:{DescID: 105}
 │   │   │   │     DESCRIPTOR_ADDED → ABSENT
 │   │   │   │
-│   │   │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+│   │   │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   ├── • FunctionName:{DescID: 105}
@@ -197,7 +197,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • Function:{DescID: 105}
 │       │   │     ABSENT → DESCRIPTOR_ADDED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
@@ -372,8 +372,8 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │           │
 │           ├── • SetObjectParentID
 │           │     ObjParent:
-│           │       ObjectID: 105
-│           │       ParentSchemaID: 101
+│           │       ChildObjectID: 105
+│           │       SchemaID: 101
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -599,7 +599,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │   │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105, Name: root}
     │   │   │   │     rule: "dependents exist before descriptor becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ObjectParent:{DescID: 105, ReferencedDescID: 101}
+    │   │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105, ReferencedDescID: 101}
     │   │   │   │     rule: "dependents exist before descriptor becomes public"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 105}

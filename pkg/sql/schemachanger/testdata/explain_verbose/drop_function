@@ -50,7 +50,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • Function:{DescID: 109}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 109, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
@@ -157,7 +157,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │   │   │   ├── • Function:{DescID: 109}
 │   │   │   │     DROPPED → PUBLIC
 │   │   │   │
-│   │   │   ├── • ObjectParent:{DescID: 109, ReferencedDescID: 101}
+│   │   │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
 │   │   │   ├── • FunctionName:{DescID: 109}
@@ -205,7 +205,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • Function:{DescID: 109}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 109, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
@@ -357,7 +357,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
         │       ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109}
         │       │     rule: "descriptor dropped in transaction before removal"
         │       │
-        │       ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 109, ReferencedDescID: 101}
+        │       ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 109, ReferencedDescID: 101}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
         │       ├── • Precedence dependency from ABSENT FunctionName:{DescID: 109}

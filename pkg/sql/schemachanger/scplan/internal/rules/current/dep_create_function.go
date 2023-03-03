@@ -27,7 +27,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.FunctionName)(nil)),
-				to.Type((*scpb.ObjectParent)(nil)),
+				to.Type((*scpb.SchemaChild)(nil)),
 				JoinOnDescID(from, to, "function-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}

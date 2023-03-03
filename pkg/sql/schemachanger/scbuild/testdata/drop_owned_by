@@ -44,8 +44,8 @@ DROP OWNED BY r
   {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
-- [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 106, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 106, schemaId: 101}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 106}
 - [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -58,8 +58,8 @@ DROP OWNED BY r
   {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 109}, ABSENT], PUBLIC]
   {tableId: 109}
-- [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 109, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 109, schemaId: 101}
 - [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   {name: primary, tableId: 109}
 - [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
@@ -120,8 +120,8 @@ DROP OWNED BY r
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
   {sequenceId: 107}
-- [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 107, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 107, schemaId: 105}
 - [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 107}
 - [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -134,8 +134,8 @@ DROP OWNED BY r
   {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 108}, ABSENT], PUBLIC]
   {tableId: 108}
-- [[ObjectParent:{DescID: 108, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 108, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 108, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 108, schemaId: 105}
 - [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   {name: primary, tableId: 108}
 - [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
@@ -196,8 +196,8 @@ DROP OWNED BY r
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 108}], usesRelationIds: [108], viewId: 110}
-- [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 110, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 110, schemaId: 105}
 - [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
@@ -230,8 +230,8 @@ DROP OWNED BY r
   {arrayTypeId: 112, typeId: 111}
 - [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC]
   {logicalRepresentation: a, physicalRepresentation: gA==, typeId: 111}
-- [[ObjectParent:{DescID: 111, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 111, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 111, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 111, schemaId: 105}
 - [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 112, name: _typ, schemaId: 105}
 - [[Owner:{DescID: 112}, ABSENT], PUBLIC]
@@ -244,8 +244,8 @@ DROP OWNED BY r
   {descriptorId: 112, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], PUBLIC]
   {closedTypeIds: [111, 112], type: {arrayContents: {family: EnumFamily, oid: 100111, udtMetadata: {arrayTypeOid: 100112}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100112}, typeId: 112}
-- [[ObjectParent:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 112, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 112, schemaId: 105}
 - [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 113, name: v2, schemaId: 105}
 - [[Owner:{DescID: 113}, ABSENT], PUBLIC]
@@ -256,8 +256,8 @@ DROP OWNED BY r
   {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 113}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 110}], usesRelationIds: [110], usesTypeIds: [111, 112], viewId: 113}
-- [[ObjectParent:{DescID: 113, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 113, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 113, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 113, schemaId: 105}
 - [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 113}
 - [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC]

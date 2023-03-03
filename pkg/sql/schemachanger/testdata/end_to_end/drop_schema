@@ -15,6 +15,7 @@ begin transaction #1
 checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
+getting all objects in schema: 106
 write *eventpb.DropSchema to event log:
   schemaName: db.sc
   sql:

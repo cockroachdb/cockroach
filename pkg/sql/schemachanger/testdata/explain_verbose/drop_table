@@ -43,7 +43,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   ├── • Table:{DescID: 107}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
+│       │   ├── • SchemaChild:{DescID: 107, ReferencedDescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 107}
@@ -333,7 +333,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │   │   ├── • Table:{DescID: 107}
 │   │   │   │     DROPPED → PUBLIC
 │   │   │   │
-│   │   │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
+│   │   │   ├── • SchemaChild:{DescID: 107, ReferencedDescID: 106}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
 │   │   │   ├── • TableComment:{DescID: 107, Comment: t has a comment}
@@ -435,7 +435,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   ├── • Table:{DescID: 107}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
+│       │   ├── • SchemaChild:{DescID: 107, ReferencedDescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 107}
@@ -914,7 +914,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
         │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 107}
         │   │   │     rule: "descriptor dropped in transaction before removal"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 107, ReferencedDescID: 106}
+        │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 107, ReferencedDescID: 106}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT TableComment:{DescID: 107, Comment: t has a comment}

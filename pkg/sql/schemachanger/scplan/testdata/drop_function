@@ -27,7 +27,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -79,7 +79,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Function:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionVolatility:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionLeakProof:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
@@ -94,7 +94,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT

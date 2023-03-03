@@ -35,20 +35,20 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID: 106, Name: us-east1}
  │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID: 106, Name: us-east2}
  │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID: 106, Name: us-east3}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 106, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 106, ReferencedDescID: 105}
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 107}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: admin}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: public}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: root}
  │         │    ├── PUBLIC → DROPPED    AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 107, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 107, ReferencedDescID: 105}
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: admin}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: root}
  │         │    ├── PUBLIC → DROPPED    Table:{DescID: 108}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 108, ReferencedDescID: 105}
  │         │    ├── PUBLIC → ABSENT     TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
  │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
@@ -138,20 +138,20 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID: 106, Name: us-east1}
  │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID: 106, Name: us-east2}
  │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID: 106, Name: us-east3}
- │    │    │    ├── ABSENT     → PUBLIC ObjectParent:{DescID: 106, ReferencedDescID: 105}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 106, ReferencedDescID: 105}
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 107}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: admin}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: public}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: root}
  │    │    │    ├── DROPPED    → PUBLIC AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
- │    │    │    ├── ABSENT     → PUBLIC ObjectParent:{DescID: 107, ReferencedDescID: 105}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 107, ReferencedDescID: 105}
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 108}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: admin}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: root}
  │    │    │    ├── DROPPED    → PUBLIC Table:{DescID: 108}
- │    │    │    ├── ABSENT     → PUBLIC ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 108, ReferencedDescID: 105}
  │    │    │    ├── ABSENT     → PUBLIC TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
  │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 1}
@@ -194,20 +194,20 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106, Name: us-east1}
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106, Name: us-east2}
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106, Name: us-east3}
- │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 106, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 106, ReferencedDescID: 105}
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: admin}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: public}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: root}
  │         │    ├── PUBLIC → DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
- │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 107, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107, ReferencedDescID: 105}
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: root}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108}
- │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108, ReferencedDescID: 105}
  │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 1}

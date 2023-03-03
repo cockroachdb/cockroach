@@ -55,9 +55,9 @@ func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 			// - the parent database has back-references to a schema, but these
 			//   will be captured by the scpb.SchemaParent target.
 			ids.Add(te.DescriptorID)
-		case *scpb.ObjectParent:
+		case *scpb.SchemaChild:
 			// Ignore the parent schema, it won't have back-references.
-			ids.Add(te.ObjectID)
+			ids.Add(te.ChildObjectID)
 		case *scpb.TableData:
 			// Ignore the parent database in the table data element, the parent
 			// database won't have back-references to any tables.
@@ -114,7 +114,7 @@ func MinElementVersion(el scpb.Element) clusterversion.Key {
 		*scpb.IndexComment, *scpb.ConstraintWithoutIndexName, *scpb.ConstraintComment,
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
-		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
+		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.SchemaChild:
 		return clusterversion.TODODelete_V22_1
 	case *scpb.CompositeType, *scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
 		return clusterversion.V23_1

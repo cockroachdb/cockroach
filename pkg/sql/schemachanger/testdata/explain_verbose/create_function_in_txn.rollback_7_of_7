@@ -38,7 +38,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   ├── • Function:{DescID: 105}
     │   │   │     DESCRIPTOR_ADDED → DROPPED
     │   │   │
-    │   │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+    │   │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 105}
@@ -189,7 +189,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   │   ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 105}
         │   │   │     rule: "descriptor dropped in transaction before removal"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 105, ReferencedDescID: 101}
+        │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT FunctionName:{DescID: 105}

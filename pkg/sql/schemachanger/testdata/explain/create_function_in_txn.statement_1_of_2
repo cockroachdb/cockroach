@@ -12,7 +12,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 7 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID: 105}
- │         │    ├── ABSENT → PUBLIC           ObjectParent:{DescID: 105, ReferencedDescID: 101}
+ │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 105, ReferencedDescID: 101}
  │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID: 105}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105, Name: admin}
@@ -27,12 +27,12 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
  │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
  │              ├── UpdateFunctionTypeReferences {"FunctionID":105}
  │              ├── UpdateFunctionRelationReferences {"FunctionID":105}
- │              └── SetObjectParentID {"ObjParent":{"ObjectID":105,"ParentSchemaID":101}}
+ │              └── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 7 elements transitioning toward PUBLIC
       │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID: 105}
-      │    │    ├── PUBLIC           → ABSENT ObjectParent:{DescID: 105, ReferencedDescID: 101}
+      │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
       │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID: 105}
       │    │    ├── PUBLIC           → ABSENT Owner:{DescID: 105}
       │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: admin}
@@ -43,7 +43,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
       └── Stage 2 of 2 in PreCommitPhase
            ├── 7 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Function:{DescID: 105}
-           │    ├── ABSENT → PUBLIC ObjectParent:{DescID: 105, ReferencedDescID: 101}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105, ReferencedDescID: 101}
            │    ├── ABSENT → PUBLIC FunctionName:{DescID: 105}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 105}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105, Name: admin}
@@ -58,5 +58,5 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
                 ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
                 ├── UpdateFunctionTypeReferences {"FunctionID":105}
                 ├── UpdateFunctionRelationReferences {"FunctionID":105}
-                ├── SetObjectParentID {"ObjParent":{"ObjectID":105,"ParentSchemaID":101}}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
                 └── MarkDescriptorAsPublic {"DescriptorID":105}

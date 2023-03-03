@@ -180,12 +180,13 @@ type builderState struct {
 }
 
 type cachedDesc struct {
-	desc         catalog.Descriptor
-	prefix       tree.ObjectNamePrefix
-	backrefs     catalog.DescriptorIDSet
-	ers          *elementResultSet
-	privileges   map[privilege.Kind]error
-	hasOwnership bool
+	desc             catalog.Descriptor
+	prefix           tree.ObjectNamePrefix
+	backrefs         catalog.DescriptorIDSet
+	ers              *elementResultSet
+	privileges       map[privilege.Kind]error
+	hasOwnership     bool
+	backrefsResolved bool
 
 	// elementIndexMap maps from the string serialization of the element
 	// to the index of the element in the builder state. Note that this
