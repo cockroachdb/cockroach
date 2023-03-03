@@ -2116,6 +2116,7 @@ GO_TARGETS = [
     "//pkg/storage/enginepb:enginepb_test",
     "//pkg/storage/fs:fs",
     "//pkg/storage/fs:fs_test",
+    "//pkg/storage/meta:meta",
     "//pkg/storage/metamorphic:metamorphic",
     "//pkg/storage/metamorphic:metamorphic_test",
     "//pkg/storage/pebbleiter:pebbleiter",
