@@ -627,6 +627,15 @@ func (hi *histogramIter) inclusiveUpperBound() tree.Datum {
 func makeSpanFromBucket(iter *histogramIter, prefix []tree.Datum) (span constraint.Span) {
 	start, startBoundary := iter.lowerBound()
 	end, endBoundary := iter.upperBound()
+	if end == tree.DInf {
+		span.Init(
+			constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], start)...),
+			constraint.IncludeBoundary,
+			constraint.EmptyKey,
+			constraint.IncludeBoundary,
+		)
+		return span
+	}
 	if start.Compare(iter.h.evalCtx, end) == 0 &&
 		(startBoundary == constraint.IncludeBoundary || endBoundary == constraint.IncludeBoundary) {
 		// If the start and ends are equal and one of the boundaries is

@@ -784,6 +784,9 @@ func (expr *DIPAddr) Walk(_ Visitor) Expr { return expr }
 func (expr dNull) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr dInf) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DString) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

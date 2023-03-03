@@ -1942,6 +1942,12 @@ func (d dNull) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) (T
 	return d, nil
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d dInf) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) (TypedExpr, error) {
+	return nil, errors.AssertionFailedf("nope")
+}
+
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple are
 // comparable to the input Expr given the input comparison operator.
 func typeCheckAndRequireTupleElems(

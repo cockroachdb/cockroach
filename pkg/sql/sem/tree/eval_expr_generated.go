@@ -382,6 +382,11 @@ func (node *UnresolvedName) Eval(ctx context.Context, v ExprEvaluator) (Datum, e
 }
 
 // Eval is part of the TypedExpr interface.
+func (node dInf) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
 func (node dNull) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
