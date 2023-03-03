@@ -756,6 +756,23 @@ WHERE
   NOT IN (SELECT (ARRAY[704, 11676, 10005, 3912, 11765, 59410, 11397])[i] FROM generate_series(1, 376) AS i)
 ----
 
+# Regression test for #96441.
+statement ok
+CREATE TABLE t96441 (
+  k INT PRIMARY KEY,
+  i INT,
+  CHECK (k IN (1, 2))
+);
+INSERT INTO t96441 VALUES (1, 10);
+
+query III
+SELECT * FROM (VALUES (0))
+FULL JOIN t96441 AS t1
+ON 1 IN (SELECT t1.i FROM t96441)
+----
+NULL  1     10
+0     NULL  NULL
+
 statement ok
 ALTER TABLE abc INJECT STATISTICS '[
   {
