@@ -101,7 +101,9 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
 // timestamps), but this is only checked for keys that exist in both sides, for
-// performance.
+// performance. The given SST must not contain multiple keys for the same user
+// key, even if at different timestamps, as its stats accounting does not
+// support it.
 //
 // The returned MVCC statistics is a delta between the SST-only statistics and
 // their effect when applied, which when added to the SST statistics will adjust
