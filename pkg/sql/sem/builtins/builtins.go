@@ -7532,18 +7532,29 @@ expires until the statement bundle is collected`,
 				if !isAdmin {
 					return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
 				}
+
 				arr := tree.MustBeDArray(args[0])
 				if arr.Len() != 2 {
 					return nil, errors.New("expected an array of two elements")
 				}
 				startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
 				endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
-				endTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-				if evalCtx.AsOfSystemTime != nil {
-					endTime = evalCtx.AsOfSystemTime.Timestamp
+				startTime := args[1].(*tree.DTimestampTZ).Time
+				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
+				allRevisions := *args[2].(*tree.DBool)
+				filter := kvpb.MVCCFilter_Latest
+				if allRevisions {
+					filter = kvpb.MVCCFilter_All
+				}
+
+				req := &kvpb.ExportRequest{
+					RequestHeader:     kvpb.RequestHeader{Key: startKey, EndKey: endKey},
+					StartTime:         startTimestamp,
+					MVCCFilter:        filter,
+					ExportFingerprint: true,
 				}
 				header := kvpb.Header{
-					Timestamp: endTime,
+					Timestamp: evalCtx.Txn.ReadTimestamp(),
 					// We set WaitPolicy to Error, so that the export will return an error
 					// to us instead of a blocking wait if it hits any other txns.
 					//
@@ -7552,25 +7563,13 @@ expires until the statement bundle is collected`,
 					// in the face of intents.
 					WaitPolicy: lock.WaitPolicy_Error,
 				}
-				startTime := args[1].(*tree.DTimestampTZ).Time
-				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
-				allRevisions := *args[2].(*tree.DBool)
-				filter := kvpb.MVCCFilter_Latest
-				if allRevisions {
-					filter = kvpb.MVCCFilter_All
-				}
-				req := &kvpb.ExportRequest{
-					RequestHeader:     kvpb.RequestHeader{Key: startKey, EndKey: endKey},
-					StartTime:         startTimestamp,
-					MVCCFilter:        filter,
-					ExportFingerprint: true,
-				}
 				admissionHeader := kvpb.AdmissionHeader{
 					Priority:                 int32(admissionpb.BulkNormalPri),
 					CreateTime:               timeutil.Now().UnixNano(),
 					Source:                   kvpb.AdmissionHeader_FROM_SQL,
 					NoMemoryReservedAtSource: true,
 				}
+
 				todo := make(chan *kvpb.ExportRequest, 1)
 				todo <- req
 				ctxDone := ctx.Done()
