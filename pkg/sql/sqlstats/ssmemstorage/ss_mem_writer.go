@@ -199,6 +199,11 @@ func (s *Container) RecordStatement(
 		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
+	var errorCode string
+	if value.StatementError != nil {
+		errorCode = pgerror.GetPGCode(value.StatementError).String()
+	}
+
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:                   value.StatementID,
 		FingerprintID:        stmtFingerprintID,
@@ -218,6 +223,7 @@ func (s *Container) RecordStatement(
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,
+		ErrorCode:            errorCode,
 	})
 
 	return stats.ID, nil
