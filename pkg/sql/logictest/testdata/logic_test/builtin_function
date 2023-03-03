@@ -3901,3 +3901,70 @@ CREATE TABLE public.redactable_sql_constants_table (a INT8 NOT NULL, b STRING NU
 
 statement ok
 DROP TABLE redactable_sql_constants_table
+
+subtest crdb_internal.redact
+
+query T
+SELECT crdb_internal.redact(NULL)
+----
+NULL
+
+query T
+SELECT crdb_internal.redact('')
+----
+·
+
+query T
+SELECT crdb_internal.redact('0')
+----
+0
+
+query T
+SELECT crdb_internal.redact('‹0›')
+----
+‹×›
+
+query T
+SELECT crdb_internal.redact('‹‹0››')
+----
+‹‹×››
+
+query T
+SELECT crdb_internal.redact('‹0› ‹0›')
+----
+‹×› ‹×›
+
+query T
+SELECT crdb_internal.redact('‹‹0›')
+----
+‹‹×›
+
+query T
+SELECT crdb_internal.redact(ARRAY[]::string[])
+----
+{}
+
+query T
+SELECT crdb_internal.redact(ARRAY[NULL])
+----
+{NULL}
+
+query T
+SELECT crdb_internal.redact(ARRAY[''])
+----
+{""}
+
+query T
+SELECT crdb_internal.redact(ARRAY['‹0›', '', NULL, '‹0› ‹0›', '‹0'])
+----
+{‹×›,"",NULL,"‹×› ‹×›",‹0}
+
+query T
+SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants('SELECT 1, 2, 3'))
+----
+SELECT ‹×›, ‹×›, ‹×›
+
+query T
+SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', '']))
+----
+{"SELECT ‹×›",NULL,"SELECT ‹×›",‹×›}

@@ -7802,6 +7802,46 @@ expires until the statement bundle is collected`,
 			Volatility: volatility.Immutable,
 		},
 	),
+	"crdb_internal.redact": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		stringOverload1(
+			func(_ context.Context, _ *eval.Context, redactable string) (tree.Datum, error) {
+				return tree.NewDString(string(redact.RedactableString(redactable).Redact())), nil
+			},
+			types.String,
+			"Replaces all occurrences of unsafe substrings (substrings surrounded by the redaction "+
+				"markers, '‹' and '›') with the redacted marker, '‹×›'.",
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				result := tree.NewDArray(types.String)
+				for _, redactableDatum := range arr.Array {
+					if redactableDatum == tree.DNull {
+						if err := result.Append(tree.DNull); err != nil {
+							return nil, err
+						}
+						continue
+					}
+					redactable := string(tree.MustBeDString(redactableDatum))
+					redacted := string(redact.RedactableString(redactable).Redact())
+					if err := result.Append(tree.NewDString(redacted)); err != nil {
+						return nil, err
+					}
+				}
+				return result, nil
+			},
+			Info: "For each element of the array `val`, replaces all occurrences of unsafe substrings " +
+				"(substrings surrounded by the redaction markers, '‹' and '›') with the redacted marker, " +
+				"'‹×›'.",
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
