@@ -11459,7 +11459,7 @@ create_database_stmt:
       SecondaryRegion: tree.Name($16),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_super_region_clause opt_secondary_region_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -11473,8 +11473,9 @@ create_database_stmt:
       Regions: $14.nameList(),
       SurvivalGoal: $15.survivalGoal(),
       Placement: $16.dataPlacement(),
-      SuperRegion: $17.superRegion(),
-      SecondaryRegion: tree.Name($18),
+      Owner: $17.roleSpec(),
+      SuperRegion: $18.superRegion(),
+      SecondaryRegion: tree.Name($19),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
