@@ -48,7 +48,6 @@ EOF
 # by manually created clusters.
 timeout -s INT $((7800*60)) bin/roachtest run \
   tag:release_qualification \
-  --build-tag "${release_version}" \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/cockroach" \

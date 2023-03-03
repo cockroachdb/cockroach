@@ -22,7 +22,6 @@ build/teamcity-roachtest-invoke.sh \
   --parallelism="${PARALLELISM}" \
   --cpu-quota="${CPUQUOTA}" \
   --cluster-id="${TC_BUILD_ID}" \
-  --build-tag="${BUILD_TAG}" \
   --cockroach="${PWD}/bin/cockroach" \
   --cockroach-short="${PWD}/bin/cockroach-short-ea" \
   --artifacts=/artifacts \

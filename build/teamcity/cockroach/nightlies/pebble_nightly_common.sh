@@ -26,9 +26,6 @@ chmod o+rwx "${artifacts}"
 mkdir -p "$PWD/bin"
 chmod o+rwx "$PWD/bin"
 
-build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
-export build_tag
-
 # Build the roachtest binary.
 bazel build //pkg/cmd/roachtest --config ci -c opt
 BAZEL_BIN=$(bazel info bazel-bin --config ci -c opt)
@@ -58,10 +55,10 @@ function prepare_datadir() {
   # Each roachtest's artifacts are zip'd. Unzip them all and remove the .zips.
   find "$artifacts" -name '*.zip' -execdir unzip {} \;
   find "$artifacts" -name '*.zip' -execdir rm {} \;
-  
+
   # mkbench expects artifacts to be gzip compressed.
   find "$artifacts" -name '*.log' | xargs gzip -9
-  
+
   # mkbench expects the benchmark data to be stored in data/YYYYMMDD.
   mkdir data
   ln -sf "$PWD/artifacts" "data/$(date +"%Y%m%d")"
