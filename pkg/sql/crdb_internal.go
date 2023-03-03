@@ -6143,62 +6143,60 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 
 		row := make(tree.Datums, 9 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
-				SortedAppNames: true,
-				SortedKey:      true,
-			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+				func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
-				if err != nil {
-					return err
-				}
-
-				fingerprintID := tree.NewDBytes(
-					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.ID))))
-
-				transactionFingerprintID := tree.NewDBytes(
-					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.Key.TransactionFingerprintID))))
-
-				planHash := tree.NewDBytes(
-					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(statistics.Key.PlanHash)))
-
-				metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
-				if err != nil {
-					return err
-				}
-				statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&statistics.Stats)
-				if err != nil {
-					return err
-				}
-				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
-
-				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
-					types.DefaultIntervalTypeMetadata)
-
-				indexRecommendations := tree.NewDArray(types.String)
-				for _, recommendation := range statistics.Stats.IndexRecommendations {
-					if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+					aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+					if err != nil {
 						return err
 					}
-				}
 
-				row = row[:0]
-				row = append(row,
-					aggregatedTs,                        // aggregated_ts
-					fingerprintID,                       // fingerprint_id
-					transactionFingerprintID,            // transaction_fingerprint_id
-					planHash,                            // plan_hash
-					tree.NewDString(statistics.Key.App), // app_name
-					tree.NewDJSON(metadataJSON),         // metadata
-					tree.NewDJSON(statisticsJSON),       // statistics
-					tree.NewDJSON(plan),                 // plan
-					aggInterval,                         // aggregation_interval
-					indexRecommendations,                // index_recommendations
-				)
+					fingerprintID := tree.NewDBytes(
+						tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.ID))))
 
-				return pusher.pushRow(row...)
-			})
+					transactionFingerprintID := tree.NewDBytes(
+						tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.Key.TransactionFingerprintID))))
+
+					planHash := tree.NewDBytes(
+						tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(statistics.Key.PlanHash)))
+
+					metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
+					if err != nil {
+						return err
+					}
+					statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&statistics.Stats)
+					if err != nil {
+						return err
+					}
+					plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
+
+					aggInterval := tree.NewDInterval(
+						duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+						types.DefaultIntervalTypeMetadata)
+
+					indexRecommendations := tree.NewDArray(types.String)
+					for _, recommendation := range statistics.Stats.IndexRecommendations {
+						if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+							return err
+						}
+					}
+
+					row = row[:0]
+					row = append(row,
+						aggregatedTs,                        // aggregated_ts
+						fingerprintID,                       // fingerprint_id
+						transactionFingerprintID,            // transaction_fingerprint_id
+						planHash,                            // plan_hash
+						tree.NewDString(statistics.Key.App), // app_name
+						tree.NewDJSON(metadataJSON),         // metadata
+						tree.NewDJSON(statisticsJSON),       // statistics
+						tree.NewDJSON(plan),                 // plan
+						aggInterval,                         // aggregation_interval
+						indexRecommendations,                // index_recommendations
+					)
+
+					return pusher.pushRow(row...)
+				})
 		}
 		return setupGenerator(ctx, worker, stopper)
 	},
@@ -6369,17 +6367,13 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 		if err != nil {
 			return nil, nil, err
 		}
-
 		s := p.extendedEvalCtx.statsProvider
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 
 		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return memSQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
-				SortedAppNames: true,
-				SortedKey:      true,
-			}, func(
+			return memSQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics) error {
 

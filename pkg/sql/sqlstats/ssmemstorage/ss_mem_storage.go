@@ -224,129 +224,67 @@ func (s *Container) IterateTransactionStats(
 	return nil
 }
 
-// NewTempContainerFromExistingStmtStats creates a new Container by ingesting a slice
-// of serverpb.StatementsResponse_CollectedStatementStatistics sorted by
-// Key.KeyData.App field.
-// It consumes the first chunk of the slice where
-// all entries in the chunk contains the identical appName. The remaining
-// slice is returned as the result.
-// It returns a nil slice once all entries in statistics are consumed.
-func NewTempContainerFromExistingStmtStats(
-	statistics []serverpb.StatementsResponse_CollectedStatementStatistics,
-) (
-	container *Container,
-	remaining []serverpb.StatementsResponse_CollectedStatementStatistics,
-	err error,
-) {
-	if len(statistics) == 0 {
-		return nil, statistics, nil
+// InsertExistingStmtStats inserts a StatementsResponse_CollectedStatementStatistics
+// entry directly into the container.
+func (container *Container) InsertExistingStmtStats(
+	stats serverpb.StatementsResponse_CollectedStatementStatistics,
+) (err error) {
+
+	key := stmtKey{
+		sampledPlanKey: sampledPlanKey{
+			stmtNoConstants: stats.Key.KeyData.Query,
+			failed:          stats.Key.KeyData.Failed,
+			implicitTxn:     stats.Key.KeyData.ImplicitTxn,
+			database:        stats.Key.KeyData.Database,
+		},
+		planHash:                 stats.Key.KeyData.PlanHash,
+		transactionFingerprintID: stats.Key.KeyData.TransactionFingerprintID,
+	}
+	stmtStats, _, throttled :=
+		container.getStatsForStmtWithKeyLocked(key, stats.ID, true /* createIfNonexistent */)
+	if throttled {
+		return ErrFingerprintLimitReached
 	}
 
-	appName := statistics[0].Key.KeyData.App
+	// This handles all the statistics fields.
+	stmtStats.mu.data.Add(&stats.Stats)
 
-	container = New(
-		nil, /* st */
-		nil, /* uniqueStmtFingerprintLimit */
-		nil, /* uniqueTxnFingerprintLimit */
-		nil, /* uniqueStmtFingerprintCount */
-		nil, /* uniqueTxnFingerprintCount */
-		nil, /* mon */
-		appName,
-		nil, /* knobs */
-		nil, /* insights */
-		nil, /*latencyInformation */
-	)
-
-	for i := range statistics {
-		if currentAppName := statistics[i].Key.KeyData.App; currentAppName != appName {
-			return container, statistics[i:], nil
-		}
-		key := stmtKey{
-			sampledPlanKey: sampledPlanKey{
-				stmtNoConstants: statistics[i].Key.KeyData.Query,
-				failed:          statistics[i].Key.KeyData.Failed,
-				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
-				database:        statistics[i].Key.KeyData.Database,
-			},
-			planHash:                 statistics[i].Key.KeyData.PlanHash,
-			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
-		}
-		stmtStats, _, throttled :=
-			container.getStatsForStmtWithKeyLocked(key, statistics[i].ID, true /* createIfNonexistent */)
-		if throttled {
-			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
-		}
-
-		// This handles all the statistics fields.
-		stmtStats.mu.data.Add(&statistics[i].Stats)
-
-		// Setting all metadata fields.
-		if stmtStats.mu.data.SensitiveInfo.LastErr == "" && key.failed {
-			stmtStats.mu.data.SensitiveInfo.LastErr = statistics[i].Stats.SensitiveInfo.LastErr
-		}
-
-		if stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(statistics[i].Stats.SensitiveInfo.MostRecentPlanTimestamp) {
-			stmtStats.mu.data.SensitiveInfo.MostRecentPlanDescription = statistics[i].Stats.SensitiveInfo.MostRecentPlanDescription
-			stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = statistics[i].Stats.SensitiveInfo.MostRecentPlanTimestamp
-		}
-
-		stmtStats.mu.vectorized = statistics[i].Key.KeyData.Vec
-		stmtStats.mu.distSQLUsed = statistics[i].Key.KeyData.DistSQL
-		stmtStats.mu.fullScan = statistics[i].Key.KeyData.FullScan
-		stmtStats.mu.database = statistics[i].Key.KeyData.Database
-		stmtStats.mu.querySummary = statistics[i].Key.KeyData.QuerySummary
+	// Setting all metadata fields.
+	if stmtStats.mu.data.SensitiveInfo.LastErr == "" && key.failed {
+		stmtStats.mu.data.SensitiveInfo.LastErr = stats.Stats.SensitiveInfo.LastErr
 	}
 
-	return container, nil /* remaining */, nil /* err */
+	if stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(stats.Stats.SensitiveInfo.MostRecentPlanTimestamp) {
+		stmtStats.mu.data.SensitiveInfo.MostRecentPlanDescription = stats.Stats.SensitiveInfo.MostRecentPlanDescription
+		stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = stats.Stats.SensitiveInfo.MostRecentPlanTimestamp
+	}
+
+	stmtStats.mu.vectorized = stats.Key.KeyData.Vec
+	stmtStats.mu.distSQLUsed = stats.Key.KeyData.DistSQL
+	stmtStats.mu.fullScan = stats.Key.KeyData.FullScan
+	stmtStats.mu.database = stats.Key.KeyData.Database
+	stmtStats.mu.querySummary = stats.Key.KeyData.QuerySummary
+
+	return nil
 }
 
-// NewTempContainerFromExistingTxnStats creates a new Container by ingesting a slice
-// of CollectedTransactionStatistics sorted by .StatsData.App field.
-// It consumes the first chunk of the slice where all entries in the chunk
-// contains the identical appName. The remaining slice is returned as the result.
-// It returns a nil slice once all entries in statistics are consumed.
-func NewTempContainerFromExistingTxnStats(
-	statistics []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
-) (
-	container *Container,
-	remaining []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
-	err error,
-) {
-	if len(statistics) == 0 {
-		return nil, statistics, nil
+// InsertExistingTxnStats inserts existing txn stats directly to the container.
+func (container *Container) InsertExistingTxnStats(
+	stats serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
+) (err error) {
+
+	txnStats, _, throttled :=
+		container.getStatsForTxnWithKeyLocked(
+			stats.StatsData.TransactionFingerprintID,
+			stats.StatsData.StatementFingerprintIDs,
+			true /* createIfNonexistent */)
+	if throttled {
+		return ErrFingerprintLimitReached
 	}
 
-	appName := statistics[0].StatsData.App
+	txnStats.mu.data.Add(&stats.StatsData.Stats)
 
-	container = New(
-		nil, /* st */
-		nil, /* uniqueStmtFingerprintLimit */
-		nil, /* uniqueTxnFingerprintLimit */
-		nil, /* uniqueStmtFingerprintCount */
-		nil, /* uniqueTxnFingerprintCount */
-		nil, /* mon */
-		appName,
-		nil, /* knobs */
-		nil, /* insights */
-		nil, /* latencyInformation */
-	)
-
-	for i := range statistics {
-		if currentAppName := statistics[i].StatsData.App; currentAppName != appName {
-			return container, statistics[i:], nil
-		}
-		txnStats, _, throttled :=
-			container.getStatsForTxnWithKeyLocked(
-				statistics[i].StatsData.TransactionFingerprintID,
-				statistics[i].StatsData.StatementFingerprintIDs,
-				true /* createIfNonexistent */)
-		if throttled {
-			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
-		}
-		txnStats.mu.data.Add(&statistics[i].StatsData.Stats)
-	}
-
-	return container, nil /* remaining */, nil /* err */
+	return nil
 }
 
 // NewApplicationStatsWithInheritedOptions implements the

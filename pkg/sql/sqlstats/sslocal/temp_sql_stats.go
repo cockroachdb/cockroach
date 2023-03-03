@@ -66,23 +66,33 @@ func (t txnResponseList) Swap(i, j int) {
 func NewTempSQLStatsFromExistingStmtStats(
 	statistics []serverpb.StatementsResponse_CollectedStatementStatistics,
 ) (*SQLStats, error) {
-	sort.Sort(stmtResponseList(statistics))
-
 	var err error
 	s := &SQLStats{}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 
-	for len(statistics) > 0 {
-		appName := statistics[0].Key.KeyData.App
-		var container *ssmemstorage.Container
+	for i := range statistics {
+		appName := statistics[i].Key.KeyData.App
+		container, ok := s.mu.apps[appName]
+		if !ok {
+			container = ssmemstorage.New(
+				nil, /* st */
+				nil, /* uniqueStmtFingerprintLimit */
+				nil, /* uniqueTxnFingerprintLimit */
+				nil, /* uniqueStmtFingerprintCount */
+				nil, /* uniqueTxnFingerprintCount */
+				nil, /* mon */
+				appName,
+				nil, /* knobs */
+				nil, /* insights */
+				nil, /*latencyInformation */
+			)
+			s.mu.apps[appName] = container
+		}
 
-		container, statistics, err =
-			ssmemstorage.NewTempContainerFromExistingStmtStats(statistics)
-		if err != nil {
+		if err = container.InsertExistingStmtStats(statistics[i]); err != nil {
 			return nil, err
 		}
 
-		s.mu.apps[appName] = container
 	}
 
 	return s, nil
@@ -105,17 +115,29 @@ func NewTempSQLStatsFromExistingTxnStats(
 	s := &SQLStats{}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 
-	for len(statistics) > 0 {
-		appName := statistics[0].StatsData.App
-		var container *ssmemstorage.Container
+	for i := range statistics {
+		appName := statistics[i].StatsData.App
+		container, ok := s.mu.apps[appName]
+		if !ok {
+			container = ssmemstorage.New(
+				nil, /* st */
+				nil, /* uniqueStmtFingerprintLimit */
+				nil, /* uniqueTxnFingerprintLimit */
+				nil, /* uniqueStmtFingerprintCount */
+				nil, /* uniqueTxnFingerprintCount */
+				nil, /* mon */
+				appName,
+				nil, /* knobs */
+				nil, /* insights */
+				nil, /* latencyInformation */
+			)
+			s.mu.apps[appName] = container
+		}
 
-		container, statistics, err =
-			ssmemstorage.NewTempContainerFromExistingTxnStats(statistics)
-		if err != nil {
+		if err = container.InsertExistingTxnStats(statistics[i]); err != nil {
 			return nil, err
 		}
 
-		s.mu.apps[appName] = container
 	}
 
 	return s, nil
