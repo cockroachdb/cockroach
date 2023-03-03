@@ -5,20 +5,24 @@ CREATE VIEW redacted_descriptors AS
         jsonb_pretty(
             regexp_replace(
                 regexp_replace(
-                    (
-                        crdb_internal.pb_to_json(
-                            'desc',
-                            crdb_internal.redact_descriptor(
-                                descriptor
+                    regexp_replace(
+                        (
+                            crdb_internal.pb_to_json(
+                                'desc',
+                                crdb_internal.redact_descriptor(
+                                    descriptor
+                                )
                             )
-                        )
-                    )::STRING,
-                    '"createdAtNanos": "[0-9]+"',
-                    '"createdAtNanos": "0"',
-                    'g'
+                        )::STRING,
+                        '"createdAtNanos": "[0-9]+"',
+                        '"createdAtNanos": "0"',
+                        'g'
+                    ),
+                    '"wallTime": "[0-9]+"',
+                    '"wallTime": "0"'
                 ),
-                '"wallTime": "[0-9]+"',
-                '"wallTime": "0"'
+               '"logical": [0-9]+[,]*',
+               ''
             )::JSONB
         )
             AS descriptor
