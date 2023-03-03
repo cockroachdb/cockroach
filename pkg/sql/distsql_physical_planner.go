@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -4026,7 +4027,9 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound = 1
 				serialStreamErrorSpec.ExceedsInputIdxExclusiveUpperBoundError =
 					pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-						"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
+						"Query has no home region. Try using a lower LIMIT value or running the query from a different region. %s",
+						sqlerrors.EnforceHomeRegionFurtherInfo,
+					)
 			}
 			// With UNION ALL, we can end up with multiple streams on the same node.
 			// We don't want to have unnecessary routers and cross-node streams, so
