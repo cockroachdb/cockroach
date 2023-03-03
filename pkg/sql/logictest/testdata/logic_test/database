@@ -317,3 +317,28 @@ user testuser
 
 statement error permission denied to create database
 CREATE DATABASE d WITH OWNER testuser2
+
+user root
+
+# Fix for https://github.com/cockroachdb/cockroach/issues/97938.
+subtest if_not_exists_with_owner
+
+statement ok
+CREATE DATABASE IF NOT EXISTS ifnotexistsownerdb WITH OWNER testuser
+
+query TTTTT colnames
+SELECT * FROM [SHOW DATABASES] WHERE database_name = 'ifnotexistsownerdb'
+----
+database_name       owner     primary_region  regions  survival_goal
+ifnotexistsownerdb  testuser  NULL            {}       NULL
+
+statement ok
+CREATE DATABASE IF NOT EXISTS ifnotexistsownerdb WITH OWNER testuser
+
+query TTTTT colnames
+SELECT * FROM [SHOW DATABASES] WHERE database_name = 'ifnotexistsownerdb'
+----
+database_name       owner     primary_region  regions  survival_goal
+ifnotexistsownerdb  testuser  NULL            {}       NULL
+
+subtest end
