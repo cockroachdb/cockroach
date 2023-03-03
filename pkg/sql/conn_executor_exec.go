@@ -1433,9 +1433,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				// region" error occurred, but this time it didn't error out, report
 				// back the query's home region.
 				err = pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-					`%s. Try running the query from region '%s'.`,
+					`%s. Try running the query from region '%s'. %s`,
 					execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 					homeRegion,
+					sqlerrors.EnforceHomeRegionFurtherInfo,
 				)
 				res.SetError(err)
 				// We won't be faking the gateway region any more. Restore the original

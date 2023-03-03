@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1856,12 +1857,14 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	for _, scan := range b.builtScans {
 		if scan.Distribution.Any() {
 			return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-				"Query has no home region. Try accessing only tables defined in multi-region databases.")
+				"Query has no home region. Try accessing only tables defined in multi-region databases. %s",
+				sqlerrors.EnforceHomeRegionFurtherInfo)
 		}
 		if len(scan.Distribution.Regions) > 1 {
 			if scan.Table == opt.TableID(0) {
 				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					"Query has no home region. Try adding a LIMIT clause.")
+					"Query has no home region. Try adding a LIMIT clause. %s",
+					sqlerrors.EnforceHomeRegionFurtherInfo)
 			}
 			moreThanOneRegionScans = append(moreThanOneRegionScans, scan)
 		} else {
@@ -1884,7 +1887,8 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	}
 	if len(regionSet) > 2 {
 		return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-			"Query has no home region. Try adding a LIMIT clause.")
+			"Query has no home region. Try adding a LIMIT clause. %s",
+			sqlerrors.EnforceHomeRegionFurtherInfo)
 	}
 	for i, scan := range b.builtScans {
 		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
@@ -1907,16 +1911,18 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 		if queryHasHomeRegion {
 			if homeRegion != queryHomeRegion {
 				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					`Query has no home region. The home region ('%s') of operation on table '%s' does not match the home region ('%s') of operation on table '%s'.`,
+					`Query has no home region. The home region ('%s') of operation on table '%s' does not match the home region ('%s') of operation on table '%s'. %s`,
 					queryHomeRegion,
 					inputTableName,
 					homeRegion,
-					firstTable)
+					firstTable,
+					sqlerrors.EnforceHomeRegionFurtherInfo)
 			} else if gatewayRegion != homeRegion {
 				return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-					`%s. Try running the query from region '%s'.`,
+					`%s. Try running the query from region '%s'. %s`,
 					execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 					homeRegion,
+					sqlerrors.EnforceHomeRegionFurtherInfo,
 				)
 			}
 		} else {
@@ -1981,7 +1987,7 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 		if ok {
 			errCode = pgcode.QueryNotRunningInHomeRegion
 			errorStringBuilder.WriteString(execinfra.QueryNotRunningInHomeRegionMessagePrefix)
-			errorStringBuilder.WriteString(fmt.Sprintf(`. Try running the query from region '%s'.`, homeRegion))
+			errorStringBuilder.WriteString(fmt.Sprintf(`. Try running the query from region '%s'. %s`, homeRegion, sqlerrors.EnforceHomeRegionFurtherInfo))
 		} else if distribute.Input.Op() != opt.LookupJoinOp {
 			// More detailed error message handling for lookup join occurs in the
 			// execbuilder.
@@ -1990,7 +1996,8 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 			} else {
 				errCode = pgcode.QueryHasNoHomeRegion
 				errorStringBuilder.WriteString("Query has no home region.")
-				errorStringBuilder.WriteString(` Try adding a LIMIT clause.`)
+				errorStringBuilder.WriteString(` Try adding a LIMIT clause. `)
+				errorStringBuilder.WriteString(sqlerrors.EnforceHomeRegionFurtherInfo)
 			}
 		}
 		if err == nil {
@@ -2106,14 +2113,15 @@ func (b *Builder) filterSuggestionError(
 				plural = "s"
 			}
 			tableName := tableMeta.Alias.Table()
-			args := make([]interface{}, 0, 8)
+			args := make([]interface{}, 0, 9)
 			args = append(args, tableName)
 			args = append(args, crdbRegionColName)
 			args = append(args, plural)
 			args = append(args, b.indexColumnNames(tableMeta, index, 1))
-			if table2 == nil {
+			if table2 == nil || table2Meta.Alias.Table() == tableName {
+				args = append(args, sqlerrors.EnforceHomeRegionFurtherInfo)
 				err = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					"Query has no home region. Try adding a filter on %s.%s and/or on key column%s (%s).", args...)
+					"Query has no home region. Try adding a filter on %s.%s and/or on key column%s (%s). %s", args...)
 			} else if crdbRegionColName2, ok := table2.HomeRegionColName(); ok {
 				index = table2.Index(indexOrdinal2)
 				plural = ""
@@ -2125,8 +2133,9 @@ func (b *Builder) filterSuggestionError(
 				args = append(args, crdbRegionColName2)
 				args = append(args, plural)
 				args = append(args, b.indexColumnNames(table2Meta, index, 1))
+				args = append(args, sqlerrors.EnforceHomeRegionFurtherInfo)
 				err = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					"Query has no home region. Try adding a filter on %s.%s and/or on key column%s (%s). Try adding a filter on %s.%s and/or on key column%s (%s).", args...)
+					"Query has no home region. Try adding a filter on %s.%s and/or on key column%s (%s). Try adding a filter on %s.%s and/or on key column%s (%s). %s", args...)
 			}
 		}
 	}
@@ -2201,24 +2210,27 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 				if homeRegion != queryHomeRegion {
 					if inputTableName == "" {
 						return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-							`Query has no home region. The home region ('%s') of lookup table '%s' does not match the home region ('%s') of the other relation in the join.'`,
+							`Query has no home region. The home region ('%s') of lookup table '%s' does not match the home region ('%s') of the other relation in the join. %s'`,
 							homeRegion,
 							lookupTable.Name(),
 							queryHomeRegion,
+							sqlerrors.EnforceHomeRegionFurtherInfo,
 						)
 					}
 					return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-						`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+						`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'. %s`,
 						queryHomeRegion,
 						inputTableName,
 						homeRegion,
 						string(lookupTable.Name()),
+						sqlerrors.EnforceHomeRegionFurtherInfo,
 					)
 				} else if gatewayRegion != homeRegion {
 					return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-						`%s. Try running the query from region '%s'.`,
+						`%s. Try running the query from region '%s'. %s`,
 						execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 						homeRegion,
+						sqlerrors.EnforceHomeRegionFurtherInfo,
 					)
 				}
 			} else {
@@ -2433,24 +2445,27 @@ func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (er
 				if homeRegion != queryHomeRegion {
 					if inputTableName == "" {
 						return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-							`Query has no home region. The home region ('%s') of lookup table '%s' does not match the home region ('%s') of the other relation in the join.'`,
+							`Query has no home region. The home region ('%s') of lookup table '%s' does not match the home region ('%s') of the other relation in the join. %s`,
 							homeRegion,
 							lookupTable.Name(),
 							queryHomeRegion,
+							sqlerrors.EnforceHomeRegionFurtherInfo,
 						)
 					}
 					return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-						`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+						`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'. %s`,
 						queryHomeRegion,
 						inputTableName,
 						homeRegion,
 						string(lookupTable.Name()),
+						sqlerrors.EnforceHomeRegionFurtherInfo,
 					)
 				} else if gatewayRegion != homeRegion {
 					return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-						`%s. Try running the query from region '%s'.`,
+						`%s. Try running the query from region '%s'. %s`,
 						execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 						homeRegion,
+						sqlerrors.EnforceHomeRegionFurtherInfo,
 					)
 				}
 			} else {
