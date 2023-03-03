@@ -58,8 +58,8 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 		if n.DropBehavior == tree.DropCascade {
 			// Special case to handle dropped types which aren't supported in CASCADE.
 			var objectIDs, typeIDs catalog.DescriptorIDSet
-			scpb.ForEachObjectParent(b.BackReferences(schemaID), func(_ scpb.Status, _ scpb.TargetStatus, op *scpb.ObjectParent) {
-				objectIDs.Add(op.ObjectID)
+			scpb.ForEachSchemaChild(b.BackReferences(schemaID), func(_ scpb.Status, _ scpb.TargetStatus, op *scpb.SchemaChild) {
+				objectIDs.Add(op.ChildObjectID)
 			})
 			objectIDs.ForEach(func(id descpb.ID) {
 				elts := b.QueryByID(id)

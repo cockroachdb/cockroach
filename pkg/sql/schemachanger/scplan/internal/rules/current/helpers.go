@@ -277,7 +277,7 @@ func isData(e scpb.Element) bool {
 
 func isDescriptorParentReference(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.ObjectParent, *scpb.SchemaParent:
+	case *scpb.SchemaChild, *scpb.SchemaParent:
 		return true
 	}
 	return false

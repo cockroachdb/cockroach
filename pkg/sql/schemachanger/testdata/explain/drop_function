@@ -29,7 +29,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: admin}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: root}
  │         │    ├── PUBLIC → DROPPED Function:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 109, ReferencedDescID: 101}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109, ReferencedDescID: 101}
  │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109}
  │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109}
  │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109}
@@ -54,7 +54,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109, Name: admin}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109, Name: root}
  │    │    │    ├── DROPPED → PUBLIC Function:{DescID: 109}
- │    │    │    ├── ABSENT  → PUBLIC ObjectParent:{DescID: 109, ReferencedDescID: 101}
+ │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 109, ReferencedDescID: 101}
  │    │    │    ├── ABSENT  → PUBLIC FunctionName:{DescID: 109}
  │    │    │    ├── ABSENT  → PUBLIC FunctionVolatility:{DescID: 109}
  │    │    │    ├── ABSENT  → PUBLIC FunctionLeakProof:{DescID: 109}
@@ -68,7 +68,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: admin}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: root}
  │         │    ├── PUBLIC → DROPPED Function:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 109, ReferencedDescID: 101}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109, ReferencedDescID: 101}
  │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109}
  │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109}
  │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109}

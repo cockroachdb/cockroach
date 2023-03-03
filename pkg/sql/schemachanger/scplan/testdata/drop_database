@@ -48,13 +48,13 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -80,13 +80,13 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -113,7 +113,7 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -128,7 +128,7 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 112}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -146,7 +146,7 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -164,7 +164,7 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 114}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -184,20 +184,20 @@ StatementPhase stage 1 of 1 with 169 MutationType ops
     [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[EnumType:{DescID: 115}, ABSENT], PUBLIC] -> DROPPED
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC] -> ABSENT
-    [[ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 116}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 117}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 117}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 117, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -817,13 +817,13 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 110}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Table:{DescID: 110}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -849,13 +849,13 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
@@ -882,7 +882,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 111}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 111, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -897,7 +897,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 112}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 112, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 112, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -915,7 +915,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 113}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 113, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -933,7 +933,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 114}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 114, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -953,20 +953,20 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[EnumType:{DescID: 115}, ABSENT], DROPPED] -> PUBLIC
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], ABSENT] -> PUBLIC
-    [[ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 116}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 117}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 117}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 117, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 117, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -1014,13 +1014,13 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1049,13 +1049,13 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1085,7 +1085,7 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1100,7 +1100,7 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 112}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1118,7 +1118,7 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1136,7 +1136,7 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 114}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1156,20 +1156,20 @@ PreCommitPhase stage 2 of 2 with 257 MutationType ops
     [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[EnumType:{DescID: 115}, ABSENT], PUBLIC] -> DROPPED
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC] -> ABSENT
-    [[ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 116}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 117}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 117}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 117, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -2209,13 +2209,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
-  to:   [ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [Owner:{DescID: 116}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
+  to:   [SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [UserPrivileges:{DescID: 116, Name: admin}, ABSENT]
   kind: Precedence
@@ -3273,13 +3273,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
-  to:   [ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [EnumType:{DescID: 115}, DROPPED]
   to:   [Owner:{DescID: 115}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [EnumType:{DescID: 115}, DROPPED]
+  to:   [SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [UserPrivileges:{DescID: 115, Name: admin}, ABSENT]
   kind: Precedence
@@ -3437,94 +3437,6 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT]
-  to:   [View:{DescID: 117}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT]
-  to:   [Schema:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT]
-  to:   [Sequence:{DescID: 107}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT]
-  to:   [Sequence:{DescID: 108}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT]
-  to:   [Table:{DescID: 109}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT]
-  to:   [Schema:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT]
-  to:   [Table:{DescID: 110}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT]
-  to:   [View:{DescID: 112}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT]
-  to:   [View:{DescID: 113}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT]
-  to:   [View:{DescID: 114}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT]
-  to:   [EnumType:{DescID: 115}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT]
-  to:   [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT]
   to:   [View:{DescID: 117}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -3688,6 +3600,94 @@ DROP DATABASE db1 CASCADE
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT]
+  to:   [Schema:{DescID: 105}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT]
+  to:   [Sequence:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT]
+  to:   [Sequence:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 109, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 109, ReferencedDescID: 106}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT]
+  to:   [Schema:{DescID: 105}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT]
+  to:   [Table:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 111, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 111, ReferencedDescID: 106}, ABSENT]
+  to:   [View:{DescID: 111}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 112, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 112, ReferencedDescID: 106}, ABSENT]
+  to:   [View:{DescID: 112}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 113, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 113, ReferencedDescID: 106}, ABSENT]
+  to:   [View:{DescID: 113}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 114, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 114, ReferencedDescID: 106}, ABSENT]
+  to:   [View:{DescID: 114}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT]
+  to:   [EnumType:{DescID: 115}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT]
+  to:   [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 117, ReferencedDescID: 106}, ABSENT]
+  to:   [Schema:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 117, ReferencedDescID: 106}, ABSENT]
+  to:   [View:{DescID: 117}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT]
   to:   [Schema:{DescID: 106}, ABSENT]
   kind: Precedence
@@ -3721,13 +3721,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 107}, DROPPED]
-  to:   [ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [Sequence:{DescID: 107}, DROPPED]
   to:   [Owner:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 107}, DROPPED]
+  to:   [SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [Sequence:{DescID: 107}, ABSENT]
   kind: PreviousStagePrecedence
@@ -3753,13 +3753,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 108}, DROPPED]
-  to:   [ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [Sequence:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 108}, DROPPED]
+  to:   [SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [Sequence:{DescID: 108}, ABSENT]
   kind: PreviousStagePrecedence
@@ -3869,10 +3869,6 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [Table:{DescID: 109}, DROPPED]
   to:   [Owner:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -3880,6 +3876,10 @@ DROP DATABASE db1 CASCADE
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   kind: Precedence
   rule: relation dropped before dependent index
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [SchemaChild:{DescID: 109, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: PreviousStagePrecedence
@@ -3993,10 +3993,6 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
-  to:   [ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [Table:{DescID: 110}, DROPPED]
   to:   [Owner:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -4004,6 +4000,10 @@ DROP DATABASE db1 CASCADE
   to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   kind: Precedence
   rule: relation dropped before dependent index
+- from: [Table:{DescID: 110}, DROPPED]
+  to:   [SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [Table:{DescID: 110}, ABSENT]
   kind: PreviousStagePrecedence
@@ -4197,13 +4197,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
-  to:   [ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 111}, DROPPED]
   to:   [Owner:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [SchemaChild:{DescID: 111, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 111}, DROPPED]
   to:   [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
   kind: Precedence
@@ -4269,13 +4269,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
-  to:   [ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 112}, DROPPED]
   to:   [Owner:{DescID: 112}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 112}, DROPPED]
+  to:   [SchemaChild:{DescID: 112, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 112}, DROPPED]
   to:   [UserPrivileges:{DescID: 112, Name: admin}, ABSENT]
   kind: Precedence
@@ -4341,13 +4341,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
-  to:   [ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 113}, DROPPED]
   to:   [Owner:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 113}, DROPPED]
+  to:   [SchemaChild:{DescID: 113, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 113}, DROPPED]
   to:   [UserPrivileges:{DescID: 113, Name: admin}, ABSENT]
   kind: Precedence
@@ -4413,13 +4413,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
-  to:   [ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 114}, DROPPED]
   to:   [Owner:{DescID: 114}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 114}, DROPPED]
+  to:   [SchemaChild:{DescID: 114, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 114}, DROPPED]
   to:   [UserPrivileges:{DescID: 114, Name: admin}, ABSENT]
   kind: Precedence
@@ -4497,13 +4497,13 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
-  to:   [ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 117}, DROPPED]
   to:   [Owner:{DescID: 117}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 117}, DROPPED]
+  to:   [SchemaChild:{DescID: 117, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 117}, DROPPED]
   to:   [UserPrivileges:{DescID: 117, Name: admin}, ABSENT]
   kind: Precedence

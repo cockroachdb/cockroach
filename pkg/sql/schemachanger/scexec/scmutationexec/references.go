@@ -493,12 +493,12 @@ func updateBackReferencesInRelation(
 }
 
 func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObjectParentID) error {
-	sc, err := i.checkOutSchema(ctx, op.ObjParent.ParentSchemaID)
+	sc, err := i.checkOutSchema(ctx, op.ObjParent.SchemaID)
 	if err != nil {
 		return err
 	}
 
-	obj, err := i.checkOutDescriptor(ctx, op.ObjParent.ObjectID)
+	obj, err := i.checkOutDescriptor(ctx, op.ObjParent.ChildObjectID)
 	if err != nil {
 		return err
 	}

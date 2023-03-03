@@ -43,8 +43,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
-- [[ObjectParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 106, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 106, schemaId: 104}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 106}
 - [[Namespace:{DescID: 107, Name: t1, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -57,8 +57,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 107}, ABSENT], PUBLIC]
   {tableId: 107}
-- [[ObjectParent:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 107, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 107, schemaId: 104}
 - [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], PUBLIC]
   {comment: t1 is good, tableId: 107}
 - [[ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
@@ -125,8 +125,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 107}], usesRelationIds: [107], viewId: 108}
-- [[ObjectParent:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 108, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 108, schemaId: 104}
 - [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 108}
 - [[ColumnName:{DescID: 108, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
@@ -155,8 +155,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 109}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 108}], usesRelationIds: [108], viewId: 109}
-- [[ObjectParent:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 109, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 109, schemaId: 104}
 - [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
@@ -191,8 +191,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 108}, {columnIds: [1, 2], toId: 109}], usesRelationIds: [108, 109], viewId: 110}
-- [[ObjectParent:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 110, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 110, schemaId: 104}
 - [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
@@ -227,8 +227,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 109}], usesRelationIds: [109], viewId: 111}
-- [[ObjectParent:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 111, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 111, schemaId: 104}
 - [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
@@ -267,8 +267,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {arrayTypeId: 113, typeId: 112}
 - [[EnumTypeValue:{DescID: 112, Name: a}, ABSENT], PUBLIC]
   {logicalRepresentation: a, physicalRepresentation: gA==, typeId: 112}
-- [[ObjectParent:{DescID: 112, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 112, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 112, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 112, schemaId: 104}
 - [[Namespace:{DescID: 113, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 113, name: _typ, schemaId: 104}
 - [[Owner:{DescID: 113}, ABSENT], PUBLIC]
@@ -281,8 +281,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 113, ReferencedTypeIDs: [112 113]}, ABSENT], PUBLIC]
   {closedTypeIds: [112, 113], type: {arrayContents: {family: EnumFamily, oid: 100112, udtMetadata: {arrayTypeOid: 100113}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100113}, typeId: 113}
-- [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 113, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 113, schemaId: 104}
 - [[Namespace:{DescID: 114, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 114, name: v5, schemaId: 104}
 - [[Owner:{DescID: 114}, ABSENT], PUBLIC]
@@ -293,8 +293,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 114, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 111}], usesRelationIds: [111], usesTypeIds: [112, 113], viewId: 114}
-- [[ObjectParent:{DescID: 114, ReferencedDescID: 104}, ABSENT], PUBLIC]
-  {objectId: 114, parentSchemaId: 104}
+- [[SchemaChild:{DescID: 114, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {childObjectId: 114, schemaId: 104}
 - [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 114}
 - [[ColumnName:{DescID: 114, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
@@ -335,8 +335,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 115, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 115}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 111}], usesRelationIds: [111], usesTypeIds: [112, 113], viewId: 115}
-- [[ObjectParent:{DescID: 115, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  {objectId: 115, parentSchemaId: 105}
+- [[SchemaChild:{DescID: 115, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {childObjectId: 115, schemaId: 105}
 - [[Column:{DescID: 115, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, pgAttributeNum: 1, tableId: 115}
 - [[ColumnName:{DescID: 115, Name: k, ColumnID: 1}, ABSENT], PUBLIC]

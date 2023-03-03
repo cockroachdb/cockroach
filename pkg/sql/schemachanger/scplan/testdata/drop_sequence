@@ -12,7 +12,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
@@ -41,7 +41,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -52,7 +52,7 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
@@ -123,7 +123,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -170,7 +170,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> PUBLIC
-    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], ABSENT] -> PUBLIC
   ops:
@@ -183,7 +183,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -281,11 +281,11 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+- from: [Owner:{DescID: 104}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 104}, ABSENT]
+- from: [SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -306,13 +306,13 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]
-  to:   [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Owner:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 104}, DROPPED]
+  to:   [SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: PreviousStagePrecedence

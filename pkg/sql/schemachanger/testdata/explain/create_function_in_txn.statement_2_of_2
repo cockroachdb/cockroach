@@ -36,7 +36,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: admin}
  │    │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: root}
  │    │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID: 105}
- │    │    │    ├── PUBLIC           → ABSENT ObjectParent:{DescID: 105, ReferencedDescID: 101}
+ │    │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
  │    │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID: 105}
  │    │    │    ├── PUBLIC           → ABSENT FunctionBody:{DescID: 105}
  │    │    │    ├── BACKFILL_ONLY    → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -56,7 +56,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105, Name: admin}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105, Name: root}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID: 105}
- │         │    ├── ABSENT → PUBLIC           ObjectParent:{DescID: 105, ReferencedDescID: 101}
+ │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 105, ReferencedDescID: 101}
  │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID: 105}
  │         │    ├── ABSENT → PUBLIC           FunctionBody:{DescID: 105}
  │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -86,7 +86,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
- │              ├── SetObjectParentID {"ObjParent":{"ObjectID":105,"ParentSchemaID":101}}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
