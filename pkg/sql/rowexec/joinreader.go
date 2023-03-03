@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1021,7 +1022,8 @@ func (jr *joinReader) readInput() (
 }
 
 var noHomeRegionError = execinfra.NewDynamicQueryHasNoHomeRegionError(pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-	"Query has no home region. Try using a lower LIMIT value or running the query from a different region."))
+	"Query has no home region. Try using a lower LIMIT value or running the query from a different region. %s",
+	sqlerrors.EnforceHomeRegionFurtherInfo))
 
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
