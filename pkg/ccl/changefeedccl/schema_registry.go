@@ -185,8 +185,13 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	}
 
 	var id int32
-	err := r.doWithRetry(ctx, func() error {
-		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, &buf)
+	err := r.doWithRetry(ctx, func() (e error) {
+		defer func() {
+			if e != nil && log.V(1) {
+				log.Infof(ctx, "retryable error when registering schema %s %s", e, schema)
+			}
+		}()
+		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, bytes.NewReader(buf.Bytes()))
 		if err != nil {
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}
@@ -211,15 +216,7 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() error) error {
 	// Since network services are often a source of flakes, add a few retries here
 	// before we give up and return an error that will bubble up and tear down the
-	// entire changefeed, though that error is marked as retryable so that the job
-	// itself can attempt to start the changefeed again. TODO(dt): If the registry
-	// is down or constantly returning errors, we can't make progress. Continuing
-	// to indicate that we're "running" in this case can be misleading, as we
-	// really aren't anymore. Right now the MO in CDC is try and try again
-	// forever, so doing so here is consistent with the behavior elsewhere, but we
-	// should revisit this more broadly as this pattern can easily mask real,
-	// actionable issues in the operator's environment that which they might be
-	// able to resolve if we made them visible in a failure instead.
+	// entire changefeed.
 	var err error
 	for retrier := retry.StartWithCtx(ctx, r.retryOpts); retrier.Next(); {
 		err = fn()
@@ -228,7 +225,7 @@ func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() err
 		}
 		log.VInfof(ctx, 2, "retrying schema registry operation: %s", err.Error())
 	}
-	return changefeedbase.MarkRetryableError(err)
+	return changefeedbase.WithTerminalError(err)
 }
 
 func gracefulClose(ctx context.Context, toClose io.ReadCloser) {
