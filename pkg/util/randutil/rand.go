@@ -129,7 +129,18 @@ func RandDuration(r *rand.Rand, max time.Duration) time.Duration {
 	return time.Duration(r.Int63n(int64(max)))
 }
 
-var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+const (
+	// MixedCaseAlphabet defines the alphabet of mixed-case letters for use when
+	// generating random bytes.
+	MixedCaseAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	// LowercaseAlphabet defines the alphabet of lowercase letters for use when
+	// generating random bytes.
+	LowercaseAlphabet = "abcdefghijklmnopqrstuvwxyz"
+	// PrintableKeyAlphabet to use with random string generation to produce strings
+	// that doesn't need to be escaped when found as a part of a key and is
+	// generally human printable.
+	PrintableKeyAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+)
 
 // RandBytes returns a byte slice of the given length with random
 // data.
@@ -137,12 +148,24 @@ func RandBytes(r *rand.Rand, size int) []byte {
 	if size <= 0 {
 		return nil
 	}
-
 	arr := make([]byte, size)
-	for i := 0; i < len(arr); i++ {
-		arr[i] = randLetters[r.Intn(len(randLetters))]
-	}
+	FillRandBytes(r, arr, MixedCaseAlphabet)
 	return arr
+}
+
+// FillRandBytes fills a bytes slice with random data.
+func FillRandBytes(r *rand.Rand, b []byte, alphabet string) {
+	for i := 0; i < len(b); i++ {
+		b[i] = alphabet[r.Intn(len(alphabet))]
+	}
+}
+
+// RandBytesInRange returns a byte slice with length [minSize,maxSize) with
+// random characters pulled from alphabet.
+func RandBytesInRange(r *rand.Rand, alphabet string, minSize, maxSize int) []byte {
+	b := make([]byte, RandIntInRange(r, minSize, maxSize))
+	FillRandBytes(r, b, alphabet)
+	return b
 }
 
 // FastUint32 returns a lock free uint32 value. Compared to rand.Uint32, this
@@ -173,11 +196,6 @@ func ReadTestdataBytes(r *rand.Rand, arr []byte) {
 		}
 	}
 }
-
-// PrintableKeyAlphabet to use with random string generation to produce strings
-// that doesn't need to be escaped when found as a part of a key and is
-// generally human printable.
-const PrintableKeyAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // RandString generates a random string of the desired length from the
 // input alphabet. It is useful when you want to generate keys that would
