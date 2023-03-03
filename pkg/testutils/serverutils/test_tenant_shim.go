@@ -107,6 +107,10 @@ type TestTenantInterface interface {
 	// this tenant.
 	ClusterSettings() *cluster.Settings
 
+	// SettingsWatcher returns the *settingswatcher.SettingsWatcher used by the
+	// tenant server.
+	SettingsWatcher() interface{}
+
 	// Stopper returns the stopper used by the tenant.
 	Stopper() *stop.Stopper
 
