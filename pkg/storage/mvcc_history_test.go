@@ -635,7 +635,7 @@ func TestMVCCHistories(t *testing.T) {
 						require.NoError(t, err)
 						msFinal.Add(ms)
 					}
-					buf.Printf("stats: %s\n", ms.Formatted(false /* delta */))
+					buf.Printf("stats: %s\n", msFinal.Formatted(false /* delta */))
 				}
 
 				signalError := e.t.Errorf
