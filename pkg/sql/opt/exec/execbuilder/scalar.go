@@ -949,8 +949,15 @@ func (b *Builder) buildRoutinePlanGenerator(
 			// Copy the expression into a new memo. Replace parameter references
 			// with argument datums.
 			addedWithBindings := false
+			isRoot := true
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
+				isRootLocal := isRoot
+				if isRoot {
+					// Set isRoot to false for all recursive calls after the
+					// first invocation of replaceFn.
+					isRoot = false
+				}
 				switch t := e.(type) {
 				case *memo.VariableExpr:
 					if ord, ok := argOrd(t.Col); ok {
@@ -983,12 +990,12 @@ func (b *Builder) buildRoutinePlanGenerator(
 				}
 
 				replaced := f.CopyAndReplaceDefault(e, replaceFn)
-				if wrapRootExpr != nil && e == stmt.RelExpr {
+				if wrapRootExpr != nil && isRootLocal {
 					replaced = wrapRootExpr(f, replaced.(memo.RelExpr))
 				}
 				return replaced
 			}
-			f.CopyAndReplace(stmt, stmt.PhysProps, replaceFn)
+			f.CopyAndReplace(stmt.RelExpr, stmt.PhysProps, replaceFn)
 
 			// Optimize the memo.
 			optimizedExpr, err := o.Optimize()
