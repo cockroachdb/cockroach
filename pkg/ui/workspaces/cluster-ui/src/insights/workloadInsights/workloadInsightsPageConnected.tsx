@@ -56,8 +56,8 @@ const transactionMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
-  isDataValid: state.adminUI.txnInsights?.valid,
-  lastUpdated: state.adminUI.txnInsights.lastUpdated,
+  isDataValid: state.adminUI?.txnInsights?.valid,
+  lastUpdated: state.adminUI?.txnInsights.lastUpdated,
   transactions: selectTransactionInsights(state),
   transactionsError: selectTransactionInsightsError(state),
   insightTypes: selectInsightTypes(),

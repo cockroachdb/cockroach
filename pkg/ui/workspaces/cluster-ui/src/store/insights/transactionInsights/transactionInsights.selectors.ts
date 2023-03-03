@@ -16,14 +16,14 @@ import { selectTransactionFingerprintID } from "src/selectors/common";
 import { FixFingerprintHexValue } from "../../../util";
 
 export const selectTransactionInsights = (state: AppState): TxnInsightEvent[] =>
-  state.adminUI.txnInsights?.data?.results;
+  state.adminUI?.txnInsights?.data?.results;
 
 export const selectTransactionInsightsError = (state: AppState): Error | null =>
-  state.adminUI.txnInsights?.lastError;
+  state.adminUI?.txnInsights?.lastError;
 
 export const selectTransactionInsightsMaxApiReached = (
   state: AppState,
-): boolean => state.adminUI.stmtInsights?.data?.maxSizeReached;
+): boolean => state.adminUI?.stmtInsights?.data?.maxSizeReached;
 
 export const selectTxnInsightsByFingerprint = createSelector(
   selectTransactionInsights,
@@ -50,5 +50,5 @@ export const selectFilters = createSelector(
 // Show the data as 'Loading' when the request is in flight AND the
 // data is invalid or null.
 export const selectTransactionInsightsLoading = (state: AppState): boolean =>
-  state.adminUI.txnInsights?.inFlight &&
-  (!state.adminUI.txnInsights?.valid || !state.adminUI.txnInsights?.data);
+  state.adminUI?.txnInsights?.inFlight &&
+  (!state.adminUI?.txnInsights?.valid || !state.adminUI?.txnInsights?.data);
