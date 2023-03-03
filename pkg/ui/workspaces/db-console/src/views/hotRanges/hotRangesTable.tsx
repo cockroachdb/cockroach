@@ -110,7 +110,7 @@ const HotRangesTable = ({
         cell: val => (
           <>
             {val.replica_node_ids.map((nodeId, idx, arr) => (
-              <Link to={`/node/${nodeId}`}>
+              <Link to={`/node/${nodeId}`} key={nodeId}>
                 {nodeId}
                 {idx < arr.length - 1 && ", "}
               </Link>
