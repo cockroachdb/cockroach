@@ -1236,7 +1236,7 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 		evalCtxVal := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 		evalCtx = &evalCtxVal
 	}
-	if ts.js.HistogramColumnType == "" || ts.js.HistogramBuckets == nil {
+	if ts.js.HistogramColumnType == "" || len(ts.js.HistogramBuckets) == 0 {
 		return nil
 	}
 	colTypeRef, err := parser.GetTypeFromValidSQLSyntax(ts.js.HistogramColumnType)
@@ -1245,38 +1245,59 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	}
 	colType := tree.MustBeStaticallyKnownType(colTypeRef)
 
-	var offset int
-	if ts.js.NullCount > 0 {
-		// A bucket for NULL is not persisted, but we create a fake one to
-		// make histograms easier to work with. The length of histogram
-		// is therefore 1 greater than the length of ts.js.HistogramBuckets.
-		// NOTE: This matches the logic in the TableStatisticsCache.
-		ts.histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets)+1)
-		ts.histogram[0] = cat.HistogramBucket{
-			NumEq:         float64(ts.js.NullCount),
-			NumRange:      0,
-			DistinctRange: 0,
-			UpperBound:    tree.DNull,
-		}
-		offset = 1
-	} else {
-		ts.histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
-		offset = 0
-	}
+	// We create two psuedo buckets for values between NULL and the minimum
+	// value in the collected histogram, and values between the maximum value in
+	// the histogram and infinity.
+	ts.histogram = make([]cat.HistogramBucket, 0, len(ts.js.HistogramBuckets)+2)
 
-	for i := offset; i < len(ts.histogram); i++ {
-		bucket := &ts.js.HistogramBuckets[i-offset]
+	lastBucketIdx := len(ts.js.HistogramBuckets) - 1
+	lastBucketNumRange := float64(ts.js.HistogramBuckets[lastBucketIdx].NumRange)
+	lastBucketDistinctRange := float64(ts.js.HistogramBuckets[lastBucketIdx].DistinctRange)
+
+	// A bucket for NULL is not persisted, but we create a fake one to
+	// make histograms easier to work with. The length of histogram
+	// is therefore 1 greater than the length of ts.js.HistogramBuckets.
+	// NOTE: This matches the logic in the TableStatisticsCache.
+	ts.histogram = append(ts.histogram, cat.HistogramBucket{
+		NumEq:         float64(ts.js.NullCount),
+		NumRange:      0,
+		DistinctRange: 0,
+		UpperBound:    tree.DNull,
+	})
+
+	for i := range ts.js.HistogramBuckets {
+		bucket := &ts.js.HistogramBuckets[i]
 		datum, err := rowenc.ParseDatumStringAs(context.Background(), colType, bucket.UpperBound, evalCtx)
 		if err != nil {
 			panic(err)
 		}
-		ts.histogram[i] = cat.HistogramBucket{
-			NumEq:         float64(bucket.NumEq),
-			NumRange:      float64(bucket.NumRange),
-			DistinctRange: bucket.DistinctRange,
-			UpperBound:    datum,
+
+		numRange := float64(bucket.NumRange)
+		distinctRange := bucket.DistinctRange
+
+		// Synthesize values in the range between NULL and the minimum collected
+		// value.
+		if i == 0 && numRange == 0 {
+			numRange = lastBucketNumRange
+			distinctRange = lastBucketDistinctRange
 		}
+
+		ts.histogram = append(ts.histogram, cat.HistogramBucket{
+			NumEq:         float64(bucket.NumEq),
+			NumRange:      numRange,
+			DistinctRange: distinctRange,
+			UpperBound:    datum,
+		})
 	}
+
+	// Synthesize a bucket for all values between the maximum collected value
+	// and infinity.
+	// NOTE: This matches the logic in the TableStatisticsCache.
+	ts.histogram = append(ts.histogram, cat.HistogramBucket{
+		NumRange:      lastBucketNumRange,
+		DistinctRange: lastBucketDistinctRange,
+		UpperBound:    tree.DInf,
+	})
 	return ts.histogram
 }
 

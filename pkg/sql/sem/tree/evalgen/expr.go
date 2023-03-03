@@ -29,7 +29,7 @@ func generateExprEval(fileName string, files []*ast.File) (err error) {
 			},
 			"isPtr": func(name string) bool {
 				switch name {
-				case "dNull", "UnqualifiedStar":
+				case "dNull", "UnqualifiedStar", "dInf":
 					return false
 				default:
 					return true
@@ -44,7 +44,7 @@ func generateExprEval(fileName string, files []*ast.File) (err error) {
 	})
 }
 
-var isDatumRE = regexp.MustCompile("^D[A-Z]|^dNull$")
+var isDatumRE = regexp.MustCompile("^D[A-Z]|^dNull|^dInf$")
 
 const visitorTemplate = header +
 	`

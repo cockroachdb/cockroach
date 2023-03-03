@@ -66,6 +66,12 @@ var (
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
 
+	// DInf represents a generic maximum value for any type. In theory, it is
+	// similar to DNull, but it is a maximum, not a minimum. It should never be
+	// used in an expression, and it cannot be created by a user. It is
+	// currently only during query optimization.
+	DInf Datum = dInf{}
+
 	// DZero is the zero-valued integer Datum.
 	DZero = NewDInt(0)
 
@@ -443,6 +449,10 @@ func (d *DBool) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DBool)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -616,6 +626,10 @@ func (d *DBitArray) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DBitArray)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -743,6 +757,10 @@ func (d *DInt) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	thisInt := *d
 	var v DInt
@@ -882,6 +900,10 @@ func (d *DFloat) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	var v DFloat
 	switch t := ctx.UnwrapDatum(other).(type) {
@@ -1094,6 +1116,10 @@ func (d *DDecimal) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	var v apd.Decimal
 	switch t := ctx.UnwrapDatum(other).(type) {
 	case *DDecimal:
@@ -1272,6 +1298,10 @@ func (d *DString) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DString)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -1427,6 +1457,10 @@ func (d *DCollatedString) CompareError(ctx CompareContext, other Datum) (int, er
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DCollatedString)
 	if !ok || !d.ResolvedType().Equivalent(other.ResolvedType()) {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -1523,6 +1557,10 @@ func (d *DBytes) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DBytes)
 	if !ok {
@@ -1730,6 +1768,10 @@ func (d *DUuid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DUuid)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -1862,6 +1904,10 @@ func (d *DIPAddr) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DIPAddr)
 	if !ok {
@@ -2165,6 +2211,10 @@ func (d *DDate) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	var v DDate
 	switch t := ctx.UnwrapDatum(other).(type) {
 	case *DDate:
@@ -2321,6 +2371,10 @@ func (d *DTime) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	return compareTimestamps(ctx, d, other)
 }
 
@@ -2459,6 +2513,10 @@ func (d *DTimeTZ) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	return compareTimestamps(ctx, d, other)
 }
@@ -2794,6 +2852,10 @@ func (d *DTimestamp) CompareError(ctx CompareContext, other Datum) (int, error) 
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	return compareTimestamps(ctx, d, other)
 }
 
@@ -2972,6 +3034,10 @@ func (d *DTimestampTZ) CompareError(ctx CompareContext, other Datum) (int, error
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	return compareTimestamps(ctx, d, other)
 }
@@ -3163,6 +3229,10 @@ func (d *DInterval) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DInterval)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -3301,6 +3371,10 @@ func (d *DGeography) CompareError(ctx CompareContext, other Datum) (int, error) 
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DGeography)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -3423,6 +3497,10 @@ func (d *DGeometry) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DGeometry)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -3544,6 +3622,10 @@ func (d *DBox2D) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DBox2D)
 	if !ok {
@@ -3775,6 +3857,10 @@ func (d *DJSON) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	v, ok := ctx.UnwrapDatum(other).(*DJSON)
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -3882,6 +3968,10 @@ func (d *DTSQuery) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DTSQuery)
 	if !ok {
@@ -4013,6 +4103,10 @@ func (d *DTSVector) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DTSVector)
 	if !ok {
@@ -4193,6 +4287,10 @@ func (d *DTuple) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DTuple)
 	if !ok {
@@ -4513,6 +4611,10 @@ func (d dNull) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		return 0, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	return -1, nil
 }
 
@@ -4561,6 +4663,72 @@ func (dNull) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d dNull) Size() uintptr {
+	return unsafe.Sizeof(d)
+}
+
+type dInf struct{}
+
+// ResolvedType implements the TypedExpr interface.
+func (dInf) ResolvedType() *types.T {
+	return types.Any
+}
+
+// Compare implements the Datum interface.
+func (d dInf) Compare(ctx CompareContext, other Datum) int {
+	return 1
+}
+
+// CompareError implements the Datum interface.
+func (d dInf) CompareError(ctx CompareContext, other Datum) (int, error) {
+	// DInf is greater than any value, except itself.
+	if other == DInf {
+		return 0, nil
+	}
+	return 1, nil
+}
+
+// Prev implements the Datum interface.
+func (d dInf) Prev(ctx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d dInf) Next(ctx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (dInf) IsMax(ctx CompareContext) bool {
+	return true
+}
+
+// IsMin implements the Datum interface.
+func (dInf) IsMin(ctx CompareContext) bool {
+	// TODO: Should this be false?
+	return true
+}
+
+// Max implements the Datum interface.
+func (dInf) Max(ctx CompareContext) (Datum, bool) {
+	return nil, true
+}
+
+// Min implements the Datum interface.
+func (dInf) Min(ctx CompareContext) (Datum, bool) {
+	// TODO: represent a negative infinity
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (dInf) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (dInf) Format(ctx *FmtCtx) {
+	panic(errors.AssertionFailedf("shold not be called"))
+}
+
+// Size implements the Datum interface.
+func (d dInf) Size() uintptr {
 	return unsafe.Sizeof(d)
 }
 
@@ -4672,6 +4840,10 @@ func (d *DArray) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DArray)
 	if !ok {
@@ -4860,6 +5032,10 @@ func (d *DVoid) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 
 	_, ok := ctx.UnwrapDatum(other).(*DVoid)
@@ -5064,6 +5240,10 @@ func (d *DEnum) Compare(ctx CompareContext, other Datum) int {
 func (d *DEnum) CompareError(ctx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DEnum)
 	if !ok {
@@ -5308,6 +5488,10 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
+	}
 	var v oid.Oid
 	switch t := ctx.UnwrapDatum(other).(type) {
 	case *DOid:
@@ -5478,6 +5662,10 @@ func (d *DOidWrapper) CompareError(ctx CompareContext, other Datum) (int, error)
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
+	}
+	if other == DInf {
+		// DInf is greater than any value.
+		return -1, nil
 	}
 	if v, ok := other.(*DOidWrapper); ok {
 		return d.Wrapped.CompareError(ctx, v.Wrapped)
