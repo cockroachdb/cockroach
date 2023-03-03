@@ -18,7 +18,6 @@ source $root/build/teamcity/util/roachtest_util.sh
 build/teamcity-roachtest-invoke.sh \
   tag:aws-weekly \
   --cloud="${CLOUD}" \
-  --build-tag="${BUILD_TAG}" \
   --cluster-id "${TC_BUILD_ID}" \
   --cockroach "$PWD/bin/cockroach" \
   --artifacts=/artifacts \

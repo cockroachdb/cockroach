@@ -760,7 +760,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 	// Walk through the fully normalized memo to determine index candidates and
 	// create hypothetical tables.
 	indexCandidates := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
-	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
+	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(opc.catalog, indexCandidates)
 
 	// Optimize with the saved memo and hypothetical tables. Walk through the
 	// optimal plan to determine index recommendations.
@@ -775,7 +775,10 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 		return err
 	}
 
-	opc.p.instrumentation.indexRecs = indexrec.FindRecs(f.Memo().RootExpr(), f.Metadata())
+	opc.p.instrumentation.indexRecs, err = indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
+	if err != nil {
+		return err
+	}
 
 	// Re-initialize the optimizer (which also re-initializes the factory) and
 	// update the saved memo's metadata with the original table information.

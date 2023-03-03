@@ -24,7 +24,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_covers(geom1, 'POINT(0 0 0 0)')
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -124,7 +124,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_covers('LINESTRING ( 0 0, 0 2 )'::geometry, geom2)
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom2);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom2);
 --
 optimal plan:
 select
@@ -268,7 +268,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_contains(geom2, 'LINESTRING ( 0 0, 0 2 )'::geometry)
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom2);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom2);
 --
 optimal plan:
 select
@@ -428,7 +428,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_equals(geom1, 'LINESTRING ( 0 0, 0 2 )'::geometry)
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -528,7 +528,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_intersects(geom1, 'POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry)
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -673,7 +673,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_dwithinexclusive('SRID=4326;POINT(-42.89456 75.938299)'::geography, geog2, 10, true)
 ----
-creation: CREATE INVERTED INDEX ON t2 (geog2);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geog2);
 --
 optimal plan:
 select
@@ -802,7 +802,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE bbox1 ~ geom1
 ----
-creation: CREATE INDEX ON t2 (bbox1) STORING (k, i, s, geom1, geog1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (bbox1) STORING (k, i, s, geom1, geog1, bbox2, geom2, geog2, inet1);
 --
 optimal plan:
 select
@@ -831,7 +831,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE bbox1 && bbox2 AND 'BOX(1 2, 3 4)'::box2d ~ geom1
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -1029,7 +1029,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND st_overlaps('POINT(0 0 0 0)', geom2)
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -1133,7 +1133,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND k = 2
 ----
-creation: CREATE INVERTED INDEX ON t2 (k, geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (k, geom1);
 --
 optimal plan:
 select
@@ -1237,7 +1237,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND k > 2
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -1346,8 +1346,8 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND k = 2 AND i = 3
 ----
-creation: CREATE INDEX ON t2 (k) STORING (i, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
-creation: CREATE INDEX ON t2 (i) STORING (k, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (k) STORING (i, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (i) STORING (k, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
 --
 optimal plan:
 inner-join (zigzag t2@_hyp_1 t2@_hyp_2)
@@ -1376,7 +1376,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND k > 2 AND i > 3
 ----
-creation: CREATE INVERTED INDEX ON t2 (geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (geom1);
 --
 optimal plan:
 select
@@ -1569,7 +1569,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE geom1 && 'BOX(1 2, 3 4)'::box2d AND k = 2
 ----
-creation: CREATE INVERTED INDEX ON t2 (k, geom1);
+creation: CREATE INVERTED INDEX ON t.public.t2 (k, geom1);
 --
 optimal plan:
 select
@@ -1677,7 +1677,7 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE bbox1 ~ bbox2 AND 'BOX(1 2, 3 4)'::box2d && geom2 AND k > 2
 ----
-creation: CREATE INDEX ON t2 (k) STORING (i, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (k) STORING (i, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
 --
 optimal plan:
 select
@@ -1734,7 +1734,7 @@ t2:
 index-recommendations
 SELECT * FROM t1, t2 WHERE t1.s ~ t2.s AND ~t1.k = t1.k
 ----
-creation: CREATE INDEX ON t1 (k) STORING (i, f, s);
+creation: CREATE INDEX ON t.public.t1 (k) STORING (i, f, s);
 --
 optimal plan:
 inner-join (cross)
@@ -1831,7 +1831,7 @@ CREATE INVERTED INDEX inverted_idx ON t2 (geom1) NOT VISIBLE
 index-recommendations
 SELECT * FROM t2 WHERE st_covers(geom1, 'POINT(0 0 0 0)')
 ----
-alteration: ALTER INDEX t2@inverted_idx VISIBLE;
+alteration: ALTER INDEX t.public.t2@inverted_idx VISIBLE;
 --
 optimal plan:
 select

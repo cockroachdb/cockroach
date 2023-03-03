@@ -76,7 +76,7 @@ scan t1@existing_t1_k
 index-recommendations
 SELECT i FROM t1 WHERE k >= 3
 ----
-replacement: CREATE INDEX ON t1 (k) STORING (i, s); DROP INDEX t1@existing_t1_k;
+replacement: CREATE INDEX ON t.public.t1 (k) STORING (i, s); DROP INDEX t.public.t1@existing_t1_k;
 --
 optimal plan:
 project
@@ -94,8 +94,8 @@ project
 index-recommendations
 SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3
 ----
-replacement: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;
-creation: CREATE INDEX ON t2 (i) STORING (k);
+replacement: CREATE UNIQUE INDEX ON t.public.t1 (i) STORING (k); DROP INDEX t.public.t1@existing_t1_i;
+creation: CREATE INDEX ON t.public.t2 (i) STORING (k);
 --
 optimal plan:
 project
@@ -146,7 +146,7 @@ t1:
 index-recommendations
 SELECT * FROM t1 WHERE i >= 3
 ----
-creation: CREATE INDEX ON t1 (i) STORING (k, f, s);
+creation: CREATE INDEX ON t.public.t1 (i) STORING (k, f, s);
 --
 optimal plan:
 scan t1@_hyp_1
@@ -164,7 +164,7 @@ t1:
 index-recommendations
 SELECT f, k FROM t1 WHERE f > 2 AND f < 8
 ----
-creation: CREATE INDEX ON t1 (f) STORING (k);
+creation: CREATE INDEX ON t.public.t1 (f) STORING (k);
 --
 optimal plan:
 scan t1@_hyp_1
@@ -182,7 +182,7 @@ t1:
 index-recommendations
 SELECT i FROM t1 WHERE k < 3 AND i > 5
 ----
-creation: CREATE INDEX ON t1 (k) STORING (i);
+creation: CREATE INDEX ON t.public.t1 (k) STORING (i);
 --
 optimal plan:
 project
@@ -209,8 +209,8 @@ t1:
 index-recommendations
 SELECT i FROM t1 WHERE k < 3 AND i > 5 OR f < 7
 ----
-creation: CREATE INDEX ON t1 (k) STORING (i, f);
-creation: CREATE INDEX ON t1 (f) STORING (k, i);
+creation: CREATE INDEX ON t.public.t1 (k) STORING (i, f);
+creation: CREATE INDEX ON t.public.t1 (f) STORING (k, i);
 --
 optimal plan:
 project
@@ -266,7 +266,7 @@ t1:
 index-recommendations
 SELECT s FROM t1 WHERE s = 'NG'
 ----
-creation: CREATE INDEX ON t1 (s);
+creation: CREATE INDEX ON t.public.t1 (s);
 --
 optimal plan:
 scan t1@_hyp_1
@@ -286,8 +286,8 @@ t2:
 index-recommendations
 SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.i
 ----
-creation: CREATE INDEX ON t1 (k);
-creation: CREATE INDEX ON t2 (i);
+creation: CREATE INDEX ON t.public.t1 (k);
+creation: CREATE INDEX ON t.public.t2 (i);
 --
 optimal plan:
 project
@@ -349,7 +349,7 @@ t1:
 index-recommendations
 SELECT i FROM t1 ORDER BY i
 ----
-creation: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t.public.t1 (i);
 --
 optimal plan:
 scan t1@_hyp_1
@@ -367,7 +367,7 @@ t1:
 index-recommendations
 SELECT k, i FROM t1 ORDER BY k DESC, i ASC
 ----
-creation: CREATE INDEX ON t1 (k DESC, i);
+creation: CREATE INDEX ON t.public.t1 (k DESC, i);
 --
 optimal plan:
 scan t1@_hyp_1
@@ -393,7 +393,7 @@ SELECT * FROM (
 )
 ORDER BY k ASC, i DESC
 ----
-creation: CREATE INDEX ON t1 (k, i DESC);
+creation: CREATE INDEX ON t.public.t1 (k, i DESC);
 --
 optimal plan:
 scan t1@_hyp_1
@@ -418,7 +418,7 @@ UNION ALL
 SELECT k FROM t1 WHERE k < 10
 ORDER BY k DESC
 ----
-creation: CREATE INDEX ON t1 (k DESC);
+creation: CREATE INDEX ON t.public.t1 (k DESC);
 --
 optimal plan:
 union-all
@@ -447,7 +447,7 @@ t1:
 index-recommendations
 SELECT count(*) FROM t1 GROUP BY k
 ----
-creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t.public.t1 (k);
 --
 optimal plan:
 project
@@ -477,7 +477,7 @@ t1:
 index-recommendations
 SELECT sum(k) FROM t1 GROUP BY i, f, k
 ----
-creation: CREATE INDEX ON t1 (k, i, f);
+creation: CREATE INDEX ON t.public.t1 (k, i, f);
 --
 optimal plan:
 project
@@ -560,7 +560,7 @@ ON t1.k != t2.k
 AND t1.s IS NOT NULL
 AND t2.i IS NULL
 ----
-creation: CREATE INDEX ON t2 (i) STORING (k);
+creation: CREATE INDEX ON t.public.t2 (i) STORING (k);
 --
 optimal plan:
 left-join (cross)
@@ -594,7 +594,7 @@ t1:
 index-recommendations
 SELECT k, i FROM t1 WHERE k = 1 AND i = 2
 ----
-creation: CREATE INDEX ON t1 (k, i);
+creation: CREATE INDEX ON t.public.t1 (k, i);
 --
 optimal plan:
 scan t1@_hyp_3
@@ -615,7 +615,7 @@ t1:
 index-recommendations
 SELECT * FROM t1 WHERE k = 1 AND f > 0
 ----
-creation: CREATE INDEX ON t1 (k, f) STORING (i, s);
+creation: CREATE INDEX ON t.public.t1 (k, f) STORING (i, s);
 --
 optimal plan:
 scan t1@_hyp_3
@@ -638,8 +638,8 @@ t1:
 index-recommendations
 SELECT k, i, f FROM t1 WHERE k = 1 AND i = 2 AND f > 0
 ----
-creation: CREATE INDEX ON t1 (k) STORING (i, f);
-creation: CREATE INDEX ON t1 (i) STORING (k, f);
+creation: CREATE INDEX ON t.public.t1 (k) STORING (i, f);
+creation: CREATE INDEX ON t.public.t1 (i) STORING (k, f);
 --
 optimal plan:
 inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
@@ -668,7 +668,7 @@ t2:
 index-recommendations
 SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
 ----
-creation: CREATE INDEX ON t1 (f) STORING (k);
+creation: CREATE INDEX ON t.public.t1 (f) STORING (k);
 --
 optimal plan:
 project
@@ -703,7 +703,7 @@ t2:
 index-recommendations
 SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
 ----
-creation: CREATE INDEX ON t1 (i, s) STORING (k);
+creation: CREATE INDEX ON t.public.t1 (i, s) STORING (k);
 --
 optimal plan:
 project
@@ -770,7 +770,7 @@ FROM (
   AND t1.s = 'NG'
 )
 ----
-creation: CREATE INDEX ON t1 (s, f) STORING (i);
+creation: CREATE INDEX ON t.public.t1 (s, f) STORING (i);
 --
 optimal plan:
 union-all
@@ -847,9 +847,9 @@ ON t1.k = t2.k
 WHERE EXISTS (SELECT k, i FROM t3 WHERE t3.f > t3.k)
 ORDER BY t1.k, t2.i, t1.i DESC
 ----
-creation: CREATE INDEX ON t1 (k, i DESC);
-creation: CREATE INDEX ON t2 (k) STORING (i);
-creation: CREATE INDEX ON t3 (f) STORING (k);
+creation: CREATE INDEX ON t.public.t1 (k, i DESC);
+creation: CREATE INDEX ON t.public.t2 (k) STORING (i);
+creation: CREATE INDEX ON t.public.t3 (f) STORING (k);
 --
 optimal plan:
 sort (segmented)
@@ -956,8 +956,8 @@ t1:
 index-recommendations
 SELECT k FROM t1 UNION SELECT i FROM t1
 ----
-creation: CREATE INDEX ON t1 (k);
-creation: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t.public.t1 (k);
+creation: CREATE INDEX ON t.public.t1 (i);
 --
 optimal plan:
 union
@@ -986,8 +986,8 @@ t1:
 index-recommendations
 SELECT k FROM t1 INTERSECT SELECT i FROM t1
 ----
-creation: CREATE INDEX ON t1 (k);
-creation: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t.public.t1 (k);
+creation: CREATE INDEX ON t.public.t1 (i);
 --
 optimal plan:
 intersect
@@ -1016,8 +1016,8 @@ t1:
 index-recommendations
 SELECT k FROM t1 INTERSECT ALL SELECT i FROM t1
 ----
-creation: CREATE INDEX ON t1 (k);
-creation: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t.public.t1 (k);
+creation: CREATE INDEX ON t.public.t1 (i);
 --
 optimal plan:
 intersect-all
@@ -1045,8 +1045,8 @@ t1:
 index-recommendations
 SELECT k FROM t1 EXCEPT SELECT i FROM t1
 ----
-creation: CREATE INDEX ON t1 (k);
-creation: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t.public.t1 (k);
+creation: CREATE INDEX ON t.public.t1 (i);
 --
 optimal plan:
 except
@@ -1075,8 +1075,8 @@ t1:
 index-recommendations
 SELECT k FROM t1 EXCEPT ALL SELECT i FROM t1
 ----
-creation: CREATE INDEX ON t1 (k);
-creation: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t.public.t1 (k);
+creation: CREATE INDEX ON t.public.t1 (i);
 --
 optimal plan:
 except-all
@@ -1104,8 +1104,8 @@ t1:
 index-recommendations
 SELECT k, f FROM t1 UNION SELECT i, f FROM t1
 ----
-creation: CREATE INDEX ON t1 (k, f);
-creation: CREATE INDEX ON t1 (i, f);
+creation: CREATE INDEX ON t.public.t1 (k, f);
+creation: CREATE INDEX ON t.public.t1 (i, f);
 --
 optimal plan:
 union
@@ -1136,7 +1136,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j->'a' = '1'
 ----
-creation: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (j);
 --
 optimal plan:
 project
@@ -1163,7 +1163,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j @> '{"foo": "1"}'
 ----
-creation: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (j);
 --
 optimal plan:
 project
@@ -1190,7 +1190,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}'
 ----
-creation: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (j);
 --
 optimal plan:
 project
@@ -1234,7 +1234,7 @@ t4:
 index-recommendations
 SELECT j FROM t4 WHERE j @> '{"foo": "1", "bar": "2"}'
 ----
-creation: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (j);
 --
 optimal plan:
 inner-join (lookup t4)
@@ -1263,7 +1263,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
 ----
-creation: CREATE INVERTED INDEX ON t4 (k, j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (k, j);
 --
 optimal plan:
 project
@@ -1316,8 +1316,8 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
 ----
-creation: CREATE INDEX ON t4 (k) STORING (i, f, j);
-creation: CREATE INDEX ON t4 (i) STORING (k, f, j);
+creation: CREATE INDEX ON t.public.t4 (k) STORING (i, f, j);
+creation: CREATE INDEX ON t.public.t4 (i) STORING (k, f, j);
 --
 optimal plan:
 project
@@ -1374,7 +1374,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a IS NULL
 ----
-creation: CREATE INDEX ON t4 (a) STORING (k, f);
+creation: CREATE INDEX ON t.public.t4 (a) STORING (k, f);
 --
 optimal plan:
 project
@@ -1426,7 +1426,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a = ARRAY[1]
 ----
-creation: CREATE INDEX ON t4 (a) STORING (k, f);
+creation: CREATE INDEX ON t.public.t4 (a) STORING (k, f);
 --
 optimal plan:
 project
@@ -1448,7 +1448,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
 ----
-creation: CREATE INDEX ON t4 (i) STORING (k, f, a);
+creation: CREATE INDEX ON t.public.t4 (i) STORING (k, f, a);
 --
 optimal plan:
 project
@@ -1478,7 +1478,7 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
 ----
-creation: CREATE INDEX ON t4 (f) STORING (k, a);
+creation: CREATE INDEX ON t.public.t4 (f) STORING (k, a);
 --
 optimal plan:
 project
@@ -1607,7 +1607,7 @@ project
 index-recommendations
 SELECT i FROM t4 WHERE i > 5
 ----
-creation: CREATE INDEX ON t4 (i);
+creation: CREATE INDEX ON t.public.t4 (i);
 --
 optimal plan:
 scan t4@_hyp_4
@@ -1618,7 +1618,7 @@ scan t4@_hyp_4
 index-recommendations
 SELECT i, f FROM t4 WHERE f > 5
 ----
-creation: CREATE INDEX ON t4 (f) STORING (i);
+creation: CREATE INDEX ON t.public.t4 (f) STORING (i);
 --
 optimal plan:
 scan t4@_hyp_4
@@ -1629,7 +1629,7 @@ scan t4@_hyp_4
 index-recommendations
 SELECT j FROM t4 WHERE j->'a' = '1'
 ----
-creation: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t.public.t4 (j);
 --
 optimal plan:
 index-join t4
@@ -1785,7 +1785,7 @@ CREATE INDEX idx_2 ON t5(v) STORING (i)
 index-recommendations
 SELECT i, j FROM t5 WHERE v > 1
 ----
-replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_2;
+replacement: CREATE INDEX ON t.public.t5 (v) STORING (i, j); DROP INDEX t.public.t5@idx_2;
 --
 optimal plan:
 project
@@ -1809,7 +1809,7 @@ CREATE INDEX idx_3 ON t5(v, i)
 index-recommendations
 SELECT i, j FROM t5 WHERE v > 1
 ----
-replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_1;
+replacement: CREATE INDEX ON t.public.t5 (v) STORING (i, j); DROP INDEX t.public.t5@idx_1;
 --
 optimal plan:
 project
@@ -1853,7 +1853,7 @@ scan t_notvisible@idx_i_visible
 index-recommendations
 SELECT v FROM t_notvisible WHERE v > 1
 ----
-alteration: ALTER INDEX t_notvisible@idx_v_invisible VISIBLE;
+alteration: ALTER INDEX t.public.t_notvisible@idx_v_invisible VISIBLE;
 --
 optimal plan:
 scan t_notvisible@_hyp_3
@@ -1866,7 +1866,7 @@ scan t_notvisible@_hyp_3
 index-recommendations
 SELECT i FROM t_notvisible WHERE v > 1
 ----
-creation: CREATE INDEX ON t_notvisible (v) STORING (i);
+creation: CREATE INDEX ON t.public.t_notvisible (v) STORING (i);
 --
 optimal plan:
 project
@@ -1901,7 +1901,7 @@ scan t_notvisible@idx_v_visible
 index-recommendations
 SELECT i FROM t_notvisible WHERE v > 1
 ----
-replacement: CREATE INDEX ON t_notvisible (v) STORING (i); DROP INDEX t_notvisible@idx_v_visible;
+replacement: CREATE INDEX ON t.public.t_notvisible (v) STORING (i); DROP INDEX t.public.t_notvisible@idx_v_visible;
 --
 optimal plan:
 project

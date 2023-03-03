@@ -18,7 +18,7 @@ func TestBuildOptAndHypTableMaps(t *testing.T) {
 	table2 := tables[1]
 	indexCandidates := testIndexCandidates1(tables, indexCols)
 
-	oldTables, hypTables := BuildOptAndHypTableMaps(indexCandidates)
+	oldTables, hypTables := BuildOptAndHypTableMaps(nil, indexCandidates)
 
 	if oldTables[table1.ID()] != table1 {
 		t.Errorf("expected table1 to be %+v,\n got %+v\n", table1, oldTables[table1.ID()])
