@@ -87,28 +87,67 @@ import {
   selectResolution30mStorageTTL,
   selectCrossClusterReplicationEnabled,
 } from "src/redux/clusterSettings";
+import { getDataFromServer } from "src/util/dataFromServer";
 
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
+  isKvDashboard: boolean;
 }
 
 const dashboards: { [key: string]: GraphDashboard } = {
-  overview: { label: "Overview", component: overviewDashboard },
-  hardware: { label: "Hardware", component: hardwareDashboard },
-  runtime: { label: "Runtime", component: runtimeDashboard },
-  sql: { label: "SQL", component: sqlDashboard },
-  storage: { label: "Storage", component: storageDashboard },
-  replication: { label: "Replication", component: replicationDashboard },
-  distributed: { label: "Distributed", component: distributedDashboard },
-  queues: { label: "Queues", component: queuesDashboard },
-  requests: { label: "Slow Requests", component: requestsDashboard },
-  changefeeds: { label: "Changefeeds", component: changefeedsDashboard },
-  overload: { label: "Overload", component: overloadDashboard },
-  ttl: { label: "TTL", component: ttlDashboard },
+  overview: {
+    label: "Overview",
+    component: overviewDashboard,
+    isKvDashboard: false,
+  },
+  hardware: {
+    label: "Hardware",
+    component: hardwareDashboard,
+    isKvDashboard: true,
+  },
+  runtime: {
+    label: "Runtime",
+    component: runtimeDashboard,
+    isKvDashboard: true,
+  },
+  sql: { label: "SQL", component: sqlDashboard, isKvDashboard: false },
+  storage: {
+    label: "Storage",
+    component: storageDashboard,
+    isKvDashboard: true,
+  },
+  replication: {
+    label: "Replication",
+    component: replicationDashboard,
+    isKvDashboard: true,
+  },
+  distributed: {
+    label: "Distributed",
+    component: distributedDashboard,
+    isKvDashboard: true,
+  },
+  queues: { label: "Queues", component: queuesDashboard, isKvDashboard: true },
+  requests: {
+    label: "Slow Requests",
+    component: requestsDashboard,
+    isKvDashboard: true,
+  },
+  changefeeds: {
+    label: "Changefeeds",
+    component: changefeedsDashboard,
+    isKvDashboard: false,
+  },
+  overload: {
+    label: "Overload",
+    component: overloadDashboard,
+    isKvDashboard: true,
+  },
+  ttl: { label: "TTL", component: ttlDashboard, isKvDashboard: false },
   crossClusterReplication: {
     label: "Cross-Cluster Replication",
     component: crossClusterReplicationDashboard,
+    isKvDashboard: true,
   },
 };
 
@@ -118,6 +157,7 @@ const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
   return {
     value: key,
     label: dashboard.label,
+    isKvDashboard: dashboard.isKvDashboard,
   };
 });
 
@@ -253,8 +293,13 @@ export class NodeGraphs extends React.Component<
       nodeDisplayNameByID,
       nodeIds,
     } = this.props;
+    const canViewKvGraphs =
+      getDataFromServer().FeatureFlags.can_view_kv_metric_dashboards;
     const { showLowResolutionAlert, showDeletedDataAlert } = this.state;
-    const selectedDashboard = getMatchParamByName(match, dashboardNameAttr);
+    let selectedDashboard = getMatchParamByName(match, dashboardNameAttr);
+    if (dashboards[selectedDashboard].isKvDashboard && !canViewKvGraphs) {
+      selectedDashboard = defaultDashboard;
+    }
     const dashboard = _.has(dashboards, selectedDashboard)
       ? selectedDashboard
       : defaultDashboard;
@@ -325,12 +370,15 @@ export class NodeGraphs extends React.Component<
     // as we have 3 columns, we divide node amount on 3
     const paddingBottom =
       nodeIDs.length > 8 ? 90 + Math.ceil(nodeIDs.length / 3) * 10 : 50;
-
-    const filteredDropdownOptions = this.props.crossClusterReplicationEnabled
-      ? dashboardDropdownOptions // Already in the list, no need to filter
-      : dashboardDropdownOptions.filter(
-          option => option.label !== "Cross-Cluster Replication",
-        );
+    const filteredDropdownOptions = dashboardDropdownOptions
+      // Don't show KV dashboards if the logged-in user doesn't have permission to view them.
+      .filter(option => (canViewKvGraphs ? true : !option.isKvDashboard))
+      // Don't show the replication dashboard if not enabled.
+      .filter(option =>
+        this.props.crossClusterReplicationEnabled
+          ? true
+          : option.label !== "Cross-Cluster Replication",
+      );
 
     return (
       <div style={{ paddingBottom }}>

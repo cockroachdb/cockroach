@@ -17,8 +17,10 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -87,6 +89,7 @@ func (s *httpServer) handleHealth(healthHandler http.Handler) {
 
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
+	tenantID roachpb.TenantID,
 	authnServer *authenticationServer,
 	adminAuthzCheck *adminPrivilegeChecker,
 	metricSource metricMarshaler,
@@ -116,6 +119,9 @@ func (s *httpServer) setupRoutes(
 				return &ustring
 			}
 			return nil
+		},
+		Flags: serverpb.FeatureFlags{
+			CanViewKvMetricDashboards: tenantID.Equal(roachpb.SystemTenantID),
 		},
 	})
 
