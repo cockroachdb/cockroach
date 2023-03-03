@@ -968,6 +968,9 @@ func (s *vectorizedFlowCreator) setupInput(
 			var err error
 			if input.EnforceHomeRegionError != nil {
 				err = input.EnforceHomeRegionError.ErrorDetail(ctx)
+				if execinfra.AllowEnforceHomeRegionFollowerReads.Get(&flowCtx.Cfg.Settings.SV) {
+					err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
+				}
 			}
 			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{

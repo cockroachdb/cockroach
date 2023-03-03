@@ -10,12 +10,22 @@
 
 package execinfra
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
+)
 
 // QueryNotRunningInHomeRegionMessagePrefix is the common message prefix for
 // erroring out queries with no home region when the enforce_home_region session
 // flag is set.
 const QueryNotRunningInHomeRegionMessagePrefix = "Query is not running in its home region"
+
+var AllowEnforceHomeRegionFollowerReads = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.multiregion.enforce_home_region_follower_reads.enabled",
+	"allows the use of follower reads to dynamically detect a query's home region",
+	false,
+).WithPublic()
 
 // dynamicQueryHasNoHomeRegionError is a wrapper for a
 // "query has no home region" error to flag the query as retryable.

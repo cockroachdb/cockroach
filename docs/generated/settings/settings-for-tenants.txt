@@ -257,6 +257,7 @@ sql.metrics.statement_details.threshold	duration	0s	minimum execution time to ca
 sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics
 sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
+sql.multiregion.enforce_home_region_follower_reads.enabled	boolean	false	allows the use of follower reads to dynamically detect a query's home region
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job

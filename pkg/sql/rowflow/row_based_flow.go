@@ -331,7 +331,11 @@ func (f *rowBasedFlow) setupInputSyncs(
 				var returnErrorFunc func() error
 				if is.EnforceHomeRegionError != nil {
 					returnErrorFunc = func() error {
-						return execinfra.NewDynamicQueryHasNoHomeRegionError(is.EnforceHomeRegionError.ErrorDetail(ctx))
+						enforceHomeRegionError := is.EnforceHomeRegionError.ErrorDetail(ctx)
+						if execinfra.AllowEnforceHomeRegionFollowerReads.Get(&f.FlowCtx.Cfg.Settings.SV) {
+							enforceHomeRegionError = execinfra.NewDynamicQueryHasNoHomeRegionError(enforceHomeRegionError)
+						}
+						return enforceHomeRegionError
 					}
 				}
 				sync, err = makeSerialSync(ordering, f.EvalCtx, streams,

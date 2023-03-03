@@ -249,6 +249,11 @@ type joinReader struct {
 	// only lookups to rows in remote regions and remote accesses are set to
 	// error out via a session setting.
 	errorOnLookup bool
+
+	// allowEnforceHomeRegionFollowerReads, if true, causes errors produced by the
+	// above `errorOnLookup` flag to be retryable, and use follower reads to find
+	// the query's home region during the retries.
+	allowEnforceHomeRegionFollowerReads bool
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -346,19 +351,20 @@ func newJoinReader(
 		flowCtx.EvalCtx.Planner != nil && flowCtx.EvalCtx.Planner.EnforceHomeRegion()
 
 	jr := &joinReader{
-		fetchSpec:                         spec.FetchSpec,
-		splitFamilyIDs:                    spec.SplitFamilyIDs,
-		maintainOrdering:                  spec.MaintainOrdering,
-		input:                             input,
-		lookupCols:                        lookupCols,
-		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
-		shouldLimitBatches:                shouldLimitBatches,
-		readerType:                        readerType,
-		txn:                               txn,
-		usesStreamer:                      useStreamer,
-		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
-		limitHintHelper:                   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
-		errorOnLookup:                     errorOnLookup,
+		fetchSpec:                           spec.FetchSpec,
+		splitFamilyIDs:                      spec.SplitFamilyIDs,
+		maintainOrdering:                    spec.MaintainOrdering,
+		input:                               input,
+		lookupCols:                          lookupCols,
+		outputGroupContinuationForLeftRow:   spec.OutputGroupContinuationForLeftRow,
+		shouldLimitBatches:                  shouldLimitBatches,
+		readerType:                          readerType,
+		txn:                                 txn,
+		usesStreamer:                        useStreamer,
+		lookupBatchBytesLimit:               rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
+		limitHintHelper:                     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
+		errorOnLookup:                       errorOnLookup,
+		allowEnforceHomeRegionFollowerReads: execinfra.AllowEnforceHomeRegionFollowerReads.Get(&flowCtx.Cfg.Settings.SV),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -1021,14 +1027,18 @@ func (jr *joinReader) readInput() (
 	return jrPerformingLookup, outRow, nil
 }
 
-var noHomeRegionError = execinfra.NewDynamicQueryHasNoHomeRegionError(pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
 	"Query has no home region. Try using a lower LIMIT value or running the query from a different region. %s",
-	sqlerrors.EnforceHomeRegionFurtherInfo))
+	sqlerrors.EnforceHomeRegionFurtherInfo)
 
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	if jr.errorOnLookup {
-		jr.MoveToDraining(noHomeRegionError)
+		err := noHomeRegionError
+		if jr.allowEnforceHomeRegionFollowerReads {
+			err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
+		}
+		jr.MoveToDraining(err)
 		return jrStateUnknown, jr.DrainHelper()
 	}
 	for {

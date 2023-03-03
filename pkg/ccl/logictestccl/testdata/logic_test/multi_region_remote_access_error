@@ -17,6 +17,9 @@ SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
 statement ok
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 
+statement ok
+SET CLUSTER SETTING sql.multiregion.enforce_home_region_follower_reads.enabled = true;
+
 # Start with SURVIVE ZONE FAILURE for positive tests.
 # SURVIVE REGION FAILURE cases will always error out.
 statement ok
