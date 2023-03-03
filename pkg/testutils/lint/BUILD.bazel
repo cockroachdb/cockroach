@@ -23,6 +23,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":lint"],
+    embedsrcs = ["gcassert_paths.txt"],
     gotags = ["lint"],
     tags = ["integration"],
     visibility = ["//build/bazelutil:__subpackages__"],
