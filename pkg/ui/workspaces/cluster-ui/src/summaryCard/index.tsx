@@ -53,7 +53,7 @@ export const SummaryCardItem: React.FC<ISummaryCardItemProps> = ({
 }) => (
   <div className={cx("summary--card__item", className)}>
     <h4 className={cx("summary--card__item--label")}>{label}</h4>
-    <p className={cx("summary--card__item--value")}>{value}</p>
+    <span className={cx("summary--card__item--value")}>{value}</span>
   </div>
 );
 
