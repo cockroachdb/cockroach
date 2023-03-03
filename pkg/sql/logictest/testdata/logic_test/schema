@@ -106,6 +106,15 @@ SELECT * FROM myschema.tb2
 statement ok
 SET search_path TO public
 
+# We should be able to alter the public schema owner.
+statement ok
+ALTER SCHEMA public OWNER TO testuser
+
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 'public'
+----
+public  testuser
+
 # Try to create a temp table in a user defined schema.
 statement error pq: cannot create temporary relation in non-temporary schema
 CREATE TEMP TABLE myschema.tmp (x int)
@@ -114,12 +123,17 @@ CREATE TEMP TABLE myschema.tmp (x int)
 statement error pq: schema cannot be modified: "pg_catalog"
 CREATE TABLE pg_catalog.bad (x int)
 
-# We shouldn't be able to alter virtual or public schemas.
-statement error pq: cannot modify schema "public"
+# We shouldn't be able to rename the public schema. In the future, we may
+# want to support this.
+statement error pq: cannot rename schema "public"
 ALTER SCHEMA public RENAME TO private
 
+# We shouldn't be able to alter virtual schemas.
 statement error pq: cannot modify schema "pg_catalog"
 ALTER SCHEMA pg_catalog RENAME TO mysql_catalog
+
+statement error pq: cannot modify schema "pg_catalog"
+ALTER SCHEMA pg_catalog OWNER TO root
 
 # We can't rename a schema to a pg_temp prefixed name.
 statement error pq: unacceptable schema name "pg_temp_not_temp"
