@@ -1064,7 +1064,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
+   SQL command: CREATE INDEX ON test.public.t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
@@ -1124,7 +1124,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
+   SQL command: CREATE INDEX ON test.public.t (v);
 
 query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
@@ -1158,7 +1158,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
+   SQL command: CREATE INDEX ON test.public.t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -1212,7 +1212,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
+   SQL command: CREATE INDEX ON test.public.t (v);
 
 query T
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
@@ -1249,7 +1249,39 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: CREATE INDEX ON tt (x) STORING (y); DROP INDEX tt@a;
+   SQL commands: CREATE INDEX ON test.public.tt (x) STORING (y); DROP INDEX test.public.tt@a;
+
+statement ok
+CREATE DATABASE another_db;
+USE another_db;
+CREATE SCHEMA sc;
+
+statement ok
+CREATE TABLE another_db.sc.t (
+  k INT PRIMARY KEY,
+  a INT
+)
+
+query T
+EXPLAIN SELECT * FROM another_db.sc.t WHERE a = 1
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: a = 1
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON another_db.sc.t (a);
+
+statement ok
+USE test;
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT

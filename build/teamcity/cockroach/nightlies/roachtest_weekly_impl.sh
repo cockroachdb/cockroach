@@ -29,7 +29,6 @@ source $root/build/teamcity/util/roachtest_util.sh
 # build/teamcity-weekly-roachtest.sh
 timeout -s INT $((7800*60)) build/teamcity-roachtest-invoke.sh \
   tag:weekly \
-  --build-tag="${BUILD_TAG}" \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/bin/cockroach" \

@@ -31,7 +31,6 @@ build/teamcity-roachtest-invoke.sh \
   --parallelism="${PARALLELISM-16}" \
   --cpu-quota="${CPUQUOTA-1024}" \
   --cluster-id="${TC_BUILD_ID}" \
-  --build-tag="${BUILD_TAG}" \
   --lifetime="36h" \
   --cockroach="${PWD}/bin/cockroach" \
   --artifacts="${PWD}/artifacts" \

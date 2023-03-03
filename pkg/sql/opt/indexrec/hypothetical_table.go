@@ -11,6 +11,7 @@
 package indexrec
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -27,7 +28,7 @@ import (
 // cat.StableID to its constructed HypotheticalTable. These tables will be used
 // to update the table query metadata when making index recommendations.
 func BuildOptAndHypTableMaps(
-	indexCandidates map[cat.Table][][]cat.IndexColumn,
+	c cat.Catalog, indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) (optTables, hypTables map[cat.StableID]cat.Table) {
 	numTables := len(indexCandidates)
 	hypTables = make(map[cat.StableID]cat.Table, numTables)
@@ -36,7 +37,7 @@ func BuildOptAndHypTableMaps(
 	for t, indexes := range indexCandidates {
 		hypIndexes := make([]hypotheticalIndex, 0, len(indexes))
 		var hypTable HypotheticalTable
-		hypTable.init(t)
+		hypTable.init(c, t)
 
 		for _, indexCols := range indexes {
 			indexOrd := hypTable.Table.IndexCount() + len(hypIndexes)
@@ -78,6 +79,7 @@ func BuildOptAndHypTableMaps(
 // potentially speed up queries to this table.
 type HypotheticalTable struct {
 	cat.Table
+	c                    cat.Catalog
 	invertedCols         []*cat.Column
 	primaryKeyColsOrdSet intsets.Fast
 	hypotheticalIndexes  []hypotheticalIndex
@@ -85,8 +87,11 @@ type HypotheticalTable struct {
 
 var _ cat.Table = &HypotheticalTable{}
 
-func (ht *HypotheticalTable) init(table cat.Table) {
-	ht.Table = table
+func (ht *HypotheticalTable) init(c cat.Catalog, table cat.Table) {
+	*ht = HypotheticalTable{
+		Table: table,
+		c:     c,
+	}
 
 	// Get PK column ordinals.
 	primaryIndex := ht.Index(cat.PrimaryIndex)
@@ -134,6 +139,12 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 		return ht.Table.Index(i)
 	}
 	return &ht.hypotheticalIndexes[i-existingIndexCount]
+}
+
+// FullyQualifiedName returns the fully qualified name of the hypothetical
+// table.
+func (ht *HypotheticalTable) FullyQualifiedName(ctx context.Context) (cat.DataSourceName, error) {
+	return ht.c.FullyQualifiedName(ctx, ht.Table)
 }
 
 // existingRedundantIndex checks whether a visible index with the same explicit

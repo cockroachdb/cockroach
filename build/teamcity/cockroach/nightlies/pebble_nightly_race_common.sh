@@ -26,9 +26,6 @@ chmod o+rwx "${artifacts}"
 mkdir -p "$PWD/bin"
 chmod o+rwx "$PWD/bin"
 
-build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
-export build_tag
-
 # Build the roachtest binary.
 bazel build //pkg/cmd/roachtest --config ci -c opt
 BAZEL_BIN=$(bazel info bazel-bin --config ci -c opt)

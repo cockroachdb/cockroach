@@ -15,7 +15,6 @@ _dir="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # workload.
 exit_status=0
 if ! timeout -s INT $((1000*60)) bin/roachtest run \
-  --build-tag "${build_tag}" \
   --slack-token "${SLACK_TOKEN-}" \
   --cluster-id "${TC_BUILD_ID-$(date +"%Y%m%d%H%M%S")}" \
   --cloud "aws" \
