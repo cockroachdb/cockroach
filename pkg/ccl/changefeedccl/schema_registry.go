@@ -141,8 +141,7 @@ func (r *confluentSchemaRegistry) Ping(ctx context.Context) error {
 // RegisterSchemaForSubject registers the given schema for the given
 // subject. The schema type is assumed to be AVRO.
 //
-//   https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
-//
+//	https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
 func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	ctx context.Context, subject string, schema string,
 ) (int32, error) {
@@ -158,8 +157,13 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	}
 
 	var id int32
-	err := r.doWithRetry(ctx, func() error {
-		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, &buf)
+	err := r.doWithRetry(ctx, func() (e error) {
+		defer func() {
+			if e != nil && log.V(1) {
+				log.Infof(ctx, "retryable error when registering schema %s %s", e, schema)
+			}
+		}()
+		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, bytes.NewReader(buf.Bytes()))
 		if err != nil {
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}
