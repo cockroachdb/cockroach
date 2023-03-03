@@ -436,7 +436,7 @@ func TestPartialZip(t *testing.T) {
 	// we're decommissioning a node in a 3-node cluster, so there's no node to
 	// up-replicate the under-replicated ranges to.
 	{
-		_, err := c.RunWithCapture(fmt.Sprintf("node decommission --wait=none %d", 2))
+		_, err := c.RunWithCapture(fmt.Sprintf("node decommission --checks=skip --wait=none %d", 2))
 		if err != nil {
 			t.Fatal(err)
 		}

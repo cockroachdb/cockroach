@@ -295,7 +295,7 @@ func getStatusNodeAlignment() string {
 		align += "rrrrrr"
 	}
 	if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
-		align += decommissionResponseAlignment()
+		align += decommissionStatusAlignment()
 	}
 	return align
 }
@@ -307,6 +307,11 @@ var decommissionNodesColumnHeaders = []string{
 	"is_decommissioning",
 	"membership",
 	"is_draining",
+}
+
+var decommissionNodesCheckAddlColumnHeaders = []string{
+	"readiness",
+	"blocking_ranges",
 }
 
 var decommissionNodeCmd = &cobra.Command{
@@ -371,7 +376,10 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs, localNodeID); err != nil {
+	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait,
+		nodeCtx.nodeDecommissionChecks, nodeCtx.nodeDecommissionDryRun,
+		nodeIDs, localNodeID,
+	); err != nil {
 		cause := errors.UnwrapAll(err)
 		if s, ok := status.FromError(cause); ok && s.Code() == codes.NotFound {
 			// Are we trying to decommission a node that does not
@@ -455,6 +463,8 @@ func runDecommissionNodeImpl(
 	ctx context.Context,
 	c serverpb.AdminClient,
 	wait nodeDecommissionWaitType,
+	checks nodeDecommissionCheckMode,
+	dryRun bool,
 	nodeIDs []roachpb.NodeID,
 	localNodeID roachpb.NodeID,
 ) error {
@@ -471,21 +481,61 @@ func runDecommissionNodeImpl(
 	// sameStatusThreshold iterations), verbosity is automatically set.
 	// Some decommissioning replicas will be reported to the operator.
 	const sameStatusThreshold = 15
+	const preCheckBlockingRangeErrsToReport = 5
 	var (
 		numReplicaReport = 0
 		sameStatusCount  = 0
 	)
 
-	// Decommissioning a node is driven by a three-step process.
-	// 1) Mark each node as 'decommissioning'. In doing so, all replicas are
+	// Decommissioning a node is driven by a four-step process.
+	// 1) Evaluate decommission pre-check status. If node(s) are unready for
+	// decommission, report prior to initializing decommission and exit.
+	// 2) Mark each node as 'decommissioning'. In doing so, all replicas are
 	// slowly moved off of these nodes.
-	// 2) Drain each node.
-	// 3) Mark each node as 'decommissioned'.
+	// 3) Drain each node.
+	// 4) Mark each node as 'decommissioned'.
 	// Note: if the node serving the decommission request is a target node,
 	// the draining step for that node will be skipped. This is because
 	// after a drain, issuing a decommission RPC against this node will fail.
 	// TODO(cameron): update the note once decommission requests are
 	// routed to another selected "control" node in the cluster.
+	var preCheckReq *serverpb.DecommissionPreCheckRequest
+	var preCheckResp *serverpb.DecommissionPreCheckResponse
+	if checks > nodeDecommissionChecksSkip {
+		var err error
+		preCheckReq = &serverpb.DecommissionPreCheckRequest{
+			NodeIDs:         nodeIDs,
+			StrictReadiness: checks == nodeDecommissionChecksStrict,
+		}
+		preCheckResp, err = c.DecommissionPreCheck(ctx, preCheckReq)
+		if err != nil {
+			fmt.Fprintln(stderr)
+			return errors.Wrap(err, "while trying to check decommission readiness")
+		}
+	}
+
+	// On a dry run, we simply run checks (as above), and print the decommission
+	// status.
+	if dryRun || !decommissionPreCheckReady(preCheckResp) {
+		req := &serverpb.DecommissionStatusRequest{
+			NodeIDs: nodeIDs,
+		}
+		resp, err := c.DecommissionStatus(ctx, req)
+		if err != nil {
+			fmt.Fprintln(stderr)
+			return errors.Wrap(err, "while trying to check decommission status")
+		}
+		fmt.Fprintln(stderr)
+
+		err = printDecommissionStatusAndReadiness(*resp, preCheckResp)
+		if err == nil && !decommissionPreCheckReady(preCheckResp) {
+			printDecommissionBlockingErrorSummary(preCheckResp, preCheckBlockingRangeErrsToReport)
+			fmt.Fprintln(stderr)
+			err = errors.New("Cannot decommission nodes.")
+		}
+		return err
+	}
+
 	prevResponse := serverpb.DecommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
@@ -505,7 +555,7 @@ func runDecommissionNodeImpl(
 
 		if !reflect.DeepEqual(&prevResponse, resp) {
 			fmt.Fprintln(stderr)
-			if err = printDecommissionStatus(*resp); err != nil {
+			if err = printDecommissionStatusAndReadiness(*resp, preCheckResp); err != nil {
 				return err
 			}
 			prevResponse = *resp
@@ -523,6 +573,15 @@ func runDecommissionNodeImpl(
 			if sameStatusCount >= sameStatusThreshold && numReplicaReport == 0 {
 				// Configure a number of replicas to report.
 				numReplicaReport = 5
+				// Refresh pre-check results, if applicable.
+				if preCheckReq != nil {
+					if newPreCheckResp, err := c.DecommissionPreCheck(ctx, preCheckReq); err != nil {
+						fmt.Fprintln(stderr)
+						return errors.Wrap(err, "while trying to check decommission readiness")
+					} else {
+						preCheckResp = newPreCheckResp
+					}
+				}
 			} else {
 				sameStatusCount++
 			}
@@ -590,7 +649,7 @@ func runDecommissionNodeImpl(
 	return errors.New("maximum number of retries exceeded")
 }
 
-func decommissionResponseAlignment() string {
+func decommissionStatusAlignment() string {
 	return "rcrccc"
 }
 
@@ -614,6 +673,39 @@ func decommissionResponseValueToRows(
 	return rows
 }
 
+func decommissionReadinessAlignment() string {
+	return "cr"
+}
+
+func decommissionStatusAndReadinessAlignment() string {
+	return decommissionStatusAlignment() + decommissionReadinessAlignment()
+}
+
+// decommissionStatusAndReadinessValueToRows converts a
+// DecommissionStatusResponse Status as well as a DecommissionPreCheckResponse
+// NodeCheckResult to SQL-like result rows, so that we can pretty-print them.
+func decommissionStatusAndReadinessValueToRows(
+	statuses []serverpb.DecommissionStatusResponse_Status,
+	reportByNodeID map[roachpb.NodeID]serverpb.DecommissionPreCheckResponse_NodeCheckResult,
+) [][]string {
+	var rows [][]string
+	for _, node := range statuses {
+		report := reportByNodeID[node.NodeID]
+
+		rows = append(rows, []string{
+			strconv.FormatInt(int64(node.NodeID), 10),
+			strconv.FormatBool(node.IsLive),
+			strconv.FormatInt(node.ReplicaCount, 10),
+			strconv.FormatBool(!node.Membership.Active()),
+			node.Membership.String(),
+			strconv.FormatBool(node.Draining),
+			report.DecommissionReadiness.String(),
+			strconv.FormatInt(int64(len(report.CheckedRanges)), 10),
+		})
+	}
+	return rows
+}
+
 var recommissionNodeCmd = &cobra.Command{
 	Use:   "recommission { --self | <node id 1> [<node id 2> ...] }",
 	Short: "recommissions the node(s)",
@@ -625,9 +717,28 @@ signaling the affected nodes to participate in the cluster again.
 	RunE: clierrorplus.MaybeDecorateError(runRecommissionNode),
 }
 
+func printDecommissionStatusAndReadiness(
+	statusResp serverpb.DecommissionStatusResponse, checkResp *serverpb.DecommissionPreCheckResponse,
+) error {
+	if checkResp == nil {
+		return printDecommissionStatus(statusResp)
+	}
+
+	reportByNodeID := make(map[roachpb.NodeID]serverpb.DecommissionPreCheckResponse_NodeCheckResult)
+	for _, nodeCheckResult := range checkResp.CheckedNodes {
+		reportByNodeID[nodeCheckResult.NodeID] = nodeCheckResult
+	}
+
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, append(decommissionNodesColumnHeaders, decommissionNodesCheckAddlColumnHeaders...),
+		clisqlexec.NewRowSliceIter(
+			decommissionStatusAndReadinessValueToRows(statusResp.Status, reportByNodeID),
+			decommissionStatusAndReadinessAlignment(),
+		))
+}
+
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, decommissionNodesColumnHeaders,
-		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
+		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionStatusAlignment()))
 }
 
 func printDecommissionReplicas(resp serverpb.DecommissionStatusResponse) {
@@ -643,6 +754,54 @@ func printDecommissionReplicas(resp serverpb.DecommissionStatusResponse) {
 			)
 		}
 	}
+}
+
+func printDecommissionBlockingErrorSummary(
+	resp *serverpb.DecommissionPreCheckResponse, reportLimit int,
+) {
+	fmt.Fprintln(stderr, "\nranges blocking decommission detected")
+	reported := 0
+	for _, nodeCheckResult := range resp.CheckedNodes {
+		if nodeCheckResult.DecommissionReadiness != serverpb.DecommissionPreCheckResponse_ALLOCATION_ERRORS {
+			continue
+		}
+
+		errCountMap := make(map[string]int)
+		for _, rangeCheckResult := range nodeCheckResult.CheckedRanges {
+			errCountMap[rangeCheckResult.Error] += 1
+		}
+
+		for errMsg, count := range errCountMap {
+			if reported >= reportLimit {
+				fmt.Fprintf(stderr, "...more blocking errors detected.\n")
+				return
+			}
+			fmt.Fprintf(stderr,
+				"n%d has %d replicas blocked with error: \"%s\"\n",
+				nodeCheckResult.NodeID,
+				count,
+				errMsg,
+			)
+			reported++
+		}
+	}
+}
+
+// decommissionPreCheckReady checks if, given a valid response, there are any
+// nodes shown to not be ready for decommission.
+func decommissionPreCheckReady(resp *serverpb.DecommissionPreCheckResponse) bool {
+	// If we don't have a response value, this indicates that the pre-checks are
+	// disabled, and hence all nodes are implicitly ready for decommission.
+	if resp == nil {
+		return true
+	}
+	for _, nodeCheckResult := range resp.CheckedNodes {
+		if nodeCheckResult.DecommissionReadiness != serverpb.DecommissionPreCheckResponse_READY {
+			return false
+		}
+	}
+
+	return true
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
