@@ -162,6 +162,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/storage/meta",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
