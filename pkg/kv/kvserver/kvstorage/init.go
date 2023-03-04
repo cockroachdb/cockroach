@@ -72,6 +72,12 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 	if err := batch.Commit(true /* sync */); err != nil {
 		return errors.Wrap(err, "persisting engine initialization data")
 	}
+	// We will set the store ID during start, but we want to set it as quickly as
+	// possible after creating a store (to initialize the shared object creator
+	// ID).
+	if err := eng.SetStoreID(ctx, int32(ident.StoreID)); err != nil {
+		return errors.Wrap(err, "setting store ID")
+	}
 
 	return nil
 }

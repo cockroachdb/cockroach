@@ -1803,10 +1803,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
-	// Communicate store ID to engine, if it needs it.
+	// Communicate store ID to engine.
 	// TODO(sep-raft-log): do for both engines.
-	if logSetter, ok := s.TODOEngine().(storage.StoreIDSetter); ok {
-		logSetter.SetStoreID(ctx, int32(s.StoreID()))
+	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
+		return err
 	}
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since

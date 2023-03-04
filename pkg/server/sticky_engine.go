@@ -88,10 +88,8 @@ func (e *stickyInMemEngine) Closed() bool {
 }
 
 // SetStoreID implements the StoreIDSetter interface.
-func (e *stickyInMemEngine) SetStoreID(ctx context.Context, storeID int32) {
-	if storeIDSetter, ok := e.Engine.(storage.StoreIDSetter); ok {
-		storeIDSetter.SetStoreID(ctx, storeID)
-	}
+func (e *stickyInMemEngine) SetStoreID(ctx context.Context, storeID int32) error {
+	return e.Engine.SetStoreID(ctx, storeID)
 }
 
 // stickyInMemEnginesRegistryImpl is the bookkeeper for all active
