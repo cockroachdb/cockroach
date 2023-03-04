@@ -492,12 +492,6 @@ func TestInitializeEngineErrors(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
-	// Bootstrap should fail if engine has no cluster version yet.
-	err := kvstorage.InitEngine(ctx, eng, testIdent)
-	require.ErrorContains(t, err, "no cluster version")
-
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
-
 	// Put some random garbage into the engine.
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
@@ -506,7 +500,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	err = store.Start(ctx, stopper)
+	err := store.Start(ctx, stopper)
 	require.ErrorIs(t, err, &kvstorage.NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.

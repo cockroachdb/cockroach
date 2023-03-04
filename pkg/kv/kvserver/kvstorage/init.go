@@ -76,8 +76,8 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 	return nil
 }
 
-// checkCanInitializeEngine ensures that the engine is empty except for a
-// cluster version, which must be present.
+// checkCanInitializeEngine ensures that the engine is empty except possibly for
+// cluster version or cached cluster settings.
 func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	// See if this is an already-bootstrapped store.
 	ident, err := ReadStoreIdent(ctx, eng)
@@ -99,12 +99,10 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	})
 	defer iter.Close()
 	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
-	if !valid {
-		if err == nil {
-			return errors.New("no cluster version found on uninitialized engine")
-		}
+	if err != nil {
 		return err
 	}
+
 	getMVCCKey := func() (storage.MVCCKey, error) {
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
 			bounds, err := iter.EngineRangeBounds()
@@ -123,24 +121,19 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		}
 		return k.ToMVCCKey()
 	}
-	var k storage.MVCCKey
-	if k, err = getMVCCKey(); err != nil {
-		return err
-	}
-	if !k.Key.Equal(keys.DeprecatedStoreClusterVersionKey()) {
-		return errors.New("no cluster version found on uninitialized engine")
-	}
-	valid, err = iter.NextEngineKey()
+
 	for valid {
-		// Only allowed to find cached cluster settings on an uninitialized
-		// engine.
+		var k storage.MVCCKey
 		if k, err = getMVCCKey(); err != nil {
 			return err
 		}
-		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
-			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
+		// Only allowed to find cluster version and cached cluster settings on an
+		// uninitialized engine.
+		if !k.Key.Equal(keys.DeprecatedStoreClusterVersionKey()) {
+			if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
+				return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
+			}
 		}
-		// There may be more cached cluster settings, so continue iterating.
 		valid, err = iter.NextEngineKey()
 	}
 	return err
