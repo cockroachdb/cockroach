@@ -49,6 +49,11 @@ func (v Version) LessEq(otherV Version) bool {
 	return v.Equal(otherV) || v.Less(otherV)
 }
 
+// AtLeast returns true if the receiver is greater than or requal to the parameter.
+func (v Version) AtLeast(otherV Version) bool {
+	return !otherV.Less(v)
+}
+
 // String implements the fmt.Stringer interface.
 func (v Version) String() string { return redact.StringWithoutMarkers(v) }
 

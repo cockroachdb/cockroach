@@ -442,12 +442,12 @@ const (
 	// backfilled.
 	V23_1DatabaseRoleSettingsRoleIDColumnBackfilled
 
-	// V23_1_MVCCRangeTombstonesUnconditionallyEnabled is a version gate at and
-	// after which Cockroach will always write MVCC Range Tombstones, regardless
-	// of the value of the storage.mvcc.range_tombstones.enabled cluster setting.
-	// Prior to this version, it was possible for a cluster to be writing MVCC
-	// Range Tombstones, but only if the cluster had been opted in manually, under
-	// a specific set of circumstances (i.e. appropriate 22.2.x version, Cockroach
+	// V23_1_MVCCRangeTombstonesUnconditionallyEnabled is a version gate after
+	// which Cockroach will always write MVCC Range Tombstones, regardless of the
+	// value of the storage.mvcc.range_tombstones.enabled cluster setting. Prior
+	// to this version, it was possible for a cluster to be writing MVCC Range
+	// Tombstones, but only if the cluster had been opted in manually, under a
+	// specific set of circumstances (i.e. appropriate 22.2.x version, Cockroach
 	// Cloud cluster, etc.).
 	V23_1_MVCCRangeTombstonesUnconditionallyEnabled
 
@@ -458,6 +458,10 @@ const (
 	// V23_1DeprecateClusterVersionKey is the version where we no longer write
 	// cluster version keys to engines.
 	V23_1DeprecateClusterVersionKey
+
+	// V23_1SetPebbleCreatorID is a version gate after which we set the Creator ID
+	// on Pebble stores that have shared storage configured.
+	V23_1SetPebbleCreatorID
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -795,6 +799,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1DeprecateClusterVersionKey,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 62},
+	},
+	{
+		Key:     V23_1SetPebbleCreatorID,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 64},
 	},
 
 	// *************************************************

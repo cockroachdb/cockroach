@@ -963,6 +963,11 @@ type Engine interface {
 	// SetCompactionConcurrency is used to set the engine's compaction
 	// concurrency. It returns the previous compaction concurrency.
 	SetCompactionConcurrency(n uint64) uint64
+
+	// SetStoreID informs the engine of the store ID, once it is known.
+	// Used to show the store ID in logs and to initialize the shared object
+	// creator ID (if shared object storage is configured).
+	SetStoreID(ctx context.Context, storeID int32) error
 }
 
 // Batch is the interface for batch specific operations.
