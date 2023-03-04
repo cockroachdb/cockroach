@@ -96,8 +96,9 @@ func newPebbleTempEngine(
 		return nil, nil, err
 	}
 
-	// Set store ID for the pebble engine.
-	p.SetStoreID(ctx, base.TempStoreID)
+	// Set store ID for the pebble engine. We are not using shared storage for
+	// temp stores so this cannot error out.
+	_ = p.SetStoreID(ctx, base.TempStoreID)
 	return &pebbleTempEngine{
 		db:     p.db,
 		closer: p.closer,
