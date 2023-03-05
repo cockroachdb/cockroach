@@ -3915,7 +3915,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	}
 
 	// Corrupt one of the files in the backup.
-	f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[1].Path), os.O_WRONLY, 0)
+	f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[0].Path), os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

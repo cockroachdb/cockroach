@@ -52,6 +52,7 @@ func TestShowBackup(t *testing.T) {
 	defer cleanupEmptyCluster()
 	sqlDB.Exec(t, `
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+SET CLUSTER SETTING bulkio.backup.file_size = '1';
 CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 USE data; CREATE SCHEMA sc;
 CREATE TABLE data.sc.t1 (a INT);
