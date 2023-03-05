@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -22,48 +22,128 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func getRangeInfoForTable(
-	ctx context.Context, t *testing.T, db *gosql.DB, servers []*server.TestServer, tableName string,
-) (startKey, endKey roachpb.Key, store *kvserver.Store) {
-	var rangeID roachpb.RangeID
-	err := db.QueryRow(fmt.Sprintf("select range_id from [show ranges from table %s] limit 1", tableName)).Scan(&rangeID)
+func intentCountForTable(ctx context.Context, t *testing.T, db *gosql.DB, table string) int {
+	q := fmt.Sprintf(`
+		select sum((crdb_internal.range_stats(raw_start_key)->>'intent_count')::int)
+		from [show ranges from table %s with keys]`,
+		table)
+	var count int
+	err := db.QueryRowContext(ctx, q).Scan(&count)
 	require.NoError(t, err)
-	for _, server := range servers {
-		require.NoError(t, server.Stores().VisitStores(func(s *kvserver.Store) error {
-			if replica, err := s.GetReplica(rangeID); err == nil && replica.OwnsValidLease(ctx, replica.Clock().NowAsClockTimestamp()) {
-				desc := replica.Desc()
-				startKey = desc.StartKey.AsRawKey()
-				endKey = desc.EndKey.AsRawKey()
-				store = s
-			}
-			return nil
-		}))
-	}
-	return startKey, endKey, store
+	return count
 }
 
-func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
-	for _, s := range tc.Servers {
-		err = s.Stores().VisitStores(func(store *kvserver.Store) error {
-			return store.ForceReplicationScanAndProcess()
-		})
+func lockCountForTable(ctx context.Context, t *testing.T, db *gosql.DB, table string) int {
+	q := fmt.Sprintf(
+		`select lock_key_pretty
+		from crdb_internal.cluster_locks
+		where table_name = '%s'`,
+		table)
+	rows, err := db.QueryContext(ctx, q)
+	require.NoError(t, err)
+	defer rows.Close()
+	var count int
+	for rows.Next() {
+		var lockKeyPretty string
+		require.NoError(t, rows.Scan(&lockKeyPretty))
+		t.Logf("lock at key: %s", lockKeyPretty)
+		count++
 	}
-	return err
+	return count
 }
 
-// TestAsyncIntentResolutionByteSizePagination tests that async intent
+// TestAsyncIntentResolution runs a transaction that adds an unreplicated lock
+// on each range and then writes an intent on each range. Intent resolution for
+// the intents/locks on the first range will be synchronous and on the second
+// range will be asynchronous.
+func TestAsyncIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testAsyncIntentResolution(t, func(db *gosql.DB) {
+		tx, err := db.Begin()
+		require.NoError(t, err)
+		_, err = tx.Exec("SELECT * FROM t WHERE i IN (1, 3) FOR UPDATE")
+		require.NoError(t, err)
+		_, err = tx.Exec("INSERT INTO t (i) VALUES (2), (4)")
+		require.NoError(t, err)
+		err = tx.Commit()
+		require.NoError(t, err)
+	})
+}
+
+// TestAsyncIntentResolution_1PC runs a transaction that writes to a single
+// range and hits the 1-phase commit fast-path.
+func TestAsyncIntentResolution_1PC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testAsyncIntentResolution(t, func(db *gosql.DB) {
+		_, err := db.Exec("INSERT INTO t (i) VALUES (2)")
+		require.NoError(t, err)
+	})
+}
+
+// TestAsyncIntentResolution_1PCUnreplicatedLocks runs a transaction that adds
+// an unreplicated lock on each range but does not perform any writes. The
+// transaction will hit the 1-phase commit fast-path. Resolution for the locks
+// on the first range will be synchronous and on the second range will be
+// asynchronous.
+func TestAsyncIntentResolution_1PCUnreplicatedLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testAsyncIntentResolution(t, func(db *gosql.DB) {
+		_, err := db.Exec("SELECT * FROM t WHERE i IN (1, 3) FOR UPDATE")
+		require.NoError(t, err)
+	})
+}
+
+// testAsyncIntentResolution runs a test function against a table 't' that is
+// split into two ranges. It then asserts that all intents and locks across the
+// table's ranges are resolved.
+func testAsyncIntentResolution(t *testing.T, fn func(*gosql.DB)) {
+	// Start test cluster.
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+
+	// Create table t and split into two ranges, with a boundary at key 3. Add a
+	// key on key 1 and key 3 that can be locked using SELECT FOR UPDATE.
+	_, err := db.Exec("CREATE TABLE t (i INT PRIMARY KEY)")
+	require.NoError(t, err)
+	_, err = db.Exec("ALTER TABLE t SPLIT AT VALUES (3)")
+	require.NoError(t, err)
+	_, err = db.Exec("INSERT INTO t (i) VALUES (1), (3)")
+	require.NoError(t, err)
+
+	// Run the test's user txn function.
+	fn(db)
+
+	// Check that all intents and locks have been resolved to ensure async
+	// intent resolution completed.
+	testutils.SucceedsSoon(t, func() error {
+		if c := intentCountForTable(ctx, t, db, "t"); c != 0 {
+			return errors.Errorf("%d intents still unresolved", c)
+		}
+		if c := lockCountForTable(ctx, t, db, "t"); c != 0 {
+			return errors.Errorf("%d locks still unresolved", c)
+		}
+		return nil
+	})
+}
+
+// TestAsyncIntentResolution_ByteSizePagination tests that async intent
 // resolution through the IntentResolver has byte size pagination. This is done
 // by creating a transaction that first writes to a range (transaction record)
 // and then in another range: writes such that the total bytes of the write
@@ -73,7 +153,7 @@ func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 // IntentResolver, but the write batch size from intent resolution will exceed
 // the max raft command size resulting in an error and not all intents will be
 // resolved, unless byte size pagination is implemented.
-func TestAsyncIntentResolutionByteSizePagination(t *testing.T) {
+func TestAsyncIntentResolution_ByteSizePagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -143,34 +223,26 @@ func TestAsyncIntentResolutionByteSizePagination(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Get the store, start key, and end key of the range containing table t.
-	startKey, endKey, store := getRangeInfoForTable(ctx, t, db, tc.Servers, "t")
-
 	// Check that all intents have been resolved to ensure async intent
 	// resolution did not exceed the max raft command size, which can only
 	// happen if byte size pagination was implemented.
 	testutils.SucceedsSoon(t, func() error {
-		result, err := storage.MVCCScan(ctx, store.TODOEngine(), startKey, endKey,
-			hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
-		if err != nil {
-			return err
-		}
-		if intentCount := len(result.Intents); intentCount != 0 {
-			return errors.Errorf("%d intents still unresolved", intentCount)
+		if c := intentCountForTable(ctx, t, db, "t"); c != 0 {
+			return errors.Errorf("%d intents still unresolved", c)
 		}
 		return nil
 	})
 }
 
-// TestEndTxnByteSizePagination tests that EndTxn has byte size pagination.
-// This is done by creating a transaction where the total bytes of the write
-// values exceeds the max raft command size and updating the transaction
-// timestamp to ensure the key values are written to the raft command during
-// intent resolution. EndTxn will synchronously resolve the intents and the
-// write batch size from intent resolution will exceed the max raft command
-// size resulting in an error and no intents will be resolved, unless byte size
-// pagination is implemented.
-func TestEndTxnByteSizePagination(t *testing.T) {
+// TestSyncIntentResolution_ByteSizePagination tests that EndTxn has byte size
+// pagination. This is done by creating a transaction where the total bytes of
+// the write values exceeds the max raft command size and updating the
+// transaction timestamp to ensure the key values are written to the raft
+// command during intent resolution. EndTxn will synchronously resolve the
+// intents and the write batch size from intent resolution will exceed the max
+// raft command size resulting in an error and no intents will be resolved,
+// unless byte size pagination is implemented.
+func TestSyncIntentResolution_ByteSizePagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -238,23 +310,24 @@ func TestEndTxnByteSizePagination(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Get the store, start key, and end key of the range containing table t.
-	startKey, endKey, store := getRangeInfoForTable(ctx, t, db, tc.Servers, "t")
-
 	// Check that at least 1 intent has been resolved to ensure synchronous
 	// intent resolution did not exceed the max raft command size, which can only
 	// happen if byte size pagination was implemented.
 	testutils.SucceedsSoon(t, func() error {
-		result, err := storage.MVCCScan(ctx, store.TODOEngine(), startKey, endKey,
-			hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
-		if err != nil {
-			return err
-		}
-		if intentCount := len(result.Intents); intentCount == numIntents {
-			return errors.Errorf("Expected fewer than %d unresolved intents, got %d", numIntents, intentCount)
+		if c := intentCountForTable(ctx, t, db, "t"); c == numIntents {
+			return errors.Errorf("expected fewer than %d unresolved intents, got %d", numIntents, c)
 		}
 		return nil
 	})
+}
+
+func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
+	for _, s := range tc.Servers {
+		err = s.Stores().VisitStores(func(store *kvserver.Store) error {
+			return store.ForceReplicationScanAndProcess()
+		})
+	}
+	return err
 }
 
 // TestIntentResolutionUnavailableRange tests that InFlightBackpressureLimit
