@@ -84,6 +84,14 @@ eexpect "1 row"
 eexpect root@
 end_test
 
+start_test "Test that the history can be recalled."
+send "\\s\r"
+eexpect "select 1"
+eexpect "foo"
+eexpect "select 2; select 3"
+eexpect root@
+end_test
+
 # Finally terminate with Ctrl+D
 send_eof
 eexpect eof

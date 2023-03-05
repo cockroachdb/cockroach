@@ -98,6 +98,10 @@ func (b *editlineReader) addHistory(line string) error {
 	return b.ins.AddHistory(line)
 }
 
+func (b *editlineReader) saveHistory() error {
+	return b.ins.SaveHistory()
+}
+
 func (b *editlineReader) canPrompt() bool {
 	return true
 }

@@ -106,6 +106,9 @@ type internalContext struct {
 	// hook to run once, then clear, after running the next batch of statements.
 	afterRun func()
 
+	// file where the history is saved.
+	histFile string
+
 	statementWrappers []statementWrapper
 
 	// state about the current query.
