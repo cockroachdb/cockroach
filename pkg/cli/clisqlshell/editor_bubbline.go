@@ -104,6 +104,10 @@ func (b *bubblineReader) addHistory(line string) error {
 	return b.ins.AddHistory(line)
 }
 
+func (b *bubblineReader) getHistory() []string {
+	return b.ins.GetHistory()
+}
+
 func (b *bubblineReader) canPrompt() bool {
 	return true
 }
