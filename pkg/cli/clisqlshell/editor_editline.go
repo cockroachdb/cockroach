@@ -98,6 +98,11 @@ func (b *editlineReader) addHistory(line string) error {
 	return b.ins.AddHistory(line)
 }
 
+func (b *editlineReader) getHistory() []string {
+	fmt.Println("Warning: display history not implemented by editlineReader")
+	return []string{}
+}
+
 func (b *editlineReader) canPrompt() bool {
 	return true
 }

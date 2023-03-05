@@ -23,6 +23,7 @@ type editor interface {
 	getOutputStream() *os.File
 	getLine() (string, error)
 	addHistory(line string) error
+	getHistory() []string
 	canPrompt() bool
 	setPrompt(prompt string)
 	multilineEdit() bool
