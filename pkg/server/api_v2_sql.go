@@ -313,8 +313,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requestPayload.Database == "" {
-		// TODO(knz): maybe derive the default value off the username?
-		requestPayload.Database = "defaultdb"
+		requestPayload.Database = "system"
 	}
 	if requestPayload.ApplicationName == "" {
 		requestPayload.ApplicationName = "$ api-v2-sql"

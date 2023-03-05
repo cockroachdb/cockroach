@@ -311,6 +311,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest({}),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+            database: "system",
           });
           return {
             body: JSON.stringify(
@@ -345,6 +346,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest(req),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+            database: "system",
           });
           return {
             body: JSON.stringify(
@@ -377,6 +379,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest({}),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+            database: "system",
           });
           return { throws: new Error() };
         },
@@ -402,6 +405,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest({}),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+            database: "system",
           });
           return new Promise<any>(() => {});
         },
