@@ -551,7 +551,8 @@ func (r *Replica) evaluate1PC(
 	clonedTxn.ReadTimestamp = br.Timestamp
 	clonedTxn.WriteTimestamp = br.Timestamp
 
-	// If the end transaction is not committed, clear the batch and mark the status aborted.
+	// If the end transaction is not committed, clear the batch and mark the
+	// status aborted.
 	if !etArg.Commit {
 		clonedTxn.Status = roachpb.ABORTED
 		batch.Close()
@@ -575,19 +576,39 @@ func (r *Replica) evaluate1PC(
 	}
 
 	// Even though the transaction is 1PC and hasn't written any intents, it may
-	// have acquired unreplicated locks, so inform the concurrency manager that
-	// it is finalized and than any unreplicated locks that it has acquired can
-	// be released.
-	res.Local.UpdatedTxns = []*roachpb.Transaction{clonedTxn}
-	res.Local.ResolvedLocks = make([]roachpb.LockUpdate, len(etArg.LockSpans))
-	for i, sp := range etArg.LockSpans {
-		res.Local.ResolvedLocks[i] = roachpb.LockUpdate{
-			Span:           sp,
-			Txn:            clonedTxn.TxnMeta,
-			Status:         clonedTxn.Status,
-			IgnoredSeqNums: clonedTxn.IgnoredSeqNums,
+	// have acquired unreplicated locks, so inform the local concurrency manager
+	// that it is finalized and that any unreplicated locks that it has acquired
+	// on this range can be released. The transaction may have also acquired
+	// unreplicated locks on other ranges. In such cases, retain the external
+	// locks so that they can be handed to async intent resolution.
+	//
+	// NOTE: we're holding a read latch on the RangeDescriptor key thanks to the
+	// EndTxn latch declaration, so this descriptor access is synchronized with
+	// splits and merges.
+	desc := r.Desc()
+	resolvedLocks := make([]roachpb.LockUpdate, 0, len(etArg.LockSpans))
+	var externalLocks []roachpb.Span
+	for _, sp := range etArg.LockSpans {
+		inSpan, outSpans := kvserverbase.IntersectSpan(sp, desc)
+		externalLocks = append(externalLocks, outSpans...)
+		if inSpan != nil {
+			resolvedLocks = append(resolvedLocks, roachpb.LockUpdate{
+				Span:           *inSpan,
+				Txn:            clonedTxn.TxnMeta,
+				Status:         clonedTxn.Status,
+				IgnoredSeqNums: clonedTxn.IgnoredSeqNums,
+			})
 		}
 	}
+	clonedTxn.LockSpans = externalLocks
+
+	if len(externalLocks) != 0 {
+		// NB: like in result.FromEndTxn, don't add to EndTxns if all lock spans
+		// were local and asynchronous resolution is not needed.
+		res.Local.EndTxns = []result.EndTxnIntents{{Txn: clonedTxn, Always: false, Poison: false}}
+	}
+	res.Local.UpdatedTxns = []*roachpb.Transaction{clonedTxn}
+	res.Local.ResolvedLocks = resolvedLocks
 
 	// Assign the response txn.
 	br.Txn = clonedTxn
