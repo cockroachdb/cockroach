@@ -95,6 +95,7 @@ Informational
   \du[S+] [PATTERN] same as \dg.
   \dv[S+] [PATTERN] list only views.
   \l[+] [PATTERN]   list databases.
+  \s                list command history.
   \sf[+] FUNCNAME   show a function's definition.
   \sv[+] VIEWNAME   show a view's definition.
   \z [PATTERN]      same as \dp.
@@ -277,6 +278,14 @@ func (c *cliState) printCliHelp() {
 		docs.URL("use-the-built-in-sql-client.html"),
 	)
 	fmt.Fprintln(c.iCtx.stdout)
+}
+
+// printCommandHistory prints the recorded command history.
+func (c *cliState) printCommandHistory() {
+	// TODO: if the history file is very large only display a recent portion of commands.
+	// TODO: think about how to handle very large command to the ui more user friendly.
+	history := c.ins.getHistory()
+	fmt.Print(strings.Join(history[:], "\n"))
 }
 
 // addHistory persists a line of input to the readline history file.
@@ -1391,6 +1400,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		// Reset the input buffer so far. This is useful when e.g. a user
 		// got confused with string delimiters and multi-line input.
 		return cliStartLine
+
+	case `\s`:
+		c.printCommandHistory()
 
 	case `\show`:
 		if c.ins.multilineEdit() {

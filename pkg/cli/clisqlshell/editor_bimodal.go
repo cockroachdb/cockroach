@@ -69,6 +69,10 @@ func (e *bimodalEditor) addHistory(line string) error {
 		e.main.addHistory(line))
 }
 
+func (e *bimodalEditor) getHistory() []string {
+	return append(e.copy.getHistory(), e.main.getHistory()...)
+}
+
 func (e *bimodalEditor) canPrompt() bool {
 	return e.main.canPrompt()
 }
