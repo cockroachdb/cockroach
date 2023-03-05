@@ -1149,7 +1149,7 @@ WITH RECURSIVE cte(a, b) AS (
 ----
 with &2 (cte)
  ├── columns: a:9!null b:10!null
- ├── union
+ ├── union-all
  │    ├── columns: "?column?":7!null "?column?":8!null
  │    ├── left columns: "?column?":1 "?column?":2
  │    ├── right columns: "?column?":5 "?column?":6
@@ -2035,3 +2035,87 @@ with &4 (qux)
            │                   │    └── filters (true)
            │                   └── filters (true)
            └── filters (true)
+
+# Regression tests for #93370. Do not convert a non-recursive CTE
+# that uses UNION ALL and WITH RECURSIVE to UNION.
+build
+WITH RECURSIVE
+   x(id) AS
+     (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 3 ),
+   y(id) AS
+     (SELECT * FROM x UNION ALL SELECT * FROM x)
+ SELECT * FROM y
+----
+with &2 (x)
+ ├── columns: id:9
+ ├── recursive-c-t-e
+ │    ├── columns: id:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: id:2
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 1 [as="?column?":1]
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: id:3!null
+ │         │    ├── with-scan &1 (x)
+ │         │    │    ├── columns: id:3
+ │         │    │    └── mapping:
+ │         │    │         └──  id:2 => id:3
+ │         │    └── filters
+ │         │         └── id:3 < 3
+ │         └── projections
+ │              └── id:3 + 1 [as="?column?":4]
+ └── with &4 (y)
+      ├── columns: id:9
+      ├── union-all
+      │    ├── columns: id:8
+      │    ├── left columns: id:5
+      │    ├── right columns: id:7
+      │    ├── with-scan &2 (x)
+      │    │    ├── columns: id:5
+      │    │    └── mapping:
+      │    │         └──  id:2 => id:5
+      │    └── with-scan &2 (x)
+      │         ├── columns: id:7
+      │         └── mapping:
+      │              └──  id:2 => id:7
+      └── with-scan &4 (y)
+           ├── columns: id:9
+           └── mapping:
+                └──  id:8 => id:9
+
+exec-ddl
+CREATE TABLE t93370 (i INT)
+----
+
+build
+WITH RECURSIVE
+   y(id) AS (SELECT * FROM t93370 UNION ALL SELECT * FROM t93370)
+ SELECT * FROM y
+----
+with &2 (y)
+ ├── columns: id:11
+ ├── union-all
+ │    ├── columns: i:10
+ │    ├── left columns: t93370.i:1
+ │    ├── right columns: t93370.i:6
+ │    ├── project
+ │    │    ├── columns: t93370.i:1
+ │    │    └── scan t93370
+ │    │         └── columns: t93370.i:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    └── project
+ │         ├── columns: t93370.i:6
+ │         └── scan t93370
+ │              └── columns: t93370.i:6 rowid:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
+ └── with-scan &2 (y)
+      ├── columns: id:11
+      └── mapping:
+           └──  i:10 => id:11

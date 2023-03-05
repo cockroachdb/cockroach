@@ -1141,3 +1141,36 @@ SELECT i, j FROM u@u_j_idx
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE u WITH OPTIONS INDEX ALL
 ----
+
+# Regression tests for #93370. Do not convert a non-recursive CTE
+# that uses UNION ALL and WITH RECURSIVE to UNION.
+query I rowsort
+WITH RECURSIVE
+   x(id) AS
+     (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 3 ),
+   y(id) AS
+     (SELECT * FROM x UNION ALL SELECT * FROM x)
+ SELECT * FROM y
+----
+1
+2
+3
+1
+2
+3
+
+statement ok
+CREATE TABLE t93370 (i INT);
+INSERT INTO t93370 VALUES (1), (2), (3)
+
+query I rowsort
+WITH RECURSIVE
+   y(id) AS (SELECT * FROM t93370 UNION ALL SELECT * FROM t93370)
+ SELECT * FROM y
+----
+1
+2
+3
+1
+2
+3
