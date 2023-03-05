@@ -151,7 +151,7 @@ func ContainsKeyRange(desc *roachpb.RangeDescriptor, start, end roachpb.Key) boo
 // into up to three pieces: A first piece which is contained in the Range,
 // and a slice of up to two further spans which are outside of the key
 // range. An span for which [Key, EndKey) is empty does not result in any
-// spans; thus intersectIntent only applies to span ranges.
+// spans; thus IntersectSpan only applies to span ranges.
 //
 // A range-local span range is never split: It's returned as either
 // belonging to or outside of the descriptor's key range, and passing an
