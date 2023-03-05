@@ -51,6 +51,10 @@ func (b *bufioReader) addHistory(line string) error {
 	return nil
 }
 
+func (b *bufioReader) saveHistory() error {
+	return nil
+}
+
 func (b *bufioReader) canPrompt() bool {
 	return b.displayPrompt
 }
