@@ -424,6 +424,98 @@ sql admin
 }
 
 
+# Delete defaultdb for the following two tests.
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [
+    {"sql": "DROP DATABASE defaultdb CASCADE"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "DROP DATABASE"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+
+# Not passing any database, should still work for admin with defaultdb deleted.
+sql admin
+{
+  "execute": true,
+  "statements": [
+    {"sql": "SELECT * FROM mydb.bar"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "i",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "k",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "i": 1,
+      "k": 42
+     },
+     {
+      "i": 2,
+      "k": 42
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+
+
+# Not passing any database, should still work for non-admin with defaultdb deleted.
+# The error should be about permission on the table, not permission about executing the query.
+sql non-admin expect-error
+{
+  "execute": true,
+  "statements": [{"sql": "SELECT username FROM users where username = 'admin'"}]
+}
+----
+42501|executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users
+
+
 sql admin
 {
   "database": "mydb",
