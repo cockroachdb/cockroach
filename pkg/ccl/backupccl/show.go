@@ -12,6 +12,7 @@ import (
 	"context"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -215,6 +216,7 @@ var showBackupOptions = exprutil.KVOptionValidationMap{
 	backupOptCheckFiles:                     exprutil.KVStringOptRequireNoValue,
 	backupOptConnTestTransfer:               exprutil.KVStringOptRequireValue,
 	backupOptConnTestDuration:               exprutil.KVStringOptRequireValue,
+	backupOptConnTestConcurrency:            exprutil.KVStringOptRequireValue,
 }
 
 // showBackupPlanHook implements PlanHookFn.
@@ -252,6 +254,13 @@ func showBackupPlanHook(
 				return nil, nil, nil, false, err
 			}
 			params.MinDuration = parsed
+		}
+		if concurrency, ok := opts[backupOptConnTestConcurrency]; ok {
+			parsed, err := strconv.Atoi(concurrency)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			params.Concurrency = int64(parsed)
 		}
 		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, params)
 	}

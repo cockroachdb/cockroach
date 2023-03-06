@@ -46,8 +46,14 @@ SELECT node, locality, ok, error, can_delete FROM [SHOW BACKUP CONNECTION 'nodel
 3 region=us-east-1,availability-zone=us-east1 true  true
 
 query-sql
-SELECT node, locality, ok, error, can_delete FROM [SHOW BACKUP CONNECTION 'nodelocal://1/conn-test' WITH TRANSFER='1', TIME = '1ms'] ORDER BY node;
+SELECT node, locality, ok, error, can_delete FROM [SHOW BACKUP CONNECTION 'nodelocal://1/conn-test' WITH TRANSFER='1', TIME = '1ms', 'concurrently' = '3'] ORDER BY node;
 ----
 1 region=eu-central-1,availability-zone=eu-central-1 true  true
+1 region=eu-central-1,availability-zone=eu-central-1 true  true
+1 region=eu-central-1,availability-zone=eu-central-1 true  true
 2 region=eu-north-1,availability-zone=eu-north-1 true  true
+2 region=eu-north-1,availability-zone=eu-north-1 true  true
+2 region=eu-north-1,availability-zone=eu-north-1 true  true
+3 region=us-east-1,availability-zone=us-east1 true  true
+3 region=us-east-1,availability-zone=us-east1 true  true
 3 region=us-east-1,availability-zone=us-east1 true  true
