@@ -2720,6 +2720,15 @@ An event of type `captured_index_usage_stats`
 | `IsInverted` | IsInverted indicates if the index is an inverted index. | no |
 | `CreatedAt` | CreatedAt is the timestamp at which the index was created. | no |
 | `SchemaName` | SchemaName is the name of the schema in which the index was created. | no |
+| `IsVisible` | IsVisible indicates whether the index is visible or not. | no |
+| `IsSharded` | IsSharded indicates whether the index is sharded or not. | no |
+| `ShardBucketCount` | ShardBucketCount indicates the number of shards the index is divided into. | no |
+| `DropTime` | DropTime is the timestamp at which the table was dropped. | no |
+| `ModTime` | ModTime is the timestamp at which the table was last modified. | no |
+| `ModTimeLogical` | ModTimeLogical is the unix nanos at which the table was last modified. | no |
+| `AuditMode` | AuditMode indicates if the table has audit logging set. | no |
+| `Locality` | Locality is the location associated with the table. | no |
+| `MVCCStats` | MVCCStats is a message containing replica stats related to a given table name. | yes |
 
 
 #### Common fields
@@ -2797,6 +2806,37 @@ ChangefeedFailed events.
 | `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
+
+### `m_v_c_c_stats`
+
+An event of type `m_v_c_c_stats` is an event that is logged as part of the CapturedIndexUsageStats. The stats are derived from
+pkg/storage/enginepb/mvcc.proto refer to there if adding more MVCC stats.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `ContainsEstimates` | contains_estimates indicates whether stats in the object are estimated or not. See pkg/storage/enginepb/mvcc.pb.go for more details. | no |
+| `LastUpdatedNanos` | last_update_nanos is a timestamp at which the ages were last updated. | no |
+| `IntentAge` | intent_age is the cumulative age of the tracked intents. | no |
+| `GcBytesAge` | gc_bytes_age is the cumulative age of the non-live data | no |
+| `LiveBytes` | live_bytes is the number of bytes stored in keys and values which can in principle be read by means of a Scan or Get in the far future, including intents but not deletion tombstones (or their intents). | no |
+| `LiveCount` | live_count is the number of meta keys tracked under live_bytes. | no |
+| `KeyBytes` | key_bytes is the number of bytes stored in all non-system point keys, including live, meta, old, and deleted keys. | no |
+| `KeyCount` | key_count is the number of meta keys tracked under key_bytes. | no |
+| `ValueBytes` | value_bytes is the number of bytes in all non-system version values, including meta values. | no |
+| `ValueCount` | val_count is the number of meta values tracked under val_bytes. | no |
+| `IntentBytes` | intent_bytes is the bytes in intent key-value pairs (without their meta keys). | no |
+| `IntentCount` | intent_count is the number of keys tracked under intent_bytes. It is equal to the number of meta keys in the system with a non-empty Transaction proto. | no |
+| `SeparatedIntentCount` | separated_intent_count is the number of intents that are in the separated lock table. It is <= intent_count. | no |
+| `RangeKeyBytes` | range_key_bytes is the encoded size of range keys. | no |
+| `RangeKeyCount` | range_key_count is the number of range keys tracked under range_key_bytes. | no |
+| `RangeValBytes` | range_val_bytes is the number of bytes stored in range keys. | no |
+| `RangeValCount` | range_val_count is the number of range key values tracked under range_val_bytes, i.e. the number of range key versions. | no |
+| `SysBytes` | sys_bytes is the number of bytes stored in system-local kv-pairs. | no |
+| `SysCount` | sys_count is the number of meta keys tracked under sys_bytes. | no |
+| `AbortSpanBytes` | abort_span_bytes is the number of bytes stored in a range's abort span. These bytes are a subset of sys_bytes. | no |
+
+
 
 ### `recovery_event`
 

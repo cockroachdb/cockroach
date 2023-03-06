@@ -65,6 +65,10 @@ func TestEventJSON(t *testing.T) {
 			&StoreStats{Levels: []LevelStats{{Level: 0, NumFiles: 1}, {Level: 6, NumFiles: 2}}},
 			`"Levels":[{"Level":0,"NumFiles":1},{"Level":6,"NumFiles":2}]`,
 		},
+		{
+			&CapturedIndexUsageStats{TotalReadCount: 1, MVCCStats: &MVCCStats{LiveBytes: 1, LiveCount: 1}},
+			`"TotalReadCount":1,"MVCCStats":{"LiveBytes":1,"LiveCount":1}`,
+		},
 	}
 
 	for _, tc := range testCases {

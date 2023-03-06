@@ -680,6 +680,14 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
        b = append(b, []byte(str)...)
      }
    }
+   {{- else if eq .FieldType "MVCCStats"}}
+   if m.{{.FieldName}} != nil {
+	if printComma { b = append(b, ',')}; printComma = true
+	b = append(b, "\"{{.FieldName}}\":"...)
+	b = append(b, '{')
+	printComma, b = m.MVCCStats.AppendJSONFields(false, b)
+    b = append(b, '}')
+   }
    {{- else}}
    {{ error  .FieldType }}
    {{- end}}

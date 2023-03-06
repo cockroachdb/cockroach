@@ -810,6 +810,91 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, '"')
 	}
 
+	if m.IsVisible {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsVisible\":true"...)
+	}
+
+	if m.IsSharded {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsSharded\":true"...)
+	}
+
+	if m.ShardBucketCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ShardBucketCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ShardBucketCount), 10)
+	}
+
+	if m.DropTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DropTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.DropTime)))
+		b = append(b, '"')
+	}
+
+	if m.ModTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ModTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ModTime)))
+		b = append(b, '"')
+	}
+
+	if m.ModTimeLogical != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ModTimeLogical\":"...)
+		b = strconv.AppendFloat(b, float64(m.ModTimeLogical), 'f', -1, 32)
+	}
+
+	if m.AuditMode != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AuditMode\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.AuditMode)))
+		b = append(b, '"')
+	}
+
+	if m.Locality != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Locality\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Locality)))
+		b = append(b, '"')
+	}
+
+	if m.MVCCStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MVCCStats\":"...)
+		b = append(b, '{')
+		printComma, b = m.MVCCStats.AppendJSONFields(false, b)
+		b = append(b, '}')
+	}
+
 	return printComma, b
 }
 
@@ -3209,6 +3294,192 @@ func (m *LevelStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 		printComma = true
 		b = append(b, "\"NumSublevels\":"...)
 		b = strconv.AppendInt(b, int64(m.NumSublevels), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *MVCCStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if m.ContainsEstimates != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContainsEstimates\":"...)
+		b = strconv.AppendInt(b, int64(m.ContainsEstimates), 10)
+	}
+
+	if m.LastUpdatedNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LastUpdatedNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.LastUpdatedNanos), 10)
+	}
+
+	if m.IntentAge != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntentAge\":"...)
+		b = strconv.AppendInt(b, int64(m.IntentAge), 10)
+	}
+
+	if m.GcBytesAge != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GcBytesAge\":"...)
+		b = strconv.AppendInt(b, int64(m.GcBytesAge), 10)
+	}
+
+	if m.LiveBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LiveBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.LiveBytes), 10)
+	}
+
+	if m.LiveCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LiveCount\":"...)
+		b = strconv.AppendInt(b, int64(m.LiveCount), 10)
+	}
+
+	if m.KeyBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KeyBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.KeyBytes), 10)
+	}
+
+	if m.KeyCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KeyCount\":"...)
+		b = strconv.AppendInt(b, int64(m.KeyCount), 10)
+	}
+
+	if m.ValueBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ValueBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.ValueBytes), 10)
+	}
+
+	if m.ValueCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ValueCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ValueCount), 10)
+	}
+
+	if m.IntentBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntentBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.IntentBytes), 10)
+	}
+
+	if m.IntentCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntentCount\":"...)
+		b = strconv.AppendInt(b, int64(m.IntentCount), 10)
+	}
+
+	if m.SeparatedIntentCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SeparatedIntentCount\":"...)
+		b = strconv.AppendInt(b, int64(m.SeparatedIntentCount), 10)
+	}
+
+	if m.RangeKeyBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeKeyBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeKeyBytes), 10)
+	}
+
+	if m.RangeKeyCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeKeyCount\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeKeyCount), 10)
+	}
+
+	if m.RangeValBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeValBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeValBytes), 10)
+	}
+
+	if m.RangeValCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeValCount\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeValCount), 10)
+	}
+
+	if m.SysBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SysBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.SysBytes), 10)
+	}
+
+	if m.SysCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SysCount\":"...)
+		b = strconv.AppendInt(b, int64(m.SysCount), 10)
+	}
+
+	if m.AbortSpanBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AbortSpanBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.AbortSpanBytes), 10)
 	}
 
 	return printComma, b

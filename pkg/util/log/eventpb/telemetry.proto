@@ -232,6 +232,33 @@ message CapturedIndexUsageStats {
 
   // SchemaName is the name of the schema in which the index was created.
   string schema_name = 13 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IsVisible indicates whether the index is visible or not.
+  bool is_visible = 14 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IsSharded indicates whether the index is sharded or not.
+  bool is_sharded = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  // ShardBucketCount indicates the number of shards the index is divided into.
+  int32 shard_bucket_count = 16 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // DropTime is the timestamp at which the table was dropped.
+  string drop_time = 17 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ModTime is the timestamp at which the table was last modified.
+  string mod_time = 18 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ModTimeLogical is the unix nanos at which the table was last modified.
+  float mod_time_logical = 19 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // AuditMode indicates if the table has audit logging set.
+  string audit_mode = 20 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Locality is the location associated with the table.
+  string locality = 21 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  
+  // MVCCStats is a message containing replica stats related to a given table name.
+  MVCCStats mvcc_stats = 22 [(gogoproto.customname) = "MVCCStats", (gogoproto.jsontag) = ",omitempty"];
 }
 
 // CreateChangefeed is an event for any CREATE CHANGEFEED query that
@@ -268,6 +295,63 @@ message ChangefeedEmittedBytes {
 
   // Flag to indicate that the changefeed is closing.
   bool closing = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// MVCCStats is an event that is logged as part of the CapturedIndexUsageStats. The stats are derived from
+// pkg/storage/enginepb/mvcc.proto refer to there if adding more MVCC stats.
+message MVCCStats {
+  // contains_estimates indicates whether stats in the object are
+  // estimated or not. See pkg/storage/enginepb/mvcc.pb.go for more details.
+  int64 contains_estimates = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // last_update_nanos is a timestamp at which the ages were last
+	// updated.
+  int64 last_updated_nanos = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // intent_age is the cumulative age of the tracked intents.
+  int64 intent_age = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // gc_bytes_age is the cumulative age of the non-live data
+  int64 gc_bytes_age = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // live_bytes is the number of bytes stored in keys and values which can in
+	// principle be read by means of a Scan or Get in the far future, including
+	// intents but not deletion tombstones (or their intents).
+  int64 live_bytes = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // live_count is the number of meta keys tracked under live_bytes.
+  int64 live_count = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // key_bytes is the number of bytes stored in all non-system
+	// point keys, including live, meta, old, and deleted keys.
+	int64 key_bytes = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // key_count is the number of meta keys tracked under key_bytes.
+  int64 key_count = 8 [(gogoproto.jsontag) = ",omitempty"];
+  // value_bytes is the number of bytes in all non-system version
+	// values, including meta values.
+  int64 value_bytes = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // val_count is the number of meta values tracked under val_bytes.
+  int64 value_count = 10 [(gogoproto.jsontag) = ",omitempty"];
+  // intent_bytes is the bytes in intent key-value
+  // pairs (without their meta keys).
+  int64 intent_bytes = 11 [(gogoproto.jsontag) = ",omitempty"];
+  // intent_count is the number of keys tracked under intent_bytes.
+	// It is equal to the number of meta keys in the system with
+	// a non-empty Transaction proto.
+  int64 intent_count = 12 [(gogoproto.jsontag) = ",omitempty"];
+  // separated_intent_count is the number of intents that are in the separated
+	// lock table. It is <= intent_count.
+  int64 separated_intent_count = 13 [(gogoproto.jsontag) = ",omitempty"];
+  // range_key_bytes is the encoded size of range keys. 
+  int64 range_key_bytes = 14 [(gogoproto.jsontag) = ",omitempty"];
+  // range_key_count is the number of range keys tracked under range_key_bytes.
+	int64 range_key_count = 15 [(gogoproto.jsontag) = ",omitempty"];
+  // range_val_bytes is the number of bytes stored in range keys. 
+  int64 range_val_bytes = 16 [(gogoproto.jsontag) = ",omitempty"];
+  // range_val_count is the number of range key values tracked under
+	// range_val_bytes, i.e. the number of range key versions.
+  int64 range_val_count = 17 [(gogoproto.jsontag) = ",omitempty"];
+  // sys_bytes is the number of bytes stored in system-local kv-pairs.
+  int64 sys_bytes = 18 [(gogoproto.jsontag) = ",omitempty"];
+  // sys_count is the number of meta keys tracked under sys_bytes.
+  int64 sys_count = 19 [(gogoproto.jsontag) = ",omitempty"];
+  // abort_span_bytes is the number of bytes stored in a range's
+	// abort span. These bytes are a subset of sys_bytes.
+  int64 abort_span_bytes = 20 [(gogoproto.jsontag) = ",omitempty"]; 
 }
 
 // RecoveryEvent is an event that is logged on every invocation of BACKUP,
