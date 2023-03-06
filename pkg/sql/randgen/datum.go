@@ -481,6 +481,15 @@ func randStringSimple(rng *rand.Rand) string {
 }
 
 func randJSONSimple(rng *rand.Rand) json.JSON {
+	return randJSONSimpleDepth(rng, 0)
+}
+
+func randJSONSimpleDepth(rng *rand.Rand, depth int) json.JSON {
+	depth++
+	// Prevents timeouts during stress runs.
+	if depth > 100 {
+		return json.NullJSONValue
+	}
 	switch rng.Intn(10) {
 	case 0:
 		return json.NullJSONValue
@@ -495,13 +504,13 @@ func randJSONSimple(rng *rand.Rand) json.JSON {
 	case 5:
 		a := json.NewArrayBuilder(0)
 		for i := rng.Intn(3); i >= 0; i-- {
-			a.Add(randJSONSimple(rng))
+			a.Add(randJSONSimpleDepth(rng, depth))
 		}
 		return a.Build()
 	default:
 		a := json.NewObjectBuilder(0)
 		for i := rng.Intn(3); i >= 0; i-- {
-			a.Add(randStringSimple(rng), randJSONSimple(rng))
+			a.Add(randStringSimple(rng), randJSONSimpleDepth(rng, depth))
 		}
 		return a.Build()
 	}
