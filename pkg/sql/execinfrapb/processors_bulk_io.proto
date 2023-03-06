@@ -410,8 +410,18 @@ message GenerativeSplitAndScatterSpec {
   optional bool use_simple_import_spans = 19 [(gogoproto.nullable) = false];
 }
 
+
+
 message CloudStorageTestSpec {
   optional string location = 1 [(gogoproto.nullable) = false];
-  optional int64 transfer_size = 2 [(gogoproto.nullable) = false];
-  // NEXT ID: 2;
+  message Params {
+    // TransferSize determines the size of the file that is written and then
+    // read back in its entirety in each iteration of the test.
+    optional int64 transfer_size = 1 [(gogoproto.nullable) = false];
+    // MinDuration causes the test to be run repeatedly until the duration has
+    // elapsed.
+    optional int64 min_duration = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
+  }
+  optional Params params = 2 [(gogoproto.nullable) = false];
+  // NEXT ID: 3;
 }

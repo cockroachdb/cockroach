@@ -151,20 +151,20 @@ SHOW BACKUP CONNECTION '_' -- literals removed
 SHOW BACKUP CONNECTION 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP CONNECTION 'bar' WITH transfer = '1KiB'
+SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = '1KiB', TIME = '1h'
 ----
-SHOW BACKUP CONNECTION 'bar' WITH transfer = '1KiB'
-SHOW BACKUP CONNECTION ('bar') WITH transfer = ('1KiB') -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH transfer = '_' -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH _ = '1KiB' -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH transfer = '1KiB', "time" = '1h' -- normalized!
+SHOW BACKUP CONNECTION ('bar') WITH transfer = ('1KiB'), "time" = ('1h') -- fully parenthesized
+SHOW BACKUP CONNECTION '_' WITH transfer = '_', "time" = '_' -- literals removed
+SHOW BACKUP CONNECTION 'bar' WITH _ = '1KiB', _ = '1h' -- identifiers removed
 
 parse
-SHOW BACKUP CONNECTION 'bar' WITH transfer = $1
+SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = $1, TIME = $2
 ----
-SHOW BACKUP CONNECTION 'bar' WITH transfer = $1
-SHOW BACKUP CONNECTION ('bar') WITH transfer = ($1) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH transfer = $1 -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH _ = $1 -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH transfer = $1, "time" = $2 -- normalized!
+SHOW BACKUP CONNECTION ('bar') WITH transfer = ($1), "time" = ($2) -- fully parenthesized
+SHOW BACKUP CONNECTION '_' WITH transfer = $1, "time" = $1 -- literals removed
+SHOW BACKUP CONNECTION 'bar' WITH _ = $1, _ = $2 -- identifiers removed
 
 parse
 SHOW BACKUPS IN 'bar'

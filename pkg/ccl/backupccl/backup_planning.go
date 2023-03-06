@@ -68,6 +68,8 @@ const (
 	backupOptEncDir           = "encryption_info_dir"
 	backupOptCheckFiles       = "check_files"
 	backupOptConnTestTransfer = "transfer"
+	backupOptConnTestDuration = "time"
+
 	// backupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	backupPartitionDescriptorPrefix = "BACKUP_PART"

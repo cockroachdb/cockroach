@@ -214,6 +214,7 @@ var showBackupOptions = exprutil.KVOptionValidationMap{
 	backupOptEncDir:                         exprutil.KVStringOptRequireValue,
 	backupOptCheckFiles:                     exprutil.KVStringOptRequireNoValue,
 	backupOptConnTestTransfer:               exprutil.KVStringOptRequireValue,
+	backupOptConnTestDuration:               exprutil.KVStringOptRequireValue,
 }
 
 // showBackupPlanHook implements PlanHookFn.
@@ -237,16 +238,22 @@ func showBackupPlanHook(
 			return nil, nil, nil, false, err
 		}
 
-		var transferSize int64
+		var params cloudcheck.Params
 		if transferSizeStr, ok := opts[backupOptConnTestTransfer]; ok {
 			parsed, err := humanizeutil.ParseBytes(transferSizeStr)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
-			transferSize = parsed
+			params.TransferSize = parsed
 		}
-
-		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, transferSize)
+		if durationStr, ok := opts[backupOptConnTestDuration]; ok {
+			parsed, err := time.ParseDuration(durationStr)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			params.MinDuration = parsed
+		}
+		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, params)
 	}
 
 	if backup.Path == nil && backup.InCollection != nil {
