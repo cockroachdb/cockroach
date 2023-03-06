@@ -104,6 +104,29 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
+query TT
+SHOW CREATE c WITH REDACT
+----
+c  CREATE TABLE public.c (
+     a INT8 NOT NULL,
+     b INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
+     CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES public.d(d),
+     INDEX c_a_b_idx (a ASC, b ASC),
+     UNIQUE INDEX unique_a (a ASC),
+     FAMILY fam_0_a_rowid (a, rowid),
+     FAMILY fam_1_b (b),
+     CONSTRAINT check_b CHECK (b IN (‹×›:::INT8, ‹×›:::INT8, ‹×›:::INT8)),
+     CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
+     CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > ‹×›:::INT8,
+     CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b),
+     CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > ‹×›:::INT8
+   );
+   COMMENT ON TABLE public.c IS 'table';
+   COMMENT ON COLUMN public.c.a IS 'column';
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+
 subtest alter_column_type_not_break_show_create
 
 statement ok
@@ -137,6 +160,17 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 COMMENT ON COLUMN public.t.c IS 'first comment'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT];
+----
+CREATE TABLE public.t (
+  c VARCHAR NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON COLUMN public.t.c IS 'first comment'
+
 
 statement ok
 CREATE TABLE t1 (
