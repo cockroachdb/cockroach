@@ -278,10 +278,10 @@ func Keys(forSystemTenant bool) (res []string) {
 	return res
 }
 
-// Lookup returns a Setting by name along with its description.
-// For non-reportable setting, it instantiates a MaskedSetting
-// to masquerade for the underlying setting.
-func Lookup(name string, purpose LookupPurpose, forSystemTenant bool) (Setting, bool) {
+// LookupForLocalAccess returns a NonMaskedSetting by name. Used when a setting
+// is being retrieved for local processing within the cluster and not for
+// reporting; sensitive values are accessible.
+func LookupForLocalAccess(name string, forSystemTenant bool) (NonMaskedSetting, bool) {
 	s, ok := registry[name]
 	if !ok {
 		return nil, false
@@ -289,24 +289,27 @@ func Lookup(name string, purpose LookupPurpose, forSystemTenant bool) (Setting, 
 	if !forSystemTenant && s.Class() == SystemOnly {
 		return nil, false
 	}
-	if purpose == LookupForReporting && !s.isReportable() {
-		return &MaskedSetting{setting: s}, true
-	}
 	return s, true
 }
 
-// LookupPurpose indicates what is being done with the setting.
-type LookupPurpose int
-
-const (
-	// LookupForReporting indicates that a setting is being retrieved
-	// for reporting and sensitive values should be scrubbed.
-	LookupForReporting LookupPurpose = iota
-	// LookupForLocalAccess indicates that a setting is being
-	// retrieved for local processing within the cluster and
-	// all values should be accessible
-	LookupForLocalAccess
-)
+// LookupForReporting returns a Setting by name. Used when a setting is being
+// retrieved for reporting.
+//
+// For settings that are non-reportable, the returned Setting hides the current
+// value (see Setting.String).
+func LookupForReporting(name string, forSystemTenant bool) (Setting, bool) {
+	s, ok := registry[name]
+	if !ok {
+		return nil, false
+	}
+	if !forSystemTenant && s.Class() == SystemOnly {
+		return nil, false
+	}
+	if !s.isReportable() {
+		return &maskedSetting{setting: s}, true
+	}
+	return s, true
+}
 
 // ForSystemTenant can be passed to Lookup for code that runs only on the system
 // tenant.
@@ -325,11 +328,13 @@ var ReadableTypes = map[string]string{
 	"m": "version",
 }
 
-// RedactedValue returns a string representation of the value for settings
-// types the are not considered sensitive (numbers, bools, etc) or
-// <redacted> for those with values could store sensitive things (i.e. strings).
+// RedactedValue returns:
+//   - a string representation of the value, if the setting is reportable (or it
+//     is a string setting with an empty value);
+//   - "<redacted>" if the setting is not reportable;
+//   - "<unknown>" if there is no setting with this name.
 func RedactedValue(name string, values *Values, forSystemTenant bool) string {
-	if setting, ok := Lookup(name, LookupForReporting, forSystemTenant); ok {
+	if setting, ok := LookupForReporting(name, forSystemTenant); ok {
 		return setting.String(values)
 	}
 	return "<unknown>"

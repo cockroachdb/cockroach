@@ -1954,18 +1954,16 @@ func (s *adminServer) Settings(
 		return nil, serverError(ctx, err)
 	}
 
-	var lookupPurpose settings.LookupPurpose
+	redactValues := true
 	if isAdmin {
 		// Root accesses can customize the purpose.
 		// This is used by the UI to see all values (local access)
 		// and `cockroach zip` to redact the values (telemetry).
-		lookupPurpose = settings.LookupForReporting
 		if req.UnredactedValues {
-			lookupPurpose = settings.LookupForLocalAccess
+			redactValues = false
 		}
 	} else {
 		// Non-root access cannot see the values in any case.
-		lookupPurpose = settings.LookupForReporting
 		if err := s.adminPrivilegeChecker.requireViewClusterSettingOrModifyClusterSettingPermission(ctx); err != nil {
 			return nil, err
 		}
@@ -1998,7 +1996,13 @@ func (s *adminServer) Settings(
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
-		v, ok := settings.Lookup(k, lookupPurpose, settings.ForSystemTenant)
+		var v settings.Setting
+		var ok bool
+		if redactValues {
+			v, ok = settings.LookupForReporting(k, settings.ForSystemTenant)
+		} else {
+			v, ok = settings.LookupForLocalAccess(k, settings.ForSystemTenant)
+		}
 		if !ok {
 			continue
 		}

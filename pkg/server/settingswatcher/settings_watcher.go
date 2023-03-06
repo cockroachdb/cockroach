@@ -247,7 +247,7 @@ func (s *SettingsWatcher) handleKV(
 	}
 
 	if !s.codec.ForSystemTenant() {
-		setting, ok := settings.Lookup(name, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
+		setting, ok := settings.LookupForLocalAccess(name, s.codec.ForSystemTenant())
 		if !ok {
 			log.Warningf(ctx, "unknown setting %s, skipping update", redact.Safe(name))
 			return nil
@@ -337,18 +337,14 @@ func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val setting
 
 // setDefaultLocked sets a setting to its default value.
 func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
-	setting, ok := settings.Lookup(key, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
+	setting, ok := settings.LookupForLocalAccess(key, s.codec.ForSystemTenant())
 	if !ok {
 		log.Warningf(ctx, "failed to find setting %s, skipping update", redact.Safe(key))
 		return
 	}
-	ws, ok := setting.(settings.NonMaskedSetting)
-	if !ok {
-		log.Fatalf(ctx, "expected non-masked setting, got %T", s)
-	}
 	val := settings.EncodedValue{
-		Value: ws.EncodedDefault(),
-		Type:  ws.Typ(),
+		Value: setting.EncodedDefault(),
+		Type:  setting.Typ(),
 	}
 	s.setLocked(ctx, key, val)
 }

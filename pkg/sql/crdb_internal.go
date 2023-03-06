@@ -2006,9 +2006,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
-			setting, _ := settings.Lookup(
-				k, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
-			)
+			setting, _ := settings.LookupForLocalAccess(k, p.ExecCfg().Codec.ForSystemTenant())
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
