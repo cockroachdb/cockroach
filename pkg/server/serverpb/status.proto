@@ -1562,6 +1562,13 @@ message StatementsResponse {
   repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
 }
 
+enum StatsSortOptions {
+  SERVICE_LAT = 0;
+  reserved 1; // This is for  CPU Time in 23.1
+  EXECUTION_COUNT = 2;
+  reserved 3; // This is for P99 in 23.1
+  CONTENTION_TIME = 4;
+}
 message CombinedStatementsStatsRequest {
   enum StatsType {
     StmtStatsOnly = 0;
@@ -1570,6 +1577,7 @@ message CombinedStatementsStatsRequest {
 
   message FetchMode {
     StatsType stats_type = 1;
+    StatsSortOptions sort = 2;
   }
 
   // Unix time range for aggregated statements.
@@ -1588,6 +1596,8 @@ message CombinedStatementsStatsRequest {
   // TODO (xinhaoz) - Split this API into stmts and txns properly instead of using
   //  this param.
   FetchMode fetch_mode = 5 [(gogoproto.nullable) = true];
+
+  int64 limit = 6;
 }
 
 // StatementDetailsRequest requests the details of a Statement, based on its keys.
