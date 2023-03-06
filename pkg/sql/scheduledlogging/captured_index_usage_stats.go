@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -86,6 +87,8 @@ type CaptureIndexUsageStatsLoggingScheduler struct {
 	st                      *cluster.Settings
 	knobs                   *CaptureIndexUsageStatsTestingKnobs
 	currentCaptureStartTime time.Time
+	codec                   keys.SQLCodec
+	getSpanStats            func(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
 }
 
 func (s *CaptureIndexUsageStatsLoggingScheduler) getLoggingDuration() time.Duration {
@@ -122,11 +125,15 @@ func Start(
 	db isql.DB,
 	cs *cluster.Settings,
 	knobs *CaptureIndexUsageStatsTestingKnobs,
+	codec keys.SQLCodec,
+	getSpanStats func(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error),
 ) {
 	scheduler := CaptureIndexUsageStatsLoggingScheduler{
-		db:    db,
-		st:    cs,
-		knobs: knobs,
+		db:           db,
+		st:           cs,
+		knobs:        knobs,
+		codec:        codec,
+		getSpanStats: getSpanStats,
 	}
 	scheduler.start(ctx, stopper)
 }
@@ -147,7 +154,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 					continue
 				}
 				s.currentCaptureStartTime = timeutil.Now()
-				err := captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
+				err := s.captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
 				if err != nil {
 					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
 				}
@@ -166,7 +173,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 	})
 }
 
-func captureIndexUsageStats(
+func (s *CaptureIndexUsageStatsLoggingScheduler) captureIndexUsageStats(
 	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
 ) error {
 	allDatabaseNames, err := getAllDatabaseNames(ctx, ie)
@@ -176,8 +183,9 @@ func captureIndexUsageStats(
 
 	// Capture index usage statistics for each database.
 	var ok bool
-	expectedNumDatums := 11
-	var allCapturedIndexUsageStats []logpb.EventPayload
+	expectedNumDatums := 19
+	var allCapturedIndexUsageStats []*eventpb.CapturedIndexUsageStats
+	var allStats []logpb.EventPayload
 	for _, databaseName := range allDatabaseNames {
 		// Omit index usage statistics on the default databases 'system',
 		// 'defaultdb', and 'postgres'.
@@ -196,12 +204,21 @@ func captureIndexUsageStats(
 		 total_reads,
 		 last_read,
 		 ti.created_at,
-		 ns.nspname::string
+		 ns.nspname::string,
+		 ti.is_visible,
+		 ti.is_sharded,
+		 ti.shard_bucket_count,
+		 t.drop_time,
+		 t.mod_time,
+		 t.mod_time_logical,
+		 t.audit_mode,
+		 t.locality
 		FROM crdb_internal.index_usage_statistics AS us
     JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
                                           AND us.table_id = ti.descriptor_id
     JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
     JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
+	JOIN crdb_internal.tables AS t ON ti.descriptor_id = t.table_id
 ORDER BY total_reads ASC`
 
 		it, err := ie.QueryIteratorEx(
@@ -218,6 +235,12 @@ ORDER BY total_reads ASC`
 			return err
 		}
 
+		type stashType struct {
+			span roachpb.Span
+			rows map[int]struct{}
+		}
+		rowsForIndexSpan := make(map[string]stashType)
+		rowIndex := 0
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			var row tree.Datums
 			if err != nil {
@@ -248,29 +271,114 @@ ORDER BY total_reads ASC`
 				createdAt = tree.MustBeDTimestamp(row[9]).Time
 			}
 			schemaName := tree.MustBeDString(row[10])
-
-			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
-				TableID:        uint32(roachpb.TableID(tableID)),
-				IndexID:        uint32(roachpb.IndexID(indexID)),
-				TotalReadCount: uint64(totalReads),
-				LastRead:       lastRead.String(),
-				DatabaseName:   databaseName.String(),
-				TableName:      string(tableName),
-				IndexName:      string(indexName),
-				IndexType:      string(indexType),
-				IsUnique:       bool(isUnique),
-				IsInverted:     bool(isInverted),
-				CreatedAt:      createdAt.String(),
-				SchemaName:     string(schemaName),
+			isVisible := tree.MustBeDBool(row[11])
+			isSharded := tree.MustBeDBool(row[12])
+			shardBucketCount := 0
+			if row[13] != tree.DNull {
+				shardBucketCount = int(tree.MustBeDInt(row[13]))
+			}
+			dropTime := time.Time{}
+			if row[14] != tree.DNull {
+				dropTime = tree.MustBeDTimestamp(row[14]).Time
+			}
+			// ModTime can't be null.
+			modTime := tree.MustBeDTimestamp(row[15]).Time
+			modTimeLogical := tree.MustBeDDecimal(row[16]).Decimal
+			modTimeLogicalFloat, err := modTimeLogical.Float64()
+			if err != nil {
+				log.Infof(ctx, "Error retrieving float from decimal: %s ", err)
+			}
+			auditMode := tree.MustBeDString(row[17])
+			locality := ""
+			if row[18] != tree.DNull {
+				locality = string(tree.MustBeDString(row[18]))
 			}
 
+			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
+				TableID:             uint32(roachpb.TableID(tableID)),
+				IndexID:             uint32(roachpb.IndexID(indexID)),
+				TotalReadCount:      uint64(totalReads),
+				LastRead:            lastRead.String(),
+				DatabaseName:        databaseName.String(),
+				TableName:           string(tableName),
+				IndexName:           string(indexName),
+				IndexType:           string(indexType),
+				IsUnique:            bool(isUnique),
+				IsInverted:          bool(isInverted),
+				CreatedAt:           createdAt.String(),
+				SchemaName:          string(schemaName),
+				IsVisible:           bool(isVisible),
+				IsSharded:           bool(isSharded),
+				ShardBucketCount:    int32(shardBucketCount),
+				TableDropTime:       dropTime.String(),
+				TableModTime:        modTime.String(),
+				TableModTimeLogical: float32(modTimeLogicalFloat),
+				TableAuditMode:      auditMode.String(),
+				TableLocality:       locality,
+			}
+
+			// Determine the span for the index. We'll use this span to
+			// query for MVCC statistics via SpanStats.
+			indexPrefix := s.codec.IndexPrefix(uint32(tableID), uint32(indexID))
+			indexSpan := roachpb.Span{
+				Key:    indexPrefix,
+				EndKey: indexPrefix.PrefixEnd(),
+			}
+			indexSpanString := indexSpan.String()
+
+			// In case multiple rows refer to the same table and index,
+			// we'll do the following:
+			// 1) Maintain a unique set of spans.
+			// 2) Associate a span back to the original row(s).
+			if _, ok := rowsForIndexSpan[indexSpanString]; !ok {
+				// This is the first time we've seen this span.
+				rowsForIndexSpan[indexSpanString] = stashType{
+					span: indexSpan,
+					rows: map[int]struct{}{rowIndex: {}},
+				}
+			} else {
+				// We've seen this span before.
+				rowsForIndexSpan[indexSpanString].rows[rowIndex] = struct{}{}
+			}
+
+			rowIndex++
 			allCapturedIndexUsageStats = append(allCapturedIndexUsageStats, capturedIndexStats)
 		}
+
+		// Now that we've finished iterating, we can do a batched
+		// SpanStats request with the spans we've collected.
+		spans := make([]roachpb.Span, 0, len(rowsForIndexSpan))
+		for _, v := range rowsForIndexSpan {
+			spans = append(spans, v.span)
+		}
+
+		spanStatsRes, err := s.getSpanStats(ctx, &roachpb.SpanStatsRequest{
+			NodeID: "0", // Fan-out to all nodes.
+			Spans:  spans,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		// Assign the returned MVCC stats to the appropriate
+		// capturedUsageIndexStats entry.
+		for span, stats := range spanStatsRes.SpanToStats {
+			for rowIndex := range rowsForIndexSpan[span].rows {
+				allCapturedIndexUsageStats[rowIndex].MVCCStats = &stats.TotalStats
+			}
+		}
+
+		// LogEventsWithDelay expects a []logpb.EventPayload.
+		for _, usageStat := range allCapturedIndexUsageStats {
+			allStats = append(allStats, usageStat)
+		}
+
 		if err = it.Close(); err != nil {
 			return err
 		}
 	}
-	logutil.LogEventsWithDelay(ctx, allCapturedIndexUsageStats, stopper, loggingDelay)
+	logutil.LogEventsWithDelay(ctx, allStats, stopper, loggingDelay)
 	return nil
 }
 

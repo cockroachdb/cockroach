@@ -13,6 +13,7 @@ package eventpb
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,10 @@ func TestEventJSON(t *testing.T) {
 		{
 			&StoreStats{Levels: []LevelStats{{Level: 0, NumFiles: 1}, {Level: 6, NumFiles: 2}}},
 			`"Levels":[{"Level":0,"NumFiles":1},{"Level":6,"NumFiles":2}]`,
+		},
+		{
+			&CapturedIndexUsageStats{TotalReadCount: 1, MVCCStats: &enginepb.MVCCStats{LiveBytes: 1, LiveCount: 1}},
+			`"TotalReadCount":1,"MVCCStats":{"liveBytes":"1","liveCount":"1"}`,
 		},
 	}
 
