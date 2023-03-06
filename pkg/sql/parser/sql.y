@@ -864,6 +864,9 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
     return u.val.(tree.ShowTenantOptions)
 }
+func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
+    return u.val.(tree.ShowCreateFormatOption)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -963,7 +966,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 
 %token <str> QUERIES QUERY QUOTE
 
-%token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
+%token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETENTION RETURNING RETURN RETURNS RETRY REVISION_HISTORY
@@ -1245,6 +1248,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %type <tree.Statement> show_commit_timestamp_stmt
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
+%type <tree.ShowCreateFormatOption> opt_show_create_format_options
 %type <tree.Statement> show_create_schedules_stmt
 %type <tree.Statement> show_create_external_connections_stmt
 %type <tree.Statement> show_csettings_stmt show_local_or_tenant_csettings_stmt
@@ -8120,30 +8124,40 @@ show_transfer_stmt:
 // SHOW CREATE ALL TYPES
 // %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
-  SHOW CREATE table_name
+  SHOW CREATE table_name opt_show_create_format_options
   {
-    $$.val = &tree.ShowCreate{Name: $3.unresolvedObjectName()}
+    $$.val = &tree.ShowCreate{
+      Name: $3.unresolvedObjectName(), FmtOpt: $4.showCreateFormatOption(),
+    }
   }
-| SHOW CREATE TABLE table_name
-	{
+| SHOW CREATE TABLE table_name opt_show_create_format_options
+  {
     /* SKIP DOC */
-    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeTable, Name: $4.unresolvedObjectName()}
-	}
-| SHOW CREATE VIEW table_name
-	{
+    $$.val = &tree.ShowCreate{
+      Mode: tree.ShowCreateModeTable,
+      Name: $4.unresolvedObjectName(),
+      FmtOpt: $5.showCreateFormatOption(),
+    }
+  }
+| SHOW CREATE VIEW table_name opt_show_create_format_options
+  {
     /* SKIP DOC */
-    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeView, Name: $4.unresolvedObjectName()}
-	}
+    $$.val = &tree.ShowCreate{
+      Mode: tree.ShowCreateModeView,
+      Name: $4.unresolvedObjectName(),
+      FmtOpt: $5.showCreateFormatOption(),
+    }
+  }
 | SHOW CREATE SEQUENCE sequence_name
-	{
+  {
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSequence, Name: $4.unresolvedObjectName()}
-	}
+  }
 | SHOW CREATE DATABASE db_name
-	{
+  {
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeDatabase, Name: $4.unresolvedObjectName()}
-	}
+  }
 | SHOW CREATE INDEXES FROM table_name
   {
     /* SKIP DOC */
@@ -8176,6 +8190,16 @@ show_create_stmt:
     $$.val = &tree.ShowCreateAllTypes{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
+
+opt_show_create_format_options:
+  /* EMPTY */
+  {
+    $$.val = tree.ShowCreateFormatOptionNone
+  }
+| WITH REDACT
+  {
+    $$.val = tree.ShowCreateFormatOptionRedactedValues
+  }
 
 // %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs
 // %Category: DDL
@@ -16451,6 +16475,7 @@ unreserved_keyword:
 | REASSIGN
 | RECURRING
 | RECURSIVE
+| REDACT
 | REF
 | REFRESH
 | REGION
@@ -16991,6 +17016,7 @@ bare_label_keywords:
 | REASSIGN
 | RECURRING
 | RECURSIVE
+| REDACT
 | REF
 | REFERENCES
 | REFRESH

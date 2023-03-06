@@ -768,10 +768,18 @@ const (
 	ShowCreateModeSecondaryIndexes
 )
 
+type ShowCreateFormatOption int
+
+const (
+	ShowCreateFormatOptionNone ShowCreateFormatOption = iota
+	ShowCreateFormatOptionRedactedValues
+)
+
 // ShowCreate represents a SHOW CREATE statement.
 type ShowCreate struct {
-	Mode ShowCreateMode
-	Name *UnresolvedObjectName
+	Mode   ShowCreateMode
+	Name   *UnresolvedObjectName
+	FmtOpt ShowCreateFormatOption
 }
 
 // Format implements the NodeFormatter interface.
@@ -787,6 +795,11 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 		ctx.WriteString("SECONDARY INDEXES FROM ")
 	}
 	ctx.FormatNode(node.Name)
+
+	switch node.FmtOpt {
+	case ShowCreateFormatOptionRedactedValues:
+		ctx.WriteString(" WITH REDACT")
+	}
 }
 
 // ShowCreateAllSchemas represents a SHOW CREATE ALL SCHEMAS statement.
