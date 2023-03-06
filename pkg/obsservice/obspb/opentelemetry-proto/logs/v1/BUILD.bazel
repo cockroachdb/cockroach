@@ -6,10 +6,11 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "v1_proto",
     srcs = ["logs.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//obsservice/obspb/opentelemetry-proto/common/v1:v1_proto",
-        "//obsservice/obspb/opentelemetry-proto/resource/v1:v1_proto",
+        "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:v1_proto",
+        "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:v1_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -21,8 +22,8 @@ go_proto_library(
     proto = ":v1_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//obsservice/obspb/opentelemetry-proto/common/v1:common_proto",
-        "//obsservice/obspb/opentelemetry-proto/resource/v1:resource_proto",
+        "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
+        "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:resource",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

@@ -26,11 +26,11 @@ proto_library(
         "lock_waiter.proto",
         "locking.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//kv/kvserver/concurrency/lock:lock_proto",
-        "//storage/enginepb:enginepb_proto",
-        "//util/hlc:hlc_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
     ],
@@ -43,9 +43,8 @@ go_proto_library(
     proto = ":lock_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//kv/kvserver/concurrency/lock:locking_proto",
-        "//storage/enginepb:mvcc3_proto",
-        "//util/hlc:timestamp_proto",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

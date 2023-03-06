@@ -18,7 +18,8 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
+	sqllex "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase"
 )
 
 const eof = -1
@@ -139,7 +140,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 	switch ch {
 	case '$':
 		if s.scanDollarQuotedString(lval) {
-			lval.SetID(lexbase.SCONST)
+			lval.SetID(plpgsqllexbase.SCONST)
 			return
 		}
 		return
@@ -147,14 +148,14 @@ func (s *Scanner) Scan(lval ScanSymType) {
 	case identQuote:
 		// "[^"]"
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(lexbase.IDENT)
+			lval.SetID(plpgsqllexbase.IDENT)
 		}
 		return
 
 	case singleQuote:
 		// '[^']'
 		if s.scanString(lval, ch, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(lexbase.SCONST)
+			lval.SetID(plpgsqllexbase.SCONST)
 		}
 		return
 
@@ -164,7 +165,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 			// b'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
-				lval.SetID(lexbase.BCONST)
+				lval.SetID(plpgsqllexbase.BCONST)
 			}
 			return
 		}
@@ -175,9 +176,9 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		switch t := s.peek(); {
 		case t == '.': // ..
 			s.pos++
-			lval.SetID(lexbase.DOT_DOT)
+			lval.SetID(plpgsqllexbase.DOT_DOT)
 			return
-		case lexbase.IsDigit(t):
+		case sqllex.IsDigit(t):
 			s.scanNumber(lval, ch)
 			return
 		}
@@ -187,7 +188,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case '=': // !=
 			s.pos++
-			lval.SetID(lexbase.NOT_EQUALS)
+			lval.SetID(plpgsqllexbase.NOT_EQUALS)
 			return
 		}
 		return
@@ -196,11 +197,11 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case '<': // <<
 			s.pos++
-			lval.SetID(lexbase.LESS_LESS)
+			lval.SetID(plpgsqllexbase.LESS_LESS)
 			return
 		case '=': // <=
 			s.pos++
-			lval.SetID(lexbase.LESS_EQUALS)
+			lval.SetID(plpgsqllexbase.LESS_EQUALS)
 			return
 		}
 		return
@@ -209,11 +210,11 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case '>': // >>
 			s.pos++
-			lval.SetID(lexbase.GREATER_GREATER)
+			lval.SetID(plpgsqllexbase.GREATER_GREATER)
 			return
 		case '=': // >=
 			s.pos++
-			lval.SetID(lexbase.GREATER_EQUALS)
+			lval.SetID(plpgsqllexbase.GREATER_EQUALS)
 			return
 		}
 		return
@@ -222,21 +223,21 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case ':':
 			s.pos++
-			lval.SetID(lexbase.TYPECAST)
+			lval.SetID(plpgsqllexbase.TYPECAST)
 			return
 		case '=':
 			s.pos++
-			lval.SetID(lexbase.COLON_EQUALS)
+			lval.SetID(plpgsqllexbase.COLON_EQUALS)
 			return
 		}
 		return
 
 	default:
-		if lexbase.IsDigit(ch) {
+		if sqllex.IsDigit(ch) {
 			s.scanNumber(lval, ch)
 			return
 		}
-		if lexbase.IsIdentStart(ch) {
+		if sqllex.IsIdentStart(ch) {
 			s.scanIdent(lval)
 			return
 		}
@@ -309,7 +310,7 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 			isLower = false
 		}
 
-		if !lexbase.IsIdentMiddle(ch) {
+		if !sqllex.IsIdentMiddle(ch) {
 			break
 		}
 
@@ -334,10 +335,10 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 		lval.SetStr(*(*string)(unsafe.Pointer(&b)))
 	} else {
 		// The string has unicode in it. No choice but to run Normalize.
-		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
+		lval.SetStr(sqllex.NormalizeName(s.in[start:s.pos]))
 	}
 
-	lval.SetID(lexbase.GetKeywordID(lval.Str()))
+	lval.SetID(plpgsqllexbase.GetKeywordID(lval.Str()))
 }
 
 func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
@@ -348,13 +349,13 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 
 	for {
 		ch := s.peek()
-		if (isHex && lexbase.IsHexDigit(ch)) || lexbase.IsDigit(ch) {
+		if (isHex && sqllex.IsHexDigit(ch)) || sqllex.IsDigit(ch) {
 			s.pos++
 			continue
 		}
 		if ch == 'x' || ch == 'X' {
 			if isHex || s.in[start] != '0' || s.pos != start+1 {
-				lval.SetID(lexbase.ERROR)
+				lval.SetID(plpgsqllexbase.ERROR)
 				lval.SetStr(errInvalidHexNumeric)
 				return
 			}
@@ -390,8 +391,8 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 				s.pos++
 			}
 			ch = s.peek()
-			if !lexbase.IsDigit(ch) {
-				lval.SetID(lexbase.ERROR)
+			if !sqllex.IsDigit(ch) {
+				lval.SetID(plpgsqllexbase.ERROR)
 				lval.SetStr("invalid floating point literal")
 				return
 			}
@@ -402,17 +403,17 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 
 	lval.SetStr(s.in[start:s.pos])
 	if hasDecimal || hasExponent {
-		lval.SetID(lexbase.FCONST)
+		lval.SetID(plpgsqllexbase.FCONST)
 		floatConst := constant.MakeFromLiteral(lval.Str(), token.FLOAT, 0)
 		if floatConst.Kind() == constant.Unknown {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(plpgsqllexbase.ERROR)
 			lval.SetStr(fmt.Sprintf("could not make constant float from literal %q", lval.Str()))
 			return
 		}
 		lval.SetUnionVal(NewNumValFn(floatConst, lval.Str(), false /* negative */))
 	} else {
 		if isHex && s.pos == start+2 {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(plpgsqllexbase.ERROR)
 			lval.SetStr(errInvalidHexNumeric)
 			return
 		}
@@ -427,10 +428,10 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 			}
 		}
 
-		lval.SetID(lexbase.ICONST)
+		lval.SetID(plpgsqllexbase.ICONST)
 		intConst := constant.MakeFromLiteral(lval.Str(), token.INT, 0)
 		if intConst.Kind() == constant.Unknown {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(plpgsqllexbase.ERROR)
 			lval.SetStr(fmt.Sprintf("could not make constant int from literal %q", lval.Str()))
 			return
 		}
@@ -471,7 +472,7 @@ outer:
 		case 'A', 'B', 'C', 'D', 'E', 'F':
 			curbyte = (curbyte << 4) | byte(b-'A'+10)
 		default:
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(plpgsqllexbase.ERROR)
 			lval.SetStr(errInvalidBytesLiteral)
 			return false
 		}
@@ -485,12 +486,12 @@ outer:
 	}
 
 	if bytep != 0 {
-		lval.SetID(lexbase.ERROR)
+		lval.SetID(plpgsqllexbase.ERROR)
 		lval.SetStr(errInvalidBytesLiteral)
 		return false
 	}
 
-	lval.SetID(lexbase.BCONST)
+	lval.SetID(plpgsqllexbase.BCONST)
 	lval.SetStr(s.finishString(buf))
 	return true
 }
@@ -554,7 +555,7 @@ outer:
 					}
 					v, multibyte, tail, err := strconv.UnquoteChar(tmp, byte(ch))
 					if err != nil {
-						lval.SetID(lexbase.ERROR)
+						lval.SetID(plpgsqllexbase.ERROR)
 						lval.SetStr(err.Error())
 						return false
 					}
@@ -577,20 +578,20 @@ outer:
 			}
 
 		case eof:
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(plpgsqllexbase.ERROR)
 			lval.SetStr(errUnterminated)
 			return false
 		}
 	}
 
 	if requireUTF8 && !utf8.Valid(buf) {
-		lval.SetID(lexbase.ERROR)
+		lval.SetID(plpgsqllexbase.ERROR)
 		lval.SetStr(errInvalidUTF8)
 		return false
 	}
 
 	if ch == identQuote {
-		lval.SetStr(lexbase.NormalizeString(s.finishString(buf)))
+		lval.SetStr(sqllex.NormalizeString(s.finishString(buf)))
 	} else {
 		lval.SetStr(s.finishString(buf))
 	}
@@ -637,7 +638,7 @@ outer:
 		case eof:
 			if foundStartTag {
 				// A start tag was found, therefore we expect an end tag before the eof, otherwise it is an error.
-				lval.SetID(lexbase.ERROR)
+				lval.SetID(plpgsqllexbase.ERROR)
 				lval.SetStr(errUnterminated)
 			} else {
 				// This is not a dollar-quoted string, reset the pos back to the start.
@@ -647,7 +648,7 @@ outer:
 
 		default:
 			// If we haven't found a start tag yet, check whether the current characters is a valid for a tag.
-			if !foundStartTag && !lexbase.IsIdentStart(ch) && !lexbase.IsDigit(ch) {
+			if !foundStartTag && !sqllex.IsIdentStart(ch) && !sqllex.IsDigit(ch) {
 				return false
 			}
 			s.pos++
@@ -665,7 +666,7 @@ outer:
 	}
 
 	if !utf8.Valid(buf) {
-		lval.SetID(lexbase.ERROR)
+		lval.SetID(plpgsqllexbase.ERROR)
 		lval.SetStr(errInvalidUTF8)
 		return false
 	}
@@ -711,7 +712,7 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 	}
 
 	for {
-		if lval.id == lexbase.ERROR {
+		if lval.id == plpgsqllexbase.ERROR {
 			return true, true, fmt.Errorf("scan error: %s", lval.s)
 		}
 		s.Scan(lval)
@@ -719,32 +720,6 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 			return (lval.id == 0), true, nil
 		}
 	}
-}
-
-// LastLexicalToken returns the last lexical token. If the string has no lexical
-// tokens, returns 0 and ok=false.
-func LastLexicalToken(sql string) (lastTok int, ok bool) {
-	var s Scanner
-	var lval fakeSym
-	s.Init(sql)
-	for {
-		last := lval.ID()
-		s.Scan(&lval)
-		if lval.ID() == 0 {
-			return int(last), last != 0
-		}
-	}
-}
-
-// FirstLexicalToken returns the first lexical token.
-// Returns 0 if there is no token.
-func FirstLexicalToken(sql string) (tok int) {
-	var s Scanner
-	var lval fakeSym
-	s.Init(sql)
-	s.Scan(&lval)
-	id := lval.ID()
-	return int(id)
 }
 
 // fakeSym is a simplified symbol type for use by

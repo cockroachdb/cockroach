@@ -62,6 +62,7 @@ go_test(
 proto_library(
     name = "pgerror_proto",
     srcs = ["errors.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
 )
 

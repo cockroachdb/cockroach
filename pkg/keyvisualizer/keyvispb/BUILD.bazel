@@ -6,9 +6,10 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "keyvispb_proto",
     srcs = ["key_visualizer.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//roachpb:roachpb_proto",
+        "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@go_googleapis//google/api:annotations_proto",

@@ -13,8 +13,7 @@ package parser
 import (
 	"go/constant"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -22,8 +21,8 @@ import (
 )
 
 func init() {
-	NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
-	NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
+	scanner.NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
+	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
 }
 
 // Statement is the result of parsing a single statement. It contains the AST
@@ -79,18 +78,6 @@ type Parser struct {
 // in various descriptors. Any user input that was created after
 // INT := INT4 will simply use INT4 in any resulting code.
 var defaultNakedIntType = types.Int
-
-// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
-// of how a "naked" INT type should be parsed returns the corresponding integer
-// type.
-func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
-	switch defaultIntSize {
-	case 4, 32:
-		return types.Int4
-	default:
-		return types.Int
-	}
-}
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (Statement, error) {
@@ -192,110 +179,8 @@ func (p *Parser) parse(
 	}, nil
 }
 
-// unaryNegation constructs an AST node for a negation. This attempts
-// to preserve constant NumVals and embed the negative sign inside
-// them instead of wrapping in an UnaryExpr. This in turn ensures
-// that negative numbers get considered as a single constant
-// for the purpose of formatting and scrubbing.
-func unaryNegation(e tree.Expr) tree.Expr {
-	if cst, ok := e.(*tree.NumVal); ok {
-		cst.Negate()
-		return cst
-	}
-
-	// Common case.
-	return &tree.UnaryExpr{
-		Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
-		Expr:     e,
-	}
-}
-
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (Statement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
-}
-
-// ParseOne parses a sql statement string, ensuring that it contains only a
-// single statement, and returns that Statement. ParseOne will always
-// interpret the INT and SERIAL types as 64-bit types, since this is
-// used in various internal-execution paths where we might receive
-// bits of SQL from other nodes. In general,earwe expect that all
-// user-generated SQL has been run through the ParseWithInt() function.
-func ParseOne(sql string) (Statement, error) {
-	return ParseOneWithInt(sql, defaultNakedIntType)
-}
-
-// ParseOneWithInt is similar to ParseOn but interprets the INT and SERIAL
-// types as the provided integer type.
-func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
-	var p Parser
-	return p.parseOneWithInt(sql, nakedIntType)
-}
-
-var errBitLengthNotPositive = pgerror.WithCandidateCode(
-	errors.New("length for type bit must be at least 1"), pgcode.InvalidParameterValue)
-
-// newBitType creates a new BIT type with the given bit width.
-func newBitType(width int32, varying bool) (*types.T, error) {
-	if width < 1 {
-		return nil, errBitLengthNotPositive
-	}
-	if varying {
-		return types.MakeVarBit(width), nil
-	}
-	return types.MakeBit(width), nil
-}
-
-var errFloatPrecAtLeast1 = pgerror.WithCandidateCode(
-	errors.New("precision for type float must be at least 1 bit"), pgcode.InvalidParameterValue)
-var errFloatPrecMax54 = pgerror.WithCandidateCode(
-	errors.New("precision for type float must be less than 54 bits"), pgcode.InvalidParameterValue)
-
-// newFloat creates a type for FLOAT with the given precision.
-func newFloat(prec int64) (*types.T, error) {
-	if prec < 1 {
-		return nil, errFloatPrecAtLeast1
-	}
-	if prec <= 24 {
-		return types.Float4, nil
-	}
-	if prec <= 54 {
-		return types.Float, nil
-	}
-	return nil, errFloatPrecMax54
-}
-
-// newDecimal creates a type for DECIMAL with the given precision and scale.
-func newDecimal(prec, scale int32) (*types.T, error) {
-	if scale > prec {
-		err := pgerror.WithCandidateCode(
-			errors.Newf("scale (%d) must be between 0 and precision (%d)", scale, prec),
-			pgcode.InvalidParameterValue)
-		return nil, err
-	}
-	return types.MakeDecimal(prec, scale), nil
-}
-
-// arrayOf creates a type alias for an array of the given element type and fixed
-// bounds. The bounds are currently ignored.
-func arrayOf(
-	ref tree.ResolvableTypeReference, bounds []int32,
-) (tree.ResolvableTypeReference, error) {
-	// If the reference is a statically known type, then return an array type,
-	// rather than an array type reference.
-	if typ, ok := tree.GetStaticallyKnownType(ref); ok {
-		// Do not allow type unknown[]. This is consistent with Postgres' behavior.
-		if typ.Family() == types.UnknownFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
-		}
-		if typ.Family() == types.VoidFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type void[] does not exist")
-		}
-		if err := types.CheckArrayElementType(typ); err != nil {
-			return nil, err
-		}
-		return types.MakeArray(typ), nil
-	}
-	return &tree.ArrayTypeReference{ElementType: ref}, nil
 }

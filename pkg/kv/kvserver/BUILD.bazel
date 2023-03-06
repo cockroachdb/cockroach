@@ -485,12 +485,12 @@ proto_library(
         "api.proto",
         "storage_services.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//kv/kvserver:kvserver_proto",
-        "//kv/kvserver/kvserverpb:kvserverpb_proto",
-        "//roachpb:roachpb_proto",
-        "//storage/enginepb:enginepb_proto",
+        "//pkg/kv/kvserver/kvserverpb:kvserverpb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -502,11 +502,9 @@ go_proto_library(
     proto = ":kvserver_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//kv/kvserver:api_proto",
-        "//kv/kvserver/kvserverpb:raft_proto",
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
-        "//storage/enginepb:mvcc3_proto",
-        "//storage/enginepb:mvcc_proto",
+        "//pkg/storage/enginepb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

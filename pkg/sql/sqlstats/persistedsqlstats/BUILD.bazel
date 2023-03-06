@@ -114,6 +114,7 @@ go_test(
 proto_library(
     name = "persistedsqlstats_proto",
     srcs = ["sql_stats_compact.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
 )
 

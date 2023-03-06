@@ -31,9 +31,9 @@ proto_library(
         "recorded_span.proto",
         "tracing.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//util/tracing/tracingpb:tracingpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:any_proto",
         "@com_google_protobuf//:duration_proto",
@@ -48,7 +48,6 @@ go_proto_library(
     proto = ":tracingpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//util/tracing/tracingpb:tracing_proto",
         "@com_github_cockroachdb_redact//:redact",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],

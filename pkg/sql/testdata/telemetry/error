@@ -136,3 +136,17 @@ SELECT 2/0
 ----
 error: pq: division by zero
 errorcodes.22012
+
+feature-counters
+CREATE FUNCTION myfunc() RETURNS INT AS
+'
+DECLARE
+BEGIN
+a := NULL;
+b = 7 + 7;
+END
+'LANGUAGE PLPGSQL;
+----
+error: pq: unimplemented: PL/pgSQL is not yet supported
+errorcodes.0A000      1
+unimplemented.#91569  1
