@@ -65,9 +65,12 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	// Explicitly disallow modifying Public schema in 22.1.
-	if schema.GetName() == tree.PublicSchema {
-		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
+	// Explicitly disallow renaming public schema. In the future, we may want
+	// to support this. In order to support it, we have to remove the logic that
+	// automatically re-creates the public schema if it doesn't exist.
+	_, isRename := n.Cmd.(*tree.AlterSchemaRename)
+	if schema.GetName() == tree.PublicSchema && isRename {
+		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot rename schema %q", n.Schema.String())
 	}
 	switch schema.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
