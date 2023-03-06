@@ -132,6 +132,7 @@ func ignoreUnused(obj string) bool {
 		"github.com/cockroachdb/cockroach/pkg/geo/geographiclib.",
 		"github.com/cockroachdb/cockroach/pkg/util/goschedstats.",
 		"github.com/cockroachdb/cockroach/pkg/sql/parser.",
+		"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser.",
 	}
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(obj, prefix) {

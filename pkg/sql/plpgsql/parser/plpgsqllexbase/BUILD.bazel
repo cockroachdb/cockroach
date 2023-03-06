@@ -5,7 +5,6 @@ go_library(
     name = "plpgsqllexbase",
     srcs = [
         "keywords.go",
-        "reserved_keywords.go",
         "tokens.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase",
