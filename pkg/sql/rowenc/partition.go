@@ -57,21 +57,27 @@ type PartitionTuple struct {
 	SpecialCount int
 }
 
-func (t *PartitionTuple) String() string {
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteByte('(')
+var _ tree.NodeFormatter = &PartitionTuple{}
+
+func (t *PartitionTuple) Format(ctx *tree.FmtCtx) {
+	ctx.WriteByte('(')
 	for i := 0; i < len(t.Datums)+t.SpecialCount; i++ {
 		if i > 0 {
-			f.WriteString(", ")
+			ctx.WriteString(", ")
 		}
 		if i < len(t.Datums) {
-			f.FormatNode(t.Datums[i])
+			ctx.FormatNode(t.Datums[i])
 		} else {
-			f.WriteString(t.Special.String())
+			ctx.WriteString(t.Special.String())
 		}
 	}
-	f.WriteByte(')')
-	return f.CloseAndGetString()
+	ctx.WriteByte(')')
+}
+
+func (t *PartitionTuple) String() string {
+	ctx := tree.NewFmtCtx(tree.FmtSimple)
+	ctx.FormatNode(t)
+	return ctx.CloseAndGetString()
 }
 
 // DecodePartitionTuple parses columns (which are a prefix of the columns of
