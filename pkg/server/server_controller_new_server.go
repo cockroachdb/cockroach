@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -145,7 +146,7 @@ func (s *Server) startTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err := NewSharedProcessTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer)
+	tenantServer, err := NewSharedProcessTenantServer(startCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +173,7 @@ func (s *Server) makeSharedProcessTenantConfig(
 		InternalServer:     s.node,
 		ServerInterceptors: s.grpc.serverInterceptorsInfo,
 	}
-	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper)
+	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper, s.recorder)
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -188,6 +189,7 @@ func makeSharedProcessTenantServerConfig(
 	kvServerCfg Config,
 	kvServerInfo LocalKVServerInfo,
 	stopper *stop.Stopper,
+	nodeMetricsRecorder *status.MetricsRecorder,
 ) (baseCfg BaseConfig, sqlCfg SQLConfig, err error) {
 	st := cluster.MakeClusterSettings()
 
@@ -355,6 +357,8 @@ func makeSharedProcessTenantServerConfig(
 	// that it is inside the same process as the KV layer and how to
 	// reach this KV layer without going through the network.
 	sqlCfg.LocalKVServerInfo = &kvServerInfo
+
+	sqlCfg.NodeMetricsRecorder = nodeMetricsRecorder
 
 	return baseCfg, sqlCfg, nil
 }
