@@ -23,7 +23,6 @@ describe("populateRegionNodeForStatements", () => {
       label: "",
       summary: "",
       aggregatedTs: 0,
-      aggregationInterval: 0,
       implicitTxn: false,
       fullScan: false,
       database: "",
