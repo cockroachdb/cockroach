@@ -1233,7 +1233,9 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	// statements for tables referenced via FKs in these tables.
 	for i := range envOpts.Tables {
 		out.writef("")
-		if err := c.PrintCreateTable(&out.buf, &envOpts.Tables[i]); err != nil {
+		if err := c.PrintCreateTable(
+			&out.buf, &envOpts.Tables[i], false, /* redactValues */
+		); err != nil {
 			return nil, err
 		}
 		out.writef("")
@@ -1252,7 +1254,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 
 	for i := range envOpts.Views {
 		out.writef("")
-		if err := c.PrintCreateView(&out.buf, &envOpts.Views[i]); err != nil {
+		if err := c.PrintCreateView(&out.buf, &envOpts.Views[i], false /* redactValues */); err != nil {
 			return nil, err
 		}
 	}
