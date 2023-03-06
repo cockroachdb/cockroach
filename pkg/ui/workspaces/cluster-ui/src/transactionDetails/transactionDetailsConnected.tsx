@@ -32,7 +32,11 @@ import {
   selectHasViewActivityRedactedRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectTimeScale,
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+} from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
@@ -93,6 +97,8 @@ const mapStateToProps = (
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     isDataValid: isValid,
     lastUpdated,
+    limit: selectTxnsPageLimit(state),
+    reqSortSetting: selectTxnsPageReqSort(state),
   };
 };
 

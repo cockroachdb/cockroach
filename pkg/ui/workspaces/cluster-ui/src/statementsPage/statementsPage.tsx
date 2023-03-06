@@ -60,15 +60,15 @@ import styles from "./statementsPage.module.scss";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
-
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-type IDuration = google.protobuf.IDuration;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { UIConfigState } from "../store";
-import { StatementsRequest } from "src/api/statementsApi";
-import Long from "long";
+import {
+  SqlStatsSortType,
+  StatementsRequest,
+  createCombinedStmtsRequest,
+} from "src/api/statementsApi";
 import ClearStats from "../sqlActivity/clearStats";
 import LoadingError from "../sqlActivity/errorComponent";
 import {
@@ -83,7 +83,17 @@ import {
 import { commonStyles } from "../common";
 import moment from "moment";
 
-import { STATS_LONG_LOADING_DURATION } from "src/util/constants";
+import { Dropdown } from "src/dropdown";
+import {
+  STATS_LONG_LOADING_DURATION,
+  limitOptions,
+  stmtRequestSortOptions,
+  getSortLabel,
+} from "src/util/sqlActivityConstants";
+import { Button } from "src/button";
+
+type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IDuration = google.protobuf.IDuration;
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -120,6 +130,8 @@ export interface StatementsPageDispatchProps {
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
+  onChangeLimit: (limit: number) => void;
+  onChangeReqSort: (sort: SqlStatsSortType) => void;
 }
 
 export interface StatementsPageStateProps {
@@ -128,6 +140,8 @@ export interface StatementsPageStateProps {
   isReqInFlight: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
+  limit: number;
+  reqSortSetting: SqlStatsSortType;
   statementsError: Error | null;
   apps: string[];
   databases: string[];
@@ -147,17 +161,27 @@ export interface StatementsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
+  timeScale: TimeScale;
+  limit: number;
+  reqSortSetting: SqlStatsSortType;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
-  const [start, end] = toRoundedDateRange(ts);
-  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
+type RequestParams = Pick<
+  StatementsPageState,
+  "limit" | "reqSortSetting" | "timeScale"
+>;
+
+function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
+  const [start, end] = toRoundedDateRange(params.timeScale);
+  return createCombinedStmtsRequest({
+    start,
+    end,
+    limit: params.limit,
+    sort: params.reqSortSetting,
   });
 }
 
@@ -197,6 +221,9 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
+      limit: this.props.limit,
+      timeScale: this.props.timeScale,
+      reqSortSetting: this.props.reqSortSetting,
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -256,9 +283,17 @@ export class StatementsPage extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
-    if (this.props.onTimeScaleChange) {
-      this.props.onTimeScaleChange(ts);
-    }
+    this.setState(prevState => ({
+      ...prevState,
+      timeScale: ts,
+    }));
+  };
+
+  updateRequestParams = (): void => {
+    this.props.onChangeLimit(this.state.limit);
+    this.props.onChangeReqSort(this.state.reqSortSetting);
+    this.props.onTimeScaleChange(this.state.timeScale);
+    this.refreshStatements();
   };
 
   resetPagination = (): void => {
@@ -273,7 +308,7 @@ export class StatementsPage extends React.Component<
   };
 
   refreshStatements = (): void => {
-    const req = stmtsRequestFromTimeScale(this.props.timeScale);
+    const req = stmtsRequestFromParams(this.state);
     this.props.refreshStatements(req);
   };
 
@@ -337,20 +372,13 @@ export class StatementsPage extends React.Component<
     );
   }
 
-  componentDidUpdate = (prevProps: StatementsPageProps): void => {
+  componentDidUpdate = (): void => {
     this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
       if (!this.props.hasViewActivityRedactedRole) {
         this.props.refreshStatementDiagnosticsRequests();
       }
-    }
-
-    if (
-      prevProps.timeScale !== this.props.timeScale ||
-      (prevProps.isDataValid && !this.props.isDataValid)
-    ) {
-      this.refreshStatements();
     }
   };
 
@@ -360,7 +388,10 @@ export class StatementsPage extends React.Component<
 
   onChangePage = (current: number): void => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current } });
+    this.setState(prevState => ({
+      ...prevState,
+      pagination: { ...pagination, current },
+    }));
     this.props.onPageChanged != null && this.props.onPageChanged(current);
   };
 
@@ -520,6 +551,14 @@ export class StatementsPage extends React.Component<
       .filter(statement =>
         search ? filterBySearchQuery(statement, search) : true,
       );
+  };
+
+  onChangeLimit = (newLimit: number): void => {
+    this.setState(prevState => ({ ...prevState, limit: newLimit }));
+  };
+
+  onChangeReqSort = (newSort: SqlStatsSortType): void => {
+    this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
   };
 
   renderStatements = (regions: string[]): React.ReactElement => {
@@ -692,11 +731,29 @@ export class StatementsPage extends React.Component<
             />
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
+            <Dropdown items={limitOptions} onChange={this.onChangeLimit}>
+              Limit: {this.state.limit ?? "N/A"}
+            </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown
+              items={stmtRequestSortOptions}
+              onChange={this.onChangeReqSort}
+            >
+              Sort By: {getSortLabel(this.state.reqSortSetting)}
+            </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem>
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
-              currentScale={this.props.timeScale}
+              currentScale={this.state.timeScale}
               setTimeScale={this.changeTimeScale}
             />
+          </PageConfigItem>
+          <PageConfigItem>
+            <Button size="small" onClick={this.updateRequestParams}>
+              Submit Request
+            </Button>
           </PageConfigItem>
           {hasAdminRole && (
             <PageConfigItem
