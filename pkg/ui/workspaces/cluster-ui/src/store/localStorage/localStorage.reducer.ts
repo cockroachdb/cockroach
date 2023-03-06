@@ -13,6 +13,10 @@ import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "src/queryFilter/";
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { WorkloadInsightEventFilters } from "src/insights";
+import {
+  SqlStatsSortType,
+  DEFAULT_STATS_REQ_OPTIONS,
+} from "src/api/statementsApi";
 
 type SortSetting = {
   ascending: boolean;
@@ -21,6 +25,10 @@ type SortSetting = {
 
 export enum LocalStorageKeys {
   GLOBAL_TIME_SCALE = "timeScale/SQLActivity",
+  STMT_FINGERPRINTS_LIMIT = "limit/StatementsPage",
+  STMT_FINGERPRINTS_SORT = "sort/StatementsPage",
+  TXN_FINGERPRINTS_LIMIT = "limit/TransactionsPage",
+  TXN_FINGERPRINTS_SORT = "sort/TransactionsPage",
 }
 
 export type LocalStorageState = {
@@ -33,6 +41,10 @@ export type LocalStorageState = {
   "showColumns/StatementInsightsPage": string;
   "showColumns/JobsPage": string;
   [LocalStorageKeys.GLOBAL_TIME_SCALE]: TimeScale;
+  [LocalStorageKeys.STMT_FINGERPRINTS_LIMIT]: number;
+  [LocalStorageKeys.STMT_FINGERPRINTS_SORT]: SqlStatsSortType;
+  [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]: number;
+  [LocalStorageKeys.TXN_FINGERPRINTS_SORT]: SqlStatsSortType;
   "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
   "sortSetting/StatementsPage": SortSetting;
@@ -125,6 +137,13 @@ const initialState: LocalStorageState = {
   "showColumns/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("showColumns/ActiveStatementsPage")) ??
     null,
+  [LocalStorageKeys.STMT_FINGERPRINTS_LIMIT]:
+    JSON.parse(
+      localStorage.getItem(LocalStorageKeys.STMT_FINGERPRINTS_LIMIT),
+    ) || DEFAULT_STATS_REQ_OPTIONS.limit,
+  [LocalStorageKeys.STMT_FINGERPRINTS_SORT]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.STMT_FINGERPRINTS_SORT)) ||
+    DEFAULT_STATS_REQ_OPTIONS.sort,
   "showColumns/ActiveTransactionsPage":
     JSON.parse(localStorage.getItem("showColumns/ActiveTransactionsPage")) ??
     null,
@@ -132,6 +151,12 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
   "showColumns/TransactionPage":
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
+  [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.TXN_FINGERPRINTS_LIMIT)) ||
+    DEFAULT_STATS_REQ_OPTIONS.limit,
+  [LocalStorageKeys.TXN_FINGERPRINTS_SORT]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.TXN_FINGERPRINTS_SORT)) ||
+    DEFAULT_STATS_REQ_OPTIONS.sort,
   "showColumns/SessionsPage":
     JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
   "showColumns/StatementInsightsPage":
@@ -223,3 +248,35 @@ const localStorageSlice = createSlice({
 });
 
 export const { actions, reducer } = localStorageSlice;
+
+export const updateStmtsPageLimitAction = (
+  limit: number,
+): PayloadAction<Payload> =>
+  localStorageSlice.actions.update({
+    key: LocalStorageKeys.STMT_FINGERPRINTS_LIMIT,
+    value: limit,
+  });
+
+export const updateStmsPageReqSortAction = (
+  sort: SqlStatsSortType,
+): PayloadAction<Payload> =>
+  localStorageSlice.actions.update({
+    key: LocalStorageKeys.STMT_FINGERPRINTS_SORT,
+    value: sort,
+  });
+
+export const updateTxnsPageLimitAction = (
+  limit: number,
+): PayloadAction<Payload> =>
+  localStorageSlice.actions.update({
+    key: LocalStorageKeys.TXN_FINGERPRINTS_LIMIT,
+    value: limit,
+  });
+
+export const updateTxnsPageReqSortAction = (
+  sort: SqlStatsSortType,
+): PayloadAction<Payload> =>
+  localStorageSlice.actions.update({
+    key: LocalStorageKeys.TXN_FINGERPRINTS_SORT,
+    value: sort,
+  });
