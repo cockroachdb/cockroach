@@ -67,18 +67,16 @@ func getCombinedStatementStats(
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementsResponse, error) {
-	startTime := getTimeFromSeconds(req.Start)
-	endTime := getTimeFromSeconds(req.End)
-	limit := SQLStatsResponseMax.Get(&settings.SV)
 	showInternal := SQLStatsShowInternal.Get(&settings.SV)
 	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
-		startTime, endTime, limit, testingKnobs, showInternal)
+		req, testingKnobs, showInternal, settings)
+
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
 	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
 	var err error
 
 	if req.FetchMode != serverpb.StatsFetchMode_StmtStatsOnly {
-		transactions, err = collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit)
+		transactions, err = collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit, testingKnobs)
 		if err != nil {
 			return nil, serverError(ctx, err)
 		}
@@ -92,7 +90,7 @@ func getCombinedStatementStats(
 		whereClause, args = buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
 	}
 
-	statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
+	statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit, testingKnobs)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -105,6 +103,19 @@ func getCombinedStatementStats(
 	}
 
 	return response, nil
+}
+
+func getColumnFromSortOption(sort serverpb.StatsSortOptions) string {
+	switch sort {
+	case serverpb.StatsSortOptions_SERVICE_LAT:
+		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
+	case serverpb.StatsSortOptions_CPU_TIME:
+		return `(statistics -> 'statistics' -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
+	case serverpb.StatsSortOptions_EXECUTION_COUNT:
+		return `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
+	default:
+		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
+	}
 }
 
 // buildWhereClauseForStmtsByTxn builds the where clause to get the statement
@@ -152,7 +163,10 @@ func buildWhereClauseForStmtsByTxn(
 // The whereClause will be in the format `WHERE A = $1 AND B = $2` and
 // args will return the list of arguments in order that will replace the actual values.
 func getCombinedStatementsQueryClausesAndArgs(
-	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs, showInternal bool,
+	req *serverpb.CombinedStatementsStatsRequest,
+	testingKnobs *sqlstats.TestingKnobs,
+	showInternal bool,
+	settings *cluster.Settings,
 ) (whereClause string, orderAndLimitClause string, args []interface{}) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
@@ -167,17 +181,29 @@ func getCombinedStatementsQueryClausesAndArgs(
 			catconstants.DelegatedAppNamePrefix))
 	}
 
-	if start != nil {
+	// Add start and end filters from request.
+	startTime := getTimeFromSeconds(req.Start)
+	endTime := getTimeFromSeconds(req.End)
+	if startTime != nil {
 		buffer.WriteString(" AND aggregated_ts >= $1")
-		args = append(args, *start)
+		args = append(args, *startTime)
 	}
 
-	if end != nil {
-		args = append(args, *end)
+	if endTime != nil {
+		args = append(args, *endTime)
 		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)))
 	}
+
+	// Add LIMIT from request.
+	limit := req.Limit
+	if limit == 0 {
+		limit = SQLStatsResponseMax.Get(&settings.SV)
+	}
 	args = append(args, limit)
-	orderAndLimitClause = fmt.Sprintf(` ORDER BY aggregated_ts DESC LIMIT $%d`, len(args))
+
+	// Determine sort column.
+	col := getColumnFromSortOption(req.Sort)
+	orderAndLimitClause = fmt.Sprintf(` ORDER BY %s LIMIT $%d`, col, len(args))
 
 	return buffer.String(), orderAndLimitClause, args
 }
@@ -188,23 +214,26 @@ func collectCombinedStatements(
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-
-	query := fmt.Sprintf(
-		`SELECT
-				fingerprint_id,
-				transaction_fingerprint_id,
-				app_name,
-				max(aggregated_ts) as aggregated_ts,
-				metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-		FROM crdb_internal.statement_statistics %s
-		GROUP BY
-				fingerprint_id,
-				transaction_fingerprint_id,
-				app_name,
-				metadata
-		%s`, whereClause, orderAndLimit)
+	aostClause := testingKnobs.GetAOSTClause()
+	query := fmt.Sprintf(`
+SELECT * FROM (
+SELECT
+    fingerprint_id,
+    transaction_fingerprint_id,
+    app_name,
+    max(aggregated_ts) as aggregated_ts,
+    metadata,
+    crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+FROM crdb_internal.statement_statistics %s
+GROUP BY
+    fingerprint_id,
+    transaction_fingerprint_id,
+    app_name,
+    metadata
+) %s
+%s`, whereClause, aostClause, orderAndLimit)
 
 	const expectedNumDatums = 6
 
@@ -288,21 +317,25 @@ func collectCombinedTransactions(
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
+	aostClause := testingKnobs.GetAOSTClause()
 
-	query := fmt.Sprintf(
-		`SELECT
-				app_name,
-				max(aggregated_ts) as aggregated_ts,
-				fingerprint_id,
-				metadata,
-				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-			FROM crdb_internal.transaction_statistics %s
-			GROUP BY
-				app_name,
-				fingerprint_id,
-				metadata
-			%s`, whereClause, orderAndLimit)
+	query := fmt.Sprintf(`
+SELECT * FROM (
+SELECT
+    app_name,
+    max(aggregated_ts) as aggregated_ts,
+    fingerprint_id,
+    metadata,
+    crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+FROM crdb_internal.transaction_statistics %s
+GROUP BY
+    app_name,
+    fingerprint_id,
+    metadata
+) %s
+%s`, whereClause, aostClause, orderAndLimit)
 
 	const expectedNumDatums = 5
 

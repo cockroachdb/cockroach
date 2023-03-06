@@ -30,6 +30,8 @@ func (s *statusServer) Statements(
 			Start:     req.Start,
 			End:       req.End,
 			FetchMode: req.FetchMode,
+			Limit:     req.Limit,
+			Sort:      req.Sort,
 		}
 		return s.CombinedStatementStats(ctx, &combinedRequest)
 	}
