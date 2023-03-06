@@ -320,7 +320,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
-	storeFiles := make([]storageccl.StoreFile, 0, len(EntryFiles{}))
+	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
 
