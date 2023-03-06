@@ -38,7 +38,11 @@ import {
   selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "../store/utils/selectors";
+import {
+  selectTimeScale,
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+} from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
@@ -100,6 +104,8 @@ const mapStateToProps = (
     transactionInsights: selectTxnInsightsByFingerprint(state, props),
     hasAdminRole: selectHasAdminRole(state),
     isDataValid: isValid,
+    limit: selectTxnsPageLimit(state),
+    reqSortSetting: selectTxnsPageReqSort(state),
   };
 };
 

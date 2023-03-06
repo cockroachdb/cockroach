@@ -33,9 +33,17 @@ import {
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "../store/utils/selectors";
-import { StatementsRequest } from "src/api/statementsApi";
-import { actions as localStorageActions } from "../store/localStorage";
+import {
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+  selectTimeScale,
+} from "../store/utils/selectors";
+import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import {
+  actions as localStorageActions,
+  updateTxnsPageLimitAction,
+  updateTxnsPageReqSortAction,
+} from "../store/localStorage";
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
 import { TimeScale } from "../timeScaleDropdown";
@@ -85,6 +93,8 @@ export const TransactionsPageConnected = withRouter(
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         hasAdminRole: selectHasAdminRole(state),
+        limit: selectTxnsPageLimit(state),
+        reqSortSetting: selectTxnsPageReqSort(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
@@ -157,6 +167,10 @@ export const TransactionsPageConnected = withRouter(
             }),
           );
         },
+        onChangeLimit: (limit: number) =>
+          dispatch(updateTxnsPageLimitAction(limit)),
+        onChangeReqSort: (sort: SqlStatsSortType) =>
+          dispatch(updateTxnsPageReqSortAction(sort)),
       },
       activePageProps: mapDispatchToRecentTransactionsPageProps(dispatch),
     }),

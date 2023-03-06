@@ -29,7 +29,8 @@ import {
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
 import { EllipsisVertical } from "@cockroachlabs/icons";
-import { getBasePath, StatementDiagnosticsReport } from "../api";
+import { getBasePath } from "src/api/basePath";
+import { StatementDiagnosticsReport } from "src/api/statementDiagnosticsApi";
 import moment from "moment";
 
 export type NodeNames = { [nodeId: string]: string };

@@ -325,11 +325,11 @@ const storesReducerObj = new KeyedCachedDataReducer(
 export const refreshStores = storesReducerObj.refresh;
 
 const queriesReducerObj = new CachedDataReducer(
-  api.getCombinedStatements,
+  clusterUiApi.getCombinedStatements,
   "statements",
   null,
-  moment.duration(30, "m"),
-  true, // Allow new requests to replace in flight ones.
+  moment.duration(10, "m"),
+  true,
 );
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
