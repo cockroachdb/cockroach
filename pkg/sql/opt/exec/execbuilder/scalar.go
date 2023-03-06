@@ -982,13 +982,14 @@ func (b *Builder) buildRoutinePlanGenerator(
 					// Fall through.
 				}
 
-				replaced := f.CopyAndReplaceDefault(e, replaceFn)
-				if wrapRootExpr != nil && e == stmt.RelExpr {
-					replaced = wrapRootExpr(f, replaced.(memo.RelExpr))
-				}
-				return replaced
+				return f.CopyAndReplaceDefault(e, replaceFn)
 			}
-			f.CopyAndReplace(stmt, stmt.PhysProps, replaceFn)
+			f.CopyAndReplace(stmt.RelExpr, stmt.PhysProps, replaceFn)
+
+			if wrapRootExpr != nil {
+				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)
+				f.Memo().SetRoot(wrapped, stmt.PhysProps)
+			}
 
 			// Optimize the memo.
 			optimizedExpr, err := o.Optimize()
