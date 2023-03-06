@@ -128,6 +128,24 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (a DESC) WHERE a > 8:::INT8
     )
 
+query TT
+SHOW CREATE TABLE t6 WITH REDACTED_VALUES
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > ‹×›:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
+    )
+
 # Renaming a column updates the index predicates.
 
 statement ok
@@ -2078,4 +2096,3 @@ DROP INDEX idx97551;
 statement ok
 DROP TABLE t97551;
 DROP TYPE enum97551;
-

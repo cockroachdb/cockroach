@@ -398,6 +398,20 @@ ok1  CREATE TABLE public.ok1 (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+query TT
+SHOW CREATE TABLE ok1 WITH REDACTED_VALUES
+----
+ok1  CREATE TABLE public.ok1 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok1_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((‹×›)),
+       PARTITION p2 VALUES IN ((‹×›))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.create' AND usage_count > 0
 ----
@@ -496,6 +510,20 @@ ok3  CREATE TABLE public.ok3 (
   PARTITION p2 VALUES IN ((DEFAULT))
 )
 -- Warning: Partitioned table with no zone configurations.
+
+query TT
+SHOW CREATE TABLE ok3 WITH REDACTED_VALUES
+----
+ok3  CREATE TABLE public.ok3 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok3_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((‹×›)),
+       PARTITION p2 VALUES IN ((DEFAULT))
+     )
+     -- Warning: Partitioned table with no zone configurations.
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok3
@@ -745,6 +773,21 @@ ok8  CREATE TABLE public.ok8 (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+query TT
+SHOW CREATE TABLE ok8 WITH REDACTED_VALUES
+----
+ok8  CREATE TABLE public.ok8 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok8_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY RANGE (a) (
+       PARTITION p1 VALUES FROM (MINVALUE) TO (‹×›),
+       PARTITION p2 VALUES FROM (‹×›) TO (‹×›),
+       PARTITION p3 VALUES FROM (‹×›) TO (MAXVALUE)
+     )
+     -- Warning: Partitioned table with no zone configurations.
+
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok8
 ----
@@ -889,6 +932,27 @@ ok11  CREATE TABLE public.ok11 (
   )
 )
 -- Warning: Partitioned table with no zone configurations.
+
+query TT
+SHOW CREATE TABLE ok11 WITH REDACTED_VALUES
+----
+ok11  CREATE TABLE public.ok11 (
+        a INT8 NOT NULL,
+        b INT8 NOT NULL,
+        c INT8 NOT NULL,
+        CONSTRAINT ok11_pkey PRIMARY KEY (a ASC, b ASC, c ASC)
+      ) PARTITION BY LIST (a) (
+        PARTITION p1 VALUES IN ((‹×›)) PARTITION BY LIST (b) (
+          PARTITION p1_1 VALUES IN ((‹×›)) PARTITION BY LIST (c) (
+            PARTITION p1_1_1 VALUES IN ((‹×›))
+          ),
+          PARTITION p1_2 VALUES IN ((‹×›))
+        ),
+        PARTITION p2 VALUES IN ((‹×›)) PARTITION BY RANGE (b) (
+          PARTITION p2_1 VALUES FROM (‹×›) TO (‹×›)
+        )
+      )
+      -- Warning: Partitioned table with no zone configurations.
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok11

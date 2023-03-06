@@ -1877,12 +1877,28 @@ SHOW CREATE t -- literals removed
 SHOW CREATE _ -- identifiers removed
 
 parse
+SHOW CREATE TABLE t WITH REDACTED_VALUES
+----
+SHOW CREATE t WITH REDACTED_VALUES -- normalized!
+SHOW CREATE t WITH REDACTED_VALUES -- fully parenthesized
+SHOW CREATE t WITH REDACTED_VALUES -- literals removed
+SHOW CREATE _ WITH REDACTED_VALUES -- identifiers removed
+
+parse
 SHOW CREATE VIEW t
 ----
 SHOW CREATE t -- normalized!
 SHOW CREATE t -- fully parenthesized
 SHOW CREATE t -- literals removed
 SHOW CREATE _ -- identifiers removed
+
+parse
+SHOW CREATE VIEW t WITH REDACTED_VALUES
+----
+SHOW CREATE t WITH REDACTED_VALUES -- normalized!
+SHOW CREATE t WITH REDACTED_VALUES -- fully parenthesized
+SHOW CREATE t WITH REDACTED_VALUES -- literals removed
+SHOW CREATE _ WITH REDACTED_VALUES -- identifiers removed
 
 parse
 SHOW CREATE SEQUENCE t
