@@ -2702,6 +2702,7 @@ show_backup_options_list ::=
 show_backup_connection_options ::=
 	'TRANSFER' '=' string_or_placeholder
 	| 'TIME' '=' string_or_placeholder
+	| 'CONCURRENTLY' '=' a_expr
 
 targets_roles ::=
 	'ROLE' role_spec_list
