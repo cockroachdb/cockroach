@@ -12,13 +12,14 @@ package parser
 
 import (
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase"
 	"go/constant"
 	"go/token"
 	"strconv"
 	"unicode/utf8"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase"
 )
 
 const eof = -1
@@ -253,14 +254,6 @@ func (s *Scanner) peek() int {
 	return int(s.in[s.pos])
 }
 
-func (s *Scanner) peekN(n int) int {
-	pos := s.pos + n
-	if pos >= len(s.in) {
-		return eof
-	}
-	return int(s.in[pos])
-}
-
 func (s *Scanner) next() int {
 	ch := s.peek()
 	if ch != eof {
@@ -338,7 +331,6 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 	}
 
 	lval.SetID(plpgsqllexbase.GetKeywordID(lval.Str()))
-	return
 }
 
 func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
@@ -439,66 +431,8 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 	}
 }
 
-// scanHexString scans the content inside x'....'.
-func (s *Scanner) scanHexString(lval ScanSymType, ch int) bool {
-	buf := s.buffer()
-
-	var curbyte byte
-	bytep := 0
-	const errInvalidBytesLiteral = "invalid hexadecimal bytes literal"
-outer:
-	for {
-		b := s.next()
-		switch b {
-		case ch:
-			newline, ok := s.skipWhitespace(lval, false)
-			if !ok {
-				return false
-			}
-			// SQL allows joining adjacent strings separated by whitespace
-			// as long as that whitespace contains at least one
-			// newline. Kind of strange to require the newline, but that
-			// is the standard.
-			if s.peek() == ch && newline {
-				s.pos++
-				continue
-			}
-			break outer
-
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			curbyte = (curbyte << 4) | byte(b-'0')
-		case 'a', 'b', 'c', 'd', 'e', 'f':
-			curbyte = (curbyte << 4) | byte(b-'a'+10)
-		case 'A', 'B', 'C', 'D', 'E', 'F':
-			curbyte = (curbyte << 4) | byte(b-'A'+10)
-		default:
-			lval.SetID(plpgsqllexbase.ERROR)
-			lval.SetStr(errInvalidBytesLiteral)
-			return false
-		}
-		bytep++
-
-		if bytep > 1 {
-			buf = append(buf, curbyte)
-			bytep = 0
-			curbyte = 0
-		}
-	}
-
-	if bytep != 0 {
-		lval.SetID(plpgsqllexbase.ERROR)
-		lval.SetStr(errInvalidBytesLiteral)
-		return false
-	}
-
-	lval.SetID(plpgsqllexbase.BCONST)
-	lval.SetStr(s.finishString(buf))
-	return true
-}
-
 // scanString scans the content inside '...'. This is used for simple
-// string literals '...' but also e'....' and b'...'. For x'...', see
-// scanHexString().
+// string literals '...' but also e'....' and b'...'. For x'...'.
 func (s *Scanner) scanString(lval ScanSymType, ch int, allowEscapes, requireUTF8 bool) bool {
 	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
@@ -673,31 +607,6 @@ outer:
 
 	lval.SetStr(s.finishString(buf))
 	return true
-}
-
-// scanOne is a simplified version of (*Parser).scanOneStmt() for use
-// by HasMultipleStatements().
-func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
-	// Scan the first token.
-	for {
-		s.Scan(lval)
-		if lval.id == 0 {
-			return true, false, nil
-		}
-		if lval.id != ';' {
-			break
-		}
-	}
-
-	for {
-		if lval.id == plpgsqllexbase.ERROR {
-			return true, true, fmt.Errorf("scan error: %s", lval.s)
-		}
-		s.Scan(lval)
-		if lval.id == 0 || lval.id == ';' {
-			return (lval.id == 0), true, nil
-		}
-	}
 }
 
 // fakeSym is a simplified symbol type for use by

@@ -11,9 +11,9 @@
 package parser
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -70,7 +70,6 @@ type Parser struct {
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType
-	stmtBuf    [1]Statement
 }
 
 // INT8 is the historical interpretation of INT. This should be left
@@ -82,20 +81,6 @@ var defaultNakedIntType = types.Int
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (Statement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
-}
-
-// ParseWithInt parses a sql statement string and returns a list of
-// Statements. The INT token will result in the specified TInt type.
-func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statement, error) {
-	return p.parseWithDepth(1, sql, nakedIntType)
-}
-
-func (p *Parser) parseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
-	stmt, err := p.parseWithDepth(1, sql, nakedIntType)
-	if err != nil {
-		return Statement{}, err
-	}
-	return stmt, nil
 }
 
 func (p *Parser) scanOneStmt() (sql string, tokens []plpgsqlSymType, done bool) {

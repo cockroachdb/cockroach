@@ -247,6 +247,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
+			// Generated files for plpgsql
+			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
 			file, err := os.Open(filepath.Join(pkgDir, filename))
 			if err != nil {
@@ -1573,6 +1575,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/rpc: github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/lexbase/allkeywords: log$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase/allkeywords: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/timeutil/gen: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/kv/kvpb/gen: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/log/gen: log$`),
