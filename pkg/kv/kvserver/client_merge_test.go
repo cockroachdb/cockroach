@@ -3782,13 +3782,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		type sstFileWriter struct {
 			span   roachpb.Span
-			file   *storage.MemFile
+			file   *storage.MemObject
 			writer storage.SSTWriter
 		}
 		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
 		sstFileWriters := map[string]sstFileWriter{}
 		for _, span := range keySpans {
-			file := &storage.MemFile{}
+			file := &storage.MemObject{}
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
 			if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
 				return err
@@ -3850,7 +3850,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// replicas (while absorbing their user keys into the LHS).
 		for _, k := range []roachpb.Key{keyB, keyC} {
 			rangeID := rangeIds[string(k)]
-			sstFile := &storage.MemFile{}
+			sstFile := &storage.MemObject{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
 			{
@@ -3892,7 +3892,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 
 		// Construct an SST for the user key range of the subsumed replicas.
-		sstFile := &storage.MemFile{}
+		sstFile := &storage.MemObject{}
 		sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 		defer sst.Close()
 		desc := roachpb.RangeDescriptor{

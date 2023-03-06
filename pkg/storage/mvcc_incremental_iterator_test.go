@@ -186,7 +186,6 @@ func assertExportedErrs(
 	expectedIntents []roachpb.Intent,
 ) {
 	const big = 1 << 30
-	sstFile := &MemFile{}
 	st := cluster.MakeTestingClusterSettings()
 	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: startKey},
@@ -198,7 +197,7 @@ func assertExportedErrs(
 		MaxSize:            big,
 		MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 		StopMidKey:         false,
-	}, sstFile)
+	}, &bytes.Buffer{})
 	require.Error(t, err)
 
 	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
@@ -224,7 +223,7 @@ func assertExportedKVs(
 	expected []MVCCKeyValue,
 ) {
 	const big = 1 << 30
-	sstFile := &MemFile{}
+	var sstFile bytes.Buffer
 	st := cluster.MakeTestingClusterSettings()
 	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: startKey},
@@ -235,9 +234,9 @@ func assertExportedKVs(
 		TargetSize:         big,
 		MaxSize:            big,
 		StopMidKey:         false,
-	}, sstFile)
+	}, &sstFile)
 	require.NoError(t, err)
-	data := sstFile.Data()
+	data := sstFile.Bytes()
 	if data == nil {
 		require.Nil(t, expected)
 		return
@@ -1347,7 +1346,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	defer db2.Close()
 
 	ingest := func(it EngineIterator, valid bool, err error, count int) {
-		memFile := &MemFile{}
+		memFile := &MemObject{}
 		sst := MakeIngestionSSTWriter(ctx, db2.settings, memFile)
 		defer sst.Close()
 

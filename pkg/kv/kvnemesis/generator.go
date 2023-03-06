@@ -573,7 +573,7 @@ func randAddSSTable(g *generator, rng *rand.Rand) Operation {
 	sstTombstone := storage.MVCCValue{MVCCValueHeader: sstValueHeader}
 
 	// Write key/value pairs to the SST.
-	f := &storage.MemFile{}
+	f := &storage.MemObject{}
 	st := cluster.MakeTestingClusterSettings()
 	w := storage.MakeIngestionSSTWriter(ctx, st, f)
 	defer w.Close()

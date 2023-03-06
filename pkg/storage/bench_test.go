@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/stretchr/testify/require"
 )
@@ -1721,7 +1722,7 @@ func runCheckSSTConflicts(
 	// between the engine keys without colliding.
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	sstFile := &MemFile{}
+	sstFile := &MemObject{}
 	sstWriter := MakeIngestionSSTWriter(ctx, st, sstFile)
 	var sstStart, sstEnd MVCCKey
 	lastKeyNum := -1
@@ -1762,7 +1763,7 @@ func runSSTIterator(b *testing.B, numKeys int, verify bool) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	sstFile := &MemFile{}
+	sstFile := &MemObject{}
 	sstWriter := MakeIngestionSSTWriter(ctx, st, sstFile)
 
 	for i := 0; i < numKeys; i++ {
@@ -1926,13 +1927,13 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			return cmp < 0
 		})
 		sstFileName := fmt.Sprintf("tmp-ingest-%d", i)
-		sstFile, err := eng.Create(sstFileName)
+		sstFile, err := eng.fs.Create(sstFileName)
 		require.NoError(b, err)
 		// No improvement with v3 since the multiple versions are in different
 		// files.
 		format := sstable.TableFormatPebblev2
 		opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
-		writer := sstable.NewWriter(sstFile, opts)
+		writer := sstable.NewWriter(objstorage.NewFileWritable(sstFile), opts)
 		for _, kv := range kvPairs {
 			require.NoError(b, writer.Add(
 				pebble.InternalKey{UserKey: kv.key, Trailer: uint64(kv.kind)}, kv.value))

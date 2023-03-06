@@ -11,6 +11,7 @@
 package batcheval_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"regexp"
@@ -1421,14 +1422,14 @@ func runTestDBAddSSTable(
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 
-		sstFile := &storage.MemFile{}
-		w := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
+		var sstFile bytes.Buffer
+		w := storage.MakeBackupSSTWriter(ctx, cs, &sstFile)
 		defer w.Close()
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
 
 		_, _, err := db.AddSSTable(
-			ctx, "b", "c", sstFile.Data(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, "b", "c", sstFile.Bytes(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}

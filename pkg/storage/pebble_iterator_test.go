@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"io/fs"
 	"math/rand"
@@ -98,8 +99,8 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	f := &MemFile{}
-	w := MakeBackupSSTWriter(ctx, st, f)
+	var f bytes.Buffer
+	w := MakeBackupSSTWriter(ctx, st, &f)
 
 	// Create an example sstable.
 	var rawValue [64]byte
