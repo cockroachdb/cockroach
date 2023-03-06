@@ -20,6 +20,7 @@ import { StatementDiagnosticsReport } from "../api";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import ILatencyInfo = cockroach.sql.ILatencyInfo;
 import { AggregateStatistics } from "src/statementsTable";
+import { DEFAULT_STATS_REQ_OPTIONS } from "../api/statementsApi";
 
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
@@ -587,6 +588,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
   statementsError: null,
+  limit: DEFAULT_STATS_REQ_OPTIONS.limit,
+  reqSortSetting: DEFAULT_STATS_REQ_OPTIONS.sort,
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
@@ -615,6 +618,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onColumnsChange: noop,
   onSortingChange: noop,
   onFilterChange: noop,
+  onChangeLimit: noop,
+  onChangeReqSort: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {

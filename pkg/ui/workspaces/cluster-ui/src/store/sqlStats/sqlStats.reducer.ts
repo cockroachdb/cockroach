@@ -44,6 +44,7 @@ const sqlStatsSlice = createSlice({
   initialState,
   reducers: {
     received: (state, action: PayloadAction<StatementsResponse>) => {
+      state.inFlight = false;
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
@@ -51,12 +52,14 @@ const sqlStatsSlice = createSlice({
       state.inFlight = false;
     },
     failed: (state, action: PayloadAction<Error>) => {
+      state.inFlight = false;
       state.valid = false;
       state.lastError = action.payload;
       state.lastUpdated = moment.utc();
       state.inFlight = false;
     },
     invalidated: state => {
+      state.inFlight = false;
       state.valid = false;
     },
     refresh: (state, action: PayloadAction<StatementsRequest>) => {
