@@ -717,8 +717,11 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	//
 	// That command should return immediately. And a "roachprod status" should
 	// reveal that the sleep command is running on the cluster.
-	nodeCmd := fmt.Sprintf(`export ROACHPROD=%s GOTRACEBACK=crash && bash -c %s`,
-		c.roachprodEnvValue(node), ssh.Escape1(expandedCmd))
+	envVars := append([]string{
+		fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)), "GOTRACEBACK=crash",
+	}, config.DefaultEnvVars()...)
+	nodeCmd := fmt.Sprintf(`export %s && bash -c %s`,
+		strings.Join(envVars, " "), ssh.Escape1(expandedCmd))
 	if c.IsLocal() {
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
