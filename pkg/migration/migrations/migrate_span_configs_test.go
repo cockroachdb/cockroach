@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -353,4 +354,46 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 		clusterversion.ByKey(clusterversion.EnsureSpanConfigSubscription).String(),
 	)
 	require.False(t, scKVSubscriber.LastUpdated().IsEmpty())
+}
+
+// TestEnablingSpanConfigs verifies that we only use the span config
+// infrastructure once the right version gate has been bumped. It's a regression
+// test for #98094.
+func TestEnablingSpanConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "may time out due to multiple servers")
+	skip.UnderStress(t, "too many nodes")
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 6, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.EnableSpanConfigStore - 1,
+					),
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
+				},
+			},
+			ScanInterval: 100 * time.Millisecond, // speed up test
+		},
+	})
+
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 4`)
+
+	key := tc.ScratchRange(t)
+	testutils.SucceedsSoon(t, func() error {
+		desc := tc.LookupRangeOrFatal(t, key)
+		if got := len(desc.Replicas().Descriptors()); got != 4 {
+			return errors.Newf("expected 4 replicas for scratch range, found %d", got)
+		}
+		return nil
+	})
 }
