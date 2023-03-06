@@ -328,193 +328,11 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	})
 }
 
-type testDataSet interface {
-	name() string
-	// runRestore does any setup that's required and restores the dataset into
-	// the given cluster. Any setup shouldn't take a long amount of time since
-	// perf artifacts are based on how long this takes.
-	runRestore(ctx context.Context, c cluster.Cluster)
-
-	// runRestoreDetached is like runRestore but runs the RESTORE WITH detahced,
-	// and returns the job ID.
-	runRestoreDetached(ctx context.Context, t test.Test, c cluster.Cluster) (jobspb.JobID, error)
-}
-
-type dataBank2TB struct{}
-
-func (dataBank2TB) name() string {
-	return "2TB"
-}
-
-func (dataBank2TB) runRestore(ctx context.Context, c cluster.Cluster) {
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
-				WITH into_db = 'restore2tb'"`)
-}
-
-func (dataBank2TB) runRestoreDetached(
-	ctx context.Context, t test.Test, c cluster.Cluster,
-) (jobspb.JobID, error) {
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
-				WITH into_db = 'restore2tb', detached"`)
-	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
-	}
-
-	var jobID jobspb.JobID
-	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
-		return 0, err
-	}
-
-	return jobID, nil
-}
-
-var _ testDataSet = dataBank2TB{}
-
-type tpccIncData struct{}
-
-func (tpccIncData) name() string {
-	return "TPCCInc"
-}
-
-func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
-	// This data set restores a 1.80TB (replicated) backup consisting of 48
-	// incremental backup layers taken every 15 minutes. 8000 warehouses were
-	// imported and then a workload of 1000 warehouses was run against the cluster
-	// while the incremental backups were being taken.
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE FROM '2022/09/29-000000.00' IN
-				'gs://cockroach-fixtures/backups/tpcc/rev-history=false,inc-count=48,cluster/8000-warehouses/22.2.0-alpha.4?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-09-28 23:42:00'"`)
-}
-
-func (tpccIncData) runRestoreDetached(
-	ctx context.Context, t test.Test, c cluster.Cluster,
-) (jobspb.JobID, error) {
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE FROM '/2022/09/07-000000.00' IN
-				'gs://cockroach-fixtures/tpcc-incrementals-22.2?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-09-07 12:15:00'"
-				WITH detached"`)
-	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
-	}
-
-	var jobID jobspb.JobID
-	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
-		return 0, err
-	}
-
-	return jobID, nil
-}
-
 func registerRestore(r registry.Registry) {
 	// TODO(msbutler): delete the tests created by the loop below. Specifically
 	// - restore2TB/nodes=10
 	// - restore2TB/nodes=32
 	// - restore2TB/nodes=6/cpus=8/pd-volume=2500GB
-	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
-	for _, item := range []struct {
-		nodes        int
-		cpus         int
-		largeVolumes bool
-		dataSet      testDataSet
-
-		timeout time.Duration
-	}{
-		{dataSet: dataBank2TB{}, nodes: 10, timeout: 6 * time.Hour},
-		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
-		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, largeVolumes: true},
-		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
-	} {
-		item := item
-		clusterOpts := make([]spec.Option, 0)
-		testName := fmt.Sprintf("restore%s/nodes=%d", item.dataSet.name(), item.nodes)
-		if item.cpus != 0 {
-			clusterOpts = append(clusterOpts, spec.CPU(item.cpus))
-			testName += fmt.Sprintf("/cpus=%d", item.cpus)
-		}
-		if item.largeVolumes {
-			clusterOpts = append(clusterOpts, spec.VolumeSize(largeVolumeSize))
-			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
-		}
-		// Has been seen to OOM: https://github.com/cockroachdb/cockroach/issues/71805
-		clusterOpts = append(clusterOpts, spec.HighMem(true))
-
-		r.Add(registry.TestSpec{
-			Name:              testName,
-			Owner:             registry.OwnerDisasterRecovery,
-			Cluster:           r.MakeClusterSpec(item.nodes, clusterOpts...),
-			Timeout:           item.timeout,
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
-				m := c.NewMonitor(ctx)
-
-				// Run the disk usage logger in the monitor to guarantee its
-				// having terminated when the test ends.
-				dul := NewDiskUsageLogger(t, c)
-				m.Go(dul.Runner)
-				hc := NewHealthChecker(t, c, c.All())
-				m.Go(hc.Runner)
-
-				// TODO(peter): This currently causes the test to fail because we see a
-				// flurry of valid merges when the restore finishes.
-				//
-				// m.Go(func(ctx context.Context) error {
-				// 	// Make sure the merge queue doesn't muck with our restore.
-				// 	return verifyMetrics(ctx, c, map[string]float64{
-				// 		"cr.store.queue.merge.process.success": 10,
-				// 		"cr.store.queue.merge.process.failure": 10,
-				// 	})
-				// })
-
-				tick, perfBuf := initBulkJobPerfArtifacts(testName, item.timeout)
-				m.Go(func(ctx context.Context) error {
-					defer dul.Done()
-					defer hc.Done()
-					t.Status(`running restore`)
-					// Tick once before starting the restore, and once after to
-					// capture the total elapsed time. This is used by
-					// roachperf to compute and display the average MB/sec per
-					// node.
-					if item.cpus >= 8 {
-						// If the nodes are large enough (specifically, if they
-						// have enough memory we can increase the parallelism
-						// of restore). Machines with 16 vCPUs typically have
-						// enough memory to support 3 concurrent workers.
-						c.Run(ctx, c.Node(1),
-							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency = 5"`)
-						c.Run(ctx, c.Node(1),
-							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5"`)
-					}
-					tick()
-					item.dataSet.runRestore(ctx, c)
-					tick()
-
-					// Upload the perf artifacts to any one of the nodes so that the test
-					// runner copies it into an appropriate directory path.
-					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-					if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
-						log.Errorf(ctx, "failed to create perf dir: %+v", err)
-					}
-					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
-					}
-					return nil
-				})
-				m.Wait()
-			},
-		})
-	}
 	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
 		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
 
@@ -692,6 +510,28 @@ func registerRestore(r registry.Registry) {
 			timeout:  1 * time.Hour,
 		},
 		{
+			// Benchmarks if per node throughput remains constant if the number of
+			// nodes doubles relative to default.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
+			backup:   makeBackupSpecs(backupSpecs{}),
+			timeout:  1 * time.Hour,
+		},
+		{
+			// Benchmarks if per node throughput doubles if the vcpu count doubles
+			// relative to default.
+			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
+			backup:   makeBackupSpecs(backupSpecs{}),
+			timeout:  1 * time.Hour,
+		},
+		{
+			// Ensures we can restore a 48 length incremental chain.
+			// Also benchmarks per node throughput for a long chain.
+			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			backup:   makeBackupSpecs(backupSpecs{backupsIncluded: 48}),
+			timeout:  1 * time.Hour,
+		},
+		{
+			// The nightly 8TB Restore test.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
 			backup: makeBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
@@ -699,6 +539,7 @@ func registerRestore(r registry.Registry) {
 			timeout: 5 * time.Hour,
 		},
 		{
+			// The weekly 32TB Restore test.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
 			backup: makeBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
@@ -708,9 +549,7 @@ func registerRestore(r registry.Registry) {
 		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:
-		// - restore/tpce/400GB/nodes=10
 		// - restore/tpce/400GB/nodes=30
-		// - restore/tpce/400GB/cpu=16
 		// - restore/tpce/400GB/encryption
 	} {
 		sp := sp
@@ -909,9 +748,14 @@ func makeBackupSpecs(override backupSpecs) backupSpecs {
 		specs.fullBackupDir = override.fullBackupDir
 	}
 
+	if override.backupsIncluded != 0 {
+		specs.backupsIncluded = override.backupsIncluded
+	}
+
 	if override.workload != nil {
 		specs.workload = override.workload
 	}
+
 	return specs
 }
 
