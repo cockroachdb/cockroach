@@ -29,6 +29,23 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
+----
+CREATE TABLE public.t (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  j JSONB NULL,
+  comp INT8 NULL AS (a + ‹×›:::INT8) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_a_plus_b_idx ((a + b) ASC),
+  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
+  INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
+  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+)
+
 query TTBTTTB colnames
 SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
 ----
