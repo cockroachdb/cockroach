@@ -130,6 +130,13 @@ state limit=2
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 ...
 
+# Take another look at the remaining protected spans.
+state offset=57
+----
+...
+/Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
+/Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
+
 # Release the schema object records.
 release record-id=3
 ----
@@ -137,9 +144,9 @@ release record-id=3
 release record-id=4
 ----
 
-mutations
+# Observe that they're no longer protected.
+state offset=57
 ----
-delete /Table/10{6-7}
-upsert /Table/10{6-7}                      range default
-delete /Table/10{7-8}
-upsert /Table/10{7-8}                      range default
+...
+/Table/10{6-7}                             range default
+/Table/10{7-8}                             range default
