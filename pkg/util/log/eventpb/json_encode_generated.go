@@ -810,6 +810,92 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, '"')
 	}
 
+	if m.IsVisible {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsVisible\":true"...)
+	}
+
+	if m.IsSharded {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsSharded\":true"...)
+	}
+
+	if m.ShardBucketCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ShardBucketCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ShardBucketCount), 10)
+	}
+
+	if m.DropTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DropTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.DropTime)))
+		b = append(b, '"')
+	}
+
+	if m.ModTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ModTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ModTime)))
+		b = append(b, '"')
+	}
+
+	if m.ModTimeLogical != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ModTimeLogical\":"...)
+		b = strconv.AppendFloat(b, float64(m.ModTimeLogical), 'f', -1, 32)
+	}
+
+	if m.AuditMode != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AuditMode\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.AuditMode)))
+		b = append(b, '"')
+	}
+
+	if m.Locality != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Locality\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Locality)))
+		b = append(b, '"')
+	}
+
+	if m.MVCCStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		jsonEncoder := jsonpb.Marshaler{}
+		if str, err := jsonEncoder.MarshalToString(m.MVCCStats); err == nil {
+			b = append(b, "\"MVCCStats\":"...)
+			b = append(b, []byte(str)...)
+		}
+	}
+
 	return printComma, b
 }
 

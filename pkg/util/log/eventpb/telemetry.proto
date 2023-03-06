@@ -14,6 +14,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
 
 import "gogoproto/gogo.proto";
 import "sql/catalog/descpb/structured.proto";
+import "storage/enginepb/mvcc.proto";
 import "util/log/eventpb/events.proto";
 import "util/log/eventpb/sql_audit_events.proto";
 import "util/log/logpb/event.proto";
@@ -232,6 +233,33 @@ message CapturedIndexUsageStats {
 
   // SchemaName is the name of the schema in which the index was created.
   string schema_name = 13 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IsVisible indicates whether the index is visible or not.
+  bool is_visible = 14 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IsSharded indicates whether the index is sharded or not.
+  bool is_sharded = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  // ShardBucketCount indicates the number of shards the index is divided into.
+  int32 shard_bucket_count = 16 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // DropTime is the timestamp at which the table was dropped.
+  string drop_time = 17 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ModTime is the timestamp at which the table was last modified.
+  string mod_time = 18 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ModTimeLogical is the unix nanos at which the table was last modified.
+  float mod_time_logical = 19 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // AuditMode indicates if the table has audit logging set.
+  string audit_mode = 20 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Locality is the location associated with the table.
+  string locality = 21 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  
+  // MVCCStats is a message containing replica stats related to a given table name.
+  cockroach.storage.enginepb.MVCCStats mvcc_stats = 22 [(gogoproto.customname) = "MVCCStats", (gogoproto.jsontag) = ",omitempty"];
 }
 
 // CreateChangefeed is an event for any CREATE CHANGEFEED query that

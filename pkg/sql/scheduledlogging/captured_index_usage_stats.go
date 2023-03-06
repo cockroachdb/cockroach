@@ -12,6 +12,7 @@ package scheduledlogging
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -175,7 +177,7 @@ func captureIndexUsageStats(
 
 	// Capture index usage statistics for each database.
 	var ok bool
-	expectedNumDatums := 11
+	expectedNumDatums := 19
 	var allCapturedIndexUsageStats []logpb.EventPayload
 	for _, databaseName := range allDatabaseNames {
 		// Omit index usage statistics on the default databases 'system',
@@ -195,12 +197,21 @@ func captureIndexUsageStats(
 		 total_reads,
 		 last_read,
 		 ti.created_at,
-		 ns.nspname::string
+		 ns.nspname::string,
+		 ti.is_visible,
+		 ti.is_sharded,
+		 ti.shard_bucket_count,
+		 t.drop_time,
+		 t.mod_time,
+		 t.mod_time_logical,
+		 t.audit_mode,
+		 t.locality
 		FROM crdb_internal.index_usage_statistics AS us
     JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
                                           AND us.table_id = ti.descriptor_id
     JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
     JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
+	JOIN crdb_internal.tables AS t ON ti.descriptor_id = t.table_id
 ORDER BY total_reads ASC`
 
 		it, err := ie.QueryIteratorEx(
@@ -247,22 +258,57 @@ ORDER BY total_reads ASC`
 				createdAt = tree.MustBeDTimestamp(row[9]).Time
 			}
 			schemaName := tree.MustBeDString(row[10])
-
-			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
-				TableID:        uint32(roachpb.TableID(tableID)),
-				IndexID:        uint32(roachpb.IndexID(indexID)),
-				TotalReadCount: uint64(totalReads),
-				LastRead:       lastRead.String(),
-				DatabaseName:   databaseName.String(),
-				TableName:      string(tableName),
-				IndexName:      string(indexName),
-				IndexType:      string(indexType),
-				IsUnique:       bool(isUnique),
-				IsInverted:     bool(isInverted),
-				CreatedAt:      createdAt.String(),
-				SchemaName:     string(schemaName),
+			isVisible := tree.MustBeDBool(row[11])
+			isSharded := tree.MustBeDBool(row[12])
+			shardBucketCount := 0
+			if row[13] != tree.DNull {
+				shardBucketCount = int(tree.MustBeDInt(row[13]))
+			}
+			dropTime := time.Time{}
+			if row[14] != tree.DNull {
+				dropTime = tree.MustBeDTimestamp(row[14]).Time
+			}
+			// ModTime can't be null.
+			modTime := tree.MustBeDTimestamp(row[15]).Time
+			modTimeLogical := tree.MustBeDDecimal(row[16]).Decimal
+			modTimeLogicalFloat, err := modTimeLogical.Float64()
+			if err != nil {
+				log.Infof(ctx, "Error retrieving float from decimal: %s ", err)
+			}
+			auditMode := tree.MustBeDString(row[17])
+			locality := ""
+			if row[18] != tree.DNull {
+				locality = string(tree.MustBeDString(row[18]))
 			}
 
+			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
+				TableID:          uint32(roachpb.TableID(tableID)),
+				IndexID:          uint32(roachpb.IndexID(indexID)),
+				TotalReadCount:   uint64(totalReads),
+				LastRead:         lastRead.String(),
+				DatabaseName:     databaseName.String(),
+				TableName:        string(tableName),
+				IndexName:        string(indexName),
+				IndexType:        string(indexType),
+				IsUnique:         bool(isUnique),
+				IsInverted:       bool(isInverted),
+				CreatedAt:        createdAt.String(),
+				SchemaName:       string(schemaName),
+				IsVisible:        bool(isVisible),
+				IsSharded:        bool(isSharded),
+				ShardBucketCount: int32(shardBucketCount),
+				DropTime:         dropTime.String(),
+				ModTime:          modTime.String(),
+				ModTimeLogical:   float32(modTimeLogicalFloat),
+				AuditMode:        auditMode.String(),
+				Locality:         locality,
+			}
+			mvccStats, err := captureMVCCStats(ctx, ie, string(databaseName), string(tableName))
+			if err != nil {
+				log.Infof(ctx, "Error collecting mvcc stats: %s", err)
+			} else {
+				capturedIndexStats.MVCCStats = mvccStats
+			}
 			allCapturedIndexUsageStats = append(allCapturedIndexUsageStats, capturedIndexStats)
 		}
 		if err = it.Close(); err != nil {
@@ -330,4 +376,106 @@ func getAllDatabaseNames(ctx context.Context, ie isql.Executor) (tree.NameList, 
 		allDatabaseNames = append(allDatabaseNames, databaseName)
 	}
 	return allDatabaseNames, nil
+}
+
+// captureMVCCStats executes a sql query in order to return MVCC stats as they
+// pertain to the provided table name.
+func captureMVCCStats(
+	ctx context.Context, ie isql.Executor, dbName string, tableName string,
+) (*enginepb.MVCCStats, error) {
+	expectedNumDatums := 20
+	stmt := fmt.Sprintf(`WITH range_stats AS (SELECT crdb_internal.range_stats(raw_start_key) AS d FROM [SHOW RANGES FROM TABLE %s WITH KEYS]) SELECT
+	COALESCE(((d->>'contains_estimates')::INT64),0)::INT64 AS contains_estimates,
+	COALESCE(((d->>'last_update_nanos')::INT64),0)::INT64 AS last_updated_nanos,
+	COALESCE(((d->>'intent_age')::INT64),0)::INT64 AS intent_age,
+	COALESCE(((d->'gc_bytes_age')::INT64),0)::INT64 AS gc_bytes_age,
+	COALESCE(((d->>'live_bytes')::INT64),0)::INT64 AS live_bytes,
+	COALESCE(((d->'live_count')::INT64),0)::INT64 AS live_count,
+	COALESCE(((d->>'key_bytes')::INT64),0)::INT64 AS key_bytes,
+	COALESCE(((d->>'key_count')::INT64),0)::INT64 AS key_count,
+	COALESCE(((d->>'val_bytes')::INT64),0)::INT64 AS val_bytes,
+	COALESCE(((d->>'val_count')::INT64),0)::INT64 AS val_count,
+	COALESCE(((d->>'intent_bytes')::INT64),0)::INT64 AS intent_bytes,
+	COALESCE(((d->>'intent_count')::INT64),0)::INT64 AS intent_count,
+	COALESCE(((d->>'separated_intent_count')::INT64),0)::INT64 AS separated_intent_count,
+	COALESCE(((d->>'range_key_bytes')::INT64),0)::INT64 AS range_key_bytes,
+	COALESCE(((d->>'range_key_count')::INT64),0)::INT64 AS range_key_count,
+	COALESCE(((d->>'range_val_bytes')::INT64),0)::INT64 AS range_val_bytes,
+	COALESCE(((d->>'range_val_count')::INT64),0)::INT64 AS range_val_count,
+	COALESCE(((d->>'sys_bytes')::INT64),0)::INT64 AS sys_bytes,
+	COALESCE(((d->>'sys_count')::INT64),0)::INT64 AS sys_count,
+	COALESCE(((d->>'abort_span_bytes')::INT64),0)::INT64 AS abort_span_bytes FROM range_stats`, tableName)
+
+	it, err := ie.QueryIteratorEx(
+		ctx,
+		"capture-mvcc-stats",
+		nil,
+		sessiondata.InternalExecutorOverride{
+			User:     username.RootUserName(),
+			Database: dbName,
+		},
+		stmt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := it.Next(ctx)
+	if !ok {
+		return nil, errors.New("unexpected no rows while capturing mvcc stats")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var row tree.Datums
+	if row = it.Cur(); row == nil {
+		return nil, errors.New("unexpected null row while capturing mvcc stats")
+	}
+	if row.Len() != expectedNumDatums {
+		return nil, errors.Newf("expected %d columns, received %d while capturing mvcc stats", expectedNumDatums, row.Len())
+	}
+	containsEstimates := tree.MustBeDInt(row[0])
+	lastUpdateNanos := tree.MustBeDInt(row[1])
+	intentAge := tree.MustBeDInt(row[2])
+	gcBytesAge := tree.MustBeDInt(row[3])
+	liveBytes := tree.MustBeDInt(row[4])
+	liveCount := tree.MustBeDInt(row[5])
+	keyBytes := tree.MustBeDInt(row[6])
+	keyCount := tree.MustBeDInt(row[7])
+	valBytes := tree.MustBeDInt(row[8])
+	valCount := tree.MustBeDInt(row[9])
+	intentBytes := tree.MustBeDInt(row[10])
+	intentCount := tree.MustBeDInt(row[11])
+	separatedIntentCount := tree.MustBeDInt(row[12])
+	rangeKeyBytes := tree.MustBeDInt(row[13])
+	rangeKeyCount := tree.MustBeDInt(row[14])
+	rangeValBytes := tree.MustBeDInt(row[15])
+	rangeValCount := tree.MustBeDInt(row[16])
+	sysBytes := tree.MustBeDInt(row[17])
+	sysCount := tree.MustBeDInt(row[18])
+	abortSpanBytes := tree.MustBeDInt(row[19])
+	if err = it.Close(); err != nil {
+		return nil, err
+	}
+	return &enginepb.MVCCStats{
+		ContainsEstimates:    int64(containsEstimates),
+		LastUpdateNanos:      int64(lastUpdateNanos),
+		IntentAge:            int64(intentAge),
+		GCBytesAge:           int64(gcBytesAge),
+		LiveBytes:            int64(liveBytes),
+		LiveCount:            int64(liveCount),
+		KeyBytes:             int64(keyBytes),
+		KeyCount:             int64(keyCount),
+		ValBytes:             int64(valBytes),
+		ValCount:             int64(valCount),
+		IntentBytes:          int64(intentBytes),
+		IntentCount:          int64(intentCount),
+		SeparatedIntentCount: int64(separatedIntentCount),
+		RangeKeyBytes:        int64(rangeKeyBytes),
+		RangeKeyCount:        int64(rangeKeyCount),
+		RangeValBytes:        int64(rangeValBytes),
+		RangeValCount:        int64(rangeValCount),
+		SysBytes:             int64(sysBytes),
+		SysCount:             int64(sysCount),
+		AbortSpanBytes:       int64(abortSpanBytes),
+	}, nil
 }

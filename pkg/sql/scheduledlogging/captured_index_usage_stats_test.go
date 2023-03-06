@@ -22,6 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -268,6 +270,22 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 		require.Greater(t, actualDuration+timeBuffer, expectedDuration, "%v+%v <= %v", expectedDuration, actualDuration, timeBuffer)
 		previousTimestamp = currentTimestamp
 	}
+}
+
+func TestCaptureMVCCStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	settings := cluster.MakeTestingClusterSettings()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: settings})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	// Create test databases.
+	db.Exec(t, "CREATE DATABASE test")
+	// Create a table.
+	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
+	ie := s.InternalExecutor().(isql.Executor)
+	stats, err := captureMVCCStats(context.Background(), ie, "test", "test.test_table")
+	require.NoError(t, err)
+	require.True(t, (&enginepb.MVCCStats{}) != stats)
 }
 
 // checkNumTotalEntriesAndNumIndexEntries is a helper function that verifies that
