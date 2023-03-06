@@ -533,6 +533,11 @@ func registerRestore(r registry.Registry) {
 		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r),
 		Timeout: withPauseSpecs.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+
+			if c.Spec().Cloud != withPauseSpecs.backup.cloud {
+				// For now, only run the test on the cloud provider that also stores the backup.
+				t.Skip("test configured to run on %s", withPauseSpecs.backup.cloud)
+			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			m := c.NewMonitor(ctx)
