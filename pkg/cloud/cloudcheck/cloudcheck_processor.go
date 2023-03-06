@@ -39,6 +39,19 @@ type result struct {
 	canDelete  bool
 }
 
+// add combines the result of other.
+func (r *result) add(other result) {
+	r.ok = r.ok && other.ok
+	if r.error == "" {
+		r.error = other.error
+	}
+	r.wroteBytes += other.wroteBytes
+	r.wroteTime += other.wroteTime
+	r.readBytes += other.readBytes
+	r.readTime += other.readTime
+	r.canDelete = r.canDelete && other.canDelete
+}
+
 var flowTypes = []*types.T{
 	types.Int, types.String, // node and locality
 	types.Bool, types.String, // ok and error
@@ -52,24 +65,49 @@ func checkURI(
 	opener cloud.ExternalStorageFromURIFactory,
 	location string,
 	username username.SQLUsername,
-	transferSize int64,
+	params TestParams,
 ) result {
+	ctxDone := ctx.Done()
+
+	transferSize := params.TransferSize
 	if transferSize == 0 {
 		transferSize = 32 << 20
 	}
 
-	var res result
-	store, err := opener(ctx, location, username)
-	if err != nil {
-		res.error = errors.Wrapf(err, "opening external storage").Error()
-		return res
+	var total result
+
+	start := timeutil.Now()
+	for {
+		select {
+		case <-ctxDone:
+			return total
+		default:
+		}
+
+		store, err := opener(ctx, location, username)
+		if err != nil {
+			total.error = errors.Wrapf(err, "opening external storage").Error()
+			return total
+		}
+		defer store.Close()
+
+		res, err := checkStorage(ctx, store, transferSize)
+		if err != nil {
+			res.error = err.Error()
+		}
+
+		if total.ok {
+			total.add(res)
+		} else {
+			total = res
+		}
+
+		if !total.ok || timeutil.Since(start) > params.MinDuration {
+			break
+		}
 	}
-	defer store.Close()
-	res, err = checkStorage(ctx, store, transferSize)
-	if err != nil {
-		res.error = err.Error()
-	}
-	return res
+
+	return total
 }
 
 func checkStorage(
@@ -173,7 +211,7 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		p.FlowCtx.Cfg.ExternalStorageFromURI,
 		p.spec.Location,
 		p.FlowCtx.EvalCtx.SessionData().User(),
-		p.spec.TransferSize,
+		p.spec.Params,
 	)
 	return rowenc.EncDatumRow{
 		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(p.EvalCtx.NodeID.SQLInstanceID()))),

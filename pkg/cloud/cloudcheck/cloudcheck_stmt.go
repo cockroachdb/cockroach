@@ -31,15 +31,18 @@ var Header = colinfo.ResultColumns{
 	{Name: "locality", Typ: types.String},
 	{Name: "ok", Typ: types.Bool},
 	{Name: "error", Typ: types.String},
+	{Name: "transferred", Typ: types.String},
 	{Name: "read_speed", Typ: types.String},
 	{Name: "write_speed", Typ: types.String},
 	{Name: "can_delete", Typ: types.Bool},
 }
 
+type TestParams = execinfrapb.CloudStorageTestSpec_Params
+
 // ShowCloudStorageTestPlanHook is currently called by showBackup hook but
 // should be extended to be a standalone plan instead.
 func ShowCloudStorageTestPlanHook(
-	ctx context.Context, p sql.PlanHookState, location string, transferSize int64,
+	ctx context.Context, p sql.PlanHookState, location string, params TestParams,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 
 	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{location}); err != nil {
@@ -64,7 +67,7 @@ func ShowCloudStorageTestPlanHook(
 		}
 		plan := planCtx.NewPhysicalPlan()
 		corePlacement := make([]physicalplan.ProcessorCorePlacement, len(sqlInstanceIDs))
-		spec := &execinfrapb.CloudStorageTestSpec{Location: location, TransferSize: transferSize}
+		spec := &execinfrapb.CloudStorageTestSpec{Location: location, Params: params}
 		for i := range sqlInstanceIDs {
 			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
 			corePlacement[i].Core.CloudStorageTest = spec
@@ -82,11 +85,12 @@ func ShowCloudStorageTestPlanHook(
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// collapse the two pairs of bytes+time to a single string rate each.
-			res := make(tree.Datums, len(row)-2)
+			res := make(tree.Datums, len(row)-1)
 			copy(res[:4], row[:4])
-			res[4] = tree.NewDString(rateFromDatums(row[4], row[5]))
-			res[5] = tree.NewDString(rateFromDatums(row[6], row[7]))
-			res[6] = row[8]
+			res[4] = tree.NewDString(string(humanizeutil.IBytes(int64(tree.MustBeDInt(row[6])))))
+			res[5] = tree.NewDString(rateFromDatums(row[4], row[5]))
+			res[6] = tree.NewDString(rateFromDatums(row[6], row[7]))
+			res[7] = row[8]
 			resultsCh <- res
 			return nil
 		})
