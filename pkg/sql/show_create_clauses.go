@@ -106,8 +106,13 @@ func ShowCreateView(
 	sessionData *sessiondata.SessionData,
 	tn *tree.TableName,
 	desc catalog.TableDescriptor,
+	redactableValues bool,
 ) (string, error) {
-	f := tree.NewFmtCtx(tree.FmtSimple)
+	fmtFlags := tree.FmtSimple
+	if redactableValues {
+		fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+	}
+	f := tree.NewFmtCtx(fmtFlags)
 	f.WriteString("CREATE ")
 	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
@@ -134,6 +139,7 @@ func ShowCreateView(
 	cfg := tree.DefaultPrettyCfg()
 	cfg.UseTabs = true
 	cfg.LineWidth = 100 - cfg.TabWidth
+	cfg.ValueRedaction = redactableValues
 	q := formatViewQueryForDisplay(ctx, semaCtx, sessionData, desc, cfg)
 	for i, line := range strings.Split(q, "\n") {
 		if i > 0 {
@@ -569,6 +575,7 @@ func ShowCreatePartitioning(
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
+	redactableValues bool,
 ) error {
 	isPrimaryKeyOfPartitionAllByTable :=
 		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idx.GetID() && colOffset == 0
@@ -620,7 +627,11 @@ func ShowCreatePartitioning(
 		buf.WriteString(tree.NameString(idx.GetKeyColumnName(colOffset + i)))
 	}
 	buf.WriteString(`) (`)
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtFlags := tree.FmtSimple
+	if redactableValues {
+		fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+	}
+	f := tree.NewFmtCtx(fmtFlags)
 	isFirst := true
 	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
 		if !isFirst {
@@ -630,8 +641,8 @@ func ShowCreatePartitioning(
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		fmtCtx.FormatName(name)
-		_, _ = fmtCtx.Buffer.WriteTo(buf)
+		f.FormatName(name)
+		_, _ = f.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range values {
 			if j != 0 {
@@ -642,11 +653,13 @@ func ShowCreatePartitioning(
 			if err != nil {
 				return err
 			}
-			buf.WriteString(tuple.String())
+			f.FormatNode(tuple)
+			_, _ = f.Buffer.WriteTo(buf)
 		}
 		buf.WriteString(`)`)
 		return ShowCreatePartitioning(
 			a, codec, tableDesc, idx, subPartitioning, buf, indent+1, colOffset+part.NumColumns(),
+			redactableValues,
 		)
 	})
 	if err != nil {
@@ -668,14 +681,16 @@ func ShowCreatePartitioning(
 		if err != nil {
 			return err
 		}
-		buf.WriteString(fromTuple.String())
+		f.FormatNode(fromTuple)
+		_, _ = f.Buffer.WriteTo(buf)
 		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
 			a, codec, tableDesc, idx, part, to, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
-		buf.WriteString(toTuple.String())
+		f.FormatNode(toTuple)
+		_, _ = f.Buffer.WriteTo(buf)
 		return nil
 	})
 	if err != nil {
@@ -696,6 +711,17 @@ func showConstraintClause(
 	sessionData *sessiondata.SessionData,
 	f *tree.FmtCtx,
 ) error {
+	exprFmtFlags := tree.FmtParsable
+	if f.HasFlags(tree.FmtPGCatalog) {
+		exprFmtFlags = tree.FmtPGCatalog
+	} else {
+		if f.HasFlags(tree.FmtMarkRedactionNode) {
+			exprFmtFlags |= tree.FmtMarkRedactionNode
+		}
+		if f.HasFlags(tree.FmtOmitNameRedaction) {
+			exprFmtFlags |= tree.FmtOmitNameRedaction
+		}
+	}
 	for _, e := range desc.CheckConstraints() {
 		if e.IsHashShardingConstraint() && !e.IsConstraintUnvalidated() {
 			continue
@@ -707,7 +733,9 @@ func showConstraintClause(
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.GetExpr(), semaCtx, sessionData, tree.FmtParsable)
+		expr, err := schemaexpr.FormatExprForDisplay(
+			ctx, desc, e.GetExpr(), semaCtx, sessionData, exprFmtFlags,
+		)
 		if err != nil {
 			return err
 		}
@@ -733,7 +761,9 @@ func showConstraintClause(
 		f.WriteString(")")
 		if c.IsPartial() {
 			f.WriteString(" WHERE ")
-			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.GetPredicate(), semaCtx, sessionData, tree.FmtParsable)
+			pred, err := schemaexpr.FormatExprForDisplay(
+				ctx, desc, c.GetPredicate(), semaCtx, sessionData, exprFmtFlags,
+			)
 			if err != nil {
 				return err
 			}

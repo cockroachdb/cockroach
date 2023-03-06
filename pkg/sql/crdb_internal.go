@@ -3194,6 +3194,7 @@ CREATE TABLE crdb_internal.create_statements (
   create_nofks                  STRING NOT NULL,
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
+  create_redactable             STRING NOT NULL,
   has_partitions                BOOL NOT NULL,
   is_multi_region               BOOL NOT NULL,
   is_virtual                    BOOL NOT NULL,
@@ -3213,7 +3214,7 @@ CREATE TABLE crdb_internal.create_statements (
 		scNameStr := tree.NewDString(sc.GetName())
 
 		var descType tree.Datum
-		var stmt, createNofk string
+		var stmt, createNofk, createRedactable string
 		alterStmts := tree.NewDArray(types.String)
 		validateStmts := tree.NewDArray(types.String)
 		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
@@ -3221,10 +3222,19 @@ CREATE TABLE crdb_internal.create_statements (
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(ctx, &p.semaCtx, p.SessionData(), &name, table)
+			stmt, err = ShowCreateView(
+				ctx, &p.semaCtx, p.SessionData(), &name, table, false, /* redactableValues */
+			)
+			if err != nil {
+				return err
+			}
+			createRedactable, err = ShowCreateView(
+				ctx, &p.semaCtx, p.SessionData(), &name, table, true, /* redactableValues */
+			)
 		} else if table.IsSequence() {
 			descType = typeSequence
 			stmt, err = ShowCreateSequence(ctx, &name, table)
+			createRedactable = stmt
 		} else {
 			descType = typeTable
 			displayOptions := ShowCreateDisplayOptions{
@@ -3239,6 +3249,13 @@ CREATE TABLE crdb_internal.create_statements (
 			}
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
 			stmt, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
+			if err != nil {
+				return err
+			}
+			displayOptions.RedactableValues = true
+			createRedactable, err = ShowCreateTable(
+				ctx, p, &name, contextName, table, lookup, displayOptions,
+			)
 		}
 		if err != nil {
 			return err
@@ -3264,6 +3281,7 @@ CREATE TABLE crdb_internal.create_statements (
 			tree.NewDString(createNofk),
 			alterStmts,
 			validateStmts,
+			tree.NewDString(createRedactable),
 			tree.MakeDBool(tree.DBool(hasPartitions)),
 			tree.MakeDBool(tree.DBool(db != nil && db.IsMultiRegion())),
 			tree.MakeDBool(tree.DBool(table.IsVirtualTable())),
@@ -3438,8 +3456,9 @@ CREATE TABLE crdb_internal.table_indexes (
 							idx,
 							idx.GetPartitioning(),
 							&partitionBuf,
-							0, /* indent */
-							0, /* colOffset */
+							0,     /* indent */
+							0,     /* colOffset */
+							false, /* redactableValues */
 						); err != nil {
 							return err
 						}
