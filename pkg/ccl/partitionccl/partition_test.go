@@ -1298,6 +1298,7 @@ func TestRepartitioning(t *testing.T) {
 					if err := sql.ShowCreatePartitioning(
 						&tree.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex,
 						testIndex.GetPartitioning(), &repartition, 0 /* indent */, 0, /* colOffset */
+						false, /* redactableValues */
 					); err != nil {
 						t.Fatalf("%+v", err)
 					}

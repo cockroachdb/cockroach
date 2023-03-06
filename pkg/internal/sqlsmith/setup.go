@@ -13,7 +13,9 @@ package sqlsmith
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,25 +73,48 @@ func stringSetup(s string) Setup {
 	}
 }
 
-// randTables is a Setup function that creates 1-5 random tables.
-func randTables(r *rand.Rand) []string {
-	return randTablesN(r, r.Intn(5)+1)
+// RandTablesPrefixStringConsts is similar to the rand-tables setup but injects
+// a prefix into string constants used in the CREATE TABLE statements.
+func RandTablesPrefixStringConsts(r *rand.Rand, prefix string) []string {
+	return randTablesN(r, r.Intn(5)+1, prefix)
 }
 
+// randTables is a Setup function that creates 1-5 random tables.
+func randTables(r *rand.Rand) []string {
+	return randTablesN(r, r.Intn(5)+1, "")
+}
+
+// stringConstRegex is a pattern that matches SQL string literals with type
+// assertions. It deliberately does not match string literals containing an
+// escaped single quote (either doubled or backslash-escaped) to try to avoid
+// matches that do not cover the entire string literal. It's not a parser, so it
+// will mismatch on some pathological cases (e.g. something evil like
+// e'\':::STRING ':::STRING) in which case the mutated CREATE TABLE statement
+// might be malformed.
+var stringConstRegex = regexp.MustCompile(`[^'\\]'[^']*':::STRING[^:[]`)
+
 // randTablesN is a Setup function that creates n random tables.
-func randTablesN(r *rand.Rand, n int) []string {
+func randTablesN(r *rand.Rand, n int, prefix string) []string {
 	var stmts []string
 	// Since we use the stats mutator, disable auto stats generation.
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`)
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;`)
 
 	// Create the random tables.
-	createTableStatements := randgen.RandCreateTables(r, "table", n,
-		false /* isMultiRegion */, randgen.StatisticsMutator,
-		randgen.PartialIndexMutator, randgen.ForeignKeyMutator)
+	createTableStatements := randgen.RandCreateTables(
+		r, "table", n, false /* isMultiRegion */, randgen.StatisticsMutator,
+		randgen.PartialIndexMutator, randgen.ForeignKeyMutator, //prefixStringConstsMutator,
+	)
 
-	for _, stmt := range createTableStatements {
-		stmts = append(stmts, tree.SerializeForDisplay(stmt))
+	for _, ast := range createTableStatements {
+		stmt := tree.SerializeForDisplay(ast)
+		// Inject prefix into string constants.
+		if prefix != "" {
+			stmt = stringConstRegex.ReplaceAllStringFunc(stmt, func(match string) string {
+				return strings.Replace(match, "'", "'"+prefix, 1)
+			})
+		}
+		stmts = append(stmts, stmt)
 	}
 
 	// Create some random types as well.

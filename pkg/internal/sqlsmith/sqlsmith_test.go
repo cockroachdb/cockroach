@@ -92,7 +92,7 @@ func TestRandTableInserts(t *testing.T) {
 	rnd, _ := randutil.NewTestRand()
 	defer ccl.TestingEnableEnterprise()()
 
-	setup := randTablesN(rnd, 10)
+	setup := randTablesN(rnd, 10, "")
 	for _, stmt := range setup {
 		if _, err := sqlDB.Exec(stmt); err != nil {
 			t.Log(stmt)
