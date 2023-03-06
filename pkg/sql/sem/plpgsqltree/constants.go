@@ -115,28 +115,6 @@ func (k PLpgSQLGetDiagKind) String() string {
 
 type PLpgSQLFetchDirection int
 
-const (
-	PLpgSQLFetchForward PLpgSQLFetchDirection = iota
-	// TODO add more, but maybe we have existing enum for this already.
-)
-
-type PLpgSQLPromiseType int
-
-const (
-	PlpgsqlPromiseNone = iota /* not a promise, or promise satisfied */
-	PlpgsqlPromiseTgName
-	PlpgsqlPromiseTgWhen
-	PlpgsqlPromiseTgLevel
-	PlpgsqlPromiseTgOp
-	PlpgsqlPromiseTgRelid
-	PlpgsqlPromiseTgTableName
-	PlpgsqlPromiseTgTableSchema
-	PlpgsqlPromiseTgNargs
-	PlpgsqlPromiseTgArgv
-	PlpgsqlPromiseTgEvent
-	PlpgsqlPromiseTgTag
-)
-
 type PLpgSQLCursorOpt uint32
 
 const (

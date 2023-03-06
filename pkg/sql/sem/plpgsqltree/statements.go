@@ -482,7 +482,7 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 			ctx.WriteString(s.Query)
 		}
 	} else {
-		ctx.WriteString(fmt.Sprintf("%s", s.ArgQuery))
+		ctx.WriteString(s.ArgQuery)
 	}
 	ctx.WriteString("\n")
 }

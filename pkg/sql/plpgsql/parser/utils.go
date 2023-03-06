@@ -16,10 +16,3 @@ type declareHeader struct {
 	label    string
 	initVars []plpgsqltree.PLpgSQLVariable
 }
-
-type plWDatum struct {
-	datum  *plpgsqltree.PLpgSQLDatum
-	ident  string
-	quoted bool
-	idents []string
-}

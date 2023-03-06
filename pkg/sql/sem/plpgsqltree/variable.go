@@ -26,8 +26,6 @@ type PLpgSQLDatumImpl struct {
 	DatumNo int
 }
 
-func (d *PLpgSQLDatumImpl) plpgsqldatum() {}
-
 type PLpgSQLVariable interface {
 	PLpgSQLDatum
 	pgpgsqlvariable()
@@ -50,8 +48,6 @@ type PLpgSQLVariableImpl struct {
 	DefaultValue PLpgSQLExpr
 }
 
-func (v *PLpgSQLVariableImpl) pgpgsqlvariable() {}
-
 type PLpgSQLScalarVar struct {
 	PLpgSQLVariableImpl
 	DataType *types.T
@@ -71,13 +67,6 @@ type PLpgSQLScalarVar struct {
 	Value     tree.Datum
 	IsNull    bool
 	FreeValue bool
-
-	/*
-	 * The promise field records which "promised" value to assign if the
-	 * promise must be honored.  If it's a normal variable, or the promise has
-	 * been fulfilled, this is PLPGSQL_PROMISE_NONE.
-	 */
-	promise PLpgSQLPromiseType
 }
 
 type PLpgSQLRowVar struct {
@@ -116,10 +105,6 @@ type PLpgSQLRecordField struct {
 }
 
 // TODO look at PLpgSQL_variable / PLpgSQL_var / PLpgSQL_row / PLpgSQL_rec / PLpgSQL_recfield
-
-type PLpgSQLEnv struct {
-	VarScopeStack []VariableScope
-}
 
 // Scope contains all the variables defined in the DECLARE section of current statement block.
 type VariableScope struct {

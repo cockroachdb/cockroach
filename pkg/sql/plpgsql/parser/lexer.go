@@ -43,8 +43,6 @@ type lexer struct {
 	numAnnotations  tree.AnnotationIdx
 
 	lastError error
-
-	env *plpgsqltree.PLpgSQLEnv
 }
 
 func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T) {
@@ -326,9 +324,7 @@ func (l *lexer) ReadSqlConstruct(
 	return strings.Join(exprTokenStrs, " "), terminatorMet
 }
 
-func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(
-	openStmt *plpgsqltree.PLpgSQLStmtOpen,
-) {
+func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.PLpgSQLStmtOpen) {
 	l.lastPos++
 	if int(l.Peek().id) == EXECUTE {
 		dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
@@ -378,22 +374,9 @@ func (l *lexer) lastToken() plpgsqlSymType {
 	return l.tokens[l.lastPos]
 }
 
-// NewAnnotation returns a new annotation index.
-func (l *lexer) NewAnnotation() tree.AnnotationIdx {
-	l.numAnnotations++
-	return l.numAnnotations
-}
-
 // SetStmt is called from the parser when the statement is constructed.
 func (l *lexer) SetStmt(stmt plpgsqltree.PLpgSQLStatement) {
 	l.stmt = stmt.(*plpgsqltree.PLpgSQLStmtBlock)
-}
-
-// UpdateNumPlaceholders is called from the parser when a placeholder is constructed.
-func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
-	if n := int(p.Idx) + 1; l.numPlaceholders < n {
-		l.numPlaceholders = n
-	}
 }
 
 // PurposelyUnimplemented wraps Error, setting lastUnimplementedError.
@@ -494,13 +477,4 @@ func (l *lexer) populateErrorDetails() {
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTok.pos)-j))
 	l.lastError = errors.WithDetail(l.lastError, buf.String())
-}
-
-// specialHelpErrorPrefix is a special prefix that must be present at
-// the start of an error message to be considered a valid help
-// response payload by the CLI shell.
-const specialHelpErrorPrefix = "help token in input"
-
-func (l *lexer) populateHelpMsg(msg string) {
-	l.lastError = errors.WithHint(errors.Wrap(l.lastError, specialHelpErrorPrefix), msg)
 }

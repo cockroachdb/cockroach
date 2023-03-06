@@ -61,14 +61,6 @@ func (u *plpgsqlSymUnion) plpgsqlStmtBlock() *plpgsqltree.PLpgSQLStmtBlock {
     return u.val.(*plpgsqltree.PLpgSQLStmtBlock)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlExpr() plpgsqltree.PLpgSQLExpr {
-    return u.val.(plpgsqltree.PLpgSQLExpr)
-}
-
-func (u *plpgsqlSymUnion) plpgsqlExprs() []plpgsqltree.PLpgSQLExpr {
-    return u.val.([]plpgsqltree.PLpgSQLExpr)
-}
-
 func (u *plpgsqlSymUnion) plpgsqlStmtCaseWhenArm() *plpgsqltree.PLpgSQLStmtCaseWhenArm {
     return u.val.(*plpgsqltree.PLpgSQLStmtCaseWhenArm)
 }
@@ -89,18 +81,9 @@ func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
     return u.val.([]plpgsqltree.PLpgSQLStatement)
 }
 
-func (u *plpgsqlSymUnion) plWDatum() *plWDatum {
-    return u.val.(*plWDatum)
-}
-
 func (u *plpgsqlSymUnion) int32() int32 {
     return u.val.(int32)
 }
-
-func (u *plpgsqlSymUnion) uint32() uint32 {
-    return u.val.(uint32)
-}
-
 
 func (u *plpgsqlSymUnion) bool() bool {
     return u.val.(bool)

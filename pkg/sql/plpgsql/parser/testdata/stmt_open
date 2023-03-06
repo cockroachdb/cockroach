@@ -20,6 +20,3 @@ DECLARE
 BEGIN
 OPEN curs2 SCROLL FOR EXECUTE select $ , $ from foo where key = mykey USING [hello jojo]
 END
-
-
-
