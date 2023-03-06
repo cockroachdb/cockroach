@@ -755,11 +755,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	systemTenantNameContainer := roachpb.NewTenantNameContainer(catconstants.SystemTenantName)
 
 	recorder := status.NewMetricsRecorder(
-		clock,
-		nodeLiveness,
-		rpcContext,
-		st,
+		rpcContext.TenantID,
 		systemTenantNameContainer,
+		nodeLiveness,
+		rpcContext.RemoteClocks,
+		clock.WallClock(),
+		st,
 	)
 	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
 

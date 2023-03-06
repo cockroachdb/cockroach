@@ -260,6 +260,15 @@ func (sd *StoreDetail) status(
 	//         +-------------------------+    Successful liveness
 	//                                        heartbeat
 	//
+
+	// The store is considered dead if it hasn't been updated via gossip
+	// within the liveness threshold. Note that LastUpdatedTime is set
+	// when the store detail is created and will have a non-zero value
+	// even before the first gossip arrives for a store.
+	deadAsOf := sd.LastUpdatedTime.Add(deadThreshold)
+	if now.After(deadAsOf) {
+		return storeStatusDead
+	}
 	// If there's no descriptor (meaning no gossip ever arrived for this
 	// store), return unavailable.
 	if sd.Desc == nil {
