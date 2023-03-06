@@ -1683,6 +1683,10 @@ func insertStats(
 		return nil
 	}
 
+	totalNumBatches := len(latestStats) / restoreStatsInsertBatchSize
+	log.Infof(ctx, "restore will insert %d TableStatistics in %d batches", len(latestStats), totalNumBatches)
+	insertStatsProgress := log.Every(10 * time.Second)
+
 	// We could be restoring hundreds of tables, so insert the new stats in
 	// batches instead of all in a single, long-running txn. This prevents intent
 	// buildup in the face of txn retries.
@@ -1707,6 +1711,7 @@ func insertStats(
 				if err := job.SetDetails(ctx, txn, details); err != nil {
 					return errors.Wrapf(err, "updating job marking stats insertion complete")
 				}
+				return nil
 			}
 
 			return nil
@@ -1716,6 +1721,11 @@ func insertStats(
 
 		// Truncate the stats that we have inserted in the txn above.
 		latestStats = latestStats[restoreStatsInsertBatchSize:]
+
+		if insertStatsProgress.ShouldLog() {
+			remainingBatches := len(latestStats) / restoreStatsInsertBatchSize
+			log.Infof(ctx, "restore has %d/%d TableStatistics batches remaining to insert", remainingBatches, totalNumBatches)
+		}
 	}
 }
 
