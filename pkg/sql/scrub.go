@@ -185,6 +185,12 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err != nil {
 			return err
 		}
+		// Skip over descriptors that are not tables (like types).
+		// Note: We are asking for table objects above, so It's valid to only
+		// get a prefix, and no descriptor.
+		if objDesc == nil || objDesc.DescriptorType() != catalog.Table {
+			continue
+		}
 		tableDesc := objDesc.(catalog.TableDescriptor)
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
