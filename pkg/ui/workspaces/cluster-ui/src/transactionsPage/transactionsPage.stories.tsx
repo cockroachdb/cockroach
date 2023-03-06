@@ -25,6 +25,7 @@ import {
 
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
+import { SqlStatsSortOptions } from "../api";
 
 const getEmptyData = () =>
   extend({}, data, { transactions: [], statements: [] });
@@ -53,6 +54,11 @@ storiesOf("Transactions Page", module)
       search={""}
       sortSetting={sortSetting}
       lastUpdated={lastUpdated}
+      isReqInFlight={false}
+      limit={100}
+      reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
+      onChangeLimit={noop}
+      onChangeReqSort={noop}
     />
   ))
   .add("without data", () => {
@@ -75,6 +81,11 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        isReqInFlight={false}
+        limit={100}
+        reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
       />
     );
   })
@@ -105,6 +116,11 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        isReqInFlight={false}
+        limit={100}
+        reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
       />
     );
   })
@@ -128,6 +144,11 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        isReqInFlight={true}
+        limit={100}
+        reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
       />
     );
   })
@@ -158,6 +179,11 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        isReqInFlight={false}
+        limit={100}
+        reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
       />
     );
   });

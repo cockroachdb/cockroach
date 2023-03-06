@@ -21,8 +21,10 @@ import { txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
+  reqSortSetting,
   selectData,
   selectLastError,
+  limitSetting,
 } from "src/views/transactions/transactionsPage";
 import {
   TransactionDetailsStateProps,
@@ -87,6 +89,8 @@ export default withRouter(
         isLoading: isLoading,
         lastUpdated: lastUpdated,
         isDataValid: isValid,
+        limit: limitSetting.selector(state),
+        reqSortSetting: reqSortSetting.selector(state),
       };
     },
     {

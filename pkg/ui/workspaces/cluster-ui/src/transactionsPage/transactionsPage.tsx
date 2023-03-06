@@ -34,7 +34,6 @@ import {
   searchTransactionsData,
   filterTransactions,
 } from "./utils";
-import Long from "long";
 import { merge } from "lodash";
 import { unique, syncHistory } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
@@ -50,7 +49,11 @@ import {
   updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 import { UIConfigState } from "../store";
-import { StatementsRequest } from "src/api/statementsApi";
+import {
+  createCombinedStmtsRequest,
+  SqlStatsSortType,
+  StatementsRequest,
+} from "src/api/statementsApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import {
@@ -72,7 +75,14 @@ import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import moment from "moment";
-import { STATS_LONG_LOADING_DURATION } from "../util/constants";
+import { Dropdown } from "src/dropdown";
+import {
+  STATS_LONG_LOADING_DURATION,
+  getSortLabel,
+  limitOptions,
+  txnRequestSortOptions,
+} from "src/util/sqlActivityConstants";
+import { Button } from "src/button";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -81,6 +91,9 @@ const cx = classNames.bind(styles);
 interface TState {
   filters?: Filters;
   pagination: ISortedTablePagination;
+  timeScale: TimeScale;
+  limit: number;
+  reqSortSetting: SqlStatsSortType;
 }
 
 export interface TransactionsPageStateProps {
@@ -90,6 +103,8 @@ export interface TransactionsPageStateProps {
   isReqInFlight: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
+  limit: number;
+  reqSortSetting: SqlStatsSortType;
   error?: Error | null;
   filters: Filters;
   isTenant?: UIConfigState["isTenant"];
@@ -106,6 +121,8 @@ export interface TransactionsPageDispatchProps {
   refreshUserSQLRoles: () => void;
   resetSQLStats: () => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
+  onChangeLimit: (limit: number) => void;
+  onChangeReqSort: (sort: SqlStatsSortType) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
   onSearchComplete?: (query: string) => void;
@@ -120,11 +137,15 @@ export type TransactionsPageProps = TransactionsPageStateProps &
   TransactionsPageDispatchProps &
   RouteComponentProps;
 
-function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
-  const [start, end] = toRoundedDateRange(ts);
-  return new protos.cockroach.server.serverpb.CombinedStatementsStatsRequest({
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
+type RequestParams = Pick<TState, "timeScale" | "limit" | "reqSortSetting">;
+
+function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
+  const [start, end] = toRoundedDateRange(params.timeScale);
+  return createCombinedStmtsRequest({
+    start,
+    end,
+    limit: params.limit,
+    sort: params.reqSortSetting,
   });
 }
 export class TransactionsPage extends React.Component<
@@ -133,7 +154,11 @@ export class TransactionsPage extends React.Component<
 > {
   constructor(props: TransactionsPageProps) {
     super(props);
+
     this.state = {
+      limit: this.props.limit,
+      timeScale: this.props.timeScale,
+      reqSortSetting: this.props.reqSortSetting,
       pagination: {
         pageSize: this.props.pageSize || 20,
         current: 1,
@@ -182,7 +207,7 @@ export class TransactionsPage extends React.Component<
   };
 
   refreshData = (): void => {
-    const req = stmtsRequestFromTimeScale(this.props.timeScale);
+    const req = stmtsRequestFromParams(this.state);
     this.props.refreshData(req);
   };
 
@@ -243,17 +268,10 @@ export class TransactionsPage extends React.Component<
     );
   }
 
-  componentDidUpdate(prevProps: TransactionsPageProps): void {
+  componentDidUpdate(): void {
     this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
-    }
-
-    if (
-      prevProps.timeScale !== this.props.timeScale ||
-      (prevProps.isDataValid && !this.props.isDataValid)
-    ) {
-      this.refreshData();
     }
   }
 
@@ -360,9 +378,31 @@ export class TransactionsPage extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
-    if (this.props.onTimeScaleChange) {
-      this.props.onTimeScaleChange(ts);
+    this.setState(prevState => ({ ...prevState, timeScale: ts }));
+  };
+
+  onChangeLimit = (newLimit: number): void => {
+    this.setState(prevState => ({ ...prevState, limit: newLimit }));
+  };
+
+  onChangeReqSort = (newSort: SqlStatsSortType): void => {
+    this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
+  };
+
+  updateRequestParams = (): void => {
+    if (this.props.limit !== this.state.limit) {
+      this.props.onChangeLimit(this.state.limit);
     }
+
+    if (this.props.reqSortSetting !== this.state.reqSortSetting) {
+      this.props.onChangeReqSort(this.state.reqSortSetting);
+    }
+
+    if (this.props.timeScale !== this.state.timeScale) {
+      this.props.onTimeScaleChange(this.state.timeScale);
+    }
+
+    this.refreshData();
   };
 
   render(): React.ReactElement {
@@ -444,14 +484,32 @@ export class TransactionsPage extends React.Component<
             />
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
+            <Dropdown items={limitOptions} onChange={this.onChangeLimit}>
+              Limit: {this.state.limit ?? "N/A"}
+            </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown
+              items={txnRequestSortOptions}
+              onChange={this.onChangeReqSort}
+            >
+              Sort By: {getSortLabel(this.state.reqSortSetting)}
+            </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem className={commonStyles("separator")}>
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
-              currentScale={this.props.timeScale}
+              currentScale={this.state.timeScale}
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
+          <PageConfigItem>
+            <Button size="small" onClick={this.updateRequestParams}>
+              Submit Request
+            </Button>
+          </PageConfigItem>
           {hasAdminRole && (
-            <PageConfigItem className={commonStyles("separator")}>
+            <PageConfigItem>
               <ClearStats
                 resetSQLStats={this.resetSQLStats}
                 tooltipType="transaction"
