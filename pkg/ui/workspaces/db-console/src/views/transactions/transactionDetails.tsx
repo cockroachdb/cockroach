@@ -22,8 +22,10 @@ import { txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
+  reqSortSetting,
   selectData,
   selectLastError,
+  limitSetting,
 } from "src/views/transactions/transactionsPage";
 import {
   TransactionDetailsStateProps,
@@ -92,6 +94,8 @@ export default withRouter(
         transactionInsights: selectTxnInsightsByFingerprint(state, props),
         hasAdminRole: selectHasAdminRole(state),
         isDataValid: isValid,
+        limit: limitSetting.selector(state),
+        reqSortSetting: reqSortSetting.selector(state),
       };
     },
     {
