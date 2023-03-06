@@ -17,6 +17,7 @@ import { noop } from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "src/util";
+import { DEFAULT_STATS_REQ_OPTIONS } from "../api/statementsApi";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
@@ -913,6 +914,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
   ],
   statementsError: null,
+  limit: DEFAULT_STATS_REQ_OPTIONS.limit,
+  reqSortSetting: DEFAULT_STATS_REQ_OPTIONS.sort,
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
@@ -940,6 +943,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onColumnsChange: noop,
   onSortingChange: noop,
   onFilterChange: noop,
+  onChangeLimit: noop,
+  onChangeReqSort: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {
