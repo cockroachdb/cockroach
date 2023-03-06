@@ -123,18 +123,13 @@ func (p *planner) SetClusterSetting(
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
-	v, ok := settings.Lookup(name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant())
+	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
 
 	if err := checkPrivilegesForSetting(ctx, p, name, "set"); err != nil {
 		return nil, err
-	}
-
-	setting, ok := v.(settings.NonMaskedSetting)
-	if !ok {
-		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
 	if !p.execCfg.Codec.ForSystemTenant() {

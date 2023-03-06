@@ -117,9 +117,7 @@ func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
-	val, ok := settings.Lookup(
-		name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
-	)
+	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
@@ -137,11 +135,6 @@ func (p *planner) ShowClusterSetting(
 				docs.URL("alter-role.html#set-default-session-variable-values-for-a-role"),
 			),
 		)
-	}
-
-	setting, ok := val.(settings.NonMaskedSetting)
-	if !ok {
-		return nil, errors.AssertionFailedf("setting is masked: %v", name)
 	}
 
 	columns, err := getShowClusterSettingPlanColumns(setting, name)
