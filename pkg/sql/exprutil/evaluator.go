@@ -46,6 +46,15 @@ func (e Evaluator) StringArray(ctx context.Context, exprs tree.Exprs) ([]string,
 	return strs, nil
 }
 
+// Int evaluates expr to an int.
+func (e Evaluator) Int(ctx context.Context, expr tree.Expr) (int64, error) {
+	d, err := e.evalScalar(ctx, expr, types.Int)
+	if err != nil {
+		return 0, err
+	}
+	return int64(tree.MustBeDInt(d)), nil
+}
+
 // String evaluates expr to a string.
 func (e Evaluator) String(ctx context.Context, expr tree.Expr) (string, error) {
 	d, err := e.evalScalar(ctx, expr, types.String)

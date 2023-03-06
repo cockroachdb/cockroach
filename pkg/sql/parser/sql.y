@@ -7443,6 +7443,10 @@ show_backup_connection_options:
  {
   $$.val = &tree.ShowBackupOptions{CheckConnectionDuration: $3.expr()}
  }
+ | CONCURRENTLY '=' a_expr
+ {
+  $$.val = &tree.ShowBackupOptions{CheckConnectionConcurrency: $3.expr()}
+ }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg

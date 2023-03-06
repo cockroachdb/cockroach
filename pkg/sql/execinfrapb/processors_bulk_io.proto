@@ -433,6 +433,8 @@ message CloudStorageTestSpec {
     // MinDuration causes the test to be run repeatedly until the duration has
     // elapsed.
     optional int64 min_duration = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
+    // Concurrency causes multiple tests to be run in parallel.
+    optional int64 concurrency = 3 [(gogoproto.nullable) = false];
   }
   optional Params params = 2 [(gogoproto.nullable) = false];
   // NEXT ID: 3;
