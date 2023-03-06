@@ -55,7 +55,13 @@ WHERE name = %s
 }
 
 func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement, error) {
-	const showCreateQuery = `
+	createField := "create_statement"
+	switch n.FmtOpt {
+	case tree.ShowCreateFormatOptionRedactedValues:
+		createField = "crdb_internal.redact(create_redactable)"
+	}
+
+	showCreateQuery := `
 WITH zone_configs AS (
 		SELECT
 			string_agg(
@@ -77,7 +83,7 @@ WITH zone_configs AS (
 )
 SELECT
     %[3]s AS table_name,
-    concat(create_statement,
+    concat(` + createField + `,
         CASE
 				WHEN is_multi_region THEN
 					CASE
