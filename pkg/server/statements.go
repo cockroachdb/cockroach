@@ -29,6 +29,10 @@ func (s *statusServer) Statements(
 		combinedRequest := serverpb.CombinedStatementsStatsRequest{
 			Start: req.Start,
 			End:   req.End,
+<<<<<<< HEAD
+=======
+			Limit: req.Limit,
+>>>>>>> 20292009d1f (server: add limit and sort capabilities to sql stats requests)
 		}
 		return s.CombinedStatementStats(ctx, &combinedRequest)
 	}
