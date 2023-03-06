@@ -781,8 +781,8 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder 'WITH' 'TRANSFER' '=' string_or_placeholder
+	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder
+	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder 'WITH' show_backup_connection_options_list
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -1929,6 +1929,9 @@ opt_with_show_backup_options ::=
 	| 'WITH' 'OPTIONS' '(' show_backup_options_list ')'
 	| 
 
+show_backup_connection_options_list ::=
+	( show_backup_connection_options ) ( ( ',' show_backup_connection_options ) )*
+
 with_comment ::=
 	'WITH' 'COMMENT'
 	| 
@@ -2695,6 +2698,10 @@ extra_var_value ::=
 
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
+
+show_backup_connection_options ::=
+	'TRANSFER' '=' string_or_placeholder
+	| 'TIME' '=' string_or_placeholder
 
 targets_roles ::=
 	'ROLE' role_spec_list
