@@ -442,7 +442,7 @@ func exportUsingGoIterator(
 	startKey, endKey roachpb.Key,
 	reader storage.Reader,
 ) ([]byte, error) {
-	memFile := &storage.MemFile{}
+	memFile := &storage.MemObject{}
 	sst := storage.MakeIngestionSSTWriter(
 		ctx, cluster.MakeTestingClusterSettings(), memFile,
 	)
@@ -593,7 +593,7 @@ func assertEqualKVs(
 			var sst []byte
 			maxSize := uint64(0)
 			prevStart := start
-			sstFile := &storage.MemFile{}
+			var sstFile bytes.Buffer
 			summary, resumeInfo, err := storage.MVCCExportToSST(ctx, st, e, storage.MVCCExportOptions{
 				StartKey:           start,
 				EndKey:             endKey,
@@ -603,10 +603,10 @@ func assertEqualKVs(
 				TargetSize:         targetSize,
 				MaxSize:            maxSize,
 				StopMidKey:         bool(stopMidKey),
-			}, sstFile)
+			}, &sstFile)
 			require.NoError(t, err)
 			start = resumeInfo.ResumeKey
-			sst = sstFile.Data()
+			sst = sstFile.Bytes()
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.
 			if start.Key != nil {
@@ -652,7 +652,7 @@ func assertEqualKVs(
 					TargetSize:         targetSize,
 					MaxSize:            maxSize,
 					StopMidKey:         false,
-				}, &storage.MemFile{})
+				}, &bytes.Buffer{})
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
 			}

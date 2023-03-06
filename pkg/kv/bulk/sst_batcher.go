@@ -168,7 +168,7 @@ type SSTBatcher struct {
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
 	sstWriter         storage.SSTWriter
-	sstFile           *storage.MemFile
+	sstFile           *storage.MemObject
 	batchStartKey     []byte
 	batchEndKey       []byte
 	batchEndValue     []byte
@@ -365,7 +365,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.sstWriter.Close()
-	b.sstFile = &storage.MemFile{}
+	b.sstFile = &storage.MemObject{}
 	// Create sstables intended for ingestion using the newest format that all
 	// nodes can support. MakeIngestionSSTWriter will handle cluster version
 	// gating using b.settings.
@@ -912,7 +912,7 @@ func createSplitSSTable(
 	iter storage.SimpleMVCCIterator,
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
-	sstFile := &storage.MemFile{}
+	sstFile := &storage.MemObject{}
 	w := storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
 	defer w.Close()
 
@@ -937,7 +937,7 @@ func createSplitSSTable(
 			}
 
 			left = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
-			*sstFile = storage.MemFile{}
+			*sstFile = storage.MemObject{}
 			w = storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
 			split = true
 			first = nil
