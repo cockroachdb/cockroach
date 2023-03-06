@@ -39,6 +39,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":eventpb"],
     deps = [
+        "//pkg/storage/enginepb",
         "//pkg/util/log/logpb",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
@@ -67,6 +68,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util/log/logpb:logpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -80,6 +82,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/storage/enginepb",
         "//pkg/util/log/logpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],

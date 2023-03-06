@@ -268,6 +268,30 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 		require.Greater(t, actualDuration+timeBuffer, expectedDuration, "%v+%v <= %v", expectedDuration, actualDuration, timeBuffer)
 		previousTimestamp = currentTimestamp
 	}
+
+	// Verify we logged data in the message to telemetry by checking some of the fields that can't be null/empty.
+	for _, entry := range entries {
+		var payload struct {
+			TableID        int    `json:"TableID"`
+			IndexID        int    `json:"IndexID"`
+			CreatedAt      string `json:"CreatedAt"`
+			IsVisible      bool   `json:"IsVisible"`
+			TableModTime   string `json:"TableModTime"`
+			TableAuditMode string `json:"TableAUditMode"`
+			MVCCStats      struct {
+				LastUpdateNanos string `json:"lastUpdateNanos"`
+			}
+		}
+		err = json.Unmarshal([]byte(entry.Message), &payload)
+		require.NoError(t, err)
+		require.True(t, payload.TableID > 0)
+		require.True(t, payload.IndexID > 0)
+		require.True(t, payload.CreatedAt != "")
+		require.True(t, payload.IsVisible)
+		require.True(t, payload.TableModTime != "")
+		require.True(t, payload.TableAuditMode == "'DISABLED'")
+		require.True(t, payload.MVCCStats.LastUpdateNanos != "")
+	}
 }
 
 // checkNumTotalEntriesAndNumIndexEntries is a helper function that verifies that

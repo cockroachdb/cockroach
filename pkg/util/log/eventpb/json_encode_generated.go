@@ -810,6 +810,92 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, '"')
 	}
 
+	if m.IsVisible {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsVisible\":true"...)
+	}
+
+	if m.IsSharded {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsSharded\":true"...)
+	}
+
+	if m.ShardBucketCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ShardBucketCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ShardBucketCount), 10)
+	}
+
+	if m.TableDropTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableDropTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableDropTime)))
+		b = append(b, '"')
+	}
+
+	if m.TableModTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableModTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableModTime)))
+		b = append(b, '"')
+	}
+
+	if m.TableModTimeLogical != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableModTimeLogical\":"...)
+		b = strconv.AppendFloat(b, float64(m.TableModTimeLogical), 'f', -1, 32)
+	}
+
+	if m.TableAuditMode != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableAuditMode\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableAuditMode)))
+		b = append(b, '"')
+	}
+
+	if m.TableLocality != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableLocality\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableLocality)))
+		b = append(b, '"')
+	}
+
+	if m.MVCCStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		jsonEncoder := jsonpb.Marshaler{}
+		if str, err := jsonEncoder.MarshalToString(m.MVCCStats); err == nil {
+			b = append(b, "\"MVCCStats\":"...)
+			b = append(b, []byte(str)...)
+		}
+	}
+
 	return printComma, b
 }
 

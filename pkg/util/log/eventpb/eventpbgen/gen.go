@@ -387,7 +387,7 @@ func readInput(
 			switch typ {
 			case "google.protobuf.Timestamp":
 				typ = "timestamp"
-			case "cockroach.sql.sqlbase.Descriptor":
+			case "cockroach.sql.sqlbase.Descriptor", "cockroach.storage.enginepb.MVCCStats":
 				typ = "protobuf"
 			}
 
