@@ -1313,7 +1313,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
 %type <*tree.TenantReplicationOptions> opt_with_tenant_replication_options tenant_replication_options tenant_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options show_backup_connection_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -7317,19 +7317,19 @@ show_backup_stmt:
   			Options: *$5.showBackupOptions(),
   		}
   	}
-| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP CONNECTION string_or_placeholder
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupConnectionTest,
   			Path:    $4.expr(),
   		}
   	}
-| SHOW BACKUP CONNECTION string_or_placeholder WITH TRANSFER '=' string_or_placeholder
+| SHOW BACKUP CONNECTION string_or_placeholder WITH show_backup_connection_options_list
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupConnectionTest,
   			Path:    $4.expr(),
-        Options: tree.ShowBackupOptions{TransferSize: $8.expr()},
+        Options: *$6.showBackupOptions(),
   		}
   	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
@@ -7419,6 +7419,29 @@ show_backup_options:
  | DEBUG_DUMP_METADATA_SST
  {
  $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
+ }
+
+show_backup_connection_options_list:
+  // Require at least one option
+  show_backup_connection_options
+  {
+    $$.val = $1.showBackupOptions()
+  }
+| show_backup_connection_options_list ',' show_backup_connection_options
+  {
+    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+show_backup_connection_options:
+  TRANSFER '=' string_or_placeholder
+ {
+  $$.val = &tree.ShowBackupOptions{CheckConnectionTransferSize: $3.expr()}
+ }
+ | TIME '=' string_or_placeholder
+ {
+  $$.val = &tree.ShowBackupOptions{CheckConnectionDuration: $3.expr()}
  }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
