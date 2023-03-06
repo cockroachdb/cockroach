@@ -523,12 +523,13 @@ func registerRestore(r registry.Registry) {
 		backup: makeBackupSpecs(
 			backupSpecs{workload: tpceRestore{customers: 5000},
 				version: "v22.2.1"}),
-		timeout: 3 * time.Hour,
+		timeout:    3 * time.Hour,
+		namePrefix: "pause",
 	}
-	withPauseTestName := withPauseSpecs.computeName("pause", false)
+	withPauseSpecs.initTestName()
 
 	r.Add(registry.TestSpec{
-		Name:    withPauseTestName,
+		Name:    withPauseSpecs.testName,
 		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r),
 		Timeout: withPauseSpecs.timeout,
@@ -542,7 +543,7 @@ func registerRestore(r registry.Registry) {
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			m := c.NewMonitor(ctx)
 
-			withPauseSpecs.getRuntimeSpecs(ctx, t, c, withPauseTestName)
+			withPauseSpecs.getRuntimeSpecs(ctx, t, c)
 			// Run the disk usage logger in the monitor to guarantee its
 			// having terminated when the test ends.
 			dul := NewDiskUsageLogger(t, c)
@@ -713,9 +714,9 @@ func registerRestore(r registry.Registry) {
 		// - restore/tpce/400GB/encryption
 	} {
 		sp := sp
-		testName := sp.computeName("", false)
+		sp.initTestName()
 		r.Add(registry.TestSpec{
-			Name:    testName,
+			Name:    sp.testName,
 			Owner:   registry.OwnerDisasterRecovery,
 			Cluster: sp.hardware.makeClusterSpecs(r),
 			Timeout: sp.timeout,
@@ -725,7 +726,7 @@ func registerRestore(r registry.Registry) {
 			Tags:              sp.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
-				t.L().Printf("Full test specs: %s", sp.computeName("", true))
+				t.L().Printf("Full test specs: %s", sp.computeName(true))
 
 				if c.Spec().Cloud != sp.backup.cloud {
 					// For now, only run the test on the cloud provider that also stores the backup.
@@ -742,7 +743,7 @@ func registerRestore(r registry.Registry) {
 				hc := NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
-				sp.getRuntimeSpecs(ctx, t, c, testName)
+				sp.getRuntimeSpecs(ctx, t, c)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
@@ -951,14 +952,22 @@ type restoreSpecs struct {
 	timeout  time.Duration
 	tags     []string
 
+	// namePrefix appears in the name of the roachtest, i.e. `restore/{prefix}/{config}`.
+	namePrefix string
+
 	t        test.Test
 	c        cluster.Cluster
 	testName string
 }
 
-func (sp *restoreSpecs) computeName(prefix string, verbose bool) string {
-	if prefix != "" {
-		prefix = "/" + prefix
+func (sp *restoreSpecs) initTestName() {
+	sp.testName = sp.computeName(false)
+}
+
+func (sp *restoreSpecs) computeName(verbose bool) string {
+	var prefix string
+	if sp.namePrefix != "" {
+		prefix = "/" + sp.namePrefix
 	}
 	return "restore" + prefix + sp.backup.String(verbose) + sp.hardware.String(verbose)
 }
@@ -968,12 +977,9 @@ func (sp *restoreSpecs) restoreCmd(target, opts string) string {
 		target, sp.backup.fullBackupDir, sp.backup.backupCollection(), sp.backup.aost, opts)
 }
 
-func (sp *restoreSpecs) getRuntimeSpecs(
-	ctx context.Context, t test.Test, c cluster.Cluster, testName string,
-) {
+func (sp *restoreSpecs) getRuntimeSpecs(ctx context.Context, t test.Test, c cluster.Cluster) {
 	sp.t = t
 	sp.c = c
-	sp.testName = testName
 
 	var aost string
 	conn := sp.c.Conn(ctx, sp.t.L(), 1)
