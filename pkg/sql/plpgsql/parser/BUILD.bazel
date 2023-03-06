@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 sh_binary(
     name = "plpgsql-gen",
-    srcs = ["plpgsql-gen.sh"],
+    srcs = ["//pkg/sql/parser:sql-gen.sh"],
 )
 
 # Define the target to auto-generate sql.go from the grammar file.
@@ -53,7 +53,6 @@ go_library(
 
 exports_files(
     [
-        "reserved_keywords.awk",
         "plpgsql.y",
     ],
     visibility = ["//visibility:public"],

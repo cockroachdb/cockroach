@@ -100,7 +100,7 @@ export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
 $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
     $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
+    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
 """,
     exec_tools = [
         ":sql-gen",
@@ -158,6 +158,7 @@ exports_files(
         "reserved_keywords.awk",
         "sql.y",
         "help.awk",
+        "sql-gen.sh",
     ],
     visibility = ["//visibility:public"],
 )
