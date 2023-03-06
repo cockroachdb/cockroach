@@ -30,6 +30,8 @@ type Iterator = *assertionIter
 
 // MaybeWrap returns the provided Pebble iterator, wrapped with double close
 // detection.
+//
+//gcassert:inline
 func MaybeWrap(iter *pebble.Iterator) Iterator {
 	return &assertionIter{Iterator: iter, closedCh: make(chan struct{})}
 }
@@ -76,6 +78,7 @@ type rangeKeyBuf struct {
 	bgCh chan struct{}
 }
 
+//gcassert:inline
 func (b *rangeKeyBuf) mangle() {
 	zero(b.start)
 	zero(b.end)
@@ -85,6 +88,7 @@ func (b *rangeKeyBuf) mangle() {
 	}
 }
 
+//gcassert:inline
 func (i *assertionIter) Clone(cloneOpts pebble.CloneOptions) (Iterator, error) {
 	iter, err := i.Iterator.Clone(cloneOpts)
 	if err != nil {
@@ -240,6 +244,8 @@ func (i *assertionIter) maybeMangleBufs() {
 // maybeSaveAndMangleRangeKeyBufs is invoked at the end of every iterator
 // operation. It saves the range keys to buffers owned by `assertionIter` and
 // with random probability mangles any buffers previously returned to the user.
+//
+//gcassert:inline
 func (i *assertionIter) maybeSaveAndMangleRangeKeyBufs() {
 	// If RangeKeyChanged()=false, the pebble.Iterator contract guarantees that
 	// any buffers previously returned through RangeBounds() and RangeKeys() are
