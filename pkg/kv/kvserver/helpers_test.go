@@ -392,7 +392,7 @@ func (r *Replica) LoadBasedSplitter() *split.Decider {
 func MakeSSTable(
 	ctx context.Context, key, value string, ts hlc.Timestamp,
 ) ([]byte, storage.MVCCKeyValue) {
-	sstFile := &storage.MemFile{}
+	sstFile := &storage.MemObject{}
 	sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 	defer sst.Close()
 

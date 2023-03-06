@@ -6158,12 +6158,12 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 		dataIndex := 0
 		startKey := initialOpts.StartKey
 		for len(startKey.Key) > 0 {
-			sstFile := &MemFile{}
+			var sstFile bytes.Buffer
 			opts := initialOpts
 			opts.StartKey = startKey
-			_, resumeInfo, err := MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			_, resumeInfo, err := MVCCExportToSST(ctx, st, engine, opts, &sstFile)
 			require.NoError(t, err)
-			chunk := sstToKeys(t, sstFile.Data())
+			chunk := sstToKeys(t, sstFile.Bytes())
 			require.LessOrEqual(t, len(chunk), len(expectedData)-dataIndex, "remaining test data")
 			for _, key := range chunk {
 				require.True(t, key.Equal(expectedData[dataIndex]), "returned key is not equal")
@@ -6272,7 +6272,7 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 			}
 			require.NoError(t, engine.Flush(), "Flush engine data")
 
-			sstFile := &MemFile{}
+			var sstFile bytes.Buffer
 			opts := MVCCExportOptions{
 				StartKey:           MVCCKey{Key: testKey(minKey), Timestamp: minTimestamp},
 				EndKey:             testKey(maxKey),
@@ -6297,19 +6297,19 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 
 			// With StopMidKey=false, we expect 6
 			// revisions or 0 revisions.
-			_, _, err := MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			_, _, err := MVCCExportToSST(ctx, st, engine, opts, &sstFile)
 			require.NoError(t, err)
-			chunk := sstToKeys(t, sstFile.Data())
+			chunk := sstToKeys(t, sstFile.Bytes())
 			require.Equal(t, 6, len(chunk))
 
 			// With StopMidKey=true, we can stop in the
 			// middle of iteration.
 			callsBeforeFailure = 2
-			sstFile = &MemFile{}
+			sstFile.Reset()
 			opts.StopMidKey = true
-			_, _, err = MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			_, _, err = MVCCExportToSST(ctx, st, engine, opts, &sstFile)
 			require.NoError(t, err)
-			chunk = sstToKeys(t, sstFile.Data())
+			chunk = sstToKeys(t, sstFile.Bytes())
 			// We expect 3 here rather than 2 because the
 			// first iteration never calls the handler.
 			require.Equal(t, 3, len(chunk))
@@ -6339,16 +6339,16 @@ type dataLimits struct {
 
 func exportAllData(t *testing.T, engine Engine, limits queryLimits) []MVCCKey {
 	st := cluster.MakeTestingClusterSettings()
-	sstFile := &MemFile{}
+	var sstFile bytes.Buffer
 	_, _, err := MVCCExportToSST(context.Background(), st, engine, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: testKey(limits.minKey), Timestamp: limits.minTimestamp},
 		EndKey:             testKey(limits.maxKey),
 		StartTS:            limits.minTimestamp,
 		EndTS:              limits.maxTimestamp,
 		ExportAllRevisions: !limits.latest,
-	}, sstFile)
+	}, &sstFile)
 	require.NoError(t, err, "Failed to export expected data")
-	return sstToKeys(t, sstFile.Data())
+	return sstToKeys(t, sstFile.Bytes())
 }
 
 func sstToKeys(t *testing.T, data []byte) []MVCCKey {
@@ -6404,7 +6404,6 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 
 			require.NoError(t, fillInData(ctx, engine, data))
 
-			destination := &MemFile{}
 			_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 				StartKey:           MVCCKey{Key: key(10)},
 				EndKey:             key(20000),
@@ -6415,7 +6414,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				MaxSize:            0,
 				MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 				StopMidKey:         false,
-			}, destination)
+			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
 			} else {
@@ -6493,7 +6492,6 @@ func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
 					maxSize = keyValueSize * 2
 				}
 				for !resumeKey.Equal(MVCCKey{}) {
-					dest := &MemFile{}
 					_, resumeInfo, err := MVCCExportToSST(
 						ctx, st, engine, MVCCExportOptions{
 							StartKey:           resumeKey,
@@ -6504,7 +6502,7 @@ func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
 							TargetSize:         1,
 							MaxSize:            maxSize,
 							StopMidKey:         test.stopMidKey,
-						}, dest)
+						}, &bytes.Buffer{})
 					require.NoError(t, err)
 					resumeKey = resumeInfo.ResumeKey
 					if !resumeKey.Timestamp.IsEmpty() {
@@ -6540,7 +6538,7 @@ func TestMVCCExportToSSTSErrorsOnLargeKV(t *testing.T) {
 			TargetSize:         1,
 			MaxSize:            1,
 			StopMidKey:         true,
-		}, &MemFile{})
+		}, &bytes.Buffer{})
 	require.Equal(t, int64(0), summary.DataSize)
 	expectedErr := &ExceedMaxSizeError{}
 	require.ErrorAs(t, err, &expectedErr)
@@ -6560,15 +6558,15 @@ func TestMVCCExportFingerprint(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	fingerprint := func(opts MVCCExportOptions, engine Engine) (uint64, []byte, kvpb.BulkOpSummary, MVCCKey) {
-		dest := &MemFile{}
+		var dest bytes.Buffer
 		var err error
 		res, resumeInfo, fingerprint, hasRangeKeys, err := MVCCExportFingerprint(
-			ctx, st, engine, opts, dest)
+			ctx, st, engine, opts, &dest)
 		require.NoError(t, err)
 		if !hasRangeKeys {
-			dest = &MemFile{}
+			dest.Reset()
 		}
-		return fingerprint, dest.Data(), res, resumeInfo.ResumeKey
+		return fingerprint, dest.Bytes(), res, resumeInfo.ResumeKey
 	}
 
 	// verifyFingerprintAgainstOracle uses the `fingerprintOracle` to compute a
@@ -6814,10 +6812,10 @@ func (f *fingerprintOracle) getFingerprintAndRangeKeys(
 ) (uint64, []MVCCRangeKeyStack) {
 	t.Helper()
 
-	dest := &MemFile{}
-	_, _, err := MVCCExportToSST(ctx, f.st, f.engine, *f.opts, dest)
+	var dest bytes.Buffer
+	_, _, err := MVCCExportToSST(ctx, f.st, f.engine, *f.opts, &dest)
 	require.NoError(t, err)
-	return f.fingerprintPointKeys(t, dest.Data()), getRangeKeys(t, dest.Data())
+	return f.fingerprintPointKeys(t, dest.Bytes()), getRangeKeys(t, dest.Bytes())
 }
 
 func (f *fingerprintOracle) fingerprintPointKeys(t *testing.T, dataSST []byte) uint64 {

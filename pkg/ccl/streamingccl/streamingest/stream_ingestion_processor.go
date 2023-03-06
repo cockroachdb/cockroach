@@ -90,7 +90,7 @@ type rangeKeyBatcher struct {
 	// adding MVCCRangeKeyValue
 	rangeKeySSTWriterMaker func() *storage.SSTWriter
 	// In-memory SST file for flushing MVCC range keys
-	rangeKeySSTFile *storage.MemFile
+	rangeKeySSTFile *storage.MemObject
 	// curRangeKVBatch is the current batch of range KVs which will
 	// be ingested through 'flush' later.
 	curRangeKVBatch mvccRangeKeyValues
@@ -113,7 +113,7 @@ func newRangeKeyBatcher(
 		db:              db,
 		minTimestamp:    hlc.MaxTimestamp,
 		batchSummary:    kvpb.BulkOpSummary{},
-		rangeKeySSTFile: &storage.MemFile{},
+		rangeKeySSTFile: &storage.MemObject{},
 		onFlush:         onFlush,
 	}
 	batcher.rangeKeySSTWriterMaker = func() *storage.SSTWriter {

@@ -1168,7 +1168,7 @@ func UpdateSSTTimestamps(
 		return nil, enginepb.MVCCStats{}, errors.Errorf("to timestamp not given")
 	}
 
-	sstOut := &MemFile{}
+	sstOut := &MemObject{}
 	sstOut.Buffer.Grow(len(sst))
 
 	var statsDelta enginepb.MVCCStats
