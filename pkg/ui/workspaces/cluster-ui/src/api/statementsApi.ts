@@ -40,13 +40,46 @@ export type ErrorWithKey = {
   key: string;
 };
 
+export const SqlStatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
+export type SqlStatsSortType = cockroach.server.serverpb.StatsSortOptions;
+
+export const DEFAULT_STATS_REQ_OPTIONS = {
+  limit: 100,
+  sort: SqlStatsSortOptions.SERVICE_LAT,
+};
+
+// THhe required fields to create a stmts request.
+type StmtReqFields = {
+  limit: number;
+  sort: SqlStatsSortType;
+  start: moment.Moment;
+  end: moment.Moment;
+};
+
+export function createCombinedStmtsRequest({
+  limit,
+  sort,
+  start,
+  end,
+}: StmtReqFields): StatementsRequest {
+  return new cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(start.unix()),
+    end: Long.fromNumber(end.unix()),
+    limit: Long.fromNumber(limit ?? DEFAULT_STATS_REQ_OPTIONS.limit),
+    sort,
+  });
+}
+
 export const getCombinedStatements = (
   req: StatementsRequest,
-): Promise<cockroach.server.serverpb.StatementsResponse> => {
+): Promise<SqlStatsResponse> => {
   const queryStr = propsToQueryString({
     start: req.start.toInt(),
     end: req.end.toInt(),
     fetch_mode: cockroach.server.serverpb.StatsFetchMode.StmtStatsOnly,
+    limit: req.limit.toInt(),
+    sort: req.sort,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
@@ -65,6 +98,8 @@ export const getFlushedTxnStatsApi = (
     end: req.end.toInt(),
     combined: true,
     fetch_mode: cockroach.server.serverpb.StatsFetchMode.TxnStatsOnly,
+    limit: req.limit.toInt(),
+    sort: req.sort,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
