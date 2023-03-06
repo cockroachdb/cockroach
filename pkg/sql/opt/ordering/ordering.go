@@ -365,9 +365,14 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 			}
 		} else {
 			equivCols := fds.ComputeEquivClosure(opt.MakeColSet(col))
-			remappedCol, ok := equivCols.Intersection(outCols).Next(0)
+			remappedCol, ok := equivCols.Next(0)
 			if !ok {
 				panic(errors.AssertionFailedf("no output column equivalent to %d", redact.Safe(col)))
+			}
+			// If the column is in the output use that.
+			remappedColFromOutput, ok := equivCols.Intersection(outCols).Next(0)
+			if ok {
+				remappedCol = remappedColFromOutput
 			}
 			if result == nil {
 				result = make(opt.Ordering, i, len(provided))
