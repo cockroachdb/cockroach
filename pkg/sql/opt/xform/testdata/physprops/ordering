@@ -2741,3 +2741,35 @@ project
  │         └── bool_and
  └── projections
       └── NULL
+
+# Regression test for #96288
+exec-ddl
+CREATE TABLE v0 (c1 BYTES PRIMARY KEY, c2 TIMESTAMP, INDEX i3(c2))
+----
+
+opt
+SELECT * FROM v0 WHERE (c1 = c1 AND c2 = '01-31-2023 00:00:00'::TIMESTAMP) OR (c1 = b'00' AND c1 = b'0') OR (c1 IS NULL AND c2 IS NULL)
+----
+distinct-on
+ ├── columns: c1:1!null c2:2
+ ├── grouping columns: c1:1!null
+ ├── internal-ordering: +1
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── project
+ │    ├── columns: c1:1!null c2:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1 [actual: +2,+1]
+ │    ├── scan v0@i3
+ │    │    ├── columns: c1:5!null c2:6
+ │    │    ├── constraint: /6/5: [/'2023-01-31 00:00:00' - /'2023-01-31 00:00:00']
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    └── ordering: +5 [actual: +6,+5]
+ │    └── projections
+ │         ├── c1:5 [as=c1:1, outer=(5)]
+ │         └── c2:6 [as=c2:2, outer=(6)]
+ └── aggregations
+      └── const-agg [as=c2:2, outer=(2)]
+           └── c2:2
