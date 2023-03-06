@@ -22,6 +22,7 @@ import { txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
+  reqSortSetting,
   selectData,
   selectLastError,
 } from "src/views/transactions/transactionsPage";
@@ -35,6 +36,7 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelectors";
 import { selectHasAdminRole } from "src/redux/user";
+import { limitSetting } from "./transactionsPage";
 
 export const selectTransaction = createSelector(
   (state: AdminUIState) => state.cachedData.transactions,
@@ -92,6 +94,8 @@ export default withRouter(
         transactionInsights: selectTxnInsightsByFingerprint(state, props),
         hasAdminRole: selectHasAdminRole(state),
         isDataValid: isValid,
+        limit: limitSetting.selector(state),
+        reqSortSetting: reqSortSetting.selector(state),
       };
     },
     {
