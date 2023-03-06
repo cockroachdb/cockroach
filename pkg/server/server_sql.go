@@ -1579,7 +1579,7 @@ func (s *SQLServer) preStart(
 
 	scheduledlogging.Start(
 		ctx, stopper, s.execCfg.InternalDB, s.execCfg.Settings,
-		s.execCfg.CaptureIndexUsageStatsKnobs,
+		s.execCfg.CaptureIndexUsageStatsKnobs, s.execCfg.Codec, s.execCfg.TenantStatusServer.SpanStats,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 	return nil

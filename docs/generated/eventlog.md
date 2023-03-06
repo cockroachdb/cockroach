@@ -2720,6 +2720,15 @@ An event of type `captured_index_usage_stats`
 | `IsInverted` | IsInverted indicates if the index is an inverted index. | no |
 | `CreatedAt` | CreatedAt is the timestamp at which the index was created. | no |
 | `SchemaName` | SchemaName is the name of the schema in which the index was created. | no |
+| `IsVisible` | IsVisible indicates whether the index is visible or not. | no |
+| `IsSharded` | IsSharded indicates whether the index is sharded or not. | no |
+| `ShardBucketCount` | ShardBucketCount indicates the number of shards the index is divided into. | no |
+| `TableDropTime` | DropTime is the timestamp at which the table was dropped. | no |
+| `TableModTime` | ModTime is the timestamp at which the table was last modified. | no |
+| `TableModTimeLogical` | ModTimeLogical is the unix nanos at which the table was last modified. | no |
+| `TableAuditMode` | AuditMode indicates if the table has audit logging set. | no |
+| `TableLocality` | Locality is the location associated with the table. | no |
+| `MVCCStats` | MVCCStats is a message containing replica stats related to a given table name. | yes |
 
 
 #### Common fields

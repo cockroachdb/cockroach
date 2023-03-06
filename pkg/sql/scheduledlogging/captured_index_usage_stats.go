@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -85,6 +87,8 @@ type CaptureIndexUsageStatsLoggingScheduler struct {
 	st                      *cluster.Settings
 	knobs                   *CaptureIndexUsageStatsTestingKnobs
 	currentCaptureStartTime time.Time
+	codec                   keys.SQLCodec
+	getSpanStats            func(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
 }
 
 func (s *CaptureIndexUsageStatsLoggingScheduler) getLoggingDuration() time.Duration {
@@ -121,11 +125,15 @@ func Start(
 	db isql.DB,
 	cs *cluster.Settings,
 	knobs *CaptureIndexUsageStatsTestingKnobs,
+	codec keys.SQLCodec,
+	getSpanStats func(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error),
 ) {
 	scheduler := CaptureIndexUsageStatsLoggingScheduler{
-		db:    db,
-		st:    cs,
-		knobs: knobs,
+		db:           db,
+		st:           cs,
+		knobs:        knobs,
+		codec:        codec,
+		getSpanStats: getSpanStats,
 	}
 	scheduler.start(ctx, stopper)
 }
@@ -146,7 +154,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 					continue
 				}
 				s.currentCaptureStartTime = timeutil.Now()
-				err := captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
+				err := s.captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
 				if err != nil {
 					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
 				}
@@ -165,7 +173,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 	})
 }
 
-func captureIndexUsageStats(
+func (s *CaptureIndexUsageStatsLoggingScheduler) captureIndexUsageStats(
 	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
 ) error {
 	allDatabaseNames, err := getAllDatabaseNames(ctx, ie)
@@ -175,7 +183,7 @@ func captureIndexUsageStats(
 
 	// Capture index usage statistics for each database.
 	var ok bool
-	expectedNumDatums := 11
+	expectedNumDatums := 19
 	var allCapturedIndexUsageStats []logpb.EventPayload
 	for _, databaseName := range allDatabaseNames {
 		// Omit index usage statistics on the default databases 'system',
@@ -195,12 +203,21 @@ func captureIndexUsageStats(
 		 total_reads,
 		 last_read,
 		 ti.created_at,
-		 ns.nspname::string
+		 ns.nspname::string,
+		 ti.is_visible,
+		 ti.is_sharded,
+		 ti.shard_bucket_count,
+		 t.drop_time,
+		 t.mod_time,
+		 t.mod_time_logical,
+		 t.audit_mode,
+		 t.locality
 		FROM crdb_internal.index_usage_statistics AS us
     JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
                                           AND us.table_id = ti.descriptor_id
     JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
     JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
+	JOIN crdb_internal.tables AS t ON ti.descriptor_id = t.table_id
 ORDER BY total_reads ASC`
 
 		it, err := ie.QueryIteratorEx(
@@ -247,22 +264,57 @@ ORDER BY total_reads ASC`
 				createdAt = tree.MustBeDTimestamp(row[9]).Time
 			}
 			schemaName := tree.MustBeDString(row[10])
-
-			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
-				TableID:        uint32(roachpb.TableID(tableID)),
-				IndexID:        uint32(roachpb.IndexID(indexID)),
-				TotalReadCount: uint64(totalReads),
-				LastRead:       lastRead.String(),
-				DatabaseName:   databaseName.String(),
-				TableName:      string(tableName),
-				IndexName:      string(indexName),
-				IndexType:      string(indexType),
-				IsUnique:       bool(isUnique),
-				IsInverted:     bool(isInverted),
-				CreatedAt:      createdAt.String(),
-				SchemaName:     string(schemaName),
+			isVisible := tree.MustBeDBool(row[11])
+			isSharded := tree.MustBeDBool(row[12])
+			shardBucketCount := 0
+			if row[13] != tree.DNull {
+				shardBucketCount = int(tree.MustBeDInt(row[13]))
+			}
+			dropTime := time.Time{}
+			if row[14] != tree.DNull {
+				dropTime = tree.MustBeDTimestamp(row[14]).Time
+			}
+			// ModTime can't be null.
+			modTime := tree.MustBeDTimestamp(row[15]).Time
+			modTimeLogical := tree.MustBeDDecimal(row[16]).Decimal
+			modTimeLogicalFloat, err := modTimeLogical.Float64()
+			if err != nil {
+				log.Infof(ctx, "Error retrieving float from decimal: %s ", err)
+			}
+			auditMode := tree.MustBeDString(row[17])
+			locality := ""
+			if row[18] != tree.DNull {
+				locality = string(tree.MustBeDString(row[18]))
 			}
 
+			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
+				TableID:             uint32(roachpb.TableID(tableID)),
+				IndexID:             uint32(roachpb.IndexID(indexID)),
+				TotalReadCount:      uint64(totalReads),
+				LastRead:            lastRead.String(),
+				DatabaseName:        databaseName.String(),
+				TableName:           string(tableName),
+				IndexName:           string(indexName),
+				IndexType:           string(indexType),
+				IsUnique:            bool(isUnique),
+				IsInverted:          bool(isInverted),
+				CreatedAt:           createdAt.String(),
+				SchemaName:          string(schemaName),
+				IsVisible:           bool(isVisible),
+				IsSharded:           bool(isSharded),
+				ShardBucketCount:    int32(shardBucketCount),
+				TableDropTime:       dropTime.String(),
+				TableModTime:        modTime.String(),
+				TableModTimeLogical: float32(modTimeLogicalFloat),
+				TableAuditMode:      auditMode.String(),
+				TableLocality:       locality,
+			}
+			mvccStats, err := s.captureMVCCStats(ctx, uint32(roachpb.TableID(tableID)), uint32(roachpb.IndexID(indexID)))
+			if err != nil {
+				log.Infof(ctx, "Error collecting mvcc stats: %s", err)
+			} else {
+				capturedIndexStats.MVCCStats = mvccStats
+			}
 			allCapturedIndexUsageStats = append(allCapturedIndexUsageStats, capturedIndexStats)
 		}
 		if err = it.Close(); err != nil {
@@ -330,4 +382,22 @@ func getAllDatabaseNames(ctx context.Context, ie isql.Executor) (tree.NameList, 
 		allDatabaseNames = append(allDatabaseNames, databaseName)
 	}
 	return allDatabaseNames, nil
+}
+
+// captureMVCCStats executes a sql query in order to return MVCC stats as they
+// pertain to the provided table name.
+func (s *CaptureIndexUsageStatsLoggingScheduler) captureMVCCStats(
+	ctx context.Context, tableID uint32, indexID uint32,
+) (*enginepb.MVCCStats, error) {
+	startKey := roachpb.RKey(s.codec.IndexPrefix(tableID, indexID))
+	req := &roachpb.SpanStatsRequest{
+		NodeID:   "0",
+		StartKey: startKey,
+		EndKey:   startKey.PrefixEnd(),
+	}
+	spanStats, err := s.getSpanStats(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &spanStats.TotalStats, nil
 }
