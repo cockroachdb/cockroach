@@ -264,6 +264,11 @@ func (o option) Apply(s *Smither) {
 	o.apply(s)
 }
 
+// DisableEverything disables every kind of statement.
+var DisableEverything = simpleOption("disable every kind of statement", func(s *Smither) {
+	s.stmtWeights = nil
+})
+
 // DisableMutations causes the Smither to not emit statements that could
 // mutate any on-disk data.
 var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
