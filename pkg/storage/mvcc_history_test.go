@@ -11,6 +11,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1383,7 +1384,7 @@ func cmdExport(e *evalCtx) error {
 	r := e.newReader()
 	defer r.Close()
 
-	sstFile := &storage.MemFile{}
+	var sstFile bytes.Buffer
 
 	var summary kvpb.BulkOpSummary
 	var resumeInfo storage.ExportRequestResumeInfo
@@ -1392,17 +1393,17 @@ func cmdExport(e *evalCtx) error {
 	var err error
 	if shouldFingerprint {
 		summary, resumeInfo, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(e.ctx, e.st, r,
-			opts, sstFile)
+			opts, &sstFile)
 		if err != nil {
 			return err
 		}
 		if !hasRangeKeys {
-			sstFile = &storage.MemFile{}
+			sstFile.Reset()
 		}
 		e.results.buf.Printf("export: %s", &summary)
 		e.results.buf.Print(" fingerprint=true")
 	} else {
-		summary, resumeInfo, err = storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
+		summary, resumeInfo, err = storage.MVCCExportToSST(e.ctx, e.st, r, opts, &sstFile)
 		if err != nil {
 			return err
 		}
@@ -2088,7 +2089,7 @@ type evalCtx struct {
 	locks             map[string]*roachpb.Transaction
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
-	sstFile           *storage.MemFile
+	sstFile           *storage.MemObject
 	ssts              [][]byte
 }
 
@@ -2341,7 +2342,7 @@ func (e *evalCtx) newTxn(
 
 func (e *evalCtx) sst() *storage.SSTWriter {
 	if e.sstWriter == nil {
-		e.sstFile = &storage.MemFile{}
+		e.sstFile = &storage.MemObject{}
 		w := storage.MakeIngestionSSTWriter(e.ctx, e.st, e.sstFile)
 		e.sstWriter = &w
 	}

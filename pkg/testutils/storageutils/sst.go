@@ -31,7 +31,7 @@ func MakeSST(
 ) ([]byte, roachpb.Key, roachpb.Key) {
 	t.Helper()
 
-	sstFile := &storage.MemFile{}
+	sstFile := &storage.MemObject{}
 	writer := storage.MakeIngestionSSTWriter(context.Background(), st, sstFile)
 	defer writer.Close()
 
