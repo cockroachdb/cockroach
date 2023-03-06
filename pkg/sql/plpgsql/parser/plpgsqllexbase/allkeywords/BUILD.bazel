@@ -4,7 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "allkeywords_lib",
     srcs = ["main.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase/allkeywords",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase/allkeywords",
     visibility = ["//visibility:private"],
 )
 

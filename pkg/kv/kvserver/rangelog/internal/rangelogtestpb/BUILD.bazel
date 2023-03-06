@@ -6,8 +6,9 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "rangelogtestpb_proto",
     srcs = ["rangelogtest.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//pkg/kv/kvserver/rangelog:__subpackages__"],
-    deps = ["//kv/kvserver/kvserverpb:kvserverpb_proto"],
+    deps = ["//pkg/kv/kvserver/kvserverpb:kvserverpb_proto"],
 )
 
 go_proto_library(
@@ -19,7 +20,7 @@ go_proto_library(
         "//pkg/gen:__subpackages__",  # keep
         "//pkg/kv/kvserver/rangelog:__subpackages__",
     ],
-    deps = ["//kv/kvserver/kvserverpb:range_log_proto"],
+    deps = ["//pkg/kv/kvserver/kvserverpb"],
 )
 
 go_library(

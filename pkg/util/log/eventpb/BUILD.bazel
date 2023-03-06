@@ -63,11 +63,11 @@ proto_library(
         "telemetry.proto",
         "zone_events.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//sql/catalog/descpb:descpb_proto",
-        "//util/log/eventpb:eventpb_proto",
-        "//util/log/logpb:logpb_proto",
+        "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/util/log/logpb:logpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -79,11 +79,8 @@ go_proto_library(
     proto = ":eventpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//sql/catalog/descpb:structured_proto",
-        "//util/log/eventpb:events_proto",
-        "//util/log/eventpb:sql_audit_events_proto",
-        "//util/log/eventpb:zone_events_proto",
-        "//util/log/logpb:event_proto",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/log/logpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

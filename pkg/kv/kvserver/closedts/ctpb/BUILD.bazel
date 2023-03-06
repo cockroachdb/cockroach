@@ -18,10 +18,11 @@ go_library(
 proto_library(
     name = "ctpb_proto",
     srcs = ["service.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//roachpb:roachpb_proto",
-        "//util/hlc:hlc_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -34,7 +35,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "//util/hlc:timestamp_proto",
+        "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

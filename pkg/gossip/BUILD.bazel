@@ -97,11 +97,12 @@ go_test(
 proto_library(
     name = "gossip_proto",
     srcs = ["gossip.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//roachpb:roachpb_proto",
-        "//util:util_proto",
-        "//util/hlc:hlc_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/util:util_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -114,8 +115,8 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "//util:unresolved_addr_proto",
-        "//util/hlc:timestamp_proto",
+        "//pkg/util",
+        "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

@@ -20,9 +20,10 @@ go_library(
 proto_library(
     name = "livenesspb_proto",
     srcs = ["liveness.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//util/hlc:hlc_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -35,7 +36,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",  # keep
-        "//util/hlc:legacy_timestamp_proto",
+        "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

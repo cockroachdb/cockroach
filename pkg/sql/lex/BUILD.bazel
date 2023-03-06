@@ -28,6 +28,7 @@ go_test(
 proto_library(
     name = "lex_proto",
     srcs = ["encode.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

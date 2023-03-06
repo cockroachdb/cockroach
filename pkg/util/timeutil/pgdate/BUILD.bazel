@@ -59,6 +59,7 @@ stringer(
 proto_library(
     name = "pgdate_proto",
     srcs = ["pgdate.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
 )
 

@@ -57,9 +57,10 @@ go_test(
 proto_library(
     name = "clusterversion_proto",
     srcs = ["cluster_version.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//roachpb:roachpb_proto",
+        "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )

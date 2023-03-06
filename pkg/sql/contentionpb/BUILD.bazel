@@ -20,9 +20,10 @@ go_library(
 proto_library(
     name = "contentionpb_proto",
     srcs = ["contention.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//kv/kvpb:kvpb_proto",
+        "//pkg/kv/kvpb:kvpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",

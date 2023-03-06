@@ -11,9 +11,10 @@ proto_library(
     srcs = [
         "recovery.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//roachpb:roachpb_proto",
+        "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:timestamp_proto",
     ],

@@ -25,15 +25,16 @@ proto_library(
         "jobs.proto",
         "schedule.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//clusterversion:clusterversion_proto",
-        "//kv/kvpb:kvpb_proto",
-        "//multitenant/mtinfopb:mtinfopb_proto",
-        "//roachpb:roachpb_proto",
-        "//sql/catalog/descpb:descpb_proto",
-        "//sql/sessiondatapb:sessiondatapb_proto",
-        "//util/hlc:hlc_proto",
+        "//pkg/clusterversion:clusterversion_proto",
+        "//pkg/kv/kvpb:kvpb_proto",
+        "//pkg/multitenant/mtinfopb:mtinfopb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/sessiondatapb:sessiondatapb_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:any_proto",
@@ -48,18 +49,18 @@ go_proto_library(
     proto = ":jobspb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//clusterversion:cluster_version_proto",
-        "//multitenant/mtinfopb:info_proto",
+        "//pkg/clusterversion",
         "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/hlc",
         "//pkg/util/tracing/tracingpb",  # keep
         "//pkg/util/uuid",  # keep
-        "//sql/catalog/descpb:structured_proto",
-        "//sql/sessiondatapb:session_data_proto",
-        "//util/hlc:timestamp_proto",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
     ],

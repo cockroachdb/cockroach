@@ -43,6 +43,7 @@ go_test(
 proto_library(
     name = "duration_proto",
     srcs = ["duration.proto"],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
 )
 

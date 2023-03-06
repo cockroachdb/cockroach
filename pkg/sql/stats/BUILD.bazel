@@ -142,10 +142,10 @@ proto_library(
         "histogram.proto",
         "table_statistic.proto",
     ],
+    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//sql/stats:stats_proto",
-        "//sql/types:types_proto",
+        "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:timestamp_proto",
     ],
@@ -158,8 +158,7 @@ go_proto_library(
     proto = ":stats_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//sql/stats:histogram_proto",
-        "//sql/types:types_proto",
+        "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
