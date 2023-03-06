@@ -100,7 +100,7 @@ const (
 
 	// DefaultLeaseRenewalCrossValidate is the default setting for if
 	// we should validate descriptors on lease renewals.
-	DefaultLeaseRenewalCrossValidate = true
+	DefaultLeaseRenewalCrossValidate = false
 )
 
 // DefaultCertsDirectory is the default value for the cert directory flag.
