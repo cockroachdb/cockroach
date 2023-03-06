@@ -22,7 +22,6 @@ import (
 
 // ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
 func ExplainTreePlanNodeToJSON(node *appstatspb.ExplainTreePlanNode) json.JSON {
-
 	// Create a new json.ObjectBuilder with key-value pairs for the node's name (1),
 	// node's attributes (len(node.Attrs)), and the node's children (1).
 	nodePlan := json.NewObjectBuilder(len(node.Attrs) + 2 /* numAddsHint */)
@@ -70,159 +69,167 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //
 // JSON Schema for stats portion:
 //
-//	{
-//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.statistics",
-//	  "type": "object",
+//		{
+//		  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//		  "title": "system.statement_statistics.statistics",
+//		  "type": "object",
 //
-//	  "definitions": {
-//	    "numeric_stats": {
-//	      "type": "object",
-//	      "properties": {
-//	        "mean":   { "type": "number" },
-//	        "sqDiff": { "type": "number" }
-//	      },
-//	      "required": ["mean", "sqDiff"]
-//	    },
-//	    "indexes": {
-//	      "type": "array",
-//	      "items": {
-//	        "type": "string",
-//	      },
-//	    },
-//	    "node_ids": {
-//	      "type": "array",
-//	      "items": {
-//	        "type": "int",
-//	      },
-//	    },
-//	    "mvcc_iterator_stats": {
-//	      "type": "object",
-//	      "properties": {
-//	        "stepCount": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "stepCountInternal": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "seekCount": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "seekCountInternal": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "blockBytes": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "blockBytesInCache": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "keyBytes": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "valueBytes": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "pointCount": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "pointsCoveredByRangeTombstones": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "rangeKeyCount": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "rangeKeyContainedPoints": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        },
-//	        "rangeKeySkippedPoints": {
-//	          "$ref": "#/definitions/numeric_stats"
-//	        }
-//	      },
-//	      "required": [
-//	        "stepCount",
-//	        "stepCountInternal",
-//	        "seekCount",
-//	        "seekCountInternal",
-//	        "blockBytes",
-//	        "blockBytesInCache",
-//	        "keyBytes",
-//	        "valueBytes",
-//	        "pointCount",
-//	        "pointsCoveredByRangeTombstones",
-//	        "rangeKeyCount",
-//	        "rangeKeyContainedPoints",
-//	        "rangeKeySkippedPoints"
-//	      ]
-//	    },
-//	    "statistics": {
-//	      "type": "object",
-//	      "properties": {
-//	        "firstAttemptCnt":   { "type": "number" },
-//	        "maxRetries":        { "type": "number" },
-//	        "numRows":           { "$ref": "#/definitions/numeric_stats" },
-//	        "idleLat":           { "$ref": "#/definitions/numeric_stats" },
-//	        "parseLat":          { "$ref": "#/definitions/numeric_stats" },
-//	        "planLat":           { "$ref": "#/definitions/numeric_stats" },
-//	        "runLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
-//	        "rowsRead":          { "$ref": "#/definitions/numeric_stats" },
-//	        "firstExecAt":       { "type": "string" },
-//	        "lastExecAt":        { "type": "string" },
-//	        "nodes":             { "type": "node_ids" },
-//	        "indexes":           { "type": "indexes" },
-//	        "lastErrorCode":     { "type": "string" },
-//	      },
-//	      "required": [
-//	        "firstAttemptCnt",
-//	        "maxRetries",
-//	        "numRows",
-//	        "idleLat",
-//	        "parseLat",
-//	        "planLat",
-//	        "runLat",
-//	        "svcLat",
-//	        "ovhLat",
-//	        "bytesRead",
-//	        "rowsRead",
-//	        "nodes",
-//	        "indexes
-//	      ]
-//	    },
-//	    "execution_statistics": {
-//	      "type": "object",
-//	      "properties": {
-//	        "cnt":             { "type": "number" },
-//	        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
-//	        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
-//	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
-//	        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
-//	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
-//	        "cpuSQLNanos":     { "$ref": "#/definitions/numeric_stats" },
-//	        "mvccIteratorStats": { "$ref": "#/definitions/mvcc_iterator_stats" }
-//	        }
-//	      },
-//	      "required": [
-//	        "cnt",
-//	        "networkBytes",
-//	        "maxMemUsage",
-//	        "contentionTime",
-//	        "networkMsg",
-//	        "maxDiskUsage",
-//	        "cpuSQLNanos",
-//	        "mvccIteratorStats"
-//	      ]
-//	    }
-//	  },
+//		  "definitions": {
+//		    "numeric_stats": {
+//		      "type": "object",
+//		      "properties": {
+//		        "mean":   { "type": "number" },
+//		        "sqDiff": { "type": "number" }
+//		      },
+//		      "required": ["mean", "sqDiff"]
+//		    },
+//		    "indexes": {
+//		      "type": "array",
+//		      "items": {
+//		        "type": "string",
+//		      },
+//		    },
+//		    "node_ids": {
+//		      "type": "array",
+//		      "items": {
+//		        "type": "int",
+//		      },
+//		    },
+//		    "regions": {
+//		      "type": "array",
+//		      "items": {
+//		        "type": "string",
+//		      },
+//		    },
+//		    "mvcc_iterator_stats": {
+//		      "type": "object",
+//		      "properties": {
+//		        "stepCount": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "stepCountInternal": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "seekCount": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "seekCountInternal": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "blockBytes": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "blockBytesInCache": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "keyBytes": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "valueBytes": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "pointCount": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "pointsCoveredByRangeTombstones": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "rangeKeyCount": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "rangeKeyContainedPoints": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        },
+//		        "rangeKeySkippedPoints": {
+//		          "$ref": "#/definitions/numeric_stats"
+//		        }
+//		      },
+//		      "required": [
+//		        "stepCount",
+//		        "stepCountInternal",
+//		        "seekCount",
+//		        "seekCountInternal",
+//		        "blockBytes",
+//		        "blockBytesInCache",
+//		        "keyBytes",
+//		        "valueBytes",
+//		        "pointCount",
+//		        "pointsCoveredByRangeTombstones",
+//		        "rangeKeyCount",
+//		        "rangeKeyContainedPoints",
+//		        "rangeKeySkippedPoints"
+//		      ]
+//	     },
+//		    "statistics": {
+//		      "type": "object",
+//		      "properties": {
+//		        "firstAttemptCnt":   { "type": "number" },
+//		        "maxRetries":        { "type": "number" },
+//		        "numRows":           { "$ref": "#/definitions/numeric_stats" },
+//		        "idleLat":           { "$ref": "#/definitions/numeric_stats" },
+//		        "parseLat":          { "$ref": "#/definitions/numeric_stats" },
+//		        "planLat":           { "$ref": "#/definitions/numeric_stats" },
+//		        "runLat":            { "$ref": "#/definitions/numeric_stats" },
+//		        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
+//		        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
+//		        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
+//		        "rowsRead":          { "$ref": "#/definitions/numeric_stats" },
+//		        "firstExecAt":       { "type": "string" },
+//		        "lastExecAt":        { "type": "string" },
+//		        "nodes":             { "type": "node_ids" },
+//		        "regions":           { "type": "regions" },
+//		        "indexes":           { "type": "indexes" },
+//		        "lastErrorCode":     { "type": "string" },
+//		      },
+//		      "required": [
+//		        "firstAttemptCnt",
+//		        "maxRetries",
+//		        "numRows",
+//		        "idleLat",
+//		        "parseLat",
+//		        "planLat",
+//		        "runLat",
+//		        "svcLat",
+//		        "ovhLat",
+//		        "bytesRead",
+//		        "rowsRead",
+//		        "nodes",
+//		        "regions",
+//		        "indexes
+//		      ]
+//		    },
+//		    "execution_statistics": {
+//		      "type": "object",
+//		      "properties": {
+//		        "cnt":             { "type": "number" },
+//		        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
+//		        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
+//		        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
+//		        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
+//		        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//		        "cpuSQLNanos":     { "$ref": "#/definitions/numeric_stats" },
+//		        "mvccIteratorStats": { "$ref": "#/definitions/mvcc_iterator_stats" }
+//		        }
+//		      },
+//		      "required": [
+//		        "cnt",
+//		        "networkBytes",
+//		        "maxMemUsage",
+//		        "contentionTime",
+//		        "networkMsg",
+//		        "maxDiskUsage",
+//		        "cpuSQLNanos",
+//		        "mvccIteratorStats"
+//		      ]
+//		    }
+//		  },
 //
-//	  "properties": {
-//	    "stats": { "$ref": "#/definitions/statistics" },
-//	    "execStats": {
-//	      "$ref": "#/definitions/execution_statistics"
-//	    }
-//	}
+//		  "properties": {
+//		    "stats": { "$ref": "#/definitions/statistics" },
+//		    "execStats": {
+//		      "$ref": "#/definitions/execution_statistics"
+//		    }
+//		}
 func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.JSON, error) {
 	return (*stmtStats)(statistics).encodeJSON()
 }

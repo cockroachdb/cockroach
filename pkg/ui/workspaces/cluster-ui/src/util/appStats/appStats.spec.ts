@@ -274,6 +274,7 @@ function randomStats(
       nanos: 111613000,
     },
     nodes: [Long.fromInt(1), Long.fromInt(3), Long.fromInt(4)],
+    regions: ["gcp-us-east1"],
     plan_gists: ["Ais="],
     index_recommendations: [""],
     indexes: ["123@456"],
