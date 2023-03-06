@@ -16,6 +16,7 @@ package lint
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -40,6 +41,9 @@ import (
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
+
+//go:embed gcassert_paths.txt
+var rawGcassertPaths string
 
 func dirCmd(
 	dir string, name string, args ...string,
@@ -2036,46 +2040,23 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 65485, "Doesn't work in Bazel -- not really sure why yet")
 
 		t.Parallel()
 
-		gcassertPaths := []string{
-			"../../col/coldata",
-			"../../col/colserde",
-			"../../keys",
-			"../../kv/kvclient/rangecache",
-			"../../kv/kvpb",
-			"../../roachpb",
-			"../../sql/catalog/descs",
-			"../../sql/colcontainer",
-			"../../sql/colconv",
-			"../../sql/colexec",
-			"../../sql/colexec/colexecagg",
-			"../../sql/colexec/colexecbase",
-			"../../sql/colexec/colexechash",
-			"../../sql/colexec/colexecjoin",
-			"../../sql/colexec/colexecproj",
-			"../../sql/colexec/colexecprojconst",
-			"../../sql/colexec/colexecsel",
-			"../../sql/colexec/colexecspan",
-			"../../sql/colexec/colexecwindow",
-			"../../sql/colfetcher",
-			"../../sql/opt",
-			"../../sql/row",
-			"../../storage",
-			"../../storage/enginepb",
-			"../../storage/pebbleiter",
-			"../../util",
-			"../../util/admission",
-			"../../util/hlc",
-			"../../util/intsets",
+		var gcassertPaths []string
+		for _, path := range strings.Split(rawGcassertPaths, "\n") {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			gcassertPaths = append(gcassertPaths, fmt.Sprintf("../../%s", path))
 		}
 
 		// Ensure that all packages that have '//gcassert' or '// gcassert'
 		// assertions are included into gcassertPaths.
 		t.Run("Coverage", func(t *testing.T) {
 			t.Parallel()
+
 			cmd, stderr, filter, err := dirCmd(
 				pkgDir,
 				"git",
@@ -2120,13 +2101,15 @@ func TestLint(t *testing.T) {
 			}
 		})
 
-		var buf strings.Builder
-		if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
-			t.Fatal(err)
-		}
-		output := buf.String()
-		if len(output) > 0 {
-			t.Fatalf("failed gcassert:\n%s", output)
+		if !bazel.BuiltWithBazel() {
+			var buf strings.Builder
+			if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
+				t.Fatal(err)
+			}
+			output := buf.String()
+			if len(output) > 0 {
+				t.Fatalf("failed gcassert:\n%s", output)
+			}
 		}
 	})
 
