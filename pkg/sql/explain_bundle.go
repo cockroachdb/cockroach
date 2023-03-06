@@ -416,11 +416,6 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 
 	b.z.AddFile("env.sql", buf.String())
 
-	if b.flags.RedactValues {
-		b.z.AddFile("schema.sql", "-- schema redacted\n")
-		return
-	}
-
 	mem := b.plan.mem
 	if mem == nil {
 		// No optimizer plans; an error must have occurred during planning.
@@ -466,13 +461,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	for i := range tables {
 		blankLine()
-		if err := c.PrintCreateTable(&buf, &tables[i]); err != nil {
+		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
 			fmt.Fprintf(&buf, "-- error getting schema for table %s: %v\n", tables[i].String(), err)
 		}
 	}
 	for i := range views {
 		blankLine()
-		if err := c.PrintCreateView(&buf, &views[i]); err != nil {
+		if err := c.PrintCreateView(&buf, &views[i], b.flags.RedactValues); err != nil {
 			fmt.Fprintf(&buf, "-- error getting schema for view %s: %v\n", views[i].String(), err)
 		}
 	}
@@ -482,7 +477,8 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	b.z.AddFile("schema.sql", buf.String())
 	for i := range tables {
 		buf.Reset()
-		if err := c.PrintTableStats(&buf, &tables[i], false /* hideHistograms */); err != nil {
+		hideHistograms := b.flags.RedactValues
+		if err := c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
 			fmt.Fprintf(&buf, "-- error getting statistics for table %s: %v\n", tables[i].String(), err)
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
@@ -771,9 +767,15 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintCreateTable(w io.Writer, tn *tree.TableName) error {
+func (c *stmtEnvCollector) PrintCreateTable(
+	w io.Writer, tn *tree.TableName, redactValues bool,
+) error {
+	var formatOption string
+	if redactValues {
+		formatOption = " WITH REDACTED_VALUES"
+	}
 	createStatement, err := c.query(
-		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tn.String()),
+		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.String(), formatOption),
 	)
 	if err != nil {
 		return err
@@ -793,9 +795,15 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintCreateView(w io.Writer, tn *tree.TableName) error {
+func (c *stmtEnvCollector) PrintCreateView(
+	w io.Writer, tn *tree.TableName, redactValues bool,
+) error {
+	var formatOption string
+	if redactValues {
+		formatOption = " WITH REDACTED_VALUES"
+	}
 	createStatement, err := c.query(fmt.Sprintf(
-		"SELECT create_statement FROM [SHOW CREATE VIEW %s]", tn.String(),
+		"SELECT create_statement FROM [SHOW CREATE VIEW %s%s]", tn.String(), formatOption,
 	))
 	if err != nil {
 		return err
