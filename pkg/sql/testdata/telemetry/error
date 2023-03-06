@@ -13,6 +13,10 @@ ${1} (...)
 ----
 
 exec
+SET CLUSTER SETTING sql.catalog.descriptor_lease_renewal_cross_validation.enabled='on';
+----
+
+exec
 CREATE TABLE fktbl (id INT PRIMARY KEY);
 ----
 

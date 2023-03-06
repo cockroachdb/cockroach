@@ -102,7 +102,7 @@ const (
 
 	// DefaultLeaseRenewalCrossValidate is the default setting for if
 	// we should validate descriptors on lease renewals.
-	DefaultLeaseRenewalCrossValidate = true
+	DefaultLeaseRenewalCrossValidate = false
 )
 
 // DefaultHistogramWindowInterval returns the default rotation window for
