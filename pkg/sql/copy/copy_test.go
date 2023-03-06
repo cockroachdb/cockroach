@@ -412,7 +412,7 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 	t.Run("copy to", func(t *testing.T) {
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
-			_, err = copyConn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+			_, err := copyConn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
 			return err
 		})
 
