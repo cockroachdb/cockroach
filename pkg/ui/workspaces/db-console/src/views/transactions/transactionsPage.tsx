@@ -34,6 +34,7 @@ import {
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
+  api,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
@@ -102,6 +103,18 @@ export const transactionColumnsLocalSetting = new LocalSetting(
   null,
 );
 
+export const reqSortSetting = new LocalSetting(
+  "reqSortSetting/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  api.DEFAULT_STATS_REQ_OPTIONS.sort,
+);
+
+export const limitSetting = new LocalSetting(
+  "reqLimitSetting/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  api.DEFAULT_STATS_REQ_OPTIONS.limit,
+);
+
 const fingerprintsPageActions = {
   refreshData: refreshTxns,
   refreshNodes,
@@ -127,6 +140,8 @@ const fingerprintsPageActions = {
     }),
   onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
   onSearchComplete: (query: string) => searchLocalSetting.set(query),
+  onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
+  onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
 };
 
 type StateProps = {
@@ -163,6 +178,8 @@ const TransactionsPageConnected = withRouter(
         sortSetting: sortSettingLocalSetting.selector(state),
         statementsError: state.cachedData.transactions.lastError,
         hasAdminRole: selectHasAdminRole(state),
+        limit: limitSetting.selector(state),
+        reqSortSetting: reqSortSetting.selector(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),

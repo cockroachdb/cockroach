@@ -60,7 +60,6 @@ import {
 } from "src/statementsTable/statementsTable";
 import { Transaction } from "src/transactionsTable";
 import Long from "long";
-import { StatementsRequest } from "../api";
 import {
   getValidOption,
   TimeScale,
@@ -72,6 +71,11 @@ import {
 import moment from "moment";
 
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import {
+  SqlStatsSortType,
+  StatementsRequest,
+  createCombinedStmtsRequest,
+} from "src/api/statementsApi";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -84,6 +88,8 @@ const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 
 export interface TransactionDetailsStateProps {
   timeScale: TimeScale;
+  limit: number;
+  reqSortSetting: SqlStatsSortType;
   error?: Error | null;
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
@@ -117,9 +123,11 @@ function statementsRequestFromProps(
   props: TransactionDetailsProps,
 ): StatementsRequest {
   const [start, end] = toRoundedDateRange(props.timeScale);
-  return new protos.cockroach.server.serverpb.CombinedStatementsStatsRequest({
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
+  return createCombinedStmtsRequest({
+    start,
+    end,
+    limit: props.limit,
+    sort: props.reqSortSetting,
   });
 }
 

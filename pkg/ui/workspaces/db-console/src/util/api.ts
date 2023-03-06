@@ -192,8 +192,6 @@ export type MetricMetadataRequestMessage =
 export type MetricMetadataResponseMessage =
   protos.cockroach.server.serverpb.MetricMetadataResponse;
 
-export type StatementDiagnosticsReportsRequestMessage =
-  protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
 export type StatementDiagnosticsReportsResponseMessage =
   protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
 
@@ -212,8 +210,6 @@ export type StatementDiagnosticsRequestMessage =
 export type StatementDiagnosticsResponseMessage =
   protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
-export type StatementsRequestMessage =
-  protos.cockroach.server.serverpb.CombinedStatementsStatsRequest;
 export type StatementDetailsRequestMessage =
   protos.cockroach.server.serverpb.StatementDetailsRequest;
 
@@ -811,23 +807,6 @@ export function getStores(
   return timeoutFetch(
     serverpb.StoresResponse,
     `${STATUS_PREFIX}/stores/${req.node_id}`,
-    null,
-    timeout,
-  );
-}
-
-// getCombinedStatements returns statements the cluster has recently executed, and some stats about them.
-export function getCombinedStatements(
-  req: StatementsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<StatementsResponseMessage> {
-  const queryStr = propsToQueryString({
-    start: req.start.toInt(),
-    end: req.end.toInt(),
-  });
-  return timeoutFetch(
-    serverpb.StatementsResponse,
-    `${STATUS_PREFIX}/combinedstmts?${queryStr}`,
     null,
     timeout,
   );
