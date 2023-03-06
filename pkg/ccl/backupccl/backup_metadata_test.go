@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -285,9 +285,15 @@ func checkStats(
 
 	it := bm.NewStatsIter(ctx)
 	defer it.Close()
-	metaStats, err := bulk.CollectToSlice(it)
-	if err != nil {
-		t.Fatal(err)
+	var metaStats []*stats.TableStatisticProto
+
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		metaStats = append(metaStats, it.Value())
 	}
 
 	require.Equal(t, expectedStats, metaStats)

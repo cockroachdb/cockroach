@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1581,9 +1580,7 @@ type LayerToBackupManifestFileIterFactory map[int]*IterFactory
 
 // NewFileIter creates a new Iterator over BackupManifest_Files. It is assumed
 // that the BackupManifest_File are sorted by FileCmp.
-func (f *IterFactory) NewFileIter(
-	ctx context.Context,
-) (bulk.Iterator[*backuppb.BackupManifest_File], error) {
+func (f *IterFactory) NewFileIter(ctx context.Context) (FileIterator, error) {
 	if f.m.HasExternalManifestSSTs {
 		storeFile := storageccl.StoreFile{
 			Store:    f.store,
@@ -1600,40 +1597,38 @@ func (f *IterFactory) NewFileIter(
 		return NewFileSSTIter(ctx, storeFile, encOpts)
 	}
 
-	return newSlicePointerIterator(f.m.Files), nil
+	return newFileSliceIterator(f.m.Files), nil
 }
 
 // NewDescIter creates a new Iterator over Descriptors.
-func (f *IterFactory) NewDescIter(ctx context.Context) bulk.Iterator[*descpb.Descriptor] {
+func (f *IterFactory) NewDescIter(ctx context.Context) DescIterator {
 	if f.m.HasExternalManifestSSTs {
 		backing := makeBytesIter(ctx, f.store, f.descriptorSSTPath, []byte(sstDescsPrefix), f.encryption, true, f.kmsEnv)
-		it := DescIterator{
+		it := descIterator{
 			backing: backing,
 		}
 		it.Next()
 		return &it
 	}
 
-	return newSlicePointerIterator(f.m.Descriptors)
+	return newDescSliceIterator(f.m.Descriptors)
 }
 
 // NewDescriptorChangesIter creates a new Iterator over
 // BackupManifest_DescriptorRevisions. It is assumed that descriptor changes are
 // sorted by DescChangesLess.
-func (f *IterFactory) NewDescriptorChangesIter(
-	ctx context.Context,
-) bulk.Iterator[*backuppb.BackupManifest_DescriptorRevision] {
+func (f *IterFactory) NewDescriptorChangesIter(ctx context.Context) DescriptorRevisionIterator {
 	if f.m.HasExternalManifestSSTs {
 		if f.m.MVCCFilter == backuppb.MVCCFilter_Latest {
 			// If the manifest is backuppb.MVCCFilter_Latest, then return an empty
 			// iterator for descriptor changes.
 			var backing []backuppb.BackupManifest_DescriptorRevision
-			return newSlicePointerIterator(backing)
+			return newDescriptorChangesSliceIterator(backing)
 		}
 
 		backing := makeBytesIter(ctx, f.store, f.descriptorSSTPath, []byte(sstDescsPrefix), f.encryption,
 			false, f.kmsEnv)
-		dri := DescriptorRevisionIterator{
+		dri := descriptorRevisionIterator{
 			backing: backing,
 		}
 
@@ -1641,7 +1636,7 @@ func (f *IterFactory) NewDescriptorChangesIter(
 		return &dri
 	}
 
-	return newSlicePointerIterator(f.m.DescriptorChanges)
+	return newDescriptorChangesSliceIterator(f.m.DescriptorChanges)
 }
 
 // GetBackupManifestIterFactories constructs a mapping from the idx of the

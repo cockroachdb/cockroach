@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -101,13 +100,13 @@ func TestManifestHandlingIteratorOperations(t *testing.T) {
 	})
 
 	t.Run("files", func(t *testing.T) {
-		checkIteratorOperations(t, mustCreateFileIterFactory(t, iterFactory), sortedFiles, fileLess)
+		checkFileIteratorOperations(t, mustCreateFileIterFactory(t, iterFactory), sortedFiles, fileLess)
 	})
 	t.Run("descriptors", func(t *testing.T) {
-		checkIteratorOperations(t, iterFactory.NewDescIter, sortedDescs, descLess)
+		checkDescIteratorOperations(t, iterFactory.NewDescIter, sortedDescs, descLess)
 	})
 	t.Run("descriptor-changes", func(t *testing.T) {
-		checkIteratorOperations(t, iterFactory.NewDescriptorChangesIter, sortedDescRevs, descRevsLess)
+		checkDescriptorChangesIteratorOperations(t, iterFactory.NewDescriptorChangesIter, sortedDescRevs, descRevsLess)
 	})
 }
 
@@ -138,13 +137,13 @@ func TestManifestHandlingEmptyIterators(t *testing.T) {
 
 	iterFactory := backupinfo.NewIterFactory(&m, store, nil, nil)
 	t.Run("files", func(t *testing.T) {
-		checkEmptyIteratorOperations(t, mustCreateFileIterFactory(t, iterFactory))
+		checkEmptyFileIteratorOperations(t, mustCreateFileIterFactory(t, iterFactory))
 	})
 	t.Run("descriptors", func(t *testing.T) {
-		checkEmptyIteratorOperations(t, iterFactory.NewDescIter)
+		checkEmptyDescIteratorOperations(t, iterFactory.NewDescIter)
 	})
 	t.Run("descriptor-changes", func(t *testing.T) {
-		checkEmptyIteratorOperations(t, iterFactory.NewDescriptorChangesIter)
+		checkEmptyDescriptorChangesIteratorOperations(t, iterFactory.NewDescriptorChangesIter)
 	})
 }
 
@@ -198,18 +197,18 @@ func makeMockManifest(
 	return m
 }
 
-func checkIteratorOperations[T any](
+func checkFileIteratorOperations(
 	t *testing.T,
-	mkIter func(context.Context) bulk.Iterator[*T],
-	expected []T,
-	less func(left T, right T) bool,
+	mkIter func(context.Context) backupinfo.FileIterator,
+	expected []backuppb.BackupManifest_File,
+	less func(left backuppb.BackupManifest_File, right backuppb.BackupManifest_File) bool,
 ) {
 	ctx := context.Background()
 
 	// 1. Check if the iterator returns the expected contents, regardless of how
 	// many times value is called between calls to Next().
 	for numValueCalls := 1; numValueCalls <= 5; numValueCalls++ {
-		var actual []T
+		var actual []backuppb.BackupManifest_File
 		it := mkIter(ctx)
 		defer it.Close()
 		for ; ; it.Next() {
@@ -219,7 +218,7 @@ func checkIteratorOperations[T any](
 				break
 			}
 
-			var value T
+			var value backuppb.BackupManifest_File
 			for i := 0; i < numValueCalls; i++ {
 				value = *it.Value()
 			}
@@ -267,8 +266,190 @@ func checkIteratorOperations[T any](
 	require.NoError(t, err)
 }
 
-func checkEmptyIteratorOperations[T any](
-	t *testing.T, mkIter func(context.Context) bulk.Iterator[*T],
+func checkDescIteratorOperations(
+	t *testing.T,
+	mkIter func(context.Context) backupinfo.DescIterator,
+	expected []descpb.Descriptor,
+	less func(left descpb.Descriptor, right descpb.Descriptor) bool,
+) {
+	ctx := context.Background()
+
+	// 1. Check if the iterator returns the expected contents, regardless of how
+	// many times value is called between calls to Next().
+	for numValueCalls := 1; numValueCalls <= 5; numValueCalls++ {
+		var actual []descpb.Descriptor
+		it := mkIter(ctx)
+		defer it.Close()
+		for ; ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				break
+			}
+
+			var value descpb.Descriptor
+			for i := 0; i < numValueCalls; i++ {
+				value = *it.Value()
+			}
+
+			actual = append(actual, value)
+		}
+
+		sort.Slice(actual, func(i, j int) bool {
+			return less(actual[i], actual[j])
+		})
+
+		require.Equal(t, expected, actual, fmt.Sprintf("contents not equal if there are %d calls to Value()", numValueCalls))
+	}
+
+	// 2. Check that we can repeatedly call Next() and Value() after the iterator
+	// is done.
+	it := mkIter(ctx)
+	defer it.Close()
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		it.Next()
+		ok, err := it.Valid()
+		require.False(t, ok)
+		require.NoError(t, err)
+
+		it.Value() // Should not error or panic.
+	}
+
+	// 3. Check that we can get the value without calling Valid().
+	itNoCheck := mkIter(ctx)
+	defer itNoCheck.Close()
+	require.Greater(t, len(expected), 0)
+	value := itNoCheck.Value()
+	require.Contains(t, expected, *value)
+
+	ok, err := itNoCheck.Valid()
+	require.True(t, ok)
+	require.NoError(t, err)
+}
+
+func checkDescriptorChangesIteratorOperations(
+	t *testing.T,
+	mkIter func(context.Context) backupinfo.DescriptorRevisionIterator,
+	expected []backuppb.BackupManifest_DescriptorRevision,
+	less func(left backuppb.BackupManifest_DescriptorRevision, right backuppb.BackupManifest_DescriptorRevision) bool,
+) {
+	ctx := context.Background()
+
+	// 1. Check if the iterator returns the expected contents, regardless of how
+	// many times value is called between calls to Next().
+	for numValueCalls := 1; numValueCalls <= 5; numValueCalls++ {
+		var actual []backuppb.BackupManifest_DescriptorRevision
+		it := mkIter(ctx)
+		defer it.Close()
+		for ; ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				break
+			}
+
+			var value backuppb.BackupManifest_DescriptorRevision
+			for i := 0; i < numValueCalls; i++ {
+				value = *it.Value()
+			}
+
+			actual = append(actual, value)
+		}
+
+		sort.Slice(actual, func(i, j int) bool {
+			return less(actual[i], actual[j])
+		})
+
+		require.Equal(t, expected, actual, fmt.Sprintf("contents not equal if there are %d calls to Value()", numValueCalls))
+	}
+
+	// 2. Check that we can repeatedly call Next() and Value() after the iterator
+	// is done.
+	it := mkIter(ctx)
+	defer it.Close()
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		it.Next()
+		ok, err := it.Valid()
+		require.False(t, ok)
+		require.NoError(t, err)
+
+		it.Value() // Should not error or panic.
+	}
+
+	// 3. Check that we can get the value without calling Valid().
+	itNoCheck := mkIter(ctx)
+	defer itNoCheck.Close()
+	require.Greater(t, len(expected), 0)
+	value := itNoCheck.Value()
+	require.Contains(t, expected, *value)
+
+	ok, err := itNoCheck.Valid()
+	require.True(t, ok)
+	require.NoError(t, err)
+}
+
+func checkEmptyFileIteratorOperations(
+	t *testing.T, mkIter func(context.Context) backupinfo.FileIterator,
+) {
+	ctx := context.Background()
+
+	// Check that regardless of how many calls to Next() the iterator will not be
+	// valid.
+	for numNextCalls := 0; numNextCalls < 5; numNextCalls++ {
+		it := mkIter(ctx)
+		defer it.Close()
+		for i := 0; i < numNextCalls; i++ {
+			it.Next()
+		}
+
+		ok, err := it.Valid()
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		it.Value() // Should not error or panic.
+	}
+}
+
+func checkEmptyDescIteratorOperations(
+	t *testing.T, mkIter func(context.Context) backupinfo.DescIterator,
+) {
+	ctx := context.Background()
+
+	// Check that regardless of how many calls to Next() the iterator will not be
+	// valid.
+	for numNextCalls := 0; numNextCalls < 5; numNextCalls++ {
+		it := mkIter(ctx)
+		defer it.Close()
+		for i := 0; i < numNextCalls; i++ {
+			it.Next()
+		}
+
+		ok, err := it.Valid()
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		it.Value() // Should not error or panic.
+	}
+}
+
+func checkEmptyDescriptorChangesIteratorOperations(
+	t *testing.T, mkIter func(context.Context) backupinfo.DescriptorRevisionIterator,
 ) {
 	ctx := context.Background()
 
@@ -291,8 +472,8 @@ func checkEmptyIteratorOperations[T any](
 
 func mustCreateFileIterFactory(
 	t *testing.T, iterFactory *backupinfo.IterFactory,
-) func(ctx context.Context) bulk.Iterator[*backuppb.BackupManifest_File] {
-	return func(ctx context.Context) bulk.Iterator[*backuppb.BackupManifest_File] {
+) func(ctx context.Context) backupinfo.FileIterator {
+	return func(ctx context.Context) backupinfo.FileIterator {
 		it, err := iterFactory.NewFileIter(ctx)
 		require.NoError(t, err)
 		return it

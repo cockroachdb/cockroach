@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
@@ -55,48 +54,6 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 	"target size to which base spans of a restore are merged to produce a restore span (0 disables)",
 	384<<20,
 )
-
-// backupManifestFileIterator exposes methods that can be used to iterate over
-// the `BackupManifest_Files` field of a manifest.
-type backupManifestFileIterator interface {
-	next() (backuppb.BackupManifest_File, bool)
-	peek() (backuppb.BackupManifest_File, bool)
-	err() error
-	close()
-}
-
-// sstFileIterator uses an underlying `backupinfo.FileIterator` to read the
-// `BackupManifest_Files` from the SST file.
-type sstFileIterator struct {
-	fi *backupinfo.FileIterator
-}
-
-func (s *sstFileIterator) next() (backuppb.BackupManifest_File, bool) {
-	f, ok := s.peek()
-	if ok {
-		s.fi.Next()
-	}
-
-	return f, ok
-}
-
-func (s *sstFileIterator) peek() (backuppb.BackupManifest_File, bool) {
-	if ok, _ := s.fi.Valid(); !ok {
-		return backuppb.BackupManifest_File{}, false
-	}
-	return *s.fi.Value(), true
-}
-
-func (s *sstFileIterator) err() error {
-	_, err := s.fi.Valid()
-	return err
-}
-
-func (s *sstFileIterator) close() {
-	s.fi.Close()
-}
-
-var _ backupManifestFileIterator = &sstFileIterator{}
 
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering
 // of RestoreSpanEntry's which each have all overlapping files from the passed
@@ -376,7 +333,7 @@ func generateAndSendImportSpans(
 		return err
 	}
 
-	fileIterByLayer := make([]bulk.Iterator[*backuppb.BackupManifest_File], 0, len(backups))
+	fileIterByLayer := make([]backupinfo.FileIterator, 0, len(backups))
 	for layer := range backups {
 		iter, err := layerToBackupManifestFileIterFactory[layer].NewFileIter(ctx)
 		if err != nil {
@@ -591,7 +548,7 @@ func generateAndSendImportSpans(
 // [a, b, c, e, f, g]
 type fileSpanStartAndEndKeyIterator struct {
 	heap     *fileHeap
-	allIters []bulk.Iterator[*backuppb.BackupManifest_File]
+	allIters []backupinfo.FileIterator
 	err      error
 }
 
@@ -681,7 +638,7 @@ func (i *fileSpanStartAndEndKeyIterator) reset() {
 }
 
 type fileHeapItem struct {
-	fileIter  bulk.Iterator[*backuppb.BackupManifest_File]
+	fileIter  backupinfo.FileIterator
 	file      *backuppb.BackupManifest_File
 	cmpEndKey bool
 }
@@ -727,9 +684,7 @@ func (f *fileHeap) Pop() any {
 }
 
 func getNewIntersectingFilesByLayer(
-	span roachpb.Span,
-	layersCoveredLater map[int]bool,
-	fileIters []bulk.Iterator[*backuppb.BackupManifest_File],
+	span roachpb.Span, layersCoveredLater map[int]bool, fileIters []backupinfo.FileIterator,
 ) ([][]*backuppb.BackupManifest_File, error) {
 	var files [][]*backuppb.BackupManifest_File
 

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -974,18 +973,38 @@ func NewBackupMetadata(
 }
 
 // SpanIterator is a simple iterator to iterate over roachpb.Spans.
-type SpanIterator struct {
+type SpanIterator interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
+	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
+	Value() roachpb.Span
+
+	// Next advances the iterator to the next value.
+	Next()
+
+	// Close closes the iterator.
+	Close()
+}
+
+type spanIterator struct {
 	backing bytesIter
 	filter  func(key storage.MVCCKey) bool
 	value   *roachpb.Span
 	err     error
 }
 
+var _ SpanIterator = &spanIterator{}
+
 // NewSpanIter creates a new SpanIterator for the backup metadata.
-func (b *BackupMetadata) NewSpanIter(ctx context.Context) bulk.Iterator[roachpb.Span] {
+func (b *BackupMetadata) NewSpanIter(ctx context.Context) SpanIterator {
 	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstSpansPrefix), b.enc,
 		true, b.kmsEnv)
-	it := SpanIterator{
+	it := spanIterator{
 		backing: backing,
 	}
 	it.Next()
@@ -993,11 +1012,11 @@ func (b *BackupMetadata) NewSpanIter(ctx context.Context) bulk.Iterator[roachpb.
 }
 
 // NewIntroducedSpanIter creates a new IntroducedSpanIterator for the backup metadata.
-func (b *BackupMetadata) NewIntroducedSpanIter(ctx context.Context) bulk.Iterator[roachpb.Span] {
+func (b *BackupMetadata) NewIntroducedSpanIter(ctx context.Context) SpanIterator {
 	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstSpansPrefix), b.enc,
 		false, b.kmsEnv)
 
-	it := SpanIterator{
+	it := spanIterator{
 		backing: backing,
 		filter: func(key storage.MVCCKey) bool {
 			return key.Timestamp == hlc.Timestamp{}
@@ -1008,28 +1027,28 @@ func (b *BackupMetadata) NewIntroducedSpanIter(ctx context.Context) bulk.Iterato
 }
 
 // Close closes the iterator.
-func (si *SpanIterator) Close() {
+func (si *spanIterator) Close() {
 	si.backing.close()
 }
 
-// Valid implements the Iterator interface.
-func (si *SpanIterator) Valid() (bool, error) {
+// Valid implements the SpanIterator interface.
+func (si *spanIterator) Valid() (bool, error) {
 	if si.err != nil {
 		return false, si.err
 	}
 	return si.value != nil, si.err
 }
 
-// Value implements the Iterator interface.
-func (si *SpanIterator) Value() roachpb.Span {
+// Value implements the SpanIterator interface.
+func (si *spanIterator) Value() roachpb.Span {
 	if si.value == nil {
 		return roachpb.Span{}
 	}
 	return *si.value
 }
 
-// Next implements the Iterator interface.
-func (si *SpanIterator) Next() {
+// Next implements the SpanIterator interface.
+func (si *spanIterator) Next() {
 	wrapper := resultWrapper{}
 	var nextSpan *roachpb.Span
 
@@ -1050,16 +1069,34 @@ func (si *SpanIterator) Next() {
 }
 
 // FileIterator is a simple iterator to iterate over backuppb.BackupManifest_File.
-type FileIterator struct {
+type FileIterator interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
+	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
+	Value() *backuppb.BackupManifest_File
+
+	// Next advances the iterator to the next value.
+	Next()
+
+	// Close closes the iterator.
+	Close()
+}
+
+type fileIterator struct {
 	mergedIterator storage.SimpleMVCCIterator
 	err            error
 	file           *backuppb.BackupManifest_File
 }
 
+var _ FileIterator = &fileIterator{}
+
 // NewFileIter creates a new FileIterator for the backup metadata.
-func (b *BackupMetadata) NewFileIter(
-	ctx context.Context,
-) (bulk.Iterator[*backuppb.BackupManifest_File], error) {
+func (b *BackupMetadata) NewFileIter(ctx context.Context) (FileIterator, error) {
 	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc,
 		false, b.kmsEnv)
 	defer fileInfoIter.close()
@@ -1090,34 +1127,34 @@ func (b *BackupMetadata) NewFileIter(
 	return newFileSSTIter(ctx, storeFiles, encOpts)
 }
 
-// NewFileSSTIter creates a new FileIterator to iterate over the storeFile.
+// NewFileSSTIter creates a new fileIterator to iterate over the storeFile.
 // It is the caller's responsibility to Close() the returned iterator.
 func NewFileSSTIter(
 	ctx context.Context, storeFile storageccl.StoreFile, encOpts *roachpb.FileEncryptionOptions,
-) (*FileIterator, error) {
+) (FileIterator, error) {
 	return newFileSSTIter(ctx, []storageccl.StoreFile{storeFile}, encOpts)
 }
 
 func newFileSSTIter(
 	ctx context.Context, storeFiles []storageccl.StoreFile, encOpts *roachpb.FileEncryptionOptions,
-) (*FileIterator, error) {
+) (*fileIterator, error) {
 	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encOpts, iterOpts)
 	if err != nil {
 		return nil, err
 	}
 	iter.SeekGE(storage.MVCCKey{})
-	fi := &FileIterator{mergedIterator: iter}
+	fi := &fileIterator{mergedIterator: iter}
 	fi.Next()
 	return fi, nil
 }
 
 // Close closes the iterator.
-func (fi *FileIterator) Close() {
+func (fi *fileIterator) Close() {
 	fi.mergedIterator.Close()
 }
 
 // Valid indicates whether or not the iterator is pointing to a valid value.
-func (fi *FileIterator) Valid() (bool, error) {
+func (fi *fileIterator) Valid() (bool, error) {
 	if fi.err != nil {
 		return false, fi.err
 	}
@@ -1125,13 +1162,13 @@ func (fi *FileIterator) Valid() (bool, error) {
 	return fi.file != nil, nil
 }
 
-// Value implements the Iterator interface.
-func (fi *FileIterator) Value() *backuppb.BackupManifest_File {
+// Value implements the FileIterator interface.
+func (fi *fileIterator) Value() *backuppb.BackupManifest_File {
 	return fi.file
 }
 
-// Next implements the Iterator interface.
-func (fi *FileIterator) Next() {
+// Next implements the FileIterator interface.
+func (fi *fileIterator) Next() {
 	if fi.err != nil {
 		return
 	}
@@ -1157,16 +1194,36 @@ func (fi *FileIterator) Next() {
 }
 
 // DescIterator is a simple iterator to iterate over descpb.Descriptors.
-type DescIterator struct {
+type DescIterator interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
+	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
+	Value() *descpb.Descriptor
+
+	// Next advances the iterator to the next value.
+	Next()
+
+	// Close closes the iterator.
+	Close()
+}
+
+type descIterator struct {
 	backing bytesIter
 	value   *descpb.Descriptor
 	err     error
 }
 
+var _ DescIterator = &descIterator{}
+
 // NewDescIter creates a new DescIterator for the backup metadata.
-func (b *BackupMetadata) NewDescIter(ctx context.Context) bulk.Iterator[*descpb.Descriptor] {
+func (b *BackupMetadata) NewDescIter(ctx context.Context) DescIterator {
 	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc, true, b.kmsEnv)
-	it := DescIterator{
+	it := descIterator{
 		backing: backing,
 	}
 	it.Next()
@@ -1174,25 +1231,25 @@ func (b *BackupMetadata) NewDescIter(ctx context.Context) bulk.Iterator[*descpb.
 }
 
 // Close closes the iterator.
-func (di *DescIterator) Close() {
+func (di *descIterator) Close() {
 	di.backing.close()
 }
 
-// Valid implements the Iterator interface.
-func (di *DescIterator) Valid() (bool, error) {
+// Valid implements the DescIterator interface.
+func (di *descIterator) Valid() (bool, error) {
 	if di.err != nil {
 		return false, di.err
 	}
 	return di.value != nil, nil
 }
 
-// Value implements the Iterator interface.
-func (di *DescIterator) Value() *descpb.Descriptor {
+// Value implements the DescIterator interface.
+func (di *descIterator) Value() *descpb.Descriptor {
 	return di.value
 }
 
-// Next implements the Iterator interface.
-func (di *DescIterator) Next() {
+// Next implements the DescIterator interface.
+func (di *descIterator) Next() {
 	if di.err != nil {
 		return
 	}
@@ -1218,19 +1275,37 @@ func (di *DescIterator) Next() {
 }
 
 // TenantIterator is a simple iterator to iterate over TenantInfoWithUsages.
-type TenantIterator struct {
+type TenantIterator interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
+	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
+	Value() descpb.TenantInfoWithUsage
+
+	// Next advances the iterator to the next value.
+	Next()
+
+	// Close closes the iterator.
+	Close()
+}
+
+type tenantIterator struct {
 	backing bytesIter
 	value   *descpb.TenantInfoWithUsage
 	err     error
 }
 
+var _ TenantIterator = &tenantIterator{}
+
 // NewTenantIter creates a new TenantIterator for the backup metadata.
-func (b *BackupMetadata) NewTenantIter(
-	ctx context.Context,
-) bulk.Iterator[descpb.TenantInfoWithUsage] {
+func (b *BackupMetadata) NewTenantIter(ctx context.Context) TenantIterator {
 	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstTenantsPrefix), b.enc,
 		false, b.kmsEnv)
-	it := TenantIterator{
+	it := tenantIterator{
 		backing: backing,
 	}
 	it.Next()
@@ -1238,28 +1313,28 @@ func (b *BackupMetadata) NewTenantIter(
 }
 
 // Close closes the iterator.
-func (ti *TenantIterator) Close() {
+func (ti *tenantIterator) Close() {
 	ti.backing.close()
 }
 
-// Valid implements the Iterator interface.
-func (ti *TenantIterator) Valid() (bool, error) {
+// Valid implements the TenantIterator interface.
+func (ti *tenantIterator) Valid() (bool, error) {
 	if ti.err != nil {
 		return false, ti.err
 	}
 	return ti.value != nil, nil
 }
 
-// Value implements the Iterator interface.
-func (ti *TenantIterator) Value() descpb.TenantInfoWithUsage {
+// Value implements the TenantIterator interface.
+func (ti *tenantIterator) Value() descpb.TenantInfoWithUsage {
 	if ti.value == nil {
 		return descpb.TenantInfoWithUsage{}
 	}
 	return *ti.value
 }
 
-// Next implements the Iterator interface.
-func (ti *TenantIterator) Next() {
+// Next implements the TenantIterator interface.
+func (ti *tenantIterator) Next() {
 	if ti.err != nil {
 		return
 	}
@@ -1286,24 +1361,42 @@ func (ti *TenantIterator) Next() {
 }
 
 // DescriptorRevisionIterator is a simple iterator to iterate over backuppb.BackupManifest_DescriptorRevisions.
-type DescriptorRevisionIterator struct {
+type DescriptorRevisionIterator interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
+	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
+	Value() *backuppb.BackupManifest_DescriptorRevision
+
+	// Next advances the iterator to the next value.
+	Next()
+
+	// Close closes the iterator.
+	Close()
+}
+
+type descriptorRevisionIterator struct {
 	backing bytesIter
 	err     error
 	value   *backuppb.BackupManifest_DescriptorRevision
 }
 
-// NewDescriptorChangesIter creates a new DescriptorChangesIterator for the backup metadata.
-func (b *BackupMetadata) NewDescriptorChangesIter(
-	ctx context.Context,
-) bulk.Iterator[*backuppb.BackupManifest_DescriptorRevision] {
+var _ DescriptorRevisionIterator = &descriptorRevisionIterator{}
+
+// NewDescriptorChangesIter creates a new DescriptorRevisionIterator for the backup metadata.
+func (b *BackupMetadata) NewDescriptorChangesIter(ctx context.Context) DescriptorRevisionIterator {
 	if b.MVCCFilter == backuppb.MVCCFilter_Latest {
 		var backing []backuppb.BackupManifest_DescriptorRevision
-		return newSlicePointerIterator(backing)
+		return newDescriptorChangesSliceIterator(backing)
 	}
 
 	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc,
 		false, b.kmsEnv)
-	dri := DescriptorRevisionIterator{
+	dri := descriptorRevisionIterator{
 		backing: backing,
 	}
 
@@ -1311,31 +1404,26 @@ func (b *BackupMetadata) NewDescriptorChangesIter(
 	return &dri
 }
 
-// Valid implements the Iterator interface.
-func (dri *DescriptorRevisionIterator) Valid() (bool, error) {
+// Valid implements the DescriptorRevisionIterator interface.
+func (dri *descriptorRevisionIterator) Valid() (bool, error) {
 	if dri.err != nil {
 		return false, dri.err
 	}
 	return dri.value != nil, nil
 }
 
-// Value implements the Iterator interface.
-func (dri *DescriptorRevisionIterator) Value() *backuppb.BackupManifest_DescriptorRevision {
+// Value implements the DescriptorRevisionIterator interface.
+func (dri *descriptorRevisionIterator) Value() *backuppb.BackupManifest_DescriptorRevision {
 	return dri.value
 }
 
 // Close closes the iterator.
-func (dri *DescriptorRevisionIterator) Close() {
+func (dri *descriptorRevisionIterator) Close() {
 	dri.backing.close()
 }
 
-// Next retrieves the next descriptor revision in the iterator.
-//
-// Next returns true if next element was successfully unmarshalled into
-// revision, and false if there are no more elements or if an error was
-// encountered. When Next returns false, the user should call the Err method to
-// verify the existence of an error.
-func (dri *DescriptorRevisionIterator) Next() {
+// Next implements the DescriptorRevisionIterator interface.
+func (dri *descriptorRevisionIterator) Next() {
 	if dri.err != nil {
 		return
 	}
@@ -1384,19 +1472,37 @@ func unmarshalWrapper(wrapper *resultWrapper) (backuppb.BackupManifest_Descripto
 }
 
 // StatsIterator is a simple iterator to iterate over stats.TableStatisticProtos.
-type StatsIterator struct {
+type StatsIterator interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
+	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
+	Value() *stats.TableStatisticProto
+
+	// Next advances the iterator to the next value.
+	Next()
+
+	// Close closes the iterator.
+	Close()
+}
+
+type statsIterator struct {
 	backing bytesIter
 	value   *stats.TableStatisticProto
 	err     error
 }
 
+var _ StatsIterator = &statsIterator{}
+
 // NewStatsIter creates a new StatsIterator for the backup metadata.
-func (b *BackupMetadata) NewStatsIter(
-	ctx context.Context,
-) bulk.Iterator[*stats.TableStatisticProto] {
+func (b *BackupMetadata) NewStatsIter(ctx context.Context) StatsIterator {
 	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstStatsPrefix), b.enc,
 		false, b.kmsEnv)
-	it := StatsIterator{
+	it := statsIterator{
 		backing: backing,
 	}
 	it.Next()
@@ -1404,25 +1510,25 @@ func (b *BackupMetadata) NewStatsIter(
 }
 
 // Close closes the iterator.
-func (si *StatsIterator) Close() {
+func (si *statsIterator) Close() {
 	si.backing.close()
 }
 
-// Valid implements the Iterator interface.
-func (si *StatsIterator) Valid() (bool, error) {
+// Valid implements the StatsIterator interface.
+func (si *statsIterator) Valid() (bool, error) {
 	if si.err != nil {
 		return false, si.err
 	}
 	return si.value != nil, nil
 }
 
-// Value implements the Iterator interface.
-func (si *StatsIterator) Value() *stats.TableStatisticProto {
+// Value implements the StatsIterator interface.
+func (si *statsIterator) Value() *stats.TableStatisticProto {
 	return si.value
 }
 
-// Next implements the Iterator interface.
-func (si *StatsIterator) Next() {
+// Next implements the StatsIterator interface.
+func (si *statsIterator) Next() {
 	if si.err != nil {
 		return
 	}
@@ -1529,24 +1635,24 @@ type resultWrapper struct {
 	value []byte
 }
 
-type sliceIterator[T any] struct {
-	backingSlice []T
+type fileSliceIterator struct {
+	backingSlice []backuppb.BackupManifest_File
 	idx          int
 }
 
-var _ bulk.Iterator[*backuppb.BackupManifest_DescriptorRevision] = &sliceIterator[backuppb.BackupManifest_DescriptorRevision]{}
+var _ FileIterator = &fileSliceIterator{}
 
-func newSlicePointerIterator[T any](backing []T) *sliceIterator[T] {
-	return &sliceIterator[T]{
+func newFileSliceIterator(backing []backuppb.BackupManifest_File) *fileSliceIterator {
+	return &fileSliceIterator{
 		backingSlice: backing,
 	}
 }
 
-func (s *sliceIterator[T]) Valid() (bool, error) {
+func (s *fileSliceIterator) Valid() (bool, error) {
 	return s.idx < len(s.backingSlice), nil
 }
 
-func (s *sliceIterator[T]) Value() *T {
+func (s *fileSliceIterator) Value() *backuppb.BackupManifest_File {
 	if s.idx < len(s.backingSlice) {
 		return &s.backingSlice[s.idx]
 	}
@@ -1554,9 +1660,75 @@ func (s *sliceIterator[T]) Value() *T {
 	return nil
 }
 
-func (s *sliceIterator[T]) Next() {
+func (s *fileSliceIterator) Next() {
 	s.idx++
 }
 
-func (s *sliceIterator[T]) Close() {
+func (s *fileSliceIterator) Close() {
+}
+
+type descSliceIterator struct {
+	backingSlice []descpb.Descriptor
+	idx          int
+}
+
+var _ DescIterator = &descSliceIterator{}
+
+func newDescSliceIterator(backing []descpb.Descriptor) *descSliceIterator {
+	return &descSliceIterator{
+		backingSlice: backing,
+	}
+}
+
+func (s *descSliceIterator) Valid() (bool, error) {
+	return s.idx < len(s.backingSlice), nil
+}
+
+func (s *descSliceIterator) Value() *descpb.Descriptor {
+	if s.idx < len(s.backingSlice) {
+		return &s.backingSlice[s.idx]
+	}
+
+	return nil
+}
+
+func (s *descSliceIterator) Next() {
+	s.idx++
+}
+
+func (s *descSliceIterator) Close() {
+}
+
+type descriptorChangesSliceIterator struct {
+	backingSlice []backuppb.BackupManifest_DescriptorRevision
+	idx          int
+}
+
+var _ DescriptorRevisionIterator = &descriptorChangesSliceIterator{}
+
+func newDescriptorChangesSliceIterator(
+	backing []backuppb.BackupManifest_DescriptorRevision,
+) *descriptorChangesSliceIterator {
+	return &descriptorChangesSliceIterator{
+		backingSlice: backing,
+	}
+}
+
+func (s *descriptorChangesSliceIterator) Valid() (bool, error) {
+	return s.idx < len(s.backingSlice), nil
+}
+
+func (s *descriptorChangesSliceIterator) Value() *backuppb.BackupManifest_DescriptorRevision {
+	if s.idx < len(s.backingSlice) {
+		return &s.backingSlice[s.idx]
+	}
+
+	return nil
+}
+
+func (s *descriptorChangesSliceIterator) Next() {
+	s.idx++
+}
+
+func (s *descriptorChangesSliceIterator) Close() {
 }
