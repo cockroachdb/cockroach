@@ -27,7 +27,7 @@ export const FilterSearchOption = (
       <div className={filterLabel.margin}>{label}</div>
       <Search
         onChange={onChanged}
-        renderSuffix={false}
+        suffix={false}
         placeholder="Search"
         value={value}
       />
