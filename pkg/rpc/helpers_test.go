@@ -12,6 +12,7 @@ package rpc
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,6 +57,7 @@ func TestingAuthenticateTenant(
 // for testing.
 func TestingAuthorizeTenantRequest(
 	ctx context.Context,
+	sv *settings.Values,
 	tenID roachpb.TenantID,
 	method string,
 	request interface{},
@@ -64,5 +66,5 @@ func TestingAuthorizeTenantRequest(
 	return tenantAuthorizer{
 		tenantID:               tenID,
 		capabilitiesAuthorizer: authorizer,
-	}.authorize(ctx, tenID, method, request)
+	}.authorize(ctx, sv, tenID, method, request)
 }
