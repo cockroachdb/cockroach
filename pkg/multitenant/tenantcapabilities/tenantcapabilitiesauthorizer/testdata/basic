@@ -15,7 +15,7 @@ ok
 # Tenant 11 shouldn't be able to issue splits.
 has-capability-for-batch  ten=11 cmds=(split, scan, cput)
 ----
-tenant 11 does not have admin split capability
+client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
 # Test that the order of the split request doesn't have any effect.
 has-capability-for-batch ten=11 cmds=(scan, cput)
@@ -41,7 +41,7 @@ ok
 
 has-capability-for-batch  ten=10 cmds=(split, scan, cput)
 ----
-tenant 10 does not have admin split capability
+client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
 # However, this has no effect on batch requests that don't contain splits.
 has-capability-for-batch ten=10 cmds=(scan, cput)
@@ -54,13 +54,13 @@ ok
 
 has-node-status-capability ten=11
 ----
-tenant 11 does not have capability to query cluster node metadata
+client tenant does not have capability to query cluster node metadata
 
 
 has-tsdb-query-capability ten=10
 ----
-ok
+client tenant does not have capability to query timeseries data
 
 has-tsdb-query-capability ten=11
 ----
-tenant 11 does not have capability to query timeseries data
+client tenant does not have capability to query timeseries data
