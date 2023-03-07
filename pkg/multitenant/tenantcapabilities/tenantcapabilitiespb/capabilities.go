@@ -90,6 +90,8 @@ func (t *TenantCapabilities) Cap(
 		return boolCap{&t.CanViewNodeInfo}
 	case tenantcapabilities.CanViewTSDBMetrics:
 		return boolCap{&t.CanViewTSDBMetrics}
+	case tenantcapabilities.ExemptFromRateLimiting:
+		return boolCap{&t.ExemptFromRateLimiting}
 
 	default:
 		panic(errors.AssertionFailedf("unknown capability: %q", capabilityID.String()))
@@ -112,6 +114,8 @@ func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityI
 		return t.CanViewNodeInfo
 	case tenantcapabilities.CanViewTSDBMetrics:
 		return t.CanViewTSDBMetrics
+	case tenantcapabilities.ExemptFromRateLimiting:
+		return t.ExemptFromRateLimiting
 
 	default:
 		panic(errors.AssertionFailedf("unknown or non-bool capability: %q", capabilityID.String()))
