@@ -110,6 +110,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/testutils",
