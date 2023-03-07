@@ -1563,9 +1563,31 @@ message StatementsResponse {
 }
 
 message CombinedStatementsStatsRequest {
+  enum StatsType {
+    StmtStatsOnly = 0;
+    TxnStatsOnly = 1;
+  }
+
+  message FetchMode {
+    StatsType stats_type = 1;
+  }
+
   // Unix time range for aggregated statements.
   int64 start = 1 [(gogoproto.nullable) = true];
   int64 end = 2 [(gogoproto.nullable) = true];
+
+  // Note that if fetch_mode is set to transactions only, we will also
+  // include the statement statistics for the stmts in the transactions
+  // response. This is more of a hack-y method to get the complete stats
+  // for txns, because in the client we need to fill in some txn stats info
+  // from its stmt stats, such as the query string.
+  //
+  // We prefer this hackier method right now to reduce surface area for backporting
+  // these changes, but in the future we will introduce more endpoints to properly
+  // organize these differing requests.
+  // TODO (xinhaoz) - Split this API into stmts and txns properly instead of using
+  //  this param.
+  FetchMode fetch_mode = 5 [(gogoproto.nullable) = true];
 }
 
 // StatementDetailsRequest requests the details of a Statement, based on its keys.
@@ -2213,6 +2235,7 @@ service Status {
       get: "/_status/combinedstmts"
     };
   }
+
   rpc StatementDetails(StatementDetailsRequest) returns (StatementDetailsResponse) {
     option (google.api.http) = {
       get: "/_status/stmtdetails/{fingerprint_id}"
