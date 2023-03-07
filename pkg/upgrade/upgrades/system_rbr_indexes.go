@@ -85,12 +85,10 @@ func cleanUpRegionalByTableIndex(
 }
 
 func migrations(codec keys.SQLCodec) (result []rbrMigration) {
-	// TODO(jeffswenson): enable the migrations along with the PRs that add
-	// version gates for the sub systems interacting with the table..
 	return []rbrMigration{
-		// sqlLivenessMigration(codec),
-		// sqlInstanceMigration(codec),
-		// leaseMigration(codec),
+		sqlLivenessMigration(codec),
+		sqlInstanceMigration(codec),
+		leaseMigration(codec),
 	}
 }
 
