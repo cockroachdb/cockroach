@@ -30,11 +30,13 @@ go_test(
         "cache_impl_test.go",
         "cache_test.go",
         "main_test.go",
+        "watcher_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":rangefeedcache"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangecache",  # keep
         "//pkg/kv/kvclient/rangefeed",
@@ -49,6 +51,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
+        "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

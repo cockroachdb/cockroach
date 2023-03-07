@@ -46,13 +46,12 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 export interface StatementInsightDetailsOverviewTabProps {
   insightEventDetails: StmtInsightEvent;
-  setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
 }
 
 export const StatementInsightDetailsOverviewTab: React.FC<
   StatementInsightDetailsOverviewTabProps
-> = ({ insightEventDetails, setTimeScale, hasAdminRole }) => {
+> = ({ insightEventDetails, hasAdminRole }) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
@@ -85,7 +84,6 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             data={insightDetails.contentionEvents}
             sortSetting={insightsDetailsContentionSortSetting}
             onChangeSortSetting={setDetailsContentionSortSetting}
-            setTimeScale={setTimeScale}
           />
         </Col>
       </Row>
@@ -161,8 +159,6 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               label="Transaction Fingerprint ID"
               value={TransactionDetailsLink(
                 insightDetails.transactionFingerprintID,
-                insightDetails.startTime,
-                setTimeScale,
               )}
             />
             <SummaryCardItem
@@ -171,7 +167,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             />
             <SummaryCardItem
               label="Statement Fingerprint ID"
-              value={StatementDetailsLink(insightDetails, setTimeScale)}
+              value={StatementDetailsLink(insightDetails)}
             />
           </SummaryCard>
         </Col>

@@ -303,3 +303,48 @@ eval
 NULL::string LIKE ANY(ARRAY['bar', NULL])
 ----
 NULL
+
+eval
+NULL = ANY(ARRAY []::INTEGER[])
+----
+false
+
+eval
+NULL = SOME(ARRAY []::INTEGER[])
+----
+false
+
+eval
+NULL = ALL(ARRAY []::INTEGER[])
+----
+true
+
+eval
+NULL = ANY(ARRAY [1]::INTEGER[])
+----
+NULL
+
+eval
+NULL = SOME(ARRAY [1]::INTEGER[])
+----
+NULL
+
+eval
+NULL = ALL(ARRAY [1]::INTEGER[])
+----
+NULL
+
+eval
+NULL = ANY(NULL::INTEGER[])
+----
+NULL
+
+eval
+NULL = SOME(NULL::INTEGER[])
+----
+NULL
+
+eval
+NULL = ALL(NULL::INTEGER[])
+----
+NULL

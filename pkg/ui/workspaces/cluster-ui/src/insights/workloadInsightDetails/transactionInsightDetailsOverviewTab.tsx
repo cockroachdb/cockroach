@@ -197,8 +197,6 @@ the maximum number of statements was reached in the console.`;
                       label="Transaction Fingerprint ID"
                       value={TransactionDetailsLink(
                         txnDetails.transactionFingerprintID,
-                        txnDetails.startTime,
-                        setTimeScale,
                       )}
                     />
                   </SummaryCard>

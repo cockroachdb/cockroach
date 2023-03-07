@@ -207,7 +207,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
     resetPagination();
   };
 
-  const defaultColumns = makeStatementInsightsColumns(setTimeScale);
+  const defaultColumns = makeStatementInsightsColumns();
 
   const onSetTimeScale = useCallback(
     (ts: TimeScale) => {

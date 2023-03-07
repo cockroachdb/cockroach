@@ -15,10 +15,19 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
+
+var ignoreAllUpdates = envutil.EnvOrDefaultBool("COCKROACH_IGNORE_CLUSTER_SETTINGS", false)
+
+// IsIgnoringAllUpdates returns true if Updaters returned by NewUpdater will
+// discard all updates due to the COCKROACH_IGNORE_CLUSTER_SETTINGS var.
+func IsIgnoringAllUpdates() bool {
+	return ignoreAllUpdates
+}
 
 // EncodeDuration encodes a duration in the format of EncodedValue.Value.
 func EncodeDuration(d time.Duration) string {
@@ -76,6 +85,9 @@ func (u NoopUpdater) ResetRemaining(context.Context) {}
 
 // NewUpdater makes an Updater.
 func NewUpdater(sv *Values) Updater {
+	if ignoreAllUpdates {
+		return NoopUpdater{}
+	}
 	return updater{
 		m:  make(map[string]struct{}, len(registry)),
 		sv: sv,
