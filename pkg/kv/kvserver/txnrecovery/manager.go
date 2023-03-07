@@ -260,7 +260,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 		// any of the in-flight writes failed.
 		for _, ru := range resps[1:] {
 			queryIntentResp := ru.GetInner().(*kvpb.QueryIntentResponse)
-			if !queryIntentResp.FoundIntent {
+			if !queryIntentResp.FoundUnpushedIntent {
 				return true /* preventedIntent */, nil, nil
 			}
 		}
