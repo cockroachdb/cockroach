@@ -19,22 +19,28 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -413,6 +419,69 @@ INTO
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 	})
+}
+
+func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "test",
+			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					for _, ru := range request.Requests {
+						if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								if rng.Float32() > 0.5 {
+									return true, 0
+								}
+								return false, 0
+							})
+						}
+					}
+					return nil
+				},
+			}},
+		},
+	})
+
+	defer tc.Stopper().Stop(context.Background())
+
+	s := tc.TenantOrServer(0)
+	sqlDB := tc.Conns[0]
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	kvDB := s.DB()
+
+	const (
+		initRows = 1000
+		splits   = 100
+	)
+	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
+	db.Exec(t, "CREATE TABLE test (k PRIMARY KEY) AS SELECT generate_series(1, $1)", initRows)
+	db.Exec(t, "ALTER TABLE test SPLIT AT (select i*10 from generate_series(1, $1) as i)", initRows/splits)
+	db.Exec(t, "ALTER TABLE test SCATTER")
+
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, execCfg.Codec, "test", "test")
+	span := desc.TableSpan(execCfg.Codec)
+
+	req := &kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    span.Key,
+			EndKey: span.EndKey},
+	}
+	header := kvpb.Header{
+		ReturnElasticCPUResumeSpans: true,
+	}
+	_, err := kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), header, req)
+	require.NoError(t, err.GoError())
 }
 
 func TestExportGCThreshold(t *testing.T) {
