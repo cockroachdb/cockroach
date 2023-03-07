@@ -263,23 +263,9 @@ func (r *Replica) updateTimestampCache(
 		case *kvpb.QueryIntentRequest:
 			missing := false
 			if pErr != nil {
-				switch t := pErr.GetDetail().(type) {
-				case *kvpb.IntentMissingError:
-					missing = true
-				case *kvpb.TransactionRetryError:
-					// QueryIntent will return a TxnRetry(SERIALIZABLE) error
-					// if a transaction is querying its own intent and finds
-					// it pushed.
-					//
-					// NB: we check the index of the error above, so this
-					// TransactionRetryError should indicate a missing intent
-					// from the QueryIntent request. However, bumping the
-					// timestamp cache wouldn't cause a correctness issue
-					// if we found the intent.
-					missing = t.Reason == kvpb.RETRY_SERIALIZABLE
-				}
+				_, missing = pErr.GetDetail().(*kvpb.IntentMissingError)
 			} else {
-				missing = !resp.(*kvpb.QueryIntentResponse).FoundIntent
+				missing = !resp.(*kvpb.QueryIntentResponse).FoundUnpushedIntent
 			}
 			if missing {
 				// If the QueryIntent determined that the intent is missing
