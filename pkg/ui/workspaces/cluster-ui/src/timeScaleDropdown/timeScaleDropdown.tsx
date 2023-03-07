@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React, { useMemo } from "react";
-import moment from "moment";
+import moment from "moment-timezone";
 import classNames from "classnames/bind";
 import {
   ArrowDirection,

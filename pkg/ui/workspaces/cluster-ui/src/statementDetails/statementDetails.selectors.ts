@@ -22,7 +22,7 @@ import {
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { selectTimeScale } from "../store/utils/selectors";
-import moment from "moment";
+import moment from "moment-timezone";
 
 type StatementDetailsResponseMessage =
   cockroach.server.serverpb.StatementDetailsResponse;

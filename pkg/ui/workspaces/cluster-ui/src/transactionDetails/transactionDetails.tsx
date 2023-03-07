@@ -80,7 +80,7 @@ import {
   timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import insightTableStyles from "../insightsTable/insightsTable.module.scss";

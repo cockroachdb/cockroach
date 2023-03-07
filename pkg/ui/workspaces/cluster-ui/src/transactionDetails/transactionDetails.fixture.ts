@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { RequestError } from "../util";
-import moment from "moment";
+import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";

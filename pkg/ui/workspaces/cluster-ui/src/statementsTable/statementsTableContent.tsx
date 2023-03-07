@@ -30,7 +30,7 @@ import {
 import styles from "./statementsTableContent.module.scss";
 import { EllipsisVertical } from "@cockroachlabs/icons";
 import { getBasePath, StatementDiagnosticsReport } from "../api";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);

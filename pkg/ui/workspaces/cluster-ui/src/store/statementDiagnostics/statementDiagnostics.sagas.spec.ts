@@ -28,7 +28,7 @@ import {
   CancelStmtDiagnosticRequest,
   CancelStmtDiagnosticResponse,
 } from "src/api/statementDiagnosticsApi";
-import moment from "moment";
+import moment from "moment-timezone";
 
 describe("statementsDiagnostics sagas", () => {
   describe("createDiagnosticsReportSaga", () => {

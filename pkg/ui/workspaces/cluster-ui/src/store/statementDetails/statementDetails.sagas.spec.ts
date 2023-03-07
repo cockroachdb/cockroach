@@ -29,7 +29,7 @@ import {
   SQLDetailsStatsReducerState,
 } from "./statementDetails.reducer";
 
-import moment from "moment";
+import moment from "moment-timezone";
 
 const lastUpdated = moment();
 

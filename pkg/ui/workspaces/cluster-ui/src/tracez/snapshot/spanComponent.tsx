@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React, { useCallback, useMemo, useState } from "react";
-import moment from "moment";
+import moment from "moment-timezone";
 import { Helmet } from "react-helmet";
 import { commonStyles } from "src/common";
 import classNames from "classnames/bind";

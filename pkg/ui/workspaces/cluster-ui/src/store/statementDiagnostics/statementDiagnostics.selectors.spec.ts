@@ -11,7 +11,7 @@
 import { assert } from "chai";
 import { selectDiagnosticsReportsPerStatement } from "./statementDiagnostics.selectors";
 import { StatementDiagnosticsReport } from "../../api";
-import moment from "moment";
+import moment from "moment-timezone";
 
 const reports: StatementDiagnosticsReport[] = [
   {

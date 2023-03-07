@@ -17,7 +17,7 @@
 import _ from "lodash";
 import { Action } from "redux";
 import assert from "assert";
-import moment from "moment";
+import moment from "moment-timezone";
 import { push } from "connected-react-router";
 import { ThunkAction, ThunkDispatch } from "redux-thunk";
 

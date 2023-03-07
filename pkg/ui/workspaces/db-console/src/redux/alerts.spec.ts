@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Store } from "redux";
-import moment from "moment";
+import moment from "moment-timezone";
 import { createHashHistory } from "history";
 
 import * as protos from "src/js/protos";

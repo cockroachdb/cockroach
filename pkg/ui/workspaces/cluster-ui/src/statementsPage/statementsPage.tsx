@@ -72,7 +72,7 @@ import {
 import { commonStyles } from "../common";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { StatementViewType } from "./statementPageTypes";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,

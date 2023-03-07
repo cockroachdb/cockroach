@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import { Action } from "redux";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   CachedDataReducer,
   CachedDataReducerState,

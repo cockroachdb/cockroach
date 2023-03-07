@@ -12,7 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { StmtInsightEvent } from "src/insights";
 import { SqlApiResponse, StmtInsightsReq } from "src/api";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type StmtInsightsState = {
   data: SqlApiResponse<StmtInsightEvent[]>;

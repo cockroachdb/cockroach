@@ -30,7 +30,7 @@ import {
   TxnInsightDetails,
   TxnInsightEvent,
 } from "src/insights";
-import moment from "moment";
+import moment from "moment-timezone";
 import { FixFingerprintHexValue } from "../util";
 import {
   formatStmtInsights,

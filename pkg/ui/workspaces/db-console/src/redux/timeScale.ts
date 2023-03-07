@@ -18,7 +18,7 @@ import { put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 import _ from "lodash";
 import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
-import moment from "moment";
+import moment from "moment-timezone";
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import {

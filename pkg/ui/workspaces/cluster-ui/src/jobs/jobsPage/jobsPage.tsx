@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";

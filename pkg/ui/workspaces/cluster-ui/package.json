@@ -31,7 +31,8 @@
   "keywords": [],
   "license": "MIT",
   "dependencies": {
-    "@babel/runtime": "^7.12.13"
+    "@babel/runtime": "^7.12.13",
+    "moment-timezone": "^0.5.40"
   },
   "devDependencies": {
     "@babel/cli": "^7.8.3",

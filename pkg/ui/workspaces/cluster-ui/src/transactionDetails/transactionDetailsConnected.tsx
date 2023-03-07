@@ -42,6 +42,7 @@ import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 import { actions as analyticsActions } from "../store/analytics";
+import moment from "moment-timezone";
 
 export const selectTransaction = createSelector(
   (state: AppState) => state.adminUI?.sqlStats,

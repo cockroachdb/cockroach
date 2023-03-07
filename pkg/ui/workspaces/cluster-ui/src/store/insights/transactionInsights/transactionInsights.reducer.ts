@@ -11,7 +11,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { TxnInsightEvent } from "src/insights";
-import moment, { Moment } from "moment";
+import moment, { Moment } from "moment-timezone";
 import { SqlApiResponse, TxnInsightsRequest } from "src/api";
 
 export type TxnInsightsState = {
