@@ -312,6 +312,13 @@ func (s *Watcher) Run(ctx context.Context) error {
 			// settings watcher.
 			if grpcutil.IsAuthError(err) ||
 				strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
+				select {
+				case <-ctx.Done():
+					// The context is canceled when the rangefeed is closed by the
+					// main handler goroutine. It's closed after we stop listening
+					// to errCh.
+				case errCh <- err:
+				}
 				return true
 			}
 			return false
