@@ -1,0 +1,54 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigbounds",
+    srcs = [
+        "bool_field.go",
+        "bounds.go",
+        "constraints_field.go",
+        "doc.go",
+        "fields.go",
+        "int32field.go",
+        "int64field.go",
+        "ints.go",
+        "lease_preferences_field.go",
+        "span_config_bounds.go",
+        "values.go",
+        "violations.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+    ],
+)
+
+go_test(
+    name = "spanconfigbounds_test",
+    srcs = [
+        "data_driven_test.go",
+        "helpers_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":spanconfigbounds"],
+    deps = [
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_pmezard_go_difflib//difflib",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
