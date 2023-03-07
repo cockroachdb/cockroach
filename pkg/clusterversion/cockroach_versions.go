@@ -199,9 +199,6 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	TODODelete_V22_2EnablePebbleFormatVersionRangeKeys
-	// TODODelete_V22_2TrigramInvertedIndexes enables the creation of trigram inverted indexes
-	// on strings.
-	TODODelete_V22_2TrigramInvertedIndexes
 	// TODODelete_V22_2RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
 	TODODelete_V22_2RemoveGrantPrivilege
 	// TODODelete_V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
@@ -220,9 +217,6 @@ const (
 	// TODODelete_V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
 	// predicates and projections.
 	TODODelete_V22_2EnablePredicateProjectionChangefeed
-	// TODODelete_V22_2AlterSystemSQLInstancesAddLocality adds a locality column to the
-	// system.sql_instances table.
-	TODODelete_V22_2AlterSystemSQLInstancesAddLocality
 	// TODODelete_V22_2SystemExternalConnectionsTable adds system.external_connections table.
 	TODODelete_V22_2SystemExternalConnectionsTable
 	// TODODelete_V22_2RoleIDSequence is the version where the system.role_id_sequence exists.
@@ -241,9 +235,6 @@ const (
 	// TODODelete_V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
 	TODODelete_V22_2SchemaChangeSupportsCreateFunction
-	// TODODelete_V22_2DeleteRequestReturnKey is the version where the DeleteRequest began
-	// populating the FoundKey value in the response.
-	TODODelete_V22_2DeleteRequestReturnKey
 	// TODODelete_V22_2PebbleFormatPrePebblev1Marked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatPrePebblev1Marked. This
 	// migration occurs at the per-store level and is twofold:
@@ -553,10 +544,6 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 	{
-		Key:     TODODelete_V22_2TrigramInvertedIndexes,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
-	},
-	{
 		Key:     TODODelete_V22_2RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
@@ -579,10 +566,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2EnablePredicateProjectionChangefeed,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
-	},
-	{
-		Key:     TODODelete_V22_2AlterSystemSQLInstancesAddLocality,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
 	},
 	{
 		Key:     TODODelete_V22_2SystemExternalConnectionsTable,
@@ -611,10 +594,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2SchemaChangeSupportsCreateFunction,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
-	},
-	{
-		Key:     TODODelete_V22_2DeleteRequestReturnKey,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
 	},
 	{
 		Key:     TODODelete_V22_2PebbleFormatPrePebblev1Marked,
