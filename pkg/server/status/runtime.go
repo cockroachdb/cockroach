@@ -248,7 +248,7 @@ var getCgoMemStats func(context.Context) (uint, uint, error)
 // the resulting information in a format that can be easily consumed by status
 // logging systems.
 type RuntimeStatSampler struct {
-	clock *hlc.Clock
+	clock hlc.WallClock
 
 	startTimeNanos int64
 	// The last sampled values of some statistics are kept only to compute
@@ -315,7 +315,7 @@ type RuntimeStatSampler struct {
 }
 
 // NewRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSampler {
+func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeStatSampler {
 	// Construct the build info metric. It is constant.
 	// We first build set the labels on the metadata.
 	info := build.GetInfo()
@@ -349,7 +349,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 
 	rsr := &RuntimeStatSampler{
 		clock:                    clock,
-		startTimeNanos:           clock.PhysicalNow(),
+		startTimeNanos:           clock.Now().UnixNano(),
 		initialNetCounters:       netCounters,
 		initialDiskCounters:      diskCounters,
 		CgoCalls:                 metric.NewGauge(metaCgoCalls),
@@ -512,7 +512,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	// Time statistics can be compared to the total elapsed time to create a
 	// useful percentage of total CPU usage, which would be somewhat less accurate
 	// if calculated later using downsampled time series data.
-	now := rsr.clock.PhysicalNow()
+	now := rsr.clock.Now().UnixNano()
 	dur := float64(now - rsr.last.now)
 	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
 	utime := userTimeMillis * 1e6
