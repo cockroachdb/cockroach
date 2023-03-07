@@ -340,3 +340,38 @@ query B
 SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
 ----
 false
+
+# This subtest makes sure that an unknown privilege in the system.privileges
+# table does not break code that is trying to look up other privileges.
+# This situation can happen if a new synthetic privilege is backported to an
+# older branch.
+subtest unknown_privilege
+
+statement ok
+INSERT INTO system.users VALUES ('node', NULL, true, 0);
+GRANT node TO root;
+
+statement ok
+UPDATE system.privileges SET privileges = '{FAKE_PRIVILEGE}'
+WHERE username = 'testuser' AND path = '/global/'
+
+query TTTTO
+SELECT * FROM system.privileges
+WHERE username = 'testuser' AND path = '/global/'
+----
+testuser  /global/  {FAKE_PRIVILEGE}  {}  102
+
+user testuser
+
+# The error shouldn't be related to FAKE_PRIVILEGE.
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting
+SET CLUSTER SETTING sql.defaults.default_int_size = 8
+
+user root
+
+statement ok
+REVOKE SYSTEM ALL FROM testuser;
+REVOKE node FROM root;
+DELETE FROM system.users WHERE username = 'node';
+
+subtest end

@@ -283,13 +283,16 @@ func PrivilegesFromBitFields(kindBits, grantOptionBits uint64, objectType Object
 
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.
 // We convert each string to uppercase and search for it in the ByName map.
-// If an entry is not found in ByName, an error is returned.
+// If an entry is not found in ByName, it is ignored.
 func ListFromStrings(strs []string) (List, error) {
 	ret := make(List, len(strs))
 	for i, s := range strs {
 		k, ok := ByName[strings.ToUpper(s)]
 		if !ok {
-			return nil, errors.Errorf("not a valid privilege: %q", s)
+			// Ignore an unknown privilege name. This is so that it is possible to
+			// backport new privileges onto older release branches, without causing
+			// mixed-version compatibility issues.
+			continue
 		}
 		ret[i] = k
 	}
