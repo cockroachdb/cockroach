@@ -2,7 +2,7 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "cockroach-go-testserver-22_2-master_test",
+    name = "cockroach-go-testserver-upgrade-to-master_test",
     size = "enormous",
     srcs = ["generated_test.go"],
     args = ["-test.timeout=3595s"],
