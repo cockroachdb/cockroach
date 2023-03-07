@@ -571,7 +571,12 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		return false
 	}
 
-	term, errt := r.raftLog.term(pr.Next - 1)
+	lastIndex, nextIndex := pr.Next-1, pr.Next
+	lastTerm, errt := r.raftLog.term(lastIndex)
+	if lastIndex != 0 && lastTerm == 0 && errt == nil {
+		errt = ErrCompacted
+	}
+
 	var ents []pb.Entry
 	var erre error
 	// In a throttled StateReplicate only send empty MsgApp, to ensure progress.
@@ -581,7 +586,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	// leader to send an append), allowing it to be acked or rejected, both of
 	// which will clear out Inflights.
 	if pr.State != tracker.StateReplicate || !pr.Inflights.Full() {
-		ents, erre = r.raftLog.entries(pr.Next, r.maxMsgSize)
+		ents, erre = r.raftLog.entries(nextIndex, r.maxMsgSize)
 	}
 
 	if len(ents) == 0 && !sendIfEmpty {
@@ -616,15 +621,15 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	}
 
 	// Send the actual MsgApp otherwise, and update the progress accordingly.
-	next := pr.Next // save Next for later, as the progress update can change it
-	if err := pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents)), next); err != nil {
+	if err := pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents)), nextIndex); err != nil {
 		r.logger.Panicf("%x: %v", r.id, err)
 	}
+	// NB: pr has been updated, but we make sure to only use its old values below.
 	r.send(pb.Message{
 		To:      to,
 		Type:    pb.MsgApp,
-		Index:   next - 1,
-		LogTerm: term,
+		Index:   lastIndex,
+		LogTerm: lastTerm,
 		Entries: ents,
 		Commit:  r.raftLog.committed,
 	})
