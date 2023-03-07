@@ -41,7 +41,6 @@ export function TransactionDetailsLink(
 
 export function StatementDetailsLink(
   insightDetails: StmtInsightEvent,
-  setTimeScale: (tw: TimeScale) => void,
 ): React.ReactElement {
   const linkProps = {
     statementFingerprintID: HexStringToInt64String(
@@ -50,18 +49,9 @@ export function StatementDetailsLink(
     appNames: [insightDetails.application],
     implicitTxn: insightDetails.implicitTxn,
   };
-  const timeScale: TimeScale = {
-    windowSize: moment.duration(insightDetails.elapsedTimeMillis),
-    fixedWindowEnd: insightDetails.endTime,
-    sampleSize: moment.duration(1, "hour"),
-    key: "Custom",
-  };
 
   return (
-    <Link
-      to={StatementLinkTarget(linkProps)}
-      onClick={() => setTimeScale(timeScale)}
-    >
+    <Link to={StatementLinkTarget(linkProps)}>
       <div>{String(insightDetails.statementFingerprintID)}</div>
     </Link>
   );

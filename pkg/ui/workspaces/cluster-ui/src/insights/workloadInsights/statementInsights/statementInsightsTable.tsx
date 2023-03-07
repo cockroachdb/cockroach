@@ -64,8 +64,7 @@ export function makeStatementInsightsColumns(
     {
       name: "statementFingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: StmtInsightEvent) =>
-        StatementDetailsLink(item, setTimeScale),
+      cell: (item: StmtInsightEvent) => StatementDetailsLink(item),
       sort: (item: StmtInsightEvent) => item.statementFingerprintID,
       showByDefault: true,
     },

@@ -61,7 +61,7 @@ export function makeInsightDetailsColumns(
       ),
       cell: (item: ContentionEvent) =>
         item.stmtInsightEvent
-          ? StatementDetailsLink(item.stmtInsightEvent, setTimeScale)
+          ? StatementDetailsLink(item.stmtInsightEvent)
           : item.waitingStmtFingerprintID,
       sort: (item: ContentionEvent) => item.waitingStmtFingerprintID,
     },

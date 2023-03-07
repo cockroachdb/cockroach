@@ -171,7 +171,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             />
             <SummaryCardItem
               label="Statement Fingerprint ID"
-              value={StatementDetailsLink(insightDetails, setTimeScale)}
+              value={StatementDetailsLink(insightDetails)}
             />
           </SummaryCard>
         </Col>
