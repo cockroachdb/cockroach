@@ -11,24 +11,11 @@
 import { combineReducers, createStore } from "redux";
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
-import {
-  StatementDiagnosticsState,
-  reducer as statementDiagnostics,
-} from "./statementDiagnostics";
 import { NodesState, reducer as nodes } from "./nodes";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { SessionsState, reducer as sessions } from "./sessions";
-import {
-  TerminateQueryState,
-  reducer as terminateQuery,
-} from "./terminateQuery";
-import { UIConfigState, reducer as uiConfig } from "./uiConfig";
 import { DOMAIN_NAME } from "./utils";
 import { SQLStatsState, reducer as sqlStats } from "./sqlStats";
-import {
-  SQLDetailsStatsReducerState,
-  reducer as sqlDetailsStats,
-} from "./statementDetails";
 import {
   IndexStatsReducerState,
   reducer as indexStats,
@@ -55,6 +42,20 @@ import {
   reducer as transactionInsightDetails,
   TransactionInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
+import {
+  reducer as sqlDetailsStats,
+  SQLDetailsStatsReducerState,
+} from "./statementDetails";
+import {
+  reducer as statementDiagnostics,
+  StatementDiagnosticsState,
+} from "./statementDiagnostics";
+import {
+  reducer as terminateQuery,
+  TerminateQueryState,
+} from "./terminateQuery";
+import { reducer as uiConfig, UIConfigState } from "./uiConfig";
+import { reducer as txnStats, TxnStatsState } from "./transactionStats";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -64,7 +65,8 @@ export type AdminUiState = {
   sessions: SessionsState;
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
-  sqlStats: SQLStatsState;
+  statements: SQLStatsState;
+  transactions: TxnStatsState;
   sqlDetailsStats: SQLDetailsStatsReducerState;
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
@@ -91,7 +93,8 @@ export const reducers = combineReducers<AdminUiState>({
   statementInsights,
   terminateQuery,
   uiConfig,
-  sqlStats,
+  statements: sqlStats,
+  transactions: txnStats,
   sqlDetailsStats,
   indexStats,
   jobs,
