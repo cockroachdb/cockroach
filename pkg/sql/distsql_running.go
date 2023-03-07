@@ -492,7 +492,8 @@ const clientRejectedMsg string = "client rejected when attempting to run DistSQL
 // to be closed.
 //
 // Args:
-// - txn is the transaction in which the plan will run. If nil, the different
+// - txn is the root transaction in which the plan will run (or will be used to
+// derive leaf transactions if the plan has concurrency). If nil, then different
 // processors are expected to manage their own internal transactions.
 // - evalCtx is the evaluation context in which the plan will run. It might be
 // mutated.
@@ -509,7 +510,7 @@ func (dsp *DistSQLPlanner) Run(
 	plan *PhysicalPlan,
 	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
-	finishedSetupFn func(),
+	finishedSetupFn func(localFlow flowinfra.Flow),
 ) (cleanup func()) {
 	cleanup = func() {}
 
@@ -532,6 +533,7 @@ func (dsp *DistSQLPlanner) Run(
 	// the line.
 	localState.EvalContext = &evalCtx.Context
 	localState.IsLocal = planCtx.isLocal
+	localState.MustUseLeaf = planCtx.mustUseLeafTxn
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	// If we have access to a planner and are currently being used to plan
@@ -701,7 +703,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if finishedSetupFn != nil {
-		finishedSetupFn()
+		finishedSetupFn(flow)
 	}
 
 	if planCtx.planner != nil && flow.IsVectorized() {
@@ -1389,7 +1391,26 @@ func (r *DistSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
-// PlanAndRunAll combines running the the main query, subqueries and cascades/checks.
+// getFinishedSetupFn returns a function to be passed into
+// DistSQLPlanner.PlanAndRun or DistSQLPlanner.Run when running an "outer" plan
+// that might create "inner" plans (e.g. apply join iterations). The returned
+// function updates the passed-in planner to make sure that the "inner" plans
+// use the LeafTxns if the "outer" plan happens to have concurrency. It also
+// returns a non-nil cleanup function that must be called once all plans (the
+// "outer" as well as all "inner" ones) are done.
+func getFinishedSetupFn(planner *planner) (finishedSetupFn func(flowinfra.Flow), cleanup func()) {
+	finishedSetupFn = func(localFlow flowinfra.Flow) {
+		if localFlow.GetFlowCtx().Txn.Type() == kv.LeafTxn {
+			atomic.StoreUint32(&planner.atomic.innerPlansMustUseLeafTxn, 1)
+		}
+	}
+	cleanup = func() {
+		atomic.StoreUint32(&planner.atomic.innerPlansMustUseLeafTxn, 0)
+	}
+	return finishedSetupFn, cleanup
+}
+
+// PlanAndRunAll combines running the main query, subqueries and cascades/checks.
 // If an error is returned, the connection needs to stop processing queries.
 // Query execution errors stored in recv; they are not returned.
 func (dsp *DistSQLPlanner) PlanAndRunAll(
@@ -1410,7 +1431,8 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 			// Skip the diagram generation since on this "main" query path we
 			// can get it via the statement bundle.
-			true, /* skipDistSQLDiagramGeneration */
+			true,  /* skipDistSQLDiagramGeneration */
+			false, /* mustUseLeafTxn */
 		) {
 			return recv.commErr
 		}
@@ -1418,8 +1440,10 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
+	finishedSetupFn, setupCleanup := getFinishedSetupFn(planner)
+	defer setupCleanup()
 	cleanup := dsp.PlanAndRun(
-		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv,
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, finishedSetupFn,
 	)
 	// Note that we're not cleaning up right away because postqueries might
 	// need to have access to the main query tree.
@@ -1452,6 +1476,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
 	skipDistSQLDiagramGeneration bool,
+	mustUseLeafTxn bool,
 ) bool {
 	for planIdx, subqueryPlan := range subqueryPlans {
 		if err := dsp.planAndRunSubquery(
@@ -1464,6 +1489,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			recv,
 			subqueryResultMemAcc,
 			skipDistSQLDiagramGeneration,
+			mustUseLeafTxn,
 		); err != nil {
 			recv.SetError(err)
 			// Usually we leave the closure of subqueries to occur when the
@@ -1495,6 +1521,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
 	skipDistSQLDiagramGeneration bool,
+	mustUseLeafTxn bool,
 ) error {
 	subqueryMonitor := mon.NewMonitor(
 		"subquery",
@@ -1518,10 +1545,10 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if distributeSubquery {
 		distribute = DistributionTypeAlways
 	}
-	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
-		distribute)
+	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	subqueryPlanCtx.stmtType = tree.Rows
 	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
+	subqueryPlanCtx.mustUseLeafTxn = mustUseLeafTxn
 	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
@@ -1557,7 +1584,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(&rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
+	defer cleanup()
+	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, finishedSetupFn)()
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
@@ -1679,6 +1708,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *kv.Txn,
 	plan planMaybePhysical,
 	recv *DistSQLReceiver,
+	finishedSetupFn func(localFlow flowinfra.Flow),
 ) (cleanup func()) {
 	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
@@ -1695,7 +1725,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	}
 	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	runCleanup := dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	runCleanup := dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 	return func() {
 		runCleanup()
 		physPlanCleanup()
@@ -1898,6 +1928,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryResultWriter := &errOnlyResultWriter{}
 	postqueryRecv.resultWriter = postqueryResultWriter
 	postqueryRecv.batchWriter = postqueryResultWriter
+	// Postqueries cannot have "inner" plans, so we use nil finishedSetupFn.
 	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	return postqueryRecv.resultWriter.Err()
 }
