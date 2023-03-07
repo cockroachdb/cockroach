@@ -1,0 +1,40 @@
+# Verify that we can maintain dispatches for:
+# - multiple nodes (n1 and n2 below, reading from one doesn't affect the
+#   other);
+# - multiple stores (s2 and s3 from n2 below, where dispatches are not
+#   coalesced);
+# - multiple priorities (high-pri and normal-pri for <n2,s3,r3> below, where
+#   dispatches are not coalesced);
+init
+----
+
+dispatch
+node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=4/20
+node=n2 range=r2 pri=normal-pri store=s2 up-to-log-position=5/20
+node=n2 range=r3 pri=normal-pri store=s3 up-to-log-position=5/21
+node=n2 range=r3 pri=high-pri   store=s3 up-to-log-position=5/22
+----
+
+pending-dispatch
+----
+node=n1
+node=n2
+
+pending-dispatch-for node=n1
+----
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=4/20
+
+pending-dispatch
+----
+node=n2
+
+pending-dispatch-for node=n2
+----
+range=r2 pri=normal-pri store=s2 up-to-log-position=log-position=5/20
+range=r3 pri=normal-pri store=s3 up-to-log-position=log-position=5/21
+range=r3 pri=high-pri store=s3 up-to-log-position=log-position=5/22
+
+pending-dispatch
+----
+
+# vim:ft=sh
