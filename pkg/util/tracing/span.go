@@ -479,6 +479,7 @@ func (sp *Span) RecordStructured(item Structured) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
+	sp.i.hasVerboseSink()
 	sp.i.RecordStructured(item)
 }
 

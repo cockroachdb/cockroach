@@ -51,7 +51,7 @@ func makeStatusLoadHandler(
 	})
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+		userTimeMillis, sysTimeMillis, err := status.GetProcCPUTime(ctx)
 		if err != nil {
 			// Just log but don't return an error to match the _status/vars metrics handler.
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)

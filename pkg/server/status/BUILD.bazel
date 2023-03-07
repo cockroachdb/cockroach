@@ -67,6 +67,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_elastic_gosigar//:gosigar",
+        "@com_github_shirou_gopsutil_v3//cpu",
         "@com_github_shirou_gopsutil_v3//net",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
