@@ -1472,10 +1472,10 @@ def go_deps():
         name = "com_github_cockroachdb_cockroach_go_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cockroach-go/v2",
-        sha256 = "c754ddca015e733515210f650389dd25f9efb3acc0a8309a6161474f5a1ac5eb",
-        strip_prefix = "github.com/cockroachdb/cockroach-go/v2@v2.2.20",
+        sha256 = "25cad5851ca08d3a7d29fe70efc112541ffe3cce4d27d9e59d5ca804558a36ea",
+        strip_prefix = "github.com/cockroachdb/cockroach-go/v2@v2.3.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.2.20.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.3.0.zip",
         ],
     )
     go_repository(
@@ -4836,6 +4836,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_jackc_pgx_v5",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jackc/pgx/v5",
+        sha256 = "e05b4284fb33e5c0c648b269070dedac6759711c411283177261228ab684f45f",
+        strip_prefix = "github.com/jackc/pgx/v5@v5.2.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.2.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_jackc_puddle",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jackc/puddle",
@@ -4843,6 +4853,16 @@ def go_deps():
         strip_prefix = "github.com/jackc/puddle@v1.2.1",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/puddle/com_github_jackc_puddle-v1.2.1.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_jackc_puddle_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jackc/puddle/v2",
+        sha256 = "73ea72b52d0a680442d535cf5d9a9713cb0803929c0b4a8e553eda47ee217c44",
+        strip_prefix = "github.com/jackc/puddle/v2@v2.1.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/puddle/v2/com_github_jackc_puddle_v2-v2.1.2.zip",
         ],
     )
     go_repository(
@@ -7464,10 +7484,10 @@ def go_deps():
         name = "com_github_rogpeppe_go_internal",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rogpeppe/go-internal",
-        sha256 = "d3d86854181b9fa008f294a1798d550337be44c8285dba9f2854f308d23931d2",
-        strip_prefix = "github.com/rogpeppe/go-internal@v1.8.1",
+        sha256 = "7d777908b9c91a1685f2d709550e6b7478e14e9c4699dffd7f0a150e36dbc7e9",
+        strip_prefix = "github.com/rogpeppe/go-internal@v1.9.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rogpeppe/go-internal/com_github_rogpeppe_go_internal-v1.8.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rogpeppe/go-internal/com_github_rogpeppe_go_internal-v1.9.0.zip",
         ],
     )
     go_repository(
@@ -7764,10 +7784,10 @@ def go_deps():
         name = "com_github_shopspring_decimal",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/shopspring/decimal",
-        sha256 = "7986d6c8489c4a55c077e3469a3c9a218f7ce4afbd25d68aa2b26a6ea5015438",
-        strip_prefix = "github.com/shopspring/decimal@v1.3.1",
+        sha256 = "65c34c248e7f736cadf03a7caa0c0870d15499eb593f933fe106c96c2b7699a7",
+        strip_prefix = "github.com/shopspring/decimal@v1.2.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shopspring/decimal/com_github_shopspring_decimal-v1.3.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shopspring/decimal/com_github_shopspring_decimal-v1.2.0.zip",
         ],
     )
     go_repository(
@@ -11214,10 +11234,10 @@ def go_deps():
         name = "org_uber_go_atomic",
         build_file_proto_mode = "disable_global",
         importpath = "go.uber.org/atomic",
-        sha256 = "6a1b34a0510c5d0d09f141b3afcd40e6500a2005f5f36578e29b5fc6dc64c24a",
-        strip_prefix = "go.uber.org/atomic@v1.9.0",
+        sha256 = "1a3a7303a5d7372db8184404b09f3142bf206e3a0001be468be2fc2540893d7a",
+        strip_prefix = "go.uber.org/atomic@v1.10.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.uber.org/atomic/org_uber_go_atomic-v1.9.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.uber.org/atomic/org_uber_go_atomic-v1.10.0.zip",
         ],
     )
     go_repository(

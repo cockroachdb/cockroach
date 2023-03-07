@@ -86,18 +86,9 @@ type TestClusterConfig struct {
 	// UseCockroachGoTestserver determines if the logictest uses the
 	// cockroach-go/testserver package to run the logic test.
 	// This allows us to do testing on different binary versions or to
-	// restart/upgrade nodes.
+	// restart/upgrade nodes. This always bootstraps with the predecessor version
+	// of the current commit, and upgrades to the current commit.
 	UseCockroachGoTestserver bool
-
-	// CockroachGoBootstrapVersion defines the version the cockroach-go/testserver
-	// is bootstrapped on for the logictest. It is required if
-	// UseCockroachGoTestserver is true.
-	CockroachGoBootstrapVersion string
-
-	// CockroachGoUpgradeVersion defines the version that the
-	// cockroach-go/testserver is upgraded to during the logictest. If one is not
-	// specified, it uses the local cockroach binary.
-	CockroachGoUpgradeVersion string
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -469,17 +460,9 @@ var LogicTestConfigs = []TestClusterConfig{
 		DeclarativeCorpusCollection: true,
 	},
 	{
-		Name:                        "cockroach-go-testserver-22.2-master",
-		UseCockroachGoTestserver:    true,
-		NumNodes:                    3,
-		CockroachGoBootstrapVersion: "v22.2.1",
-	},
-	{
-		Name:                        "cockroach-go-testserver-22.1-22.2",
-		UseCockroachGoTestserver:    true,
-		NumNodes:                    3,
-		CockroachGoBootstrapVersion: "v22.1.6",
-		CockroachGoUpgradeVersion:   "v22.2.1",
+		Name:                     "cockroach-go-testserver-upgrade-to-master",
+		UseCockroachGoTestserver: true,
+		NumNodes:                 3,
 	},
 }
 
