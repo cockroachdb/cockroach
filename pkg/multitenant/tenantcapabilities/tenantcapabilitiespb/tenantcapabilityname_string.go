@@ -12,12 +12,13 @@ func _() {
 	_ = x[CanViewNodeInfo-2]
 	_ = x[CanViewTSDBMetrics-3]
 	_ = x[TenantSpanConfigBounds-4]
-	_ = x[maxCapabilityName-4]
+	_ = x[ExemptFromRateLimiting-5]
+	_ = x[maxCapabilityName-5]
 }
 
-const _TenantCapabilityName_name = "can_admin_splitcan_view_node_infocan_view_tsdb_metricsspan_config_bounds"
+const _TenantCapabilityName_name = "can_admin_splitcan_view_node_infocan_view_tsdb_metricsspan_config_boundsexempt_from_rate_limiting"
 
-var _TenantCapabilityName_index = [...]uint8{0, 15, 33, 54, 72}
+var _TenantCapabilityName_index = [...]uint8{0, 15, 33, 54, 72, 97}
 
 func (i TenantCapabilityName) String() string {
 	i -= 1

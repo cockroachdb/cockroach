@@ -70,6 +70,10 @@ type Authorizer interface {
 	// HasTSDBQueryCapability returns an error if a tenant, referenced by its ID,
 	// is not allowed to query the TSDB for metrics.
 	HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error
+
+	// IsExemptFromRateLimiting returns true of the tenant should
+	// not be subject to rate limiting.
+	IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool
 }
 
 // Entry ties together a tenantID with its capabilities.

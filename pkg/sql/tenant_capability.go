@@ -25,9 +25,10 @@ import (
 )
 
 var capabilityTypes = map[tenantcapabilitiespb.TenantCapabilityName]*types.T{
-	tenantcapabilitiespb.CanAdminSplit:      types.Bool,
-	tenantcapabilitiespb.CanViewNodeInfo:    types.Bool,
-	tenantcapabilitiespb.CanViewTSDBMetrics: types.Bool,
+	tenantcapabilitiespb.CanAdminSplit:          types.Bool,
+	tenantcapabilitiespb.CanViewNodeInfo:        types.Bool,
+	tenantcapabilitiespb.CanViewTSDBMetrics:     types.Bool,
+	tenantcapabilitiespb.ExemptFromRateLimiting: types.Bool,
 }
 
 const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
@@ -177,6 +178,20 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 					}
 				}
 				dst.CanViewTSDBMetrics = b
+			}
+
+		case tenantcapabilitiespb.ExemptFromRateLimiting:
+			if n.n.IsRevoke {
+				dst.ExemptFromRateLimiting = false
+			} else {
+				b := true
+				if typedExpr != nil {
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
+					if err != nil {
+						return err
+					}
+				}
+				dst.ExemptFromRateLimiting = b
 			}
 
 		default:

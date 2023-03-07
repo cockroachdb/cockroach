@@ -119,7 +119,6 @@ id  active  name                  data_state  service_mode  crdb_internal.pb_to_
 5   false   NULL                  2           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "my-new-tenant-name", "tenantReplicationJobId": "0"}
 10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
-
 # Try to recreate an existing tenant.
 # GC job for tenant 5 has not run yet.
 query error pgcode 42710 a tenant with ID 5 or with name "tenant-5" already exists
