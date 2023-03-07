@@ -315,7 +315,7 @@ func (b *Builder) buildCTE(
 	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.
-		cteScope := b.buildSetOp(tree.UnionOp, false /* all */, inScope, initialScope, recursiveScope)
+		cteScope := b.buildSetOp(tree.UnionOp, isUnionAll, inScope, initialScope, recursiveScope)
 		return cteScope.expr, b.getCTECols(cteScope, cte.Name), nil
 	}
 
