@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -99,10 +100,16 @@ func TestMetadata(t *testing.T) {
 	}
 
 	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
-	depsUpToDate, err := md.CheckDependencies(context.Background(), testCat)
+	depsUpToDate, err := md.CheckDependencies(context.Background(), &evalCtx, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
 	}
+
+	udfName := tree.MakeQualifiedFunctionName("t", "public", "udf")
+	md.AddUserDefinedFunction(
+		&tree.Overload{Oid: catid.FuncIDToOID(1111)},
+		udfName.ToUnresolvedObjectName(),
+	)
 
 	// Call CopyFrom and verify that same objects are present in new metadata.
 	expr := &memo.ProjectExpr{}
@@ -165,6 +172,13 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 
+	newUDFDeps, oldUDFDeps := mdNew.TestingUDFDeps(), md.TestingUDFDeps()
+	for id, overload := range oldUDFDeps {
+		if newUDFDeps[id] != overload {
+			t.Fatalf("expected UDF dependency to be copied")
+		}
+	}
+
 	newNamesByID, oldNamesByID := mdNew.TestingObjectRefsByName(), md.TestingObjectRefsByName()
 	for id, names := range oldNamesByID {
 		newNames := newNamesByID[id]
@@ -182,7 +196,7 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 
-	depsUpToDate, err = md.CheckDependencies(context.Background(), testCat)
+	depsUpToDate, err = md.CheckDependencies(context.Background(), &evalCtx, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
 	}
