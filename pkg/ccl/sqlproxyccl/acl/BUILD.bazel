@@ -2,13 +2,15 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "denylist",
+    name = "acl",
     srcs = [
+        "access_control.go",
+        "allowlist.go",
         "denylist.go",
         "file.go",
         "watcher.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist",
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
@@ -21,13 +23,13 @@ go_library(
 )
 
 go_test(
-    name = "denylist_test",
+    name = "acl_test",
     srcs = [
         "file_test.go",
         "watcher_test.go",
     ],
     args = ["-test.timeout=295s"],
-    embed = [":denylist"],
+    embed = [":acl"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",
