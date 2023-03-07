@@ -385,14 +385,12 @@ func (r *Replica) leasePostApplyLocked(
 		}
 	}
 
-	// Potentially re-gossip if the range contains system data (e.g. system
-	// config or node liveness). We need to perform this gossip at startup as
-	// soon as possible. Trying to minimize how often we gossip is a fool's
-	// errand. The node liveness info will be gossiped frequently (every few
-	// seconds) in any case due to the liveness heartbeats. And the system config
-	// will be gossiped rarely because it falls on a range with an epoch-based
-	// range lease that is only reacquired extremely infrequently.
-	if iAmTheLeaseHolder {
+	// Potentially re-gossip if the range contains node liveness data. We need to
+	// perform this gossip at startup as soon as possible. We also need to perform
+	// this gossip if we're taking over after a leaseholder failure. In both cases,
+	// incremental liveness updates may have been lost, so we want to make sure that
+	// the latest view of node liveness ends up in gossip.
+	if leaseChangingHands && iAmTheLeaseHolder {
 		// NB: run these in an async task to keep them out of the critical section
 		// (r.mu is held here).
 		_ = r.store.stopper.RunAsyncTask(r.AnnotateCtx(context.Background()), "lease-triggers", func(ctx context.Context) {
