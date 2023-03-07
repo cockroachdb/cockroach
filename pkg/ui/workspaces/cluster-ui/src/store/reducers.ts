@@ -63,6 +63,7 @@ import {
   reducer as statementFingerprintInsights,
   StatementFingerprintInsightsCachedState,
 } from "./insights/statementFingerprintInsights";
+import { reducer as txnStats, TxnStatsState } from "./transactionStats";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -72,7 +73,8 @@ export type AdminUiState = {
   sessions: SessionsState;
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
-  sqlStats: SQLStatsState;
+  statements: SQLStatsState;
+  transactions: TxnStatsState;
   sqlDetailsStats: SQLDetailsStatsReducerState;
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
@@ -101,7 +103,8 @@ export const reducers = combineReducers<AdminUiState>({
   txnInsights,
   terminateQuery,
   uiConfig,
-  sqlStats,
+  statements: sqlStats,
+  transactions: txnStats,
   sqlDetailsStats,
   indexStats,
   jobs,
