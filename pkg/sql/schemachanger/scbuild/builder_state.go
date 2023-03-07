@@ -690,6 +690,7 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 	{
 		b.ensureDescriptor(id)
 		c := b.descCache[id]
+		b.resolveBackReferences(c)
 		c.backrefs.ForEach(ids.Add)
 		c.backrefs.ForEach(b.ensureDescriptor)
 		for i := range b.output {
@@ -1132,6 +1133,57 @@ func (b *builderState) newCachedDescForNewDesc() *cachedDesc {
 	}
 }
 
+// resolveBackReferences resolves any back references that will take
+// additional look ups. This type of scan operation is expensive, so
+// limit to when its actually needed.
+func (b *builderState) resolveBackReferences(c *cachedDesc) {
+	// Already resolved, no need for extra work.
+	if c.backrefsResolved {
+		return
+	}
+	// Name prefix and namespace lookups.
+	switch d := c.desc.(type) {
+	case catalog.DatabaseDescriptor:
+		if !d.HasPublicSchemaWithDescriptor() {
+			panic(scerrors.NotImplementedErrorf(nil, /* n */
+				"database %q (%d) with a descriptorless public schema",
+				d.GetName(), d.GetID()))
+		}
+		// Handle special case of database children, which may include temporary
+		// schemas, which aren't explicitly referenced in the database's schemas
+		// map.
+		childSchemas := b.cr.GetAllSchemasInDatabase(b.ctx, d)
+		_ = childSchemas.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			sc, err := catalog.AsSchemaDescriptor(desc)
+			if err != nil {
+				panic(err)
+			}
+			switch sc.SchemaKind() {
+			case catalog.SchemaVirtual:
+				return nil
+			case catalog.SchemaTemporary:
+				b.tempSchemas[sc.GetID()] = sc
+			}
+			c.backrefs.Add(sc.GetID())
+			return nil
+		})
+	case catalog.SchemaDescriptor:
+		b.ensureDescriptor(c.desc.GetParentID())
+		db := b.descCache[c.desc.GetParentID()].desc
+		// Handle special case of schema children, which have to be added to
+		// the back-referenced ID set but which aren't explicitly referenced in
+		// the schema descriptor itself.
+		objects := b.cr.GetAllObjectsInSchema(b.ctx, db.(catalog.DatabaseDescriptor), d)
+		_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			c.backrefs.Add(desc.GetID())
+			return nil
+		})
+	default:
+		// These are always done
+	}
+	c.backrefsResolved = true
+}
+
 func (b *builderState) ensureDescriptor(id catid.DescID) {
 	if _, found := b.descCache[id]; found {
 		return
@@ -1162,44 +1214,14 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn,
 		b.commentGetter, b.zoneConfigReader, b.evalCtx.Settings.Version.ActiveVersion(b.ctx))
 	// Name prefix and namespace lookups.
-	switch d := c.desc.(type) {
+	switch c.desc.(type) {
 	case catalog.DatabaseDescriptor:
-		if !d.HasPublicSchemaWithDescriptor() {
-			panic(scerrors.NotImplementedErrorf(nil, /* n */
-				"database %q (%d) with a descriptorless public schema",
-				d.GetName(), d.GetID()))
-		}
-		// Handle special case of database children, which may include temporary
-		// schemas, which aren't explicitly referenced in the database's schemas
-		// map.
-		childSchemas := b.cr.GetAllSchemasInDatabase(b.ctx, d)
-		_ = childSchemas.ForEachDescriptor(func(desc catalog.Descriptor) error {
-			sc, err := catalog.AsSchemaDescriptor(desc)
-			if err != nil {
-				panic(err)
-			}
-			switch sc.SchemaKind() {
-			case catalog.SchemaVirtual:
-				return nil
-			case catalog.SchemaTemporary:
-				b.tempSchemas[sc.GetID()] = sc
-			}
-			c.backrefs.Add(sc.GetID())
-			return nil
-		})
+		// Nothing to do here.
 	case catalog.SchemaDescriptor:
 		b.ensureDescriptor(c.desc.GetParentID())
 		db := b.descCache[c.desc.GetParentID()].desc
 		c.prefix.CatalogName = tree.Name(db.GetName())
 		c.prefix.ExplicitCatalog = true
-		// Handle special case of schema children, which have to be added to
-		// the back-referenced ID set but which aren't explicitly referenced in
-		// the schema descriptor itself.
-		objects := b.cr.GetAllObjectsInSchema(b.ctx, db.(catalog.DatabaseDescriptor), d)
-		_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
-			c.backrefs.Add(desc.GetID())
-			return nil
-		})
 	default:
 		b.ensureDescriptor(c.desc.GetParentID())
 		db := b.descCache[c.desc.GetParentID()].desc

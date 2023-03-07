@@ -1195,37 +1195,6 @@ func FindNamespace(b ElementStatusIterator) (current Status, target TargetStatus
 	return current, target, element
 }
 
-func (e ObjectParent) element() {}
-
-// ForEachObjectParent iterates over elements of type ObjectParent.
-func ForEachObjectParent(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ObjectParent),
-) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ObjectParent); ok {
-			fn(current, target, elt)
-		}
-	})
-}
-
-// FindObjectParent finds the first element of type ObjectParent.
-func FindObjectParent(b ElementStatusIterator) (current Status, target TargetStatus, element *ObjectParent) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ObjectParent); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
-	return current, target, element
-}
-
 func (e Owner) element() {}
 
 // ForEachOwner iterates over elements of type Owner.
@@ -1342,6 +1311,37 @@ func FindSchema(b ElementStatusIterator) (current Status, target TargetStatus, e
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Schema); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e SchemaChild) element() {}
+
+// ForEachSchemaChild iterates over elements of type SchemaChild.
+func ForEachSchemaChild(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaChild),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*SchemaChild); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindSchemaChild finds the first element of type SchemaChild.
+func FindSchemaChild(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaChild) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*SchemaChild); ok {
 			element = elt
 			current = c
 			target = t

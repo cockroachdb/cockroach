@@ -28,6 +28,7 @@ DROP INDEX idx CASCADE
 begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
+getting all objects in schema: 101
 increment telemetry for sql.schema.drop_index
 write *eventpb.DropIndex to event log:
   indexName: idx

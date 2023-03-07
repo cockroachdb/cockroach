@@ -18,6 +18,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
+getting all objects in schema: 105
 write *eventpb.DropDatabase to event log:
   databaseName: multi_region_test_db
   droppedSchemaObjects:

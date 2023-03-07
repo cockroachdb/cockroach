@@ -51,9 +51,9 @@ func qualifiedName(b BuildCtx, id catid.DescID) string {
 func qualifiedFunctionName(b BuildCtx, id catid.DescID) string {
 	elts := b.QueryByID(id)
 	_, _, fnName := scpb.FindFunctionName(elts)
-	_, _, objParent := scpb.FindObjectParent(elts)
-	_, _, scName := scpb.FindNamespace(b.QueryByID(objParent.ParentSchemaID))
-	_, _, scParent := scpb.FindSchemaParent(b.QueryByID(objParent.ParentSchemaID))
+	_, _, objParent := scpb.FindSchemaChild(elts)
+	_, _, scName := scpb.FindNamespace(b.QueryByID(objParent.SchemaID))
+	_, _, scParent := scpb.FindSchemaParent(b.QueryByID(objParent.SchemaID))
 	_, _, dbName := scpb.FindNamespace(b.QueryByID(scParent.ParentDatabaseID))
 	return dbName.Name + "." + scName.Name + "." + fnName.Name
 }
@@ -209,8 +209,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		switch t := e.(type) {
 		case *scpb.SchemaParent:
 			dropCascadeDescriptor(next, t.SchemaID)
-		case *scpb.ObjectParent:
-			dropCascadeDescriptor(next, t.ObjectID)
+		case *scpb.SchemaChild:
+			dropCascadeDescriptor(next, t.ChildObjectID)
 		case *scpb.View:
 			dropCascadeDescriptor(next, t.ViewID)
 		case *scpb.Sequence:

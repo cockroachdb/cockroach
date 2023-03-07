@@ -87,9 +87,9 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 110
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 110
+    schemaId: 101
   Status: PUBLIC
 - FunctionName:
     functionId: 110

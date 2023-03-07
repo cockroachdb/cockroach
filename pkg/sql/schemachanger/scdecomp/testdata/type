@@ -53,9 +53,9 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 104
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
   Status: PUBLIC
 - EnumTypeValue:
     logicalRepresentation: hello
@@ -603,9 +603,9 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 108
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 108
+    schemaId: 101
   Status: PUBLIC
 
 setup
@@ -660,9 +660,9 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 109
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 109
+    schemaId: 101
   Status: PUBLIC
 - CompositeTypeAttrType:
     closedTypeIds: []
@@ -1450,7 +1450,7 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 111
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 111
+    schemaId: 101
   Status: PUBLIC

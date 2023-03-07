@@ -42,7 +42,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • Table:{DescID: 108}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 105}
+│       │   ├── • SchemaChild:{DescID: 108, ReferencedDescID: 105}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
@@ -252,7 +252,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │   │   ├── • Table:{DescID: 108}
 │   │   │   │     DROPPED → PUBLIC
 │   │   │   │
-│   │   │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 105}
+│   │   │   ├── • SchemaChild:{DescID: 108, ReferencedDescID: 105}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
 │   │   │   ├── • TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
@@ -333,7 +333,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • Table:{DescID: 108}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 105}
+│       │   ├── • SchemaChild:{DescID: 108, ReferencedDescID: 105}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
@@ -658,7 +658,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
         │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 108}
         │   │   │     rule: "descriptor dropped in transaction before removal"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 108, ReferencedDescID: 105}
+        │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 108, ReferencedDescID: 105}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}

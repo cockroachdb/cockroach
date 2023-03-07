@@ -124,8 +124,8 @@ message ElementProto {
   SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
   SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
 
-  // Object elements.
-  ObjectParent object_parent = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
+  // SchemaChild elements.
+  SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
 
   // Enum type elements.
   EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
@@ -286,12 +286,12 @@ message SchemaParent {
   uint32 parent_database_id = 2 [(gogoproto.customname) = "ParentDatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
-// ObjectParent is like SchemaParent but for objects.
+// SchemaChild is like SchemaParent but for objects.
 // This is a bit useless since schemas don't maintain a set of back-references
 // to their children. Still, it exists as a convenient join relation.
-message ObjectParent {
-  uint32 object_id = 1 [(gogoproto.customname) = "ObjectID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 parent_schema_id = 2 [(gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+message SchemaChild {
+  uint32 child_object_id = 1 [(gogoproto.customname) = "ChildObjectID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 schema_id = 2 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message Sequence {

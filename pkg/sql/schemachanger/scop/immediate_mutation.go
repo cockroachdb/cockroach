@@ -757,7 +757,7 @@ type UpdateFunctionRelationReferences struct {
 
 type SetObjectParentID struct {
 	immediateMutationOp
-	ObjParent scpb.ObjectParent
+	ObjParent scpb.SchemaChild
 }
 
 type UpdateUserPrivileges struct {

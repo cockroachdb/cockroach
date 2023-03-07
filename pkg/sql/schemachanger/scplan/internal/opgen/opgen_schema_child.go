@@ -17,12 +17,12 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.ObjectParent)(nil),
+	opRegistry.register((*scpb.SchemaChild)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ObjectParent) *scop.SetObjectParentID {
-					op := protoutil.Clone(this).(*scpb.ObjectParent)
+				emit(func(this *scpb.SchemaChild) *scop.SetObjectParentID {
+					op := protoutil.Clone(this).(*scpb.SchemaChild)
 					return &scop.SetObjectParentID{ObjParent: *op}
 				}),
 			),
@@ -32,10 +32,10 @@ func init() {
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
-				emit(func(this *scpb.ObjectParent) *scop.RemoveObjectParent {
+				emit(func(this *scpb.SchemaChild) *scop.RemoveObjectParent {
 					return &scop.RemoveObjectParent{
-						ObjectID:       this.ObjectID,
-						ParentSchemaID: this.ParentSchemaID,
+						ObjectID:       this.ChildObjectID,
+						ParentSchemaID: this.SchemaID,
 					}
 				}),
 			),
