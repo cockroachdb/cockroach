@@ -319,7 +319,7 @@ func (b *Builder) buildScalar(
 		} else {
 			left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 			right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
-			out = b.constructComparison(t, left, right)
+			out = b.constructComparison(t.Operator, left, right)
 		}
 
 	case *tree.DTuple:
@@ -929,39 +929,46 @@ func (b *Builder) checkSubqueryOuterCols(
 }
 
 func (b *Builder) constructComparison(
-	cmp *tree.ComparisonExpr, left, right opt.ScalarExpr,
+	cmp treecmp.ComparisonOperator, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
-	switch cmp.Operator.Symbol {
-	case treecmp.EQ:
+	op := opt.ComparisonOpMap[cmp.Symbol]
+	return b.constructComparisonWithOp(op, left, right)
+}
+
+func (b *Builder) constructComparisonWithOp(
+	op opt.Operator, left, right opt.ScalarExpr,
+) opt.ScalarExpr {
+	switch op {
+	case opt.EqOp:
 		return b.factory.ConstructEq(left, right)
-	case treecmp.LT:
+	case opt.LtOp:
 		return b.factory.ConstructLt(left, right)
-	case treecmp.GT:
+	case opt.GtOp:
 		return b.factory.ConstructGt(left, right)
-	case treecmp.LE:
+	case opt.LeOp:
 		return b.factory.ConstructLe(left, right)
-	case treecmp.GE:
+	case opt.GeOp:
 		return b.factory.ConstructGe(left, right)
-	case treecmp.NE:
+	case opt.NeOp:
 		return b.factory.ConstructNe(left, right)
-	case treecmp.In:
+	case opt.InOp:
 		return b.factory.ConstructIn(left, right)
-	case treecmp.NotIn:
+	case opt.NotInOp:
 		return b.factory.ConstructNotIn(left, right)
-	case treecmp.Like:
+	case opt.LikeOp:
 		return b.factory.ConstructLike(left, right)
-	case treecmp.NotLike:
+	case opt.NotLikeOp:
 		return b.factory.ConstructNotLike(left, right)
-	case treecmp.ILike:
+	case opt.ILikeOp:
 		return b.factory.ConstructILike(left, right)
-	case treecmp.NotILike:
+	case opt.NotILikeOp:
 		return b.factory.ConstructNotILike(left, right)
-	case treecmp.SimilarTo:
+	case opt.SimilarToOp:
 		return b.factory.ConstructSimilarTo(left, right)
-	case treecmp.NotSimilarTo:
+	case opt.NotSimilarToOp:
 		return b.factory.ConstructNotSimilarTo(left, right)
-	case treecmp.RegMatch:
-		leftFam, rightFam := cmp.Op.LeftType.Family(), cmp.Op.RightType.Family()
+	case opt.RegMatchOp, opt.BBoxCoversOp:
+		leftFam, rightFam := left.DataType().Family(), right.DataType().Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
 			// The ~ operator means "covers" when used with geometry or bounding box
@@ -969,28 +976,28 @@ func (b *Builder) constructComparison(
 			return b.factory.ConstructBBoxCovers(left, right)
 		}
 		return b.factory.ConstructRegMatch(left, right)
-	case treecmp.NotRegMatch:
+	case opt.NotRegMatchOp:
 		return b.factory.ConstructNotRegMatch(left, right)
-	case treecmp.RegIMatch:
+	case opt.RegIMatchOp:
 		return b.factory.ConstructRegIMatch(left, right)
-	case treecmp.NotRegIMatch:
+	case opt.NotRegIMatchOp:
 		return b.factory.ConstructNotRegIMatch(left, right)
-	case treecmp.IsDistinctFrom:
+	case opt.IsNotOp:
 		return b.factory.ConstructIsNot(left, right)
-	case treecmp.IsNotDistinctFrom:
+	case opt.IsOp:
 		return b.factory.ConstructIs(left, right)
-	case treecmp.Contains:
+	case opt.ContainsOp:
 		return b.factory.ConstructContains(left, right)
-	case treecmp.ContainedBy:
+	case opt.ContainedByOp:
 		return b.factory.ConstructContainedBy(left, right)
-	case treecmp.JSONExists:
+	case opt.JsonExistsOp:
 		return b.factory.ConstructJsonExists(left, right)
-	case treecmp.JSONAllExists:
+	case opt.JsonAllExistsOp:
 		return b.factory.ConstructJsonAllExists(left, right)
-	case treecmp.JSONSomeExists:
+	case opt.JsonSomeExistsOp:
 		return b.factory.ConstructJsonSomeExists(left, right)
-	case treecmp.Overlaps:
-		leftFam, rightFam := cmp.Op.LeftType.Family(), cmp.Op.RightType.Family()
+	case opt.OverlapsOp, opt.BBoxIntersectsOp:
+		leftFam, rightFam := left.DataType().Family(), right.DataType().Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
 			// The && operator means "intersects" when used with geometry or bounding
@@ -998,10 +1005,10 @@ func (b *Builder) constructComparison(
 			return b.factory.ConstructBBoxIntersects(left, right)
 		}
 		return b.factory.ConstructOverlaps(left, right)
-	case treecmp.TSMatches:
+	case opt.TSMatchesOp:
 		return b.factory.ConstructTSMatches(left, right)
 	}
-	panic(errors.AssertionFailedf("unhandled comparison operator: %s", redact.Safe(cmp.Operator)))
+	panic(errors.AssertionFailedf("unhandled comparison operator: %s", redact.Safe(op)))
 }
 
 func (b *Builder) constructBinary(
