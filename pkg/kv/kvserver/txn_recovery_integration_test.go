@@ -371,12 +371,12 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	queryIntent := queryIntentArgs(keyA, txn.TxnMeta, false)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{}, &queryIntent)
 	require.Nil(t, pErr, "error: %s", pErr)
-	require.True(t, reply.(*kvpb.QueryIntentResponse).FoundIntent, "intent missing for %q", keyA)
+	require.True(t, reply.(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp, "intent missing for %q", keyA)
 
 	queryIntent = queryIntentArgs(keyB, txn.TxnMeta, false)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{}, &queryIntent)
 	require.Nil(t, pErr, "error: %s", pErr)
-	require.True(t, reply.(*kvpb.QueryIntentResponse).FoundIntent, "intent missing for %q", keyB)
+	require.True(t, reply.(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp, "intent missing for %q", keyB)
 
 	// Call ClearRange covering key B and its intent.
 	clearRange := clearRangeArgs(clearFrom, clearTo)

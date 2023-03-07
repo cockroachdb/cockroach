@@ -279,7 +279,7 @@ func (r *Replica) updateTimestampCache(
 					missing = t.Reason == kvpb.RETRY_SERIALIZABLE
 				}
 			} else {
-				missing = !resp.(*kvpb.QueryIntentResponse).FoundIntent
+				missing = !resp.(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp
 			}
 			if missing {
 				// If the QueryIntent determined that the intent is missing

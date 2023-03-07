@@ -59,17 +59,22 @@ func TestQueryIntent(t *testing.T) {
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 10)))
 	evalCtx := &MockEvalCtx{ClusterSettings: st, Clock: clock}
 
-	// Since we can't move the intents clock after they are written, created
-	// cloned transactions with the clock shifted instead.
+	// Since we can't move the intents timestamp after they are written, created
+	// cloned transactions with the timestamp shifted instead.
 	txABack := *txA.Clone()
 	txAForward := *txA.Clone()
 	txABack.WriteTimestamp = txABack.WriteTimestamp.Add(-2, 0)
 	txAForward.WriteTimestamp = txAForward.WriteTimestamp.Add(20, 0)
 
-	type Success struct{}
-	type NotFound struct{}
-	success := Success{}
-	notFound := NotFound{}
+	type response int
+	const (
+		_ response = iota
+		expAssertionError
+		expIntentMissingError
+		expNotFound
+		expFoundIntentMatchingTxn
+		expFoundIntentMatchingTxnAndTimestamp
+	)
 
 	tests := []struct {
 		name           string
@@ -77,41 +82,39 @@ func TestQueryIntent(t *testing.T) {
 		argTransaction roachpb.Transaction
 		key            roachpb.Key
 		errorFlag      bool
-		response       interface{}
+		resp           response
 	}{
 		// Perform standard reading of all three keys.
-		{"readA", txA, txA, keyA, true, success},
-		{"readAA", txAA, txAA, keyAA, true, success},
-		{"readB", txB, txB, keyB, true, success},
-
-		{"readC", txA, txA, keyC, true, &kvpb.IntentMissingError{}},
+		{"readA", txA, txA, keyA, true, expFoundIntentMatchingTxnAndTimestamp},
+		{"readAA", txAA, txAA, keyAA, true, expFoundIntentMatchingTxnAndTimestamp},
+		{"readB", txB, txB, keyB, true, expFoundIntentMatchingTxnAndTimestamp},
+		{"readC", txA, txA, keyC, true, expIntentMissingError},
 
 		// This tries reading a different key than this tx was written with. The
 		// returned error depends on the error flag setting.
-		{"wrongTxE", txA, txA, keyB, true, &kvpb.IntentMissingError{}},
-		{"wrongTx", txA, txA, keyB, false, notFound},
+		{"wrongTxErr", txA, txA, keyB, true, expIntentMissingError},
+		{"wrongTx", txA, txA, keyB, false, expNotFound},
 
 		// This sets a mismatch for transactions in the header and the body. An
 		// error is returned regardless of the errorFlag.
-		{"mismatchTxE", txA, txB, keyA, true, errors.AssertionFailedf("")},
-		{"mismatchTx", txA, txB, keyA, false, errors.AssertionFailedf("")},
+		{"mismatchTxErr", txA, txB, keyA, true, expAssertionError},
+		{"mismatchTx", txA, txB, keyA, false, expAssertionError},
 
-		// This simulates pushed intents by moving the tx clock backwards in time.
-		// An error is only returned if the error flag is set.
-		{"clockBackE", txABack, txABack, keyA, true, &kvpb.TransactionRetryError{}},
-		{"clockBack", txABack, txABack, keyA, false, notFound},
+		// This simulates pushed intents by moving the tx timestamp backwards in time.
+		// An error is not returned, regardless of the error flag.
+		{"timestampBackErr", txABack, txABack, keyA, true, expFoundIntentMatchingTxn},
+		{"timestampBack", txABack, txABack, keyA, false, expFoundIntentMatchingTxn},
 
-		// This simulates pushed transactions by moving the tx clock forward in time.
-		{"clockFwd", txAForward, txAForward, keyA, true, success},
+		// This simulates pushed transactions by moving the tx timestamp forward in time.
+		// In two of the cases, the header timestamp leads the argument's timestamp.
+		{"timestampFwd", txAForward, txAForward, keyA, true, expFoundIntentMatchingTxnAndTimestamp},
+		{"timestampFwdHeaderAhead", txAForward, txA, keyA, true, expFoundIntentMatchingTxnAndTimestamp},
+		{"timestampEqualHeaderAhead", txA, txABack, keyA, true, expFoundIntentMatchingTxnAndTimestamp},
 
 		// This simulates a mismatch in the header and arg write timestamps. This is
 		// always an error regardless of flag.
-		{"mismatchTxClockE", txA, txAForward, keyA, true, errors.AssertionFailedf("")},
-		{"mismatchTxClock", txA, txAForward, keyA, false, errors.AssertionFailedf("")},
-
-		// It is OK if the time on the arg transaction is moved backwards, its
-		// unclear if this happens in practice.
-		{"mismatchTxClock", txA, txABack, keyA, true, success},
+		{"headerBehindErr", txA, txAForward, keyA, true, expAssertionError},
+		{"headerBehind", txA, txAForward, keyA, false, expAssertionError},
 	}
 
 	for _, test := range tests {
@@ -127,16 +130,39 @@ func TestQueryIntent(t *testing.T) {
 			cArgs.EvalCtx = evalCtx.EvalContext()
 			var resp kvpb.QueryIntentResponse
 			_, err := QueryIntent(ctx, db, cArgs, &resp)
-			switch test.response {
-			case success:
-				require.NoError(t, err)
-				require.True(t, resp.FoundIntent)
-			case notFound:
-				require.NoError(t, err)
-				require.False(t, resp.FoundIntent)
+			switch test.resp {
+			case expAssertionError:
+				require.NotNil(t, err)
+				require.IsType(t, errors.AssertionFailedf(""), err)
+				require.False(t, resp.FoundIntentMatchingTxn)
+				require.False(t, resp.FoundIntentMatchingTxnAndTimestamp)
+				require.Nil(t, resp.Txn)
+			case expIntentMissingError:
+				require.NotNil(t, err)
+				require.IsType(t, &kvpb.IntentMissingError{}, err)
+				require.False(t, resp.FoundIntentMatchingTxn)
+				require.False(t, resp.FoundIntentMatchingTxnAndTimestamp)
+				require.Nil(t, resp.Txn)
+			case expNotFound:
+				require.Nil(t, err)
+				require.False(t, resp.FoundIntentMatchingTxn)
+				require.False(t, resp.FoundIntentMatchingTxnAndTimestamp)
+				require.Nil(t, resp.Txn)
+			case expFoundIntentMatchingTxn:
+				require.Nil(t, err)
+				require.True(t, resp.FoundIntentMatchingTxn)
+				require.False(t, resp.FoundIntentMatchingTxnAndTimestamp)
+				// If the intent was found but was pushed, the response also carries the
+				// updated write timestamp.
+				require.NotNil(t, resp.Txn)
+				require.True(t, test.hTransaction.WriteTimestamp.Less(resp.Txn.WriteTimestamp))
+			case expFoundIntentMatchingTxnAndTimestamp:
+				require.Nil(t, err)
+				require.True(t, resp.FoundIntentMatchingTxn)
+				require.True(t, resp.FoundIntentMatchingTxnAndTimestamp)
+				require.Nil(t, resp.Txn)
 			default:
-				require.IsType(t, test.response, err, "received %v", err)
-				require.False(t, resp.FoundIntent)
+				t.Fatalf("unexpected response: %v", test.resp)
 			}
 		})
 	}

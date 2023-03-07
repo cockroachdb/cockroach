@@ -6053,7 +6053,8 @@ func TestQueryIntentRequest(t *testing.T) {
 			key []byte,
 			txnMeta enginepb.TxnMeta,
 			baTxn *roachpb.Transaction,
-			expectIntent bool,
+			expectMatchingTxn bool,
+			expectMatchingTxnAndTimestamp bool,
 		) {
 			t.Helper()
 			var h kvpb.Header
@@ -6063,8 +6064,8 @@ func TestQueryIntentRequest(t *testing.T) {
 				h.Timestamp = txnMeta.WriteTimestamp
 			}
 			qiArgs := queryIntentArgs(key, txnMeta, errIfMissing)
-			qiRes, pErr := tc.SendWrappedWith(h, &qiArgs)
-			if errIfMissing && !expectIntent {
+			res, pErr := tc.SendWrappedWith(h, &qiArgs)
+			if errIfMissing && !expectMatchingTxn {
 				ownIntent := baTxn != nil
 				if ownIntent && txnMeta.WriteTimestamp.Less(txn.WriteTimestamp) {
 					if _, ok := pErr.GetDetail().(*kvpb.TransactionRetryError); !ok {
@@ -6076,34 +6077,32 @@ func TestQueryIntentRequest(t *testing.T) {
 					}
 				}
 			} else {
-				if pErr != nil {
-					t.Fatal(pErr)
-				}
-				if e, a := expectIntent, qiRes.(*kvpb.QueryIntentResponse).FoundIntent; e != a {
-					t.Fatalf("expected FoundIntent=%t but FoundIntent=%t", e, a)
-				}
+				require.Nil(t, pErr)
+				qiRes := res.(*kvpb.QueryIntentResponse)
+				require.Equal(t, expectMatchingTxn, qiRes.FoundIntentMatchingTxn)
+				require.Equal(t, expectMatchingTxnAndTimestamp, qiRes.FoundIntentMatchingTxnAndTimestamp)
 			}
 		}
 
 		for i, baTxn := range []*roachpb.Transaction{nil, txn} {
 			// Query the intent with the correct txn meta. Should see intent regardless
 			// of whether we're inside the txn or not.
-			queryIntent(key1, txn.TxnMeta, baTxn, true)
+			queryIntent(key1, txn.TxnMeta, baTxn, true, true)
 
 			// Query an intent on a different key for the same transaction. Should not
 			// see an intent.
 			keyPrevent := roachpb.Key(fmt.Sprintf("%s-%t-%d", key2, errIfMissing, i))
-			queryIntent(keyPrevent, txn.TxnMeta, baTxn, false)
+			queryIntent(keyPrevent, txn.TxnMeta, baTxn, false, false)
 
 			// Query the intent with a larger epoch. Should not see an intent.
 			largerEpochMeta := txn.TxnMeta
 			largerEpochMeta.Epoch++
-			queryIntent(key1, largerEpochMeta, baTxn, false)
+			queryIntent(key1, largerEpochMeta, baTxn, false, false)
 
 			// Query the intent with a smaller epoch. Should not see an intent.
 			smallerEpochMeta := txn.TxnMeta
 			smallerEpochMeta.Epoch--
-			queryIntent(key1, smallerEpochMeta, baTxn, false)
+			queryIntent(key1, smallerEpochMeta, baTxn, false, false)
 
 			// Query the intent with a larger timestamp. Should see an intent.
 			// See the comment on QueryIntentRequest.Txn for an explanation of why
@@ -6115,7 +6114,7 @@ func TestQueryIntentRequest(t *testing.T) {
 				largerBATxn = largerBATxn.Clone()
 				largerBATxn.WriteTimestamp = largerTSMeta.WriteTimestamp
 			}
-			queryIntent(key1, largerTSMeta, largerBATxn, true)
+			queryIntent(key1, largerTSMeta, largerBATxn, true, true)
 
 			// Query the intent with a smaller timestamp. Should not see an
 			// intent unless we're querying our own intent, in which case
@@ -6123,19 +6122,19 @@ func TestQueryIntentRequest(t *testing.T) {
 			// transaction's timestamp.
 			smallerTSMeta := txn.TxnMeta
 			smallerTSMeta.WriteTimestamp = smallerTSMeta.WriteTimestamp.Prev()
-			queryIntent(key1, smallerTSMeta, baTxn, baTxn == txn)
+			queryIntent(key1, smallerTSMeta, baTxn, true, baTxn == txn)
 
 			// Query the intent with a larger sequence number. Should not see an intent.
 			largerSeqMeta := txn.TxnMeta
 			largerSeqMeta.Sequence++
-			queryIntent(key1, largerSeqMeta, baTxn, false)
+			queryIntent(key1, largerSeqMeta, baTxn, false, false)
 
 			// Query the intent with a smaller sequence number. Should see an intent.
 			// See the comment on QueryIntentRequest.Txn for an explanation of why
 			// the request behaves like this.
 			smallerSeqMeta := txn.TxnMeta
 			smallerSeqMeta.Sequence--
-			queryIntent(key1, smallerSeqMeta, baTxn, true)
+			queryIntent(key1, smallerSeqMeta, baTxn, true, true)
 
 			// Perform a write at keyPrevent. The associated intent at this key
 			// was queried and found to be missing, so this write should be

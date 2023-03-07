@@ -1247,26 +1247,34 @@ message QueryTxnResponse {
 
 // A QueryIntentRequest is arguments to the QueryIntent() method. It visits
 // the specified key and checks whether an intent is present for the given
-// transaction. If the intent is found to be missing then it is prevented
-// from ever being written in the future.
+// transaction. If so, it checks whether the intent has a timestamp at or
+// below the given transaction's timestamp. If the intent is found to be
+// missing then it is prevented from ever being written in the future.
 message QueryIntentRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The TxnMeta that the intent is expected to have. Specifically, whether an
   // intent is a match or not is defined as whether an intent exists that could
   // be committed by the provided transaction. If an intent is found at the
-  // specified key, the intent is only considered a match if it has the same ID,
-  // the same epoch, and a write timestamp that is equal to or less than that in
-  // the provided transaction.
+  // specified key, the intent is only considered a "full match" if it has the
+  // same ID, the same epoch, and a write timestamp that is equal to or less
+  // than that in the provided transaction.
   //
-  // Additionally, the intent is only considered a match if its sequence number
-  // is equal to or greater than the expected txn's sequence number. The
+  // Additionally, the intent is only considered a "full match" if its sequence
+  // number is equal to or greater than the expected txn's sequence number. The
   // requests doesn't require an exact sequence number match because the
   // transaction could have performed overlapping writes, in which case only the
   // latest sequence number will remain. We assume that if a transaction has
   // successfully written an intent at a larger sequence number then it must
   // have succeeded in writing an intent at the smaller sequence number as
   // well.
+  //
+  // The intent is considered to be "pushed" and a "partial match" if it
+  // satisfies all conditions above except the timestamp condition. In these
+  // cases, the intent could not be committed by the provided transaction at its
+  // current provisional commit timestamp, but it could be committed by that
+  // transaction at a later commit timestamp. The intent's value can also be
+  // read by the provided transaction, even though it has been pushed.
   //
   // QueryIntentRequests may be issued in non-transactional BatchRequests or in
   // transactional BatchRequests. If issued inside of a transaction, the TxnMeta
@@ -1280,17 +1288,22 @@ message QueryIntentRequest {
   // own intent after having successfully refreshed.
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 
-  // If true, return an IntentMissingError if a matching intent is not found.
-  // Special-cased to return a SERIALIZABLE retry error if a SERIALIZABLE
-  // transaction queries its own intent and finds it has been pushed.
+  // If true, return an IntentMissingError if no matching intent (neither a
+  // "partial match" nor a "full match") is found.
   bool error_if_missing = 3;
 }
 
 // A QueryIntentResponse is the return value from the QueryIntent() method.
 message QueryIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Whether an intent matching the expected transaction was found at the key.
-  bool found_intent = 2;
+  // Whether an intent matching the expected transaction was found at the key
+  // with a timestamp that is equal to or less than that in the provided
+  // transaction - a "full match" as defined above.
+  bool found_intent_matching_txn_and_timestamp = 2;
+  // Whether an intent matching the expected transaction was found at the key,
+  // regardless of the intent's timestamp — a "partial match" as defined above.
+  // found_intent_matching_txn implies found_intent_matching_txn_and_timestamp.
+  bool found_intent_matching_txn = 3;
 }
 
 // A QueryLocksRequest is arguments to the QueryLocks() method.  It requests
