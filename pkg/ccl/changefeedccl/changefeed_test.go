@@ -5892,15 +5892,15 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	skip.UnderRace(t, "Takes too long with race enabled")
 
-	shouldDrain := true
+	var shouldDrain int32
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			DrainFast:  true,
 			Changefeed: &TestingKnobs{},
 			Flowinfra: &flowinfra.TestingKnobs{
 				FlowRegistryDraining: func() bool {
-					if shouldDrain {
-						shouldDrain = false
+					if atomic.LoadInt32(&shouldDrain) > 0 {
+						atomic.StoreInt32(&shouldDrain, 0)
 						return true
 					}
 					return false
@@ -5948,6 +5948,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	f, closeSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0))
 	defer closeSink()
 
+	atomic.StoreInt32(&shouldDrain, 1)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
 	defer closeFeed(t, feed)
 
