@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -1778,9 +1778,7 @@ func (tc *TestCluster) SplitTable(
 
 // WaitForTenantCapabilities implements TestClusterInterface.
 func (tc *TestCluster) WaitForTenantCapabilities(
-	t *testing.T,
-	tenID roachpb.TenantID,
-	capabilityNames ...tenantcapabilitiespb.TenantCapabilityName,
+	t *testing.T, tenID roachpb.TenantID, capIDs ...tenantcapabilities.CapabilityID,
 ) {
 	for i, ts := range tc.Servers {
 		testutils.SucceedsSoon(t, func() error {
@@ -1788,31 +1786,21 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 				return nil
 			}
 
-			if len(capabilityNames) > 0 {
-				missingCapabilityError := func(capabilityName tenantcapabilitiespb.TenantCapabilityName) error {
-					return errors.Newf("server=%d tenant %s does not have capability %q", i, tenID, capabilityName)
+			if len(capIDs) > 0 {
+				missingCapabilityError := func(capID tenantcapabilities.CapabilityID) error {
+					return errors.Newf("server=%d tenant %s does not have capability %q", i, tenID, capID)
 				}
 				capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
 				if !found {
-					return missingCapabilityError(capabilityNames[0])
+					return missingCapabilityError(capIDs[0])
 				}
 
-				for _, capabilityName := range capabilityNames {
-					switch capabilityName {
-					case tenantcapabilitiespb.CanAdminSplit:
-						if !capabilities.CanAdminSplit {
-							return missingCapabilityError(capabilityName)
-						}
-					case tenantcapabilitiespb.CanViewNodeInfo:
-						if !capabilities.CanViewNodeInfo {
-							return missingCapabilityError(capabilityName)
-						}
-					case tenantcapabilitiespb.CanViewTSDBMetrics:
-						if !capabilities.CanViewTSDBMetrics {
-							return missingCapabilityError(capabilityName)
-						}
-					default:
-						t.Fatalf("unrecognized capability: %q", capabilityName)
+				for _, capID := range capIDs {
+					if tenantcapabilities.CapabilityType(capID) != tenantcapabilities.Bool {
+						return errors.AssertionFailedf("WaitForTenantCapabilities only supports boolean capabilities")
+					}
+					if !capabilities.GetBool(capID) {
+						return missingCapabilityError(capID)
 					}
 				}
 			}
