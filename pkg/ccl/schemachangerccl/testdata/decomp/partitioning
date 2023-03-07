@@ -440,9 +440,9 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 104
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
   Status: PUBLIC
 
 decompose
@@ -762,7 +762,7 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 105
-    parentSchemaId: 101
+- SchemaChild:
+    childObjectId: 105
+    schemaId: 101
   Status: PUBLIC

@@ -216,9 +216,9 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 	} else {
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}
-	w.ev(scpb.Status_PUBLIC, &scpb.ObjectParent{
-		ObjectID:       typ.GetID(),
-		ParentSchemaID: typ.GetParentSchemaID(),
+	w.ev(scpb.Status_PUBLIC, &scpb.SchemaChild{
+		ChildObjectID: typ.GetID(),
+		SchemaID:      typ.GetParentSchemaID(),
 	})
 	for i := 0; i < typ.NumReferencingDescriptors(); i++ {
 		w.backRefs.Add(typ.GetReferencingDescriptorID(i))
@@ -286,9 +286,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		})
 	}
 
-	w.ev(scpb.Status_PUBLIC, &scpb.ObjectParent{
-		ObjectID:       tbl.GetID(),
-		ParentSchemaID: tbl.GetParentSchemaID(),
+	w.ev(scpb.Status_PUBLIC, &scpb.SchemaChild{
+		ChildObjectID: tbl.GetID(),
+		SchemaID:      tbl.GetParentSchemaID(),
 	})
 	if tbl.IsPartitionAllBy() {
 		w.ev(descriptorStatus(tbl), &scpb.TablePartitioning{
@@ -761,9 +761,9 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 	}
 
 	w.ev(descriptorStatus(fnDesc), fn)
-	w.ev(scpb.Status_PUBLIC, &scpb.ObjectParent{
-		ObjectID:       fnDesc.GetID(),
-		ParentSchemaID: fnDesc.GetParentSchemaID(),
+	w.ev(scpb.Status_PUBLIC, &scpb.SchemaChild{
+		ChildObjectID: fnDesc.GetID(),
+		SchemaID:      fnDesc.GetParentSchemaID(),
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.FunctionName{
 		FunctionID: fnDesc.GetID(),

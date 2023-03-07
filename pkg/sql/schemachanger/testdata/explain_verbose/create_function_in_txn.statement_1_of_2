@@ -18,7 +18,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
 │       │   ├── • Function:{DescID: 105}
 │       │   │     ABSENT → DESCRIPTOR_ADDED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
@@ -107,8 +107,8 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
 │           │
 │           └── • SetObjectParentID
 │                 ObjParent:
-│                   ObjectID: 105
-│                   ParentSchemaID: 101
+│                   ChildObjectID: 105
+│                   SchemaID: 101
 │
 └── • PreCommitPhase
     │
@@ -119,7 +119,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
     │   │   ├── • Function:{DescID: 105}
     │   │   │     DESCRIPTOR_ADDED → ABSENT
     │   │   │
-    │   │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+    │   │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
     │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • FunctionName:{DescID: 105}
@@ -149,7 +149,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
         │   ├── • Function:{DescID: 105}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC ObjectParent:{DescID: 105, ReferencedDescID: 101}
+        │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105, ReferencedDescID: 101}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
         │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 105}
@@ -167,7 +167,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
         │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 105}
         │   │         rule: "dependents exist before descriptor becomes public"
         │   │
-        │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+        │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
         │   │   │ ABSENT → PUBLIC
         │   │   │
         │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
@@ -256,8 +256,8 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
             │
             ├── • SetObjectParentID
             │     ObjParent:
-            │       ObjectID: 105
-            │       ParentSchemaID: 101
+            │       ChildObjectID: 105
+            │       SchemaID: 101
             │
             └── • MarkDescriptorAsPublic
                   DescriptorID: 105

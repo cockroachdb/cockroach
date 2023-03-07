@@ -84,9 +84,9 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 
 	// Add function element.
 	b.Add(&fn)
-	b.Add(&scpb.ObjectParent{
-		ObjectID:       fnID,
-		ParentSchemaID: sc.SchemaID,
+	b.Add(&scpb.SchemaChild{
+		ChildObjectID: fnID,
+		SchemaID:      sc.SchemaID,
 	})
 	b.Add(&scpb.FunctionName{
 		FunctionID: fnID,

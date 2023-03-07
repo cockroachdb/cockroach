@@ -17,7 +17,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: admin}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: root}
  │         │    ├── PUBLIC → DROPPED    Table:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 107, ReferencedDescID: 106}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 107, ReferencedDescID: 106}
  │         │    ├── PUBLIC → ABSENT     TableComment:{DescID: 107, Comment: t has a comment}
  │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 1}
@@ -70,7 +70,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: admin}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: root}
  │    │    │    ├── DROPPED    → PUBLIC Table:{DescID: 107}
- │    │    │    ├── ABSENT     → PUBLIC ObjectParent:{DescID: 107, ReferencedDescID: 106}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 107, ReferencedDescID: 106}
  │    │    │    ├── ABSENT     → PUBLIC TableComment:{DescID: 107, Comment: t has a comment}
  │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 1}
@@ -101,7 +101,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: admin}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: root}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 107, ReferencedDescID: 106}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107, ReferencedDescID: 106}
  │         │    ├── PUBLIC → ABSENT  TableComment:{DescID: 107, Comment: t has a comment}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 1}

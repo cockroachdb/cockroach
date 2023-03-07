@@ -29,8 +29,8 @@ DROP FUNCTION f;
   {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Function:{DescID: 109}, ABSENT], PUBLIC]
   {functionId: 109, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
-- [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 109, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 109, schemaId: 101}
 - [[FunctionName:{DescID: 109}, ABSENT], PUBLIC]
   {functionId: 109, name: f}
 - [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC]

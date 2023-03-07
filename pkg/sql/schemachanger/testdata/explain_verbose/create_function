@@ -35,7 +35,7 @@ $$;
 │       │   ├── • Function:{DescID: 110}
 │       │   │     ABSENT → DESCRIPTOR_ADDED
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 110, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
@@ -201,8 +201,8 @@ $$;
 │           │
 │           └── • SetObjectParentID
 │                 ObjParent:
-│                   ObjectID: 110
-│                   ParentSchemaID: 101
+│                   ChildObjectID: 110
+│                   SchemaID: 101
 │
 └── • PreCommitPhase
     │
@@ -213,7 +213,7 @@ $$;
     │   │   ├── • Function:{DescID: 110}
     │   │   │     DESCRIPTOR_ADDED → ABSENT
     │   │   │
-    │   │   ├── • ObjectParent:{DescID: 110, ReferencedDescID: 101}
+    │   │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
     │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • FunctionName:{DescID: 110}
@@ -246,7 +246,7 @@ $$;
         │   ├── • Function:{DescID: 110}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC ObjectParent:{DescID: 110, ReferencedDescID: 101}
+        │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110, ReferencedDescID: 101}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
         │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
@@ -267,7 +267,7 @@ $$;
         │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 110}
         │   │         rule: "dependents exist before descriptor becomes public"
         │   │
-        │   ├── • ObjectParent:{DescID: 110, ReferencedDescID: 101}
+        │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
         │   │   │ ABSENT → PUBLIC
         │   │   │
         │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
@@ -433,8 +433,8 @@ $$;
             │
             ├── • SetObjectParentID
             │     ObjParent:
-            │       ObjectID: 110
-            │       ParentSchemaID: 101
+            │       ChildObjectID: 110
+            │       SchemaID: 101
             │
             └── • MarkDescriptorAsPublic
                   DescriptorID: 110

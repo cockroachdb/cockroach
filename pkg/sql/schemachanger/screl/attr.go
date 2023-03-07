@@ -308,9 +308,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "SchemaID"),
 		rel.EntityAttr(ReferencedDescID, "ParentDatabaseID"),
 	),
-	rel.EntityMapping(t((*scpb.ObjectParent)(nil)),
-		rel.EntityAttr(DescID, "ObjectID"),
-		rel.EntityAttr(ReferencedDescID, "ParentSchemaID"),
+	rel.EntityMapping(t((*scpb.SchemaChild)(nil)),
+		rel.EntityAttr(DescID, "ChildObjectID"),
+		rel.EntityAttr(ReferencedDescID, "SchemaID"),
 	),
 	// Comment elements.
 	rel.EntityMapping(t((*scpb.TableComment)(nil)),

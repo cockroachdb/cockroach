@@ -15,8 +15,8 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   {sequenceId: 104}
-- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 104, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 104, schemaId: 101}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 104}
 
@@ -40,8 +40,8 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   {sequenceId: 104}
-- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 104, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 104, schemaId: 101}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
@@ -69,8 +69,8 @@ DROP SEQUENCE defaultdb.ownedseq CASCADE
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 111}, ABSENT], PUBLIC]
   {sequenceId: 111}
-- [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 111, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 111, schemaId: 101}
 - [[TableData:{DescID: 111, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 111}
 - [[SequenceOwner:{DescID: 110, ColumnID: 1, ReferencedDescID: 111}, ABSENT], PUBLIC]

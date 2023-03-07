@@ -162,8 +162,8 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 105}, ABSENT], PUBLIC]
   {sequenceId: 105}
-- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 105, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 105, schemaId: 101}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 105}
 
@@ -206,8 +206,8 @@ ALTER TABLE defaultdb.t DROP COLUMN l
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 105}, ABSENT], PUBLIC]
   {sequenceId: 105}
-- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {objectId: 105, parentSchemaId: 101}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 105, schemaId: 101}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 105}
 - [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]

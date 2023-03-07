@@ -198,9 +198,9 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 110
-    parentSchemaId: 106
+- SchemaChild:
+    childObjectId: 110
+    schemaId: 106
   Status: PUBLIC
 - EnumTypeValue:
     logicalRepresentation: a
@@ -375,9 +375,9 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 112
-    parentSchemaId: 106
+- SchemaChild:
+    childObjectId: 112
+    schemaId: 106
   Status: PUBLIC
 
 decompose
@@ -590,7 +590,7 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- ObjectParent:
-    objectId: 113
-    parentSchemaId: 106
+- SchemaChild:
+    childObjectId: 113
+    schemaId: 106
   Status: PUBLIC

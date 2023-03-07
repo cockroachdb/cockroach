@@ -17,7 +17,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── PUBLIC           → ABSENT      UserPrivileges:{DescID: 105, Name: admin}
       │    │    ├── PUBLIC           → ABSENT      UserPrivileges:{DescID: 105, Name: root}
       │    │    ├── DESCRIPTOR_ADDED → DROPPED     Function:{DescID: 105}
-      │    │    ├── PUBLIC           → ABSENT      ObjectParent:{DescID: 105, ReferencedDescID: 101}
+      │    │    ├── PUBLIC           → ABSENT      SchemaChild:{DescID: 105, ReferencedDescID: 101}
       │    │    ├── PUBLIC           → ABSENT      FunctionName:{DescID: 105}
       │    │    ├── PUBLIC           → ABSENT      FunctionBody:{DescID: 105}
       │    │    ├── MERGE_ONLY       → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
