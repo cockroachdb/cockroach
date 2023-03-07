@@ -392,7 +392,7 @@ func (r *Replica) leasePostApplyLocked(
 	// seconds) in any case due to the liveness heartbeats. And the system config
 	// will be gossiped rarely because it falls on a range with an epoch-based
 	// range lease that is only reacquired extremely infrequently.
-	if iAmTheLeaseHolder {
+	if leaseChangingHands && iAmTheLeaseHolder {
 		// NB: run these in an async task to keep them out of the critical section
 		// (r.mu is held here).
 		_ = r.store.stopper.RunAsyncTask(r.AnnotateCtx(context.Background()), "lease-triggers", func(ctx context.Context) {
