@@ -35,7 +35,7 @@ type onDemandServer interface {
 	getHTTPHandlerFn() http.HandlerFunc
 
 	// handleCancel processes a SQL async cancel query.
-	handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) error
+	handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData)
 
 	// serveConn handles an incoming SQL connection.
 	serveConn(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error
