@@ -31,6 +31,7 @@ import { statementInsightsSaga } from "./insights/statementInsights";
 import { schemaInsightsSaga } from "./schemaInsights";
 import { uiConfigSaga } from "./uiConfig";
 import { statementFingerprintInsightsSaga } from "./insights/statementFingerprintInsights";
+import { txnStatsSaga } from "./transactionStats";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -54,5 +55,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(schemaInsightsSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
     fork(statementFingerprintInsightsSaga),
+    fork(txnStatsSaga),
   ]);
 }
