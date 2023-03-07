@@ -1064,3 +1064,77 @@ statement ok
 USE test;
 DROP DATABASE d;
 DROP TYPE t;
+
+subtest alter_udf_schema
+
+# Renaming the schema should invalidate a schema-qualified UDF reference.
+statement ok
+CREATE SCHEMA sc;
+CREATE FUNCTION sc.fn(INT) RETURNS INT LANGUAGE SQL AS 'SELECT $1';
+
+query I
+SELECT sc.fn(1);
+----
+1
+
+statement ok
+ALTER SCHEMA sc RENAME TO sc1;
+
+query error pq: schema "sc" does not exist
+SELECT sc.fn(1);
+
+query I
+SELECT sc1.fn(1);
+----
+1
+
+statement ok
+DROP SCHEMA sc1 CASCADE;
+
+# Renaming the database should invalidate a database-qualified UDF reference.
+statement ok
+CREATE DATABASE d;
+USE d;
+CREATE FUNCTION fn(INT) RETURNS INT LANGUAGE SQL AS 'SELECT $1';
+
+query I
+SELECT d.public.fn(1);
+----
+1
+
+statement ok
+ALTER DATABASE d RENAME TO d1;
+USE d1;
+
+query error cross-database function references not allowed
+SELECT d.public.fn(1);
+
+query I
+SELECT d1.public.fn(1);
+----
+1
+
+statement ok
+USE test;
+DROP DATABASE d1 CASCADE;
+
+# Changing the current database should invalidate an unqualified UDF reference.
+statement ok
+CREATE FUNCTION fn(INT) RETURNS INT LANGUAGE SQL AS 'SELECT $1';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+CREATE DATABASE d;
+USE d;
+
+query error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+statement ok
+USE test;
+DROP DATABASE d;
+DROP FUNCTION fn;
