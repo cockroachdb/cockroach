@@ -152,7 +152,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
 	golang.org/x/crypto v0.0.0-20220307211146-efcb8507fb70
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
-	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
