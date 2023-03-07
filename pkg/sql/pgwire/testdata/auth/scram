@@ -13,6 +13,11 @@ SET CLUSTER SETTING server.user_login.downgrade_scram_stored_passwords_to_bcrypt
 ok
 
 sql
+SET CLUSTER SETTING server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled = false;
+----
+ok
+
+sql
 -- Explicit hash.
 CREATE USER abc WITH PASSWORD 'SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=';
 ----
@@ -389,9 +394,56 @@ authlog 7
 110 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 sql
--- change back to SCRAM for future tests.
+-- change back to SCRAM for future tests, and connect again to cause the upgrade.
 SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
 ----
 ok
+
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn is using SCRAM.
+authlog 7
+.*client_connection_end
+----
+111 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+112 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+113 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+114 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+115 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+116 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+117 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+subtest hash_cost_change
+
+# Enable auto-conversion of SCRAM password costs.
+sql
+SET CLUSTER SETTING server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled = true;
+----
+ok
+
+sql
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256 = 5432;
+----
+ok
+
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn requested a cleartext password in order to re-hash.
+authlog 7
+.*client_connection_end
+----
+118 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+119 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+120 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+121 {"EventType":"client_authentication_info","Info":"found stored SCRAM-SHA-256 credentials but cluster is configured to re-hash after SCRAM cost change; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+122 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+123 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+124 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 subtest end

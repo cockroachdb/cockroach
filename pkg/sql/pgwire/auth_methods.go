@@ -507,30 +507,49 @@ func authAutoSelectPasswordProtocol(
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
 		// Request information about the password hash.
-		expired, hashedPassword, err := pwRetrieveFn(ctx)
+		expired, hashedPassword, pwRetrieveErr := pwRetrieveFn(ctx)
 		// Note: we could be checking 'expired' and 'err' here, and exit
 		// early. However, we already have code paths to do just that in
 		// each authenticator, so we might as well use them. To do this,
 		// we capture the same information into the closure that the
 		// authenticator will call anyway.
-		newpwfn := func(ctx context.Context) (bool, password.PasswordHash, error) { return expired, hashedPassword, err }
+		newpwfn := func(ctx context.Context) (bool, password.PasswordHash, error) {
+			return expired, hashedPassword, pwRetrieveErr
+		}
 
 		// Was the password using the bcrypt hash encoding?
-		if err == nil && hashedPassword.Method() == password.HashBCrypt {
+		if pwRetrieveErr == nil && hashedPassword.Method() == password.HashBCrypt {
 			// Yes: we have no choice but to request a cleartext password.
 			c.LogAuthInfof(ctx, "found stored crdb-bcrypt credentials; requesting cleartext password")
 			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
 		}
 
-		autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&execCfg.Settings.SV)
-		configuredHashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
-		if err == nil && hashedPassword.Method() == password.HashSCRAMSHA256 &&
-			autoDowngradePasswordHashesBool &&
-			configuredHashMethod == password.HashBCrypt {
-			// If the cluster is configured to automatically downgrade from SCRAM to
-			// bcrypt, then we also request the cleartext password.
-			c.LogAuthInfof(ctx, "found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password")
-			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+		if pwRetrieveErr == nil && hashedPassword.Method() == password.HashSCRAMSHA256 {
+			autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&execCfg.Settings.SV)
+			autoRehashOnCostChangeBool := security.AutoRehashOnSCRAMCostChange.Get(&execCfg.Settings.SV)
+			configuredHashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
+			configuredSCRAMCost := security.SCRAMCost.Get(&execCfg.Settings.SV)
+
+			if autoDowngradePasswordHashesBool && configuredHashMethod == password.HashBCrypt {
+				// If the cluster is configured to automatically downgrade from SCRAM to
+				// bcrypt, then we also request the cleartext password.
+				c.LogAuthInfof(ctx, "found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password")
+				return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+			}
+
+			if autoRehashOnCostChangeBool && configuredHashMethod == password.HashSCRAMSHA256 {
+				ok, creds := password.GetSCRAMStoredCredentials(hashedPassword)
+				if !ok {
+					return errors.AssertionFailedf("programming error: password retrieved but invalid scram hash")
+				}
+				if int64(creds.Iters) != configuredSCRAMCost {
+					// If the cluster is configured to automatically re-hash the SCRAM
+					// password when the default cost is changed, then we also request the
+					// cleartext password.
+					c.LogAuthInfof(ctx, "found stored SCRAM-SHA-256 credentials but cluster is configured to re-hash after SCRAM cost change; requesting cleartext password")
+					return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+				}
+			}
 		}
 
 		// Error, no credentials or stored SCRAM hash: use the
