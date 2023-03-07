@@ -8,10 +8,5 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
-import { adminUISelector } from "../utils/selectors";
-
-export const sqlStatsSelector = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState?.statements,
-);
+export * from "./txnStats.reducer";
+export * from "./txnStats.sagas";

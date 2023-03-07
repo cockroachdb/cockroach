@@ -11,17 +11,30 @@
 import { createSelector } from "reselect";
 
 import { localStorageSelector } from "../store/utils/selectors";
-import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
+import { txnStatsSelector } from "../store/transactionStats/txnStats.selector";
 
 export const selectTransactionsData = createSelector(
-  sqlStatsSelector,
-  transactionsState =>
-    // The state is valid if we have successfully fetched data, and it has not yet been invalidated.
-    transactionsState.valid ? transactionsState.data : null,
+  txnStatsSelector,
+  transactionsState => transactionsState?.data,
+);
+
+export const selectTransactionsDataValid = createSelector(
+  txnStatsSelector,
+  state => state?.valid,
+);
+
+export const selectTransactionsDataInFlight = createSelector(
+  txnStatsSelector,
+  state => state?.inFlight,
+);
+
+export const selectTransactionsLastUpdated = createSelector(
+  txnStatsSelector,
+  state => state.lastUpdated,
 );
 
 export const selectTransactionsLastError = createSelector(
-  sqlStatsSelector,
+  txnStatsSelector,
   state => state.lastError,
 );
 

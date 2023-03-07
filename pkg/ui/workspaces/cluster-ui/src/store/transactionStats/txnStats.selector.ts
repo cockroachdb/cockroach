@@ -11,7 +11,7 @@
 import { createSelector } from "reselect";
 import { adminUISelector } from "../utils/selectors";
 
-export const sqlStatsSelector = createSelector(
+export const txnStatsSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState?.statements,
+  adminUiState => adminUiState?.transactions,
 );
