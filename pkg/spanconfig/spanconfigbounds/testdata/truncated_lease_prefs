@@ -1,0 +1,227 @@
+bounds name=bound_to_us
+gc_ttl_seconds: <start: 123 end: 7000>
+range_min_bytes: <start: 10 end: 100>
+num_replicas: <start: 3 end: 8>
+num_voters: <start: 3 end: 6>
+constraint_bounds: <
+    allowed: <key: "region" value: "us-central1">
+    allowed: <key: "region" value: "us-east1">
+    allowed: <key: "region" value: "us-west1">
+    fallback: <constraints: <key: "region" value: "us-east1">>
+    fallback: <constraints: <key: "region" value: "us-central1">>
+    fallback: <constraints: <key: "region" value: "us-west1">>
+>
+----
+
+# This case is interesting because the voter constraints and the lease
+# preferences are going to be clamped. What's weird about it is that
+# we're going to end up with a conflicting lease preference which conforms
+# but does not have any voters in it.
+
+config name=weird_lease_preferences
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_voters: 3
+num_replicas: 5
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-east1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-central1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "europe-west1">
+>
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "europe-west1">
+>
+lease_preferences: <constraints: <key: "region" value: "europe-west1">>
+lease_preferences: <constraints: <key: "region" value: "us-central1">>
+----
+
+check bounds=bound_to_us config=weird_lease_preferences
+----
+span config bounds violated for fields: constraints, voter_constraints, lease_preferences
+span config bounds violated for fields: constraints, voter_constraints, lease_preferences
+(1) span config bounds violated for fields: constraints, voter_constraints, lease_preferences
+  | constraints: [+region=us-east1:1 +region=us-central1:1 +region=europe-west1:1] does not conform to {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}, will be clamped to [+region=us-east1:1 +region=us-central1:2 +region=us-west1:2]
+  | voter_constraints: [+region=europe-west1:3] does not conform to {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}, will be clamped to [+region=us-east1:1]
+  | lease_preferences: [{[+region=europe-west1]} {[+region=us-central1]}] does not conform to {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}, will be clamped to [{[+region=us-central1]}]
+Error types: (1) *spanconfigbounds.ViolationError
+
+clamp bounds=bound_to_us config=weird_lease_preferences
+----
+@@ -12,32 +12,26 @@
+     value: "us-east1"
+   >
+ >
+ constraints: <
+-  num_replicas: 1
++  num_replicas: 2
+   constraints: <
+     key: "region"
+     value: "us-central1"
+   >
+ >
+ constraints: <
++  num_replicas: 2
++  constraints: <
++    key: "region"
++    value: "us-west1"
++  >
++>
++voter_constraints: <
+   num_replicas: 1
+   constraints: <
+     key: "region"
+-    value: "europe-west1"
+-  >
+->
+-voter_constraints: <
+-  num_replicas: 3
+-  constraints: <
+-    key: "region"
+-    value: "europe-west1"
+-  >
+->
+-lease_preferences: <
+-  constraints: <
+-    key: "region"
+-    value: "europe-west1"
++    value: "us-east1"
+   >
+ >
+ lease_preferences: <
+   constraints: <
+
+# Exercise the logic to clamp the lease preferences in the other direction.
+# This is to exercise the truncate logic when we're not truncating the first
+# entry.
+
+config name=truncate_lease_preferences
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_voters: 3
+num_replicas: 5
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-east1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-central1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-west1">
+>
+voter_constraints: <
+  constraints: <key: "region" value: "us-central1">
+>
+lease_preferences: <constraints: <key: "region" value: "us-central1">>
+lease_preferences: <constraints: <key: "region" value: "europe-west1">>
+lease_preferences: <constraints: <key: "region" value: "europe-west2">>
+----
+
+check bounds=bound_to_us config=truncate_lease_preferences
+----
+span config bounds violated for fields: lease_preferences
+span config bounds violated for fields: lease_preferences
+(1) span config bounds violated for fields: lease_preferences
+  | lease_preferences: [{[+region=us-central1]} {[+region=europe-west1]} {[+region=europe-west2]}] does not conform to {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}, will be clamped to [{[+region=us-central1]}]
+Error types: (1) *spanconfigbounds.ViolationError
+
+clamp bounds=bound_to_us config=truncate_lease_preferences
+----
+----
+@@ -37,17 +37,5 @@
+     key: "region"
+     value: "us-central1"
+   >
+ >
+-lease_preferences: <
+-  constraints: <
+-    key: "region"
+-    value: "europe-west1"
+-  >
+->
+-lease_preferences: <
+-  constraints: <
+-    key: "region"
+-    value: "europe-west2"
+-  >
+->
+ 
+----
+----
+
+config name=truncate_all_lease_preferences
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_voters: 3
+num_replicas: 5
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-east1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-central1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-west1">
+>
+voter_constraints: <
+  constraints: <key: "region" value: "us-central1">
+>
+lease_preferences: <constraints: <key: "region" value: "europe-west1">>
+lease_preferences: <constraints: <key: "region" value: "europe-west2">>
+lease_preferences: <constraints: <key: "region" value: "europe-west3">>
+----
+
+
+check bounds=bound_to_us config=truncate_all_lease_preferences
+----
+span config bounds violated for fields: lease_preferences
+span config bounds violated for fields: lease_preferences
+(1) span config bounds violated for fields: lease_preferences
+  | lease_preferences: [{[+region=europe-west1]} {[+region=europe-west2]} {[+region=europe-west3]}] does not conform to {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}, will be clamped to []
+Error types: (1) *spanconfigbounds.ViolationError
+
+clamp bounds=bound_to_us config=truncate_all_lease_preferences
+----
+----
+@@ -31,23 +31,5 @@
+     key: "region"
+     value: "us-central1"
+   >
+ >
+-lease_preferences: <
+-  constraints: <
+-    key: "region"
+-    value: "europe-west1"
+-  >
+->
+-lease_preferences: <
+-  constraints: <
+-    key: "region"
+-    value: "europe-west2"
+-  >
+->
+-lease_preferences: <
+-  constraints: <
+-    key: "region"
+-    value: "europe-west3"
+-  >
+->
+ 
+----
+----
