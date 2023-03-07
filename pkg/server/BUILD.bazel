@@ -158,6 +158,7 @@ go_library(
         "//pkg/security/password",
         "//pkg/security/securityassets",
         "//pkg/security/username",
+        "//pkg/server/backgroundprofiler/profiler",
         "//pkg/server/debug",
         "//pkg/server/diagnostics",
         "//pkg/server/diagnostics/diagnosticspb",

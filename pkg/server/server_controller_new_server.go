@@ -301,6 +301,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.GoroutineDumpDirName = ""
 	baseCfg.HeapProfileDirName = ""
 	baseCfg.CPUProfileDirName = ""
+	baseCfg.RuntimeProfileDirName = ""
 
 	// Expose the process-wide runtime metrics to the tenant's metric
 	// collector. Since they are process-wide, all tenants can see them.

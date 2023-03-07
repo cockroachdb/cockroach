@@ -76,6 +76,7 @@ type spanOptions struct {
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
 	EventListeners                []EventListener        // see WithEventListeners
+	EnableBackgroundProfiling     bool                   // see WithBackgroundProfiling
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
@@ -91,6 +92,22 @@ func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
 		return opts.RemoteParent.traceID
 	}
 	return 0
+}
+
+// enableBackgroundProfiling returns true if the span was created
+// WithBackgroundProfiling() or the span has a remote/local parent that has
+// background profiling enabled.
+func (opts *spanOptions) enableBackgroundProfiling() bool {
+	enableBackgroundProfiling := opts.EnableBackgroundProfiling
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
+		enableBackgroundProfiling = enableBackgroundProfiling || opts.Parent.i.crdb.enableBackgroundProfiling
+	}
+
+	if !opts.RemoteParent.Empty() {
+		enableBackgroundProfiling = enableBackgroundProfiling || opts.RemoteParent.enableBackgroundProfiling
+	}
+
+	return enableBackgroundProfiling
 }
 
 func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
@@ -464,6 +481,27 @@ func WithSterile() SpanOption {
 func (w withSterileOption) apply(opts spanOptions) spanOptions {
 	opts.Sterile = true
 	return opts
+}
+
+type backgroundProfilingOption struct{}
+
+var _ SpanOption = backgroundProfilingOption{}
+
+func (et backgroundProfilingOption) apply(opts spanOptions) spanOptions {
+	// Applying an EventListener span option implies the span has at least
+	// `RecordingStructured` recording type. If the span explicitly specifies a
+	// `RecordingVerbose` recording type via the `WithRecording(...)` option, that
+	// will be respected instead.
+	if !opts.recordingTypeExplicit {
+		opts.recordingTypeExplicit = true
+		opts.recordingTypeOpt = tracingpb.RecordingStructured
+	}
+	opts.EnableBackgroundProfiling = true
+	return opts
+}
+
+func WithBackgroundProfiling() SpanOption {
+	return backgroundProfilingOption{}
 }
 
 type eventListenersOption []EventListener

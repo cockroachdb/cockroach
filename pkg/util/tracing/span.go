@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/backgroundprofiler"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
@@ -140,6 +141,32 @@ type Span struct {
 	finishStack string
 }
 
+var _ backgroundprofiler.Subscriber = &Span{}
+
+func (sp *Span) LabelValue() string {
+	if sp.detectUseAfterFinish() {
+		return ""
+	}
+
+	return sp.OperationName()
+}
+
+func (sp *Span) Identifier() backgroundprofiler.SubscriberID {
+	if sp.detectUseAfterFinish() {
+		return 0
+	}
+
+	return backgroundprofiler.SubscriberID(sp.SpanID())
+}
+
+func (sp *Span) ProfileID() backgroundprofiler.ProfileID {
+	if sp.detectUseAfterFinish() {
+		return 0
+	}
+
+	return backgroundprofiler.ProfileID(sp.i.TraceID())
+}
+
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
 // CRDB span and it doesn't output either to an OpenTelemetry tracer, or to
 // net.Trace.
@@ -243,7 +270,27 @@ func (sp *Span) Redactable() bool {
 //
 // Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
+	sp.maybeUnsubscribeFromBackgroundProfiler()
 	sp.finishInternal()
+}
+
+// maybeUnsubscribeFromBackgroundProfiler unsubscribes the span from the
+// backgroundProfiler if the span was subscribed to it on creation.
+// If the span is responsible for finishing the profile it also emits a
+// StructuredEvent that captures metadata about the collected profiles.
+func (sp *Span) maybeUnsubscribeFromBackgroundProfiler() {
+	if sp == nil || sp.IsNoop() || sp.detectUseAfterFinish() {
+		return
+	}
+
+	if sp.i.crdb.enableBackgroundProfiling {
+		if sp.Tracer().backgroundProfiler != nil {
+			finishedProfiling, profile := sp.Tracer().backgroundProfiler.Unsubscribe(sp)
+			if finishedProfiling {
+				sp.RecordStructured(profile)
+			}
+		}
+	}
 }
 
 // finishInternal finishes the span.
@@ -273,6 +320,7 @@ func (sp *Span) finishInternal() {
 func (sp *Span) FinishAndGetRecording(recType tracingpb.RecordingType) tracingpb.Recording {
 	rec := tracingpb.Recording(nil)
 	if sp.RecordingType() != tracingpb.RecordingOff {
+		sp.maybeUnsubscribeFromBackgroundProfiler()
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
 	// Reach directly into sp.i to pass the finishing argument.
@@ -290,6 +338,7 @@ func (sp *Span) FinishAndGetConfiguredRecording() tracingpb.Recording {
 	rec := tracingpb.Recording(nil)
 	recType := sp.RecordingType()
 	if recType != tracingpb.RecordingOff {
+		sp.maybeUnsubscribeFromBackgroundProfiler()
 		// Reach directly into sp.i to pass the finishing argument.
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
@@ -876,6 +925,16 @@ type SpanMeta struct {
 	// any info about the span in order to not have a child be created on the
 	// other side. Similarly, ExtractMetaFrom does not deserialize this field.
 	sterile bool
+
+	// enableBackgroundProfiling is set if this span is part of an operation that
+	// should be profiled by the backgroundprofiler.Profiler. If true and if the
+	// span is a local, root span, then it will be Subscribed to the background
+	// profiler on creation and unsubscribed on Finish().
+	//
+	// Note this field is propagated across the wire through a carrier so that
+	// remote child spans of an operation that is being profiled on the source
+	// node, start or join profiles being collected on the remote nodes.
+	enableBackgroundProfiling bool
 }
 
 // Empty returns whether or not the SpanMeta is a zero value.
@@ -926,10 +985,11 @@ func SpanMetaFromProto(info tracingpb.TraceInfo) SpanMeta {
 	}
 
 	sm := SpanMeta{
-		traceID: info.TraceID,
-		spanID:  info.ParentSpanID,
-		otelCtx: otelCtx,
-		sterile: false,
+		traceID:                   info.TraceID,
+		spanID:                    info.ParentSpanID,
+		otelCtx:                   otelCtx,
+		sterile:                   false,
+		enableBackgroundProfiling: info.EnableBackgroundProfiling,
 	}
 	switch info.RecordingMode {
 	case tracingpb.RecordingMode_OFF:

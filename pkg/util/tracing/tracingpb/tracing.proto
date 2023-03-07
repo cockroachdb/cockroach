@@ -43,5 +43,9 @@ message TraceInfo {
   }
 
   OtelInfo otel = 4;
+
+  // EnableBackgroundProfiling is true when the operation is expected to collect
+  // profiles using the backgroundprofiler.Profiler.
+  bool enable_background_profiling = 5;
 }
 

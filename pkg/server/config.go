@@ -181,6 +181,9 @@ type BaseConfig struct {
 	// Only used if DisableRuntimeStatsMonitor is false.
 	CPUProfileDirName string
 
+	// RuntimeProfileDirName is the directory name for runtime traces.
+	RuntimeProfileDirName string
+
 	// InflightTraceDirName is the directory name for job traces.
 	InflightTraceDirName string
 

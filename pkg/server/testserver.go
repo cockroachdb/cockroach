@@ -164,6 +164,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			cfg.InflightTraceDirName = params.TraceDir
 		}
 	}
+	cfg.RuntimeProfileDirName = params.RuntimeProfileDir
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*kvserver.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
@@ -279,6 +280,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			}
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
+			}
+			if cfg.RuntimeProfileDirName == "" {
+				cfg.RuntimeProfileDirName = filepath.Join(storeSpec.Path, "logs", base.RuntimeProfileDir)
 			}
 		}
 	}
@@ -1066,6 +1070,7 @@ func (ts *TestServer) StartTenant(
 	baseCfg.Locality = params.Locality
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
+	baseCfg.RuntimeProfileDirName = params.RuntimeProfileDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
 	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
