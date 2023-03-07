@@ -11,6 +11,7 @@
 package batcheval
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -172,7 +173,7 @@ func evalExport(
 
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
-		destFile := &storage.MemFile{}
+		var destFile bytes.Buffer
 		opts := storage.MVCCExportOptions{
 			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
 			EndKey:             args.EndKey,
@@ -198,7 +199,7 @@ func evalExport(
 			}
 			var hasRangeKeys bool
 			summary, resumeInfo, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(ctx,
-				cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
+				cArgs.EvalCtx.ClusterSettings(), reader, opts, &destFile)
 			if err != nil {
 				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
 			}
@@ -208,16 +209,16 @@ func evalExport(
 			// part of the ExportResponse. This frees up the memory used by the empty
 			// SST file.
 			if !hasRangeKeys {
-				destFile = &storage.MemFile{}
+				destFile = bytes.Buffer{}
 			}
 		} else {
 			summary, resumeInfo, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
-				opts, destFile)
+				opts, &destFile)
 			if err != nil {
 				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
 			}
 		}
-		data := destFile.Data()
+		data := destFile.Bytes()
 
 		// NB: This should only happen in two cases:
 		//

@@ -534,7 +534,7 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	exemptRequests := []func() kvpb.Request{
 		func() kvpb.Request { return &kvpb.ExportRequest{} },
 		func() kvpb.Request {
-			sstFile := &storage.MemFile{}
+			sstFile := &storage.MemObject{}
 			sst := storage.MakeIngestionSSTWriter(context.Background(), cluster.MakeTestingClusterSettings(), sstFile)
 			defer sst.Close()
 			require.NoError(t, sst.LogData([]byte("hello")))

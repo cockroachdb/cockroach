@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	math "math"
@@ -190,8 +191,8 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	writeSST := func(t *testing.T, offsets []int) string {
 		path := strconv.FormatInt(timeutil.Now().UnixNano(), 10)
 
-		sstFile := &storage.MemFile{}
-		sst := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
+		var sstFile bytes.Buffer
+		sst := storage.MakeBackupSSTWriter(ctx, cs, &sstFile)
 		defer sst.Close()
 		ts := hlc.NewClockForTesting(nil).Now()
 		value := roachpb.MakeValueFromString("bar")
@@ -206,7 +207,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		if err := sst.Finish(); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "foo", path), sstFile.Data(), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "foo", path), sstFile.Bytes(), 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path

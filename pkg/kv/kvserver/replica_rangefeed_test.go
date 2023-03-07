@@ -347,7 +347,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	expVal6q.InitChecksum(roachpb.Key("q"))
 
 	st := cluster.MakeTestingClusterSettings()
-	sstFile := &storage.MemFile{}
+	sstFile := &storage.MemObject{}
 	sstWriter := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sstWriter.Close()
 	require.NoError(t, sstWriter.PutMVCC(
@@ -376,7 +376,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	expVal7q.SetInt(7)
 	expVal7q.InitChecksum(roachpb.Key("q"))
 
-	sstFile = &storage.MemFile{}
+	sstFile = &storage.MemObject{}
 	sstWriter = storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sstWriter.Close()
 	require.NoError(t, sstWriter.PutMVCC(
