@@ -111,7 +111,7 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL = ALL ARRAY[NULL, NULL]`, `NULL`},
 		{`1 = ALL NULL`, `NULL`},
 		{`'a' = ALL current_schemas(true)`, `'a':::STRING = ALL current_schemas(true)`},
-		{`NULL = ALL current_schemas(true)`, `NULL`},
+		{`NULL = ALL current_schemas(true)`, `NULL = ALL current_schemas(true)`},
 
 		{`INTERVAL '1'`, `'00:00:01':::INTERVAL`},
 		{`DECIMAL '1.0'`, `1.0:::DECIMAL`},

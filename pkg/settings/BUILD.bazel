@@ -29,6 +29,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/buildutil",
+        "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
@@ -45,6 +46,7 @@ go_test(
     size = "small",
     srcs = [
         "encoding_test.go",
+        "internal_test.go",
         "settings_test.go",
     ],
     args = ["-test.timeout=55s"],
