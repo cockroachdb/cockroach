@@ -193,7 +193,7 @@ import (
 // the test is run as the system tenant.
 //
 // The directives line looks like:
-// # tenant-capability-override-opt: capability_name1=capability_value1 capability_name2=capability_value2
+// # tenant-capability-override-opt: capability_id1=capability_value1 capability_id2=capability_value2
 //
 //
 // ###########################################

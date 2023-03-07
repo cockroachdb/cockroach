@@ -193,7 +193,7 @@ SELECT crdb_internal.create_tenant(5)
 query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache
 ----
-tenant_id  capability_name        capability_value
+tenant_id  capability_id          capability_value
 1          can_admin_split        false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false
@@ -208,7 +208,7 @@ ALTER TENANT [5] GRANT CAPABILITY can_admin_split
 query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache
 ----
-tenant_id  capability_name        capability_value
+tenant_id  capability_id          capability_value
 1          can_admin_split        false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false

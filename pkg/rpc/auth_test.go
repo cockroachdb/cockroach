@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -249,11 +250,6 @@ func TestTenantAuthRequest(t *testing.T) {
 	makeReq := func(key string, endKey ...string) kvpb.Request {
 		return makeReqShared(t, key, endKey...)
 	}
-	makeDisallowedAdminReq := func(key string) kvpb.Request {
-		s := makeSpanShared(t, key)
-		h := kvpb.RequestHeader{Key: s.Key}
-		return &kvpb.AdminMergeRequest{RequestHeader: h}
-	}
 	makeAdminSplitReq := func(key string) kvpb.Request {
 		s := makeSpan(key)
 		h := kvpb.RequestHeaderFromSpan(s)
@@ -366,38 +362,6 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeDisallowedAdminReq("a"),
-				)},
-				expErr: `request \[1 AdmMerge\] not permitted`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeDisallowedAdminReq(prefix(10, "a")),
-				)},
-				expErr: `request \[1 AdmMerge\] not permitted`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeDisallowedAdminReq(prefix(50, "a")),
-				)},
-				expErr: `request \[1 AdmMerge\] not permitted`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeDisallowedAdminReq(prefix(10, "a")),
-					makeReq(prefix(10, "a"), prefix(10, "b")),
-				)},
-				expErr: `request \[1 Scan, 1 AdmMerge\] not permitted`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeReq(prefix(10, "a"), prefix(10, "b")),
-					makeDisallowedAdminReq(prefix(10, "a")),
-				)},
-				expErr: `request \[1 Scan, 1 AdmMerge\] not permitted`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
 					makeAdminSplitReq("a"),
 				)},
 				expErr: `requested key span a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
@@ -459,15 +423,6 @@ func TestTenantAuthRequest(t *testing.T) {
 					makeAdminScatterReq(prefix(10, "a")),
 				)},
 				expErr: noError,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					func() kvpb.Request {
-						h := kvpb.RequestHeaderFromSpan(makeSpan("a"))
-						return &kvpb.SubsumeRequest{RequestHeader: h}
-					}(),
-				)},
-				expErr: `request \[1 Subsume\] not permitted`,
 			},
 		},
 		"/cockroach.roachpb.Internal/RangeLookup": {
@@ -875,7 +830,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			for _, tc := range tests {
 				t.Run("", func(t *testing.T) {
 					err := rpc.TestingAuthorizeTenantRequest(
-						ctx, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+						ctx, &settings.Values{}, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
 					)
 					if tc.expErr == noError {
 						require.NoError(t, err)
@@ -927,7 +882,7 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 			authorizer := mockAuthorizer{}
 			tc.configureAuthorizer(&authorizer)
 			err := rpc.TestingAuthorizeTenantRequest(
-				ctx, tenID, method, tc.req, authorizer,
+				ctx, &settings.Values{}, tenID, method, tc.req, authorizer,
 			)
 			if tc.expErr == "" {
 				require.NoError(t, err)
