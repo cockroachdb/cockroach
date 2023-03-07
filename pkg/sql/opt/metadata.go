@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -364,11 +365,21 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
-	// Check that all of the user defined types present have not changed.
+	// Check that no referenced user defined types have changed.
 	for _, typ := range md.AllUserDefinedTypes() {
-		toCheck, err := optCatalog.ResolveTypeByOID(ctx, typ.Oid())
-		if err != nil || typ.TypeMeta.Version != toCheck.TypeMeta.Version {
-			return false, maybeSwallowMetadataResolveErr(err)
+		id := cat.StableID(catid.UserDefinedOIDToID(typ.Oid()))
+		if names, ok := md.objectRefsByName[id]; ok {
+			for _, name := range names {
+				toCheck, err := optCatalog.ResolveType(ctx, name)
+				if err != nil || typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+					return false, maybeSwallowMetadataResolveErr(err)
+				}
+			}
+		} else {
+			toCheck, err := optCatalog.ResolveTypeByOID(ctx, typ.Oid())
+			if err != nil || typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+				return false, maybeSwallowMetadataResolveErr(err)
+			}
 		}
 	}
 
@@ -408,7 +419,8 @@ func (md *Metadata) Schema(schID SchemaID) cat.Schema {
 }
 
 // AddUserDefinedType adds a user defined type to the metadata for this query.
-func (md *Metadata) AddUserDefinedType(typ *types.T) {
+// If the type was resolved by name, the name will be tracked as well.
+func (md *Metadata) AddUserDefinedType(typ *types.T, name *tree.UnresolvedObjectName) {
 	if !typ.UserDefined() {
 		return
 	}
@@ -418,6 +430,10 @@ func (md *Metadata) AddUserDefinedType(typ *types.T) {
 	if _, ok := md.userDefinedTypes[typ.Oid()]; !ok {
 		md.userDefinedTypes[typ.Oid()] = struct{}{}
 		md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
+	}
+	if name != nil {
+		id := cat.StableID(catid.UserDefinedOIDToID(typ.Oid()))
+		md.objectRefsByName[id] = append(md.objectRefsByName[id], name)
 	}
 }
 
