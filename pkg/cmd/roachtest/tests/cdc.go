@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 // kafkaCreateTopicRetryDuration is the retry duration we use while
@@ -181,9 +182,10 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			t:     ct.t,
 			c:     ct.cluster,
 			nodes: kafkaNode,
+			mon:   ct.mon,
 		}
 		kafka.install(ct.ctx)
-		kafka.start(ct.ctx)
+		kafka.start(ct.ctx, "kafka")
 
 		if args.kafkaChaos {
 			ct.mon.Go(func(ctx context.Context) error {
@@ -327,18 +329,24 @@ var allLedgerTargets []string = []string{
 }
 
 type feedArgs struct {
-	sinkType       sinkType
-	targets        []string
-	opts           map[string]string
-	kafkaChaos     bool
-	assumeRole     string
-	tolerateErrors bool
+	sinkType        sinkType
+	targets         []string
+	opts            map[string]string
+	kafkaChaos      bool
+	assumeRole      string
+	tolerateErrors  bool
+	sinkURIOverride string
 }
 
 // TODO: Maybe move away from feedArgs since its only 3 things
 func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	ct.t.Status(fmt.Sprintf("initiating %s sink", args.sinkType))
-	sinkURI := ct.setupSink(args)
+	var sinkURI string
+	if args.sinkURIOverride == "" {
+		sinkURI = ct.setupSink(args)
+	} else {
+		sinkURI = args.sinkURIOverride
+	}
 	ct.t.Status(fmt.Sprintf("using sinkURI %s", sinkURI))
 
 	targetsStr := strings.Join(args.targets, ", ")
@@ -463,11 +471,16 @@ func (cj *changefeedJob) waitForCompletion() {
 }
 
 func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester {
+	lastCrdbNode := c.Spec().NodeCount - 1
+	if lastCrdbNode == 0 {
+		lastCrdbNode = 1
+	}
+
 	tester := cdcTester{
 		ctx:          ctx,
 		t:            t,
 		cluster:      c,
-		crdbNodes:    c.Range(1, c.Spec().NodeCount-1),
+		crdbNodes:    c.Range(1, lastCrdbNode),
 		workloadNode: c.Node(c.Spec().NodeCount),
 		doneCh:       make(chan struct{}),
 		sinkCache:    make(map[sinkType]string),
@@ -726,7 +739,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes: kafkaNode,
 	}
 	kafka.install(ctx)
-	kafka.start(ctx)
+	kafka.start(ctx, "schema-registry")
 	defer kafka.stop(ctx)
 
 	db := c.Conn(ctx, t.L(), 1)
@@ -1220,6 +1233,40 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:            "cdc/kafka-oauth",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1})
+
+			kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+			kafka := kafkaManager{
+				t:     ct.t,
+				c:     ct.cluster,
+				nodes: kafkaNode,
+				mon:   ct.mon,
+			}
+			kafka.install(ct.ctx)
+
+			creds, kafkaEnv := kafka.configureOauth(ct.ctx)
+
+			kafka.start(ctx, "kafka", kafkaEnv)
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:        kafkaSink,
+				sinkURIOverride: kafka.sinkURLOAuth(ct.ctx, creds),
+				targets:         allTpccTargets,
+				opts:            map[string]string{"initial_scan": "'only'"},
+			})
+
+			feed.waitForCompletion()
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:            "cdc/bank",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
@@ -1404,6 +1451,20 @@ const (
 	confluentCLIDownloadURLBase = "https://s3-us-west-2.amazonaws.com/confluent.cloud/confluent-cli/archives"
 )
 
+var hydraServerStartScript = `
+export SECRETS_SYSTEM=arbitrarySystemSecret
+export OAUTH2_ISSUER_URL=http://localhost:4444
+export OAUTH2_CONSENT_URL=http://localhost:3000/consent
+export OAUTH2_LOGIN_URL=http://localhost:3000/login
+export OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES=public,pairwise
+export OIDC_SUBJECT_IDENTIFIERS_PAIRWISE_SALT=arbitraryPairwiseSalt
+export SERVE_COOKIES_SAME_SITE_MODE=Lax
+export HYDRA_ADMIN_URL=http://localhost:4445
+export DSN=memory
+
+./hydra serve all --dev
+`
+
 // TODO(ssd): Perhaps something like this could be a roachprod command?
 var confluentDownloadScript = fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
@@ -1527,6 +1588,45 @@ KafkaServer {
 };
 `
 
+	// Requires formatting with the node's internal IP
+	kafkaOauthConfigTmpl = `
+sasl.enabled.mechanisms=OAUTHBEARER
+sasl.mechanism.inter.broker.protocol=OAUTHBEARER
+security.inter.broker.protocol=SASL_PLAINTEXT
+listeners=PLAINTEXT://:9092,SASL_PLAINTEXT://:9095
+advertised.listeners=PLAINTEXT://%[1]s:9092,SASL_PLAINTEXT://%[1]s:9095
+
+listener.name.sasl_plaintext.oauthbearer.sasl.login.callback.handler.class=br.com.jairsjunior.security.oauthbearer.OauthAuthenticateLoginCallbackHandler
+listener.name.sasl_plaintext.oauthbearer.sasl.server.callback.handler.class=br.com.jairsjunior.security.oauthbearer.OauthAuthenticateValidatorCallbackHandler
+
+# The following is from the confluent-4.0 default configuration file.
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+num.partitions=1
+num.recovery.threads.per.data.dir=1
+
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+zookeeper.connect=localhost:2181
+zookeeper.connection.timeout.ms=6000
+confluent.support.metrics.enable=false
+confluent.support.customer.id=anonymous
+`
+
+	kafkaOauthJAASConfig = `
+KafkaServer {
+org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;
+};
+`
+
 	// kafkaConfigTmpl is a template for Kafka's server.properties
 	// configuration file. This template is used by the kafka-auth
 	// tests to enable TLS and SASL. Other tests uses the default
@@ -1543,6 +1643,7 @@ listeners=PLAINTEXT://:9092,SSL://:9093,SASL_SSL://:9094
 
 sasl.enabled.mechanisms=SCRAM-SHA-256,SCRAM-SHA-512,PLAIN
 sasl.mechanism.inter.broker.protocol=PLAIN
+
 inter.broker.listener.name=SASL_SSL
 
 # The following is from the confluent-4.0 default configuration file.
@@ -1572,6 +1673,7 @@ type kafkaManager struct {
 	t     test.Test
 	c     cluster.Cluster
 	nodes option.NodeListOption
+	mon   cluster.Monitor
 }
 
 func (k kafkaManager) basePath() string {
@@ -1631,8 +1733,109 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven 2>&1 > logs/apt-get-install.log`)
 	})
+}
+
+func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	err := retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		return k.c.RunE(ctx, k.nodes, cmd)
+	})
+	if err != nil {
+		k.t.Fatal(err)
+	}
+}
+
+func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) {
+	k.c.Run(ctx, k.nodes, `rm -rf /home/ubuntu/hydra`)
+	k.runWithRetry(ctx, `bash <(curl https://raw.githubusercontent.com/ory/meta/master/install.sh) -d -b . hydra v2.0.3`)
+
+	err := k.c.PutString(ctx, hydraServerStartScript, "/home/ubuntu/hydra-serve.sh", 0700, k.nodes)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	mon := k.c.NewMonitor(ctx, k.nodes)
+	mon.Go(func(ctx context.Context) error {
+		err := k.c.RunE(ctx, k.nodes, `/home/ubuntu/hydra-serve.sh`)
+		return errors.Wrap(err, "hydra failed")
+	})
+	result, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, "/home/ubuntu/hydra create oauth2-client",
+		"-e", "http://localhost:4445",
+		"--grant-type", "client_credentials",
+		"--token-endpoint-auth-method", "client_secret_basic",
+		"--name", `"Test Client"`,
+	)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+
+	hydraClientRegexp, err := regexp.Compile(`CLIENT ID\t([^\s]+)\t\nCLIENT SECRET\t([^\s]+)`)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	matches := hydraClientRegexp.FindAllStringSubmatch(result.Stdout, -1)[0]
+	clientID := matches[1]
+	clientSecret := matches[2]
+
+	return clientID, clientSecret
+}
+
+func (k kafkaManager) configureOauth(ctx context.Context) (clientcredentials.Config, string) {
+	configDir := k.configDir()
+
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	nodeIP := ips[0]
+
+	kafkaOauthConfig := fmt.Sprintf(kafkaOauthConfigTmpl, nodeIP)
+	kafkaConfigPath := filepath.Join(configDir, "server.properties")
+	kafkaJAASPath := filepath.Join(configDir, "server_jaas.conf")
+	k.PutConfigContent(ctx, kafkaOauthConfig, kafkaConfigPath)
+	k.PutConfigContent(ctx, kafkaOauthJAASConfig, kafkaJAASPath)
+
+	// In order to run Kafka with OAuth a custom implementation of certain Java
+	// classes has to be provided.
+	k.c.Run(ctx, k.nodes, `rm -rf /home/ubuntu/kafka-oauth`)
+	k.runWithRetry(ctx, `git clone https://github.com/jairsjunior/kafka-oauth.git /home/ubuntu/kafka-oauth`)
+	k.c.Run(ctx, k.nodes, `(cd /home/ubuntu/kafka-oauth; git checkout c2b307548ef944d3fbe899b453d24e1fc8380add; mvn package)`)
+
+	// CLASSPATH allows Kafka to load in the custom implementation
+	kafkaEnv := "CLASSPATH='/home/ubuntu/kafka-oauth/target/*'"
+
+	// Hydra is used as an open source OAuth server
+	clientID, clientSecret := k.configureHydraOauth(ctx)
+	tokenURL := fmt.Sprintf("http://%s:4444/oauth2/token", nodeIP)
+
+	authHeader := `Basic ` + base64.StdEncoding.EncodeToString([]byte(
+		fmt.Sprintf(`%s:%s`, clientID, clientSecret),
+	))
+
+	// Env parameters for the kafka-oauth classes
+	kafkaEnv += " OAUTH_WITH_SSL=false"
+	kafkaEnv += " OAUTH_LOGIN_SERVER='127.0.0.1:4444'"
+	kafkaEnv += " OAUTH_LOGIN_ENDPOINT='/oauth2/token'"
+	kafkaEnv += " OAUTH_LOGIN_GRANT_TYPE='client_credentials'"
+	kafkaEnv += " OAUTH_LOGIN_SCOPE=''"
+	kafkaEnv += fmt.Sprintf(" OAUTH_AUTHORIZATION='%s'", authHeader)
+	kafkaEnv += " OAUTH_INTROSPECT_SERVER='127.0.0.1:4445'"
+	kafkaEnv += " OAUTH_INTROSPECT_ENDPOINT='/admin/oauth2/introspect'"
+	kafkaEnv += fmt.Sprintf(" OAUTH_INTROSPECT_AUTHORIZATION='%s'", authHeader)
+
+	credentials := clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURL:     tokenURL,
+	}
+
+	k.t.Status("configured oauth credentials: %v", credentials)
+
+	return credentials, kafkaEnv
 }
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
@@ -1739,10 +1942,10 @@ func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 		"--entity-name", "scram256")
 }
 
-func (k kafkaManager) start(ctx context.Context, services ...string) {
+func (k kafkaManager) start(ctx context.Context, service string, envVars ...string) {
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
 	k.c.Run(ctx, k.nodes, k.makeCommand("confluent", "local destroy || true"))
-	k.restart(ctx, services...)
+	k.restart(ctx, service, envVars...)
 }
 
 var kafkaServices = map[string][]string{
@@ -1751,25 +1954,8 @@ var kafkaServices = map[string][]string{
 	"schema-registry": {"zookeeper", "kafka", "schema-registry"},
 }
 
-func (k kafkaManager) kafkaServicesForTargets(targets []string) []string {
-	var services []string
-	for _, tgt := range targets {
-		if s, ok := kafkaServices[tgt]; ok {
-			services = append(services, s...)
-		} else {
-			k.t.Fatalf("unknown kafka start target %q", tgt)
-		}
-	}
-	return services
-}
-
-func (k kafkaManager) restart(ctx context.Context, targetServices ...string) {
-	var services []string
-	if len(targetServices) == 0 {
-		services = kafkaServices["schema-registry"]
-	} else {
-		services = k.kafkaServicesForTargets(targetServices)
-	}
+func (k kafkaManager) restart(ctx context.Context, targetService string, envVars ...string) {
+	services := kafkaServices[targetService]
 
 	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
 	for _, svcName := range services {
@@ -1780,16 +1966,17 @@ func (k kafkaManager) restart(ctx context.Context, targetServices ...string) {
 			k.serverJAASConfig(),
 			fmt.Sprintf("logs/%s", svcName),
 		)
-		startCmd := fmt.Sprintf(
-			"CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS='%s' %s local services %s start",
+
+		startCmd := fmt.Sprintf("CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS='%s' %s",
 			k.basePath(),
 			k.confluentHome(),
 			opts,
-			k.confluentBin(),
-			svcName)
+			strings.Join(envVars, " "),
+		)
+		startCmd += fmt.Sprintf(" %s local services %s start", k.confluentBin(), svcName)
+
 		k.c.Run(ctx, k.nodes, startCmd)
 	}
-
 }
 
 func (k kafkaManager) makeCommand(exe string, args ...string) string {
@@ -1829,7 +2016,7 @@ func (k kafkaManager) chaosLoop(
 		case <-time.After(downTime):
 		}
 
-		k.restart(ctx)
+		k.restart(ctx, "kafka")
 	}
 }
 
@@ -1855,6 +2042,28 @@ func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
 		k.t.Fatal(err)
 	}
 	return `kafka://` + ips[0] + `:9094`
+}
+
+func (k kafkaManager) sinkURLOAuth(ctx context.Context, creds clientcredentials.Config) string {
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	kafkaURI, err := url.Parse("kafka://" + ips[0] + `:9095`)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+
+	encodedSecret := base64.StdEncoding.EncodeToString([]byte(creds.ClientSecret))
+
+	params := kafkaURI.Query()
+	params.Set(changefeedbase.SinkParamSASLEnabled, "true")
+	params.Set(changefeedbase.SinkParamSASLMechanism, "OAUTHBEARER")
+	params.Set(changefeedbase.SinkParamSASLClientID, creds.ClientID)
+	params.Set(changefeedbase.SinkParamSASLClientSecret, encodedSecret)
+	params.Set(changefeedbase.SinkParamSASLTokenURL, creds.TokenURL)
+	kafkaURI.RawQuery = params.Encode()
+	return kafkaURI.String()
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
