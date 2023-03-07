@@ -6971,6 +6971,24 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+	"crdb_internal.humanize_bytes": makeBuiltin(tree.FunctionProperties{
+		Category:     categoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types:      tree.ArgTypes{{Name: "val", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				b := tree.MustBeDInt(args[0])
+				return tree.NewDString(string(humanizeutil.IBytes(int64(b)))), nil
+			},
+			Info:       "Converts integer size (in bytes) into the human-readable form.",
+			Volatility: tree.VolatilityLeakProof,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

@@ -594,6 +594,7 @@ node_build_info                        NULL
 node_contention_events                 NULL
 node_distsql_flows                     NULL
 node_inflight_trace_spans              NULL
+node_memory_monitors                   NULL
 node_metrics                           NULL
 node_queries                           NULL
 node_runtime_info                      NULL

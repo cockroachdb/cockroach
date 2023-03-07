@@ -280,7 +280,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(
-		"flow",
+		"flow "+redact.RedactableString(req.Flow.FlowID.Short()),
 		mon.MemoryResource,
 		ds.Metrics.CurBytesCount,
 		ds.Metrics.MaxBytesHist,

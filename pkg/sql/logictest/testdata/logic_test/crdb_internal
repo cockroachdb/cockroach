@@ -56,6 +56,7 @@ crdb_internal  node_build_info                  table  NULL  NULL  NULL
 crdb_internal  node_contention_events           table  NULL  NULL  NULL
 crdb_internal  node_distsql_flows               table  NULL  NULL  NULL
 crdb_internal  node_inflight_trace_spans        table  NULL  NULL  NULL
+crdb_internal  node_memory_monitors             table  NULL  NULL  NULL
 crdb_internal  node_metrics                     table  NULL  NULL  NULL
 crdb_internal  node_queries                     table  NULL  NULL  NULL
 crdb_internal  node_runtime_info                table  NULL  NULL  NULL
@@ -1140,3 +1141,40 @@ query B
 SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
+
+query TT
+SELECT crdb_internal.humanize_bytes(NULL), crdb_internal.humanize_bytes(102400)
+----
+NULL 100 KiB
+
+# Sanity checks of the crdb_internal.node_memory_monitors table.
+
+# The root monitor has a standalone budget, so its 'used' field is zero.
+query BB
+SELECT used = 0, reserved_used > 0 FROM crdb_internal.node_memory_monitors WHERE name = 'root'
+----
+true true
+
+query B
+SELECT used > 0 FROM crdb_internal.node_memory_monitors WHERE name = 'sql'
+----
+true
+
+# Run a query on one connection and observe it from another.
+user testuser
+
+statement async sleepQuery count 1
+SELECT pg_sleep(3)
+
+user root
+
+query B
+SELECT count(*) > 0 FROM crdb_internal.node_memory_monitors WHERE name LIKE '%flow%'
+----
+true
+
+user testuser
+
+awaitstatement sleepQuery
+
+user root
