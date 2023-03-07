@@ -59,6 +59,9 @@ const (
 	// TenantSpanConfigBounds contains the bounds for the tenant's
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
+	// ExemptFromRateLimiting, if set to true, exempts the tenant from the KV-side tenant
+	// rate limiter.
+	ExemptFromRateLimiting // exempt_from_rate_limiting
 
 	maxCapabilityName TenantCapabilityName = iota - 1
 	numCapabilities                        = maxCapabilityName - 1

@@ -941,9 +941,10 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 }
 
 type mockAuthorizer struct {
-	hasCapabilityForBatch   bool
-	hasNodestatusCapability bool
-	hasTSDBQueryCapability  bool
+	hasCapabilityForBatch              bool
+	hasNodestatusCapability            bool
+	hasTSDBQueryCapability             bool
+	hasExemptFromRateLimiterCapability bool
 }
 
 var _ tenantcapabilities.Authorizer = &mockAuthorizer{}
@@ -975,4 +976,8 @@ func (m mockAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachp
 		return nil
 	}
 	return errors.New("tenant does not have capability")
+}
+
+func (m mockAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
+	return m.hasExemptFromRateLimiterCapability
 }

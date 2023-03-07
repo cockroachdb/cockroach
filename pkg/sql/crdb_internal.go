@@ -6580,10 +6580,10 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     contention_duration          INTERVAL NOT NULL,
     contending_key               BYTES NOT NULL,
     contending_pretty_key     	 STRING NOT NULL,
-		    
+
     waiting_stmt_id              string NOT NULL,
     waiting_stmt_fingerprint_id  BYTES NOT NULL,
-    
+
     database_name       				 STRING NOT NULL,
     schema_name         				 STRING NOT NULL,
     table_name          				 STRING NOT NULL,
@@ -7610,6 +7610,13 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 				tenantID,
 				tree.NewDString(tenantcapabilitiespb.CanViewTSDBMetrics.String()),
 				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanViewTSDBMetrics)),
+			); err != nil {
+				return err
+			}
+			if err := addRow(
+				tenantID,
+				tree.NewDString(tenantcapabilitiespb.ExemptFromRateLimiting.String()),
+				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.ExemptFromRateLimiting)),
 			); err != nil {
 				return err
 			}

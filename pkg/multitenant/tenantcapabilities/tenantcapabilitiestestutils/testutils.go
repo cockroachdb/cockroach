@@ -75,6 +75,13 @@ func ParseTenantCapabilityUpsert(
 			}
 			cap.CanViewTSDBMetrics = b
 		}
+		if arg.Key == "exempt_from_rate_limiting" {
+			b, err := strconv.ParseBool(arg.Vals[0])
+			if err != nil {
+				return nil, err
+			}
+			cap.ExemptFromRateLimiting = b
+		}
 	}
 	update := tenantcapabilities.Update{
 		Entry: tenantcapabilities.Entry{

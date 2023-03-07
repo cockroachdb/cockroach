@@ -38,13 +38,13 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-update: ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+update: ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 flush-state
 ----
-ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 get-capabilities ten=10
 ----
@@ -52,4 +52,4 @@ not-found
 
 get-capabilities ten=15
 ----
-{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}

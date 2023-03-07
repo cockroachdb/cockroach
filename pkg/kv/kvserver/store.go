@@ -56,6 +56,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -1390,7 +1392,14 @@ func NewStore(
 			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
 
-	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs)
+	var authorizer tenantcapabilities.Authorizer
+	if cfg.RPCContext != nil && cfg.RPCContext.TenantRPCAuthorizer != nil {
+		authorizer = cfg.RPCContext.TenantRPCAuthorizer
+	} else {
+		authorizer = tenantcapabilitiesauthorizer.NewNoopAuthorizer()
+	}
+
+	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs, authorizer)
 	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
 
 	s.systemConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(

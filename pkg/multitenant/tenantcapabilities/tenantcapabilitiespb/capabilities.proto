@@ -57,6 +57,10 @@ message TenantCapabilities {
   // Furthermore the span config reconciliation infrastructure is poorly
   // positioned to surface errors to the user.
   SpanConfigBounds span_config_bounds = 4;
+
+  // ExemptFromRateLimiting, if set to true, exempts the tenant from the KV-side tenant
+  // rate limiter.
+  bool exempt_from_rate_limiting = 5;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

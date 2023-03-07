@@ -25,9 +25,9 @@ ok
 updates
 ----
 Incremental Update
-update: ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-update: ten=12 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+update: ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+update: ten=12 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 inject-error
 ----
@@ -56,9 +56,9 @@ updates
 
 flush-state
 ----
-ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-ten=12 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+ten=12 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 get-capabilities ten=50
 ----
@@ -66,11 +66,11 @@ not-found
 
 get-capabilities ten=12
 ----
-{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 get-capabilities ten=10
 ----
-{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 # Let the Watcher attempt to restart.
 restart-after-injected-error
@@ -82,23 +82,23 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-update: ten=12 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-update: ten=50 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+update: ten=12 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+update: ten=50 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 flush-state
 ----
-ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-ten=12 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
-ten=50 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+ten=12 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
+ten=50 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 get-capabilities ten=50
 ----
-{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 get-capabilities ten=12
 ----
-{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil>}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false SpanConfigBounds:<nil> ExemptFromRateLimiting:false}
 
 get-capabilities ten=10
 ----

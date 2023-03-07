@@ -25,8 +25,8 @@ import (
 // Authorizer is a concrete implementation of the tenantcapabilities.Authorizer
 // interface. It's safe for concurrent use.
 type Authorizer struct {
-	capabilitiesReader tenantcapabilities.Reader
 	settings           *cluster.Settings
+	capabilitiesReader tenantcapabilities.Reader
 
 	knobs tenantcapabilities.TestingKnobs
 }
@@ -121,4 +121,20 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
 	}
 	return nil
+}
+
+// IsExemptFromRateLimiting returns true if the tenant is not subject to rate limiting.
+func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool {
+	if tenID.IsSystem() {
+		return true
+	}
+	if a.capabilitiesReader == nil {
+		err := errors.AssertionFailedf("trying to perform capability check when no reader exists")
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return false
+	}
+	if cp, found := a.capabilitiesReader.GetCapabilities(tenID); found {
+		return cp.ExemptFromRateLimiting
+	}
+	return false
 }
