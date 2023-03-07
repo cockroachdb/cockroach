@@ -38,6 +38,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )

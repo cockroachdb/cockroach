@@ -146,6 +146,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalSessionsTableID:               crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:                crdbInternalLocalMetricsTable,
 		catconstants.CrdbInternalNodeExecutionInsightsTableID:       crdbInternalNodeExecutionInsightsTable,
+		catconstants.CrdbInternalNodeMemoryMonitorsTableID:          crdbInternalNodeMemoryMonitors,
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
@@ -1200,8 +1201,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return err
 		}
 		if !hasViewActivityOrViewActivityRedacted {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
@@ -1354,8 +1354,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return err
 		}
 		if !hasViewActivityOrhasViewActivityRedacted {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
@@ -6099,8 +6098,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 			return nil, nil, err
 		}
 		if !hasPermission {
-			return nil, nil, errors.New("crdb_internal.transaction_contention_events " +
-				"requires VIEWACTIVITY or VIEWACTIVITYREDACTED role option")
+			return nil, nil, noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
 		// If a user has VIEWACTIVITYREDACTED role option but the user does not
@@ -6263,8 +6261,7 @@ func genClusterLocksGenerator(
 			return nil, nil, err
 		}
 		if !hasViewActivityOrViewActivityRedacted {
-			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			return nil, nil, noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 		shouldRedactKeys := false
 		if !hasAdmin {
@@ -6567,6 +6564,16 @@ var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
 	},
 }
 
+func noViewActivityOrViewActivityRedactedRoleError(user username.SQLUsername) error {
+	return pgerror.Newf(
+		pgcode.InsufficientPrivilege,
+		"user %s does not have %s or %s privilege",
+		user,
+		roleoption.VIEWACTIVITY,
+		roleoption.VIEWACTIVITYREDACTED,
+	)
+}
+
 func populateExecutionInsights(
 	ctx context.Context,
 	p *planner,
@@ -6578,13 +6585,7 @@ func populateExecutionInsights(
 		return err
 	}
 	if !hasRoleOption {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"user %s does not have %s or %s privilege",
-			p.User(),
-			roleoption.VIEWACTIVITY,
-			roleoption.VIEWACTIVITYREDACTED,
-		)
+		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
@@ -6668,4 +6669,43 @@ func populateExecutionInsights(
 		))
 	}
 	return
+}
+
+var crdbInternalNodeMemoryMonitors = virtualSchemaTable{
+	comment: `node-level table listing all currently active memory monitors`,
+	schema: `
+CREATE TABLE crdb_internal.node_memory_monitors (
+  level             INT8,
+  name              STRING,
+  id                INT8,
+  parent_id         INT8,
+  used              INT8,
+  reserved_used     INT8,
+  reserved_reserved INT8
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// The memory monitors' names can expose some information about the
+		// activity on the node, so we require VIEWACTIVITY or
+		// VIEWACTIVITYREDACTED permissions.
+		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		monitorStateCb := func(monitor mon.MonitorState) error {
+			return addRow(
+				tree.NewDInt(tree.DInt(monitor.Level)),
+				tree.NewDString(monitor.Name),
+				tree.NewDInt(tree.DInt(monitor.ID)),
+				tree.NewDInt(tree.DInt(monitor.ParentID)),
+				tree.NewDInt(tree.DInt(monitor.Used)),
+				tree.NewDInt(tree.DInt(monitor.ReservedUsed)),
+				tree.NewDInt(tree.DInt(monitor.ReservedReserved)),
+			)
+		}
+		return p.extendedEvalCtx.ExecCfg.RootMemoryMonitor.TraverseTree(monitorStateCb)
+	},
 }
