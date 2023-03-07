@@ -825,7 +825,7 @@ func readCancelKeyAndCloseConn(
 // - (*server/statusServer).cancelSemaphore
 // - (*server/statusServer).CancelRequestByKey
 // - (*server/serverController).sqlMux
-func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) error {
+func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
 	s.tenantMetrics.PGWireCancelTotalCount.Inc(1)
 
 	resp, err := func() (*serverpb.CancelQueryByKeyResponse, error) {
@@ -846,9 +846,9 @@ func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.Backen
 	} else if err != nil {
 		if respStatus := status.Convert(err); respStatus.Code() == codes.ResourceExhausted {
 			s.tenantMetrics.PGWireCancelIgnoredCount.Inc(1)
+			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 		}
 	}
-	return err
 }
 
 // finalizeClientParameters "fills in" the session arguments with
