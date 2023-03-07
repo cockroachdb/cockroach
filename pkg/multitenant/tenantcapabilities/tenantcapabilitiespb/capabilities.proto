@@ -65,6 +65,10 @@ message TenantCapabilities {
   // CanAdminScatter if set to true, grants the tenant the ability to
   // successfully perform `AdminScatter` requests.
   bool can_admin_scatter = 6;
+
+  // ExemptFromRateLimiting, if set to true, exempts the tenant from the KV-side tenant
+  // rate limiter.
+  bool exempt_from_rate_limiting = 7;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

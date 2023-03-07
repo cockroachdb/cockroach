@@ -13,13 +13,14 @@ func _() {
 	_ = x[CanAdminUnsplit-3]
 	_ = x[CanViewNodeInfo-4]
 	_ = x[CanViewTSDBMetrics-5]
-	_ = x[TenantSpanConfigBounds-6]
-	_ = x[MaxCapabilityID-6]
+	_ = x[ExemptFromRateLimiting-6]
+	_ = x[TenantSpanConfigBounds-7]
+	_ = x[MaxCapabilityID-7]
 }
 
-const _CapabilityID_name = "can_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsspan_config_bounds"
+const _CapabilityID_name = "can_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsexempt_from_rate_limitingspan_config_bounds"
 
-var _CapabilityID_index = [...]uint8{0, 17, 32, 49, 67, 88, 106}
+var _CapabilityID_index = [...]uint8{0, 17, 32, 49, 67, 88, 113, 131}
 
 func (i CapabilityID) String() string {
 	i -= 1

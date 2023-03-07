@@ -6583,10 +6583,10 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     contention_duration          INTERVAL NOT NULL,
     contending_key               BYTES NOT NULL,
     contending_pretty_key     	 STRING NOT NULL,
-		    
+
     waiting_stmt_id              string NOT NULL,
     waiting_stmt_fingerprint_id  BYTES NOT NULL,
-    
+
     database_name       				 STRING NOT NULL,
     schema_name         				 STRING NOT NULL,
     table_name          				 STRING NOT NULL,
