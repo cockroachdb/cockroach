@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshNodes,
-  refreshStatements,
+  refreshTxns,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -34,7 +34,7 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 
 export const selectTransaction = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;
@@ -90,7 +90,7 @@ export default withRouter(
       };
     },
     {
-      refreshData: refreshStatements,
+      refreshData: refreshTxns,
       refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,

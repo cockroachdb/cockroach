@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshNodes,
-  refreshStatements,
+  refreshTxns,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
@@ -45,15 +45,15 @@ import {
 } from "./activeTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import {
-  selectStatementsLastUpdated,
-  selectStatementsDataValid,
-  selectStatementsDataInFlight,
+  selectTxnsLastUpdated,
+  selectTxnsDataValid,
+  selectTxnsDataInFlight,
 } from "src/selectors/executionFingerprintsSelectors";
 
-// selectStatements returns the array of AggregateStatistics to show on the
+// selectData returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
 export const selectData = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data || !state.valid) return null;
     return state.data;
@@ -63,7 +63,7 @@ export const selectData = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return "unknown";
@@ -74,7 +74,7 @@ export const selectLastReset = createSelector(
 );
 
 export const selectLastError = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
@@ -103,7 +103,7 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 );
 
 const fingerprintsPageActions = {
-  refreshData: refreshStatements,
+  refreshData: refreshTxns,
   refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
@@ -151,9 +151,9 @@ const TransactionsPageConnected = withRouter(
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
-        isDataValid: selectStatementsDataValid(state),
-        isReqInFlight: selectStatementsDataInFlight(state),
-        lastUpdated: selectStatementsLastUpdated(state),
+        isDataValid: selectTxnsDataValid(state),
+        isReqInFlight: selectTxnsDataInFlight(state),
+        lastUpdated: selectTxnsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
         filters: filtersLocalSetting.selector(state),
@@ -161,7 +161,7 @@ const TransactionsPageConnected = withRouter(
         nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
-        statementsError: state.cachedData.statements.lastError,
+        statementsError: state.cachedData.transactions.lastError,
         hasAdminRole: selectHasAdminRole(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
