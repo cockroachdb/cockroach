@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/multitenant",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/settings",
@@ -36,6 +37,9 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":tenantrate",
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

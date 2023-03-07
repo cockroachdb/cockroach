@@ -7614,6 +7614,13 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 			); err != nil {
 				return err
 			}
+			if err := addRow(
+				tenantID,
+				tree.NewDString(tenantcapabilitiespb.NotRateLimited.String()),
+				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.NotRateLimited)),
+			); err != nil {
+				return err
+			}
 		}
 		return nil
 	},

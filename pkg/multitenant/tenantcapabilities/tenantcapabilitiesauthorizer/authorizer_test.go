@@ -100,6 +100,8 @@ func TestDataDriven(t *testing.T) {
 					return "ok"
 				}
 				return err.Error()
+			case "is-not-rate-limited":
+				return fmt.Sprintf("%t", authorizer.IsNotRateLimited(context.Background(), tenID))
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)
 			}

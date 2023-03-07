@@ -64,3 +64,11 @@ ok
 has-tsdb-query-capability ten=11
 ----
 tenant 11 does not have capability to query timeseries data
+
+upsert ten=11 not_rate_limited=true
+----
+ok
+
+is-not-rate-limited ten=11
+----
+true
