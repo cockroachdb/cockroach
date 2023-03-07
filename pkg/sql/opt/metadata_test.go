@@ -47,7 +47,11 @@ func TestMetadata(t *testing.T) {
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
-	tab := &testcat.Table{Revoked: true}
+	tabName := tree.MakeTableNameWithSchema("t", "public", "tab")
+	tab := &testcat.Table{
+		TabName: tabName,
+		Revoked: true,
+	}
 	testCat.AddTable(tab)
 
 	// Create a (col = 1) scalar expression.
