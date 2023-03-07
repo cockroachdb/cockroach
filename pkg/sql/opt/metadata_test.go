@@ -46,7 +46,11 @@ func TestMetadata(t *testing.T) {
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
-	tab := &testcat.Table{Revoked: true}
+	tabName := tree.MakeTableNameWithSchema("t", "public", "tab")
+	tab := &testcat.Table{
+		TabName: tabName,
+		Revoked: true,
+	}
 	testCat.AddTable(tab)
 
 	// Create a (col = 1) scalar expression.
@@ -151,6 +155,30 @@ func TestMetadata(t *testing.T) {
 
 	if ts := mdNew.AllUserDefinedTypes(); len(ts) != 1 && ts[151500].Equal(types.MakeEnum(151500, 152510)) {
 		t.Fatalf("unexpected type")
+	}
+
+	newDSDeps, oldDSDeps := mdNew.TestingDataSourceDeps(), md.TestingDataSourceDeps()
+	for id, dataSource := range oldDSDeps {
+		if newDSDeps[id] != dataSource {
+			t.Fatalf("expected data source dependency to be copied")
+		}
+	}
+
+	newNamesByID, oldNamesByID := mdNew.TestingObjectRefsByName(), md.TestingObjectRefsByName()
+	for id, names := range oldNamesByID {
+		newNames := newNamesByID[id]
+		for i, name := range names {
+			if newNames[i] != name {
+				t.Fatalf("expected object name to be copied")
+			}
+		}
+	}
+
+	newPrivileges, oldPrivileges := mdNew.TestingPrivileges(), md.TestingPrivileges()
+	for id, privileges := range oldPrivileges {
+		if newPrivileges[id] != privileges {
+			t.Fatalf("expected privileges to be copied")
+		}
 	}
 
 	depsUpToDate, err = md.CheckDependencies(context.Background(), testCat)

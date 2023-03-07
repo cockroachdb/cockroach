@@ -911,3 +911,81 @@ DROP SCHEMA sc
 
 statement ok
 SET CLUSTER SETTING server.eventlog.enabled = false
+
+subtest alter_table_schema
+
+# Renaming the schema should invalidate a schema-qualified table reference.
+statement ok
+CREATE SCHEMA sc;
+CREATE TABLE sc.xy (x INT, y INT);
+INSERT INTO sc.xy VALUES (1, 1);
+
+query II
+SELECT * FROM sc.xy;
+----
+1 1
+
+statement ok
+ALTER SCHEMA sc RENAME TO sc1;
+
+query error pq: relation "sc.xy" does not exist
+SELECT * FROM sc.xy;
+
+query II
+SELECT * FROM sc1.xy;
+----
+1 1
+
+statement ok
+DROP SCHEMA sc1 CASCADE;
+
+# Renaming the database should invalidate a database-qualified table reference.
+statement ok
+CREATE DATABASE d;
+USE d;
+CREATE TABLE d.xy (x INT, y INT);
+INSERT INTO d.xy VALUES (1, 1);
+
+query II
+SELECT * FROM d.xy;
+----
+1 1
+
+statement ok
+ALTER DATABASE d RENAME TO d1;
+USE d1;
+
+query error pq: relation "d.xy" does not exist
+SELECT * FROM d.xy;
+
+query II
+SELECT * FROM d1.xy;
+----
+1 1
+
+statement ok
+USE test;
+DROP DATABASE d1 CASCADE;
+
+# Changing the current database should invalidate an unqualified table
+# reference.
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 1);
+
+query II
+SELECT * FROM xy;
+----
+1 1
+
+statement ok
+CREATE DATABASE d;
+USE d;
+
+query error pq: relation "xy" does not exist
+SELECT * FROM xy;
+
+statement ok
+USE test;
+DROP DATABASE d;
+DROP TABLE xy;
