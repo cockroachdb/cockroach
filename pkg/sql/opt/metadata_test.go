@@ -39,7 +39,7 @@ func TestMetadata(t *testing.T) {
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 	seqID := md.AddSequence(&testcat.Sequence{})
 	md.AddView(&testcat.View{})
-	md.AddUserDefinedType(types.MakeEnum(152100, 154180))
+	md.AddUserDefinedType(types.MakeEnum(152100, 154180), nil /* name */)
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -88,7 +88,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected views")
 	}
 
-	md.AddUserDefinedType(types.MakeEnum(151500, 152510))
+	md.AddUserDefinedType(types.MakeEnum(151500, 152510), nil /* name */)
 	if len(md.AllUserDefinedTypes()) != 1 {
 		fmt.Println(md)
 		t.Fatalf("unexpected types")

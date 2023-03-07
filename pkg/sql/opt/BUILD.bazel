@@ -24,6 +24,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/partition",
         "//pkg/sql/pgwire/pgcode",
