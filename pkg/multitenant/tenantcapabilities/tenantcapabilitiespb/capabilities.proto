@@ -80,6 +80,10 @@ message TenantCapabilities {
   // successfully perform `AdminChangeReplicas`, `AdminRelocateRange`,
   // `AdminTransferLease` requests.
   bool can_admin_relocate_range = 7;
+
+  // ExemptFromRateLimiting, if set to true, exempts the tenant from the KV-side tenant
+  // rate limiter.
+  bool exempt_from_rate_limiting = 8;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

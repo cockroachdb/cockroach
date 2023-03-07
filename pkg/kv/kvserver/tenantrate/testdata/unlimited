@@ -1,0 +1,117 @@
+init
+rate:  1
+burst: 1
+read:  { perbatch: 1, perrequest: 1, perbyte: 1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 1 }
+capabilities: { 2: { exemptfromratelimiting: true }, 3: { exemptfromratelimiting: false } }
+----
+00:00:00.000
+
+get_tenants
+[1, 2, 2, 3, 3]
+----
+[2#2, 3#2, system#1]
+
+record_read
+- { tenant: 2, readrequests: 1, readbytes: 24 }
+- { tenant: 3, readrequests: 1, readbytes: 24 }
+----
+[]
+
+metrics
+kv_tenant_rate_limit_read_.*_admitted
+----
+kv_tenant_rate_limit_read_batches_admitted 2
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_read_bytes_admitted 48
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 24
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="3"} 24
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_read_requests_admitted 2
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
+
+launch
+- { id: g1, tenant: 2 }
+- { id: g2, tenant: 3 }
+
+----
+[g1@2, g2@3]
+
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 1
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="3"} 1
+kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
+
+timers
+----
+00:00:25.000
+
+advance
+25s
+----
+00:00:25.000
+
+await
+[g1,g2]
+----
+[]
+
+advance
+1s
+----
+00:00:26.000
+
+launch
+- { id: g3, tenant: 2, writerequests: 1 }
+- { id: g4, tenant: 2, writerequests: 1 }
+- { id: g5, tenant: 3, writerequests: 1 }
+- { id: g6, tenant: 3, writerequests: 1 }
+----
+[g3@2, g4@2, g5@3, g6@3]
+
+# 1 of the tenant 3 requests should be blocked. the rest should have been
+# admitted.
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 1
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="3"} 1
+kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
+
+metrics
+kv_tenant_rate_limit_write_.*_admitted
+----
+kv_tenant_rate_limit_write_batches_admitted 3
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="2"} 2
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_write_bytes_admitted 0
+kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 0
+kv_tenant_rate_limit_write_bytes_admitted{tenant_id="3"} 0
+kv_tenant_rate_limit_write_bytes_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_write_requests_admitted 3
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 2
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
+
+timers
+----
+00:00:28.000
+
+advance
+2s
+----
+00:00:28.000
+
+await
+[g3,g4,g5,g6]
+----
+[]
