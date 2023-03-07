@@ -841,12 +841,11 @@ type PlanningCtx struct {
 	// query).
 	subOrPostQuery bool
 
-	// parallelCheck, if set, indicates that this PlanningCtx is used to handle
-	// one of the checkPlans that are run in parallel. As such, the DistSQL
-	// planner will need to do a few adjustments like using the LeafTxn (even if
-	// it's not needed based on other "regular" factors) and adding
-	// synchronization between certain write operations.
-	parallelCheck bool
+	// mustUseLeafTxn, if set, indicates that this PlanningCtx is used to handle
+	// one of the plans that will run in parallel with other plans. As such, the
+	// DistSQL planner will need to use the LeafTxn (even if it's not needed
+	// based on other "regular" factors).
+	mustUseLeafTxn bool
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
