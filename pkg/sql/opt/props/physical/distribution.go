@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // Distribution represents the physical distribution of data for a relational
@@ -189,9 +190,10 @@ func (d *Distribution) FromIndexScan(
 			// If the above methods failed to find a distribution, then the
 			// distribution is all regions in the database.
 			regionsNames, ok := tabMeta.GetRegionsInDatabase(ctx, evalCtx.Planner)
-			if !ok && evalCtx.SessionData().EnforceHomeRegion && evalCtx.Planner != nil && evalCtx.Planner.IsANSIDML() {
-				err := pgerror.New(pgcode.QueryHasNoHomeRegion,
-					"Query has no home region. Try accessing only tables defined in multi-region databases.")
+			if !ok && evalCtx.Planner != nil && evalCtx.Planner.EnforceHomeRegion() {
+				err := pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try accessing only tables defined in multi-region databases. %s",
+					sqlerrors.EnforceHomeRegionFurtherInfo)
 				panic(err)
 			}
 			if ok {
