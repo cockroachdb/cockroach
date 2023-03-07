@@ -24,6 +24,11 @@ export type StatementDetailsResponseWithKey = {
   key: string;
 };
 
+export type SqlStatsResponse = cockroach.server.serverpb.StatementsResponse;
+
+const FetchStatsMode =
+  cockroach.server.serverpb.CombinedStatementsStatsRequest.StatsType;
+
 export type ErrorWithKey = {
   err: Error;
   key: string;
@@ -35,13 +40,31 @@ export const getCombinedStatements = (
   const queryStr = propsToQueryString({
     start: req.start.toInt(),
     end: req.end.toInt(),
+    "fetch_mode.stats_type": FetchStatsMode.StmtStatsOnly,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
     `${STATEMENTS_PATH}?${queryStr}`,
     null,
     null,
-    "30M",
+    "10M",
+  );
+};
+
+export const getFlushedTxnStatsApi = (
+  req: StatementsRequest,
+): Promise<SqlStatsResponse> => {
+  const queryStr = propsToQueryString({
+    start: req.start.toInt(),
+    end: req.end.toInt(),
+    "fetch_mode.stats_type": FetchStatsMode.TxnStatsOnly,
+  });
+  return fetchData(
+    cockroach.server.serverpb.StatementsResponse,
+    `${STATEMENTS_PATH}?${queryStr}`,
+    null,
+    null,
+    "10M",
   );
 };
 

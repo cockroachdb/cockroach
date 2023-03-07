@@ -16,6 +16,7 @@ import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { TransactionsPage } from "./transactionsPage";
+import { actions as txnStatsActions } from "src/store/transactionStats";
 import {
   TransactionsPageStateProps,
   TransactionsPageDispatchProps,
@@ -27,14 +28,12 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectTransactionsDataValid,
+  selectTransactionsLastUpdated,
+  selectTransactionsDataInFlight,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import {
-  selectStatementsLastUpdated,
-  selectStatementsDataValid,
-  selectStatementsDataInFlight,
-} from "src/statementsPage/statementsPage.selectors";
 import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
@@ -51,9 +50,9 @@ export const TransactionsPageConnected = withRouter(
     (state: AppState) => ({
       columns: selectTxnColumns(state),
       data: selectTransactionsData(state),
-      isDataValid: selectStatementsDataValid(state),
-      isReqInFlight: selectStatementsDataInFlight(state),
-      lastUpdated: selectStatementsLastUpdated(state),
+      isDataValid: selectTransactionsDataValid(state),
+      isReqInFlight: selectTransactionsDataInFlight(state),
+      lastUpdated: selectTransactionsLastUpdated(state),
       timeScale: selectTimeScale(state),
       error: selectTransactionsLastError(state),
       filters: selectFilters(state),
@@ -65,7 +64,7 @@ export const TransactionsPageConnected = withRouter(
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req: StatementsRequest) =>
-        dispatch(sqlStatsActions.refresh(req)),
+        dispatch(txnStatsActions.refresh(req)),
       refreshNodes: () => dispatch(nodesActions.refresh()),
       refreshUserSQLRoles: () =>
         dispatch(uiConfigActions.refreshUserSQLRoles()),

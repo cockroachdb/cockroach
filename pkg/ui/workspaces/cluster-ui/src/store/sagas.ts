@@ -21,6 +21,7 @@ import { notifificationsSaga } from "./notifications";
 import { sqlStatsSaga } from "./sqlStats";
 import { sqlDetailsStatsSaga } from "./statementDetails";
 import { uiConfigSaga } from "./uiConfig";
+import { txnStatsSaga } from "./transactionStats";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -34,5 +35,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(sqlStatsSaga),
     fork(sqlDetailsStatsSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
+    fork(txnStatsSaga),
   ]);
 }
