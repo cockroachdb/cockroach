@@ -343,7 +343,7 @@ func createInMemoryTenant(
 func removeTenantRateLimiters(t test.Test, systemSQL *sqlutils.SQLRunner, tenantName string) {
 	var tenantID int
 	systemSQL.QueryRow(t, `SELECT id FROM [SHOW TENANT $1]`, tenantName).Scan(&tenantID)
-	systemSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
+	systemSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1::INT, 10000000000, 0,
 10000000000, now(), 0);`, tenantID)
 	systemSQL.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.tenant_rate_limiter.burst_limit_seconds = 10000;`,
