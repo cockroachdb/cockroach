@@ -49,7 +49,7 @@ export function StatementDetailsLink(
     implicitTxn: insightDetails.implicitTxn,
   };
   const timeScale: TimeScale = {
-    windowSize: moment.duration(insightDetails.elapsedTimeMillis),
+    windowSize: moment.duration(65, "minutes"),
     fixedWindowEnd: insightDetails.endTime,
     sampleSize: moment.duration(1, "hour"),
     key: "Custom",
