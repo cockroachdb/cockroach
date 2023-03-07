@@ -34,11 +34,31 @@ export default function (props: GraphDashboardProps) {
   } = props;
 
   return [
-    <LineGraph title="CPU Percent" sources={nodeSources}>
+    <LineGraph
+      title="CPU Percent"
+      sources={nodeSources}
+      tooltip={<div>CPU usage for the CRDB nodes {tooltipSelection}</div>}
+    >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.cpu.combined.percent-normalized"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Host CPU Percent"
+      sources={nodeSources}
+      tooltip={<div>Machine-wide CPU usage {tooltipSelection}</div>}
+    >
+      <Axis units={AxisUnits.Percentage} label="CPU">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.cpu.host.combined.percent-normalized"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
           />
