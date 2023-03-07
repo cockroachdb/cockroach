@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -50,11 +52,15 @@ func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
 // authorize enforces a security boundary around endpoints that tenants
 // request from the host KV node or other tenant SQL pod.
 func (a tenantAuthorizer) authorize(
-	ctx context.Context, tenID roachpb.TenantID, fullMethod string, req interface{},
+	ctx context.Context,
+	sv *settings.Values,
+	tenID roachpb.TenantID,
+	fullMethod string,
+	req interface{},
 ) error {
 	switch fullMethod {
 	case "/cockroach.roachpb.Internal/Batch":
-		return a.authBatch(ctx, tenID, req.(*kvpb.BatchRequest))
+		return a.authBatch(ctx, sv, tenID, req.(*kvpb.BatchRequest))
 
 	case "/cockroach.roachpb.Internal/RangeLookup":
 		return a.authRangeLookup(tenID, req.(*kvpb.RangeLookupRequest))
@@ -166,51 +172,13 @@ func checkSpanBounds(rSpan, tenSpan roachpb.RSpan) error {
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
 func (a tenantAuthorizer) authBatch(
-	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
+	ctx context.Context, sv *settings.Values, tenID roachpb.TenantID, args *kvpb.BatchRequest,
 ) error {
 	if err := a.capabilitiesAuthorizer.HasCapabilityForBatch(ctx, tenID, args); err != nil {
-		return authError(err.Error())
-	}
-
-	// TODO(ecwall): This list isn't exhaustive. For any request that isn't
-	// contained in here, there should be a corresponding capability. Once that's
-	// done, we can get rid of this loop entirely and perform all checks inside
-	// the capabilities Authorizer above.
-	for _, ru := range args.Requests {
-		switch ru.GetInner().(type) {
-		case
-			*kvpb.AddSSTableRequest,
-			*kvpb.AdminChangeReplicasRequest,
-			*kvpb.AdminRelocateRangeRequest,
-			*kvpb.AdminScatterRequest,
-			*kvpb.AdminSplitRequest,
-			*kvpb.AdminTransferLeaseRequest,
-			*kvpb.AdminUnsplitRequest,
-			*kvpb.ClearRangeRequest,
-			*kvpb.ConditionalPutRequest,
-			*kvpb.DeleteRangeRequest,
-			*kvpb.DeleteRequest,
-			*kvpb.EndTxnRequest,
-			*kvpb.ExportRequest,
-			*kvpb.GetRequest,
-			*kvpb.HeartbeatTxnRequest,
-			*kvpb.IncrementRequest,
-			*kvpb.InitPutRequest,
-			*kvpb.IsSpanEmptyRequest,
-			*kvpb.LeaseInfoRequest,
-			*kvpb.PutRequest,
-			*kvpb.QueryIntentRequest,
-			*kvpb.QueryLocksRequest,
-			*kvpb.QueryTxnRequest,
-			*kvpb.RangeStatsRequest,
-			*kvpb.RefreshRangeRequest,
-			*kvpb.RefreshRequest,
-			*kvpb.ReverseScanRequest,
-			*kvpb.RevertRangeRequest,
-			*kvpb.ScanRequest:
-			continue
+		if errors.HasAssertionFailure(err) {
+			logcrash.ReportOrPanic(ctx, sv, "%v", err)
 		}
-		return authErrorf("request [%s] not permitted", args.Summary())
+		return authError(err.Error())
 	}
 
 	// All keys in the request must reside within the tenant's keyspace.
