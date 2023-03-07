@@ -506,7 +506,7 @@ func (o *optTrackingTypeResolver) ResolveType(
 	if err != nil {
 		return nil, err
 	}
-	o.metadata.AddUserDefinedType(typ)
+	o.metadata.AddUserDefinedType(typ, name)
 	return typ, nil
 }
 
@@ -518,6 +518,6 @@ func (o *optTrackingTypeResolver) ResolveTypeByOID(
 	if err != nil {
 		return nil, err
 	}
-	o.metadata.AddUserDefinedType(typ)
+	o.metadata.AddUserDefinedType(typ, nil /* name */)
 	return typ, nil
 }
