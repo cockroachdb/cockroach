@@ -43,6 +43,7 @@ interface RangeSelectProps {
   onPresetOptionSelect: (arg0: RangeOption) => void;
   onCustomSelect: (dateRange: [moment.Moment, moment.Moment]) => void;
   selected: Selected;
+  timezoneLabel?: string;
 }
 
 type TimeLabelProps = {
@@ -86,6 +87,7 @@ const RangeSelect = ({
   onPresetOptionSelect,
   onCustomSelect,
   selected,
+  timezoneLabel="UTC"
 }: RangeSelectProps): React.ReactElement => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
   /**
@@ -150,6 +152,7 @@ const RangeSelect = ({
     customDropdownOptionWasJustSelected ||
     (selectedIsCustom && !customBackWasJustSelected);
 
+  console.log(selected)
   const menu = (
     <>
       {
@@ -171,11 +174,12 @@ const RangeSelect = ({
             {shouldShowCustom ? (
               <div className={cx("custom-menu")}>
                 <DateRangeMenu
-                  startInit={selected.timeWindow.start}
-                  endInit={selected.timeWindow.end}
+                  startInit={selected.timeWindow.start.tz(timezoneLabel)}
+                  endInit={selected.timeWindow.end.tz(timezoneLabel)}
                   onSubmit={onCustomSelectWrapper}
                   onCancel={closeDropdown}
                   onReturnToPresetOptionsClick={onReturnToPresetOptionsClick}
+                  timezone={timezoneLabel}
                 />
               </div>
             ) : (
@@ -224,7 +228,7 @@ const RangeSelect = ({
                         {selected.timeEnd}
                       </span>{" "}
                       <span className={cx("Select-value-label__sufix")}>
-                        (UTC)
+                        ({timezoneLabel})
                       </span>
                     </>
                   )}

@@ -85,7 +85,7 @@ import moment from "moment";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
-  selectCrossClusterReplicationEnabled,
+  selectCrossClusterReplicationEnabled, selectTimezoneSetting,
 } from "src/redux/clusterSettings";
 
 interface GraphDashboard {
@@ -135,6 +135,7 @@ type MapStateToProps = {
     typeof nodeDisplayNameByIDSelector.resultFunc
   >;
   crossClusterReplicationEnabled: boolean;
+  timezone: string;
 };
 
 type MapDispatchToProps = {
@@ -359,6 +360,7 @@ export class NodeGraphs extends React.Component<
               currentScale={this.props.timeScale}
               setTimeScale={this.props.setTimeScale}
               adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
+              timezone={this.props.timezone}
             />
           </PageConfigItem>
         </PageConfig>
@@ -456,6 +458,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   nodeDropdownOptions: nodeDropdownOptionsSelector(state),
   nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
   crossClusterReplicationEnabled: selectCrossClusterReplicationEnabled(state),
+  timezone: selectTimezoneSetting(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {

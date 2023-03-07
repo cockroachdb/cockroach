@@ -25,18 +25,20 @@ import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 function makeEventBox(
   events: clusterUiApi.EventsResponse,
   refreshEventsFn: typeof refreshEvents,
+  timezone: string,
 ) {
   return shallow(
     <EventBox
       events={events}
       refreshEvents={refreshEventsFn}
       eventsValid={true}
+      timezone={timezone}
     />,
   );
 }
 
-function makeEvent(event: clusterUiApi.EventColumns) {
-  return mount(<EventRow event={event}></EventRow>);
+function makeEvent(event: clusterUiApi.EventColumns, timezone: string) {
+  return mount(<EventRow event={event} timezone={timezone}></EventRow>);
 }
 
 const createEventWithEventType = (
@@ -56,7 +58,7 @@ describe("<EventBox>", function () {
 
   describe("refresh", function () {
     it("refreshes events when mounted.", function () {
-      makeEventBox([], spy);
+      makeEventBox([], spy, "UTC");
       expect(spy).toHaveBeenCalled();
     });
   });
@@ -67,7 +69,7 @@ describe("<EventRow>", function () {
     it("correctly renders a known event", function () {
       const e: clusterUiApi.EventColumns =
         createEventWithEventType("create_database");
-      const provider = makeEvent(e);
+      const provider = makeEvent(e, "UTC");
 
       expect(
         provider
@@ -80,7 +82,7 @@ describe("<EventRow>", function () {
 
     it("correctly renders an unknown event", function () {
       const e: clusterUiApi.EventColumns = createEventWithEventType("unknown");
-      const provider = makeEvent(e);
+      const provider = makeEvent(e, "UTC");
 
       expect(
         provider.find("div.events__message > span").text().includes("unknown"),
@@ -96,7 +98,7 @@ describe("getEventInfo", function () {
       const event: clusterUiApi.EventColumns =
         createEventWithEventType(eventType);
       const eventContent = shallow(
-        getEventInfo(event).content as React.ReactElement<any>,
+        getEventInfo(event, "UTC").content as React.ReactElement<any>,
       );
       expect(eventContent.text()).not.toMatch(/Unknown event type/);
     });

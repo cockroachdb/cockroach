@@ -9,21 +9,16 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import moment from "moment";
-import "moment-timezone";
+import moment from "moment-timezone";
 
-declare module "moment" {
-  interface Moment {
-    tz(timezone: string, keepLocalTime?: boolean): moment.Moment;
-  }
-}
 
 import {
   BytesFitScale,
   ComputeByteScale,
   ComputeDurationScale,
-  DATE_WITH_SECONDS_FORMAT_24_UTC,
+  DATE_WITH_SECONDS_FORMAT_24_TZ,
   DurationFitScale,
+  FormatWithTimezone,
 } from "src/util/format";
 
 /**
@@ -271,9 +266,6 @@ const timeIncrements: number[] = timeIncrementDurations.map(inc =>
   inc.asMilliseconds(),
 );
 
-export function formatTimeStamp(timeMillis: number): string {
-  return moment.utc(timeMillis).format(DATE_WITH_SECONDS_FORMAT_24_UTC);
-}
 
 function ComputeTimeAxisDomain(extent: Extent, timezone: string): AxisDomain {
   // Compute increment; for time scales, this is taken from a table of allowed
@@ -307,7 +299,10 @@ function ComputeTimeAxisDomain(extent: Extent, timezone: string): AxisDomain {
     return tickDateFormatter(new Date(n), format);
   };
 
-  axisDomain.guideFormat = formatTimeStamp;
+  axisDomain.guideFormat = (millis) => {
+    return FormatWithTimezone(moment(millis), DATE_WITH_SECONDS_FORMAT_24_TZ, timezone);
+  }
+
   return axisDomain;
 }
 

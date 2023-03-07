@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import uPlot, { Plugin } from "uplot";
-import { AxisUnits, formatTimeStamp } from "../utils/domain";
-import { Bytes, Duration, Percentage, Count } from "../../util";
+import uPlot, {Plugin} from "uplot";
+import moment from "moment-timezone";
+import {AxisUnits} from "../utils/domain";
+import {Bytes, Count, DATE_WITH_SECONDS_FORMAT_24_TZ, Duration, FormatWithTimezone, Percentage} from "../../util";
 
 // Fallback color for series stroke if one is not defined.
 const DEFAULT_STROKE = "#7e89a9";
@@ -110,7 +111,7 @@ export function barTooltipPlugin(yAxis: AxisUnits): Plugin {
     // get the current timestamp from the x axis and formatting as
     // the Tooltip header.
     const closestDataPointTimeMillis = u.data[0][u.posToIdx(left)];
-    timeStamp.textContent = formatTimeStamp(closestDataPointTimeMillis);
+    timeStamp.textContent = FormatWithTimezone(moment(closestDataPointTimeMillis), DATE_WITH_SECONDS_FORMAT_24_TZ);
 
     // Generating the series legend based on current state of µPlot
     generateSeriesLegend(u, seriesLegend, yAxis);

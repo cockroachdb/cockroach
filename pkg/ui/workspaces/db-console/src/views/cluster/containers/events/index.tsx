@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
@@ -34,6 +34,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import "./events.styl";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 // Number of events to show in the sidebar.
 const EVENT_BOX_NUM_EVENTS = 5;
@@ -54,12 +55,12 @@ class EventSortedTable extends SortedTable<SimplifiedEvent> {}
 
 export interface EventRowProps {
   event: clusterUiApi.EventColumns;
+  timezone: string;
 }
 
-export function getEventInfo(e: clusterUiApi.EventColumns): SimplifiedEvent {
+export function getEventInfo(e: clusterUiApi.EventColumns, timezone: string): SimplifiedEvent {
   return {
-    fromNowString: moment(e.timestamp)
-      .format(util.DATE_FORMAT_24_UTC)
+    fromNowString: util.FormatWithTimezone(moment.utc(e.timestamp), util.DATE_FORMAT_24_TZ, timezone)
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{getEventDescription(e)}</span>,
@@ -69,8 +70,8 @@ export function getEventInfo(e: clusterUiApi.EventColumns): SimplifiedEvent {
 
 export class EventRow extends React.Component<EventRowProps, {}> {
   render() {
-    const { event } = this.props;
-    const e = getEventInfo(event);
+    const { event, timezone } = this.props;
+    const e = getEventInfo(event, timezone);
     return (
       <tr>
         <td>
@@ -90,6 +91,7 @@ export interface EventBoxProps {
   // data becomes invalid, and thus trigger a refresh.
   eventsValid: boolean;
   refreshEvents: typeof refreshEvents;
+  timezone: string;
 }
 
 export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
@@ -112,7 +114,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
             {_.map(
               _.take(events, EVENT_BOX_NUM_EVENTS),
               (e: clusterUiApi.EventColumns, i: number) => {
-                return <EventRow event={e} key={i} />;
+                return <EventRow timezone={this.props.timezone} event={e} key={i} />;
               },
             )}
             <tr>
@@ -137,6 +139,7 @@ export interface EventPageProps {
   setSort: typeof eventsSortSetting.set;
   lastError: Error;
   maxSizeApiReached: boolean;
+  timezone: string;
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
@@ -151,8 +154,10 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   }
 
   renderContent() {
-    const { events, sortSetting, maxSizeApiReached } = this.props;
-    const simplifiedEvents = _.map(events, getEventInfo);
+    const { events, sortSetting, maxSizeApiReached, timezone } = this.props;
+    const simplifiedEvents = _.map(events, (event) => {
+      return getEventInfo(event, timezone)
+    })
 
     return (
       <>
@@ -219,6 +224,7 @@ const eventBoxConnected = withRouter(
       return {
         events: eventsSelector(state),
         eventsValid: eventsValidSelector(state),
+        timezone: selectTimezoneSetting(state),
       };
     },
     {
@@ -237,6 +243,7 @@ const eventPageConnected = withRouter(
         sortSetting: eventsSortSetting.selector(state),
         lastError: eventsLastErrorSelector(state),
         maxSizeApiReached: eventsMaxApiReached(state),
+        timezone: selectTimezoneSetting(state),
       };
     },
     {

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, {PropsWithChildren} from "react";
 import moment from "moment";
 import { createSelector } from "reselect";
 
@@ -45,8 +45,9 @@ import {
   TimeWindow,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
+import WithTimezone from "src/redux/withTimezone";
 
-export interface LineGraphProps extends MetricsDataComponentProps {
+interface LineGraphPropsInternal extends MetricsDataComponentProps{
   title?: string;
   subtitle?: string;
   legend?: boolean;
@@ -57,6 +58,14 @@ export interface LineGraphProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
 }
+
+interface ConnectedProps {
+  timezone: string;
+}
+
+type LineGraphProps = LineGraphPropsInternal & ConnectedProps
+
+
 
 // touPlot formats our timeseries data into the format
 // uPlot expects which is a 2-dimensional array where the
@@ -152,10 +161,9 @@ export function fillGaps(
 // and store its ref in a global variable.
 // Once we receive updates to props, we push new data to the
 // uPlot object.
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+class LineGraph extends React.Component<LineGraphProps, {}> {
   constructor(props: LineGraphProps) {
     super(props);
-
     this.setNewTimeRange = this.setNewTimeRange.bind(this);
   }
 
@@ -296,6 +304,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     this.xAxisDomain = calculateXAxisDomain(
       util.NanoToMilli(this.props.timeInfo.start.toNumber()),
       util.NanoToMilli(this.props.timeInfo.end.toNumber()),
+      this.props.timezone
     );
 
     const prevKeys =
@@ -366,3 +375,5 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     );
   }
 }
+
+export default WithTimezone<PropsWithChildren<LineGraphPropsInternal>>(LineGraph);

@@ -11,7 +11,7 @@
 import React from "react";
 import _ from "lodash";
 
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import LineGraph from "src/views/cluster/components/linegraph";
 import { Axis, Metric } from "src/views/shared/components/metricQuery";
 
 import {

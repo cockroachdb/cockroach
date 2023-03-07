@@ -290,6 +290,7 @@ describe("TimeScaleDropdown functions", function () {
       const title = formatRangeSelectSelected(
         currentWindow,
         state.currentScale,
+        "UTC"
       );
       assert.deepEqual(title, {
         key: "Past 10 Minutes",
@@ -300,7 +301,7 @@ describe("TimeScaleDropdown functions", function () {
 
     it("returns custom Title with Time part only for current day", () => {
       const currentScale = { ...state.currentScale, key: "Custom" };
-      const title = formatRangeSelectSelected(currentWindow, currentScale);
+      const title = formatRangeSelectSelected(currentWindow, currentScale, "UTC");
       const timeStart = moment
         .utc(currentWindow.start)
         .format(dropdownTimeFormat);
@@ -335,7 +336,7 @@ describe("TimeScaleDropdown functions", function () {
         ),
         key: "Custom",
       };
-      const title = formatRangeSelectSelected(window, currentScale);
+      const title = formatRangeSelectSelected(window, currentScale, "UTC");
       const timeStart = moment.utc(window.start).format(dropdownTimeFormat);
       const timeEnd = moment.utc(window.end).format(dropdownTimeFormat);
       const dateStart = moment.utc(window.start).format(dropdownDateFormat);

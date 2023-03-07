@@ -20,6 +20,13 @@ export const selectClusterSettings = createSelector(
     settings?.key_values,
 );
 
+export const selectTimezoneSetting = createSelector(
+    selectClusterSettings,
+    (settings) => {
+        return "EST"
+    }
+)
+
 export const selectResolution10sStorageTTL = createSelector(
   selectClusterSettings,
   (settings): moment.Duration | undefined => {
