@@ -45,9 +45,7 @@ interface StatementInsightsTable {
   visibleColumns: ColumnDescriptor<StmtInsightEvent>[];
 }
 
-export function makeStatementInsightsColumns(
-  setTimeScale: (ts: TimeScale) => void,
-): ColumnDescriptor<StmtInsightEvent>[] {
+export function makeStatementInsightsColumns(): ColumnDescriptor<StmtInsightEvent>[] {
   const execType = InsightExecEnum.STATEMENT;
   return [
     {
@@ -64,8 +62,7 @@ export function makeStatementInsightsColumns(
     {
       name: "statementFingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: StmtInsightEvent) =>
-        StatementDetailsLink(item, setTimeScale),
+      cell: (item: StmtInsightEvent) => StatementDetailsLink(item),
       sort: (item: StmtInsightEvent) => item.statementFingerprintID,
       showByDefault: true,
     },
