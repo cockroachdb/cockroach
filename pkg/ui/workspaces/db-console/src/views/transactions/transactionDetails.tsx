@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshNodes,
-  refreshStatements,
+  refreshTxns,
   refreshTxnInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
@@ -37,7 +37,7 @@ import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelec
 import { selectHasAdminRole } from "src/redux/user";
 
 export const selectTransaction = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;
@@ -95,7 +95,7 @@ export default withRouter(
       };
     },
     {
-      refreshData: refreshStatements,
+      refreshData: refreshTxns,
       refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
