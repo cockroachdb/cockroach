@@ -107,8 +107,8 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 
 			br := ba.CreateReply()
 			br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = txn
-			br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = true
-			br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = !prevent
+			br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp = true
+			br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp = !prevent
 
 			mockSender = kv.SenderFunc(func(
 				_ context.Context, ba *kvpb.BatchRequest,
@@ -288,8 +288,8 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				} else {
 					br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = txn
 				}
-				br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = true
-				br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = false
+				br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp = true
+				br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntentMatchingTxnAndTimestamp = false
 
 				mockSender = kv.SenderFunc(func(
 					_ context.Context, ba *kvpb.BatchRequest,

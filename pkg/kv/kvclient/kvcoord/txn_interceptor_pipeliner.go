@@ -702,12 +702,19 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
 			// the ErrorIfMissing option set to return without error
-			// and with with FoundIntent=false, but we handle that
-			// case here because it happens a lot in tests.
-			if resp.(*kvpb.QueryIntentResponse).FoundIntent {
+			// and with FoundIntentMatchingTxn=false, but we handle
+			// that case here because it happens a lot in tests.
+			// TODO(nvanbenschoten): we only need to check FoundIntentMatchingTxn,
+			// but this field was not set before v23.2, so for now, we check both
+			// fields. Remove this in the future.
+			qiResp := resp.(*kvpb.QueryIntentResponse)
+			if qiResp.FoundIntentMatchingTxnAndTimestamp || qiResp.FoundIntentMatchingTxn {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
 				// Move to lock footprint.
 				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
+			} else {
+				log.Warningf(ctx,
+					"QueryIntent(ErrorIfMissing=true) found no intent, but did not error; resp=%+v", qiResp)
 			}
 		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.

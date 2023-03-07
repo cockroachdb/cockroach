@@ -1092,7 +1092,8 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		// here then we know we can ignore intent missing errors.
 		qiReply.reply = qiBa.CreateReply()
 		for _, ru := range qiReply.reply.Responses {
-			ru.GetQueryIntent().FoundIntent = true
+			ru.GetQueryIntent().FoundIntentMatchingTxn = true
+			ru.GetQueryIntent().FoundIntentMatchingTxnAndTimestamp = true
 		}
 	}
 

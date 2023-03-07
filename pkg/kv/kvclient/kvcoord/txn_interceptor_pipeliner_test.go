@@ -244,7 +244,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -308,9 +308,16 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
-		br.Responses[1].GetQueryIntent().FoundIntent = true
-		br.Responses[2].GetQueryIntent().FoundIntent = true
-		br.Responses[3].GetQueryIntent().FoundIntent = true
+		// NOTE: expected response from a v23.1 node.
+		// TODO(nvanbenschoten): update this case when v23.1 compatibility is no
+		// longer required.
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxn = false
+		br.Responses[1].GetQueryIntent().FoundIntentMatchingTxnAndTimestamp = true
+		// NOTE: expected responses from a v23.2 node.
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxnAndTimestamp = true
+		br.Responses[3].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxnAndTimestamp = false
 		return br, nil
 	})
 
@@ -415,7 +422,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -498,9 +505,9 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
-		br.Responses[2].GetQueryIntent().FoundIntent = true
-		br.Responses[3].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[3].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -564,8 +571,8 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
-		br.Responses[1].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[1].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -650,7 +657,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 		br.Txn = ba.Txn
 		for i := 0; i < writes; i++ {
 			if i%2 == 0 {
-				br.Responses[i].GetQueryIntent().FoundIntent = true
+				br.Responses[i].GetQueryIntent().FoundIntentMatchingTxn = true
 			}
 		}
 		return br, nil
@@ -925,7 +932,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -958,7 +965,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
-		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -1070,8 +1077,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
-		br.Responses[2].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -1096,7 +1103,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[1].GetQueryIntent().FoundIntent = true
+		br.Responses[1].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -1118,8 +1125,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
-		br.Responses[2].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
+		br.Responses[2].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -1207,7 +1214,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 
@@ -1450,7 +1457,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetQueryIntent().FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntentMatchingTxn = true
 		return br, nil
 	})
 	br, pErr := tp.SendLocked(ctx, ba)
