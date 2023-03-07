@@ -34,6 +34,7 @@ capability_name        capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+not_rate_limited       false
 
 subtest end
 
@@ -52,6 +53,7 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+not_rate_limited       false
 
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
@@ -63,6 +65,7 @@ capability_name        capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+not_rate_limited       false
 
 subtest end
 
@@ -81,6 +84,7 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+not_rate_limited       false
 
 subtest end
 
@@ -99,6 +103,7 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+not_rate_limited       false
 
 subtest end
 
@@ -117,6 +122,7 @@ capability_name        capability_value
 can_admin_split        true
 can_view_node_info     true
 can_view_tsdb_metrics  false
+not_rate_limited       false
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
@@ -128,5 +134,30 @@ capability_name        capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+not_rate_limited       false
+
+statement ok
+ALTER TENANT "multiple-capability-tenant" GRANT CAPABILITY not_rate_limited
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+not_rate_limited       true
+
+statement ok
+ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY not_rate_limited
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
+----
+capability_name        capability_value
+can_admin_split        false
+can_view_node_info     false
+can_view_tsdb_metrics  false
+not_rate_limited       false
 
 subtest end

@@ -62,4 +62,8 @@ const (
 	// TODO(davidh): Revise this once tenant-scoped metrics are implemented in
 	// https://github.com/cockroachdb/cockroach/issues/96438
 	CanViewTSDBMetrics // can_view_tsdb_metrics
+
+	// NotRateLimited, if set to true, exempts the tenant from the KV-side tenant
+	// rate limiter.
+	NotRateLimited // not_rate_limited
 )

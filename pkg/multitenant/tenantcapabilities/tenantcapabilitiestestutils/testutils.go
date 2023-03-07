@@ -75,6 +75,13 @@ func ParseTenantCapabilityUpsert(
 			}
 			cap.CanViewTSDBMetrics = b
 		}
+		if arg.Key == "not_rate_limited" {
+			b, err := strconv.ParseBool(arg.Vals[0])
+			if err != nil {
+				return nil, err
+			}
+			cap.NotRateLimited = b
+		}
 	}
 	update := tenantcapabilities.Update{
 		Entry: tenantcapabilities.Entry{
