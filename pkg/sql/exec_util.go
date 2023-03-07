@@ -3462,6 +3462,10 @@ func (m *sessionDataMutator) SetInjectRetryErrorsOnCommitEnabled(val bool) {
 	m.data.InjectRetryErrorsOnCommitEnabled = val
 }
 
+func (m *sessionDataMutator) SetEnforceHomeRegionFollowerReadsEnabled(val bool) {
+	m.data.EnforceHomeRegionFollowerReadsEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

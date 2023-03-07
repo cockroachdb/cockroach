@@ -2605,6 +2605,7 @@ enable_seqscan                                        on                  NULL  
 enable_super_regions                                  off                 NULL      NULL        NULL        string
 enable_zigzag_join                                    on                  NULL      NULL        NULL        string
 enforce_home_region                                   off                 NULL      NULL        NULL        string
+enforce_home_region_follower_reads_enabled            off                 NULL      NULL        NULL        string
 escape_string_warning                                 on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy         off                 NULL      NULL        NULL        string
 experimental_distsql_planning                         off                 NULL      NULL        NULL        string
@@ -2751,6 +2752,7 @@ enable_seqscan                                        on                  NULL  
 enable_super_regions                                  off                 NULL  user     NULL      off                 off
 enable_zigzag_join                                    on                  NULL  user     NULL      on                  on
 enforce_home_region                                   off                 NULL  user     NULL      off                 off
+enforce_home_region_follower_reads_enabled            off                 NULL  user     NULL      off                 off
 escape_string_warning                                 on                  NULL  user     NULL      on                  on
 expect_and_ignore_not_visible_columns_in_copy         off                 NULL  user     NULL      off                 off
 experimental_distsql_planning                         off                 NULL  user     NULL      off                 off
@@ -2895,6 +2897,7 @@ enable_seqscan                                        NULL    NULL     NULL     
 enable_super_regions                                  NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                                    NULL    NULL     NULL     NULL        NULL
 enforce_home_region                                   NULL    NULL     NULL     NULL        NULL
+enforce_home_region_follower_reads_enabled            NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                 NULL    NULL     NULL     NULL        NULL
 expect_and_ignore_not_visible_columns_in_copy         NULL    NULL     NULL     NULL        NULL
 experimental_distsql_planning                         NULL    NULL     NULL     NULL        NULL

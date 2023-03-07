@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -462,12 +464,14 @@ func errorOnInvalidMultiregionDB(
 	survivalGoal, ok := tabMeta.GetDatabaseSurvivalGoal(ctx, evalCtx.Planner)
 	// non-multiregional database or SURVIVE REGION FAILURE option
 	if !ok {
-		err := pgerror.New(pgcode.QueryHasNoHomeRegion,
-			"Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.")
+		err := pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability. %s",
+			sqlerrors.EnforceHomeRegionFurtherInfo)
 		panic(err)
 	} else if survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
-		err := pgerror.New(pgcode.QueryHasNoHomeRegion,
-			"The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.")
+		err := pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability. %s",
+			sqlerrors.EnforceHomeRegionFurtherInfo)
 		panic(err)
 	}
 }
@@ -576,6 +580,24 @@ func (b *Builder) buildScan(
 	// is disallowed when EnforceHomeRegion is true.
 	if b.evalCtx.SessionData().EnforceHomeRegion && parser.IsANSIDML(b.stmt) {
 		errorOnInvalidMultiregionDB(b.ctx, b.evalCtx, tabMeta)
+		// Populate the remote regions touched by the multiregion database used in
+		// this query. If a query dynamically errors out as having no home region,
+		// the query will be replanned with each of the remote regions,
+		// one-at-a-time, with AOST follower_read_timestamp(). If one of these
+		// retries doesn't error out, that region will be reported to the user as
+		// the query's home region.
+		if len(b.evalCtx.RemoteRegions) == 0 {
+			if regionsNames, ok := tabMeta.GetRegionsInDatabase(b.ctx, b.evalCtx.Planner); ok {
+				if gatewayRegion, ok := b.evalCtx.Locality.Find("region"); ok {
+					b.evalCtx.RemoteRegions = make(catpb.RegionNames, 0, len(regionsNames))
+					for _, regionName := range regionsNames {
+						if string(regionName) != gatewayRegion {
+							b.evalCtx.RemoteRegions = append(b.evalCtx.RemoteRegions, regionName)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}

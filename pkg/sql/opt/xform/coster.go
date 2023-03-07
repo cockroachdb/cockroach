@@ -731,7 +731,7 @@ func (c *coster) computeDistributeCost(
 			return c.distributionCost(source)
 		}
 	}
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
+	if c.evalCtx != nil && c.evalCtx.Planner.EnforceHomeRegion() {
 		if distribute.HasHomeRegion() {
 			// Query plans with a home region are favored over those without one.
 			return LargeDistributeCostWithHomeRegion
@@ -882,7 +882,7 @@ func (c *coster) distributionCost(regionsAccessed physical.Distribution) (cost m
 		// that case to try and avoid the distribution anyway.
 		extraCost = memo.Cost(SmallDistributeCost)
 	} else if !regionsAccessed.Any() && c.evalCtx != nil &&
-		c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
+		c.evalCtx.Planner.EnforceHomeRegion() {
 		if len(regionsAccessed.Regions) == 1 {
 			// Query plans with a home region are favored over those without one.
 			extraCost = LargeDistributeCostWithHomeRegion
