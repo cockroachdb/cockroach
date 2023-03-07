@@ -628,10 +628,6 @@ const (
 
 	// planFlagContainsMutation is set if the plan has any mutations.
 	planFlagContainsMutation
-
-	// planFlagContainsNonDefaultLocking is set if the plan has a node with
-	// non-default key locking strength.
-	planFlagContainsNonDefaultLocking
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

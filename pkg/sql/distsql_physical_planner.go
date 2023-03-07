@@ -4465,15 +4465,13 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 		onFlowCleanup: []func(){infra.Release},
 	}
 	if !distribute {
-		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) ||
-			planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking) {
+		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) {
 			// Don't parallelize the scans if we have a local plan if
 			// - we don't have a planner which is the case when we are not on
 			// the main query path;
 			// - we don't have a span resolver (this can happen only in tests);
 			// - the plan contains a mutation operation - we currently don't
-			// support any parallelism when mutations are present;
-			// - the plan uses non-default key locking strength (see #94290).
+			// support any parallelism when mutations are present.
 			return planCtx
 		}
 		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(ctx, &planner.curPlan.planComponents)
