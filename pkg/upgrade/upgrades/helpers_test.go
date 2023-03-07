@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,3 +168,31 @@ func GetTable(
 
 // WaitForJobStatement is exported so that it can be detected by a testing knob.
 const WaitForJobStatement = waitForJobStatement
+
+// ExecForCountInTxns allows statements to be repeatedly run on a database
+// in transactions of a specified size.
+func ExecForCountInTxns(
+	ctx context.Context,
+	t *testing.T,
+	db *gosql.DB,
+	count int,
+	txCount int,
+	fn func(txRunner *sqlutils.SQLRunner, i int),
+) {
+	tx, err := db.BeginTx(ctx, nil /* opts */)
+	require.NoError(t, err)
+	txRunner := sqlutils.MakeSQLRunner(tx)
+	// Group statements into transactions of txCount runs to speed up creation.
+	for i := 0; i < count; i++ {
+		if i != 0 && i%txCount == 0 {
+			err := tx.Commit()
+			require.NoError(t, err)
+			tx, err = db.BeginTx(ctx, nil /* opts */)
+			require.NoError(t, err)
+			txRunner = sqlutils.MakeSQLRunner(tx)
+		}
+		fn(txRunner, i)
+	}
+	err = tx.Commit()
+	require.NoError(t, err)
+}
