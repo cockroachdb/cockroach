@@ -1589,7 +1589,7 @@ CREATE USER hash8 WITH PASSWORD 'hello world'
 query TT
 SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
 ----
-hash8  SCRAM-SHA-256$119680
+hash8  SCRAM-SHA-256$10610:
 
 statement ok
 ALTER USER hash8 WITH PASSWORD 'hello universe'
@@ -1597,7 +1597,7 @@ ALTER USER hash8 WITH PASSWORD 'hello universe'
 query TT
 SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
 ----
-hash8  SCRAM-SHA-256$119680
+hash8  SCRAM-SHA-256$10610:
 
 subtest scram_cost
 
