@@ -171,7 +171,6 @@ export const StatementInsightDetails: React.FC<
             <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
               <StatementInsightDetailsOverviewTab
                 insightEventDetails={details}
-                setTimeScale={setTimeScale}
                 hasAdminRole={hasAdminRole}
               />
             </Tabs.TabPane>

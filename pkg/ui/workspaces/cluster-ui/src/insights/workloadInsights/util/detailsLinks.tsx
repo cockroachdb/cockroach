@@ -13,27 +13,14 @@ import React from "react";
 import { HexStringToInt64String } from "../../../util";
 import { Link } from "react-router-dom";
 import { StatementLinkTarget } from "../../../statementsTable";
-import moment from "moment/moment";
-import { TimeScale } from "../../../timeScaleDropdown";
-import { Moment } from "moment";
 
 export function TransactionDetailsLink(
   transactionFingerprintID: string,
-  startTime: Moment | null,
-  setTimeScale: (tw: TimeScale) => void,
 ): React.ReactElement {
   const txnID = HexStringToInt64String(transactionFingerprintID);
   const path = `/transaction/${txnID}`;
-  const timeScale: TimeScale = startTime
-    ? {
-        windowSize: moment.duration(65, "minutes"),
-        fixedWindowEnd: moment(startTime).add(1, "hour"),
-        sampleSize: moment.duration(1, "hour"),
-        key: "Custom",
-      }
-    : null;
   return (
-    <Link to={path} onClick={() => timeScale && setTimeScale(timeScale)}>
+    <Link to={path}>
       <div>{String(transactionFingerprintID)}</div>
     </Link>
   );
@@ -41,7 +28,6 @@ export function TransactionDetailsLink(
 
 export function StatementDetailsLink(
   insightDetails: StmtInsightEvent,
-  setTimeScale: (tw: TimeScale) => void,
 ): React.ReactElement {
   const linkProps = {
     statementFingerprintID: HexStringToInt64String(
@@ -50,18 +36,9 @@ export function StatementDetailsLink(
     appNames: [insightDetails.application],
     implicitTxn: insightDetails.implicitTxn,
   };
-  const timeScale: TimeScale = {
-    windowSize: moment.duration(insightDetails.elapsedTimeMillis),
-    fixedWindowEnd: insightDetails.endTime,
-    sampleSize: moment.duration(1, "hour"),
-    key: "Custom",
-  };
 
   return (
-    <Link
-      to={StatementLinkTarget(linkProps)}
-      onClick={() => setTimeScale(timeScale)}
-    >
+    <Link to={StatementLinkTarget(linkProps)}>
       <div>{String(insightDetails.statementFingerprintID)}</div>
     </Link>
   );
