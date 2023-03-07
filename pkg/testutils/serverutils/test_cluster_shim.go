@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -236,7 +236,7 @@ type TestClusterInterface interface {
 	// tenant capabilities for the specified tenant ID.
 	// Only boolean capabilities are currently supported as we wait for the
 	// specified capabilities to have a "true" value.
-	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, ...tenantcapabilitiespb.TenantCapabilityName)
+	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, ...tenantcapabilitiesapi.CapabilityID)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.

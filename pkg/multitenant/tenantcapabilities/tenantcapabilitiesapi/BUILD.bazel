@@ -1,0 +1,27 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "tenantcapabilitiesapi",
+    srcs = [
+        "api.go",
+        "capability_names.go",
+        ":capabilityid-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+stringer(
+    name = "capabilityid-stringer",
+    src = "api.go",
+    additional_args = ["--linecomment"],
+    typ = "CapabilityID",
+)
+
+get_x_data(name = "get_x_data")

@@ -15,7 +15,7 @@ ok
 # Tenant 11 shouldn't be able to issue splits.
 has-capability-for-batch  ten=11 cmds=(split, scan, cput)
 ----
-tenant 11 does not have admin split capability
+tenant 11 does not have capability "can_admin_split"
 
 # Test that the order of the split request doesn't have any effect.
 has-capability-for-batch ten=11 cmds=(scan, cput)
@@ -41,7 +41,7 @@ ok
 
 has-capability-for-batch  ten=10 cmds=(split, scan, cput)
 ----
-tenant 10 does not have admin split capability
+tenant 10 does not have capability "can_admin_split"
 
 # However, this has no effect on batch requests that don't contain splits.
 has-capability-for-batch ten=10 cmds=(scan, cput)
