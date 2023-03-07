@@ -2635,6 +2635,15 @@ message Header {
   // each Scan and ReverseScan.
   sql.sqlbase.IndexFetchSpec index_fetch_spec = 29;
 
+  // ReturnElasticCPUResumeSpans, if set, indicates that the caller
+  // expects early-termination of requests based on the Elastic CPU
+  // limiter.
+  //
+  // Resume spans returned because of the underlying request being
+  // rate-limited by the ElasticCPU limiter will have a reason of
+  // RESUME_ELASTIC_CPU_LIMIT.
+  bool return_elastic_cpu_resume_spans = 30 [(gogoproto.customname) = "ReturnElasticCPUResumeSpans"];
+
   reserved 7, 10, 12, 14, 20;
 }
 

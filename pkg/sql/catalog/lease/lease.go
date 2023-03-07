@@ -252,7 +252,8 @@ func getDescriptorsFromStoreForInterval(
 	// Create an export request (1 kv call) for all descriptors for given
 	// descriptor ID written during the interval [timestamp, endTimestamp).
 	batchRequestHeader := kvpb.Header{
-		Timestamp: upperBound.Prev(),
+		Timestamp:                   upperBound.Prev(),
+		ReturnElasticCPUResumeSpans: true,
 	}
 	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
 	// Unmarshal key span retrieved from export request to construct historical descs.
