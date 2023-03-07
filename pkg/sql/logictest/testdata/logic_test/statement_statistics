@@ -151,7 +151,6 @@ SET application_name = '';
 statement ok
 RESET distsql
 
-skipif config 3node-tenant-default-configs #52763
 query TT colnames
 SELECT key,flags
   FROM test.crdb_internal.node_statement_statistics
