@@ -235,3 +235,66 @@ vectorized: true
 │
 └── • values
       size: 1 column, 3 rows
+
+# Regression tests for #93370. Do not convert a non-recursive CTE
+# that uses UNION ALL and WITH RECURSIVE to UNION.
+query T
+EXPLAIN WITH RECURSIVE
+   x(id) AS
+     (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 3 ),
+   y(id) AS
+     (SELECT * FROM x UNION ALL SELECT * FROM x)
+ SELECT * FROM y
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • render
+│   │
+│   └── • union all
+│       │
+│       ├── • scan buffer
+│       │     label: buffer 2 (x)
+│       │
+│       └── • scan buffer
+│             label: buffer 2 (x)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT 1 UNION ALL SELECT id + 1 FROM x WHERE id < 3
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ label: buffer 2 (x)
+        │
+        └── • recursive cte
+            │
+            └── • values
+                  size: 1 column, 1 row
+
+statement ok
+CREATE TABLE t93370 (i INT)
+
+query T
+EXPLAIN WITH RECURSIVE
+   y(id) AS (SELECT * FROM t93370 UNION ALL SELECT * FROM t93370)
+ SELECT * FROM y
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • union all
+    │
+    ├── • scan
+    │     missing stats
+    │     table: t93370@t93370_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: t93370@t93370_pkey
+          spans: FULL SCAN
