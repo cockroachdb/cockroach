@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -338,7 +339,11 @@ func makeSharedProcessTenantServerConfig(
 
 	sqlCfg = MakeSQLConfig(tenantID, tempStorageCfg)
 
-	// Split for each tenant, see https://github.com/cockroachdb/cockroach/issues/84588.
+	if kvServerCfg.BaseConfig.Settings.ExternalIODir != "" {
+		// Make this configurable on a per-tenant basis, see https://github.com/cockroachdb/cockroach/issues/84588.
+		perTenantDir := fmt.Sprintf("tenant-%d", tenantID.ToUint64())
+		baseCfg.Settings.ExternalIODir = filepath.Join(kvServerCfg.BaseConfig.Settings.ExternalIODir, perTenantDir)
+	}
 	sqlCfg.ExternalIODirConfig = kvServerCfg.SQLConfig.ExternalIODirConfig
 
 	// Use the internal connector instead of the network.
