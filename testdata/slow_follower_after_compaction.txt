@@ -1,0 +1,121 @@
+# This is a regression test for https://github.com/etcd-io/raft/pull/31.
+
+# Turn off output during the setup of the test.
+log-level none
+----
+ok
+
+# Start with 3 nodes, with a limited in-flight capacity.
+add-nodes 3 voters=(1,2,3) index=10 inflight=2
+----
+ok
+
+campaign 1
+----
+ok
+
+stabilize
+----
+ok (quiet)
+
+# Propose 3 entries.
+propose 1 prop_1_12
+----
+ok
+
+propose 1 prop_1_13
+----
+ok
+
+propose 1 prop_1_14
+----
+ok
+
+stabilize
+----
+ok (quiet)
+
+# Re-enable log messages.
+log-level debug
+----
+ok
+
+# All nodes up-to-date.
+status 1
+----
+1: StateReplicate match=14 next=15
+2: StateReplicate match=14 next=15
+3: StateReplicate match=14 next=15
+
+log-level none
+----
+ok
+
+propose 1 prop_1_15
+----
+ok
+
+propose 1 prop_1_16
+----
+ok
+
+propose 1 prop_1_17
+----
+ok
+
+propose 1 prop_1_18
+----
+ok
+
+# Commit entries on nodes 1 and 2.
+stabilize 1 2
+----
+ok (quiet)
+
+log-level debug
+----
+ok
+
+# Nodes 1 and 2 up-to-date, 3 is behind and MsgApp flow is throttled.
+status 1
+----
+1: StateReplicate match=18 next=19
+2: StateReplicate match=18 next=19
+3: StateReplicate match=14 next=17 paused inflight=2[full]
+
+# Break the MsgApp flow from the leader to node 3.
+deliver-msgs drop=3
+----
+dropped: 1->3 MsgApp Term:1 Log:1/14 Commit:14 Entries:[1/15 EntryNormal "prop_1_15"]
+dropped: 1->3 MsgApp Term:1 Log:1/15 Commit:14 Entries:[1/16 EntryNormal "prop_1_16"]
+
+# Truncate the leader's log beyond node 3 log size.
+compact 1 17
+----
+1/18 EntryNormal "prop_1_18"
+
+# Trigger a round of empty MsgApp "probe" from leader. It will reach node 3
+# which will reply with a rejection MsgApp because it sees a gap in the log.
+# Node 1 will reset the MsgApp flow and send a snapshot to catch node 3 up.
+tick-heartbeat 1
+----
+ok
+
+log-level none
+----
+ok
+
+stabilize
+----
+ok (quiet)
+
+log-level debug
+----
+ok
+
+# All nodes caught up.
+status 1
+----
+1: StateReplicate match=18 next=19
+2: StateReplicate match=18 next=19
+3: StateReplicate match=18 next=19

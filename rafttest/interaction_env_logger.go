@@ -82,17 +82,23 @@ func (l *RedirectLogger) Errorf(format string, v ...interface{}) {
 
 func (l *RedirectLogger) Fatal(v ...interface{}) {
 	l.print(4, v...)
+	panic(v)
 }
 
 func (l *RedirectLogger) Fatalf(format string, v ...interface{}) {
-
 	l.printf(4, format, v...)
+	panic(fmt.Sprintf(format, v...))
 }
 
 func (l *RedirectLogger) Panic(v ...interface{}) {
 	l.print(4, v...)
+	panic(v)
 }
 
 func (l *RedirectLogger) Panicf(format string, v ...interface{}) {
 	l.printf(4, format, v...)
+	// TODO(pavelkalinnikov): catch the panic gracefully in datadriven package.
+	// This would allow observing all the intermediate logging while debugging,
+	// and testing the cases when panic is expected.
+	panic(fmt.Sprintf(format, v...))
 }
