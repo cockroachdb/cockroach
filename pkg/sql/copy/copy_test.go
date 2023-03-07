@@ -244,6 +244,21 @@ func TestCopyFromTransaction(t *testing.T) {
 			},
 			func(f1, f2 driver.Value) bool { return !decEq(f1, f2) },
 		},
+		{
+			"implicit_non_atomic_no_1pc",
+			"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
+			[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
+			func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
+				err := tconn.Exec(ctx, "SET enable_insert_fast_path = false")
+				require.NoError(t, err)
+				err = tconn.Exec(ctx, "SET copy_from_atomic_enabled = false")
+				require.NoError(t, err)
+				orig := sql.SetCopyFromBatchSize(1)
+				defer sql.SetCopyFromBatchSize(orig)
+				f(tconn)
+			},
+			func(f1, f2 driver.Value) bool { return !decEq(f1, f2) },
+		},
 	}
 
 	for _, tc := range testCases {

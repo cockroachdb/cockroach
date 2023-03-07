@@ -12,13 +12,10 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -30,10 +27,9 @@ import (
 )
 
 const (
-	benchArgsFlag = "bench-args"
-	compressFlag  = "compress"
-	buildHashFlag = "build-hash"
+	outputFlag    = "output"
 	batchSizeFlag = "batch-size"
+	artifactsDir  = "artifacts"
 )
 
 type packageTemplateData struct {
@@ -56,8 +52,8 @@ type runTemplateData struct {
 
 const stageOutputTemplateScript = `
 mkdir -p #{.StageDir#}
-cp -Lr #{.BazelOutputDir#}/#{.RunfilesDirName#} #{.StageDir#}/#{.RunfilesDirName#}
-cp -Lr #{.BazelOutputDir#}/#{.TargetBinName#} #{.StageDir#}/#{.TargetBinName#}
+ln -s #{.BazelOutputDir#}/#{.RunfilesDirName#} #{.StageDir#}/#{.RunfilesDirName#}
+ln -s #{.BazelOutputDir#}/#{.TargetBinName#} #{.StageDir#}/#{.TargetBinName#}
 
 echo #{shesc .RunScript#} > #{.StageDir#}/run.sh
 chmod +x #{.StageDir#}/run.sh
@@ -69,7 +65,9 @@ const packageTemplateScript = `
 echo Packaging staged build output...
 cd #{.ArtifactsDir#}
 tar -chf bin.tar pkg
+
 rm -rf pkg
+bazel clean
 `
 
 const runTemplateScript = `
@@ -81,34 +79,29 @@ ln -f -s ./#{.RunfilesDirName#}/com_github_cockroachdb_cockroach/#{.PackageDir#}
 ./#{.TargetBinName#} "$@"
 `
 
-func makeRoachprodBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
-	roachprodBenchCmd := &cobra.Command{
-		Use:     "roachprod-bench-wrapper <pkg>",
-		Short:   "invokes pkg/cmd/roachprod-bench to parallelize execution of specified microbenchmarks",
-		Long:    "invokes pkg/cmd/roachprod-bench to parallelize execution of specified microbenchmarks",
-		Example: `dev roachprod-bench-wrapper ./pkg/sql/importer --cluster my_cluster`,
+func makeTestBinariesCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
+	testBinariesCmd := &cobra.Command{
+		Use:     "test-binaries <pkg>",
+		Short:   "builds portable test binaries supplied with an executable run script for each package",
+		Long:    "builds portable test binaries supplied with an executable run script for each package",
+		Example: `dev test-binaries ./pkg/sql/... --output=test_binaries.tar.gz`,
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    runE,
 	}
-	roachprodBenchCmd.Flags().String(benchArgsFlag, "", "additional arguments to pass to roachbench")
-	roachprodBenchCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
-	roachprodBenchCmd.Flags().String(clusterFlag, "", "the name of the cluster (must be set)")
-	roachprodBenchCmd.Flags().String(buildHashFlag, "", "override the build hash for the build output")
-	roachprodBenchCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
-	roachprodBenchCmd.Flags().Bool(compressFlag, true, "compress the output of the benchmarks binaries")
-	roachprodBenchCmd.Flags().Int(batchSizeFlag, 128, "the number of packages to build per batch")
-	roachprodBenchCmd.Flags().String(crossFlag, "crosslinux", "the cross build target to use")
-	return roachprodBenchCmd
+	testBinariesCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	testBinariesCmd.Flags().String(outputFlag, "bin/test_binaries.tar.gz", "the file output path of the archived test binaries")
+	testBinariesCmd.Flags().Bool(raceFlag, false, "produce race builds")
+	testBinariesCmd.Flags().Int(batchSizeFlag, 128, "the number of packages to build per batch")
+	testBinariesCmd.Flags().String(crossFlag, "crosslinux", "the cross build target to use")
+	return testBinariesCmd
 }
 
-func (d *dev) roachprodBench(cmd *cobra.Command, commandLine []string) error {
+func (d *dev) testBinaries(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 	var (
-		cluster   = mustGetFlagString(cmd, clusterFlag)
 		volume    = mustGetFlagString(cmd, volumeFlag)
-		benchArgs = mustGetFlagString(cmd, benchArgsFlag)
+		output    = mustGetFlagString(cmd, outputFlag)
 		race      = mustGetFlagBool(cmd, raceFlag)
-		compress  = mustGetFlagBool(cmd, compressFlag)
 		batchSize = mustGetConstrainedFlagInt(cmd, batchSizeFlag, func(v int) error {
 			if v <= 0 {
 				return fmt.Errorf("%s must be greater than zero", batchSizeFlag)
@@ -116,18 +109,9 @@ func (d *dev) roachprodBench(cmd *cobra.Command, commandLine []string) error {
 			return nil
 		})
 		crossConfig = mustGetFlagString(cmd, crossFlag)
-		buildHash   = mustGetFlagString(cmd, buildHashFlag)
 	)
 
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-
-	if cluster == "" {
-		return fmt.Errorf("must provide --cluster (e.g., `roachprod create $USER-bench -n 8 --gce-machine-type=n2d-standard-8 --local-ssd=true`)")
-	}
-	packages, testArgs := splitArgsAtDash(cmd, commandLine)
+	packages, _ := splitArgsAtDash(cmd, commandLine)
 	if len(packages) != 1 {
 		return fmt.Errorf("expected a single benchmark target specification; e.g., ./pkg/util/... or ./pkg/cmd/dev")
 	}
@@ -161,34 +145,16 @@ func (d *dev) roachprodBench(cmd *cobra.Command, commandLine []string) error {
 		return fmt.Errorf("no test targets found for package %s", pkg)
 	}
 
-	// Generate a unique build hash for the given targets and git revision.
-	if buildHash == "" {
-		stdout, cmdErr := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "HEAD")
-		if cmdErr != nil {
-			return cmdErr
-		}
-		gitRevision := strings.TrimSpace(string(stdout))
-		buildHashSHA := sha256.New()
-		buildHashSHA.Write([]byte(gitRevision))
-		for _, target := range testTargets {
-			buildHashSHA.Write([]byte(target))
-		}
-		buildHash = hex.EncodeToString(buildHashSHA.Sum(nil)[:])[:8]
+	if output == "" {
+		return fmt.Errorf("must provide --output")
 	}
 
-	// Assume that we need LibGEOS.
-	if err = d.buildGeos(ctx, volume); err != nil {
-		return err
+	compress := strings.HasSuffix(output, ".tar.gz")
+	if !compress && !strings.HasSuffix(output, ".tar") {
+		return fmt.Errorf("output must have the extension .tar or .tar.gz")
 	}
+	binTar := strings.TrimSuffix(output, ".gz")
 
-	// Clear any old artifacts.
-	outputPrefix := fmt.Sprintf("roachbench/%s", buildHash)
-	binTar := fmt.Sprintf("artifacts/%s/bin.tar", outputPrefix)
-	_, _ = d.os.Remove(binTar), d.os.Remove(binTar+".gz")
-
-	// Build the test targets.
-	var manifest strings.Builder
-	artifactsDir := fmt.Sprintf("/artifacts/%s", outputPrefix)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
 	if err != nil {
 		return err
@@ -210,15 +176,14 @@ func (d *dev) roachprodBench(cmd *cobra.Command, commandLine []string) error {
 		if err != nil {
 			return err
 		}
-
-		// Add package name to the manifest file.
-		for _, target := range targetBatch {
-			targetDir := targetToDir(target)
-			manifest.WriteString(fmt.Sprintf("%s\n", targetDir))
-		}
 	}
 
-	err = d.packageTestArtifacts(ctx, dockerArgs, artifactsDir)
+	err = d.packageTestBinaries(ctx, dockerArgs, artifactsDir)
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(filepath.Join(artifactsDir, "bin.tar"), binTar)
 	if err != nil {
 		return err
 	}
@@ -232,44 +197,7 @@ func (d *dev) roachprodBench(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
-	err = os.WriteFile(fmt.Sprintf("artifacts/%s/roachbench.manifest", outputPrefix), []byte(manifest.String()), 0644)
-	if err != nil {
-		return err
-	}
-
-	// Build roachprod-bench.
-	args, roachprodBenchTarget, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/roachprod-bench"})
-	if err != nil {
-		return err
-	}
-	if _, err = d.exec.CommandContextSilent(ctx, "bazel", args...); err != nil {
-		return err
-	}
-	if err = d.stageArtifacts(ctx, roachprodBenchTarget); err != nil {
-		return err
-	}
-
-	libdir := path.Join(workspace, "artifacts", "libgeos", "lib")
-	if err = d.os.MkdirAll(libdir); err != nil {
-		return err
-	}
-	for _, libWithExt := range []string{"libgeos.so", "libgeos_c.so"} {
-		src := filepath.Join(workspace, "artifacts", libWithExt)
-		dst := filepath.Join(libdir, libWithExt)
-		if err = d.os.CopyFile(src, dst); err != nil {
-			return err
-		}
-		if err = d.os.Remove(src); err != nil {
-			return err
-		}
-	}
-
-	roachprodBenchArgs := []string{fmt.Sprintf("./artifacts/%s", outputPrefix), "-cluster", cluster, "-libdir", libdir}
-	roachprodBenchArgs = append(roachprodBenchArgs, strings.Fields(benchArgs)...)
-	roachprodBenchArgs = append(roachprodBenchArgs, "--")
-	roachprodBenchArgs = append(roachprodBenchArgs, testArgs...)
-	log.Printf("Running roachprod-bench with args: %s", strings.Join(roachprodBenchArgs, " "))
-	return d.exec.CommandContextInheritingStdStreams(ctx, filepath.Join(workspace, "bin", "roachprod-bench"), roachprodBenchArgs...)
+	return nil
 }
 
 func (d *dev) crossBuildTests(
@@ -280,7 +208,7 @@ func (d *dev) crossBuildTests(
 	crossConfig string,
 	artifactsDir string,
 ) error {
-	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci")
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--crdb_test_off")
 	configArgs := getConfigArgs(bazelArgs)
 	stageOutputTemplate, err := createTemplate("stage", stageOutputTemplateScript)
 	if err != nil {
@@ -291,8 +219,7 @@ func (d *dev) crossBuildTests(
 		return err
 	}
 
-	// Construct a script that builds the binaries and copies them
-	// to the appropriate location in /artifacts.
+	// Construct a script that builds the binaries in a temporary directory.
 	var script strings.Builder
 	var bazelBinSet bool
 	script.WriteString("set -euxo pipefail\n")
@@ -336,7 +263,7 @@ func (d *dev) crossBuildTests(
 	return err
 }
 
-func (d *dev) packageTestArtifacts(
+func (d *dev) packageTestBinaries(
 	ctx context.Context, dockerArgs []string, artifactsDir string,
 ) error {
 	var packageBuf strings.Builder
@@ -351,14 +278,6 @@ func (d *dev) packageTestArtifacts(
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, packageBuf.String(), "docker", dockerArgs...)
 	return err
-}
-
-func (d *dev) buildGeos(ctx context.Context, volume string) error {
-	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//c-deps:libgeos"})
-	if err != nil {
-		return err
-	}
-	return d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
 }
 
 func createTemplate(name string, script string) (*template.Template, error) {
