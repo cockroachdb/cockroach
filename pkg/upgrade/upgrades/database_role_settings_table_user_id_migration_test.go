@@ -80,27 +80,14 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.DatabaseRoleSettingsTable, getTableDescForDatabaseRoleSettingsTableBeforeRoleIDCol)
 
 	// Create test users.
-	tx, err := db.BeginTx(ctx, nil /* opts */)
-	require.NoError(t, err)
-	txRunner := sqlutils.MakeSQLRunner(tx)
-	for i := 0; i < numUsers; i++ {
-		// Group statements into transactions of 100 users to speed up creation.
-		if i != 0 && i%100 == 0 {
-			err := tx.Commit()
-			require.NoError(t, err)
-			tx, err = db.BeginTx(ctx, nil /* opts */)
-			require.NoError(t, err)
-			txRunner = sqlutils.MakeSQLRunner(tx)
-		}
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
 		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
 		txRunner.Exec(t, fmt.Sprintf(`ALTER USER testuser%d SET application_name = 'roach sql'`, i))
-	}
-	err = tx.Commit()
-	require.NoError(t, err)
+	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers)}})
 
 	// Run migrations.
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn).String())
 	require.NoError(t, err)
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
