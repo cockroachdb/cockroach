@@ -63,6 +63,9 @@ type FunctionReferenceResolver interface {
 // ResolvableFunctionReference implements the editable reference call of a
 // FuncExpr.
 type ResolvableFunctionReference struct {
+	// ReferenceByName keeps track of the name that was used to resolve the
+	// function, if one was used. This is used for metadata dependency tracking.
+	ReferenceByName *UnresolvedObjectName
 	FunctionReference
 }
 
@@ -111,6 +114,8 @@ func (ref *ResolvableFunctionReference) Resolve(
 		if err != nil {
 			return nil, err
 		}
+		referenceByName, _ := t.ToUnresolvedObjectName(NoAnnotation)
+		ref.ReferenceByName = &referenceByName
 		ref.FunctionReference = fd
 		return fd, nil
 	default:
@@ -146,7 +151,7 @@ func WrapFunction(n string) ResolvableFunctionReference {
 	if !ok {
 		panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(n)))
 	}
-	return ResolvableFunctionReference{fd}
+	return ResolvableFunctionReference{FunctionReference: fd}
 }
 
 // FunctionReference is the common interface to UnresolvedName and QualifiedFunctionName.
