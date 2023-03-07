@@ -27,8 +27,9 @@ func (s *statusServer) Statements(
 ) (*serverpb.StatementsResponse, error) {
 	if req.Combined {
 		combinedRequest := serverpb.CombinedStatementsStatsRequest{
-			Start: req.Start,
-			End:   req.End,
+			Start:     req.Start,
+			End:       req.End,
+			FetchMode: req.FetchMode,
 		}
 		return s.CombinedStatementStats(ctx, &combinedRequest)
 	}
@@ -108,20 +109,20 @@ func statementsLocal(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	sqlServer *SQLServer,
-	fetchMode serverpb.StatementsRequest_FetchMode,
+	fetchMode serverpb.StatsFetchMode,
 ) (*serverpb.StatementsResponse, error) {
 	var stmtStats []appstatspb.CollectedStatementStatistics
 	var txnStats []appstatspb.CollectedTransactionStatistics
 	var err error
 
-	if fetchMode != serverpb.StatementsRequest_TxnStatsOnly {
+	if fetchMode != serverpb.StatsFetchMode_TxnStatsOnly {
 		stmtStats, err = sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if fetchMode != serverpb.StatementsRequest_StmtStatsOnly {
+	if fetchMode != serverpb.StatsFetchMode_StmtStatsOnly {
 		txnStats, err = sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats(ctx)
 		if err != nil {
 			return nil, err

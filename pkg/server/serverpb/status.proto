@@ -1557,6 +1557,12 @@ message StoresResponse {
   repeated StoreDetails stores = 1 [ (gogoproto.nullable) = false ];
 }
 
+enum StatsFetchMode {
+  StmtAndTxnStats = 0; // Default.
+  StmtStatsOnly = 1;
+  TxnStatsOnly = 2;
+}
+
 // StatementsRequest is used by both tenant and node-level
 // implementations to serve fan-out requests across multiple nodes or
 // instances. When implemented on a node, the `node_id` field refers to
@@ -1564,19 +1570,13 @@ message StoresResponse {
 // `node_id` field refers to the instanceIDs that identify individual
 // tenant pods.
 message StatementsRequest {
-  enum FetchMode {
-    StmtAndTxnStats = 0; // Default.
-    StmtStatsOnly = 1;
-    TxnStatsOnly = 2;
-  }
-
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
   // If this field is set we will use the combined statements API instead.
   bool combined = 2;
   // These fields are used for the combined statements API.
   int64 start = 3 [(gogoproto.nullable) = true];
   int64 end = 4 [(gogoproto.nullable) = true];
-  FetchMode fetch_mode = 5;
+  StatsFetchMode fetch_mode = 5;
 }
 
 message StatementsResponse {
@@ -1616,6 +1616,13 @@ message StatementsResponse {
 }
 
 message CombinedStatementsStatsRequest {
+  // Unix time range for aggregated statements.
+  int64 start = 1 [(gogoproto.nullable) = true];
+  int64 end = 2 [(gogoproto.nullable) = true];
+  StatsFetchMode fetch_mode = 5;
+}
+
+message FlushedTxnsStatsRequest {
   // Unix time range for aggregated statements.
   int64 start = 1 [(gogoproto.nullable) = true];
   int64 end = 2 [(gogoproto.nullable) = true];
@@ -2300,6 +2307,7 @@ service Status {
       get: "/_status/combinedstmts"
     };
   }
+
   rpc StatementDetails(StatementDetailsRequest) returns (StatementDetailsResponse) {
     option (google.api.http) = {
       get: "/_status/stmtdetails/{fingerprint_id}"
