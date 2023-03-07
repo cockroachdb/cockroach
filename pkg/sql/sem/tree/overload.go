@@ -221,6 +221,9 @@ type Overload struct {
 	// ReturnSet is set to true when a user-defined function is defined to return
 	// a set of values.
 	ReturnSet bool
+	// Version is the descriptor version of the descriptor used to construct
+	// this version of the function overload. Only used for UDFs.
+	Version uint64
 }
 
 // params implements the overloadImpl interface.
