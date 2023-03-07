@@ -56,12 +56,12 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []MVCCKeyValue {
 func makePebbleSST(t testing.TB, kvs []MVCCKeyValue, ingestion bool) []byte {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	f := &MemFile{}
+	f := &MemObject{}
 	var w SSTWriter
 	if ingestion {
 		w = MakeIngestionSSTWriter(ctx, st, f)
 	} else {
-		w = MakeBackupSSTWriter(ctx, st, f)
+		w = MakeBackupSSTWriter(ctx, st, &f.Buffer)
 	}
 	defer w.Close()
 
@@ -120,7 +120,7 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	sstFile := &MemFile{}
+	sstFile := &MemObject{}
 	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 

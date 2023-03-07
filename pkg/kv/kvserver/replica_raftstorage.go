@@ -497,7 +497,7 @@ func (r *Replica) applySnapshot(
 	}
 	if nonempty {
 		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-		// buffering in a MemFile first.
+		// buffering in a MemObject first.
 		if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
 			return err
 		}
@@ -715,8 +715,8 @@ func writeUnreplicatedSST(
 	meta raftpb.SnapshotMetadata,
 	hs raftpb.HardState,
 	sl *logstore.StateLoader,
-) (_ *storage.MemFile, nonempty bool, _ error) {
-	unreplicatedSSTFile := &storage.MemFile{}
+) (_ *storage.MemObject, nonempty bool, _ error) {
+	unreplicatedSSTFile := &storage.MemObject{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
 		ctx, st, unreplicatedSSTFile,
 	)
@@ -789,7 +789,7 @@ func clearSubsumedReplicaDiskData(
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, subDesc := range subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		subsumedReplSSTFile := &storage.MemFile{}
+		subsumedReplSSTFile := &storage.MemObject{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
 			ctx, st, subsumedReplSSTFile,
 		)
@@ -811,7 +811,7 @@ func clearSubsumedReplicaDiskData(
 		}
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
-			// buffering in a MemFile first.
+			// buffering in a MemObject first.
 			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 				return err
 			}
@@ -845,7 +845,7 @@ func clearSubsumedReplicaDiskData(
 	// subsume both r1 and r2 in S1.
 	for i := range keySpans {
 		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
-			subsumedReplSSTFile := &storage.MemFile{}
+			subsumedReplSSTFile := &storage.MemObject{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
 				ctx, st, subsumedReplSSTFile,
 			)
@@ -866,7 +866,7 @@ func clearSubsumedReplicaDiskData(
 			}
 			if subsumedReplSST.DataSize > 0 {
 				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
-				// buffering in a MemFile first.
+				// buffering in a MemObject first.
 				if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 					return err
 				}
