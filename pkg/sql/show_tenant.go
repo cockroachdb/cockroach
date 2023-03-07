@@ -125,6 +125,10 @@ func (n *showTenantNode) getTenantValues(
 				name:  tenantcapabilitiespb.CanViewTSDBMetrics,
 				value: strconv.FormatBool(capabilities.CanViewTSDBMetrics),
 			},
+			{
+				name:  tenantcapabilitiespb.NotRateLimited,
+				value: strconv.FormatBool(capabilities.NotRateLimited),
+			},
 		}
 	}
 

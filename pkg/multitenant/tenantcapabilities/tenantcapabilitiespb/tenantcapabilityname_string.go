@@ -11,11 +11,12 @@ func _() {
 	_ = x[CanAdminSplit-1]
 	_ = x[CanViewNodeInfo-2]
 	_ = x[CanViewTSDBMetrics-3]
+	_ = x[NotRateLimited-4]
 }
 
-const _TenantCapabilityName_name = "can_admin_splitcan_view_node_infocan_view_tsdb_metrics"
+const _TenantCapabilityName_name = "can_admin_splitcan_view_node_infocan_view_tsdb_metricsnot_rate_limited"
 
-var _TenantCapabilityName_index = [...]uint8{0, 15, 33, 54}
+var _TenantCapabilityName_index = [...]uint8{0, 15, 33, 54, 70}
 
 func (i TenantCapabilityName) String() string {
 	i -= 1

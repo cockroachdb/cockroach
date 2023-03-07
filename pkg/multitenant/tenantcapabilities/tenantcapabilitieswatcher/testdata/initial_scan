@@ -38,13 +38,13 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
-update: ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
+update: ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 flush-state
 ----
-ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
-ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
+ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 get-capabilities ten=10
 ----
@@ -52,4 +52,4 @@ not-found
 
 get-capabilities ten=15
 ----
-{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}

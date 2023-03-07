@@ -18,13 +18,13 @@ ok
 updates
 ----
 Incremental Update
-update: ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
-update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
+update: ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 flush-state
 ----
-ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
-ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
+ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 upsert ten=11 can_admin_split=true
 ----
@@ -33,11 +33,11 @@ ok
 updates
 ----
 Incremental Update
-update: ten=11 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+update: ten=11 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 get-capabilities ten=11
 ----
-{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 delete ten=10
 ----
@@ -64,7 +64,7 @@ updates
 # what we'd expect.
 flush-state
 ----
-ten=11 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+ten=11 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 upsert ten=15 can_admin_split=true
 ----
@@ -73,7 +73,7 @@ ok
 updates
 ----
 Incremental Update
-update: ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+update: ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 # Ensure only the last update is applied, even when there are multiple updates
 # to a single key.
@@ -100,7 +100,7 @@ not-found
 
 flush-state
 ----
-ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false}
+ten=15 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 # Same thing, but this time instead of deleting the key, leave it behind.
 delete ten=15
@@ -118,12 +118,12 @@ ok
 updates
 ----
 Incremental Update
-update: ten=15 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
+update: ten=15 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 flush-state
 ----
-ten=15 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
+ten=15 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}
 
 get-capabilities ten=15
 ----
-{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false NotRateLimited:false}

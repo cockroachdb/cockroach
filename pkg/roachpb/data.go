@@ -2467,3 +2467,13 @@ func (r *RowCount) Add(other RowCount) {
 	r.Rows += other.Rows
 	r.IndexEntries += other.IndexEntries
 }
+
+func (tid *TenantID) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var id uint64
+	if err := unmarshal(&id); err == nil {
+		tid.InternalValue = id
+		return nil
+	} else {
+		return unmarshal(tid)
+	}
+}

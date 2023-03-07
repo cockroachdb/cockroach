@@ -197,9 +197,11 @@ tenant_id  capability_name        capability_value
 1          can_admin_split        false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false
+1          not_rate_limited       false
 5          can_admin_split        false
 5          can_view_node_info     false
 5          can_view_tsdb_metrics  false
+5          not_rate_limited       false
 
 statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split
@@ -212,8 +214,10 @@ tenant_id  capability_name        capability_value
 1          can_admin_split        false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false
-5          can_admin_split        true
+1          not_rate_limited       false
+5          can_admin_split        false
 5          can_view_node_info     false
 5          can_view_tsdb_metrics  false
+5          not_rate_limited       false
 
 subtest end
