@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -65,7 +64,7 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		mockReader := mockReader(make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities))
+		mockReader := mockReader(make(map[roachpb.TenantID]tenantcapabilities.TenantCapabilities))
 		authorizer := New(cluster.MakeTestingClusterSettings(), nil /* TestingKnobs */)
 		authorizer.BindReader(mockReader)
 
@@ -73,11 +72,18 @@ func TestDataDriven(t *testing.T) {
 			tenID := tenantcapabilitiestestutils.GetTenantID(t, d)
 			switch d.Cmd {
 			case "upsert":
-				update, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				_, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
 				if err != nil {
 					return err.Error()
 				}
-				mockReader.updateState([]*tenantcapabilities.Update{update})
+				mockReader.updateState([]*tenantcapabilities.Update{
+					{
+						Entry: tenantcapabilities.Entry{
+							TenantID:           tenID,
+							TenantCapabilities: &caps,
+						},
+					},
+				})
 			case "delete":
 				update := tenantcapabilitiestestutils.ParseTenantCapabilityDelete(t, d)
 				mockReader.updateState([]*tenantcapabilities.Update{update})
@@ -108,7 +114,7 @@ func TestDataDriven(t *testing.T) {
 	})
 }
 
-type mockReader map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
+type mockReader map[roachpb.TenantID]tenantcapabilities.TenantCapabilities
 
 var _ tenantcapabilities.Reader = mockReader{}
 
@@ -125,12 +131,24 @@ func (m mockReader) updateState(updates []*tenantcapabilities.Update) {
 // GetCapabilities implements the tenantcapabilities.Reader interface.
 func (m mockReader) GetCapabilities(
 	id roachpb.TenantID,
-) (tenantcapabilitiespb.TenantCapabilities, bool) {
+) (tenantcapabilities.TenantCapabilities, bool) {
 	cp, found := m[id]
 	return cp, found
 }
 
 // GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
-func (m mockReader) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+func (m mockReader) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilities.TenantCapabilities {
 	return m
+}
+
+func TestAllBatchCapsAreBoolean(t *testing.T) {
+	for _, capID := range reqMethodToCap {
+		if capID >= tenantcapabilities.MaxCapabilityID {
+			// One of the special values.
+			continue
+		}
+		if actual, expected := capID.CapabilityType(), tenantcapabilities.Bool; actual != expected {
+			t.Errorf("cap %s  has type %d, expected %d", capID, actual, expected)
+		}
+	}
 }

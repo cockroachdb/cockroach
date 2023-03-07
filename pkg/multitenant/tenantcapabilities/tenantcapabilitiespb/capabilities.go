@@ -10,56 +10,71 @@
 
 package tenantcapabilitiespb
 
-import "github.com/cockroachdb/errors"
-
-// TenantCapabilityName is a pseudo-enum of valid capability names.
-type TenantCapabilityName int32
-
-// IsSet returns true if the capability name has a non-zero value.
-func (t TenantCapabilityName) IsSet() bool {
-	return t > 0
-}
-
-var stringToTenantCapabilityName = func() map[string]TenantCapabilityName {
-	m := make(map[string]TenantCapabilityName, numCapabilities)
-	for c := TenantCapabilityName(1); c <= maxCapabilityName; c++ {
-		m[c.String()] = c
-	}
-	return m
-}()
-
-// TenantCapabilityNameFromString converts a string to a TenantCapabilityName
-// or returns an error if no conversion is possible.
-func TenantCapabilityNameFromString(s string) (TenantCapabilityName, error) {
-	tenantCapabilityName, ok := stringToTenantCapabilityName[s]
-	if !ok {
-		return 0, errors.Newf("unknown capability: %q", s)
-	}
-	return tenantCapabilityName, nil
-}
-
-//go:generate stringer -type=TenantCapabilityName -linecomment
-const (
-	_ TenantCapabilityName = iota // the zero-value is not meaningful
-
-	// CanAdminSplit if set to true, grants the tenant the ability to
-	// successfully perform `AdminSplit` requests.
-	CanAdminSplit // can_admin_split
-	// CanViewNodeInfo if set to true, grants the tenant the ability
-	// retrieve node-level observability data at endpoints such as `_status/nodes`
-	// and in the DB Console overview page.
-	CanViewNodeInfo // can_view_node_info
-	// CanViewTSDBMetrics if set to true, grants the tenant the ability to
-	// make arbitrary queries of the TSDB of the entire cluster. Currently,
-	// we do not store per-tenant metrics so this will surface system metrics
-	// to the tenant.
-	// TODO(davidh): Revise this once tenant-scoped metrics are implemented in
-	// https://github.com/cockroachdb/cockroach/issues/96438
-	CanViewTSDBMetrics // can_view_tsdb_metrics
-	// TenantSpanConfigBounds contains the bounds for the tenant's
-	// span configs.
-	TenantSpanConfigBounds // span_config_bounds
-
-	maxCapabilityName TenantCapabilityName = iota - 1
-	numCapabilities                        = maxCapabilityName - 1
+import (
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
+
+// boolCapValue is a wrapper around bool that ensures that values can
+// be included in reportables.
+type boolCapValue bool
+
+func (b boolCapValue) String() string { return redact.Sprint(b).StripMarkers() }
+func (b boolCapValue) SafeFormat(p redact.SafePrinter, verb rune) {
+	p.Print(redact.Safe(bool(b)))
+}
+
+// Unwrap implements the tenantcapabilities.Value interface.
+func (b boolCapValue) Unwrap() interface{} { return bool(b) }
+
+// boolCap is an accessor struct for boolean capabilities.
+type boolCap struct {
+	cap *bool
+}
+
+// Get implements the tenantcapabilities.Capability interface.
+func (b boolCap) Get() tenantcapabilities.Value {
+	return boolCapValue(*b.cap)
+}
+
+// Set implements the tenantcapabilities.Capability interface.
+func (b boolCap) Set(val interface{}) {
+	bval, ok := val.(bool)
+	if !ok {
+		panic(errors.AssertionFailedf("invalid value type: %T", val))
+	}
+	*b.cap = bval
+}
+
+// For implements the tenantcapabilities.TenantCapabilities interface.
+func (t *TenantCapabilities) Cap(
+	capabilityID tenantcapabilities.CapabilityID,
+) tenantcapabilities.Capability {
+	switch capabilityID {
+	case tenantcapabilities.CanAdminSplit:
+		return boolCap{&t.CanAdminSplit}
+	case tenantcapabilities.CanViewNodeInfo:
+		return boolCap{&t.CanViewNodeInfo}
+	case tenantcapabilities.CanViewTSDBMetrics:
+		return boolCap{&t.CanViewTSDBMetrics}
+
+	default:
+		panic(errors.AssertionFailedf("unknown capability: %q", capabilityID.String()))
+	}
+}
+
+// GetBool implements the tenantcapabilities.TenantCapabilities interface. It is an optimization.
+func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityID) bool {
+	switch capabilityID {
+	case tenantcapabilities.CanAdminSplit:
+		return t.CanAdminSplit
+	case tenantcapabilities.CanViewNodeInfo:
+		return t.CanViewNodeInfo
+	case tenantcapabilities.CanViewTSDBMetrics:
+		return t.CanViewTSDBMetrics
+
+	default:
+		panic(errors.AssertionFailedf("unknown or non-bool capability: %q", capabilityID.String()))
+	}
+}
