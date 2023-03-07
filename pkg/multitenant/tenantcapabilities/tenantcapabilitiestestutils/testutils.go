@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ParseBatchRequestString is a helper function to parse datadriven input that
+// ParseBatchRequests is a helper function to parse datadriven input that
 // declares (empty) batch requests of supported types, for a particular tenant.
 // The constructed batch request is returned. The cmds are of the following
 // form:
@@ -50,39 +50,22 @@ func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba kvpb.BatchRequ
 
 func ParseTenantCapabilityUpsert(
 	t *testing.T, d *datadriven.TestData,
-) (*tenantcapabilities.Update, error) {
+) (roachpb.TenantID, tenantcapabilitiespb.TenantCapabilities, error) {
 	tID := GetTenantID(t, d)
-	cap := tenantcapabilitiespb.TenantCapabilities{}
+	caps := tenantcapabilitiespb.TenantCapabilities{}
 	for _, arg := range d.CmdArgs {
-		if arg.Key == "can_admin_split" {
-			b, err := strconv.ParseBool(arg.Vals[0])
-			if err != nil {
-				return nil, err
+		if capID, ok := tenantcapabilities.CapabilityIDFromString(arg.Key); ok {
+			switch capID.CapabilityType() {
+			case tenantcapabilities.Bool:
+				b, err := strconv.ParseBool(arg.Vals[0])
+				if err != nil {
+					return roachpb.TenantID{}, tenantcapabilitiespb.TenantCapabilities{}, err
+				}
+				caps.Cap(capID).Set(b)
 			}
-			cap.CanAdminSplit = b
-		}
-		if arg.Key == "can_view_node_info" {
-			b, err := strconv.ParseBool(arg.Vals[0])
-			if err != nil {
-				return nil, err
-			}
-			cap.CanViewNodeInfo = b
-		}
-		if arg.Key == "can_view_tsdb_metrics" {
-			b, err := strconv.ParseBool(arg.Vals[0])
-			if err != nil {
-				return nil, err
-			}
-			cap.CanViewTSDBMetrics = b
 		}
 	}
-	update := tenantcapabilities.Update{
-		Entry: tenantcapabilities.Entry{
-			TenantID:           tID,
-			TenantCapabilities: cap,
-		},
-	}
-	return &update, nil
+	return tID, caps, nil
 }
 
 func ParseTenantCapabilityDelete(t *testing.T, d *datadriven.TestData) *tenantcapabilities.Update {
