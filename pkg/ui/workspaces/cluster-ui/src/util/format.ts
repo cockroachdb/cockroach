@@ -190,7 +190,7 @@ export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
  * Alternate 24 hour UTC formats
  */
 export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
-export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
+export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [ata] H:mm:ss UTC";
 export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC =
   "MMM DD, YYYY [at] H:mm:ss:ms UTC";
 

@@ -54,6 +54,7 @@ var indexHTML = []byte(`<!DOCTYPE html>
 	<body>
 		<div id="react-layout"></div>
 		<script src="bundle.js" type="text/javascript"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.41/moment-timezone.min.js" integrity="sha512-+KXpe6Mg3rKqyz8Kaefa1qLyHvqdWddwh07GvAh2rW7ZmUUZ7xzSMZygm+4S3f0pQTd7zNNlP9Ibc6+GaO+UAA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	</body>
 </html>
 `)

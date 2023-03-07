@@ -212,6 +212,13 @@ type Server struct {
 // The caller is responsible for listening on the server's ShutdownRequested()
 // channel and calling stopper.Stop().
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
+
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(location)
+
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
 	if err := cfg.ValidateAddrs(ctx); err != nil {
@@ -939,7 +946,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				cfg.Tracer,
 				flushInterval,
 				flushTriggerBytesSize,
-				10*1<<20, // maxBufferSizeBytes - 10MB
+				10*1<<20,                                  // maxBufferSizeBytes - 10MB
 				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
 			)
 			eventsExporter = ee
@@ -954,7 +961,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				cfg.Tracer,
 				flushInterval,
 				flushTriggerBytesSize,
-				10*1<<20, // maxBufferSizeBytes - 10MB
+				10*1<<20,                                  // maxBufferSizeBytes - 10MB
 				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
 			)
 			log.Infof(ctx, "will export events over OTLP to: %s", cfg.ObsServiceAddr)
