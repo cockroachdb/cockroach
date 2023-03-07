@@ -253,6 +253,46 @@ func TestFormatExpr(t *testing.T) {
 	}
 }
 
+// TestFormatUntypedExpr is similar to TestFormatExpr, but it does not
+// type-check the test expressions before formatting them. It allows for testing
+// formatting of mis-typed expressions.
+func TestFormatUntypedExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testData := []struct {
+		expr     string
+		f        tree.FmtFlags
+		expected string
+	}{
+		{"((1, 2) AS foo)", tree.FmtHideConstants, "((_, _) AS foo)"},
+		{"((1, 2, 3) AS foo)", tree.FmtHideConstants, "((_, _, __more1_10__) AS foo)"},
+		{"((1, 2, 3) AS foo, bar)", tree.FmtHideConstants, "((_, _, __more1_10__) AS foo, bar)"},
+		{"((1, 2, 3) AS foo, bar, baz)", tree.FmtHideConstants, "((_, _, __more1_10__) AS foo, bar)"},
+		{"((1, 2) AS foo, bar)", tree.FmtHideConstants, "((_, _) AS foo, bar)"},
+		{"((1, 2) AS foo, bar, baz)", tree.FmtHideConstants, "((_, _) AS foo, bar, baz)"},
+		{"(ROW(1) AS foo)", tree.FmtHideConstants, "((_,) AS foo)"},
+		{"(ROW(1) AS foo, bar)", tree.FmtHideConstants, "((_,) AS foo, bar)"},
+		{"(ROW(1) AS foo, bar, baz)", tree.FmtHideConstants, "((_,) AS foo, bar, baz)"},
+		{"(ROW(1, 2) AS foo, bar, baz)", tree.FmtHideConstants, "((_, _) AS foo, bar, baz)"},
+		{"(ROW(1, 2, 3) AS foo, bar)", tree.FmtHideConstants, "((_, _, __more1_10__) AS foo, bar)"},
+		{"(ROW(1, 2, 3) AS foo, bar, baz)", tree.FmtHideConstants, "((_, _, __more1_10__) AS foo, bar)"},
+		{"(ROW(1, 2, 3) AS foo)", tree.FmtHideConstants, "((_, _, __more1_10__) AS foo)"},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
+			expr, err := parser.ParseExpr(test.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exprStr := tree.AsStringWithFlags(expr, test.f)
+			if exprStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, exprStr)
+			}
+		})
+	}
+}
+
 func TestFormatExpr2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
