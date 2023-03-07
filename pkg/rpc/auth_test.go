@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -875,7 +876,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			for _, tc := range tests {
 				t.Run("", func(t *testing.T) {
 					err := rpc.TestingAuthorizeTenantRequest(
-						ctx, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+						ctx, &settings.Values{}, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
 					)
 					if tc.expErr == noError {
 						require.NoError(t, err)
@@ -927,7 +928,7 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 			authorizer := mockAuthorizer{}
 			tc.configureAuthorizer(&authorizer)
 			err := rpc.TestingAuthorizeTenantRequest(
-				ctx, tenID, method, tc.req, authorizer,
+				ctx, &settings.Values{}, tenID, method, tc.req, authorizer,
 			)
 			if tc.expErr == "" {
 				require.NoError(t, err)
