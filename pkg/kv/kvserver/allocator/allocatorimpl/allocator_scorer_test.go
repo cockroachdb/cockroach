@@ -1096,7 +1096,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := &RangeCountScorerOptions{StoreHealthOptions: StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction}}
+	options := &RangeCountScorerOptions{}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),

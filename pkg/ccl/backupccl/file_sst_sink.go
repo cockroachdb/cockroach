@@ -190,7 +190,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	// If this span extended the last span added -- that is, picked up where it
 	// ended and has the same time-bounds -- then we can simply extend that span
 	// and add to its entry counts. Otherwise we need to record it separately.
-	if l := len(s.flushedFiles) - 1; l > 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
+	if l := len(s.flushedFiles) - 1; l >= 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
 		s.flushedFiles[l].EndTime.EqOrdering(resp.metadata.EndTime) &&
 		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey

@@ -60,7 +60,7 @@ var (
 				QueriesPerSecond: 3000,
 				CPUPerSecond:     3000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 10),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -80,7 +80,7 @@ var (
 				QueriesPerSecond: 2800,
 				CPUPerSecond:     2800 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 5),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -100,7 +100,7 @@ var (
 				QueriesPerSecond: 2600,
 				CPUPerSecond:     2600 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 2),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -120,7 +120,7 @@ var (
 				QueriesPerSecond: 2400,
 				CPUPerSecond:     2400 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 10),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -140,7 +140,7 @@ var (
 				QueriesPerSecond: 2200,
 				CPUPerSecond:     2200 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 3),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 3),
 			},
 		},
 		{
@@ -160,7 +160,7 @@ var (
 				QueriesPerSecond: 2000,
 				CPUPerSecond:     2000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 2),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -180,7 +180,7 @@ var (
 				QueriesPerSecond: 1800,
 				CPUPerSecond:     1800 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 10),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -200,7 +200,7 @@ var (
 				QueriesPerSecond: 1600,
 				CPUPerSecond:     1600 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 5),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -220,7 +220,7 @@ var (
 				QueriesPerSecond: 1400,
 				CPUPerSecond:     1400 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 3),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 3),
 			},
 		},
 	}
@@ -283,7 +283,7 @@ var (
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 15),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -293,7 +293,7 @@ var (
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 10),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -303,7 +303,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 5),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -313,7 +313,7 @@ var (
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 20),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 20),
 			},
 		},
 		{
@@ -323,7 +323,7 @@ var (
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 25),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 25),
 			},
 		},
 	}
@@ -338,7 +338,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 100),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -348,7 +348,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 15),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -358,7 +358,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 100),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -368,7 +368,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold - 15),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -378,7 +378,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 100),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 100),
 			},
 		},
 	}
@@ -393,7 +393,7 @@ var (
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 1),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -403,7 +403,7 @@ var (
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 1),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -413,7 +413,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 1),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -423,7 +423,7 @@ var (
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 1),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -433,7 +433,7 @@ var (
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 1),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 1),
 			},
 		},
 	}
@@ -448,7 +448,7 @@ var (
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 1),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -458,7 +458,7 @@ var (
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 10),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 10),
 			},
 		},
 		{
@@ -468,7 +468,7 @@ var (
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 50),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 50),
 			},
 		},
 		{
@@ -478,7 +478,7 @@ var (
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 100),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -488,7 +488,7 @@ var (
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
 				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultIOOverloadThreshold + 100),
+					allocatorimpl.DefaultReplicaIOOverloadThreshold + 100),
 			},
 		},
 	}
@@ -935,7 +935,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad()
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
+			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(rebalanceThreshold)
 
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(ctx, rctx)
@@ -1061,7 +1061,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			name:                "rebalance one replica within heavy region",
 			voters:              []roachpb.StoreID{1, 6, 9},
 			constraints:         oneReplicaPerRegion,
-			expRebalancedVoters: []roachpb.StoreID{9, 6, 2},
+			expRebalancedVoters: []roachpb.StoreID{2, 6, 9},
 		},
 		// A replica is in a heavily loaded region, on a relatively heavily loaded
 		// store. We expect it to be moved to a less busy store within the same
@@ -1083,7 +1083,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			voters:              []roachpb.StoreID{1, 2, 9},
 			constraints:         twoReplicasInHotRegion,
 			leasePreferences:    leasePreferredHotRegion,
-			expRebalancedVoters: []roachpb.StoreID{3, 2, 9},
+			expRebalancedVoters: []roachpb.StoreID{2, 3, 9},
 		},
 		// Two replicas are in the hot region, both on relatively heavily
 		// loaded nodes. We expect one of those replicas to be moved to a
@@ -1094,21 +1094,21 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			name:                "rebalance two replicas out of three within heavy region, prefer lease in heavy region",
 			voters:              []roachpb.StoreID{1, 2, 9},
 			constraints:         twoReplicasInHotRegion,
-			expRebalancedVoters: []roachpb.StoreID{9, 2, 3},
+			expRebalancedVoters: []roachpb.StoreID{2, 9, 3},
 		},
 		{
 			name:        "rebalance two replicas out of five within heavy region",
 			voters:      []roachpb.StoreID{1, 2, 6, 8, 9},
 			constraints: twoReplicasInHotRegion,
 			// NB: Because of the diversity heuristic we won't rebalance to node 7.
-			expRebalancedVoters: []roachpb.StoreID{9, 3, 6, 8, 2},
+			expRebalancedVoters: []roachpb.StoreID{8, 3, 6, 9, 2},
 		},
 		{
 			name:        "rebalance two replicas out of five within heavy region",
 			voters:      []roachpb.StoreID{1, 2, 6, 8, 9},
 			constraints: twoReplicasInHotRegion,
 			// NB: Because of the diversity heuristic we won't rebalance to node 7.
-			expRebalancedVoters: []roachpb.StoreID{9, 3, 6, 8, 2},
+			expRebalancedVoters: []roachpb.StoreID{8, 3, 6, 9, 2},
 		},
 		// In the absence of any constraints, ensure that as long as diversity is
 		// maximized, replicas on hot stores are rebalanced to cooler stores within
@@ -1144,7 +1144,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			voterConstraints: allReplicasInHotRegion,
 			constraints:      oneReplicaPerRegion,
 
-			expRebalancedVoters: []roachpb.StoreID{3, 2, 1},
+			expRebalancedVoters: []roachpb.StoreID{2, 3, 1},
 			// NB: Expect the non-voter on node 4 (hottest node in region B) to
 			// move to node 5 (least hot region in region B), the least hot
 			// node without a high IO overload score.
@@ -1158,8 +1158,10 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			voterConstraints: twoReplicasInSecondHottestRegion,
 			constraints:      oneReplicaPerRegion,
 			// NB: Expect the voter on node 4 (hottest node in region B) to move to
-			// node 6 (least hot region in region B).
-			expRebalancedVoters: []roachpb.StoreID{9, 5, 6, 8, 3},
+			// node 6 (least hot region in region B). Expect the lease to move to the
+			// lowest QPS node among nodes that pass the IO overload transfer check
+			// (n8).
+			expRebalancedVoters: []roachpb.StoreID{8, 5, 6, 9, 3},
 		},
 		{
 			name:   "primary region with second highest QPS, region survival, one voter on sub-optimal node, prefer lease hottest region",
@@ -1183,9 +1185,10 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			constraints:      oneReplicaPerRegion,
 			leasePreferences: leasePreferredSecondHotRegion,
 			// NB: Expect the voter on node 4 (hottest node in region B) to move to
-			// node 6 (least hot region in region B). Expect lease to transfer
-			// to least hot store, in the second hottest region (node 6).
-			expRebalancedVoters: []roachpb.StoreID{6, 5, 3, 8, 9},
+			// node 6 (least hot region in region B). Expect lease to transfer to
+			// least hot store, in the second hottest region that passes the lease IO
+			// overload check (node 5).
+			expRebalancedVoters: []roachpb.StoreID{5, 6, 3, 8, 9},
 		},
 		{
 			name:   "primary region with highest QPS, region survival, two voters on sub-optimal nodes",
@@ -1199,8 +1202,9 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// the least hot region. Additionally, in region B, we've got one replica
 			// on store 4 (which is the hottest store in that region). We expect that
 			// replica to be moved to store 5, which is the least hot node without a
-			// high IO overload score.
-			expRebalancedVoters: []roachpb.StoreID{9, 2, 5, 8, 3},
+			// high IO overload score. Expect the lease to move to s8 as it passes
+			// the IO overload transfer check.
+			expRebalancedVoters: []roachpb.StoreID{8, 2, 5, 9, 3},
 		},
 		{
 			name:        "one voter on sub-optimal node in the coldest region",
@@ -1224,6 +1228,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			expRebalancedVoters: []roachpb.StoreID{8, 5, 6},
 		},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, withQPSCPU(t, objectiveProvider, func(t *testing.T) {
 			// Boilerplate for test setup.
@@ -1271,8 +1276,9 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad()
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingLeasesAndReplicas)
-			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: allocatorimpl.IOOverloadThresholdBlockRebalanceTo}
+			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdBlockTransfers,
+			}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(
@@ -1360,8 +1366,8 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		hottestRanges := sr.replicaRankings.TopLoad()
 		options := sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-		rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-			EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
+		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 		sr.chooseRangeToRebalance(ctx, rctx)
@@ -1528,8 +1534,8 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad()
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
+			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(tc.rebalanceThreshold)
 
 			_, voterTargets, _ := sr.chooseRangeToRebalance(ctx, rctx)
@@ -1637,8 +1643,8 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		hottestRanges = sr.replicaRankings.TopLoad()
 		options = sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx = sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-		rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-			EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
+		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 		rctx.options.Deterministic = true
 
@@ -1682,17 +1688,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.IOOverloadThresholdNoAction,
-		},
-		{
-			name: "ignore io overload on allocation when log only enforcement",
-			// NB: All stores have high io overload, this should be ignored.
-			stores: noLocalityHighReadAmpStores,
-			conf:   roachpb.SpanConfig{},
-			expectedTargets: []roachpb.ReplicationTarget{
-				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
-			},
-			enforcement: allocatorimpl.IOOverloadThresholdLogOnly,
+			enforcement: allocatorimpl.IOOverloadThresholdIgnore,
 		},
 		{
 			name: "don't stop rebalancing when the io overload score uniformly above threshold and block rebalance to enforcement",
@@ -1702,7 +1698,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockTransfers,
 		},
 		{
 			name: "don't stop rebalancing when the io overload score is uniformly above threshold and block rebalance to enforcement",
@@ -1734,7 +1730,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockTransfers,
 		},
 		{
 			name: "rebalance should ignore stores with high IO overload when block rebalance to enforcement",
@@ -1748,7 +1744,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockTransfers,
 		},
 		{
 			name: "rebalance should ignore stores with high IO overload scores when block all enforcement level",
@@ -1778,7 +1774,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			stores:          noLocalityUniformQPSHighReadAmp,
 			conf:            roachpb.SpanConfig{},
 			expectedTargets: nil,
-			enforcement:     allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
+			enforcement:     allocatorimpl.IOOverloadThresholdBlockTransfers,
 		},
 	}
 
@@ -1809,8 +1805,8 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			require.Greater(t, len(rctx.hottestRanges), 0)
 
-			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: test.enforcement, IOOverloadThreshold: allocatorimpl.DefaultIOOverloadThreshold}
+			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+				ReplicaEnforcementLevel: test.enforcement, ReplicaIOOverloadThreshold: allocatorimpl.DefaultReplicaIOOverloadThreshold}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 			_, targetVoters, _ := sr.chooseRangeToRebalance(ctx, rctx)
