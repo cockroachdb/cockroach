@@ -73,12 +73,26 @@ func getCombinedStatementStats(
 	showInternal := SQLStatsShowInternal.Get(&settings.SV)
 	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
 		startTime, endTime, limit, testingKnobs, showInternal)
-	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
-	if err != nil {
-		return nil, serverError(ctx, err)
+	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
+	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+	var err error
+
+	if req.FetchMode == nil || req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		transactions, err = collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
 	}
 
-	transactions, err := collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit)
+	if req.FetchMode != nil && req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		// Change the whereClause for the statements to those matching the txn_fingerprint_ids in the
+		// transactions response that are within the desired interval. We also don't need the order and
+		// limit anymore.
+		orderAndLimit = ""
+		whereClause, args = buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
+	}
+
+	statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -91,6 +105,44 @@ func getCombinedStatementStats(
 	}
 
 	return response, nil
+}
+
+// buildWhereClauseForStmtsByTxn builds the where clause to get the statement
+// stats based on a list of transactions. The list of transactions provided must
+// contain no duplicate transaction fingerprint ids.
+func buildWhereClauseForStmtsByTxn(
+	req *serverpb.CombinedStatementsStatsRequest,
+	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
+	testingKnobs *sqlstats.TestingKnobs,
+) (whereClause string, args []interface{}) {
+	var buffer strings.Builder
+	buffer.WriteString(testingKnobs.GetAOSTClause())
+
+	buffer.WriteString(" WHERE true")
+
+	// Add start and end filters from request.
+	startTime := getTimeFromSeconds(req.Start)
+	endTime := getTimeFromSeconds(req.End)
+	if startTime != nil {
+		args = append(args, *startTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts >= $%d", len(args)))
+	}
+
+	if endTime != nil {
+		args = append(args, *endTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)))
+	}
+
+	txnFingerprints := make([]string, 0, len(transactions))
+	for i := range transactions {
+		fingerprint := uint64(transactions[i].StatsData.TransactionFingerprintID)
+		txnFingerprints = append(txnFingerprints, fmt.Sprintf("\\x%016x", fingerprint))
+	}
+
+	args = append(args, txnFingerprints)
+	buffer.WriteString(fmt.Sprintf(" AND transaction_fingerprint_id = any $%d", len(args)))
+
+	return buffer.String(), args
 }
 
 // getCombinedStatementsQueryClausesAndArgs returns:
