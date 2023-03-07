@@ -91,7 +91,7 @@ func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) 
 
 	return tenantcapabilities.Entry{
 		TenantID:           tenID,
-		TenantCapabilities: tenantInfo.Capabilities,
+		TenantCapabilities: &tenantInfo.Capabilities,
 	}, nil
 }
 
