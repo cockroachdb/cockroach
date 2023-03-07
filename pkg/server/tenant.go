@@ -1068,7 +1068,7 @@ func makeTenantSQLServerArgs(
 	if baseCfg.RuntimeStatSampler != nil {
 		runtime = baseCfg.RuntimeStatSampler
 	} else {
-		runtime = status.NewRuntimeStatSampler(startupCtx, clock)
+		runtime = status.NewRuntimeStatSampler(startupCtx, clock.WallClock())
 	}
 	registry.AddMetricStruct(runtime)
 
