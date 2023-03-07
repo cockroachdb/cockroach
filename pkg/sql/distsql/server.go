@@ -549,10 +549,10 @@ type LocalState struct {
 	// HasConcurrency indicates whether the local flow uses multiple goroutines.
 	HasConcurrency bool
 
-	// ParallelCheck indicates whether the local flow is for a "check" postquery
-	// that runs in parallel with other checks and, thus, the LeafTxn must be
-	// used by this flow.
-	ParallelCheck bool
+	// MustUseLeaf indicates whether the local flow must use the LeafTxn even if
+	// there is no concurrency in the flow on its own because there would be
+	// concurrency with other flows which prohibits the usage of the RootTxn.
+	MustUseLeaf bool
 
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
@@ -567,7 +567,7 @@ type LocalState struct {
 // MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call
 // this method only after IsLocal and HasConcurrency have been set correctly.
 func (l LocalState) MustUseLeafTxn() bool {
-	return !l.IsLocal || l.HasConcurrency || l.ParallelCheck
+	return !l.IsLocal || l.HasConcurrency || l.MustUseLeaf
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node,

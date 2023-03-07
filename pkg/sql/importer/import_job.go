@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -65,7 +66,7 @@ const importJobRecoveryEventType eventpb.RecoveryEventType = "import_job"
 type importTestingKnobs struct {
 	afterImport            func(summary roachpb.RowCount) error
 	beforeRunDSP           func() error
-	onSetupFinish          func()
+	onSetupFinish          func(flowinfra.Flow)
 	alwaysFlushJobProgress bool
 }
 

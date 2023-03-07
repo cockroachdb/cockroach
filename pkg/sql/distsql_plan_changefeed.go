@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -206,7 +207,7 @@ func RunCDCEvaluation(
 	// changes.
 	cdcPlan.PlanCtx.usePlannerDescriptorsForLocalFlow = true
 	p := cdcPlan.PlanCtx.planner
-	finishedSetupFn := func() {
+	finishedSetupFn := func(flowinfra.Flow) {
 		p.Descriptors().ReleaseAll(ctx)
 	}
 
