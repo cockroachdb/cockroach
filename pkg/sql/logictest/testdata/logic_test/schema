@@ -989,3 +989,78 @@ statement ok
 USE test;
 DROP DATABASE d;
 DROP TABLE xy;
+
+# Regression tests for #96674.
+subtest alter_udt_schema
+
+# Renaming the schema should invalidate a schema-qualified UDT reference.
+statement ok
+CREATE SCHEMA sc;
+CREATE TYPE sc.t AS ENUM ('HELLO');
+
+query T
+SELECT 'HELLO'::sc.t;
+----
+HELLO
+
+statement ok
+ALTER SCHEMA sc RENAME TO sc1;
+
+query error pq: type "sc.t" does not exist
+SELECT 'HELLO'::sc.t;
+
+query T
+SELECT 'HELLO'::sc1.t;
+----
+HELLO
+
+statement ok
+DROP SCHEMA sc1 CASCADE;
+
+# Renaming the database should invalidate a database-qualified UDT reference.
+statement ok
+CREATE DATABASE d;
+USE d;
+CREATE TYPE d.t AS ENUM ('HELLO');
+
+query T
+SELECT 'HELLO'::d.t;
+----
+HELLO
+
+statement ok
+ALTER DATABASE d RENAME TO d1;
+USE d1;
+
+query error pq: type "d.t" does not exist
+SELECT 'HELLO'::d.t;
+
+query T
+SELECT 'HELLO'::d1.t;
+----
+HELLO
+
+statement ok
+USE test;
+DROP DATABASE d1 CASCADE;
+
+# Changing the current database should invalidate an unqualified UDT reference.
+statement ok
+CREATE TYPE t AS ENUM ('HELLO');
+
+query T
+SELECT 'HELLO'::t;
+----
+HELLO
+
+statement ok
+CREATE DATABASE d;
+USE d;
+
+query error pq: type "t" does not exist
+SELECT 'HELLO'::t;
+
+statement ok
+USE test;
+DROP DATABASE d;
+DROP TYPE t;
