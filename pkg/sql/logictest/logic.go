@@ -40,6 +40,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -80,8 +81,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -1840,49 +1843,36 @@ func (t *logicTest) setup(
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
 	if cfg.UseCockroachGoTestserver {
-		skip.WithIssue(t.t(), 96387, "flakes with panic over connection string")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
-		if runtime.GOARCH == "arm64" && strings.HasPrefix(cfg.CockroachGoBootstrapVersion, "v22.1") {
-			skip.IgnoreLint(t.t(), "Skip under ARM64. There are no ARM release artifacts for v22.1.")
-		}
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
 		}
 		if cfg.NumNodes != 3 {
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
 		}
-		if cfg.CockroachGoBootstrapVersion == "" {
-			t.Fatal("cockroach-go testserver tests must specify CockroachGoBootstrapVersion")
+
+		upgradeVersion, err := version.Parse(build.BinaryVersion())
+		if err != nil {
+			t.Fatal(err)
+		}
+		bootstrapVersion, err := version.PredecessorVersion(*upgradeVersion)
+		if err != nil {
+			t.Fatal(err)
 		}
 		bootstrapBinaryPath, err := binfetcher.Download(context.Background(), binfetcher.Options{
 			Binary:  "cockroach",
 			Dir:     tempExternalIODir,
-			Version: cfg.CockroachGoBootstrapVersion,
+			Version: "v" + bootstrapVersion,
 			GOOS:    runtime.GOOS,
+			GOARCH:  runtime.GOARCH,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// Prevent a lint failure "this value is never used" when
-		// bazel.BuiltWithBazel returns false above.
-		_ = bootstrapBinaryPath
-
-		localBinaryPath, found := bazel.FindBinary("pkg/cmd/cockroach-short/cockroach-short_/", "cockroach-short")
+		upgradeBinaryPath, found := bazel.FindBinary("pkg/cmd/cockroach-short/cockroach-short_/", "cockroach-short")
 		if !found {
 			t.Fatal(errors.New("cockroach binary not found"))
-		}
-		upgradeBinaryPath := localBinaryPath
-		if cfg.CockroachGoUpgradeVersion != "" {
-			upgradeBinaryPath, err = binfetcher.Download(context.Background(), binfetcher.Options{
-				Binary:  "cockroach",
-				Dir:     tempExternalIODir,
-				Version: cfg.CockroachGoUpgradeVersion,
-				GOOS:    runtime.GOOS,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
 		}
 		t.newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath)
 	} else {
@@ -3099,16 +3089,23 @@ func (t *logicTest) processSubtest(
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
-				t.Fatal(err)
-			}
-			for i := 0; i < t.cfg.NumNodes; i++ {
-				// Wait for each node to be reachable, since UpgradeNode uses `kill`
-				// to terminate nodes, and may introduce temporary unavailability in
-				// the system range.
-				if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
-					t.Fatal(err)
+			// If an upgrade fails, retry it to make sure that it was not
+			// a transient issue (e.g. an unavailable port).
+			if err := retry.WithMaxAttempts(context.Background(), retry.Options{}, 3, func() error {
+				if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
+					return err
 				}
+				for i := 0; i < t.cfg.NumNodes; i++ {
+					// Wait for each node to be reachable, since UpgradeNode uses `kill`
+					// to terminate nodes, and may introduce temporary unavailability in
+					// the system range.
+					if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
 			}
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
