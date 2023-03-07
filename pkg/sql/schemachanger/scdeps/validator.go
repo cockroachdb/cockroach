@@ -66,7 +66,7 @@ type ValidateConstraintFn func(
 
 // NewFakeSessionDataFn callback function used to create session data
 // for the internal executor.
-type NewFakeSessionDataFn func(sv *settings.Values) *sessiondata.SessionData
+type NewFakeSessionDataFn func(sv *settings.Values, opName string) *sessiondata.SessionData
 
 type validator struct {
 	db                         *kv.DB
@@ -120,7 +120,7 @@ func (vd validator) ValidateConstraint(
 	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(&vd.settings.SV),
+	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(&vd.settings.SV, "validate-constraint"),
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 

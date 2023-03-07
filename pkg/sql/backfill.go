@@ -1049,7 +1049,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if err != nil {
 			return err
 		}
-		sd := NewFakeSessionData(sc.execCfg.SV())
+		sd := NewFakeSessionData(sc.execCfg.SV(), "dist-index-backfill")
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, /* planner */
 			txn.KV(), DistributionTypeSystemTenantOnly)
@@ -1345,7 +1345,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 				return nil
 			}
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-			sd := NewFakeSessionData(sc.execCfg.SV())
+			sd := NewFakeSessionData(sc.execCfg.SV(), "dist-column-backfill")
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 			recv := MakeDistSQLReceiver(
 				ctx,
