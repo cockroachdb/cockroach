@@ -12,13 +12,11 @@ package tenantcapabilitiesauthorizer
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,35 +50,101 @@ func (a *Authorizer) HasCapabilityForBatch(
 	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest,
 ) error {
 	if tenID.IsSystem() {
-		return nil // the system tenant is allowed to do as it pleases
+		return nil // the system tenant is allowed to do as it pleases.
 	}
 	if a.capabilitiesReader == nil {
-		err := errors.AssertionFailedf("trying to perform capability check when no reader exists")
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
+		return errors.AssertionFailedf("programming error: trying to perform capability check when no reader exists")
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
-		log.VInfof(
-			ctx,
-			3,
+		log.Infof(ctx,
 			"no capability information for tenant %s; requests that require capabilities may be denied",
 			tenID,
 		)
 	}
 
 	for _, ru := range ba.Requests {
-		switch ru.GetInner().(type) {
-		case *kvpb.AdminSplitRequest:
-			if !cp.CanAdminSplit && !a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
-				return errors.Newf("tenant %s does not have admin split capability", tenID)
+		requiredCap, hasCap := reqMethodToCap[ru.GetInner().Method()]
+		if requiredCap == noCapCheckNeeded {
+			continue
+		}
+		if !hasCap || requiredCap == onlySystemTenant || !found || !cp.GetBool(requiredCap) {
+			if requiredCap == tenantcapabilities.CanAdminSplit && a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
+				continue
 			}
-		default:
-			// No capability checks for any other type of request.
+			// All allowable request types must be explicitly opted into the
+			// reqMethodToCap map. If a request type is missing from the map
+			// (!hasCap), we must be conservative and assume it is
+			// disallowed. This prevents accidents where someone adds a new
+			// sensitive request type in KV and forgets to add an explicit
+			// authorization rule for it here.
+			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, ru.GetInner())
 		}
 	}
 	return nil
 }
+
+var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
+	// The following requests are authorized for all workloads.
+	kvpb.AddSSTable:         noCapCheckNeeded,
+	kvpb.Barrier:            noCapCheckNeeded,
+	kvpb.ClearRange:         noCapCheckNeeded,
+	kvpb.ConditionalPut:     noCapCheckNeeded,
+	kvpb.DeleteRange:        noCapCheckNeeded,
+	kvpb.Delete:             noCapCheckNeeded,
+	kvpb.EndTxn:             noCapCheckNeeded,
+	kvpb.Export:             noCapCheckNeeded,
+	kvpb.Get:                noCapCheckNeeded,
+	kvpb.HeartbeatTxn:       noCapCheckNeeded,
+	kvpb.Increment:          noCapCheckNeeded,
+	kvpb.InitPut:            noCapCheckNeeded,
+	kvpb.IsSpanEmpty:        noCapCheckNeeded,
+	kvpb.LeaseInfo:          noCapCheckNeeded,
+	kvpb.PushTxn:            noCapCheckNeeded,
+	kvpb.Put:                noCapCheckNeeded,
+	kvpb.QueryIntent:        noCapCheckNeeded,
+	kvpb.QueryLocks:         noCapCheckNeeded,
+	kvpb.QueryTxn:           noCapCheckNeeded,
+	kvpb.RangeStats:         noCapCheckNeeded,
+	kvpb.RecoverTxn:         noCapCheckNeeded,
+	kvpb.Refresh:            noCapCheckNeeded,
+	kvpb.RefreshRange:       noCapCheckNeeded,
+	kvpb.ResolveIntentRange: noCapCheckNeeded,
+	kvpb.ResolveIntent:      noCapCheckNeeded,
+	kvpb.ReverseScan:        noCapCheckNeeded,
+	kvpb.RevertRange:        noCapCheckNeeded,
+	kvpb.Scan:               noCapCheckNeeded,
+
+	// The following are authorized via specific capabilities.
+	kvpb.AdminSplit: tenantcapabilities.CanAdminSplit,
+
+	// TODO(ecwall): The following should also be authorized via specific capabilities.
+	kvpb.AdminChangeReplicas: noCapCheckNeeded,
+	kvpb.AdminMerge:          noCapCheckNeeded,
+	kvpb.AdminRelocateRange:  noCapCheckNeeded,
+	kvpb.AdminScatter:        noCapCheckNeeded,
+	kvpb.AdminTransferLease:  noCapCheckNeeded,
+	kvpb.AdminUnsplit:        noCapCheckNeeded,
+
+	// TODO(knz,arul): Verify with the relevant teams whether secondary
+	// tenants have legitimate access to any of those.
+	kvpb.TruncateLog:                   onlySystemTenant,
+	kvpb.Merge:                         onlySystemTenant,
+	kvpb.RequestLease:                  onlySystemTenant,
+	kvpb.TransferLease:                 onlySystemTenant,
+	kvpb.Probe:                         onlySystemTenant,
+	kvpb.RecomputeStats:                onlySystemTenant,
+	kvpb.ComputeChecksum:               onlySystemTenant,
+	kvpb.CheckConsistency:              onlySystemTenant,
+	kvpb.AdminVerifyProtectedTimestamp: onlySystemTenant,
+	kvpb.Migrate:                       onlySystemTenant,
+	kvpb.Subsume:                       onlySystemTenant,
+	kvpb.QueryResolvedTimestamp:        onlySystemTenant,
+	kvpb.GC:                            onlySystemTenant,
+}
+
+const noCapCheckNeeded = tenantcapabilities.LastCapabilityID + 1
+const onlySystemTenant = tenantcapabilities.LastCapabilityID + 2
 
 // BindReader implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
@@ -89,36 +153,34 @@ func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
 
 func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	if tenID.IsSystem() {
-		return nil // the system tenant is allowed to do as it pleases
+		return nil // the system tenant is allowed to do as it pleases.
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
-		log.Infof(
-			ctx,
+		log.Infof(ctx,
 			"no capability information for tenant %s; requests that require capabilities may be denied",
 			tenID,
 		)
 	}
-	if !cp.CanViewNodeInfo {
-		return errors.Newf("tenant %s does not have capability to query cluster node metadata", tenID)
+	if !found || !cp.GetBool(tenantcapabilities.CanViewNodeInfo) {
+		return errors.Newf("client tenant does not have capability to query cluster node metadata")
 	}
 	return nil
 }
 
 func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	if tenID.IsSystem() {
-		return nil // the system tenant is allowed to do as it pleases
+		return nil // the system tenant is allowed to do as it pleases.
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
-		log.Infof(
-			ctx,
+		log.Infof(ctx,
 			"no capability information for tenant %s; requests that require capabilities may be denied",
 			tenID,
 		)
 	}
-	if !cp.CanViewTSDBMetrics {
-		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
+	if !found || !cp.GetBool(tenantcapabilities.CanViewTSDBMetrics) {
+		return errors.Newf("client tenant does not have capability to query timeseries data")
 	}
 	return nil
 }
