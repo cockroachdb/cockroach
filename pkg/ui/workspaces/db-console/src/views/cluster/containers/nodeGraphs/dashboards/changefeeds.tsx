@@ -20,7 +20,11 @@ export default function (props: GraphDashboardProps) {
   const { storeSources } = props;
 
   return [
-    <LineGraph title="Max Changefeed Latency" sources={storeSources}>
+    <LineGraph
+      title="Max Changefeed Latency"
+      isKvGraph={false}
+      sources={storeSources}
+    >
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
           name="cr.node.changefeed.max_behind_nanos"
@@ -31,7 +35,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Byte Traffic" sources={storeSources}>
+    <LineGraph
+      title="Sink Byte Traffic"
+      isKvGraph={false}
+      sources={storeSources}
+    >
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
           name="cr.node.changefeed.emitted_bytes"
@@ -41,7 +49,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Counts" sources={storeSources}>
+    <LineGraph title="Sink Counts" isKvGraph={false} sources={storeSources}>
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.node.changefeed.emitted_messages"
@@ -56,7 +64,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Timings" sources={storeSources}>
+    <LineGraph title="Sink Timings" isKvGraph={false} sources={storeSources}>
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
           name="cr.node.changefeed.emit_nanos"
@@ -71,7 +79,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Changefeed Restarts" sources={storeSources}>
+    <LineGraph
+      title="Changefeed Restarts"
+      isKvGraph={false}
+      sources={storeSources}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.node.changefeed.error_retries"

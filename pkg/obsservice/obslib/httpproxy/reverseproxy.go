@@ -143,6 +143,8 @@ func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 		OIDC: &noOIDCConfigured{},
 		Flags: serverpb.FeatureFlags{
 			IsObservabilityService: true,
+			// TODO(obs-infra): make conditional once obsservice becomes tenant-aware.
+			CanViewKvMetricDashboards: true,
 		},
 	}))
 	for _, path := range CRDBProxyPaths {

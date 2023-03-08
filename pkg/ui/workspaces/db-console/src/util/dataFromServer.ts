@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import IFeatureFlags = cockroach.server.serverpb.IFeatureFlags;
+import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
 
 export interface DataFromServer {
   Insecure: boolean;
@@ -20,7 +20,7 @@ export interface DataFromServer {
   OIDCAutoLogin: boolean;
   OIDCLoginEnabled: boolean;
   OIDCButtonText: string;
-  FeatureFlags: IFeatureFlags;
+  FeatureFlags: FeatureFlags;
 }
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
 // tag in index.html, the contents of which are generated in a Go template

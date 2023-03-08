@@ -37,6 +37,8 @@ import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
 import { initializeAnalytics } from "./analytics";
 import { DataFromServer } from "src/util/dataFromServer";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -53,7 +55,7 @@ export interface AdminUIState {
 
 const emptyDataFromServer: DataFromServer = {
   Insecure: true,
-  FeatureFlags: {},
+  FeatureFlags: new FeatureFlags(),
   LoggedInUser: "",
   NodeID: "",
   OIDCAutoLogin: false,
