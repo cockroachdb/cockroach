@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/bubbline/editline"
+	"github.com/knz/bubbline/history"
 )
 
 const (
@@ -95,6 +96,7 @@ Informational
   \du[S+] [PATTERN] same as \dg.
   \dv[S+] [PATTERN] list only views.
   \l[+] [PATTERN]   list databases.
+  \s                list command history.
   \sf[+] FUNCNAME   show a function's definition.
   \sv[+] VIEWNAME   show a view's definition.
   \z [PATTERN]      same as \dp.
@@ -277,6 +279,33 @@ func (c *cliState) printCliHelp() {
 		docs.URL("use-the-built-in-sql-client.html"),
 	)
 	fmt.Fprintln(c.iCtx.stdout)
+}
+
+// printCommandHistory prints the recorded command history.
+func (c *cliState) printCommandHistory() {
+	// As long as we preserve compatibility with go-libedit, we cannot
+	// ask the line editor directly for a copy of the history; instead
+	// we need to load it from file.
+
+	// To do so, first we must save it to file: by default, it is
+	// not saved on every input.
+	if err := c.ins.saveHistory(); err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "warning: cannot save history: %v", err)
+		return
+	}
+
+	// Then, we load it back from file. We can use the bubbline loader,
+	// because both bubbline and libedit use the same file format.
+	h, err := history.LoadHistory(c.iCtx.histFile)
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "warning: cannot load history: %v", err)
+		return
+	}
+
+	// Finally, we can print the entries.
+	for _, entry := range h {
+		fmt.Fprintln(c.iCtx.stdout, entry)
+	}
 }
 
 // addHistory persists a line of input to the readline history file.
@@ -1392,6 +1421,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		// got confused with string delimiters and multi-line input.
 		return cliStartLine
 
+	case `\s`:
+		c.printCommandHistory()
+
 	case `\show`:
 		if c.ins.multilineEdit() {
 			fmt.Fprintln(c.iCtx.stderr, `warning: \show is ineffective with this editor`)
@@ -2297,17 +2329,16 @@ func (c *cliState) configurePreShellDefaults(
 	// all), to prevent abnormal situation where a history runs into
 	// megabytes and starts slowing down the shell.
 	const maxHistEntries = 10000
-	var histFile string
 	if useEditor {
 		homeDir, err := envutil.HomeDir()
 		if err != nil {
 			fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)
 		} else {
-			histFile = filepath.Join(homeDir, cmdHistFile)
+			c.iCtx.histFile = filepath.Join(homeDir, cmdHistFile)
 		}
 	}
 
-	cleanupFn, c.exitErr = c.ins.init(cmdIn, c.iCtx.stdout, c.iCtx.stderr, c, maxHistEntries, histFile)
+	cleanupFn, c.exitErr = c.ins.init(cmdIn, c.iCtx.stdout, c.iCtx.stderr, c, maxHistEntries, c.iCtx.histFile)
 	if c.exitErr != nil {
 		return cleanupFn, c.exitErr
 	}
