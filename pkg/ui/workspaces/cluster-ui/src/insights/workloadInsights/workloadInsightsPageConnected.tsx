@@ -72,8 +72,8 @@ const statementMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  isDataValid: state.adminUI.stmtInsights?.valid,
-  lastUpdated: state.adminUI.stmtInsights.lastUpdated,
+  isDataValid: state.adminUI?.stmtInsights?.valid,
+  lastUpdated: state.adminUI?.stmtInsights.lastUpdated,
   statements: selectStmtInsights(state),
   statementsError: selectStmtInsightsError(state),
   insightTypes: selectInsightTypes(),
