@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -36,7 +35,6 @@ func TestWatchAuthErr(t *testing.T) {
 	host, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer host.Stopper().Stop(ctx)
 
-	var _ = kvtenantccl.Connector{}
 	tenant, _ := serverutils.StartTenant(t, host, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 	})

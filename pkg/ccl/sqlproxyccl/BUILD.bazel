@@ -80,7 +80,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/acl",
         "//pkg/ccl/sqlproxyccl/balancer",
         "//pkg/ccl/sqlproxyccl/interceptor",
