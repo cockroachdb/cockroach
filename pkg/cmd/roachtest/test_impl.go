@@ -283,30 +283,81 @@ func collectErrors(args []interface{}) []error {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.addFailure("", args...)
+	t.addFailureAndCancel(1, "", args...)
 	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.addFailure(format, args...)
+	t.addFailureAndCancel(1, format, args...)
 	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
 func (t *testImpl) FailNow() {
-	t.addFailure("FailNow called")
+	t.addFailureAndCancel(1, "FailNow called")
 	panic(errTestFatal)
 }
 
 // Error implements the TestingT interface
 func (t *testImpl) Error(args ...interface{}) {
-	t.addFailure("", args...)
+	t.addFailureAndCancel(1, "", args...)
 }
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.addFailure(format, args...)
+	t.addFailureAndCancel(1, format, args...)
+}
+
+func (t *testImpl) addFailureAndCancel(depth int, format string, args ...interface{}) {
+	t.addFailure(depth+1, format, args...)
+	if t.mu.cancel != nil {
+		t.mu.cancel()
+	}
+}
+
+// addFailure depth indicates how many stack frames to skip when reporting the
+// site of the failure in logs. `0` will report the caller of addFailure, `1` the
+// caller of the caller of addFailure, etc.
+func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
+	if format == "" {
+		format = strings.Repeat(" %v", len(args))[1:]
+	}
+	reportFailure := newFailure(errors.NewWithDepthf(depth+1, format, args...), collectErrors(args))
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.mu.failures = append(t.mu.failures, reportFailure)
+
+	var b strings.Builder
+	formatFailure(&b, reportFailure)
+	msg := b.String()
+
+	failureNum := len(t.mu.failures)
+	failureLog := fmt.Sprintf("failure_%d", failureNum)
+	t.L().Printf("test failure #%d: full stack retained in %s.log: %s", failureNum, failureLog, msg)
+	// Also dump the verbose error (incl. all stack traces) to a log file, in case
+	// we need it. The stacks are sometimes helpful, but we don't want them in the
+	// main log as they are highly verbose.
+	{
+		cl, err := t.L().ChildLogger(failureLog, logger.QuietStderr, logger.QuietStdout)
+		if err == nil {
+			// We don't actually log through this logger since it adds an unrelated
+			// file:line caller (namely ours). The error already has stack traces
+			// so it's better to write only it to the file to avoid confusion.
+			if cl.File != nil {
+				path := cl.File.Name()
+				if len(path) > 0 {
+					_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure.squashedErr)), 0644)
+				}
+			}
+			cl.Close() // we just wanted the filename
+		}
+	}
+
+	t.mu.output = append(t.mu.output, msg...)
+	t.mu.output = append(t.mu.output, '\n')
 }
 
 // We take the first error from each failure which is the
@@ -321,47 +372,6 @@ func formatFailure(b *strings.Builder, reportFailures ...failure) {
 			file, line, fn = "<unknown>", 0, "unknown"
 		}
 		fmt.Fprintf(b, "(%s:%d).%s: %v", file, line, fn, failure.squashedErr)
-	}
-}
-
-func (t *testImpl) addFailure(format string, args ...interface{}) {
-	if format == "" {
-		format = strings.Repeat(" %v", len(args))[1:]
-	}
-	reportFailure := newFailure(errors.NewWithDepthf(1, format, args...), collectErrors(args))
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.mu.failures = append(t.mu.failures, reportFailure)
-
-	var b strings.Builder
-	formatFailure(&b, reportFailure)
-	msg := b.String()
-
-	t.L().Printf("test failure #%d: %s", len(t.mu.failures), msg)
-	// Also dump the verbose error (incl. all stack traces) to a log file, in case
-	// we need it. The stacks are sometimes helpful, but we don't want them in the
-	// main log as they are highly verbose.
-	{
-		cl, err := t.L().ChildLogger(
-			fmt.Sprintf("failure_%d", len(t.mu.failures)),
-			logger.QuietStderr, logger.QuietStdout,
-		)
-		if err == nil {
-			// We don't actually log through this logger since it adds an unrelated
-			// file:line caller (namely ours). The error already has stack traces
-			// so it's better to write only it to the file to avoid confusion.
-			path := cl.File.Name()
-			cl.Close() // we just wanted the filename
-			_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure.squashedErr)), 0644)
-		}
-	}
-
-	t.mu.output = append(t.mu.output, msg...)
-	t.mu.output = append(t.mu.output, '\n')
-	if t.mu.cancel != nil {
-		t.mu.cancel()
 	}
 }
 

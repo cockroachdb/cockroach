@@ -156,6 +156,8 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	l.Printf("%s: starting nodes", c.Name)
+
+	// SSH retries are disabled by passing nil RunRetryOpts
 	return c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) (*RunResultDetails, error) {
 		node := nodes[nodeIdx]
 		res := &RunResultDetails{Node: node}
@@ -189,32 +191,18 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
-			l.Printf("%s: initializing cluster", c.Name)
-			initOut, err := c.initializeCluster(ctx, node)
-			if err != nil {
+			if err := c.initializeCluster(ctx, l, node); err != nil {
 				res.Err = err
 				return res, errors.Wrap(err, "failed to initialize cluster")
 			}
-
-			if initOut != "" {
-				l.Printf(initOut)
-			}
 		}
 
-		// We're sure to set cluster settings after having initialized the
-		// cluster.
-
-		l.Printf("%s: setting cluster settings", c.Name)
-		clusterSettingsOut, err := c.setClusterSettings(ctx, l, node)
-		if err != nil {
+		if err := c.setClusterSettings(ctx, l, node); err != nil {
 			res.Err = err
-			return res, errors.Wrap(err, "unable to set cluster settings")
-		}
-		if clusterSettingsOut != "" {
-			l.Printf(clusterSettingsOut)
+			return res, errors.Wrap(err, "failed to set cluster settings")
 		}
 		return res, nil
-	})
+	}, DefaultSSHRetryOpts)
 }
 
 // NodeDir returns the data directory for the given node and store.
@@ -311,11 +299,6 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
-		sess, err := c.newSession(node)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
-		defer sess.Close()
 
 		var cmd string
 		if c.IsLocal() {
@@ -325,7 +308,10 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
+		defer sess.Close()
+
+		out, cmdErr := sess.CombinedOutput(ctx)
 		res := newRunResultDetails(node, cmdErr)
 		res.CombinedOut = out
 
@@ -334,7 +320,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 		}
 		resultChan <- result{node: node, output: string(res.CombinedOut)}
 		return res, nil
-	}); err != nil {
+	}, DefaultSSHRetryOpts); err != nil {
 		return err
 	}
 
@@ -361,19 +347,17 @@ func (c *SyncedCluster) startNode(
 	}
 
 	if err := func() error {
-		sess, err := c.newSession(node)
-		if err != nil {
-			return err
-		}
-		defer sess.Close()
-
-		sess.SetStdin(strings.NewReader(startCmd))
 		var cmd string
 		if c.IsLocal() {
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 		}
 		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
-		if out, err := sess.CombinedOutput(ctx, cmd); err != nil {
+
+		sess := c.newSession(l, node, cmd)
+		defer sess.Close()
+
+		sess.SetStdin(strings.NewReader(startCmd))
+		if out, err := sess.CombinedOutput(ctx); err != nil {
 			return errors.Wrapf(err, "failed to upload start script: %s", out)
 		}
 
@@ -382,18 +366,16 @@ func (c *SyncedCluster) startNode(
 		return "", err
 	}
 
-	sess, err := c.newSession(node)
-	if err != nil {
-		return "", err
-	}
-	defer sess.Close()
-
 	var cmd string
 	if c.IsLocal() {
 		cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	cmd += "./cockroach.sh"
-	out, err := sess.CombinedOutput(ctx, cmd)
+
+	sess := c.newSession(l, node, cmd)
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
 		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
@@ -628,38 +610,39 @@ func (c *SyncedCluster) maybeScaleMem(val int) int {
 	return val
 }
 
-func (c *SyncedCluster) initializeCluster(ctx context.Context, node Node) (string, error) {
-	initCmd := c.generateInitCmd(node)
+func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger, node Node) error {
+	l.Printf("%s: initializing cluster\n", c.Name)
+	cmd := c.generateInitCmd(node)
 
-	sess, err := c.newSession(node)
-	if err != nil {
-		return "", err
-	}
+	sess := c.newSession(l, node, cmd, withDebugName("init-cluster"))
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(ctx, initCmd)
+	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", initCmd, out)
+		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
-	return strings.TrimSpace(string(out)), nil
+
+	if out := strings.TrimSpace(string(out)); out != "" {
+		l.Printf(out)
+	}
+	return nil
 }
 
-func (c *SyncedCluster) setClusterSettings(
-	ctx context.Context, l *logger.Logger, node Node,
-) (string, error) {
-	clusterSettingCmd := c.generateClusterSettingCmd(l, node)
+func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger, node Node) error {
+	l.Printf("%s: setting cluster settings", c.Name)
+	cmd := c.generateClusterSettingCmd(l, node)
 
-	sess, err := c.newSession(node)
-	if err != nil {
-		return "", err
-	}
+	sess := c.newSession(l, node, cmd, withDebugName("set-cluster-settings"))
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(ctx, clusterSettingCmd)
+	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
+		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
-	return strings.TrimSpace(string(out)), nil
+	if out := strings.TrimSpace(string(out)); out != "" {
+		l.Printf(out)
+	}
+	return nil
 }
 
 func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) string {
