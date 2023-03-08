@@ -3466,6 +3466,10 @@ func (m *sessionDataMutator) SetEnforceHomeRegionFollowerReadsEnabled(val bool) 
 	m.data.EnforceHomeRegionFollowerReadsEnabled = val
 }
 
+func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
+	m.data.OptimizerAlwaysUseHistograms = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
