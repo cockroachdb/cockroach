@@ -1,0 +1,35 @@
+# Regression test for https://github.com/cockroachdb/cockroach/issues/94337.
+# The linked issue only manifests itself if the read request is able to drop
+# latches early. Before this bug was fixed, one of the conditions required for
+# a read request to drop its latches early was that it needed to have a higher
+# read timestamp compared to the timestamp at which it had written all intents
+# the read overlapped with. Adding the sleeps here bumps the transaction's read
+# timestamp, by virtue of the closed timestamp interval.
+
+statement ok
+CREATE TABLE a (id INT);
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_sleep(1.5)
+
+statement ok
+SAVEPOINT s
+
+statement ok
+SELECT pg_sleep(1.5)
+
+statement ok
+INSERT INTO a(id) VALUES (0);
+
+statement ok
+ROLLBACK TO SAVEPOINT s
+
+query I
+SELECT * FROM a
+----
+
+statement ok
+COMMIT
