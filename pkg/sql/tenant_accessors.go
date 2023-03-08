@@ -62,7 +62,7 @@ func GetAllNonDropTenantIDs(
 WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' != $1 ORDER BY id`
 		arg = "DROP"
 	}
-	rows, err := txn.QueryBuffered(ctx, "get-tenant-ids", txn.KV(), q, arg)
+	rows, err := txn.QueryBufferedEx(ctx, "get-tenant-ids", txn.KV(), sessiondata.NodeUserSessionDataOverride, q, arg)
 	if err != nil {
 		return nil, err
 	}

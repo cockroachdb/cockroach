@@ -190,13 +190,41 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error only users with the admin role are allowed to drop tenant
+statement error user testuser does not have CONTROLREPLICATION privilege on global
 DROP TENANT three
 
-statement error only users with the admin role are allowed to show tenant
+statement error user testuser does not have CONTROLREPLICATION privilege on global
 SHOW TENANTS
 
+statement error user testuser does not have CONTROLREPLICATION privilege on global
+SHOW TENANT 'two'
+
 user root
+
+statement ok
+GRANT SYSTEM CONTROLREPLICATION TO testuser
+
+user testuser
+
+query ITTT colnames
+SHOW TENANTS
+----
+id  name        data_state  service_mode
+1   system      ready       shared
+2   tenant-one  ready       none
+3   two         ready       none
+4   three       ready       none
+
+query ITTT colnames
+SHOW TENANT two
+----
+id  name        data_state  service_mode
+3   two         ready       none
+
+user root
+
+statement ok
+REVOKE SYSTEM CONTROLREPLICATION FROM testuser
 
 subtest read_only
 

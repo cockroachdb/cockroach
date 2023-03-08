@@ -40,14 +40,6 @@ func startReplicationProducerJob(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, tenantName roachpb.TenantName,
 ) (streampb.ReplicationProducerSpec, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
-		return streampb.ReplicationProducerSpec{}, err
-	}
-
-	if !hasAdminRole {
-		return streampb.ReplicationProducerSpec{}, errors.New("admin role required to start a replication jobs")
-	}
 
 	if !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
 		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")

@@ -50,6 +50,13 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if n.desiredprivs.Contains(privilege.VIEWJOB) {
 			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using VIEWJOB system privilege")
 		}
+		if n.desiredprivs.Contains(privilege.REPLICATION) {
+			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using REPLICATION system privilege")
+		}
+		if n.desiredprivs.Contains(privilege.CONTROLREPLICATION) {
+			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using CONTROLREPLICATION system privilege")
+		}
+
 	}
 
 	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
