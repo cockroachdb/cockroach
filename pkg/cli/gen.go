@@ -225,7 +225,7 @@ Output the list of cluster settings known to this binary.
 
 		var rows [][]string
 		for _, name := range settings.Keys(settings.ForSystemTenant) {
-			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess, settings.ForSystemTenant)
+			setting, ok := settings.LookupForLocalAccess(name, settings.ForSystemTenant)
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}

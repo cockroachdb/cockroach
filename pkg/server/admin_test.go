@@ -1180,7 +1180,7 @@ func TestAdminAPISettings(t *testing.T) {
 	allKeys := settings.Keys(settings.ForSystemTenant)
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.Lookup(k, settings.LookupForReporting, settings.ForSystemTenant)
+		ref, ok := settings.LookupForReporting(k, settings.ForSystemTenant)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}

@@ -351,7 +351,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("lookup-system", func(t *testing.T) {
 		for _, s := range []settings.Setting{i1A, iVal, fA, fVal, dA, dVal, eA, mA, duA} {
-			result, ok := settings.Lookup(s.Key(), settings.LookupForLocalAccess, settings.ForSystemTenant)
+			result, ok := settings.LookupForLocalAccess(s.Key(), settings.ForSystemTenant)
 			if !ok {
 				t.Fatalf("lookup(%s) failed", s.Key())
 			}
@@ -362,7 +362,7 @@ func TestCache(t *testing.T) {
 	})
 	t.Run("lookup-tenant", func(t *testing.T) {
 		for _, s := range []settings.Setting{i1A, fA, dA, duA} {
-			result, ok := settings.Lookup(s.Key(), settings.LookupForLocalAccess, false /* forSystemTenant */)
+			result, ok := settings.LookupForLocalAccess(s.Key(), false /* forSystemTenant */)
 			if !ok {
 				t.Fatalf("lookup(%s) failed", s.Key())
 			}
@@ -373,7 +373,7 @@ func TestCache(t *testing.T) {
 	})
 	t.Run("lookup-tenant-fail", func(t *testing.T) {
 		for _, s := range []settings.Setting{iVal, fVal, dVal, eA, mA} {
-			_, ok := settings.Lookup(s.Key(), settings.LookupForLocalAccess, false /* forSystemTenant */)
+			_, ok := settings.LookupForLocalAccess(s.Key(), false /* forSystemTenant */)
 			if ok {
 				t.Fatalf("lookup(%s) should have failed", s.Key())
 			}
@@ -688,13 +688,13 @@ func TestCache(t *testing.T) {
 }
 
 func TestIsReportable(t *testing.T) {
-	if v, ok := settings.Lookup(
-		"bool.t", settings.LookupForLocalAccess, settings.ForSystemTenant,
+	if v, ok := settings.LookupForLocalAccess(
+		"bool.t", settings.ForSystemTenant,
 	); !ok || !settings.TestingIsReportable(v) {
 		t.Errorf("expected 'bool.t' to be marked as isReportable() = true")
 	}
-	if v, ok := settings.Lookup(
-		"sekretz", settings.LookupForLocalAccess, settings.ForSystemTenant,
+	if v, ok := settings.LookupForLocalAccess(
+		"sekretz", settings.ForSystemTenant,
 	); !ok || settings.TestingIsReportable(v) {
 		t.Errorf("expected 'sekretz' to be marked as isReportable() = false")
 	}
@@ -712,7 +712,7 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
 	var changes int
-	s, ok := settings.Lookup(maxName, settings.LookupForLocalAccess, settings.ForSystemTenant)
+	s, ok := settings.LookupForLocalAccess(maxName, settings.ForSystemTenant)
 	if !ok {
 		t.Fatalf("expected lookup of %s to succeed", maxName)
 	}

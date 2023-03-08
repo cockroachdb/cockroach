@@ -20,6 +20,10 @@ export function QueriesCell(
   transactionQueries: string[],
   textLimit: number,
 ): React.ReactElement {
+  // Filter out null or undefined values from array
+  if (transactionQueries) {
+    transactionQueries = transactionQueries.filter(x => x);
+  }
   if (
     !transactionQueries?.length ||
     (transactionQueries.length === 1 &&
