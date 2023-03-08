@@ -48,12 +48,11 @@ export function* updateSQLStatsTimeScaleSaga(
   );
 }
 
-export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
+export function* resetSQLStatsSaga() {
   try {
     yield call(resetSQLStats);
     yield put(sqlDetailsStatsActions.invalidateAll());
     yield put(sqlStatsActions.invalidated());
-    yield put(sqlStatsActions.refresh(action.payload));
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }

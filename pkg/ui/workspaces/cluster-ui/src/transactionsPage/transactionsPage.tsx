@@ -103,7 +103,7 @@ export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
-  resetSQLStats: (req: StatementsRequest) => void;
+  resetSQLStats: () => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
@@ -119,12 +119,9 @@ export type TransactionsPageProps = TransactionsPageStateProps &
   TransactionsPageDispatchProps &
   RouteComponentProps;
 
-function stmtsRequestFromTimeScale(
-  ts: TimeScale,
-): protos.cockroach.server.serverpb.StatementsRequest {
+function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
   const [start, end] = toRoundedDateRange(ts);
-  return new protos.cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+  return new protos.cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -189,8 +186,7 @@ export class TransactionsPage extends React.Component<
   };
 
   resetSQLStats = (): void => {
-    const req = stmtsRequestFromTimeScale(this.props.timeScale);
-    this.props.resetSQLStats(req);
+    this.props.resetSQLStats();
   };
 
   componentDidMount(): void {

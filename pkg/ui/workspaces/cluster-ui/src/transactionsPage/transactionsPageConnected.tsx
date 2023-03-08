@@ -94,8 +94,7 @@ export const TransactionsPageConnected = withRouter(
         refreshNodes: () => dispatch(nodesActions.refresh()),
         refreshUserSQLRoles: () =>
           dispatch(uiConfigActions.refreshUserSQLRoles()),
-        resetSQLStats: (req: StatementsRequest) =>
-          dispatch(sqlStatsActions.reset(req)),
+        resetSQLStats: () => dispatch(sqlStatsActions.reset()),
         onTimeScaleChange: (ts: TimeScale) => {
           dispatch(
             sqlStatsActions.updateTimeScale({

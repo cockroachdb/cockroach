@@ -93,7 +93,7 @@ export interface StatementsPageDispatchProps {
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
-  resetSQLStats: (req: StatementsRequest) => void;
+  resetSQLStats: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
     insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
@@ -145,12 +145,9 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function stmtsRequestFromTimeScale(
-  ts: TimeScale,
-): cockroach.server.serverpb.StatementsRequest {
+function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
   const [start, end] = toRoundedDateRange(ts);
-  return new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -277,8 +274,7 @@ export class StatementsPage extends React.Component<
   };
 
   resetSQLStats = (): void => {
-    const req = stmtsRequestFromTimeScale(this.props.timeScale);
-    this.props.resetSQLStats(req);
+    this.props.resetSQLStats();
   };
 
   componentDidMount(): void {
