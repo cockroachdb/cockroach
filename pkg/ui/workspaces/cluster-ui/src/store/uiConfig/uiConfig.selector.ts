@@ -12,7 +12,7 @@ import { createSelector } from "reselect";
 import { AppState } from "../reducers";
 
 export const selectUIConfig = createSelector(
-  (state: AppState) => state.adminUI.uiConfig,
+  (state: AppState) => state.adminUI?.uiConfig,
   uiConfig => uiConfig,
 );
 

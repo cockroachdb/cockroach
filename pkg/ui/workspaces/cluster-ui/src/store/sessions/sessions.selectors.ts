@@ -17,7 +17,7 @@ import { getMatchParamByName } from "src/util/query";
 import { byteArrayToUuid } from "src/sessions/sessionsTable";
 
 export const selectSession = createSelector(
-  (state: AppState) => state.adminUI.sessions,
+  (state: AppState) => state.adminUI?.sessions,
   (_state: AppState, props: RouteComponentProps) => props,
   (state: SessionsState, props: RouteComponentProps<any>) => {
     if (!state.data) {
@@ -33,6 +33,6 @@ export const selectSession = createSelector(
 );
 
 export const selectSessionDetailsUiConfig = createSelector(
-  (state: AppState) => state.adminUI.uiConfig.pages.sessionDetails,
+  (state: AppState) => state.adminUI?.uiConfig.pages.sessionDetails,
   statementDetailsUiConfig => statementDetailsUiConfig,
 );

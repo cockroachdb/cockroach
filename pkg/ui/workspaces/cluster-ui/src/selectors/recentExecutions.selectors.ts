@@ -27,13 +27,13 @@ import {
 // pages that are specific to cluster-ui.
 // They should NOT be exported with the cluster-ui package.
 
-const selectSessions = (state: AppState) => state.adminUI.sessions?.data;
+const selectSessions = (state: AppState) => state.adminUI?.sessions?.data;
 
 const selectClusterLocks = (state: AppState) =>
-  state.adminUI.clusterLocks?.data?.results;
+  state.adminUI?.clusterLocks?.data?.results;
 
 export const selectClusterLocksMaxApiSizeReached = (state: AppState) =>
-  !!state.adminUI.clusterLocks?.data?.maxSizeReached;
+  !!state.adminUI?.clusterLocks?.data?.maxSizeReached;
 
 export const selectRecentExecutions = createSelector(
   selectSessions,
@@ -94,7 +94,7 @@ export const selectContentionDetailsForStatement = createSelector(
 );
 
 export const selectAppName = createSelector(
-  (state: AppState) => state.adminUI.sessions,
+  (state: AppState) => state.adminUI?.sessions,
   response => {
     if (!response.data) return null;
     return response.data.internal_app_name_prefix;

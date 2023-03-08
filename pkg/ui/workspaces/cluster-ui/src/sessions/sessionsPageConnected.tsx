@@ -34,7 +34,7 @@ export const selectSessionsData = createSelector(
 );
 
 export const selectSessions = createSelector(
-  (state: AppState) => state.adminUI.sessions,
+  (state: AppState) => state.adminUI?.sessions,
   (state: SessionsState) => {
     if (!state.data) {
       return null;
@@ -46,7 +46,7 @@ export const selectSessions = createSelector(
 );
 
 export const selectAppName = createSelector(
-  (state: AppState) => state.adminUI.sessions,
+  (state: AppState) => state.adminUI?.sessions,
   (state: SessionsState) => {
     if (!state.data) {
       return null;
@@ -56,7 +56,7 @@ export const selectAppName = createSelector(
 );
 
 export const selectSortSetting = createSelector(
-  (state: AppState) => state.adminUI.localStorage,
+  (state: AppState) => state.adminUI?.localStorage,
   localStorage => localStorage["sortSetting/SessionsPage"],
 );
 
@@ -78,7 +78,7 @@ export const SessionsPageConnected = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       sessions: selectSessions(state),
       internalAppNamePrefix: selectAppName(state),
-      sessionsError: state.adminUI.sessions.lastError,
+      sessionsError: state.adminUI?.sessions.lastError,
       sortSetting: selectSortSetting(state),
       columns: selectColumns(state),
       filters: selectFilters(state),
