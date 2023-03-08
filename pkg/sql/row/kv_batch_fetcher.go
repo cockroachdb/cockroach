@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -162,8 +164,9 @@ type txnKVFetcher struct {
 	batchIdx       int
 	reqsScratch    []kvpb.RequestUnion
 
-	responses        []kvpb.ResponseUnion
-	remainingBatches [][]byte
+	responses           []kvpb.ResponseUnion
+	remainingBatches    [][]byte
+	remainingColBatches []coldata.Batch
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
@@ -530,13 +533,32 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-// popBatch returns the 0th byte slice in a slice of byte slices, as well as
-// the rest of the slice of the byte slices. It nils the pointer to the 0th
-// element before reslicing the outer slice.
-func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
-	batch, remainingBatches = batches[0], batches[1:]
-	batches[0] = nil
-	return batch, remainingBatches
+// popBatch returns the 0th "batch" in a slice of "batches", as well as the rest
+// of the slice of the "batches". It nils the pointer to the 0th element before
+// reslicing the outer slice.
+//
+// Note that since we nil out the 0th element, the caller of nextBatch() will
+// have the only reference to it. As a result, the next time nextBatch() is
+// called previously-returned element should become garbage, and we could shrink
+// the memory usage accordingly. In other words, we're still accounting for some
+// memory after it became garbage. However, given our history of
+// under-accounting in most places, this seems acceptable.
+func popBatch(
+	batches [][]byte, colBatches []coldata.Batch,
+) (
+	batch []byte,
+	remainingBatches [][]byte,
+	colBatch coldata.Batch,
+	remainingColBatches []coldata.Batch,
+) {
+	if batches != nil {
+		batch, remainingBatches = batches[0], batches[1:]
+		batches[0] = nil
+		return batch, remainingBatches, nil, nil
+	}
+	colBatch, remainingColBatches = colBatches[0], colBatches[1:]
+	colBatches[0] = nil
+	return nil, nil, colBatch, remainingColBatches
 }
 
 func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherResponse, err error) {
@@ -549,14 +571,16 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 	// each of which is a byte slice containing result data from KV. Since this
 	// function, by contract, returns just a single byte slice at a time, we store
 	// the inner list as state for the next invocation to pop from.
-	if len(f.remainingBatches) > 0 {
+	if len(f.remainingBatches) > 0 || len(f.remainingColBatches) > 0 {
 		// Are there remaining data batches? If so, just pop one off from the
 		// list and return it.
 		var batchResp []byte
-		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
+		var colBatch coldata.Batch
+		batchResp, f.remainingBatches, colBatch, f.remainingColBatches = popBatch(f.remainingBatches, f.remainingColBatches)
 		return KVBatchFetcherResponse{
 			MoreKVs:       true,
 			BatchResponse: batchResp,
+			ColBatch:      colBatch,
 			spanID:        f.curSpanID,
 		}, nil
 	}
@@ -594,8 +618,8 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 
 		switch t := reply.(type) {
 		case *kvpb.ScanResponse:
-			if len(t.BatchResponses) > 0 {
-				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
+			if len(t.BatchResponses) > 0 || len(t.ColBatches.ColBatches) > 0 {
+				ret.BatchResponse, f.remainingBatches, ret.ColBatch, f.remainingColBatches = popBatch(t.BatchResponses, t.ColBatches.ColBatches)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
@@ -607,12 +631,12 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 					"unexpectedly got a ScanResponse with non-nil IntentRows",
 				)
 			}
-			// Note that ret.BatchResponse might be nil when the ScanResponse is
-			// empty, and the caller (the KVFetcher) will skip over it.
+			// Note that ret.BatchResponse and ret.ColBatch might be nil when
+			// the ScanResponse is empty, and the callers will skip over it.
 			return ret, nil
 		case *kvpb.ReverseScanResponse:
-			if len(t.BatchResponses) > 0 {
-				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
+			if len(t.BatchResponses) > 0 || len(t.ColBatches.ColBatches) > 0 {
+				ret.BatchResponse, f.remainingBatches, ret.ColBatch, f.remainingColBatches = popBatch(t.BatchResponses, t.ColBatches.ColBatches)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
@@ -624,8 +648,9 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 					"unexpectedly got a ScanResponse with non-nil IntentRows",
 				)
 			}
-			// Note that ret.BatchResponse might be nil when the ScanResponse is
-			// empty, and the caller (the KVFetcher) will skip over it.
+			// Note that ret.BatchResponse and ret.ColBatch might be nil when
+			// the ReverseScanResponse is empty, and the callers will skip over
+			// it.
 			return ret, nil
 		case *kvpb.GetResponse:
 			if t.IntentValue != nil {
@@ -671,6 +696,7 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 	f.batchIdx = 0
 	f.responses = nil
 	f.remainingBatches = nil
+	f.remainingColBatches = nil
 	f.spans = identifiableSpans{}
 	f.scratchSpans = identifiableSpans{}
 	// Release only the allocations made by this fetcher. Note that we're still
@@ -796,7 +822,12 @@ func (h *kvBatchFetcherHelper) NextBatch(ctx context.Context) (KVBatchFetcherRes
 	if !resp.MoreKVs || err != nil {
 		return resp, err
 	}
-	nBytes := len(resp.BatchResponse)
+	// Note that if resp.ColBatch is nil, then GetBatchMemSize will return 0.
+	// TODO(yuzefovich, 23.1): for resp.ColBatch this includes the decoded
+	// footprint as well as the overhead of slices and whatnot which is
+	// different from what "bytes read" is about. Figure out how we want to
+	// track it here.
+	nBytes := len(resp.BatchResponse) + int(colmem.GetBatchMemSize(resp.ColBatch))
 	for i := range resp.KVs {
 		nBytes += len(resp.KVs[i].Key)
 		nBytes += len(resp.KVs[i].Value.RawBytes)
