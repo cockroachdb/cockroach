@@ -15,13 +15,17 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -385,6 +389,147 @@ func TestMultiSharedGauge(t *testing.T) {
 	require.Equal(t, minAllocation, resourceGauge.Value(), "Metric")
 }
 
+func getMonitor(
+	ctx context.Context, st *cluster.Settings, name string, parent *BytesMonitor,
+) *BytesMonitor {
+	m := NewMonitor(redact.RedactableString(name), MemoryResource, nil, nil, 1, math.MaxInt64, st)
+	var reserved BoundAccount
+	if parent == nil {
+		reserved = MakeStandaloneBudget(math.MaxInt64)
+	}
+	m.Start(ctx, parent, reserved)
+	return m
+}
+
+// TestBytesMonitorTree is a sanity check that the tree structure of related
+// monitors is maintained and traversed as expected.
+func TestBytesMonitorTree(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	export := func(m *BytesMonitor) string {
+		var monitors []MonitorState
+		_ = m.TraverseTree(func(monitor MonitorState) error {
+			monitors = append(monitors, monitor)
+			return nil
+		})
+		var sb strings.Builder
+		for _, e := range monitors {
+			for i := 0; i < e.Level; i++ {
+				sb.WriteString("-")
+			}
+			sb.WriteString(e.Name + "\n")
+		}
+		return sb.String()
+	}
+
+	parent := getMonitor(ctx, st, "parent", nil /* parent */)
+	child1 := getMonitor(ctx, st, "child1", parent)
+	child2 := getMonitor(ctx, st, "child2", parent)
+	require.Equal(t, "parent\n-child2\n-child1\n", export(parent))
+	require.Equal(t, "child1\n", export(child1))
+	require.Equal(t, "child2\n", export(child2))
+
+	grandchild1 := getMonitor(ctx, st, "grandchild1", child1)
+	grandchild2 := getMonitor(ctx, st, "grandchild2", child2)
+	require.Equal(t, "parent\n-child2\n--grandchild2\n-child1\n--grandchild1\n", export(parent))
+	require.Equal(t, "child1\n-grandchild1\n", export(child1))
+	require.Equal(t, "child2\n-grandchild2\n", export(child2))
+
+	grandchild2.Stop(ctx)
+	child2.Stop(ctx)
+
+	require.Equal(t, "parent\n-child1\n--grandchild1\n", export(parent))
+	require.Equal(t, "child1\n-grandchild1\n", export(child1))
+
+	grandchild1.Stop(ctx)
+	child1.Stop(ctx)
+
+	require.Equal(t, "parent\n", export(parent))
+	parent.Stop(ctx)
+}
+
+// TestBytesMonitorNoDeadlocks ensures that no deadlocks can occur when monitors
+// are started and stopped concurrently with the monitor tree traversal.
+func TestBytesMonitorNoDeadlocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	root := getMonitor(ctx, st, "root", nil /* parent */)
+	defer root.Stop(ctx)
+
+	// Spin up 10 goroutines that repeatedly start and stop child monitors while
+	// also making reservations against them.
+	var wg sync.WaitGroup
+	const numGoroutines = 10
+	// done will be closed when the concurrent goroutines should exit.
+	done := make(chan struct{})
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rng, _ := randutil.NewTestRand()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					func() {
+						m := getMonitor(ctx, st, fmt.Sprintf("m%d", i), root)
+						defer m.Stop(ctx)
+						numOps := rng.Intn(10 + 1)
+						var reserved int64
+						defer func() {
+							m.releaseBytes(ctx, reserved)
+						}()
+						for op := 0; op < numOps; op++ {
+							if reserved > 0 && rng.Float64() < 0.5 {
+								toRelease := int64(rng.Intn(int(reserved))) + 1
+								m.releaseBytes(ctx, toRelease)
+								reserved -= toRelease
+							} else {
+								toReserve := int64(rng.Intn(1000) + 1)
+								// We shouldn't hit any errors since we have an
+								// unlimited root budget.
+								_ = m.reserveBytes(ctx, toReserve)
+								reserved += toReserve
+							}
+							// Sleep up to 1ms in-between operations.
+							time.Sleep(time.Duration(rng.Intn(1000)) * time.Microsecond)
+						}
+					}()
+					// Sleep up to 2ms after having stopped the monitor.
+					time.Sleep(time.Duration(rng.Intn(2000)) * time.Microsecond)
+				}
+			}
+		}(i)
+	}
+
+	// In the main goroutine, perform the tree traversal several times with
+	// sleeps in-between.
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 1000; i++ {
+		// We mainly want to ensure that no deadlocks nor data races are
+		// occurring, but also we do a sanity check that each "row" in the
+		// output of TraverseTree() is a non-empty MonitorState.
+		var monitors []MonitorState
+		_ = root.TraverseTree(func(monitor MonitorState) error {
+			monitors = append(monitors, monitor)
+			return nil
+		})
+		for _, m := range monitors {
+			require.NotEqual(t, MonitorState{}, m)
+		}
+		// Sleep up to 3ms.
+		time.Sleep(time.Duration(rng.Intn(3000)) * time.Microsecond)
+	}
+	close(done)
+	wg.Wait()
+}
+
 func BenchmarkBoundAccountGrow(b *testing.B) {
 	ctx := context.Background()
 	m := NewMonitor("test", MemoryResource,
@@ -395,5 +540,50 @@ func BenchmarkBoundAccountGrow(b *testing.B) {
 	a := m.MakeBoundAccount()
 	for i := 0; i < b.N; i++ {
 		_ = a.Grow(ctx, 1)
+	}
+}
+
+func BenchmarkTraverseTree(b *testing.B) {
+	makeMonitorTree := func(numLevels int, numChildrenPerMonitor int) (root *BytesMonitor, cleanup func()) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		allMonitors := make([][]*BytesMonitor, numLevels)
+		allMonitors[0] = []*BytesMonitor{getMonitor(ctx, st, "root", nil /* parent */)}
+		for level := 1; level < numLevels; level++ {
+			allMonitors[level] = make([]*BytesMonitor, 0, len(allMonitors[level-1])*numChildrenPerMonitor)
+			for parent, parentMon := range allMonitors[level-1] {
+				for child := 0; child < numChildrenPerMonitor; child++ {
+					name := fmt.Sprintf("child%d_parent%d", child, parent)
+					allMonitors[level] = append(allMonitors[level], getMonitor(ctx, st, name, parentMon))
+				}
+			}
+		}
+		cleanup = func() {
+			// Simulate the production setting where we stop the children before
+			// their parent (this is not strictly necessary since we don't
+			// reserve budget from the monitors below).
+			for i := len(allMonitors) - 1; i >= 0; i-- {
+				for _, m := range allMonitors[i] {
+					m.Stop(ctx)
+				}
+			}
+		}
+		return allMonitors[0][0], cleanup
+	}
+	for _, numLevels := range []int{2, 4, 8} {
+		for _, numChildrenPerMonitor := range []int{2, 4, 8} {
+			b.Run(fmt.Sprintf("levels=%d/children=%d", numLevels, numChildrenPerMonitor), func(b *testing.B) {
+				root, cleanup := makeMonitorTree(numLevels, numChildrenPerMonitor)
+				defer cleanup()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					var numMonitors int
+					_ = root.TraverseTree(func(MonitorState) error {
+						numMonitors++
+						return nil
+					})
+				}
+			})
+		}
 	}
 }

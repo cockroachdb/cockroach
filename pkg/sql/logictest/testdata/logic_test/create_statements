@@ -904,6 +904,23 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
    duration INTERVAL NULL,
    operation STRING NULL
 )  {}  {}
+CREATE TABLE crdb_internal.node_memory_monitors (
+   level INT8 NULL,
+   name STRING NULL,
+   id INT8 NULL,
+   parent_id INT8 NULL,
+   used INT8 NULL,
+   reserved_used INT8 NULL,
+   reserved_reserved INT8 NULL
+)  CREATE TABLE crdb_internal.node_memory_monitors (
+   level INT8 NULL,
+   name STRING NULL,
+   id INT8 NULL,
+   parent_id INT8 NULL,
+   used INT8 NULL,
+   reserved_used INT8 NULL,
+   reserved_reserved INT8 NULL
+)  {}  {}
 CREATE TABLE crdb_internal.node_metrics (
    store_id INT8 NULL,
    name STRING NOT NULL,
