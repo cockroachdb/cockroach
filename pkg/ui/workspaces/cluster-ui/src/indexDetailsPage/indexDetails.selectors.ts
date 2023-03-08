@@ -37,7 +37,7 @@ export const selectIndexDetails = createSelector(
     getMatchParamByName(props.match, tableNameAttr),
   (_state: AppState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, indexNameAttr),
-  (state: AppState) => state.adminUI.indexStats.cachedData,
+  (state: AppState) => state.adminUI?.indexStats.cachedData,
   (state: AppState) => selectIsTenant(state),
   (state: AppState) => selectHasAdminRole(state),
   (

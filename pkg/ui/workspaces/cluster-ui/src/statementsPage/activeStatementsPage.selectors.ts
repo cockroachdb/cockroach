@@ -50,7 +50,7 @@ export const mapStateToActiveStatementsPageProps = (
   state: AppState,
 ): ActiveStatementsViewStateProps => ({
   statements: selectActiveStatements(state),
-  sessionsError: state.adminUI.sessions.lastError,
+  sessionsError: state.adminUI?.sessions.lastError,
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),

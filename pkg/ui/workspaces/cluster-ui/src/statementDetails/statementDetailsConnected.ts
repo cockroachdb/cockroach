@@ -64,8 +64,8 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
     isLoading: isLoading,
-    latestQuery: state.adminUI.sqlDetailsStats.latestQuery,
-    latestFormattedQuery: state.adminUI.sqlDetailsStats.latestFormattedQuery,
+    latestQuery: state.adminUI?.sqlDetailsStats.latestQuery,
+    latestFormattedQuery: state.adminUI?.sqlDetailsStats.latestFormattedQuery,
     statementsError: lastError,
     lastUpdated: lastUpdated,
     timeScale: selectTimeScale(state),
@@ -76,7 +76,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
         ? []
         : selectDiagnosticsReportsByStatementFingerprint(
             state,
-            state.adminUI.sqlDetailsStats.latestQuery,
+            state.adminUI?.sqlDetailsStats.latestQuery,
           ),
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),

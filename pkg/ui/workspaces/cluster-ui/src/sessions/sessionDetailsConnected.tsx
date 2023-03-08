@@ -31,7 +31,7 @@ export const SessionDetailsPageConnected = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       nodeNames: nodeDisplayNameByIDSelector(state),
       session: selectSession(state, props),
-      sessionError: state.adminUI.sessions.lastError,
+      sessionError: state.adminUI?.sessions.lastError,
       uiConfig: selectSessionDetailsUiConfig(state),
       isTenant: selectIsTenant(state),
     }),
