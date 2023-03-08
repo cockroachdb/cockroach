@@ -56,7 +56,9 @@ func SetCopyFromBatchSize(i int) int {
 		copyBatchRowSize = i
 	} else {
 		// We don't want non-test code mutating globals.
-		panic("SetCopyFromBatchSize is a test utility that requires crdb_test tag")
+		copyBatchRowSize = i
+
+		// panic("SetCopyFromBatchSize is a test utility that requires crdb_test tag")
 	}
 	return old
 }
@@ -358,10 +360,6 @@ type copyTxnOpt struct {
 	stmtTimestamp time.Time
 	initPlanner   func(ctx context.Context, p *planner)
 	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
-
-	// resetExtraTxnState should be called upon completing a batch from the copy
-	// machine when the copy machine handles its own transaction.
-	resetExtraTxnState func(ctx context.Context)
 }
 
 func (c *copyMachine) Close(ctx context.Context) {
@@ -802,27 +800,20 @@ func (c *copyMachine) readBinarySignature() ([]byte, error) {
 func (p *planner) preparePlannerForCopy(
 	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, implicitTxn bool,
 ) func(context.Context, error) error {
-	autoCommit := false
+	autoCommit := implicitTxn
 	txnOpt.resetPlanner(ctx, p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
 	if implicitTxn {
 		if p.SessionData().CopyFromAtomicEnabled {
 			// If the COPY should be atomic, only the final batch can commit.
 			autoCommit = finalBatch
-		} else {
-			// Otherwise we do the original behavior of committing each batch.
-			autoCommit = true
 		}
 	}
-	p.autoCommit = autoCommit
+	p.autoCommit = autoCommit && !p.execCfg.TestingKnobs.DisableAutoCommitDuringExec
 
 	return func(ctx context.Context, prevErr error) (err error) {
-		// Ensure that we clean up any accumulated extraTxnState state if we've
-		// been handed a mechanism to do so.
-		// If this is the finalBatch, then the connExecutor state machine takes
-		// care of this cleanup.
-		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled && !finalBatch {
-			defer txnOpt.resetExtraTxnState(ctx)
-
+		// Ensure that we commit the transaction if atomic copy is off. If it's on,
+		// the conn executor will commit the transaction.
+		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled {
 			if prevErr == nil {
 				// Ensure that the txn is committed if the copyMachine is in charge of
 				// committing its transactions and the execution didn't already commit it
