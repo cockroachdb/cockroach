@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -70,7 +69,6 @@ func TestRangeFeed(t *testing.T) {
 	host, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer host.Stopper().Stop(ctx)
 
-	var _ = kvtenantccl.Connector{}
 	tenant, tenantSQL := serverutils.StartTenant(t, host, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 	})
