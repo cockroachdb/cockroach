@@ -1,0 +1,13 @@
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !3node-tenant
+
+# At the moment, the query below results in an internal error when executed in
+# a distributed fashion. We should fix that and merge this file into 'tuple'
+# (tracked in #94970).
+
+# Regression test for not using CompareError when dealing with tuples (#93396).
+statement ok
+CREATE TABLE t93396 (c1 TIME PRIMARY KEY, c2 INT8);
+INSERT INTO t93396 VALUES ('0:0:0'::TIME, 0);
+
+query error unsupported comparison: time to decimal
+SELECT * FROM t93396 WHERE (c1, c2) = (SELECT 0.0, 0);

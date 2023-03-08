@@ -698,5 +698,5 @@ func compareForWindow(evalCtx *Context, left, right tree.Datum) (int, error) {
 			return 0, err
 		}
 	}
-	return left.Compare(evalCtx, right), nil
+	return left.CompareError(evalCtx, right)
 }
