@@ -64,8 +64,6 @@ message TenantCapabilities {
 message SpanConfigBounds {
   option (gogoproto.equal) = true;
 
-
-
   // GcTtlSeconds bounds the configuration of gc.ttl_seconds.
   Int32Range gc_ttl_seconds = 1 [(gogoproto.customname) = "GCTTLSeconds"];
 

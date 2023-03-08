@@ -16,18 +16,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
 var capabilityTypes = map[tenantcapabilitiespb.TenantCapabilityName]*types.T{
-	tenantcapabilitiespb.CanAdminSplit:      types.Bool,
-	tenantcapabilitiespb.CanViewNodeInfo:    types.Bool,
-	tenantcapabilitiespb.CanViewTSDBMetrics: types.Bool,
+	tenantcapabilitiespb.CanAdminSplit:          types.Bool,
+	tenantcapabilitiespb.CanViewNodeInfo:        types.Bool,
+	tenantcapabilitiespb.CanViewTSDBMetrics:     types.Bool,
+	tenantcapabilitiespb.TenantSpanConfigBounds: types.Bytes,
 }
 
 const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
@@ -61,7 +65,7 @@ func (p *planner) AlterTenantCapability(
 	for i, capability := range n.Capabilities {
 		capabilityName, err := tenantcapabilitiespb.TenantCapabilityNameFromString(capability.Name)
 		if err != nil {
-			return nil, err
+			return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 		desiredType, ok := capabilityTypes[capabilityName]
 		if !ok {
@@ -179,6 +183,48 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 				dst.CanViewTSDBMetrics = b
 			}
 
+		case tenantcapabilitiespb.TenantSpanConfigBounds:
+			if n.n.IsRevoke {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "cannot REVOKE CAPABILITY %q", capabilityName,
+				)
+			}
+			datum, err := eval.Expr(ctx, p.EvalContext(), typedExpr)
+			if err != nil {
+				return err
+			}
+			var bounds *tenantcapabilitiespb.SpanConfigBounds
+			// Allow NULL, and use it to clear the SpanConfigBounds.
+			if datum == tree.DNull {
+
+			} else if dBytes, ok := datum.(*tree.DBytes); ok {
+				bounds = new(tenantcapabilitiespb.SpanConfigBounds)
+				if err := protoutil.Unmarshal([]byte(*dBytes), bounds); err != nil {
+					return errors.WithDetail(
+						pgerror.Wrapf(
+							err, pgcode.InvalidParameterValue, "invalid %q value",
+							capabilityName,
+						),
+						"cannot decode into cockroach.multitenant.tenantcapabilitiespb.SpanConfigBounds",
+					)
+				}
+				// MakeBounds will sort the constraints.
+				//
+				// TODO(ajwerner): Validate some properties of the bounds. We'll also
+				// want to make sure that kvserver sanity checks the values it uses
+				// when clamping -- we don't want to clamp the range sizes to be tiny
+				// or GC TTL to be too short because of operator error. Some of this
+				// checking could be pushed into MakeBounds.
+				spanconfigbounds.MakeBounds(bounds)
+			} else {
+				return errors.WithDetailf(
+					pgerror.Newf(
+						pgcode.InvalidParameterValue, "parameter %q requires bytes value",
+					),
+					"%s is a %s", datum, datum.ResolvedType(),
+				)
+			}
+			dst.SpanConfigBounds = bounds
 		default:
 			return errors.AssertionFailedf("unhandled: %q", capabilityName)
 		}

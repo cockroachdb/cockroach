@@ -10,10 +10,18 @@
 
 package tenantcapabilitiespb
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+)
 
 // TenantCapabilityName is a pseudo-enum of valid capability names.
 type TenantCapabilityName int32
+
+var _ redact.SafeValue = TenantCapabilityName(0)
+
+// SafeValue makes TenantCapabilityName a redact.SafeValue.
+func (t TenantCapabilityName) SafeValue() {}
 
 // IsSet returns true if the capability name has a non-zero value.
 func (t TenantCapabilityName) IsSet() bool {

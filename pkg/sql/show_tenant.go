@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -125,6 +127,24 @@ func (n *showTenantNode) getTenantValues(
 				name:  tenantcapabilitiespb.CanViewTSDBMetrics,
 				value: strconv.FormatBool(capabilities.CanViewTSDBMetrics),
 			},
+		}
+
+		// Format SpanConfigBounds as JSON for human consumption.
+		if capabilities.SpanConfigBounds != nil {
+			jsonDatum, err := protoreflect.MessageToJSON(
+				capabilities.SpanConfigBounds, protoreflect.FmtFlags{},
+			)
+			if err != nil {
+				return nil, err
+			}
+			jsonStr, err := json.Pretty(jsonDatum)
+			if err != nil {
+				return nil, err
+			}
+			values.capabilities = append(values.capabilities, showTenantNodeCapability{
+				name:  tenantcapabilitiespb.TenantSpanConfigBounds,
+				value: jsonStr,
+			})
 		}
 	}
 

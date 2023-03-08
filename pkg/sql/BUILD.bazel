@@ -343,6 +343,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/sql/appstatspb",
         "//pkg/sql/backfill",
         "//pkg/sql/catalog",
