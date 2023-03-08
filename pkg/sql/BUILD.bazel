@@ -784,6 +784,8 @@ go_test(
         "//pkg/sql/rowexec",
         "//pkg/sql/rowinfra",
         "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/scrub",
         "//pkg/sql/scrub/scrubtestutils",
         "//pkg/sql/sem/builtins",
