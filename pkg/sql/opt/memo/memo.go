@@ -161,6 +161,7 @@ type Memo struct {
 	useImprovedDisjunctionStats            bool
 	useLimitOrderingForStreamingGroupBy    bool
 	useImprovedSplitDisjunctionForJoins    bool
+	alwaysUseHistograms                    bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -217,6 +218,7 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		useImprovedDisjunctionStats:            evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats,
 		useLimitOrderingForStreamingGroupBy:    evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy,
 		useImprovedSplitDisjunctionForJoins:    evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins,
+		alwaysUseHistograms:                    evalCtx.SessionData().OptimizerAlwaysUseHistograms,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -356,7 +358,8 @@ func (m *Memo) IsStale(
 		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled ||
 		m.useImprovedDisjunctionStats != evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats ||
 		m.useLimitOrderingForStreamingGroupBy != evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy ||
-		m.useImprovedSplitDisjunctionForJoins != evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins {
+		m.useImprovedSplitDisjunctionForJoins != evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins ||
+		m.alwaysUseHistograms != evalCtx.SessionData().OptimizerAlwaysUseHistograms {
 		return true, nil
 	}
 
