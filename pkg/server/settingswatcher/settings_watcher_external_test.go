@@ -236,14 +236,14 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 
 	expect := func(setting, value string) {
 		t.Helper()
-		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess, settings.ForSystemTenant)
+		s, ok := settings.LookupForLocalAccess(setting, settings.ForSystemTenant)
 		require.True(t, ok)
 		require.Equal(t, value, s.String(&st.SV))
 	}
 
 	expectSoon := func(setting, value string) {
 		t.Helper()
-		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess, settings.ForSystemTenant)
+		s, ok := settings.LookupForLocalAccess(setting, settings.ForSystemTenant)
 		require.True(t, ok)
 		testutils.SucceedsSoon(t, func() error {
 			if actual := s.String(&st.SV); actual != value {
@@ -292,7 +292,7 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	expectSoon("i1", "10")
 
 	// Verify that version cannot be overridden.
-	version, ok := settings.Lookup("version", settings.LookupForLocalAccess, settings.ForSystemTenant)
+	version, ok := settings.LookupForLocalAccess("version", settings.ForSystemTenant)
 	require.True(t, ok)
 	versionValue := version.String(&st.SV)
 
@@ -423,7 +423,7 @@ func TestOverflowRestart(t *testing.T) {
 // two settings do not match. It generally gets used with SucceeedsSoon.
 func CheckSettingsValuesMatch(t *testing.T, a, b *cluster.Settings) error {
 	for _, k := range settings.Keys(false /* forSystemTenant */) {
-		s, ok := settings.Lookup(k, settings.LookupForLocalAccess, false /* forSystemTenant */)
+		s, ok := settings.LookupForLocalAccess(k, false /* forSystemTenant */)
 		require.True(t, ok)
 		if s.Class() == settings.SystemOnly {
 			continue
