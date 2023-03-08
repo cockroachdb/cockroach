@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1040,6 +1041,10 @@ func (r *Replica) isRangefeedEnabled() (ret bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	return r.isRangefeedEnabledRLocked()
+}
+
+func (r *Replica) isRangefeedEnabledRLocked() (ret bool) {
 	if !r.mu.spanConfigExplicitlySet {
 		return true
 	}
@@ -1512,6 +1517,9 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
+	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
+			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
 		return err
 	} else if r.requiresExpiringLeaseRLocked() {

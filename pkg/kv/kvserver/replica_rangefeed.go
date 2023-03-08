@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -153,10 +152,6 @@ func (r *Replica) RangeFeed(
 func (r *Replica) rangeFeedWithRangeID(
 	_forStacks roachpb.RangeID, args *roachpb.RangeFeedRequest, stream rangefeed.Stream,
 ) *roachpb.Error {
-	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
-		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-	}
 	ctx := r.AnnotateCtx(stream.Context())
 	ctx = logtags.AddTag(ctx, "r", r.RangeID)
 	ctx = logtags.AddTag(ctx, "s", r.store.StoreID())
