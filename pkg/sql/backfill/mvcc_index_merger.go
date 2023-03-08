@@ -264,7 +264,6 @@ func (ibm *IndexBackfillMerger) scan(
 	chunkSize := indexBackfillMergeBatchSize.Get(&ibm.evalCtx.Settings.SV)
 	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.evalCtx.Settings.SV)
 
-	var nextStart roachpb.Key
 	var br *kvpb.BatchResponse
 	if err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		if err := txn.KV().SetFixedTimestamp(ctx, readAsOf); err != nil {
@@ -302,12 +301,7 @@ func (ibm *IndexBackfillMerger) scan(
 		spanIdx: spanIdx,
 	}
 	var chunkMem int64
-	if len(resp.Rows) == 0 {
-		chunk.completedSpan = roachpb.Span{Key: startKey, EndKey: endKey}
-	} else {
-		nextStart = resp.Rows[len(resp.Rows)-1].Key.Next()
-		chunk.completedSpan = roachpb.Span{Key: startKey, EndKey: nextStart}
-
+	if len(resp.Rows) > 0 {
 		if err := func() error {
 			ibm.muBoundAccount.Lock()
 			defer ibm.muBoundAccount.Unlock()
@@ -324,6 +318,13 @@ func (ibm *IndexBackfillMerger) scan(
 		}
 	}
 	chunk.memUsed = chunkMem
+	var nextStart roachpb.Key
+	if resp.ResumeSpan == nil {
+		chunk.completedSpan = roachpb.Span{Key: startKey, EndKey: endKey}
+	} else {
+		nextStart = resp.ResumeSpan.Key
+		chunk.completedSpan = roachpb.Span{Key: startKey, EndKey: nextStart}
+	}
 	return chunk, nextStart, nil
 }
 
