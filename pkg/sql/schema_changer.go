@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -738,7 +739,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				sc.job.Payload().UsernameProto.Decode(),
 				sc.job.Payload().Description,
 				gcDetails,
-				!sc.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob),
+				!storage.CanUseMVCCRangeTombstones(ctx, sc.settings),
 			); err != nil {
 				return err
 			}
@@ -1074,7 +1075,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 					},
 				},
 			},
-			!sc.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob),
+			!storage.CanUseMVCCRangeTombstones(ctx, sc.settings),
 		)
 		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, gcJobID, txn); err != nil {
 			return err
@@ -1284,7 +1285,7 @@ func (sc *SchemaChanger) createIndexGCJobWithDropTime(
 
 	gcJobRecord := CreateGCJobRecord(
 		jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails,
-		!sc.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob),
+		!sc.settings.Version.IsActive(ctx, clusterversion.V23_1_UseDelRangeInGCJob),
 	)
 	jobID := sc.jobRegistry.MakeJobID()
 	if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, jobID, txn); err != nil {
@@ -2761,9 +2762,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			r.job.Payload().UsernameProto.Decode(),
 			r.job.Payload().Description,
 			multiTableGCDetails,
-			!p.ExecCfg().Settings.Version.IsActive(
-				ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob,
-			),
+			!storage.CanUseMVCCRangeTombstones(ctx, p.ExecCfg().Settings),
 		); err != nil {
 			return err
 		}

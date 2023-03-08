@@ -117,11 +117,6 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		ensureSQLSchemaTelemetrySchedule,
 	),
-	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
-		toCV(clusterversion.TODODelete_V22_2WaitedForDelRangeInGCJob),
-		checkForPausedGCJobs,
-		waitForDelRangeInGCJob,
-	),
 	upgrade.NewTenantUpgrade(
 		"wait for all in-flight schema changes",
 		toCV(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable),
@@ -281,6 +276,11 @@ var upgrades = []upgradebase.Upgrade{
 		toCV(clusterversion.V23_1JobInfoTableIsBackfilled),
 		upgrade.NoPrecondition,
 		backfillJobInfoTable,
+	),
+	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
+		toCV(clusterversion.V23_1_UseDelRangeInGCJob),
+		checkForPausedGCJobs,
+		waitForDelRangeInGCJob,
 	),
 }
 
