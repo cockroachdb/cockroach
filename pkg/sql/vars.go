@@ -2399,6 +2399,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`optimizer_always_use_histograms`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_always_use_histograms`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_always_use_histograms", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerAlwaysUseHistograms(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerAlwaysUseHistograms), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

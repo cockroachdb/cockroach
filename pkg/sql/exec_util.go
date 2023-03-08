@@ -3391,6 +3391,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedSplitDisjunctionForJoins(val
 	m.data.OptimizerUseImprovedSplitDisjunctionForJoins = val
 }
 
+func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
+	m.data.OptimizerAlwaysUseHistograms = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
