@@ -295,7 +295,7 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousRelease, err := clusterupgrade.PredecessorVersion(t.buildVersion())
+	previousRelease, err := version.PredecessorVersion(t.buildVersion())
 	if err != nil {
 		return nil, err
 	}

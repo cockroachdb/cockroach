@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -64,7 +65,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
 		if mixedVersion {
-			predecessorVersion, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
+			predecessorVersion, err := version.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
 			// Upgrade some (or all) of the first N-1 CRDB nodes. We ignore the last
