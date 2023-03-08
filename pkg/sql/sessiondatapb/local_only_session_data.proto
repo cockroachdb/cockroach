@@ -279,6 +279,9 @@ message LocalOnlySessionData {
   // CopyFromRetriesEnabled controls whether retries should be internally
   // attempted for retriable errors.
   bool copy_from_retries_enabled = 89;
+  // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
+  // always uses histograms to calculate statistics if available.
+  bool optimizer_always_use_histograms = 94;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

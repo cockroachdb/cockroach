@@ -102,6 +102,7 @@ node_id                                               1
 null_ordered_last                                     off
 on_update_rehome_row_enabled                          on
 opt_split_scan_limit                                  2048
+optimizer_always_use_histograms                       off
 optimizer_use_histograms                              on
 optimizer_use_improved_disjunction_stats              off
 optimizer_use_multicol_stats                          on

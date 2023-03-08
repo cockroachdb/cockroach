@@ -302,6 +302,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats = false
 	notStale()
 
+	// Stale optimizer_always_use_histograms.
+	evalCtx.SessionData().OptimizerAlwaysUseHistograms = true
+	stale()
+	evalCtx.SessionData().OptimizerAlwaysUseHistograms = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
