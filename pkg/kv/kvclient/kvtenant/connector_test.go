@@ -1,12 +1,14 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package kvtenantccl
+package kvtenant
 
 import (
 	"context"
@@ -19,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -180,7 +181,7 @@ func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *kvpb.GossipSub
 	}
 }
 
-func waitForNodeDesc(t *testing.T, c *Connector, nodeID roachpb.NodeID) {
+func waitForNodeDesc(t *testing.T, c *connector, nodeID roachpb.NodeID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		_, err := c.GetNodeDescriptor(nodeID)
@@ -188,7 +189,7 @@ func waitForNodeDesc(t *testing.T, c *Connector, nodeID roachpb.NodeID) {
 	})
 }
 
-func waitForStoreDesc(t *testing.T, c *Connector, storeID roachpb.StoreID) {
+func waitForStoreDesc(t *testing.T, c *connector, storeID roachpb.StoreID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		_, err := c.GetStoreDescriptor(storeID)
@@ -196,7 +197,11 @@ func waitForStoreDesc(t *testing.T, c *Connector, storeID roachpb.StoreID) {
 	})
 }
 
-// TestConnectorGossipSubscription tests Connector's roles as a
+func newConnector(cfg ConnectorConfig, addrs []string) *connector {
+	return NewConnector(cfg, addrs).(*connector)
+}
+
+// TestConnectorGossipSubscription tests connector's roles as a
 // kvcoord.NodeDescStore and as a config.SystemConfigProvider.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -233,13 +238,13 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
-	cfg := kvtenant.ConnectorConfig{
+	cfg := ConnectorConfig{
 		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{ln.Addr().String()}
-	c := NewConnector(cfg, addrs)
+	c := newConnector(cfg, addrs)
 
 	// Start should block until the first GossipSubscription response.
 	startedC := make(chan error)
@@ -349,7 +354,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Len(t, sysCfgC2, 1)
 }
 
-// TestConnectorGossipSubscription tests Connector's role as a
+// TestConnectorGossipSubscription tests connector's role as a
 // kvcoord.RangeDescriptorDB.
 func TestConnectorRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -378,13 +383,13 @@ func TestConnectorRangeLookup(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
-	cfg := kvtenant.ConnectorConfig{
+	cfg := ConnectorConfig{
 		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{ln.Addr().String()}
-	c := NewConnector(cfg, addrs)
+	c := newConnector(cfg, addrs)
 	// NOTE: we don't actually start the connector worker. That's ok, as
 	// RangeDescriptorDB methods don't require it to be running.
 
@@ -433,7 +438,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	require.True(t, grpcutil.IsAuthError(err))
 }
 
-// TestConnectorRetriesUnreachable tests that Connector iterates over each of
+// TestConnectorRetriesUnreachable tests that connector iterates over each of
 // its provided addresses and retries until it is able to establish a connection
 // on one of them.
 func TestConnectorRetriesUnreachable(t *testing.T) {
@@ -480,13 +485,13 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	})
 
 	// Add listen address into list of other bogus addresses.
-	cfg := kvtenant.ConnectorConfig{
+	cfg := ConnectorConfig{
 		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{"1.1.1.1:9999", ln.Addr().String(), "2.2.2.2:9999"}
-	c := NewConnector(cfg, addrs)
+	c := newConnector(cfg, addrs)
 	c.rpcDialTimeout = 5 * time.Millisecond // speed up test
 
 	// Start should block until the first GossipSubscription response.
@@ -500,7 +505,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	case <-time.After(25 * time.Millisecond):
 	}
 
-	// Begin serving on gRPC server. Connector should quickly connect
+	// Begin serving on gRPC server. connector should quickly connect
 	// and complete startup.
 	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
@@ -520,7 +525,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	require.Regexp(t, "unable to look up descriptor for n3", err)
 }
 
-// TestConnectorRetriesError tests that Connector iterates over each of
+// TestConnectorRetriesError tests that connector iterates over each of
 // its provided addresses and retries if the error is retriable or bails out
 // immediately if it is not.
 func TestConnectorRetriesError(t *testing.T) {
@@ -590,15 +595,15 @@ func TestConnectorRetriesError(t *testing.T) {
 			addr2 := createServer(t, gossipSubFn, rangeLookupRejectorFn)
 
 			// Add listen address into list of other bogus addresses.
-			cfg := kvtenant.ConnectorConfig{
+			cfg := ConnectorConfig{
 				AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 				RPCContext:      rpcContext,
 				RPCRetryOptions: rpcRetryOpts,
 			}
 			addrs := []string{addr1, addr2}
-			c := NewConnector(cfg, addrs)
+			c := newConnector(cfg, addrs)
 			c.rpcDialTimeout = 5 * time.Millisecond // speed up test
-			require.NoError(t, c.Start(ctx), "Connector can't start")
+			require.NoError(t, c.Start(ctx), "connector can't start")
 
 			// Test will try to make range lookups until the server returning errors
 			// is hit. It then checks that error was propagated or not. We use multiple

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -324,8 +323,6 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 		TenantID: serverutils.TestTenantID(),
 	}
 
-	// ensure the tenant conenctor is linked
-	var _ = kvtenantccl.Connector{}
 	tenant, tenantSQLRaw := serverutils.StartTenant(t, s, tenantArgs)
 	defer tenant.Stopper().Stop(ctx)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantSQLRaw)
