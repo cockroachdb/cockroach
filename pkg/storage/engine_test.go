@@ -1905,6 +1905,366 @@ func TestEngineIteratorVisibility(t *testing.T) {
 	}
 }
 
+// TestScanConflictingIntentsForDroppingLatchesEarly tests
+// ScanConflictingIntentsForDroppingLatchesEarly for all non read-your-own-write
+// cases. Read-your-own-write cases are tested separately in
+// TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites.
+func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	ts := func(nanos int) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: int64(nanos),
+		}
+	}
+	newTxn := func(ts hlc.Timestamp) *roachpb.Transaction {
+		txnID := uuid.MakeV4()
+		return &roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				ID:             txnID,
+				Epoch:          1,
+				WriteTimestamp: ts,
+				MinTimestamp:   ts,
+			},
+			ReadTimestamp: ts,
+		}
+	}
+
+	belowTxnTS := ts(1)
+	txnTS := ts(2)
+	aboveTxnTS := ts(3)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	val := roachpb.Value{RawBytes: []byte{'v'}}
+
+	testCases := []struct {
+		name                  string
+		setup                 func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction)
+		start                 roachpb.Key
+		end                   roachpb.Key
+		expNeedsIntentHistory bool
+		expErr                string
+		expNumFoundIntents    int
+	}{
+		{
+			name:               "invalid end key",
+			start:              keyC,
+			end:                keyA,
+			expErr:             "start key must be less than end key",
+			expNumFoundIntents: 0,
+		},
+		{
+			name:                  "no end key",
+			start:                 keyA,
+			end:                   nil,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+		{
+			name:                  "no intents",
+			start:                 keyB,
+			end:                   keyC,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+		{
+			name: "conflicting txn intent at lower timestamp",
+			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
+				conflictingTxn := newTxn(belowTxnTS) // test txn should see this intent
+				err := MVCCPut(
+					ctx, rw, nil, keyA, conflictingTxn.WriteTimestamp, hlc.ClockTimestamp{}, val, conflictingTxn,
+				)
+				require.NoError(t, err)
+			},
+			start:                 keyA,
+			end:                   keyC,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    1,
+		},
+		{
+			name: "conflicting txn intent at higher timestamp",
+			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
+				conflictingTxn := newTxn(aboveTxnTS) // test txn shouldn't see this intent
+				err := MVCCPut(
+					ctx, rw, nil, keyA, conflictingTxn.WriteTimestamp, hlc.ClockTimestamp{}, val, conflictingTxn,
+				)
+				require.NoError(t, err)
+			},
+			start:                 keyA,
+			end:                   keyC,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+		{
+			name: "bounds do not include (latest) own write",
+			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
+				err := MVCCPut(ctx, rw, nil, keyA, txn.WriteTimestamp, hlc.ClockTimestamp{}, val, txn)
+				require.NoError(t, err)
+			},
+			start:                 keyB,
+			end:                   keyC,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := NewDefaultInMemForTesting()
+			defer eng.Close()
+
+			var intents []roachpb.Intent
+			txn := newTxn(txnTS)
+			if tc.setup != nil {
+				tc.setup(t, eng, txn)
+			}
+			needsIntentHistory, err := ScanConflictingIntentsForDroppingLatchesEarly(
+				ctx,
+				eng,
+				txn.ID,
+				txn.ReadTimestamp,
+				tc.start,
+				tc.end,
+				&intents,
+				0, /* maxIntents */
+			)
+			if tc.expErr != "" {
+				require.Error(t, err)
+				testutils.IsError(err, tc.expErr)
+				return // none of the other fields need to be tested.
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.expNeedsIntentHistory, needsIntentHistory)
+			require.Equal(t, tc.expNumFoundIntents, len(intents))
+		})
+	}
+}
+
+// TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites constructs
+// various read-your-own-write cases and ensures we correctly determine whether
+// callers of ScanConflictingIntentsForDroppingLatchesEarly need to consult
+// intent history or not when performing a scan over the MVCC keyspace. Factors
+// that go into this determination are:
+// 1. Sequence numbers of the intent/read op.
+// 2. Timestamps of the intent/read op.
+// 3. Epochs of the intent/read op.
+// 4. Whether any savepoints have been rolled back.
+//
+// NB: When scanning for conflicting intents to determine if latches can be
+// dropped early, we fallback to using the intent interleaving iterator in all
+// read-your-own-write cases. However, doing so is more restrictive than it
+// needs to be -- the in-line test expectations correspond to what an optimized
+// determination for `needsIntentHistory` would look like. However, for the
+// purposes of this test, we assert that we always fall back to using the intent
+// interleaving iterator in ALL read-your-own-write cases.
+func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	alwaysFallbackToIntentInterleavingIteratorForReadYourOwnWrites := true
+
+	ctx := context.Background()
+	ts := func(nanos int) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: int64(nanos),
+		}
+	}
+	belowReadTS := ts(1)
+	readTS := ts(2)
+	aboveReadTS := ts(3)
+
+	belowReadTxnEpoch := enginepb.TxnEpoch(1)
+	readTxnEpoch := enginepb.TxnEpoch(3)
+	aboveReadTxnEpoch := enginepb.TxnEpoch(2)
+
+	belowReadSeqNumber := enginepb.TxnSeq(1)
+	readSeqNumber := enginepb.TxnSeq(2)
+	aboveReadSeqNumber := enginepb.TxnSeq(3)
+
+	keyA := roachpb.Key("a")
+	val := roachpb.Value{RawBytes: []byte{'v'}}
+
+	testCases := []struct {
+		name                  string
+		intentTS              hlc.Timestamp
+		intentSequenceNumber  enginepb.TxnSeq
+		intentEpoch           enginepb.TxnEpoch
+		expNeedsIntentHistory bool // currently unused when testing
+		ignoredSeqNumbers     enginepb.IgnoredSeqNumRange
+	}{
+		{
+			name:                  "equal {timestamp, seq number, epoch}",
+			intentTS:              readTS,
+			intentSequenceNumber:  readSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: false,
+		},
+		{
+			name:                  "higher {intent seq number} equal {timestamp, epoch}",
+			intentTS:              readTS,
+			intentSequenceNumber:  aboveReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "higher {intent seq number} equal {epoch} lower {intent timestamp}",
+			intentTS:              belowReadTS,
+			intentSequenceNumber:  aboveReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "higher {intent seq number, intent timestamp} equal {epoch}",
+			intentTS:              aboveReadTS,
+			intentSequenceNumber:  aboveReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			// Naively scanning at the read's timestamp, without accounting for the
+			// intent, would result in us missing our own write as the writeTS is
+			// higher than the readTS.
+			name:                  "higher {intent timestamp} equal {epoch} lower {intent seq number}",
+			intentTS:              aboveReadTS,
+			intentSequenceNumber:  belowReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			// Naively scanning at the read's timestamp, without accounting for the
+			// intent, would result in us missing our own write as the writeTS is
+			// higher than the readTS.
+			name:                  "higher {intent timestamp} equal {seq number, epoch}",
+			intentTS:              aboveReadTS,
+			intentSequenceNumber:  readSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "equal {timestamp, epoch} lower {intent seq number}",
+			intentTS:              readTS,
+			intentSequenceNumber:  belowReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: false,
+		},
+		{
+			name:                  "equal {epoch} lower {intent timestamp, intent seq number}",
+			intentTS:              belowReadTS,
+			intentSequenceNumber:  belowReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: false,
+		},
+		{
+			name:                  "equal {epoch, seq number} lower {intent timestamp}",
+			intentTS:              belowReadTS,
+			intentSequenceNumber:  readSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			expNeedsIntentHistory: false,
+		},
+
+		// lower/higher epoch test cases aren't exhaustive.
+		{
+			name:                  "equal {timestamp, seq number} lower {epoch}",
+			intentTS:              readTS,
+			intentSequenceNumber:  readSeqNumber,
+			intentEpoch:           belowReadTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "higher{epoch} equal {timestamp, seq number}",
+			intentTS:              readTS,
+			intentSequenceNumber:  readSeqNumber,
+			intentEpoch:           aboveReadTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "lower {epoch, intent timestamp, intent seq number}",
+			intentTS:              belowReadTS,
+			intentSequenceNumber:  belowReadSeqNumber,
+			intentEpoch:           belowReadTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "higher {epoch} lower {intent timestamp, intent seq number}",
+			intentTS:              belowReadTS,
+			intentSequenceNumber:  belowReadSeqNumber,
+			intentEpoch:           aboveReadTxnEpoch,
+			expNeedsIntentHistory: true,
+		},
+		// Savepoint related tests.
+		{
+			// Scenario from https://github.com/cockroachdb/cockroach/issues/94337.
+			name:                  "intent part of rolled back savepoint",
+			intentTS:              belowReadTS,
+			intentSequenceNumber:  belowReadSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			ignoredSeqNumbers:     enginepb.IgnoredSeqNumRange{Start: belowReadSeqNumber, End: belowReadSeqNumber},
+			expNeedsIntentHistory: true,
+		},
+		{
+			name:                  "intent not part of rolled back savepoint",
+			intentTS:              readTS,
+			intentSequenceNumber:  readSeqNumber,
+			intentEpoch:           readTxnEpoch,
+			ignoredSeqNumbers:     enginepb.IgnoredSeqNumRange{Start: belowReadSeqNumber, End: belowReadSeqNumber},
+			expNeedsIntentHistory: true, // should be false
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := NewDefaultInMemForTesting()
+			defer eng.Close()
+
+			txnID := uuid.MakeV4()
+			txn := &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					ID: txnID,
+				},
+			}
+
+			// Write the intent as dictated by the test case.
+			txn.Epoch = tc.intentEpoch
+			txn.Sequence = tc.intentSequenceNumber
+			txn.ReadTimestamp = tc.intentTS
+			txn.WriteTimestamp = tc.intentTS
+			err := MVCCPut(ctx, eng, nil, keyA, txn.WriteTimestamp, hlc.ClockTimestamp{}, val, txn)
+			require.NoError(t, err)
+
+			// Set up the read.
+			txn.Epoch = readTxnEpoch
+			txn.Sequence = readSeqNumber
+			txn.ReadTimestamp = readTS
+			txn.WriteTimestamp = readTS
+			txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{tc.ignoredSeqNumbers}
+
+			var intents []roachpb.Intent
+			needsIntentHistory, err := ScanConflictingIntentsForDroppingLatchesEarly(
+				ctx,
+				eng,
+				txn.ID,
+				txn.ReadTimestamp,
+				keyA,
+				nil,
+				&intents,
+				0, /* maxIntents */
+			)
+			require.NoError(t, err)
+			if alwaysFallbackToIntentInterleavingIteratorForReadYourOwnWrites {
+				require.Equal(t, true, needsIntentHistory)
+			} else {
+				require.Equal(t, tc.expNeedsIntentHistory, needsIntentHistory)
+			}
+		})
+	}
+}
+
 // TestEngineRangeKeyMutations tests that range key mutations work as expected,
 // both for the engine directly and for batches.
 func TestEngineRangeKeyMutations(t *testing.T) {
