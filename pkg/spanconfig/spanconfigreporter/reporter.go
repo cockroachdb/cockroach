@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 )
 
@@ -78,8 +79,9 @@ type Reporter struct {
 		spanconfig.StoreReader
 	}
 
-	settings *cluster.Settings
-	knobs    *spanconfig.TestingKnobs
+	settings    *cluster.Settings
+	knobs       *spanconfig.TestingKnobs
+	rateLimiter *quotapool.RateLimiter
 }
 
 var _ spanconfig.Reporter = &Reporter{}
@@ -96,6 +98,11 @@ func New(
 	r := &Reporter{
 		settings: settings,
 		knobs:    knobs,
+		rateLimiter: quotapool.NewRateLimiter(
+			"spanconfig-conformance-report-rate-limiter",
+			1, /* Limit to 1 reqs per second */
+			1, /* burst */
+		),
 	}
 	r.dep.Liveness = liveness
 	r.dep.StoreResolver = resolver
@@ -117,6 +124,11 @@ func New(
 func (r *Reporter) SpanConfigConformance(
 	ctx context.Context, spans []roachpb.Span,
 ) (roachpb.SpanConfigConformanceReport, error) {
+	err := r.rateLimiter.WaitN(ctx, 1)
+	if err != nil {
+		return roachpb.SpanConfigConformanceReport{}, err
+	}
+
 	report := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
