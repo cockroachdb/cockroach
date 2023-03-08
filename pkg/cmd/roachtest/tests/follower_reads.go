@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -462,47 +463,63 @@ func initFollowerReadsDB(
 	t.L().Printf("waiting for up-replication...")
 	retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		// Check that the table has the expected number of voting and non-voting
-		// replicas.
-		var votersCol, nonVotersCol string
-		if topology.multiRegion {
-			votersCol = "coalesce(array_length(voting_replicas, 1), 0)"
-			nonVotersCol = "coalesce(array_length(non_voting_replicas, 1), 0)"
+		// Check that the table has the expected number and location of voting and
+		// non-voting replicas. The valid location sets can be larger than the
+		// expected number of replicas, in which case, multiple valid combinations
+		// with that replica count are possible.
+		var votersCount, nonVotersCount int
+		var votersSet, nonVotersSet []int
+		if !topology.multiRegion {
+			votersCount, votersSet = 3, []int{1, 2, 3}
+			nonVotersCount, nonVotersSet = 0, []int{}
+		} else if topology.survival == zone {
+			// Expect 3 voting replicas in the primary region and 2 non-voting
+			// replicas in other regions.
+			votersCount, votersSet = 3, []int{1, 2, 3}
+			nonVotersCount, nonVotersSet = 2, []int{4, 5, 6}
 		} else {
-			// Hack to support v20.2 which doesn't have the non_voting_replicas
-			// column.
-			votersCol = "coalesce(array_length(replicas, 1), 0)"
-			nonVotersCol = "0"
+			// Expect 5 voting replicas and 0 non-voting replicas.
+			votersCount, votersSet = 5, []int{1, 2, 3, 4, 5, 6}
+			nonVotersCount, nonVotersSet = 0, []int{}
 		}
 
-		q1 := fmt.Sprintf(`
+		// NOTE: joining crdb_internal.ranges_no_leases and SHOW RANGES is awkward,
+		// but we do it because crdb_internal.ranges_no_leases does not contain a
+		// table_name column in v23.1 and SHOW RANGES does not contain either a
+		// voting_replicas or non_voting_replicas column in v22.2. This query works
+		// with either version.
+		const q1 = `
 			SELECT
-				%s, %s
-			FROM [SHOW RANGES FROM TABLE test.test]`, votersCol, nonVotersCol)
+			  (    coalesce(array_length(voting_replicas,     1), 0) = $1
+			   AND coalesce(array_length(non_voting_replicas, 1), 0) = $2
+			   AND voting_replicas     <@ $3
+			   AND non_voting_replicas <@ $4
+			  ) AS ok,
+			  voting_replicas,
+			  non_voting_replicas
+			FROM
+			  crdb_internal.ranges_no_leases
+			WHERE
+			  range_id = (SELECT range_id FROM [SHOW RANGES FROM TABLE test.test])`
 
-		var voters, nonVoters int
-		err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters)
+		var ok bool
+		var voters, nonVoters pq.Int64Array
+		err := db.QueryRowContext(
+			ctx, q1, votersCount, nonVotersCount, pq.Array(votersSet), pq.Array(nonVotersSet),
+		).Scan(&ok, &voters, &nonVoters)
 		if errors.Is(err, gosql.ErrNoRows) {
 			t.L().Printf("up-replication not complete, missing range")
 			continue
 		}
 		require.NoError(t, err)
 
-		var ok bool
-		if !topology.multiRegion {
-			ok = voters == 3
-		} else if topology.survival == zone {
-			// Expect 3 voting replicas and 2 non-voting replicas.
-			ok = voters == 3 && nonVoters == 2
-		} else {
-			// Expect 5 voting replicas and 0 non-voting replicas.
-			ok = voters == 5 && nonVoters == 0
-		}
 		if ok {
 			break
 		}
 
-		t.L().Printf("up-replication not complete, found %d voters and %d non_voters", voters, nonVoters)
+		t.L().Printf("up-replication not complete, "+
+			"found voters = %v (want %d in set %v) and non_voters = %s (want %d in set %v)",
+			voters, votersCount, votersSet, nonVoters, votersCount, votersSet)
 	}
 
 	if topology.multiRegion {
