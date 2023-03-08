@@ -1501,6 +1501,13 @@ func TestTenantLogic_save_table(
 	runLogicTest(t, "save_table")
 }
 
+func TestTenantLogic_scalar(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "scalar")
+}
+
 func TestTenantLogic_scale(
 	t *testing.T,
 ) {

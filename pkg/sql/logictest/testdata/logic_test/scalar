@@ -1,0 +1,383 @@
+# ------------------------------------------------------------------------------
+# Test with boolean CASE statements.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE bools (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL);
+INSERT INTO bools VALUES
+(True, True, True, True, True),
+(False, False, False, False, False),
+(True, False, True, False, True),
+(False, True, False, True, False),
+(True, False, False, False, False),
+(False, True, True, True, True),
+(True, False, True, True, True),
+(False, True, False, False, False),
+(NULL, True, True, True, True),
+(NULL, NULL, NULL, NULL, NULL),
+(True, NULL, True, NULL, True),
+(False, True, NULL, True, NULL),
+(True, NULL, NULL, NULL, NULL),
+(NULL, True, False, True, True),
+(True, NULL, True, True, True),
+(NULL, True, NULL, False, False);
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN True WHEN b THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+true   false  true   false  true   false
+true   true   false  false  false  false
+true   false  true   true   true   true
+true   true   false  true   true   true
+true   false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+true   false  true   NULL   true   NULL
+true   true   NULL   NULL   NULL   NULL
+true   NULL   true   false  true   true
+true   true   NULL   true   true   true
+true   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN True WHEN b THEN FALSE ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+false  false  true   false  true   false
+true   true   false  false  false  false
+false  false  true   true   true   true
+true   true   false  true   true   true
+false  false  true   false  false  false
+false  NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+false  false  true   NULL   true   NULL
+true   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+false  NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN False WHEN b THEN True ELSE c END, * FROM bools;
+----
+false  true   true   true   true   true
+false  false  false  false  false  false
+false  true   false  true   false  true
+true   false  true   false  true   false
+false  true   false  false  false  false
+true   false  true   true   true   true
+false  true   false  true   true   true
+true   false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+false  true   NULL   true   NULL   true
+true   false  true   NULL   true   NULL
+false  true   NULL   NULL   NULL   NULL
+true   NULL   true   false  true   true
+false  true   NULL   true   true   true
+true   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN False WHEN b THEN False ELSE c END, * FROM bools;
+----
+false  true   true   true   true   true
+false  false  false  false  false  false
+false  true   false  true   false  true
+false  false  true   false  true   false
+false  true   false  false  false  false
+false  false  true   true   true   true
+false  true   false  true   true   true
+false  false  true   false  false  false
+false  NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+false  true   NULL   true   NULL   true
+false  false  true   NULL   true   NULL
+false  true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+false  true   NULL   true   true   true
+false  NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE False WHEN a THEN True WHEN b THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+true   false  false  false  false  false
+true   true   false  true   false  true
+true   false  true   false  true   false
+true   true   false  false  false  false
+true   false  true   true   true   true
+true   true   false  true   true   true
+true   false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+true   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE False WHEN a THEN True WHEN b THEN FALSE ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+true   false  false  false  false  false
+false  true   false  true   false  true
+true   false  true   false  true   false
+false  true   false  false  false  false
+true   false  true   true   true   true
+false  true   false  true   true   true
+true   false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+true   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE False WHEN a THEN False WHEN b THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+false  false  true   false  true   false
+true   true   false  false  false  false
+false  false  true   true   true   true
+true   true   false  true   true   true
+false  false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+false  false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE False WHEN a THEN False WHEN b THEN False ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+false  true   false  true   false  true
+false  false  true   false  true   false
+false  true   false  false  false  false
+false  false  true   true   true   true
+false  true   false  true   true   true
+false  false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+false  false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE NULL WHEN a THEN True WHEN b THEN True WHEN NULL THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+false  false  true   false  true   false
+false  true   false  false  false  false
+true   false  true   true   true   true
+true   true   false  true   true   true
+false  false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE NULL WHEN a THEN True WHEN b THEN False WHEN NULL THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+false  false  true   false  true   false
+false  true   false  false  false  false
+true   false  true   true   true   true
+true   true   false  true   true   true
+false  false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE NULL WHEN a THEN False WHEN b THEN True WHEN NULL THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+false  false  true   false  true   false
+false  true   false  false  false  false
+true   false  true   true   true   true
+true   true   false  true   true   true
+false  false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE NULL WHEN a THEN False WHEN b THEN False WHEN NULL THEN True ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+false  false  true   false  true   false
+false  true   false  false  false  false
+true   false  true   true   true   true
+true   true   false  true   true   true
+false  false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a OR b THEN True WHEN b AND c THEN True ELSE d OR NOT e END, * FROM bools;
+----
+true  true   true   true   true   true
+true  false  false  false  false  false
+true  true   false  true   false  true
+true  false  true   false  true   false
+true  true   false  false  false  false
+true  false  true   true   true   true
+true  true   false  true   true   true
+true  false  true   false  false  false
+true  NULL   true   true   true   true
+NULL  NULL   NULL   NULL   NULL   NULL
+true  true   NULL   true   NULL   true
+true  false  true   NULL   true   NULL
+true  true   NULL   NULL   NULL   NULL
+true  NULL   true   false  true   true
+true  true   NULL   true   true   true
+true  NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN NULL WHEN b THEN True ELSE c END, * FROM bools;
+----
+NULL   true   true   true   true   true
+false  false  false  false  false  false
+NULL   true   false  true   false  true
+true   false  true   false  true   false
+NULL   true   false  false  false  false
+true   false  true   true   true   true
+NULL   true   false  true   true   true
+true   false  true   false  false  false
+true   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+NULL   true   NULL   true   NULL   true
+true   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+true   NULL   true   false  true   true
+NULL   true   NULL   true   true   true
+true   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN NULL WHEN b THEN FALSE ELSE c END, * FROM bools;
+----
+NULL   true   true   true   true   true
+false  false  false  false  false  false
+NULL   true   false  true   false  true
+false  false  true   false  true   false
+NULL   true   false  false  false  false
+false  false  true   true   true   true
+NULL   true   false  true   true   true
+false  false  true   false  false  false
+false  NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+NULL   true   NULL   true   NULL   true
+false  false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+false  NULL   true   false  true   true
+NULL   true   NULL   true   true   true
+false  NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN True WHEN b THEN NULL ELSE c END, * FROM bools;
+----
+true   true   true   true   true   true
+false  false  false  false  false  false
+true   true   false  true   false  true
+NULL   false  true   false  true   false
+true   true   false  false  false  false
+NULL   false  true   true   true   true
+true   true   false  true   true   true
+NULL   false  true   false  false  false
+NULL   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+true   true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+true   true   NULL   NULL   NULL   NULL
+NULL   NULL   true   false  true   true
+true   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN False WHEN b THEN NULL ELSE c END, * FROM bools;
+----
+false  true   true   true   true   true
+false  false  false  false  false  false
+false  true   false  true   false  true
+NULL   false  true   false  true   false
+false  true   false  false  false  false
+NULL   false  true   true   true   true
+false  true   false  true   true   true
+NULL   false  true   false  false  false
+NULL   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+false  true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+false  true   NULL   NULL   NULL   NULL
+NULL   NULL   true   false  true   true
+false  true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false
+
+query BBBBBB rowsort
+SELECT CASE WHEN a THEN NULL WHEN b THEN NULL ELSE c END, * FROM bools;
+----
+NULL   true   true   true   true   true
+false  false  false  false  false  false
+NULL   true   false  true   false  true
+NULL   false  true   false  true   false
+NULL   true   false  false  false  false
+NULL   false  true   true   true   true
+NULL   true   false  true   true   true
+NULL   false  true   false  false  false
+NULL   NULL   true   true   true   true
+NULL   NULL   NULL   NULL   NULL   NULL
+NULL   true   NULL   true   NULL   true
+NULL   false  true   NULL   true   NULL
+NULL   true   NULL   NULL   NULL   NULL
+NULL   NULL   true   false  true   true
+NULL   true   NULL   true   true   true
+NULL   NULL   true   NULL   false  false

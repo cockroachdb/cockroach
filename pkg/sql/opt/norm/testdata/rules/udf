@@ -1,4 +1,8 @@
 exec-ddl
+CREATE TABLE xy (x INT, y INT);
+----
+
+exec-ddl
 CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
 ----
 
@@ -67,3 +71,69 @@ values
                      ├── fd: ()-->(4)
                      └── tuple
                           └── variable: i:1
+
+# The CASE expression cannot be optimized away for nullable non-constant
+# arguments of a volatile function.
+norm format=show-scalars
+SELECT strict_fn(x, 'foo', true) FROM xy;
+----
+project
+ ├── columns: strict_fn:10
+ ├── volatile
+ ├── scan xy
+ │    └── columns: x:1
+ └── projections
+      └── case [as=strict_fn:10, outer=(1), volatile, udf]
+           ├── true
+           ├── when
+           │    ├── is
+           │    │    ├── variable: x:1
+           │    │    └── null
+           │    └── null
+           └── udf: strict_fn
+                ├── params: i:6 t:7 b:8
+                ├── args
+                │    ├── variable: x:1
+                │    ├── const: 'foo'
+                │    └── true
+                └── body
+                     └── values
+                          ├── columns: i:9
+                          ├── outer: (6)
+                          ├── cardinality: [1 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(9)
+                          └── tuple
+                               └── variable: i:6
+
+exec-ddl
+CREATE FUNCTION strict_stable_fn(i INT, t TEXT, b BOOl) RETURNS BOOL STABLE STRICT LANGUAGE SQL AS 'SELECT i > 0'
+----
+
+# The CASE expression can be simplified after the stable function call is
+# hoisted.
+norm format=show-scalars
+SELECT * FROM xy WHERE strict_stable_fn(x, 'foo', true);
+----
+select
+ ├── columns: x:1!null y:2
+ ├── scan xy
+ │    └── columns: x:1 y:2
+ └── filters
+      └── or [outer=(1), constraints=(/1: [/1 - ])]
+           ├── and
+           │    ├── is
+           │    │    ├── is
+           │    │    │    ├── variable: x:1
+           │    │    │    └── null
+           │    │    └── true
+           │    └── null
+           └── and
+                ├── is-not
+                │    ├── is
+                │    │    ├── variable: x:1
+                │    │    └── null
+                │    └── true
+                └── gt
+                     ├── variable: x:1
+                     └── const: 0

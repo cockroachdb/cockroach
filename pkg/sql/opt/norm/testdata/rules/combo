@@ -1739,6 +1739,501 @@ SimplifyAndTrue
     └── projections
          └── case:15 [as=r:12, outer=(15)]
 ================================================================================
+SimplifyLeakproofBooleanCase
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR (NOT (((true = (bool_or:14 IS NULL)) IS true) OR (NOT CAST(NULL AS BOOL)))) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+CommuteConst
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR (NOT (((true = (bool_or:14 IS NULL)) IS true) OR (NOT CAST(NULL AS BOOL)))) [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR (NOT ((((bool_or:14 IS NULL) = true) IS true) OR (NOT CAST(NULL AS BOOL)))) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+FoldEqTrue
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR (NOT ((((bool_or:14 IS NULL) = true) IS true) OR (NOT CAST(NULL AS BOOL)))) [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR (NOT (((bool_or:14 IS NULL) IS true) OR (NOT CAST(NULL AS BOOL)))) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+FoldNotNull
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR (NOT (((bool_or:14 IS NULL) IS true) OR (NOT CAST(NULL AS BOOL)))) [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR (NOT (((bool_or:14 IS NULL) IS true) OR CAST(NULL AS BOOL))) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+NegateOr
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR (NOT (((bool_or:14 IS NULL) IS true) OR CAST(NULL AS BOOL))) [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR ((NOT ((bool_or:14 IS NULL) IS true)) AND (NOT CAST(NULL AS BOOL))) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+NegateComparison
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR ((NOT ((bool_or:14 IS NULL) IS true)) AND (NOT CAST(NULL AS BOOL))) [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND (NOT CAST(NULL AS BOOL))) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+FoldNotNull
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND (NOT CAST(NULL AS BOOL))) [as=case:15, outer=(14)]
+  + │    │         └── ((true = bool_or:14) IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+CommuteVar
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((true = bool_or:14) IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
+  + │    │         └── ((bool_or:14 = true) IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
+FoldEqTrue
+  Cost: 2209.73
+================================================================================
+   project
+    ├── columns: r:12
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:15
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(15)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:15
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(15)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:14
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(14)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:13!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(13)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5,6)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    │    └── fd: (5)-->(6)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+    │    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
+    │    │    │              └── notnull:13
+    │    │    └── projections
+  - │    │         └── ((bool_or:14 = true) IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
+  + │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
+    │    └── filters (true)
+    └── projections
+         └── case:15 [as=r:12, outer=(15)]
+================================================================================
 TryDecorrelateProject
   Cost: 2239.74
 ================================================================================
@@ -1824,7 +2319,7 @@ TryDecorrelateProject
   + │    │    │    │              └── notnull:13
   + │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -1923,7 +2418,7 @@ TryDecorrelateScalarGroupBy
   + │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2009,7 +2504,7 @@ TryDecorrelateProjectSelect
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2072,7 +2567,7 @@ DecorrelateJoin
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2147,7 +2642,7 @@ PushFilterIntoJoinRight
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2222,7 +2717,7 @@ PushSelectIntoProject
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2304,7 +2799,7 @@ EliminateSelect
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2374,7 +2869,7 @@ PruneJoinRightCols
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2465,7 +2960,7 @@ EliminateGroupByProject
     │    │    │    │                   └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2558,7 +3053,7 @@ EliminateProject
   + │    │    │    │              └── notnull:13
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2643,7 +3138,7 @@ EliminateSelect
   + │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
   + │    │    │              └── notnull:13
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     │    └── filters (true)
     └── projections
          └── case:15 [as=r:12, outer=(15)]
@@ -2717,7 +3212,7 @@ EliminateSelect
   - │    │    │         └── bool-or [as=bool_or:14, outer=(13)]
   - │    │    │              └── notnull:13
   - │    │    └── projections
-  - │    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+  - │    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
   - │    └── filters (true)
   + │    │    │    │    │    │    └── fd: (5)-->(6)
   + │    │    │    │    │    └── filters
@@ -2730,7 +3225,7 @@ EliminateSelect
   + │    │         └── bool-or [as=bool_or:14, outer=(13)]
   + │    │              └── notnull:13
   + │    └── projections
-  + │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+  + │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     └── projections
          └── case:15 [as=r:12, outer=(15)]
 ================================================================================
@@ -2779,7 +3274,7 @@ PruneProjectCols
     │    │         └── bool-or [as=bool_or:14, outer=(13)]
     │    │              └── notnull:13
     │    └── projections
-    │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+    │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
     └── projections
          └── case:15 [as=r:12, outer=(15)]
 ================================================================================
@@ -2845,7 +3340,7 @@ InlineProjectInProject
   - │    │         └── bool-or [as=bool_or:14, outer=(13)]
   - │    │              └── notnull:13
   - │    └── projections
-  - │         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:15, outer=(14)]
+  - │         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:15, outer=(14)]
   + │    │    │    │    │    └── fd: (5)-->(6)
   + │    │    │    │    └── filters
   + │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
@@ -2858,7 +3353,7 @@ InlineProjectInProject
   + │              └── notnull:13
     └── projections
   -      └── case:15 [as=r:12, outer=(15)]
-  +      └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+  +      └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -2921,7 +3416,7 @@ CommuteLeftJoin (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 ================================================================================
 GenerateMergeJoins
   Cost: 2256.64
@@ -2973,7 +3468,7 @@ GenerateMergeJoins
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 HoistProjectFromLeftJoin (higher cost)
 --------------------------------------------------------------------------------
@@ -3032,7 +3527,7 @@ HoistProjectFromLeftJoin (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 ReorderJoins (no changes)
 --------------------------------------------------------------------------------
@@ -3080,7 +3575,7 @@ CommuteLeftJoin (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
@@ -3131,7 +3626,7 @@ GenerateMergeJoins (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 GenerateLookupJoinsWithFilter (higher cost)
 --------------------------------------------------------------------------------
@@ -3181,7 +3676,7 @@ GenerateLookupJoinsWithFilter (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
@@ -3231,7 +3726,7 @@ GenerateMergeJoins (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
@@ -3291,7 +3786,7 @@ GenerateMergeJoins (higher cost)
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 ================================================================================
 GenerateStreamingGroupBy
   Cost: 2246.49
@@ -3340,7 +3835,7 @@ GenerateStreamingGroupBy
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13
     └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+         └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]
 ================================================================================
 Final best expression
   Cost: 2246.49
@@ -3388,4 +3883,4 @@ Final best expression
    │         └── bool-or [as=bool_or:14, outer=(13)]
    │              └── notnull:13
    └── projections
-        └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+        └── (bool_or:14 IS true) OR (((bool_or:14 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=r:12, outer=(14)]

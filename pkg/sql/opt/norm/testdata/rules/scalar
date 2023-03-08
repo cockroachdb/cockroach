@@ -29,6 +29,10 @@ CREATE TABLE b
 )
 ----
 
+exec-ddl
+CREATE TABLE bools (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
+----
+
 # --------------------------------------------------
 # CommuteVar
 # --------------------------------------------------
@@ -2371,3 +2375,272 @@ project
  └── projections
       ├── b.arr:5[1] [as=arr:8, outer=(5)]
       └── b.arr:5[2] [as=arr:9, outer=(5)]
+
+# --------------------------------------------------
+# SimplifyLeakproofBooleanCase
+# --------------------------------------------------
+
+# Expecting (a OR (b OR c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN True WHEN b THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── (a:1 IS true) OR ((b:2 IS true) OR bools.c:3) [as=c:9, outer=(1-3)]
+
+# Expecting (a OR ((b IS NOT TRUE) AND c)). We use "b IS NOT True" instead of
+# "NOT b" because we want it to return True when b is NULL.
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN True WHEN b THEN FALSE ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── (a:1 IS true) OR ((b:2 IS NOT true) AND bools.c:3) [as=c:9, outer=(1-3)]
+
+# Expecting ((a IS NOT TRUE) AND (b OR c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN False WHEN b THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── (a:1 IS NOT true) AND ((b:2 IS true) OR bools.c:3) [as=c:9, outer=(1-3)]
+
+# Expecting ((a IS NOT TRUE) AND ((b IS NOT TRUE) AND c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN False WHEN b THEN False ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((a:1 IS NOT true) AND (b:2 IS NOT true)) AND bools.c:3 [as=c:9, outer=(1-3)]
+
+# CASE condition is False. Expecting ((NOT a) OR ((NOT b) OR c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE False WHEN a THEN True WHEN b THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((NOT a:1) IS true) OR (((NOT b:2) IS true) OR bools.c:3) [as=c:9, outer=(1-3)]
+
+# CASE condition is False. Expecting ((NOT a) OR (((NOT b) IS NOT TRUE) AND c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE False WHEN a THEN True WHEN b THEN FALSE ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((NOT a:1) IS true) OR (((NOT b:2) IS NOT true) AND bools.c:3) [as=c:9, outer=(1-3)]
+
+# CASE condition is False. Expecting (((NOT a) IS NOT TRUE) AND ((NOT b) OR c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE False WHEN a THEN False WHEN b THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((NOT a:1) IS NOT true) AND (((NOT b:2) IS true) OR bools.c:3) [as=c:9, outer=(1-3)]
+
+# CASE condition is False.
+# Expecting (((NOT a) IS NOT TRUE) AND (((NOT b) IS NOT TRUE) AND c)).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE False WHEN a THEN False WHEN b THEN False ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── (((NOT a:1) IS NOT true) AND ((NOT b:2) IS NOT true)) AND bools.c:3 [as=c:9, outer=(1-3)]
+
+# CASE condition is NULL. Expecting (c) because the WHEN branches are simplified
+# to NULL (even the WHEN NULL branch because NULL = NULL is NULL).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE NULL WHEN a THEN True WHEN b THEN True WHEN NULL THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: bools.c:3
+ └── projections
+      └── bools.c:3 [as=c:9, outer=(3)]
+
+# CASE condition is NULL. Expecting (c).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE NULL WHEN a THEN True WHEN b THEN False WHEN NULL THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: bools.c:3
+ └── projections
+      └── bools.c:3 [as=c:9, outer=(3)]
+
+# CASE condition is NULL. Expecting (c).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE NULL WHEN a THEN False WHEN b THEN True WHEN NULL THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: bools.c:3
+ └── projections
+      └── bools.c:3 [as=c:9, outer=(3)]
+
+# CASE condition is NULL. Expecting (c).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE NULL WHEN a THEN False WHEN b THEN False WHEN NULL THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: bools.c:3
+ └── projections
+      └── bools.c:3 [as=c:9, outer=(3)]
+
+# WHEN branch returns NULL.
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN NULL WHEN b THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((a:1 IS true) AND NULL) OR ((a:1 IS NOT true) AND ((b:2 IS true) OR bools.c:3)) [as=c:9, outer=(1-3)]
+
+# WHEN branch returns NULL.
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN NULL WHEN b THEN FALSE ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((a:1 IS true) AND NULL) OR (((a:1 IS NOT true) AND (b:2 IS NOT true)) AND bools.c:3) [as=c:9, outer=(1-3)]
+
+# WHEN branch returns NULL.
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN True WHEN b THEN NULL ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── (a:1 IS true) OR (((b:2 IS true) AND NULL) OR ((b:2 IS NOT true) AND bools.c:3)) [as=c:9, outer=(1-3)]
+
+# WHEN branch returns NULL.
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN False WHEN b THEN NULL ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── (a:1 IS NOT true) AND (((b:2 IS true) AND CAST(NULL AS BOOL)) OR ((b:2 IS NOT true) AND bools.c:3)) [as=c:9, outer=(1-3)]
+
+# Both WHEN branches return NULL.
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN NULL WHEN b THEN NULL ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3
+ └── projections
+      └── ((a:1 IS true) AND NULL) OR ((a:1 IS NOT true) AND (((b:2 IS true) AND NULL) OR ((b:2 IS NOT true) AND bools.c:3))) [as=c:9, outer=(1-3)]
+
+# More complex conditions.
+# Expecting ((a OR b) OR ((b AND c) OR (d OR (NOT e)))).
+norm expect=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a OR b THEN True WHEN b AND c THEN True ELSE d OR NOT e END FROM bools;
+----
+project
+ ├── columns: case:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
+ └── projections
+      └── ((a:1 OR b:2) IS true) OR (((b:2 AND c:3) IS true) OR (d:4 OR (NOT e:5))) [as=case:9, outer=(1-5)]
+
+exec-ddl
+CREATE FUNCTION f(a INT, b INT) RETURNS BOOL LANGUAGE SQL VOLATILE AS $$
+  SELECT a + b < 0
+$$
+----
+
+# No-op because the CASE is not leak-proof.
+norm expect-not=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN False WHEN b AND f(1, 2) THEN True ELSE c END FROM bools;
+----
+project
+ ├── columns: c:12
+ ├── volatile
+ ├── scan bools
+ │    └── columns: bools.a:1 bools.b:2 bools.c:3
+ └── projections
+      └── CASE WHEN bools.a:1 THEN false WHEN bools.b:2 AND f(1, 2) THEN true ELSE bools.c:3 END [as=c:12, outer=(1-3), volatile, udf]
+
+# No-op because the CASE is not leak-proof.
+norm expect-not=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN False WHEN b THEN True ELSE c AND 1/0 > 0 END FROM bools;
+----
+project
+ ├── columns: case:9
+ ├── immutable
+ ├── scan bools
+ │    └── columns: a:1 b:2 c:3
+ └── projections
+      └── CASE WHEN a:1 THEN false WHEN b:2 THEN true ELSE c:3 AND ((1 / 0) > 0) END [as=case:9, outer=(1-3), immutable]
+
+# No-op because the CASE condition is not constant.
+norm expect-not=SimplifyLeakproofBooleanCase
+SELECT CASE a WHEN b THEN False WHEN c THEN True ELSE d END FROM bools;
+----
+project
+ ├── columns: d:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 c:3 bools.d:4
+ └── projections
+      └── CASE a:1 WHEN b:2 THEN false WHEN c:3 THEN true ELSE bools.d:4 END [as=d:9, outer=(1-4)]
+
+# No-op because one of the WHEN branches returns a non-constant value.
+norm expect-not=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN False WHEN b THEN d ELSE c END FROM bools;
+----
+project
+ ├── columns: c:9
+ ├── scan bools
+ │    └── columns: a:1 b:2 bools.c:3 d:4
+ └── projections
+      └── CASE WHEN a:1 THEN false WHEN b:2 THEN d:4 ELSE bools.c:3 END [as=c:9, outer=(1-4)]
+
+# No-op because the CASE returns the wrong type.
+norm expect-not=SimplifyLeakproofBooleanCase
+SELECT CASE WHEN a THEN 1 WHEN b THEN 0 ELSE -1 END FROM bools;
+----
+project
+ ├── columns: case:9
+ ├── scan bools
+ │    └── columns: a:1 b:2
+ └── projections
+      └── CASE WHEN a:1 THEN 1 WHEN b:2 THEN 0 ELSE -1 END [as=case:9, outer=(1,2)]

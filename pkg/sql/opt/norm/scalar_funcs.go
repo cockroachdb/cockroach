@@ -204,6 +204,173 @@ func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ *types.T) opt.ScalarExpr
 	return d
 }
 
+// IsConstantBool returns whether the given expression is a constant boolean
+// value in SQL three-value logic.
+func (c *CustomFuncs) IsConstantBool(expr opt.ScalarExpr) bool {
+	switch expr.Op() {
+	case opt.TrueOp, opt.FalseOp, opt.NullOp:
+		return true
+	case opt.CastOp:
+		// It is common for NULL values to be wrapped in a cast to boolean.
+		cast := expr.(*memo.CastExpr)
+		return cast.Typ.Equivalent(types.Bool) && cast.Input.Op() == opt.NullOp
+	}
+	return false
+}
+
+// WhensReturnConstBool checks that each WHEN branch for the CASE statement
+// returns a constant boolean value.
+func (c *CustomFuncs) WhensReturnConstBool(whens memo.ScalarListExpr) bool {
+	for _, when := range whens {
+		if !c.IsConstantBool(when.(*memo.WhenExpr).Value) {
+			return false
+		}
+	}
+	return true
+}
+
+// CaseReturnsBoolean returns true if the CASE statement with the given WHEN and
+// ELSE branches returns a boolean value.
+func (c *CustomFuncs) CaseReturnsBoolean(whens memo.ScalarListExpr, orElse opt.ScalarExpr) bool {
+	return memo.InferWhensType(whens, orElse).Equivalent(types.Bool)
+}
+
+// IsCaseLeakproof returns true if the CASE statement with the given parameters
+// is leak-proof. This is the case if all the branches of the CASE statement are
+// leak-proof.
+func (c *CustomFuncs) IsCaseLeakproof(
+	input opt.ScalarExpr, whens memo.ScalarListExpr, orElse opt.ScalarExpr,
+) bool {
+	var sharedProps props.Shared
+	checkLeakproof := func(expr opt.ScalarExpr) bool {
+		switch expr.Op() {
+		case opt.TrueOp, opt.FalseOp, opt.NullOp:
+			// Fast path: a constant boolean value is leak-proof.
+			return true
+		}
+		memo.BuildSharedProps(expr, &sharedProps, c.f.evalCtx)
+		return sharedProps.VolatilitySet.IsLeakproof()
+	}
+	if !checkLeakproof(input) {
+		return false
+	}
+	for _, when := range whens {
+		if !checkLeakproof(when) {
+			return false
+		}
+	}
+	return checkLeakproof(orElse)
+}
+
+// ConvertCaseToCondition returns a boolean condition that returns the same
+// result as a CASE statement with the given parameters. Example:
+//
+//	CASE WHEN a THEN False WHEN b THEN True ELSE c END
+//
+//	- If "a" evaluates to True, the CASE returns False. If "a" evaluates to
+//	  False, the CASE return value is determined by following branches. We can
+//	  replicate this behavior with the following expression:
+//	  ((a IS NOT True) AND (...)), where (...) indicates the result of
+//	  evaluating the following branches.
+//
+//	- Next we begin resolving the following branches, starting with "b" and
+//	  assuming the "a" branch has already been bypassed. If "b" evaluates to
+//	  True, the CASE returns True. If "b" evaluates to False, the return value
+//	  is determined by following branches. The equivalent boolean expression
+//	  is this: (b OR (...)).
+//
+//	- Finally we resolve the ELSE branch. This is simple - it is just the
+//	  condition "c". Replacing the placeholders in earlier iterations, we end
+//	  up with the following boolean expression that is equivalent to the CASE
+//	  statement: ((a IS NOT True) AND (b OR c))
+//
+// Note that this is only valid if the CASE statement is leak-proof, since
+// otherwise the transformation could allow branches to cause side effects when
+// they wouldn't have been evaluated before.
+func (c *CustomFuncs) ConvertCaseToCondition(
+	input opt.ScalarExpr, whens memo.ScalarListExpr, orElse opt.ScalarExpr,
+) opt.ScalarExpr {
+	// If the ELSE clause was not explicitly set, orElse will be set to NULL.
+	result := orElse
+	for i := len(whens) - 1; i >= 0; i-- {
+		when := whens[i].(*memo.WhenExpr)
+		condition := when.Condition
+
+		// Each WHEN branch condition is checked for equality against the input.
+		// The input value defaults to True. If the result of the check is True, the
+		// WHEN branch is evaluated. Build an expression that returns True if the
+		// WHEN branch would be evaluated, and False otherwise.
+		//   +-------+-----------+-----------+
+		//   | Input | Condition | Evaluated |
+		//   +-------+-----------+-----------+
+		//   | True  | True      | True      |
+		//   | True  | False     | False     |
+		//   | True  | NULL      | False     |
+		//   | False | True      | False     |
+		//   | False | False     | True      |
+		//   | False | NULL      | False     |
+		//   | NULL  | True      | False     |
+		//   | NULL  | False     | False     |
+		//   | NULL  | NULL      | False     |
+		//   +-------+-----------+-----------+
+		evaluateWhen := c.f.ConstructIs(c.f.ConstructEq(input, condition), memo.TrueSingleton)
+
+		switch when.Value.Op() {
+		case opt.TrueOp:
+			// The WHEN branch returns True. If the branch check evaluates to True,
+			// we return True without considering any following branches. Otherwise,
+			// we return the result of evaluating the following branches,
+			//   +----------------+--------------------+--------+
+			//   | Current Branch | Following Branches | Result |
+			//   +----------------+--------------------+--------+
+			//   | True           | True               | True   |
+			//   | True           | False              | True   |
+			//   | True           | NULL               | True   |
+			//   | False          | True               | True   |
+			//   | False          | False              | False  |
+			//   | False          | NULL               | NULL   |
+			//   +----------------+--------------------+--------+
+			result = c.f.ConstructOr(evaluateWhen, result)
+		case opt.FalseOp:
+			// The WHEN branch returns False. If the branch check evaluates to True,
+			// we return False without considering any following branches. Otherwise,
+			// we return the result of evaluating the following branches.
+			//   +----------------+--------------------+--------+
+			//   | Current Branch | Following Branches | Result |
+			//   +----------------+--------------------+--------+
+			//   | True           | True               | False  |
+			//   | True           | False              | False  |
+			//   | True           | NULL               | False  |
+			//   | False          | True               | True   |
+			//   | False          | False              | False  |
+			//   | False          | NULL               | NULL   |
+			//   +----------------+--------------------+--------+
+			result = c.f.ConstructNot(c.f.ConstructOr(evaluateWhen, c.f.ConstructNot(result)))
+		case opt.NullOp:
+			// The WHEN branch returns NULL. If the branch check evaluates to True, we
+			// return NULL without considering any following branches. Otherwise, we
+			// return the result of evaluating the following branches.
+			//   +----------------+--------------------+--------+
+			//   | Current Branch | Following Branches | Result |
+			//   +----------------+--------------------+--------+
+			//   | True           | True               | NULL   |
+			//   | True           | False              | NULL   |
+			//   | True           | NULL               | NULL   |
+			//   | False          | True               | True   |
+			//   | False          | False              | False  |
+			//   | False          | NULL               | NULL   |
+			//   +----------------+--------------------+--------+
+			result = c.f.ConstructOr(
+				c.f.ConstructAnd(evaluateWhen, memo.NullSingleton),
+				c.f.ConstructAnd(c.f.ConstructNot(evaluateWhen), result),
+			)
+		default:
+			panic(errors.AssertionFailedf("unexpected WHEN branch return value: %s", when.Value.Op()))
+		}
+	}
+	return result
+}
+
 // OpsAreSame returns true if the two operators are the same.
 func (c *CustomFuncs) OpsAreSame(left, right opt.Operator) bool {
 	return left == right
