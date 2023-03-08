@@ -1,0 +1,65 @@
+# LogicTest: local
+
+query T
+EXPLAIN (VERBOSE)
+SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    node_id,
+    agg_interval,
+    metadata,
+    statistics,
+    plan,
+    index_recommendations,
+    indexes_usage
+FROM
+    system.statement_statistics
+----
+  distribution: local
+  vectorized: true
+
+  • render
+  │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, agg_interval, metadata, statistics, plan, index_recommendations, indexes_usage)
+  │ render indexes_usage: (statistics->'statistics')->'indexes'
+  │ render aggregated_ts: aggregated_ts
+  │ render fingerprint_id: fingerprint_id
+  │ render transaction_fingerprint_id: transaction_fingerprint_id
+  │ render plan_hash: plan_hash
+  │ render app_name: app_name
+  │ render node_id: node_id
+  │ render agg_interval: agg_interval
+  │ render metadata: metadata
+  │ render statistics: statistics
+  │ render plan: plan
+  │ render index_recommendations: index_recommendations
+  │
+  └── • scan
+        columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, agg_interval, metadata, statistics, plan, index_recommendations)
+        estimated row count: 1,000 (missing stats)
+        table: statement_statistics@primary
+        spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+SELECT
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics
+FROM
+  system.transaction_statistics
+----
+  distribution: local
+  vectorized: true
+
+  • scan
+    columns: (aggregated_ts, fingerprint_id, app_name, node_id, agg_interval, metadata, statistics)
+    estimated row count: 1,000 (missing stats)
+    table: transaction_statistics@primary
+    spans: FULL SCAN
