@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -94,6 +95,7 @@ func (s *httpServer) setupRoutes(
 	handleRequestsUnauthenticated http.Handler,
 	handleDebugUnauthenticated http.Handler,
 	apiServer http.Handler,
+	flags serverpb.FeatureFlags,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
@@ -117,6 +119,7 @@ func (s *httpServer) setupRoutes(
 			}
 			return nil
 		},
+		Flags: flags,
 	})
 
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI

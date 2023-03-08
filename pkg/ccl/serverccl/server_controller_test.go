@@ -338,8 +338,8 @@ func TestServerControllerLoginLogout(t *testing.T) {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
 	}
-	require.ElementsMatch(t, []string{"session", "multitenant-session", "tenant"}, cookieNames)
-	require.ElementsMatch(t, []string{"", "", ""}, cookieValues)
+	require.ElementsMatch(t, []string{"session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Need a new server because the HTTP Client is memoized.
 	s2, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -359,8 +359,8 @@ func TestServerControllerLoginLogout(t *testing.T) {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
 	}
-	require.ElementsMatch(t, []string{"session", "multitenant-session", "tenant"}, cookieNames)
-	require.ElementsMatch(t, []string{"", "", ""}, cookieValues)
+	require.ElementsMatch(t, []string{"session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Now using manual clients to simulate states that might be invalid
 	url, err := url.Parse(s2.AdminURL())
@@ -386,6 +386,6 @@ func TestServerControllerLoginLogout(t *testing.T) {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
 	}
-	require.ElementsMatch(t, []string{"session", "multitenant-session", "tenant"}, cookieNames)
-	require.ElementsMatch(t, []string{"", "", ""}, cookieValues)
+	require.ElementsMatch(t, []string{"session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 }

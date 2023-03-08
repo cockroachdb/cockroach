@@ -1863,6 +1863,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
+		serverpb.FeatureFlags{
+			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
+		}, /* flags */
 	); err != nil {
 		return err
 	}

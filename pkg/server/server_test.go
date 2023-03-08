@@ -804,7 +804,7 @@ Binary built without web UI.
 			respBytes, err = io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			expected := fmt.Sprintf(
-				`{"Insecure":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{}}`,
+				`{"Insecure":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true}}`,
 				build.GetInfo().Tag,
 				build.BinaryVersionPrefix(),
 				1,
@@ -832,7 +832,7 @@ Binary built without web UI.
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"Insecure":false,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{}}`,
+					`{"Insecure":false,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true}}`,
 					build.GetInfo().Tag,
 					build.BinaryVersionPrefix(),
 					1,
@@ -841,7 +841,7 @@ Binary built without web UI.
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"Insecure":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{}}`,
+					`{"Insecure":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true}}`,
 					build.GetInfo().Tag,
 					build.BinaryVersionPrefix(),
 					1,
