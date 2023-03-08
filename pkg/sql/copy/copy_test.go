@@ -176,135 +176,127 @@ func TestCopyFromTransaction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: cluster.MakeTestingClusterSettings(),
-	})
-	defer s.Stopper().Stop(ctx)
-
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
-	defer cleanup()
-	var sqlConnCtx clisqlclient.Context
-
-	decEq := func(v1, v2 driver.Value) bool {
-		valToDecimal := func(v driver.Value) *apd.Decimal {
-			mt, ok := v.(pgtype.Numeric)
-			require.True(t, ok)
-			buf, err := mt.EncodeText(nil, nil)
-			require.NoError(t, err)
-			decimal, _, err := apd.NewFromString(string(buf))
-			require.NoError(t, err)
-			return decimal
-		}
-		return valToDecimal(v1).Cmp(valToDecimal(v2)) == 0
-	}
-
-	testCases := []struct {
-		name   string
-		query  string
-		data   []string
-		testf  func(clisqlclient.Conn, func(clisqlclient.Conn))
-		result func(f1, f2 driver.Value) bool
-	}{
-		{
-			"explicit_copy",
-			"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
-			[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
-			func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
-				err := tconn.Exec(ctx, "BEGIN")
-				require.NoError(t, err)
-				f(tconn)
-				err = tconn.Exec(ctx, "COMMIT")
-				require.NoError(t, err)
+	testutils.RunTrueAndFalse(t, "disableAutoCommitDuringExec", func(t *testing.T, b bool) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					DisableAutoCommitDuringExec: b,
+				},
 			},
-			decEq,
-		},
-		{
-			"implicit_atomic",
-			"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
-			[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
-			func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
-				err := tconn.Exec(ctx, "SET copy_from_atomic_enabled = true")
-				require.NoError(t, err)
-				orig := sql.SetCopyFromBatchSize(1)
-				defer sql.SetCopyFromBatchSize(orig)
-				f(tconn)
-			},
-			decEq,
-		},
-		{
-			"implicit_non_atomic",
-			"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
-			[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
-			func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
-				err := tconn.Exec(ctx, "SET copy_from_atomic_enabled = false")
-				require.NoError(t, err)
-				orig := sql.SetCopyFromBatchSize(1)
-				defer sql.SetCopyFromBatchSize(orig)
-				f(tconn)
-			},
-			func(f1, f2 driver.Value) bool { return !decEq(f1, f2) },
-		},
-		{
-			"implicit_non_atomic_no_1pc",
-			"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
-			[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
-			func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
-				err := tconn.Exec(ctx, "SET enable_insert_fast_path = false")
-				require.NoError(t, err)
-				err = tconn.Exec(ctx, "SET copy_from_atomic_enabled = false")
-				require.NoError(t, err)
-				orig := sql.SetCopyFromBatchSize(1)
-				defer sql.SetCopyFromBatchSize(orig)
-				f(tconn)
-			},
-			func(f1, f2 driver.Value) bool { return !decEq(f1, f2) },
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tconn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
-			tc.testf(tconn, func(tconn clisqlclient.Conn) {
-				// Without this everything comes back as strings
-				tconn.SetAlwaysInferResultTypes(true)
-				// Put each test in its own db so they can be parallelized.
-				err := tconn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s; USE %s", tc.name, tc.name))
-				require.NoError(t, err)
-				err = tconn.Exec(ctx, lineitemSchema)
-				require.NoError(t, err)
-				numrows, err := tconn.GetDriverConn().CopyFrom(ctx, strings.NewReader(strings.Join(tc.data, "\n")), tc.query)
-				require.NoError(t, err)
-				require.Equal(t, len(tc.data), int(numrows))
-
-				result, err := tconn.QueryRow(ctx, "SELECT l_partkey FROM lineitem WHERE l_orderkey = 1")
-				require.NoError(t, err)
-				partKey, ok := result[0].(int64)
-				require.True(t, ok)
-				require.Equal(t, int64(155190), partKey)
-
-				results, err := tconn.Query(ctx, "SELECT crdb_internal_mvcc_timestamp FROM lineitem")
-				require.NoError(t, err)
-				var lastts driver.Value
-				firstTime := true
-				vals := make([]driver.Value, 1)
-				for {
-					err = results.Next(vals)
-					if err == io.EOF {
-						break
-					}
-					require.NoError(t, err)
-					if !firstTime {
-						require.True(t, tc.result(lastts, vals[0]))
-					} else {
-						firstTime = false
-					}
-					lastts = vals[0]
-				}
-			})
-			err := tconn.Exec(ctx, "TRUNCATE TABLE lineitem")
-			require.NoError(t, err)
 		})
-	}
+		defer s.Stopper().Stop(ctx)
+
+		url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+		defer cleanup()
+		var sqlConnCtx clisqlclient.Context
+
+		decEq := func(v1, v2 driver.Value) bool {
+			valToDecimal := func(v driver.Value) *apd.Decimal {
+				mt, ok := v.(pgtype.Numeric)
+				require.True(t, ok)
+				buf, err := mt.EncodeText(nil, nil)
+				require.NoError(t, err)
+				decimal, _, err := apd.NewFromString(string(buf))
+				require.NoError(t, err)
+				return decimal
+			}
+			return valToDecimal(v1).Cmp(valToDecimal(v2)) == 0
+		}
+
+		testCases := []struct {
+			name   string
+			query  string
+			data   []string
+			testf  func(clisqlclient.Conn, func(clisqlclient.Conn))
+			result func(f1, f2 driver.Value) bool
+		}{
+			{
+				"explicit_copy",
+				"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
+				[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
+				func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
+					err := tconn.Exec(ctx, "BEGIN")
+					require.NoError(t, err)
+					f(tconn)
+					err = tconn.Exec(ctx, "COMMIT")
+					require.NoError(t, err)
+				},
+				decEq,
+			},
+			{
+				"implicit_atomic",
+				"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
+				[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
+				func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
+					err := tconn.Exec(ctx, "SET copy_from_atomic_enabled = true")
+					require.NoError(t, err)
+					orig := sql.SetCopyFromBatchSize(1)
+					defer sql.SetCopyFromBatchSize(orig)
+					f(tconn)
+				},
+				decEq,
+			},
+			{
+				"implicit_non_atomic",
+				"COPY lineitem FROM STDIN WITH CSV DELIMITER '|';",
+				[]string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)},
+				func(tconn clisqlclient.Conn, f func(tconn clisqlclient.Conn)) {
+					err := tconn.Exec(ctx, "SET copy_from_atomic_enabled = false")
+					require.NoError(t, err)
+					orig := sql.SetCopyFromBatchSize(1)
+					defer sql.SetCopyFromBatchSize(orig)
+					f(tconn)
+				},
+				func(f1, f2 driver.Value) bool { return !decEq(f1, f2) },
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				tconn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
+				tc.testf(tconn, func(tconn clisqlclient.Conn) {
+					// Without this everything comes back as strings
+					tconn.SetAlwaysInferResultTypes(true)
+					// Put each test in its own db so they can be parallelized.
+					err := tconn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s; USE %s", tc.name, tc.name))
+					require.NoError(t, err)
+					err = tconn.Exec(ctx, lineitemSchema)
+					require.NoError(t, err)
+					numrows, err := tconn.GetDriverConn().CopyFrom(ctx, strings.NewReader(strings.Join(tc.data, "\n")), tc.query)
+					require.NoError(t, err)
+					require.Equal(t, len(tc.data), int(numrows))
+
+					result, err := tconn.QueryRow(ctx, "SELECT l_partkey FROM lineitem WHERE l_orderkey = 1")
+					require.NoError(t, err)
+					partKey, ok := result[0].(int64)
+					require.True(t, ok)
+					require.Equal(t, int64(155190), partKey)
+
+					results, err := tconn.Query(ctx, "SELECT crdb_internal_mvcc_timestamp FROM lineitem")
+					require.NoError(t, err)
+					var lastts driver.Value
+					firstTime := true
+					vals := make([]driver.Value, 1)
+					for {
+						err = results.Next(vals)
+						if err == io.EOF {
+							break
+						}
+						require.NoError(t, err)
+						if !firstTime {
+							require.True(t, tc.result(lastts, vals[0]))
+						} else {
+							firstTime = false
+						}
+						lastts = vals[0]
+					}
+				})
+				err := tconn.Exec(ctx, "TRUNCATE TABLE lineitem")
+				require.NoError(t, err)
+			})
+		}
+	})
 }
 
 // slowCopySource is a pgx.CopyFromSource that copies a fixed number of rows

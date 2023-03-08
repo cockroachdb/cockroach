@@ -1071,9 +1071,7 @@ type StoreList struct {
 func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 	sl := StoreList{Stores: descriptors}
 	for _, desc := range descriptors {
-		if allocator.MaxCapacityCheck(desc) {
-			sl.CandidateRanges.update(float64(desc.Capacity.RangeCount))
-		}
+		sl.CandidateRanges.update(float64(desc.Capacity.RangeCount))
 		sl.CandidateLeases.update(float64(desc.Capacity.LeaseCount))
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
 		sl.CandidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
