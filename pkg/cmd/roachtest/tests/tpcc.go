@@ -1036,7 +1036,10 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "chaos")
 	}
 
-	opts := []spec.Option{spec.CPU(b.CPUs), spec.HighMem(b.HighMem)}
+	opts := []spec.Option{spec.CPU(b.CPUs)}
+	if b.HighMem {
+		opts = append(opts, spec.Mem(spec.High))
+	}
 	switch b.Distribution {
 	case singleZone:
 		// No specifier.
