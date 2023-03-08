@@ -1247,7 +1247,7 @@ SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
 
-# Verify users with VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with VIEWCLUSTERSETTING can view non sql.defaults cluster settings.
 # Verify users with MODIFYSQLCLUSTERSETTING can only view sql.defaults cluster settings.
 
 user root
@@ -1290,6 +1290,31 @@ REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
 
+# Verify users with MODIFYCLUSTERSETTING can view non sql.defaults cluster setting only if sql.auth.modify_cluster_setting_applies_to_all.enabled is true.
+user testuser
+
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+true
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.modify_cluster_setting_applies_to_all.enabled = false
+
+user testuser
+
+query T noticetrace
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+NOTICE: Cluster setting sql.auth.modify_cluster_setting_applies_to_all.enabled is deprecated, please use MODIFYSQLCLUSTERSETTING instead
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
 user testuser
 
 query T
@@ -1301,6 +1326,9 @@ user root
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 
 query TT
 SELECT crdb_internal.humanize_bytes(NULL), crdb_internal.humanize_bytes(102400)

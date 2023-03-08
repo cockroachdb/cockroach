@@ -2068,18 +2068,26 @@ CREATE TABLE crdb_internal.cluster_settings (
   origin        STRING NOT NULL -- the origin of the value: 'default' , 'override' or 'external-override'
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		canViewAll, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+		canViewSqlOnly := false
+		canViewAll, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
 		if err != nil {
 			return err
 		}
+
 		if !canViewAll {
-			canViewAll, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
+			canViewAll, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 			if err != nil {
 				return err
 			}
+			modifyClusterSettingAll := modifyClusterSettingAppliesToAll.Get(&p.ExecCfg().Settings.SV)
+			if canViewAll && !modifyClusterSettingAll {
+				// Issue a deprecation notice, since this setting had an impact.
+				modifyClusterSettingAppliesToAllDeprecationNotice(ctx, p)
+				canViewAll = false
+				canViewSqlOnly = true
+			}
 		}
-		canViewSqlOnly := false
-		if !canViewAll {
+		if !canViewAll && !canViewSqlOnly {
 			canViewSqlOnly, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYSQLCLUSTERSETTING)
 			if err != nil {
 				return err

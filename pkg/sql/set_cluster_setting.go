@@ -65,19 +65,55 @@ type setClusterSettingNode struct {
 	value tree.TypedExpr
 }
 
+var modifyClusterSettingAppliesToAll = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.modify_cluster_setting_applies_to_all.enabled",
+	"a bool which indicates whether MODIFYCLUSTERSETTING is able to set all cluster settings "+
+		"or only settings with the sql.defaults prefix (deprecated)",
+	true,
+).WithPublic()
+
+func modifyClusterSettingAppliesToAllDeprecationNotice(ctx context.Context, p *planner) {
+	// Once the latest version is active guide users to unset this setting.
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+		p.noticeSender.BufferNotice(pgnotice.Newf("Cluster setting %s is deprecated,"+
+			" please use MODIFYSQLCLUSTERSETTING instead", modifyClusterSettingAppliesToAll.Key()))
+	}
+}
+
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
+	isSqlSetting := strings.HasPrefix(name, "sql.defaults")
 	// If the user has modify privileges, then they can set or show any setting.
 	hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return err
 	}
 	if hasModify {
-		return nil
+		// If the user has modify privleges and modify cluster settings should only
+		// be limited to SQL defaults, then block this action if the setting is not
+		// a default.
+		modifyClusterSettingAll := modifyClusterSettingAppliesToAll.Get(&p.ExecCfg().Settings.SV)
+		isAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !isAdmin && !modifyClusterSettingAll && !isSqlSetting {
+			// Issue a deprecation notice, since this setting had an impact.
+			modifyClusterSettingAppliesToAllDeprecationNotice(ctx, p)
+			// We do not have permission to modify anymore.
+			hasModify = false
+			if action == "set" {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"users with the %s privilege need the cluster setting %s to be set to true to %s cluster setting '%s'",
+					privilege.MODIFYCLUSTERSETTING, modifyClusterSettingAppliesToAll.Key(), action, name)
+			}
+		} else {
+			return nil
+		}
 	}
 
 	// If the user only has sql modify privileges, then they can only set or show
 	// any sql.defaults setting.
-	isSqlSetting := strings.HasPrefix(name, "sql.defaults")
 	if isSqlSetting {
 		hasSqlModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYSQLCLUSTERSETTING)
 		if err != nil {

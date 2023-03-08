@@ -153,14 +153,13 @@ var retiredSettings = map[string]struct{}{
 	"server.web_session.auto_logout.timeout":           {},
 
 	// removed as of 23.1.
-	"sql.auth.modify_cluster_setting_applies_to_all.enabled": {},
-	"sql.catalog.descs.validate_on_write.enabled":            {},
-	"sql.distsql.max_running_flows":                          {},
-	"sql.distsql.flow_scheduler_queueing.enabled":            {},
-	"sql.distsql.drain.cancel_after_wait.enabled":            {},
-	"changefeed.active_protected_timestamps.enabled":         {},
-	"jobs.scheduler.single_node_scheduler.enabled":           {},
-	"tenant_capabilities.authorizer.enabled":                 {},
+	"sql.catalog.descs.validate_on_write.enabled":    {},
+	"sql.distsql.max_running_flows":                  {},
+	"sql.distsql.flow_scheduler_queueing.enabled":    {},
+	"sql.distsql.drain.cancel_after_wait.enabled":    {},
+	"changefeed.active_protected_timestamps.enabled": {},
+	"jobs.scheduler.single_node_scheduler.enabled":   {},
+	"tenant_capabilities.authorizer.enabled":         {},
 	// renamed.
 	"spanconfig.host_coalesce_adjacent.enabled":            {},
 	"sql.defaults.experimental_stream_replication.enabled": {},

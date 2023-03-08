@@ -116,7 +116,51 @@ WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
 ----
 sql.index_recommendation.drop_unused_duration  50s 168h0m0s external-override
 
+# Users with MODIFYCLUSTERSETTING cannot view or set non sql.default settings if sql.full_modify_cluster_setting.enabled is false.
+
 user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.modify_cluster_setting_applies_to_all.enabled = false
+
+user testuser
+
+statement error pq: users with the MODIFYCLUSTERSETTING privilege need the cluster setting sql.auth.modify_cluster_setting_applies_to_all.enabled to be set to true to set cluster setting 'diagnostics.reporting.enabled'
+SET CLUSTER SETTING diagnostics.reporting.enabled = false
+
+statement error only users with MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'diagnostics.reporting.enabled'
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+4
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_int_size=8
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+8
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
+
+statement ok
+SET CLUSTER SETTING sql.auth.modify_cluster_setting_applies_to_all.enabled = true
 
 statement ok
 ALTER USER testuser NOMODIFYCLUSTERSETTING
@@ -168,7 +212,7 @@ SHOW CLUSTER SETTING diagnostics.reporting.enabled
 ----
 true
 
-user root 
+user root
 
 skipif config local-mixed-22.2-23.1
 statement ok
