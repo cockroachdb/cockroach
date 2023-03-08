@@ -279,9 +279,21 @@ func processScheduleOptions(
 			if incDetails == nil {
 				continue
 			}
-			if err := schedulebase.ParseWaitBehavior(v, incDetails); err != nil {
-				return err
-			}
+			// An incremental backup schedule must always wait if there is a running job
+			// that was previously scheduled by this incremental schedule. This is
+			// because until the previous incremental backup job completes, all future
+			// incremental jobs will attempt to backup data from the same `StartTime`
+			// corresponding to the `EndTime` of the last incremental layer. In this
+			// case only the first incremental job to complete will succeed, while the
+			// remaining jobs will either be rejected or worse corrupt the chain of
+			// backups. We can accept both `wait` and `skip` as valid
+			// `on_previous_running` options for an incremental schedule.
+			//
+			// NB: Ideally we'd have a way to configure options for both the full and
+			// incremental schedule separately, in which case we could reject the
+			// `on_previous_running = start` configuration for incremental schedules.
+			// Until then this interception will have to do.
+			incDetails.Wait = jobspb.ScheduleDetails_WAIT
 			s.incJob.SetScheduleDetails(*incDetails)
 		case optUpdatesLastBackupMetric:
 			// NB: as of 20.2, schedule creation requires admin so this is duplicative
