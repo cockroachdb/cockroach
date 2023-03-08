@@ -33,14 +33,14 @@ func TestWaitForDelRangeInGCJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UseDelRangeInGCJob - 1)
-		v1 = clusterversion.ByKey(clusterversion.TODODelete_V22_2WaitedForDelRangeInGCJob)
+		v0 = clusterversion.ByKey(clusterversion.V23_1_UseDelRangeInGCJob - 1)
+		v1 = clusterversion.ByKey(clusterversion.V23_1WaitedForDelRangeInGCJob)
 	)
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
-	storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &settings.SV, true)
+	storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &settings.SV, false)
 	testServer, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 		Knobs: base.TestingKnobs{
@@ -95,7 +95,7 @@ SELECT count(*)
  WHERE job_type = 'SCHEMA CHANGE GC'
    AND status = 'paused'`,
 		[][]string{{"2"}})
-	tdb.ExpectErr(t, `verifying precondition for version \d*22.1-\d+: `+
+	tdb.ExpectErr(t, `verifying precondition for version \d*22.2-\d+: `+
 		`paused GC jobs prevent upgrading GC job behavior: \[\d+ \d+]`,
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
