@@ -573,9 +573,6 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 
 	lastIndex, nextIndex := pr.Next-1, pr.Next
 	lastTerm, errt := r.raftLog.term(lastIndex)
-	if lastIndex != 0 && lastTerm == 0 && errt == nil {
-		errt = ErrCompacted
-	}
 
 	var ents []pb.Entry
 	var erre error
@@ -1656,7 +1653,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 	} else {
 		r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
-			r.id, r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
+			r.id, r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
 
 		// Return a hint to the leader about the maximum index and term that the
 		// two logs could be divergent at. Do this by searching through the
@@ -1912,7 +1909,7 @@ func (r *raft) abortLeaderTransfer() {
 
 // committedEntryInCurrentTerm return true if the peer has committed an entry in its term.
 func (r *raft) committedEntryInCurrentTerm() bool {
-	return r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(r.raftLog.committed)) == r.Term
+	return r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(r.raftLog.committed)) == r.Term
 }
 
 // responseToReadIndexReq constructs a response for `req`. If `req` comes from the peer

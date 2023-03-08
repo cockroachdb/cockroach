@@ -153,7 +153,7 @@ func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
 		if !l.matchTerm(ne.Index, ne.Term) {
 			if ne.Index <= l.lastIndex() {
 				l.logger.Infof("found conflict at index %d [existing term: %d, conflicting term: %d]",
-					ne.Index, l.zeroTermOnErrCompacted(l.term(ne.Index)), ne.Term)
+					ne.Index, l.zeroTermOnOutOfBounds(l.term(ne.Index)), ne.Term)
 			}
 			return ne.Index
 		}
@@ -388,11 +388,14 @@ func (l *raftLog) term(i uint64) (uint64, error) {
 		return t, nil
 	}
 
-	// The valid term range is [index of dummy entry, last index].
-	dummyIndex := l.firstIndex() - 1
-	if i < dummyIndex || i > l.lastIndex() {
-		// TODO: return an error instead?
-		return 0, nil
+	// The valid term range is [firstIndex-1, lastIndex]. Even though the entry at
+	// firstIndex-1 is compacted away, its term is available for matching purposes
+	// when doing log appends.
+	if i+1 < l.firstIndex() {
+		return 0, ErrCompacted
+	}
+	if i > l.lastIndex() {
+		return 0, ErrUnavailable
 	}
 
 	t, err := l.storage.Term(i)
@@ -444,7 +447,7 @@ func (l *raftLog) matchTerm(i, term uint64) bool {
 }
 
 func (l *raftLog) maybeCommit(maxIndex, term uint64) bool {
-	if maxIndex > l.committed && l.zeroTermOnErrCompacted(l.term(maxIndex)) == term {
+	if maxIndex > l.committed && l.zeroTermOnOutOfBounds(l.term(maxIndex)) == term {
 		l.commitTo(maxIndex)
 		return true
 	}
@@ -515,11 +518,11 @@ func (l *raftLog) mustCheckOutOfBounds(lo, hi uint64) error {
 	return nil
 }
 
-func (l *raftLog) zeroTermOnErrCompacted(t uint64, err error) uint64 {
+func (l *raftLog) zeroTermOnOutOfBounds(t uint64, err error) uint64 {
 	if err == nil {
 		return t
 	}
-	if err == ErrCompacted {
+	if err == ErrCompacted || err == ErrUnavailable {
 		return 0
 	}
 	l.logger.Panicf("unexpected error (%v)", err)

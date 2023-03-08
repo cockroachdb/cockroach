@@ -2559,7 +2559,7 @@ func TestReadOnlyForNewLeader(t *testing.T) {
 	if sm.raftLog.committed != 4 {
 		t.Fatalf("committed = %d, want 4", sm.raftLog.committed)
 	}
-	lastLogTerm := sm.raftLog.zeroTermOnErrCompacted(sm.raftLog.term(sm.raftLog.committed))
+	lastLogTerm := sm.raftLog.zeroTermOnOutOfBounds(sm.raftLog.term(sm.raftLog.committed))
 	if lastLogTerm != sm.Term {
 		t.Fatalf("last log term = %d, want %d", lastLogTerm, sm.Term)
 	}
