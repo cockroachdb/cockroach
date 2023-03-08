@@ -923,14 +923,14 @@ func (r *raft) hup(t CampaignType) {
 }
 
 func (r *raft) hasUnappliedConfChanges() bool {
+	if r.raftLog.applied >= r.raftLog.committed { // in fact applied == committed
+		return false
+	}
 	ents, err := r.raftLog.slice(r.raftLog.applied+1, r.raftLog.committed+1, noLimit)
 	if err != nil {
 		r.logger.Panicf("unexpected error getting unapplied entries (%v)", err)
 	}
-	if n := numOfPendingConf(ents); n != 0 && r.raftLog.committed > r.raftLog.applied {
-		return true
-	}
-	return false
+	return numOfPendingConf(ents) != 0
 }
 
 // campaign transitions the raft instance to candidate state. This must only be
