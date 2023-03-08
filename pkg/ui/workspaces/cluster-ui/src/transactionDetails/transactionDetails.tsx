@@ -117,8 +117,7 @@ function statementsRequestFromProps(
   props: TransactionDetailsProps,
 ): StatementsRequest {
   const [start, end] = toRoundedDateRange(props.timeScale);
-  return new protos.cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+  return new protos.cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });

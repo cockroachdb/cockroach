@@ -213,7 +213,7 @@ export type StatementDiagnosticsResponseMessage =
   protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
 export type StatementsRequestMessage =
-  protos.cockroach.server.serverpb.StatementsRequest;
+  protos.cockroach.server.serverpb.CombinedStatementsStatsRequest;
 export type StatementDetailsRequestMessage =
   protos.cockroach.server.serverpb.StatementDetailsRequest;
 
@@ -822,13 +822,12 @@ export function getCombinedStatements(
   timeout?: moment.Duration,
 ): Promise<StatementsResponseMessage> {
   const queryStr = propsToQueryString({
-    combined: req.combined,
     start: req.start.toInt(),
     end: req.end.toInt(),
   });
   return timeoutFetch(
     serverpb.StatementsResponse,
-    `${STATUS_PREFIX}/statements?${queryStr}`,
+    `${STATUS_PREFIX}/combinedstmts?${queryStr}`,
     null,
     timeout,
   );
