@@ -86,8 +86,10 @@ table_name NOT IN (
 	'session_variables',
 	'tables',
 	'cluster_statement_statistics',
+	'statement_statistics_persisted',
 	'cluster_transaction_statistics',
 	'statement_statistics',
+	'transaction_statistics_persisted',
 	'transaction_statistics',
 	'tenant_usage_details',
   'pg_catalog_table_is_implemented'
