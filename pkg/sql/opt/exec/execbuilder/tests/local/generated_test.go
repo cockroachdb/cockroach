@@ -518,6 +518,13 @@ func TestExecBuild_srfs(
 	runExecBuildLogicTest(t, "srfs")
 }
 
+func TestExecBuild_statistics_persisted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "statistics_persisted")
+}
+
 func TestExecBuild_subquery(
 	t *testing.T,
 ) {
