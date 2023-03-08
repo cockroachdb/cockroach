@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -66,18 +68,20 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 func newReplicationStreamManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
 ) (eval.ReplicationStreamManager, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if !isAdmin {
-		return nil,
-			pgerror.New(pgcode.InsufficientPrivilege, "replication restricted to ADMIN role")
+	if !hasAdminRole {
+		if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.REPLICATION); err != nil {
+			return nil, err
+		}
 	}
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
 		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), "REPLICATION")
 	if enterpriseCheckErr != nil {

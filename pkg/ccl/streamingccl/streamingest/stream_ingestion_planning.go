@@ -157,6 +157,10 @@ func ingestionPlanHook(
 			return err
 		}
 
+		if err := sql.CanManageTenant(ctx, p); err != nil {
+			return err
+		}
+
 		streamAddress := streamingccl.StreamAddress(from)
 		streamURL, err := streamAddress.URL()
 		if err != nil {

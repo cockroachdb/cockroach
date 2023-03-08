@@ -38,7 +38,7 @@ type alterTenantSetClusterSettingNode struct {
 }
 
 // AlterTenantSetClusterSetting sets tenant level session variables.
-// Privileges: super user.
+// Privileges: MANAGETENANT.
 func (p *planner) AlterTenantSetClusterSetting(
 	ctx context.Context, n *tree.AlterTenantSetClusterSetting,
 ) (planNode, error) {
@@ -46,10 +46,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 	// privileged operation than changing local cluster settings. So we
 	// shouldn't be allowing with just the role option
 	// MODIFYCLUSTERSETTINGS.
-	//
-	// TODO(knz): Using admin authz for now; we may want to introduce a
-	// more specific role option later.
-	if err := p.RequireAdminRole(ctx, "change a tenant cluster setting"); err != nil {
+	if err := CanManageTenant(ctx, p); err != nil {
 		return nil, err
 	}
 	// Error out if we're trying to call this from a non-system tenant.
