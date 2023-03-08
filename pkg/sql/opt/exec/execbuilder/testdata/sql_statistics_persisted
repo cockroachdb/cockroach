@@ -1,0 +1,74 @@
+# LogicTest: local
+
+query T
+EXPLAIN (VERBOSE)
+SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    node_id,
+    agg_interval,
+    metadata,
+    statistics,
+    plan
+FROM
+    system.statement_statistics
+----
+  distribution: local
+  vectorized: true
+·
+  • scan
+    columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, agg_interval, metadata, statistics, plan)
+    estimated row count: 1,000 (missing stats)
+    table: statement_statistics@primary
+    spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM crdb_internal.statement_statistics_persisted
+----
+  distribution: local
+  vectorized: true
+·
+  • scan
+    columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, agg_interval, metadata, statistics, plan)
+    estimated row count: 1,000 (missing stats)
+    table: statement_statistics@primary
+    spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+SELECT
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics
+FROM
+  system.transaction_statistics
+----
+  distribution: local
+  vectorized: true
+·
+  • scan
+    columns: (aggregated_ts, fingerprint_id, app_name, node_id, agg_interval, metadata, statistics)
+    estimated row count: 1,000 (missing stats)
+    table: transaction_statistics@primary
+    spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM crdb_internal.transaction_statistics_persisted
+----
+  distribution: local
+  vectorized: true
+·
+  • scan
+    columns: (aggregated_ts, fingerprint_id, app_name, node_id, agg_interval, metadata, statistics)
+    estimated row count: 1,000 (missing stats)
+    table: transaction_statistics@primary
+    spans: FULL SCAN

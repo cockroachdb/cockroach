@@ -142,12 +142,14 @@ const (
 	CrdbInternalSessionTraceTableID
 	CrdbInternalSessionVariablesTableID
 	CrdbInternalStmtStatsTableID
+	CrdbInternalStmtStatsPersistedTableID
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
 	CrdbInternalTablesTableID
 	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTransactionStatsTableID
 	CrdbInternalTxnStatsTableID
+	CrdbInternalTxnStatsPersistedTableID
 	CrdbInternalZonesTableID
 	CrdbInternalInvalidDescriptorsTableID
 	CrdbInternalClusterDatabasePrivilegesTableID
