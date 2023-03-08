@@ -343,7 +343,7 @@ func makeSharedProcessTenantServerConfig(
 
 	// Use the internal connector instead of the network.
 	// See: https://github.com/cockroachdb/cockroach/issues/84591
-	sqlCfg.TenantKVAddrs = []string{kvServerCfg.BaseConfig.Config.AdvertiseAddr}
+	sqlCfg.TenantLoopbackAddr = kvServerCfg.BaseConfig.Config.AdvertiseAddr
 
 	// Use the same memory budget for each secondary tenant. The assumption
 	// here is that we use max 2 tenants, and that under common loads one

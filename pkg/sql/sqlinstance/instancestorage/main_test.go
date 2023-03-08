@@ -10,6 +10,7 @@
 package instancestorage_test
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"os"
 	"testing"
 
@@ -27,6 +28,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+	kvtenant.InitTestConnectorFactory()
 
 	// We care about running all of these tests both in the "regular" config
 	// and in the "COCKROACH_MR_SYSTEM_DATABASE" config. This is certainly
