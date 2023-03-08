@@ -52,7 +52,7 @@ export const mapStateToRecentStatementsPageProps = (
   state: AppState,
 ): RecentStatementsViewStateProps => ({
   statements: selectRecentStatements(state),
-  sessionsError: state.adminUI.sessions.lastError,
+  sessionsError: state.adminUI?.sessions.lastError,
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
