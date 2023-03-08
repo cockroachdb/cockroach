@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -54,9 +56,10 @@ type showTenantNode struct {
 
 // ShowTenant constructs a showTenantNode.
 func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode, error) {
-	if err := p.RequireAdminRole(ctx, "show tenant"); err != nil {
+	if err := CanManageTenant(ctx, p); err != nil {
 		return nil, err
 	}
+
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "show"); err != nil {
 		return nil, err
 	}
@@ -82,6 +85,18 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	}
 
 	return node, nil
+}
+
+func CanManageTenant(ctx context.Context, p AuthorizationAccessor) error {
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if isAdmin {
+		return nil
+	}
+
+	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGETENANT)
 }
 
 func (n *showTenantNode) startExec(params runParams) error {

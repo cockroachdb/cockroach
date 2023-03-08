@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -56,22 +58,24 @@ func (r *streamIngestManagerImpl) GetReplicationStatsAndStatus(
 func newStreamIngestManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
 ) (eval.StreamIngestManager, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if !isAdmin {
-		return nil,
-			pgerror.New(pgcode.InsufficientPrivilege, "replication restricted to ADMIN role")
-	}
-
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
 		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), "REPLICATION")
 	if enterpriseCheckErr != nil {
 		return nil, pgerror.Wrap(enterpriseCheckErr,
 			pgcode.InsufficientPrivilege, "replication requires enterprise license")
+	}
+
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.MANAGETENANT); err != nil {
+			return nil, err
+		}
 	}
 
 	return &streamIngestManagerImpl{

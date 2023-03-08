@@ -118,7 +118,7 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 	ctx := params.ctx
 
 	// Privilege check.
-	if err := p.RequireAdminRole(ctx, "update tenant capabilities"); err != nil {
+	if err := CanManageTenant(ctx, p); err != nil {
 		return err
 	}
 
