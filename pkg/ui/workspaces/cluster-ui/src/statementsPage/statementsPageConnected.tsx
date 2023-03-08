@@ -122,8 +122,7 @@ export const ConnectedStatementsPage = withRouter(
         refreshNodes: () => dispatch(nodesActions.refresh()),
         refreshUserSQLRoles: () =>
           dispatch(uiConfigActions.refreshUserSQLRoles()),
-        resetSQLStats: (req: StatementsRequest) =>
-          dispatch(sqlStatsActions.reset(req)),
+        resetSQLStats: () => dispatch(sqlStatsActions.reset()),
         dismissAlertMessage: () =>
           dispatch(
             localStorageActions.update({

@@ -41,10 +41,9 @@ describe("SQLStats sagas", () => {
     spy.mockRestore();
   });
 
-  const payload = new cockroach.server.serverpb.StatementsRequest({
+  const payload = new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(1596816675),
     end: Long.fromNumber(1596820675),
-    combined: true,
   });
   const sqlStatsResponse = new cockroach.server.serverpb.StatementsResponse({
     statements: [
