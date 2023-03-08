@@ -123,7 +123,15 @@ func TestNodesV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				base.DefaultTestStoreSpec,
+				base.DefaultTestStoreSpec,
+				base.DefaultTestStoreSpec,
+			},
+		},
+	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
@@ -147,5 +155,6 @@ func TestNodesV2(t *testing.T) {
 	for _, n := range nodesResp.Nodes {
 		require.Greater(t, int(n.NodeID), 0)
 		require.Less(t, int(n.NodeID), 4)
+		require.Equal(t, len(n.StoreMetrics), 3)
 	}
 }
