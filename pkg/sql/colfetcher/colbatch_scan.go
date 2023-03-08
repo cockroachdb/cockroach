@@ -274,9 +274,7 @@ func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 
 // GetKVCPUTime is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetKVCPUTime() time.Duration {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.cf.getKVCPUTime()
+	return s.cf.cpuStopWatch.Elapsed()
 }
 
 // Release implements the execreleasable.Releasable interface.
