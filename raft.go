@@ -913,17 +913,24 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
 		return
 	}
-	ents, err := r.raftLog.slice(r.raftLog.applied+1, r.raftLog.committed+1, noLimit)
-	if err != nil {
-		r.logger.Panicf("unexpected error getting unapplied entries (%v)", err)
-	}
-	if n := numOfPendingConf(ents); n != 0 && r.raftLog.committed > r.raftLog.applied {
-		r.logger.Warningf("%x cannot campaign at term %d since there are still %d pending configuration changes to apply", r.id, r.Term, n)
+	if r.hasUnappliedConfChanges() {
+		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
 	}
 
 	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
 	r.campaign(t)
+}
+
+func (r *raft) hasUnappliedConfChanges() bool {
+	ents, err := r.raftLog.slice(r.raftLog.applied+1, r.raftLog.committed+1, noLimit)
+	if err != nil {
+		r.logger.Panicf("unexpected error getting unapplied entries (%v)", err)
+	}
+	if n := numOfPendingConf(ents); n != 0 && r.raftLog.committed > r.raftLog.applied {
+		return true
+	}
+	return false
 }
 
 // campaign transitions the raft instance to candidate state. This must only be
