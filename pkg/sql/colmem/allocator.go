@@ -74,6 +74,10 @@ func getVecsMemoryFootprint(vecs []coldata.Vec) int64 {
 	return size
 }
 
+func init() {
+	coldata.GetBatchMemSize = GetBatchMemSize
+}
+
 // GetBatchMemSize returns the total memory footprint of the batch.
 func GetBatchMemSize(b coldata.Batch) int64 {
 	if b == nil || b == coldata.ZeroBatch {
@@ -241,6 +245,9 @@ func growCapacity(oldCapacity int, minDesiredCapacity int) int {
 // that minDesiredCapacity. If oldBatchReachedMemSize is true, then the old
 // batch is reused (the converse is not necessarily true).
 //
+// If alwaysReallocate=true is used, then the old batch is never reused and a
+// new one is always allocated.
+//
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
 // old batch.
@@ -252,6 +259,7 @@ func (a *Allocator) resetMaybeReallocate(
 	minDesiredCapacity int,
 	maxBatchMemSize int64,
 	desiredCapacitySufficient bool,
+	alwaysReallocate bool,
 ) (newBatch coldata.Batch, reallocated bool, oldBatchReachedMemSize bool) {
 	if minDesiredCapacity < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minDesiredCapacity %d", minDesiredCapacity))
@@ -304,6 +312,19 @@ func (a *Allocator) resetMaybeReallocate(
 				useOldBatch = oldBatchReachedMemSize
 			}
 		}
+		// If we want to use the old batch, but the batch reuse is not allowed,
+		// we won't use the old one.
+		if useOldBatch && alwaysReallocate {
+			useOldBatch = false
+			// Make sure that we get the footprint of the old batch so that it
+			// can be correctly released from the allocator (it is the caller's
+			// responsibility to track the memory usage of all previous
+			// batches).
+			if oldBatchMemSize == 0 {
+				oldBatchMemSize = GetBatchMemSize(oldBatch)
+				oldBatchReachedMemSize = oldBatchMemSize >= maxBatchMemSize
+			}
+		}
 		if useOldBatch {
 			reallocated = false
 			oldBatch.ResetInternalBatch()
@@ -329,7 +350,10 @@ const noMemLimit = math.MaxInt64
 func (a *Allocator) ResetMaybeReallocateNoMemLimit(
 	typs []*types.T, oldBatch coldata.Batch, requiredCapacity int,
 ) (newBatch coldata.Batch, reallocated bool) {
-	newBatch, reallocated, _ = a.resetMaybeReallocate(typs, oldBatch, requiredCapacity, noMemLimit, true /* desiredCapacitySufficient */)
+	newBatch, reallocated, _ = a.resetMaybeReallocate(
+		typs, oldBatch, requiredCapacity, noMemLimit,
+		true /* desiredCapacitySufficient */, false, /* alwaysReallocate */
+	)
 	return newBatch, reallocated
 }
 
@@ -685,6 +709,10 @@ type AccountingHelper struct {
 	// "successes" (a batch of maxCapacity not reaching the memory limit)
 	// reaches some threshold.
 	maxCapacity int
+	// alwaysReallocate, if set, indicates that a new batch must be returned on
+	// each ResetMaybeReallocate call. At the moment, it can only be set by the
+	// SetAccountingHelper.
+	alwaysReallocate bool
 }
 
 // discardBatch returns true if the batch with the given memory footprint has
@@ -770,7 +798,7 @@ func (h *AccountingHelper) ResetMaybeReallocate(
 	}
 	var oldBatchReachedMemSize bool
 	newBatch, reallocated, oldBatchReachedMemSize = h.allocator.resetMaybeReallocate(
-		typs, oldBatch, minDesiredCapacity, h.memoryLimit, desiredCapacitySufficient,
+		typs, oldBatch, minDesiredCapacity, h.memoryLimit, desiredCapacitySufficient, h.alwaysReallocate,
 	)
 	if oldBatchReachedMemSize && h.maxCapacity == 0 {
 		// The old batch has just reached the memory size for the first time, so
@@ -802,8 +830,8 @@ func (h *AccountingHelper) ResetMaybeReallocate(
 // only perform "set" operations on the coldata.Batch (i.e. neither copies nor
 // appends). It encapsulates the logic for performing the memory accounting for
 // these sets.
-// NOTE: it works under the assumption that only a single coldata.Batch is being
-// used.
+// NOTE: it works under the assumption that only the last coldata.Batch returned
+// by ResetMaybeReallocate is being modified by the caller.
 type SetAccountingHelper struct {
 	helper AccountingHelper
 
@@ -851,8 +879,17 @@ type SetAccountingHelper struct {
 
 // Init initializes the helper. The allocator must **not** be shared with any
 // other component.
-func (h *SetAccountingHelper) Init(allocator *Allocator, memoryLimit int64, typs []*types.T) {
+// - alwaysReallocate indicates whether a fresh batch must be returned on each
+// ResetMaybeReallocate call. If this option is used, the SetAccountingHelper
+// releases the memory of the previous batch from its accounting (in other words
+// only the last batch returned by ResetMaybeReallocate is accounted for by the
+// helper), so it is the caller's responsibility to track the memory usage of
+// all batches except for the last one (should the caller choose to keep them).
+func (h *SetAccountingHelper) Init(
+	allocator *Allocator, memoryLimit int64, typs []*types.T, alwaysReallocate bool,
+) {
 	h.helper.Init(allocator, memoryLimit)
+	h.helper.alwaysReallocate = alwaysReallocate
 
 	numDecimalVecs := 0
 	for vecIdx, typ := range typs {

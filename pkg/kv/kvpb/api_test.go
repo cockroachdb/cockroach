@@ -11,6 +11,7 @@
 package kvpb
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -53,7 +54,7 @@ func TestCombineResponses(t *testing.T) {
 			IntentRows: append(append([]roachpb.KeyValue(nil), left.IntentRows...), right.IntentRows...),
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(context.Background(), left, right, &BatchRequest{})
 		require.NoError(t, err)
 		require.Equal(t, expCombined, left)
 	})
@@ -69,7 +70,7 @@ func TestCombineResponses(t *testing.T) {
 			Value: left.Value.ShallowClone(),
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(context.Background(), left, right, &BatchRequest{})
 		require.NoError(t, err)
 		require.Equal(t, expCombined, left)
 	})
@@ -87,7 +88,7 @@ func TestCombineResponses(t *testing.T) {
 			Value: &roachpb.Value{RawBytes: []byte("W")},
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(context.Background(), left, right, &BatchRequest{})
 		require.Error(t, err)
 		require.Regexp(t, "can not combine", err)
 	})
@@ -105,7 +106,7 @@ func TestCombineResponses(t *testing.T) {
 			},
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(context.Background(), left, right, &BatchRequest{})
 		require.Error(t, err)
 		require.Regexp(t, "can not combine", err)
 	})
@@ -153,10 +154,10 @@ func TestCombinable(t *testing.T) {
 			IntentRows: append(append([]roachpb.KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
 		}
 
-		if err := sr1.combine(sr2); err != nil {
+		if err := sr1.combine(context.Background(), sr2, &BatchRequest{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := sr1.combine(&ScanResponse{}); err != nil {
+		if err := sr1.combine(context.Background(), &ScanResponse{}, &BatchRequest{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -181,10 +182,10 @@ func TestCombinable(t *testing.T) {
 		wantedDR := &DeleteRangeResponse{
 			Keys: []roachpb.Key{[]byte("1"), []byte("2")},
 		}
-		if err := dr2.combine(dr3); err != nil {
+		if err := dr2.combine(context.Background(), dr3, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := dr1.combine(dr2); err != nil {
+		if err := dr1.combine(context.Background(), dr2, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -223,8 +224,8 @@ func TestCombinable(t *testing.T) {
 				{RangeID: 2, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "bar"},
 			},
 		}
-		require.NoError(t, v1.combine(v2))
-		require.NoError(t, v1.combine(v3))
+		require.NoError(t, v1.combine(context.Background(), v2, nil))
+		require.NoError(t, v1.combine(context.Background(), v3, nil))
 		require.EqualValues(t, &AdminVerifyProtectedTimestampResponse{
 			Verified: false,
 			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
@@ -276,8 +277,8 @@ func TestCombinable(t *testing.T) {
 			ReplicasScatteredBytes: 84,
 		}
 
-		require.NoError(t, ar1.combine(ar2))
-		require.NoError(t, ar1.combine(&AdminScatterResponse{}))
+		require.NoError(t, ar1.combine(context.Background(), ar2, nil))
+		require.NoError(t, ar1.combine(context.Background(), &AdminScatterResponse{}, nil))
 
 		if !reflect.DeepEqual(ar1, wantedAR) {
 			t.Errorf("wanted %v, got %v", wantedAR, ar1)
