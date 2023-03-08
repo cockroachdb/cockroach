@@ -149,6 +149,10 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 
 sysctl --system  # reload sysctl settings
 
+# set hostname according to the name used by roachprod. There's host
+# validation logic that relies on this -- see comment on cluster_synced.go
+sudo hostnamectl set-hostname {{.VMName}}
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -158,13 +162,16 @@ sudo touch /mnt/data1/.roachprod-initialized
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error) {
+func writeStartupScript(name string, extraMountOpts string, useMultiple bool) (string, error) {
 	type tmplParams struct {
+		VMName           string
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 	}
 
-	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}
+	args := tmplParams{
+		VMName: name, ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple,
+	}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
 	if err != nil {

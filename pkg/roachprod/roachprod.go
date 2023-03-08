@@ -1356,7 +1356,7 @@ func Logs(l *logger.Logger, clusterName, dest, username string, logsOpts LogsOpt
 		return err
 	}
 	return c.Logs(
-		logsOpts.Dir, dest, username, logsOpts.Filter, logsOpts.ProgramFilter,
+		l, logsOpts.Dir, dest, username, logsOpts.Filter, logsOpts.ProgramFilter,
 		logsOpts.Interval, logsOpts.From, logsOpts.To, logsOpts.Out,
 	)
 }

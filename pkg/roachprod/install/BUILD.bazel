@@ -29,6 +29,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
+        "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/local",
