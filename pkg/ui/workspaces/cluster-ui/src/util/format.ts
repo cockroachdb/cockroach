@@ -216,6 +216,9 @@ export function Count(count: number): string {
 
 // limitText returns a shortened form of text that surpasses a given limit
 export const limitText = (text: string, limit: number): string => {
+  if (!text) {
+    return "";
+  }
   return text?.length > limit ? text.slice(0, limit - 3).concat("...") : text;
 };
 
@@ -225,7 +228,13 @@ export const limitStringArray = (arr: string[], limit: number): string => {
     return "";
   }
 
-  if (arr.length == 1 || arr[0].length > limit) {
+  // Remove null and undefined entries in the array.
+  arr = arr.filter(n => n);
+  if (arr.length == 0) {
+    return "";
+  }
+
+  if (arr.length == 1 || arr[0]?.length > limit) {
     return limitText(arr[0], limit);
   }
 
