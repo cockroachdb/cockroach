@@ -85,7 +85,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 	return nil
 }
 
-var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
+var reqMethodToCap = map[kvpb.Method]tenantcapabilities.BoolCapabilityID{
 	// The following requests are authorized for all workloads.
 	kvpb.AddSSTable:         noCapCheckNeeded,
 	kvpb.Barrier:            noCapCheckNeeded,
@@ -145,7 +145,7 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 }
 
 const (
-	noCapCheckNeeded = iota + tenantcapabilities.MaxCapabilityID + 1
+	noCapCheckNeeded = iota + tenantcapabilities.MaxBoolCapabilityID + 1
 	onlySystemTenant
 )
 

@@ -212,8 +212,10 @@ tenant_id  capability_id          capability_value
 1          can_admin_split        false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false
+1          span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 5          can_admin_split        true
 5          can_view_node_info     false
 5          can_view_tsdb_metrics  false
+5          span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 subtest end

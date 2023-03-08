@@ -4,6 +4,7 @@ SHOW TENANT [10] WITH CAPABILITIES
 10 tenant-10 ready none can_admin_split false
 10 tenant-10 ready none can_view_node_info false
 10 tenant-10 ready none can_view_tsdb_metrics false
+10 tenant-10 ready none span_config_bounds {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 exec-sql-tenant
 CREATE TABLE t(a INT)

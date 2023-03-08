@@ -60,15 +60,14 @@ func (p *planner) AlterTenantCapability(
 
 		var desiredType *types.T
 		var missingValueDefault, revokeValue tree.TypedExpr
-		capType := capID.CapabilityType()
-		switch capType {
-		case tenantcapabilities.Bool:
+		switch typedCapID := capID.(type) {
+		case tenantcapabilities.BoolCapabilityID:
 			desiredType = types.Bool
 			// Bool capabilities are a special case that default to true if no value is provided.
 			missingValueDefault = tree.DBoolTrue
 			revokeValue = tree.DBoolFalse
 		default:
-			return nil, errors.AssertionFailedf("programming error: capability type not handled: %d capability ID: %d", capType, capID)
+			return nil, errors.AssertionFailedf("programming error: capability type not handled: %d capability ID: %d", typedCapID, capID)
 		}
 
 		if n.IsRevoke {
@@ -148,21 +147,16 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("programming error: %q", capability.Name)
 		}
 
-		var value interface{}
-		capType := capID.CapabilityType()
-		switch capType {
-		case tenantcapabilities.Bool:
+		switch typedCapID := capID.(type) {
+		case tenantcapabilities.BoolCapabilityID:
 			boolValue, err := paramparse.DatumAsBool(ctx, p.EvalContext(), capability.Name, typedExpr)
 			if err != nil {
 				return err
 			}
-			value = boolValue
-
+			dst.SetBool(typedCapID, boolValue)
 		default:
-			return errors.AssertionFailedf("programming error: capability type not handled: %d capability ID: %d", capType, capID)
+			return errors.AssertionFailedf("programming error: capability type not handled: %d capability ID: %d", typedCapID, capID)
 		}
-
-		dst.Cap(capID).Set(value)
 	}
 
 	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), tenantInfo)

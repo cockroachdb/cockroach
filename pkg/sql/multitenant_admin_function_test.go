@@ -57,8 +57,8 @@ type testClusterCfg struct {
 	numNodes            int
 	setupClusterSetting *settings.BoolSetting
 	queryClusterSetting *settings.BoolSetting
-	setupCapability     tenantcapabilities.CapabilityID
-	queryCapability     tenantcapabilities.CapabilityID
+	setupCapability     tenantcapabilities.BoolCapabilityID
+	queryCapability     tenantcapabilities.BoolCapabilityID
 }
 
 func createTestClusterArgs(numReplicas, numVoters int32) base.TestClusterArgs {
@@ -241,9 +241,9 @@ type testCase struct {
 	queryClusterSetting *settings.BoolSetting
 	// Used for tests that have a capability prereq
 	// (eq SPLIT AT is required for UNSPLIT AT).
-	setupCapability tenantcapabilities.CapabilityID
+	setupCapability tenantcapabilities.BoolCapabilityID
 	// Capability required for secondary tenant query.
-	queryCapability tenantcapabilities.CapabilityID
+	queryCapability tenantcapabilities.BoolCapabilityID
 }
 
 func (tc testCase) runTest(
@@ -307,32 +307,31 @@ func (tc testCase) runTest(
 	var waitForTenantCapabilitiesFns []func()
 	setCapabilities := func(
 		tenantID roachpb.TenantID,
-		capabilityIDs ...tenantcapabilities.CapabilityID,
+		rawCapIDs ...tenantcapabilities.BoolCapabilityID,
 	) {
 		// Filter out empty capabilities.
-		var caps []tenantcapabilities.CapabilityID
-		for _, capabilityID := range capabilityIDs {
-			if capabilityID == 0 {
+		var capIDs []tenantcapabilities.CapabilityID
+		for _, capID := range rawCapIDs {
+			if capID == 0 {
 				// This can happen if e.g. setupCapability / queryCapability
 				// are unset in a test.
 				continue
 			}
-			caps = append(caps, capabilityID)
+			capIDs = append(capIDs, capID)
 		}
-		capabilityIDs = caps
-		if len(capabilityIDs) > 0 {
+		if len(capIDs) > 0 {
 			var builder strings.Builder
-			for i, capabilityID := range capabilityIDs {
+			for i, capID := range capIDs {
 				if i > 0 {
 					builder.WriteString(", ")
 				}
-				builder.WriteString(capabilityID.String())
+				builder.WriteString(capID.String())
 			}
 			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s", builder.String())
 			_, err := systemDB.ExecContext(ctx, query, tenantID.ToUint64())
 			require.NoError(t, err, query)
 			waitForTenantCapabilitiesFns = append(waitForTenantCapabilitiesFns, func() {
-				testCluster.WaitForTenantCapabilities(t, tenantID, capabilityIDs...)
+				testCluster.WaitForTenantCapabilities(t, tenantID, capIDs...)
 			})
 		}
 	}

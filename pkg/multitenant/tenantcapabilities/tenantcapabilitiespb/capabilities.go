@@ -16,65 +16,59 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// boolCapValue is a wrapper around bool that ensures that values can
+func (t *TenantCapabilities) getBoolRef(capID tenantcapabilities.BoolCapabilityID) *bool {
+	switch capID {
+	case tenantcapabilities.CanAdminSplit:
+		return &t.CanAdminSplit
+	case tenantcapabilities.CanViewNodeInfo:
+		return &t.CanViewNodeInfo
+	case tenantcapabilities.CanViewTSDBMetrics:
+		return &t.CanViewTSDBMetrics
+	default:
+		panic(errors.AssertionFailedf("unknown capability: %q", capID))
+	}
+}
+
+// GetBool implements the tenantcapabilities.TenantCapabilities interface.
+func (t *TenantCapabilities) GetBool(capID tenantcapabilities.BoolCapabilityID) bool {
+	return *t.getBoolRef(capID)
+}
+
+// SetBool implements the tenantcapabilities.TenantCapabilities interface.
+func (t *TenantCapabilities) SetBool(capID tenantcapabilities.BoolCapabilityID, value bool) {
+	*t.getBoolRef(capID) = value
+}
+
+// boolValue is a wrapper around bool that ensures that values can
 // be included in reportables.
-type boolCapValue bool
+type boolValue bool
 
-func (b boolCapValue) String() string { return redact.Sprint(b).StripMarkers() }
-func (b boolCapValue) SafeFormat(p redact.SafePrinter, verb rune) {
-	p.Print(redact.Safe(bool(b)))
+func (v boolValue) String() string { return redact.Sprint(v).StripMarkers() }
+func (v boolValue) SafeFormat(p redact.SafePrinter, verb rune) {
+	p.Print(redact.Safe(bool(v)))
 }
 
-// Unwrap implements the tenantcapabilities.Value interface.
-func (b boolCapValue) Unwrap() interface{} { return bool(b) }
-
-// boolCap is an accessor struct for boolean capabilities.
-type boolCap struct {
-	cap *bool
+func (t *TenantCapabilities) GetBoolValue(
+	capID tenantcapabilities.BoolCapabilityID,
+) tenantcapabilities.Value {
+	return boolValue(t.GetBool(capID))
 }
 
-// Get implements the tenantcapabilities.Capability interface.
-func (b boolCap) Get() tenantcapabilities.Value {
-	return boolCapValue(*b.cap)
+// spanConfigValue is a wrapper around bool that ensures that values can
+// be included in reportables.
+type spanConfigValue SpanConfigBounds
+
+func (v spanConfigValue) String() string { return redact.Sprint(v).StripMarkers() }
+func (v spanConfigValue) SafeFormat(p redact.SafePrinter, verb rune) {
+	p.Print(redact.Safe(SpanConfigBounds(v)))
 }
 
-// Set implements the tenantcapabilities.Capability interface.
-func (b boolCap) Set(val interface{}) {
-	bval, ok := val.(bool)
-	if !ok {
-		panic(errors.AssertionFailedf("invalid value type: %T", val))
+func (t *TenantCapabilities) GetSpanConfigValue(
+	tenantcapabilities.SpanConfigCapabilityID,
+) tenantcapabilities.Value {
+	spanConfigBounds := SpanConfigBounds{}
+	if t.SpanConfigBounds != nil {
+		spanConfigBounds = *t.SpanConfigBounds
 	}
-	*b.cap = bval
-}
-
-// For implements the tenantcapabilities.TenantCapabilities interface.
-func (t *TenantCapabilities) Cap(
-	capabilityID tenantcapabilities.CapabilityID,
-) tenantcapabilities.Capability {
-	switch capabilityID {
-	case tenantcapabilities.CanAdminSplit:
-		return boolCap{&t.CanAdminSplit}
-	case tenantcapabilities.CanViewNodeInfo:
-		return boolCap{&t.CanViewNodeInfo}
-	case tenantcapabilities.CanViewTSDBMetrics:
-		return boolCap{&t.CanViewTSDBMetrics}
-
-	default:
-		panic(errors.AssertionFailedf("unknown capability: %q", capabilityID.String()))
-	}
-}
-
-// GetBool implements the tenantcapabilities.TenantCapabilities interface. It is an optimization.
-func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityID) bool {
-	switch capabilityID {
-	case tenantcapabilities.CanAdminSplit:
-		return t.CanAdminSplit
-	case tenantcapabilities.CanViewNodeInfo:
-		return t.CanViewNodeInfo
-	case tenantcapabilities.CanViewTSDBMetrics:
-		return t.CanViewTSDBMetrics
-
-	default:
-		panic(errors.AssertionFailedf("unknown or non-bool capability: %q", capabilityID.String()))
-	}
+	return spanConfigValue(spanConfigBounds)
 }

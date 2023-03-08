@@ -7,7 +7,8 @@ go_library(
     srcs = [
         "capabilities.go",
         "testingknobs.go",
-        ":capabilityid-stringer",  # keep
+        ":boolcapabilityid-stringer",  # keep
+        ":spanconfigcapabilityid-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
     visibility = ["//visibility:public"],
@@ -22,10 +23,17 @@ go_library(
 )
 
 stringer(
-    name = "capabilityid-stringer",
+    name = "boolcapabilityid-stringer",
     src = "capabilities.go",
     additional_args = ["--linecomment"],
-    typ = "CapabilityID",
+    typ = "BoolCapabilityID",
+)
+
+stringer(
+    name = "spanconfigcapabilityid-stringer",
+    src = "capabilities.go",
+    additional_args = ["--linecomment"],
+    typ = "SpanConfigCapabilityID",
 )
 
 get_x_data(name = "get_x_data")

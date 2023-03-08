@@ -55,16 +55,15 @@ func ParseTenantCapabilityUpsert(
 	caps := tenantcapabilitiespb.TenantCapabilities{}
 	for _, arg := range d.CmdArgs {
 		if capID, ok := tenantcapabilities.CapabilityIDFromString(arg.Key); ok {
-			capType := capID.CapabilityType()
-			switch capType {
-			case tenantcapabilities.Bool:
+			switch typedCapID := capID.(type) {
+			case tenantcapabilities.BoolCapabilityID:
 				b, err := strconv.ParseBool(arg.Vals[0])
 				if err != nil {
 					return roachpb.TenantID{}, tenantcapabilitiespb.TenantCapabilities{}, err
 				}
-				caps.Cap(capID).Set(b)
+				caps.SetBool(typedCapID, b)
 			default:
-				t.Fatalf("unknown type %q", capType)
+				t.Fatalf("unknown type %q", typedCapID)
 			}
 		}
 	}
