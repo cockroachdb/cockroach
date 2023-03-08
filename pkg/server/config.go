@@ -501,6 +501,10 @@ type SQLConfig struct {
 	// Only applies when the SQL server is deployed individually.
 	TenantKVAddrs []string
 
+	// TenantLoopbackAddr is the address to use for the tenant's loopback connection.
+	// It only applies when in a shared-process configuration.
+	TenantLoopbackAddr string
+
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
 
