@@ -83,9 +83,13 @@ func dropTenantInternal(
 	}
 
 	if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		if ignoreServiceMode {
+			// Compatibility with CC serverless use of crdb_internal.destroy_tenant().
+			info.ServiceMode = mtinfopb.ServiceModeNone
+		}
 		// We can only check the service mode after upgrading to a version
 		// that supports the service mode column.
-		if !ignoreServiceMode && info.ServiceMode != mtinfopb.ServiceModeNone {
+		if info.ServiceMode != mtinfopb.ServiceModeNone {
 			return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot drop tenant %q (%d) in service mode %v", info.Name, tenID, info.ServiceMode),
 				"Use ALTER TENANT STOP SERVICE before DROP TENANT.")

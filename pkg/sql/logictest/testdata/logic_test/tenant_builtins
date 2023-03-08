@@ -12,6 +12,10 @@ SELECT crdb_internal.create_tenant(5)
 ----
 5
 
+# Verify that DROP TENANT is blocked when the service is not NONE.
+statement error cannot drop tenant.*in service mode external
+DROP TENANT [5]
+
 # create_tenant auto-sets the service for backward-compatibility.
 # Reset it here so the tests below don't get confused.
 statement ok
@@ -245,3 +249,19 @@ DROP TENANT [1]
 
 statement error only users with the admin role are allowed to gc tenant
 SELECT crdb_internal.gc_tenant(314)
+
+subtest regression_97873
+
+user root
+
+# Verify that destroy_tenant works even in the default service mode,
+# for compatibility with CC serverless.
+query I
+SELECT crdb_internal.create_tenant(97873)
+----
+97873
+
+query I
+SELECT crdb_internal.destroy_tenant(97873)
+----
+97873
