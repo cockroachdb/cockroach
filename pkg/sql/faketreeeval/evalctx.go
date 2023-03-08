@@ -548,6 +548,13 @@ func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
 }
 
+// CheckPrivilege is part of the eval.SessionAccessor interface.
+func (ep *DummySessionAccessor) CheckPrivilege(
+	_ context.Context, _ privilege.Object, _ privilege.Kind,
+) error {
+	return errors.WithStack(errEvalSessionVar)
+}
+
 // HasRoleOption is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,

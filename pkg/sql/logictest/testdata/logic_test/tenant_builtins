@@ -265,7 +265,7 @@ SELECT crdb_internal.create_tenant(314)
 statement error only users with the admin role are allowed to create tenant
 SELECT crdb_internal.create_tenant('not-allowed')
 
-statement error only users with the admin role are allowed to drop tenant
+statement error user testuser does not have MANAGETENANT privilege on global
 DROP TENANT [1]
 
 statement error only users with the admin role are allowed to gc tenant

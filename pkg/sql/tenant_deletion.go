@@ -32,7 +32,18 @@ import (
 func (p *planner) DropTenantByID(
 	ctx context.Context, tenID uint64, synchronousImmediateDrop, ignoreServiceMode bool,
 ) error {
-	if err := p.validateDropTenant(ctx); err != nil {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("DROP TENANT")
+	}
+
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop"); err != nil {
+		return err
+	}
+
+	// Note that we do a follow-up check for ADMIN after looking
+	// up the tenant record to ensure that only admins can delete
+	// tenants that aren't part of a replication stream.
+	if err := canManageTenant(ctx, p); err != nil {
 		return err
 	}
 
@@ -40,6 +51,14 @@ func (p *planner) DropTenantByID(
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
+
+	// If this isn't a replicating tenant, require ADMIN to drop it.
+	if info.TenantReplicationJobID == 0 {
+		if err := p.RequireAdminRole(ctx, "DROP TENANT that is online"); err != nil {
+			return err
+		}
+	}
+
 	return dropTenantInternal(
 		ctx,
 		p.ExecCfg().Settings,
@@ -51,18 +70,6 @@ func (p *planner) DropTenantByID(
 		synchronousImmediateDrop,
 		ignoreServiceMode,
 	)
-}
-
-func (p *planner) validateDropTenant(ctx context.Context) error {
-	if p.EvalContext().TxnReadOnly {
-		return readOnlyError("DROP TENANT")
-	}
-
-	const op = "drop"
-	if err := p.RequireAdminRole(ctx, "drop tenant"); err != nil {
-		return err
-	}
-	return rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op)
 }
 
 func dropTenantInternal(

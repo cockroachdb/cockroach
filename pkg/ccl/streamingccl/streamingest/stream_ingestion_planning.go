@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -83,6 +85,18 @@ func ingestionTypeCheck(
 	}
 
 	return true, nil, nil
+}
+
+func canControlReplicationStream(ctx context.Context, p sql.AuthorizationAccessor) error {
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if isAdmin {
+		return nil
+	}
+
+	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGETENANT)
 }
 
 func ingestionPlanHook(
@@ -154,6 +168,10 @@ func ingestionPlanHook(
 			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			"CREATE TENANT FROM REPLICATION",
 		); err != nil {
+			return err
+		}
+
+		if err := canControlReplicationStream(ctx, p); err != nil {
 			return err
 		}
 
