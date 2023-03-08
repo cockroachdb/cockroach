@@ -991,7 +991,7 @@ func (p *planner) preparePlannerForCopy(
 		// been handed a mechanism to do so.
 		// If this is the finalBatch, then the connExecutor state machine takes
 		// care of this cleanup.
-		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled && !finalBatch {
+		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled /*&& !finalBatch*/ {
 			defer txnOpt.resetExtraTxnState(ctx)
 
 			if prevErr == nil {
