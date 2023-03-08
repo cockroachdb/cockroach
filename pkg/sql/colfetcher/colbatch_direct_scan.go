@@ -182,6 +182,7 @@ func NewColBatchDirectScan(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
+	estimatedRowCount uint64,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchDirectScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
@@ -202,6 +203,9 @@ func NewColBatchDirectScan(
 	// issued and even after it was responded to. In theory, we (the client)
 	// should be able to modify the BatchRequest, but alas.
 	fetchSpec := spec.FetchSpec
+	fetchSpec.TraceKV = flowCtx.TraceKV
+	fetchSpec.EstimatedRowCount = estimatedRowCount
+	fetchSpec.LimitHint = uint64(base.limitHint)
 	fetcher := row.NewDirectKVBatchFetcher(
 		flowCtx.Txn,
 		bsHeader,

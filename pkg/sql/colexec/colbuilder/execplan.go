@@ -853,14 +853,6 @@ func NewColOperator(
 					if !flowCtx.EvalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1_KVDirectColumnarScans) {
 						return false
 					}
-					// We currently don't use the direct scans if TraceKV is
-					// enabled (due to not being able to tell the KV server
-					// about it). One idea would be to include this boolean into
-					// the fetchpb.IndexFetchSpec.
-					// TODO(yuzefovich, 23.1): support TraceKV option.
-					if flowCtx.TraceKV {
-						return false
-					}
 					// The current implementation of non-default locking
 					// strength as well as of SKIP LOCKED wait policy require
 					// being able to access to the full keys after the
@@ -911,7 +903,7 @@ func NewColOperator(
 				if canUseDirectScan() {
 					scanOp, resultTypes, err = colfetcher.NewColBatchDirectScan(
 						ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-						flowCtx, core.TableReader, post, args.TypeResolver,
+						flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
 					)
 					if err != nil {
 						return r, err

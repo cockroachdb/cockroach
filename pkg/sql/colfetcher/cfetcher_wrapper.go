@@ -236,13 +236,11 @@ func newCFetcherWrapper(
 	const collectStats = false
 	// We cannot reuse batches if we're not serializing the response.
 	alwaysReallocate := !mustSerialize
-	// TODO(yuzefovich, 23.1): think through estimatedRowCount (#94850) and
-	// traceKV arguments.
 	fetcher.cFetcherArgs = cFetcherArgs{
 		memoryLimit,
-		0,     /* estimatedRowCount */
-		false, /* traceKV */
-		true,  /* singleUse */
+		fetchSpec.EstimatedRowCount,
+		fetchSpec.TraceKV,
+		true, /* singleUse */
 		collectStats,
 		alwaysReallocate,
 	}
@@ -270,6 +268,7 @@ func newCFetcherWrapper(
 	if err = fetcher.Init(allocator, nextKVer, tableArgs); err != nil {
 		return nil, err
 	}
+	fetcher.machine.limitHint = int(fetchSpec.LimitHint)
 	// TODO(yuzefovich, 23.1): consider pooling the allocations of some objects.
 	wrapper := cFetcherWrapper{
 		fetcher:            fetcher,

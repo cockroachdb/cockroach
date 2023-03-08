@@ -131,4 +131,19 @@ message IndexFetchSpec {
   //
   // Any other column IDs present in the fetched KVs will be ignored.
   repeated Column fetched_columns = 15 [(gogoproto.nullable) = false];
+
+  // TraceKV if set indicates that the fetcher should add messages about KVs
+  // that are fetched during the requests' evaluation.
+  optional bool trace_kv = 17 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceKV"];
+
+  // EstimatedRowCount contains the number of rows that the optimizer expects
+  // will need to be fetched from the index across all requests, or 0 if the
+  // estimate wasn't populated. This is only used as a hint to size the columnar
+  // batches created by the cFetcher.
+  optional uint64 estimated_row_count = 18 [(gogoproto.nullable) = false];
+
+  // LimitHint is a hint as to the number of rows that the caller expects to be
+  // returned from the fetch across all requests. This is only used as a hint to
+  // size the columnar batches created by the cFetcher.
+  optional uint64 limit_hint = 19 [(gogoproto.nullable) = false];
 }
