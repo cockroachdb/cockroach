@@ -3139,3 +3139,330 @@ project
       │    └── fd: (1)-->(2,3)
       └── filters
            └── x:1 < 10 [type=bool, outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+
+# Tests for when stats are stale.
+
+exec-ddl
+CREATE TABLE stale (
+  w STRING PRIMARY KEY,
+  x STRING,
+  y STRING,
+  z STRING,
+  UNIQUE (x, y),
+  INDEX (x, z)
+)
+----
+
+exec-ddl
+ALTER TABLE stale INJECT STATISTICS '[
+    {
+        "avg_size": 7,
+        "columns": [
+            "x"
+        ],
+        "created_at": "2023-03-08 01:51:41.258198",
+        "distinct_count": 10,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo10"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo3"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo4"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo5"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo6"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo7"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo8"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "foo9"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 110
+    },
+    {
+        "avg_size": 16,
+        "columns": [
+            "x",
+            "y"
+        ],
+        "created_at": "2023-03-08 01:51:41.258198",
+        "distinct_count": 110,
+        "histo_col_type": "",
+        "null_count": 0,
+        "row_count": 110
+    },
+    {
+        "avg_size": 13,
+        "columns": [
+            "x",
+            "z"
+        ],
+        "created_at": "2023-03-08 01:51:41.258198",
+        "distinct_count": 10,
+        "histo_col_type": "",
+        "null_count": 0,
+        "row_count": 110
+    },
+    {
+        "avg_size": 9,
+        "columns": [
+            "y"
+        ],
+        "created_at": "2023-03-08 01:51:41.258198",
+        "distinct_count": 11,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1000"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1001"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1002"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1003"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1004"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1005"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1006"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1007"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1008"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1009"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 10,
+                "num_range": 0,
+                "upper_bound": "bar1010"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 110
+    },
+    {
+        "avg_size": 7,
+        "columns": [
+            "z"
+        ],
+        "created_at": "2023-03-08 01:51:41.258198",
+        "distinct_count": 10,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz10"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz3"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz4"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz5"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz6"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz7"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz8"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 11,
+                "num_range": 0,
+                "upper_bound": "baz9"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 110
+    }
+]'
+----
+
+# When optimizer_always_use_histograms is disabled, we may choose the non-unique
+# index.
+opt set=optimizer_always_use_histograms=false
+SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
+----
+limit
+ ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── select
+ │    ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=2, distinct(2)=1, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=2, null(2,3)=0]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3,4), (3)-->(1,4)
+ │    ├── limit hint: 1.00
+ │    ├── index-join stale
+ │    │    ├── columns: w:1(string!null) x:2(string) y:3(string) z:4(string)
+ │    │    ├── stats: [rows=2.2e-08]
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
+ │    │    ├── limit hint: 0.00
+ │    │    └── scan stale@stale_x_z_idx
+ │    │         ├── columns: w:1(string!null) x:2(string!null) z:4(string)
+ │    │         ├── constraint: /2/4/1: [/'bar1' - /'bar1']
+ │    │         ├── stats: [rows=2.2e-08, distinct(2)=2.2e-08, null(2)=0]
+ │    │         │   histogram(2)=
+ │    │         ├── key: (1)
+ │    │         ├── fd: ()-->(2), (1)-->(4)
+ │    │         └── limit hint: 0.00
+ │    └── filters
+ │         └── (y:3 = 'bar1000') OR (y:3 = 'bar1001') [type=bool, outer=(3), constraints=(/3: [/'bar1000' - /'bar1000'] [/'bar1001' - /'bar1001']; tight)]
+ └── 1 [type=int]
+
+# When optimizer_always_use_histograms is enabled, we should choose the unique
+# index.
+opt set=optimizer_always_use_histograms=true
+SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
+----
+index-join stale
+ ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=2.2e-08]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── scan stale@stale_x_y_key
+      ├── columns: w:1(string!null) x:2(string!null) y:3(string!null)
+      ├── constraint: /2/3
+      │    ├── [/'bar1'/'bar1000' - /'bar1'/'bar1000']
+      │    └── [/'bar1'/'bar1001' - /'bar1'/'bar1001']
+      ├── limit: 1
+      ├── stats: [rows=2.2e-08]
+      ├── key: ()
+      └── fd: ()-->(1-3)

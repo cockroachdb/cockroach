@@ -343,6 +343,9 @@ message LocalOnlySessionData {
   // follower reads to dynamically detect and report a query's home region
   // when the enforce_home_region session setting is also true.
   bool enforce_home_region_follower_reads_enabled = 93;
+  // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
+  // always uses histograms to calculate statistics if available.
+  bool optimizer_always_use_histograms = 94;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
