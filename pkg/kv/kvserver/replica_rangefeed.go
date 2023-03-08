@@ -61,6 +61,19 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// RangeFeedSmearInterval controls the frequency with which the rangefeed
+// updater loop wakes up to deliver closed timestamp updates to rangefeeds.
+var RangeFeedSmearInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.closed_timestamp_smear_interval",
+	"the target interval at which the rangefeed updater job wakes up to deliver"+
+		"closed-timestamp updates to some rangefeeds; "+
+		"set to 0 to use kv.rangefeed.closed_timestamp_refresh_interval"+
+		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
+	0,
+	settings.NonNegativeDuration,
+)
+
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
