@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -508,7 +507,6 @@ func shouldUseDelRange(
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
 	return details.Tenant == nil &&
-		s.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob) &&
 		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
 			// Allow this testing knob to override the storage setting, for convenience.
 			knobs.SkipWaitingForMVCCGC)
