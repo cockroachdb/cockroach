@@ -20,7 +20,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -37,9 +36,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
-
-// Dummy import to pull in kvtenantccl. This allows us to start tenants.
-var _ = kvtenantccl.Connector{}
 
 func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()

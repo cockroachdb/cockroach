@@ -65,10 +65,10 @@ go_test(
     embed = [":instancestorage"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
