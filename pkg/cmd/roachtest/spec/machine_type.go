@@ -12,13 +12,16 @@ package spec
 
 import "fmt"
 
-// AWSMachineType selects a machine type given the desired number of CPUs.
-func AWSMachineType(cpus int, highmem bool) string {
+// AWSMachineType selects a machine type given the desired number of CPUs and
+// memory per CPU ratio.
+func AWSMachineType(cpus int, mem MemPerCPU) string {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
 	family := "c5d" // 2 GB RAM per CPU
-	if highmem {
+	if mem == High {
 		family = "m5d" // 4 GB RAM per CPU
+	} else if mem == Low {
+		panic("low memory per CPU not implemented for AWS")
 	}
 
 	var size string
@@ -49,26 +52,37 @@ func AWSMachineType(cpus int, highmem bool) string {
 	return fmt.Sprintf("%s.%s", family, size)
 }
 
-// GCEMachineType selects a machine type given the desired number of CPUs.
-func GCEMachineType(cpus int, highmem bool) string {
+// GCEMachineType selects a machine type given the desired number of CPUs and
+// memory per CPU ratio.
+func GCEMachineType(cpus int, mem MemPerCPU) string {
 	// TODO(peter): This is awkward: at or below 16 cpus, use n1-standard so that
 	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
 	// determined (you can't request any arbitrary amount of RAM).
 	series := "n1"
-	kind := "standard" // 3.75 GB RAM per CPU
-	if highmem {
+	var kind string
+	switch mem {
+	case Auto:
+		if cpus > 16 {
+			kind = "highcpu"
+		} else {
+			kind = "standard"
+		}
+	case Standard:
+		kind = "standard" // 3.75 GB RAM per CPU
+	case High:
 		kind = "highmem" // 6.5 GB RAM per CPU
-	} else if cpus > 16 {
+	case Low:
 		kind = "highcpu" // 0.9 GB RAM per CPU
 	}
 	return fmt.Sprintf("%s-%s-%d", series, kind, cpus)
 }
 
-// AzureMachineType selects a machine type given the desired number of CPUs.
-func AzureMachineType(cpus int, highmem bool) string {
-	if highmem {
-		panic("highmem not implemented for Azure")
+// AzureMachineType selects a machine type given the desired number of CPUs and
+// memory per CPU ratio.
+func AzureMachineType(cpus int, mem MemPerCPU) string {
+	if mem != Auto && mem != Standard {
+		panic(fmt.Sprintf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem))
 	}
 	switch {
 	case cpus <= 2:
