@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -287,8 +288,77 @@ func (c *SyncedCluster) roachprodEnvValue(node Node) string {
 func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 	escaped := strings.Replace(c.roachprodEnvValue(node), "/", "\\/", -1)
 	// We look for either a trailing space or a slash (in which case, we tolerate
-	// any remaining tag suffix).
-	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
+	// any remaining tag suffix). ROACHPROD may also be the last environment
+	// variable declared, so we also account for that.
+	return fmt.Sprintf(`(ROACHPROD=%[1]s$|ROACHPROD=%[1]s[ \/])`, escaped)
+}
+
+// validateHostnameCmd wraps the command given with a check that the
+// remote node is still part of the `SyncedCluster`. When `cmd` is
+// empty, the command returned can be used to validate whether the
+// host matches the name expected by roachprod, and can be used to
+// validate the contents of the cache for that cluster.
+//
+// Since `SyncedCluster` is created from a potentially stale cache, it
+// is possible for the following events to happen:
+//
+// Client 1:
+//   - cluster A is created and information is persisted in roachprod's cache.
+//   - cluster's A lifetime expires, VMs are destroyed.
+//
+// Client 2
+//   - cluster B is created; public IP of one of the VMs of cluster
+//     A is reused and assigned to one of cluster B's VMs.
+//
+// Client 1:
+//   - command with side-effects is run on cluster A (e.g.,
+//     `roachprod stop`). Public IP now belongs to a VM in cluster
+//     B. Client unknowingly disturbs cluster B, thinking it's cluster A.
+//
+// Client 2:
+//   - notices that cluster B is behaving strangely (e.g., cockroach
+//     process died). A lot of time is spent trying to debug the
+//     issue.
+//
+// This scenario is possible and has happened a number of times in the
+// past (for one such occurrence, see #97100). A particularly
+// problematic instance of this bug happens when "cluster B" is
+// running a roachtest. This interaction leads to issues that are hard
+// to debug or make sense of, which ultimately wastes a lot of
+// engineering time.
+//
+// By wrapping every command with a hostname check as is done here, we
+// ensure that the cached cluster information is still correct.
+func (c *SyncedCluster) validateHostnameCmd(cmd string, node Node) string {
+	isValidHost := fmt.Sprintf("[[ `hostname` == '%s' ]]", vm.Name(c.Name, int(node)))
+	errMsg := fmt.Sprintf("expected host to be part of %s, but is `hostname`", c.Name)
+	elseBranch := "fi"
+	if cmd != "" {
+		elseBranch = fmt.Sprintf(`
+else
+    %s
+fi
+`, cmd)
+	}
+
+	return fmt.Sprintf(`
+if ! %s; then
+    echo "%s"
+    exit 1
+%s
+`, isValidHost, errMsg, elseBranch)
+}
+
+// validateHost will run `validateHostnameCmd` on the node passed to
+// make sure it still belongs to the SyncedCluster. Returns an error
+// when the hostnames don't match, indicating that the roachprod cache
+// is stale.
+func (c *SyncedCluster) validateHost(ctx context.Context, l *logger.Logger, node Node) error {
+	if c.IsLocal() {
+		return nil
+	}
+	cmd := c.validateHostnameCmd("", node)
+	return c.Run(ctx, l, l.Stdout, l.Stderr, Nodes{node}, "validate-ssh-host", cmd)
 }
 
 // cmdDebugName is the suffix of the generated ssh debug file
@@ -303,7 +373,7 @@ func (c *SyncedCluster) newSession(
 		node: node,
 		user: c.user(node),
 		host: c.Host(node),
-		cmd:  cmd,
+		cmd:  c.validateHostnameCmd(cmd, node),
 	}
 
 	for _, opt := range options {
@@ -1559,6 +1629,9 @@ func (c *SyncedCluster) PutString(
 func (c *SyncedCluster) Put(
 	ctx context.Context, l *logger.Logger, nodes Nodes, src string, dest string,
 ) error {
+	if err := c.validateHost(ctx, l, nodes[0]); err != nil {
+		return err
+	}
 	// Check if source file exists and if it's a symlink.
 	var potentialSymlinkPath string
 	var err error
@@ -1821,11 +1894,16 @@ func (c *SyncedCluster) Put(
 // user and assumes that the current user used to create c has the ability to
 // sudo into <user>.
 func (c *SyncedCluster) Logs(
+	l *logger.Logger,
 	src, dest, user, filter, programFilter string,
 	interval time.Duration,
 	from, to time.Time,
 	out io.Writer,
 ) error {
+	if err := c.validateHost(context.TODO(), l, c.Nodes[0]); err != nil {
+		return err
+	}
+
 	rsyncNodeLogs := func(ctx context.Context, node Node) error {
 		base := fmt.Sprintf("%d.logs", node)
 		local := filepath.Join(dest, base) + "/"
@@ -1950,6 +2028,9 @@ func (c *SyncedCluster) Logs(
 
 // Get TODO(peter): document
 func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) error {
+	if err := c.validateHost(context.TODO(), l, nodes[0]); err != nil {
+		return err
+	}
 	// TODO(peter): Only get 10 nodes at a time. When a node completes, output a
 	// line indicating that.
 	var detail string
@@ -2197,8 +2278,19 @@ func (c *SyncedCluster) pghosts(
 	return m, nil
 }
 
-// SSH TODO(peter): document
+// SSH creates an interactive shell connecting the caller to the first
+// node on the cluster (or to all nodes in an iterm2 split screen if
+// supported).
+//
+// CAUTION: this script will `exec` the ssh utility, so it must not be
+// used in any roachtest code. This is for use within `./roachprod`
+// exclusively.
 func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args []string) error {
+	targetNode := c.Nodes[0]
+	if err := c.validateHost(ctx, l, targetNode); err != nil {
+		return err
+	}
+
 	if len(c.Nodes) != 1 && len(args) == 0 {
 		// If trying to ssh to more than 1 node and the ssh session is interactive,
 		// try sshing with an iTerm2 split screen configuration.
@@ -2210,7 +2302,7 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 
 	// Perform template expansion on the arguments.
 	e := expander{
-		node: c.Nodes[0],
+		node: targetNode,
 	}
 	var expandedArgs []string
 	for _, arg := range args {
@@ -2226,19 +2318,19 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 		allArgs = []string{
 			"/bin/bash", "-c",
 		}
-		cmd := fmt.Sprintf("cd %s ; ", c.localVMDir(c.Nodes[0]))
+		cmd := fmt.Sprintf("cd %s ; ", c.localVMDir(targetNode))
 		if len(args) == 0 /* interactive */ {
 			cmd += "/bin/bash "
 		}
 		if len(args) > 0 {
-			cmd += fmt.Sprintf("export ROACHPROD=%s ; ", c.roachprodEnvValue(c.Nodes[0]))
+			cmd += fmt.Sprintf("export ROACHPROD=%s ; ", c.roachprodEnvValue(targetNode))
 			cmd += strings.Join(expandedArgs, " ")
 		}
 		allArgs = append(allArgs, cmd)
 	} else {
 		allArgs = []string{
 			"ssh",
-			fmt.Sprintf("%s@%s", c.user(c.Nodes[0]), c.Host(c.Nodes[0])),
+			fmt.Sprintf("%s@%s", c.user(targetNode), c.Host(targetNode)),
 			"-o", "UserKnownHostsFile=/dev/null",
 			"-o", "StrictHostKeyChecking=no",
 		}
@@ -2246,7 +2338,7 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 		allArgs = append(allArgs, sshArgs...)
 		if len(args) > 0 {
 			allArgs = append(allArgs, fmt.Sprintf(
-				"export ROACHPROD=%s ;", c.roachprodEnvValue(c.Nodes[0]),
+				"export ROACHPROD=%s ;", c.roachprodEnvValue(targetNode),
 			))
 		}
 		allArgs = append(allArgs, expandedArgs...)
