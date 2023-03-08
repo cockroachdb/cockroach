@@ -13,7 +13,7 @@ import { AppState } from "src/store/reducers";
 import { selectID } from "src/selectors/common";
 
 const selectTransactionInsightDetailsState = createSelector(
-  (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
+  (state: AppState) => state.adminUI?.transactionInsightDetails.cachedData,
   selectID,
   (cachedTxnInsightDetails, execId) => {
     return cachedTxnInsightDetails[execId];

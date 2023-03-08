@@ -18,5 +18,5 @@ export const adminUISelector = createSelector(
 
 export const localStorageSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState.localStorage,
+  adminUiState => adminUiState?.localStorage,
 );

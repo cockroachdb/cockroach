@@ -24,10 +24,10 @@ import {
 // pages that are specific to cluster-ui.
 // They should NOT be exported with the cluster-ui package.
 
-const selectSessions = (state: AppState) => state.adminUI.sessions?.data;
+const selectSessions = (state: AppState) => state.adminUI?.sessions?.data;
 
 const selectClusterLocks = (state: AppState) =>
-  state.adminUI.clusterLocks?.data;
+  state.adminUI?.clusterLocks?.data;
 
 export const selectActiveExecutions = createSelector(
   selectSessions,
@@ -80,7 +80,7 @@ export const selectContentionDetailsForStatement = createSelector(
 );
 
 export const selectAppName = createSelector(
-  (state: AppState) => state.adminUI.sessions,
+  (state: AppState) => state.adminUI?.sessions,
   response => {
     if (!response.data) return null;
     return response.data.internal_app_name_prefix;
