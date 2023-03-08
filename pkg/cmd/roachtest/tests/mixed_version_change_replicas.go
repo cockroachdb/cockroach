@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +57,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return rng.Intn(nodeCount) + 1
 	}
 
-	preVersion, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
+	preVersion, err := version.PredecessorVersion(*t.BuildVersion())
 	require.NoError(t, err)
 
 	// scanTableStep runs a count(*) scan across a table, asserting the row count.

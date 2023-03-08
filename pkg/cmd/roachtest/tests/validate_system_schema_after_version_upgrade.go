@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -38,7 +39,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			predecessorVersion, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
+			predecessorVersion, err := version.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

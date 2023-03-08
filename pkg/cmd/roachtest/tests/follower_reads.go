@@ -867,7 +867,7 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
-	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
+	predecessorVersion, err := version.PredecessorVersion(buildVersion)
 	require.NoError(t, err)
 
 	// Start the cluster at the old version.

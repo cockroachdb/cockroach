@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clusterupgrade
+package version
 
 import (
 	// Import embed for the version map
@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,8 +46,8 @@ func unmarshalVersionMap() (versionMap, error) {
 // predecessor_version.json). E.g., if buildVersion=22.2 and k=2, then
 // this function will return ["21.2.7", "22.1.6"] (at the time of
 // writing).
-func PredecessorHistory(buildVersion version.Version, k int) ([]string, error) {
-	if buildVersion == (version.Version{}) {
+func PredecessorHistory(buildVersion Version, k int) ([]string, error) {
+	if buildVersion == (Version{}) {
 		return nil, errors.Errorf("buildVersion not set")
 	}
 
@@ -68,7 +67,7 @@ func PredecessorHistory(buildVersion version.Version, k int) ([]string, error) {
 
 		versions = append([]string{v}, versions...)
 		formattedVersion := fmt.Sprintf("v%s", v)
-		currentVersion, err = version.Parse(formattedVersion)
+		currentVersion, err = Parse(formattedVersion)
 		if err != nil {
 			return nil, fmt.Errorf("invalid previous version %s: %w", formattedVersion, err)
 		}
@@ -81,7 +80,7 @@ func PredecessorHistory(buildVersion version.Version, k int) ([]string, error) {
 // the build tag of the main binary). For example, if the running binary is from
 // the master branch prior to releasing 19.2.0, this will return a recent
 // (ideally though not necessarily the latest) 19.1 patch release.
-func PredecessorVersion(buildVersion version.Version) (string, error) {
+func PredecessorVersion(buildVersion Version) (string, error) {
 	history, err := PredecessorHistory(buildVersion, 1)
 	if err != nil {
 		return "", err

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,7 +96,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 			allNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
 			oldNodes := c.Nodes(3, 4)
-			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
+			predV, err := version.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 
 			u := newVersionUpgradeTest(c,
