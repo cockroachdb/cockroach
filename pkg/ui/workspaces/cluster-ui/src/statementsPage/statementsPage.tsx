@@ -74,10 +74,10 @@ import LoadingError from "../sqlActivity/errorComponent";
 import {
   TimeScaleDropdown,
   TimeScale,
-  toDateRange,
   timeScaleToString,
   timeScale1hMinOptions,
   getValidOption,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
@@ -151,12 +151,9 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function statementsRequestFromProps(
-  props: StatementsPageProps,
-): cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toDateRange(props.timeScale);
-  return new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
+  const [start, end] = toRoundedDateRange(ts);
+  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -274,9 +271,10 @@ export class StatementsPage extends React.Component<
   };
 
   refreshStatements = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.refreshStatements(req);
   };
+
   resetSQLStats = (): void => {
     this.props.resetSQLStats();
   };
