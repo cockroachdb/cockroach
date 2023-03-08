@@ -698,7 +698,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
@@ -712,6 +711,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
