@@ -128,7 +128,6 @@ export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.Enque
 export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
 export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
 
-export type StatementDiagnosticsReportsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
 export type StatementDiagnosticsReportsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
 
 export type CreateStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
@@ -731,13 +730,12 @@ export function getCombinedStatements(
   timeout?: moment.Duration,
 ): Promise<StatementsResponseMessage> {
   const queryStr = propsToQueryString({
-    combined: req.combined,
     start: req.start.toInt(),
     end: req.end.toInt(),
   });
   return timeoutFetch(
     serverpb.StatementsResponse,
-    `${STATUS_PREFIX}/statements?${queryStr}`,
+    `${STATUS_PREFIX}/combinedstmts?${queryStr}`,
     null,
     timeout,
   );

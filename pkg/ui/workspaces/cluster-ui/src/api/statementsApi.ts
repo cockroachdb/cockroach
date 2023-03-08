@@ -12,16 +12,18 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
 import { propsToQueryString } from "src/util";
 
-const STATEMENTS_PATH = "/_status/statements";
+const STATEMENTS_PATH = "/_status/combinedstmts";
 const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
 
-export type StatementsRequest = cockroach.server.serverpb.StatementsRequest;
+export type StatementsRequest = cockroach.server.serverpb.CombinedStatementsStatsRequest;
 export type StatementDetailsRequest = cockroach.server.serverpb.StatementDetailsRequest;
 export type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
+
 export type StatementDetailsResponseWithKey = {
   stmtResponse: StatementDetailsResponse;
   key: string;
 };
+
 export type ErrorWithKey = {
   err: Error;
   key: string;
@@ -33,7 +35,6 @@ export const getCombinedStatements = (
   const queryStr = propsToQueryString({
     start: req.start.toInt(),
     end: req.end.toInt(),
-    combined: req.combined,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
