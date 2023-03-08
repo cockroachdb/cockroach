@@ -771,31 +771,31 @@ func TestIsOutOfBounds(t *testing.T) {
 }
 
 func TestTerm(t *testing.T) {
-	var i uint64
 	offset := uint64(100)
 	num := uint64(100)
 
 	storage := NewMemoryStorage()
 	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: offset, Term: 1}})
 	l := newLog(storage, raftLogger)
-	for i = 1; i < num; i++ {
+	for i := uint64(1); i < num; i++ {
 		l.append(pb.Entry{Index: offset + i, Term: i})
 	}
 
-	tests := []struct {
-		index uint64
-		w     uint64
+	for i, tt := range []struct {
+		idx  uint64
+		term uint64
+		err  error
 	}{
-		{offset - 1, 0},
-		{offset, 1},
-		{offset + num/2, num / 2},
-		{offset + num - 1, num - 1},
-		{offset + num, 0},
-	}
-
-	for j, tt := range tests {
-		t.Run(fmt.Sprint(j), func(t *testing.T) {
-			require.Equal(t, tt.w, mustTerm(l.term(tt.index)))
+		{idx: offset - 1, err: ErrCompacted},
+		{idx: offset, term: 1},
+		{idx: offset + num/2, term: num / 2},
+		{idx: offset + num - 1, term: num - 1},
+		{idx: offset + num, err: ErrUnavailable},
+	} {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			term, err := l.term(tt.idx)
+			require.Equal(t, tt.term, term)
+			require.Equal(t, tt.err, err)
 		})
 	}
 }
@@ -809,22 +809,25 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 	l := newLog(storage, raftLogger)
 	l.restore(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}})
 
-	tests := []struct {
-		index uint64
-		w     uint64
+	for i, tt := range []struct {
+		idx  uint64
+		term uint64
+		err  error
 	}{
 		// cannot get term from storage
-		{storagesnapi, 0},
+		{idx: storagesnapi, err: ErrCompacted},
 		// cannot get term from the gap between storage ents and unstable snapshot
-		{storagesnapi + 1, 0},
-		{unstablesnapi - 1, 0},
+		{idx: storagesnapi + 1, err: ErrCompacted},
+		{idx: unstablesnapi - 1, err: ErrCompacted},
 		// get term from unstable snapshot index
-		{unstablesnapi, 1},
-	}
-
-	for i, tt := range tests {
+		{idx: unstablesnapi, term: 1},
+		// the log beyond the unstable snapshot is empty
+		{idx: unstablesnapi + 1, err: ErrUnavailable},
+	} {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			require.Equal(t, tt.w, mustTerm(l.term(tt.index)))
+			term, err := l.term(tt.idx)
+			require.Equal(t, tt.term, term)
+			require.Equal(t, tt.err, err)
 		})
 	}
 }
