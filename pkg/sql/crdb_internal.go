@@ -7592,7 +7592,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		for _, tenantCapabilitiesEntry := range tenantCapabilitiesEntries {
 			tenantID := tree.NewDInt(tree.DInt(tenantCapabilitiesEntry.tenantID.ToUint64()))
 			for _, capabilityID := range tenantcapabilities.CapabilityIDs {
-				capabilityValue := tenantCapabilitiesEntry.tenantCapabilities.Cap(capabilityID).Get().String()
+				capabilityValue := capabilityID.Get(tenantCapabilitiesEntry.tenantCapabilities).String()
 				if err := addRow(
 					tenantID,
 					tree.NewDString(capabilityID.String()),

@@ -1796,11 +1796,13 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 				}
 
 				for _, capID := range capIDs {
-					if capID.CapabilityType() != tenantcapabilities.Bool {
+					switch typedCapID := capID.(type) {
+					case tenantcapabilities.BoolCapabilityID:
+						if !capabilities.GetBool(typedCapID) {
+							return missingCapabilityError(capID)
+						}
+					default:
 						return errors.AssertionFailedf("WaitForTenantCapabilities only supports boolean capabilities")
-					}
-					if !capabilities.GetBool(capID) {
-						return missingCapabilityError(capID)
 					}
 				}
 			}

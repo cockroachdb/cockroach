@@ -34,6 +34,7 @@ capability_id          capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 subtest end
 
@@ -52,6 +53,7 @@ capability_id          capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
@@ -63,6 +65,7 @@ capability_id          capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 subtest end
 
@@ -81,6 +84,7 @@ capability_id          capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 subtest end
 
@@ -99,6 +103,7 @@ capability_id          capability_value
 can_admin_split        true
 can_view_node_info     false
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 subtest end
 
@@ -117,6 +122,7 @@ capability_id          capability_value
 can_admin_split        true
 can_view_node_info     true
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
@@ -128,5 +134,6 @@ capability_id          capability_value
 can_admin_split        false
 can_view_node_info     false
 can_view_tsdb_metrics  false
+span_config_bounds     {<nil> <nil> <nil> <nil> <nil> <nil>}
 
 subtest end

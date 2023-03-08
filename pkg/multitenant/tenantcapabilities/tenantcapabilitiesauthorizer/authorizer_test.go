@@ -140,15 +140,3 @@ func (m mockReader) GetCapabilities(
 func (m mockReader) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilities.TenantCapabilities {
 	return m
 }
-
-func TestAllBatchCapsAreBoolean(t *testing.T) {
-	for _, capID := range reqMethodToCap {
-		if capID >= tenantcapabilities.MaxCapabilityID {
-			// One of the special values.
-			continue
-		}
-		if actual, expected := capID.CapabilityType(), tenantcapabilities.Bool; actual != expected {
-			t.Errorf("cap %s  has type %d, expected %d", capID, actual, expected)
-		}
-	}
-}

@@ -13,6 +13,7 @@ package tenantcapabilities
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -105,7 +106,7 @@ func AllCapabilitiesString(capabilities TenantCapabilities) string {
 		}
 		builder.WriteString(capID.String())
 		builder.WriteByte(':')
-		builder.WriteString(capabilities.Cap(capID).Get().String())
+		builder.WriteString(capID.Get(capabilities).String())
 	}
 	builder.WriteByte('}')
 	return builder.String()
@@ -116,17 +117,21 @@ func (u Entry) String() string {
 }
 
 // CapabilityID represents a handle to a tenant capability.
-type CapabilityID uint8
+type CapabilityID interface {
+	fmt.Stringer
+	Get(TenantCapabilities) Value
+}
 
-// Capability is the accessor to a capability's current value.
-type Capability interface {
-	// Get retrieves the current value of the capability.
-	Get() Value
-	// Set modifies the current value of the capability. Note that
-	// calling Set does not persist the result. Persistence needs to be
-	// arranged separately by storing the underlying protobuf; this is
-	// done using a different interface. See the code for ALTER TENANT.
-	Set(interface{})
+type BoolCapabilityID uint8
+
+func (c BoolCapabilityID) Get(capabilities TenantCapabilities) Value {
+	return capabilities.GetBoolValue(c)
+}
+
+type SpanConfigCapabilityID uint8
+
+func (c SpanConfigCapabilityID) Get(capabilities TenantCapabilities) Value {
+	return capabilities.GetSpanConfigValue(c)
 }
 
 // Value is a generic interface to the value of capabilities of
@@ -136,29 +141,20 @@ type Capability interface {
 type Value interface {
 	fmt.Stringer
 	redact.SafeFormatter
-
-	// Unwrap provides access to the underlying Go value. For example,
-	// for Bool capabilities, the result of Unwrap() can be casted to
-	// go's bool type.
-	Unwrap() interface{}
 }
 
 // TenantCapabilities is the interface provided by the capability store,
 // to provide access to capability values.
 type TenantCapabilities interface {
-	// Cap retrieves the accessor for a given capability.
-	Cap(CapabilityID) Capability
-
-	// GetBool is equivalent to For(cap).Get().Unwrap().(bool). It
-	// is provided as an optimization. The caller is responsible for
-	// ensuring that the capID argument designate a capability with type
-	// Bool.
-	GetBool(CapabilityID) bool
+	GetBool(BoolCapabilityID) bool
+	GetBoolValue(BoolCapabilityID) Value
+	SetBool(BoolCapabilityID, bool)
+	GetSpanConfigValue(SpanConfigCapabilityID) Value
 }
 
-//go:generate stringer -type=CapabilityID -linecomment
+//go:generate stringer -type=BoolCapabilityID -linecomment
 const (
-	_ CapabilityID = iota
+	_ BoolCapabilityID = iota
 
 	// CanAdminSplit describes the ability of a tenant to perform manual
 	// KV range split requests. These operations need a capability
@@ -178,19 +174,44 @@ const (
 	// cluster.
 	CanViewTSDBMetrics // can_view_tsdb_metrics
 
+	MaxBoolCapabilityID BoolCapabilityID = iota - 1
+)
+
+// BoolCapabilityIDs is a slice of all tenant capabilities.
+var BoolCapabilityIDs = stringerutil.EnumValues(
+	1,
+	MaxBoolCapabilityID,
+)
+
+//go:generate stringer -type=SpanConfigCapabilityID -linecomment
+const (
+	_ SpanConfigCapabilityID = iota
+
 	// TenantSpanConfigBounds contains the bounds for the tenant's
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
 
-	MaxCapabilityID CapabilityID = iota - 1
+	MaxSpanConfigCapabilityID SpanConfigCapabilityID = iota - 1
 )
 
-var stringToCapabilityIDMap = stringerutil.StringToEnumValueMap(
-	_CapabilityID_index[:],
-	_CapabilityID_name,
+// SpanConfigCapabilityIDs is a slice of all tenant capabilities.
+var SpanConfigCapabilityIDs = stringerutil.EnumValues(
 	1,
-	MaxCapabilityID-1, // TODO: remove -1 when spanConfigBounds are supported.
+	MaxSpanConfigCapabilityID,
 )
+
+var stringToCapabilityIDMap = func() map[string]CapabilityID {
+	m := make(map[string]CapabilityID, len(CapabilityIDs))
+	for _, id := range CapabilityIDs {
+		capString := id.String()
+		_, ok := m[capString]
+		if ok {
+			panic(errors.AssertionFailedf("duplicate capability strings %q", capString))
+		}
+		m[capString] = id
+	}
+	return m
+}()
 
 // CapabilityIDFromString converts a string to a CapabilityID.
 func CapabilityIDFromString(s string) (CapabilityID, bool) {
@@ -198,27 +219,15 @@ func CapabilityIDFromString(s string) (CapabilityID, bool) {
 	return capabilityID, ok
 }
 
-// CapabilityIDs is a slice of all tenant capabilities.
-var CapabilityIDs = stringerutil.EnumValues(
-	1,
-	MaxCapabilityID-1, // TODO: remove -1 when spanConfigBounds are supported.
-)
-
-// Type describes the user-facing data type of a specific capability.
-type Type int8
-
-const (
-	// Bool describes the type of boolean capabilities.
-	Bool Type = iota
-)
-
-// CapabilityType returns the type of a given capability.
-func (c CapabilityID) CapabilityType() Type {
-	switch c {
-	case CanAdminSplit, CanViewNodeInfo, CanViewTSDBMetrics:
-		return Bool
-
-	default:
-		panic(errors.AssertionFailedf("missing case: %d", c))
+var CapabilityIDs = func() (result []CapabilityID) {
+	for _, id := range BoolCapabilityIDs {
+		result = append(result, id)
 	}
-}
+	for _, id := range SpanConfigCapabilityIDs {
+		result = append(result, id)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].String() < result[j].String()
+	})
+	return
+}()
