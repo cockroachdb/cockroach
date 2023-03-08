@@ -33,7 +33,7 @@ export const selectStatementDetails = createSelector(
   (_state: AppState, props: RouteComponentProps): string =>
     queryByName(props.location, appNamesAttr),
   (state: AppState): TimeScale => selectTimeScale(state),
-  (state: AppState) => state.adminUI.sqlDetailsStats.cachedData,
+  (state: AppState) => state.adminUI?.sqlDetailsStats.cachedData,
   (
     fingerprintID,
     appNames,
@@ -75,6 +75,6 @@ export const selectStatementDetails = createSelector(
 );
 
 export const selectStatementDetailsUiConfig = createSelector(
-  (state: AppState) => state.adminUI.uiConfig.pages.statementDetails,
+  (state: AppState) => state.adminUI?.uiConfig.pages.statementDetails,
   statementDetailsUiConfig => statementDetailsUiConfig,
 );

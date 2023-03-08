@@ -20,13 +20,13 @@ import { selectStatementFingerprintID, selectID } from "src/selectors/common";
 import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
 
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
-  state.adminUI.stmtInsights?.data?.results;
+  state.adminUI?.stmtInsights?.data?.results;
 
 export const selectStmtInsightsError = (state: AppState): Error | null =>
-  state.adminUI.stmtInsights?.lastError;
+  state.adminUI?.stmtInsights?.lastError;
 
 export const selectStmtInsightsMaxApiReached = (state: AppState): boolean =>
-  !!state.adminUI.stmtInsights?.data?.maxSizeReached;
+  !!state.adminUI?.stmtInsights?.data?.maxSizeReached;
 
 export const selectStmtInsightDetails = createSelector(
   selectStmtInsights,
@@ -53,8 +53,8 @@ export const selectColumns = createSelector(
 // Show the data as 'Loading' when the request is in flight AND the
 // data is invalid or null.
 export const selectStmtInsightsLoading = (state: AppState): boolean =>
-  state.adminUI.stmtInsights?.inFlight &&
-  (!state.adminUI.stmtInsights?.valid || !state.adminUI.stmtInsights?.data);
+  state.adminUI?.stmtInsights?.inFlight &&
+  (!state.adminUI?.stmtInsights?.valid || !state.adminUI?.stmtInsights?.data);
 
 export const selectInsightsByFingerprint = createSelector(
   selectStmtInsights,

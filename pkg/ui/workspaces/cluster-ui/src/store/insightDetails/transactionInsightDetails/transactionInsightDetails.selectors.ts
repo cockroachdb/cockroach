@@ -16,7 +16,7 @@ import { TxnInsightEvent } from "src/insights";
 import { selectStmtInsights } from "src/store/insights/statementInsights";
 
 const selectTxnContentionInsightsDetails = createSelector(
-  (state: AppState) => state.adminUI.txnInsightDetails.cachedData,
+  (state: AppState) => state.adminUI?.txnInsightDetails.cachedData,
   selectID,
   (cachedTxnInsightDetails, execId) => {
     return cachedTxnInsightDetails[execId];

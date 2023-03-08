@@ -18,7 +18,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 type ILocality = cockroach.roachpb.ILocality;
 
 export const nodeStatusesSelector = (state: AppState) =>
-  state.adminUI.nodes.data || [];
+  state.adminUI?.nodes.data || [];
 
 export const nodesSelector = createSelector(
   nodeStatusesSelector,
