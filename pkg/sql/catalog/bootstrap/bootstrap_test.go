@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,58 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetInitialValuesCheckForOverrides(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test normal bootstrap using current binary's initial values.
+	tc1InitialValuesOpts := InitialValuesOpts{
+		DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+		Codec:                   keys.SystemSQLCodec,
+	}
+	tc1ExpectedKVs, tc1ExpectedSplits := MakeMetadataSchema(
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef()).GetInitialValues()
+
+	tc1ActualKVs, tc1ActualSplits, err := tc1InitialValuesOpts.GetInitialValuesCheckForOverrides()
+	require.NoError(t, err)
+	require.Equal(t, tc1ExpectedKVs, tc1ActualKVs)
+	require.Equal(t, tc1ExpectedSplits, tc1ActualSplits)
+
+	// Test system tenant override.
+	tc2InitialValuesOpts := InitialValuesOpts{
+		DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+		OverrideKey:             clusterversion.V22_2,
+		Codec:                   keys.SystemSQLCodec,
+	}
+	fn, err := GetInitialValuesFn(tc2InitialValuesOpts.OverrideKey, SystemTenant)
+	require.NoError(t, err)
+	tc2ExpectedKVs, tc2ExpectedSplits, _ := fn(
+		tc2InitialValuesOpts.Codec, tc2InitialValuesOpts.DefaultZoneConfig, tc2InitialValuesOpts.DefaultSystemZoneConfig,
+	)
+	tc2ActualKVs, tc2ActualSplits, err := tc2InitialValuesOpts.GetInitialValuesCheckForOverrides()
+	require.NoError(t, err)
+	require.Equal(t, tc2ExpectedKVs, tc2ActualKVs)
+	require.Equal(t, tc2ExpectedSplits, tc2ActualSplits)
+
+	// Test secondary tenant override.
+	tc3InitialValuesOpts := InitialValuesOpts{
+		DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
+		OverrideKey:             clusterversion.V22_2,
+		Codec:                   keys.MakeSQLCodec(roachpb.TenantID{InternalValue: 123}),
+	}
+	fn, err = GetInitialValuesFn(tc3InitialValuesOpts.OverrideKey, SecondaryTenant)
+	require.NoError(t, err)
+	tc3ExpectedKVs, tc3ExpectedSplits, _ := fn(
+		tc3InitialValuesOpts.Codec, tc3InitialValuesOpts.DefaultZoneConfig, tc3InitialValuesOpts.DefaultSystemZoneConfig,
+	)
+	tc3ActualKVs, tc3ActualSplits, err := tc3InitialValuesOpts.GetInitialValuesCheckForOverrides()
+	require.NoError(t, err)
+	require.Equal(t, tc3ExpectedKVs, tc3ActualKVs)
+	require.Equal(t, tc3ExpectedSplits, tc3ActualSplits)
+}
 
 func TestInitialValuesToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
