@@ -2725,12 +2725,6 @@ func (ex *connExecutor) execCopyIn(
 			ex.resetPlanner(ctx, p, txn, stmtTS)
 		},
 	}
-	// If COPY is not atomic, then each batch must manage the txn state.
-	if ex.implicitTxn() && !ex.sessionData().CopyFromAtomicEnabled {
-		txnOpt.resetExtraTxnState = func(ctx context.Context) {
-			ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
-		}
-	}
 
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
 
