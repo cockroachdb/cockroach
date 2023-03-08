@@ -1960,9 +1960,16 @@ func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args
 	if err := ctx.Err(); err != nil {
 		l.Printf("(note: incoming context was canceled: %s", err)
 	}
-	physicalFileName := l.File.Name()
+	// We need to protect ourselves from a race where cluster logger is
+	// concurrently closed before child logger is created. In that case child
+	// logger will have no log file but would write to stderr instead and we can't
+	// create a meaningful ".failed" file for it.
+	physicalFileName := ""
+	if l.File != nil {
+		physicalFileName = l.File.Name()
+	}
 	l.Close()
-	if err != nil {
+	if err != nil && len(physicalFileName) > 0 {
 		failedPhysicalFileName := strings.TrimSuffix(physicalFileName, ".log") + ".failed"
 		if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
 			failedFile.Close()
@@ -2003,7 +2010,10 @@ func (c *clusterImpl) RunWithDetails(
 	if err != nil {
 		return nil, err
 	}
-	physicalFileName := l.File.Name()
+	physicalFileName := ""
+	if l.File != nil {
+		physicalFileName = l.File.Name()
+	}
 
 	if err := ctx.Err(); err != nil {
 		l.Printf("(note: incoming context was canceled: %s", err)
@@ -2016,7 +2026,7 @@ func (c *clusterImpl) RunWithDetails(
 	}
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, false /* secure */, args)
-	if err != nil {
+	if err != nil && len(physicalFileName) > 0 {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
 		return results, err
