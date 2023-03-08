@@ -303,13 +303,13 @@ func (r *Replica) canDropLatchesBeforeEval(
 	// or if any of them need to use an intent interleaving iterator.
 	for _, req := range ba.Requests {
 		reqHeader := req.GetInner().Header()
-		start, end, seq := reqHeader.Key, reqHeader.EndKey, reqHeader.Sequence
+		start, end := reqHeader.Key, reqHeader.EndKey
 		var txnID uuid.UUID
 		if ba.Txn != nil {
 			txnID = ba.Txn.ID
 		}
 		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
-			ctx, rw, txnID, ba.Header.Timestamp, start, end, seq, &intents, maxIntents,
+			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxIntents,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(
