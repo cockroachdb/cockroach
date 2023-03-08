@@ -257,16 +257,6 @@ const (
 	// options table id column cannot be null. This is the final step
 	// of the system.role_options table migration.
 	TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull
-	// TODODelete_V22_2UseDelRangeInGCJob enables the use of the DelRange operation in the
-	// GC job. Before it is enabled, the GC job uses ClearRange operations
-	// after the job waits out the GC TTL. After it has been enabled, the
-	// job instead issues DelRange operations at the beginning of the job
-	// and then waits for the data to be removed automatically before removing
-	// the descriptor and zone configurations.
-	TODODelete_V22_2UseDelRangeInGCJob
-	// TODODelete_V22_2WaitedForDelRangeInGCJob corresponds to the migration which waits for
-	// the GC jobs to adopt the use of DelRange with tombstones.
-	TODODelete_V22_2WaitedForDelRangeInGCJob
 	// TODODelete_V22_2RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
 	TODODelete_V22_2RangefeedUseOneStreamPerNode
 	// TODODelete_V22_2NoNonMVCCAddSSTable adds a migration which waits for all
@@ -454,6 +444,18 @@ const (
 	// on Pebble stores that have shared storage configured.
 	V23_1SetPebbleCreatorID
 
+	// V23_1_UseDelRangeInGCJob enables the use of the DelRange operation in the
+	// GC job. Before it is enabled, the GC job uses ClearRange operations
+	// after the job waits out the GC TTL. After it has been enabled, the
+	// job instead issues DelRange operations at the beginning of the job
+	// and then waits for the data to be removed automatically before removing
+	// the descriptor and zone configurations.
+	V23_1_UseDelRangeInGCJob
+
+	// V23_1WaitedForDelRangeInGCJob corresponds to the migration which waits for
+	// the GC jobs to adopt the use of DelRange with tombstones.
+	V23_1WaitedForDelRangeInGCJob
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -610,14 +612,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
-	},
-	{
-		Key:     TODODelete_V22_2UseDelRangeInGCJob,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
-	},
-	{
-		Key:     TODODelete_V22_2WaitedForDelRangeInGCJob,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
 	{
 		Key:     TODODelete_V22_2RangefeedUseOneStreamPerNode,
@@ -782,6 +776,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1SetPebbleCreatorID,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 64},
+	},
+	{
+		Key:     V23_1_UseDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 66},
+	},
+	{
+		Key:     V23_1WaitedForDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 68},
 	},
 
 	// *************************************************
