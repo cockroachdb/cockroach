@@ -146,12 +146,9 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function stmtsRequestFromTimeScale(
-  ts: TimeScale,
-): cockroach.server.serverpb.StatementsRequest {
+function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
   const [start, end] = toRoundedDateRange(ts);
-  return new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
