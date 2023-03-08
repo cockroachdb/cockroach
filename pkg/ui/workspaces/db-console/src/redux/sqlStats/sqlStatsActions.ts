@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
-import { cockroach } from "src/js/protos";
 
 export const RESET_SQL_STATS = "cockroachui/sqlStats/RESET_SQL_STATS";
 export const RESET_SQL_STATS_FAILED =
