@@ -406,7 +406,7 @@ export class StatementsPage extends React.Component<
   onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
-    this.props.onPageChanged(current);
+    this.props.onPageChanged != null && this.props.onPageChanged(current);
   };
 
   onSubmitSearchField = (search: string): void => {
