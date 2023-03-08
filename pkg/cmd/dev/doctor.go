@@ -173,48 +173,31 @@ You can install node with: ` + "`pkg install node`"
 		},
 	},
 	{
-		name: "stamp",
+		name: "devconfig",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
-			var ret string
-			err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", "//build/bazelutil:test_stamping")
-			if err != nil {
-				ret = "Failed to run `bazel build //build/bazelutil:test_stamping`"
-				log.Println(ret)
-			} else {
-				testStampingTxt := filepath.Join(cfg.bazelBin, "build", "bazelutil", "test_stamping.txt")
-				fileContents, err := d.os.ReadFile(testStampingTxt)
-				if err != nil {
-					return err.Error()
-				}
-				if !strings.Contains(fileContents, "STABLE_BUILD_TYPE") {
-					ret = fmt.Sprintf("Could not find STABLE_BUILD_TYPE in %s\n", testStampingTxt)
+			var alreadyHaveSuggestion bool
+			for _, str := range []string{"dev", "crosslinux"} {
+				for _, delim := range []byte{' ', '='} {
+					alreadyHaveSuggestion = alreadyHaveSuggestion || d.checkLinePresenceInBazelRcUser(cfg.workspace, fmt.Sprintf("build --config%c%s", delim, str))
 				}
 			}
-			if ret != "" {
-				ret = ret + fmt.Sprintf(`
+			if alreadyHaveSuggestion {
+				return ""
+			}
+			ret := fmt.Sprintf(`
 Make sure one of the following lines is in the file %s/.bazelrc.user:
 `, cfg.workspace)
-				if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-					ret = ret + "    build --config=dev\n"
-					ret = ret + "             OR       \n"
-					ret = ret + "    build --config=crosslinux\n"
-					ret = ret + "The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI."
-				} else {
-					ret = ret + "    build --config=dev"
-				}
+			if runtime.GOOS == "linux" {
+				ret = ret + "    build --config=dev\n"
+				ret = ret + "             OR       \n"
+				ret = ret + "    build --config=crosslinux\n"
+				ret = ret + "The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI."
+			} else {
+				ret = ret + "    build --config=dev"
 			}
 			return ret
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			var alreadyHaveSuggestion bool
-			for _, str := range []string{"dev", "crosslinux"} {
-				for _, delim := range []byte{' ', '='} {
-					alreadyHaveSuggestion = alreadyHaveSuggestion || d.checkLinePresenceInBazelRcUser(cfg.workspace, fmt.Sprintf("build --config=%c%s", delim, str))
-				}
-			}
-			if alreadyHaveSuggestion {
-				return fmt.Errorf("your .bazelrc.user looks okay already :/")
-			}
 			if runtime.GOOS == "linux" {
 				if !cfg.interactive {
 					return fmt.Errorf("must be running in --interactive mode to autofix")

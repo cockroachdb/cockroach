@@ -85,7 +85,6 @@ in ($all ^ labels("out", kind("_gomock_prog_gen rule",  {{ .All }})))
   + filter(".*:.*(-gen|gen-).*", $all)
   + //pkg/testutils/lint/passes/errcheck:errcheck_excludes.txt
   + //build/bazelutil:test_force_build_cdeps.txt
-  + //build/bazelutil:test_stamping.txt
   + //pkg/cmd/mirror/npm:*
 `,
 		doNotGenerate: true,

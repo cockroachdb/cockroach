@@ -104,7 +104,6 @@ build:crosslinuxs390xbase --config=cross
 
 # devdarwinx86_64 is a legacy setting that implies `--config=dev`.
 build:devdarwinx86_64 --config=dev
-build:dev --config=simplestamp
 build:macos --action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin
 build:macos --host_action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin
 

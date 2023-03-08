@@ -159,6 +159,20 @@ percentage of physical memory (e.g. .25). If left unspecified, defaults to 25% o
 physical memory.`,
 	}
 
+	GoMemLimit = FlagInfo{
+		Name: "max-go-memory",
+		Description: `
+Soft memory limit set on the Go runtime (which is also configurable via the
+GOMEMLIMIT environment variable, but --max-go-memory has higher precedence if
+both are set). Notably, the pebble cache (as configured by --cache) is not under
+control of the Go runtime and should not be considered when determining this
+soft memory limit. Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB
+and 1GiB) or a percentage of physical memory (e.g. .25). If left unspecified,
+defaults to 2.25x of --max-sql-memory (subject to max-go-memory + 1.15x --cache
+not exceeding 90% of available RAM). Set to 0 to disable the soft memory limit
+(not recommended).`,
+	}
+
 	TSDBMem = FlagInfo{
 		Name: "max-tsdb-memory",
 		Description: `
