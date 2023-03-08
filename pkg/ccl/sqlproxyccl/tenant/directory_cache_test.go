@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,9 +34,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
-
-// To ensure tenant startup code is included.
-var _ = kvtenantccl.Connector{}
 
 func TestDirectoryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()

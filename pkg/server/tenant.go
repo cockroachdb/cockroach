@@ -967,7 +967,8 @@ func makeTenantSQLServerArgs(
 		RPCRetryOptions:   rpcRetryOptions,
 		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
 	}
-	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, sqlCfg.TenantKVAddrs)
+	kvAddressConfig := kvtenant.KVAddressConfig{RemoteAddresses: sqlCfg.TenantKVAddrs, LoopbackAddress: sqlCfg.TenantLoopbackAddr}
+	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, kvAddressConfig)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

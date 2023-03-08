@@ -13,6 +13,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -27,6 +28,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+	kvtenant.InitTestConnectorFactory()
 
 	// We care about running all of these tests both in the "regular" config
 	// and in the "COCKROACH_MR_SYSTEM_DATABASE" config. This is certainly

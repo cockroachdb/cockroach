@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -23,10 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
-
-// Dummy import to pull in kvtenantccl. This allows us to start tenants.
-// We need ccl functionality in order to test debug zip for tenant servers.
-var _ = kvtenantccl.Connector{}
 
 // TestTenantZip tests the operation of zip for a tenant server.
 func TestTenantZip(t *testing.T) {
