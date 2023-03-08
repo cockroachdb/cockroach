@@ -60,6 +60,12 @@ message Session {
 }
 
 message Transaction {
+  // TODO(gtr): Implement "Cancelled" status for transaction insights.
+  enum Status {
+    Completed = 0;
+    Failed = 1;
+  }
+
   bytes id = 1 [(gogoproto.customname) = "ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false];
@@ -85,6 +91,7 @@ message Transaction {
   int64 cpu_sql_nanos = 17 [(gogoproto.customname) = "CPUSQLNanos"];
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
+  Status status = 19;
 }
 
 message Statement {
