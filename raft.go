@@ -930,7 +930,12 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	if err != nil {
 		r.logger.Panicf("unexpected error getting unapplied entries (%v)", err)
 	}
-	return numOfPendingConf(ents) != 0
+	for i := range ents {
+		if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
+			return true
+		}
+	}
+	return false
 }
 
 // campaign transitions the raft instance to candidate state. This must only be
@@ -1990,16 +1995,6 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 	} else {
 		r.uncommittedSize -= s
 	}
-}
-
-func numOfPendingConf(ents []pb.Entry) int {
-	n := 0
-	for i := range ents {
-		if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
-			n++
-		}
-	}
-	return n
 }
 
 func releasePendingReadIndexMessages(r *raft) {
