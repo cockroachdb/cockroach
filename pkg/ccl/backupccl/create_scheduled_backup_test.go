@@ -131,6 +131,19 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 	h.sqlDB.Exec(t, "DELETE FROM system.scheduled_jobs WHERE true")
 }
 
+func (h *testHelper) waitForPausedScheduledJob(t *testing.T, scheduleID int64) {
+	query := "SELECT id FROM " + h.env.SystemJobsTableName() +
+		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
+
+	testutils.SucceedsSoon(t, func() error {
+		// Force newly created job to be adopted and verify it succeeds.
+		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var unused int64
+		return h.sqlDB.DB.QueryRowContext(context.Background(),
+			query, jobs.StatusPaused, jobs.CreatedByScheduledJobs, scheduleID).Scan(&unused)
+	})
+}
+
 func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID int64) {
 	query := "SELECT id FROM " + h.env.SystemJobsTableName() +
 		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
@@ -711,6 +724,74 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	}
 }
 
+// TestIncrementalScheduleBackupOnPreviousRunning tests that incremental
+// schedules only allow `on_previous_running` to be set to `wait` or `skip`
+// and default to `wait` if the full schedule is configured with `start`.
+// For an explanation please refer to `create_scheduled_backup.go` where we
+// configure the option for the incremental schedule.
+func TestIncrementalScheduleBackupOnPreviousRunning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `
+CREATE DATABASE db;
+USE db;
+
+CREATE TABLE t1(a int);
+INSERT INTO t1 values (1), (10), (100);
+`)
+
+	// We'll be manipulating schedule time via th.env, but we can't fool actual
+	// backup when it comes to AsOf time.  So, override AsOf backup clause to be
+	// the current time.
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
+		expr, err := tree.MakeDTimestampTZ(th.cfg.DB.KV().Clock().PhysicalTime(), time.Microsecond)
+		require.NoError(t, err)
+		clause.Expr = expr
+	}
+
+	checkScheduleDetailsWaitOption := func(schedules []*jobs.ScheduledJob,
+		expectedFullOption, expectedIncOption jobspb.ScheduleDetails_WaitBehavior) {
+		require.Len(t, schedules, 2)
+		full, inc := schedules[0], schedules[1]
+		if full.IsPaused() {
+			full, inc = inc, full // Swap: inc should be paused.
+		}
+		require.Equal(t, expectedFullOption, full.ScheduleDetails().Wait)
+		require.Equal(t, expectedIncOption, inc.ScheduleDetails().Wait)
+	}
+
+	t.Run("on_previous_running=start", func(t *testing.T) {
+		schedule := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' WITH SCHEDULE OPTIONS on_previous_running = 'start'`
+		destination := "nodelocal://0/backup/"
+		schedules, err := th.createBackupSchedule(t, schedule, destination)
+		require.NoError(t, err)
+		require.Len(t, schedules, 2)
+		checkScheduleDetailsWaitOption(schedules, jobspb.ScheduleDetails_NO_WAIT, jobspb.ScheduleDetails_WAIT)
+	})
+
+	t.Run("on_previous_running=skip", func(t *testing.T) {
+		schedule := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' WITH SCHEDULE OPTIONS on_previous_running = 'skip'`
+		destination := "nodelocal://0/backup/"
+		schedules, err := th.createBackupSchedule(t, schedule, destination)
+		require.NoError(t, err)
+		require.Len(t, schedules, 2)
+		checkScheduleDetailsWaitOption(schedules, jobspb.ScheduleDetails_SKIP, jobspb.ScheduleDetails_SKIP)
+	})
+
+	t.Run("on_previous_running=wait", func(t *testing.T) {
+		schedule := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' WITH SCHEDULE OPTIONS on_previous_running = 'wait'`
+		destination := "nodelocal://0/backup/"
+		schedules, err := th.createBackupSchedule(t, schedule, destination)
+		require.NoError(t, err)
+		require.Len(t, schedules, 2)
+		checkScheduleDetailsWaitOption(schedules, jobspb.ScheduleDetails_WAIT, jobspb.ScheduleDetails_WAIT)
+	})
+}
+
 func TestScheduleBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -738,8 +819,9 @@ CREATE TABLE t1(a int);
 INSERT INTO t1 values (-1), (10), (-100);
 `)
 
-	// We'll be manipulating schedule time via th.env, but we can't fool actual backup
-	// when it comes to AsOf time.  So, override AsOf backup clause to be the current time.
+	// We'll be manipulating schedule time via th.env, but we can't fool actual
+	// backup when it comes to AsOf time.  So, override AsOf backup clause to be
+	// the current time.
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 		expr, err := tree.MakeDTimestampTZ(th.cfg.DB.KV().Clock().PhysicalTime(), time.Microsecond)
 		require.NoError(t, err)

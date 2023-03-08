@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -300,11 +301,13 @@ func doCreateBackupSchedules(
 	unpauseOnSuccessID := jobs.InvalidScheduleID
 
 	var chainProtectedTimestampRecords bool
-	// If needed, create incremental.
+	// If needed, create an incremental schedule.
 	var inc *jobs.ScheduledJob
 	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	var incScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	if incRecurrence != nil {
+		incrementalScheduleDetails := details
+		maybeOverrideIncrementalScheduleDetails(ctx, &incrementalScheduleDetails)
 		chainProtectedTimestampRecords = scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV)
 		backupNode.AppendToLatest = true
 
@@ -316,7 +319,7 @@ func doCreateBackupSchedules(
 			}
 		}
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
-			env, p.User(), scheduleLabel, incRecurrence, details, unpauseOnSuccessID,
+			env, p.User(), scheduleLabel, incRecurrence, incrementalScheduleDetails, unpauseOnSuccessID,
 			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
 		if err != nil {
 			return err
@@ -382,6 +385,30 @@ func doCreateBackupSchedules(
 	collectScheduledBackupTelemetry(ctx, incRecurrence, fullRecurrence, firstRun, fullRecurrencePicked, ignoreExisting, details, backupEvent)
 	return emitSchedule(full, backupNode, destinations, nil, /* incrementalFrom */
 		kmsURIs, nil, resultsCh)
+}
+
+func maybeOverrideIncrementalScheduleDetails(ctx context.Context, details *jobspb.ScheduleDetails) {
+	// An incremental backup schedule must always wait if there is a running job
+	// that was previously scheduled by this incremental schedule. This is
+	// because until the previous incremental backup job completes, all future
+	// incremental jobs will attempt to backup data from the same `StartTime`
+	// corresponding to the `EndTime` of the last incremental layer. In this
+	// case only the first incremental job to complete will succeed, while the
+	// remaining jobs will either be rejected or worse corrupt the chain of
+	// backups. We can accept both `wait` and `skip` as valid
+	// `on_previous_running` options for an incremental schedule.
+	//
+	// NB: Ideally we'd have a way to configure options for both the full and
+	// incremental schedule separately, in which case we could reject the
+	// `on_previous_running = start` configuration for incremental schedules.
+	// Until then this interception will have to do.
+	switch details.Wait {
+	case jobspb.ScheduleDetails_NO_WAIT:
+		log.Warningf(ctx, "incremental schedules should not be configured with `on_previous_running = start`; "+
+			"defaulting to `on_previous_running = wait`. For more details refer to "+
+			"https://www.cockroachlabs.com/docs/stable/create-schedule-for-backup.html#schedule-options.")
+		details.Wait = jobspb.ScheduleDetails_WAIT
+	}
 }
 
 func setDependentSchedule(

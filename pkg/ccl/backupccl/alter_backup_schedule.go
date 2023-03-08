@@ -282,6 +282,7 @@ func processScheduleOptions(
 			if err := schedulebase.ParseWaitBehavior(v, incDetails); err != nil {
 				return err
 			}
+			maybeOverrideIncrementalScheduleDetails(ctx, incDetails)
 			s.incJob.SetScheduleDetails(*incDetails)
 		case optUpdatesLastBackupMetric:
 			// NB: as of 20.2, schedule creation requires admin so this is duplicative
