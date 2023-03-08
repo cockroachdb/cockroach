@@ -5162,9 +5162,14 @@ CREATE TABLE crdb_internal.default_privileges (
 	for_all_roles   BOOL,
 	object_type     STRING NOT NULL,
 	grantee         STRING NOT NULL,
-	privilege_type  STRING NOT NULL
+	privilege_type  STRING NOT NULL,
+	is_grantable    BOOL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		includeGrantOption := false
+		if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+			includeGrantOption = true
+		}
 
 		// Cache roles ahead of time to avoid role lookup inside loop.
 		var roles []catpb.DefaultPrivilegesRole
@@ -5207,6 +5212,10 @@ CREATE TABLE crdb_internal.default_privileges (
 								grantee := tree.NewDString(userPrivs.User().Normalized())
 								privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
 								for _, priv := range privList {
+									hasGrantOption := tree.DNull
+									if includeGrantOption {
+										hasGrantOption = tree.MakeDBool(tree.DBool(priv.IsSetIn(userPrivs.WithGrantOption)))
+									}
 									if err := addRow(
 										database, // database_name
 										// When the schema_name is NULL, that means the default
@@ -5217,6 +5226,7 @@ CREATE TABLE crdb_internal.default_privileges (
 										objectTypeDatum,                // object_type
 										grantee,                        // grantee
 										tree.NewDString(priv.String()), // privilege_type
+										hasGrantOption,                 // is_grantable
 									); err != nil {
 										return err
 									}
@@ -5235,6 +5245,7 @@ CREATE TABLE crdb_internal.default_privileges (
 										tree.NewDString(objectType.String()),    // object_type
 										role,                                    // grantee
 										tree.NewDString(privilege.ALL.String()), // privilege_type
+										tree.DBoolTrue,                          // is_grantable
 									); err != nil {
 										return err
 									}
@@ -5249,6 +5260,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									tree.NewDString(tree.Types.String()), // object_type
 									tree.NewDString(security.PublicRoleName().Normalized()), // grantee
 									tree.NewDString(privilege.USAGE.String()),               // privilege_type
+									tree.DBoolFalse, // is_grantable
 								); err != nil {
 									return err
 								}

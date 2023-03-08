@@ -131,14 +131,14 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 	// Check that the incompatible privileges have turned into default privileges.
 	tdb.CheckQueryResults(t, "SHOW DEFAULT PRIVILEGES FOR ALL ROLES",
 		[][]string{
-			{"NULL", "true", "tables", "testuser", "DELETE"},
-			{"NULL", "true", "tables", "testuser", "INSERT"},
-			{"NULL", "true", "tables", "testuser", "SELECT"},
-			{"NULL", "true", "tables", "testuser", "UPDATE"},
-			{"NULL", "true", "tables", "testuser2", "DELETE"},
-			{"NULL", "true", "tables", "testuser2", "INSERT"},
-			{"NULL", "true", "tables", "testuser2", "SELECT"},
-			{"NULL", "true", "tables", "testuser2", "UPDATE"},
-			{"NULL", "true", "types", "public", "USAGE"},
+			{"NULL", "true", "tables", "testuser", "DELETE", "false"},
+			{"NULL", "true", "tables", "testuser", "INSERT", "false"},
+			{"NULL", "true", "tables", "testuser", "SELECT", "false"},
+			{"NULL", "true", "tables", "testuser", "UPDATE", "false"},
+			{"NULL", "true", "tables", "testuser2", "DELETE", "false"},
+			{"NULL", "true", "tables", "testuser2", "INSERT", "false"},
+			{"NULL", "true", "tables", "testuser2", "SELECT", "false"},
+			{"NULL", "true", "tables", "testuser2", "UPDATE", "false"},
+			{"NULL", "true", "types", "public", "USAGE", "false"},
 		})
 }
