@@ -405,7 +405,7 @@ func (s *ColIndexJoin) GetBatchRequestsIssued() int64 {
 func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.cf.getKVCPUTime()
+	return s.cf.cpuStopWatch.Elapsed()
 }
 
 // GetContentionInfo is part of the colexecop.KVReader interface.

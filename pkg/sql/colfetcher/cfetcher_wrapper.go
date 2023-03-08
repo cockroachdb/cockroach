@@ -231,6 +231,9 @@ func newCFetcherWrapper(
 	// MaxSpanRequestKeys limits of the BatchRequest), so we just have a
 	// reasonable default here.
 	const memoryLimit = execinfra.DefaultMemoryLimit
+	// Since we're using the cFetcher on the KV server side, we don't collect
+	// any statistics on it (these stats are about the SQL layer).
+	const collectStats = false
 	// We cannot reuse batches if we're not serializing the response.
 	alwaysReallocate := !mustSerialize
 	// TODO(yuzefovich, 23.1): think through estimatedRowCount (#94850) and
@@ -240,7 +243,7 @@ func newCFetcherWrapper(
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
-		false, /* collectStats */
+		collectStats,
 		alwaysReallocate,
 	}
 

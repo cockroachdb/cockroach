@@ -276,7 +276,7 @@ func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 func (s *ColBatchScan) GetKVCPUTime() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.cf.getKVCPUTime()
+	return s.cf.cpuStopWatch.Elapsed()
 }
 
 // Release implements the execreleasable.Releasable interface.
