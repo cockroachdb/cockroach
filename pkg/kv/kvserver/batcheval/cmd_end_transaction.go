@@ -467,7 +467,7 @@ func EndTxn(
 	txnResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
 	txnResult.Local.ResolvedLocks = resolvedLocks
 
-	// Run the rest of the commit triggers if successfully committed.
+	// Run the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
 		triggerResult, err := RunCommitTrigger(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
