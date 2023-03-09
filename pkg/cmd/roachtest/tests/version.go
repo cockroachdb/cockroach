@@ -142,7 +142,8 @@ func registerVersion(r registry.Registry) {
 				if err := stop(i); err != nil {
 					return err
 				}
-				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
+				// Never run with runtime assertions as this makes this test take too long to complete.
+				c.Put(ctx, t.StandardCockroach(), "./cockroach", c.Node(i))
 
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
@@ -167,7 +168,7 @@ func registerVersion(r registry.Registry) {
 
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
+			c.Put(ctx, t.StandardCockroach(), "./cockroach", c.Node(nodes))
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(nodes))
 			if err := sleepAndCheck(); err != nil {
 				return err
@@ -196,7 +197,7 @@ func registerVersion(r registry.Registry) {
 				if err := stop(i); err != nil {
 					return err
 				}
-				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
+				c.Put(ctx, t.StandardCockroach(), "./cockroach", c.Node(i))
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err

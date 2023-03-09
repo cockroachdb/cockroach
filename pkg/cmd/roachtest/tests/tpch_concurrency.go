@@ -33,9 +33,10 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c cluster.Cluster,
 		disableStreamer bool,
 	) {
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, numNodes-1))
+		cockroach := t.Cockroach()
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
 		conn := c.Conn(ctx, t.L(), 1)
 		if disableStreamer {
@@ -54,7 +55,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, numNodes-1))
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 35), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster

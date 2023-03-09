@@ -96,6 +96,7 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		Suites:           registry.ManualOnly,
 		Tags:             registry.Tags("manual"),
 		Owner:            registry.OwnerKV,
+		Benchmark:        true,
 		Cluster:          nodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)

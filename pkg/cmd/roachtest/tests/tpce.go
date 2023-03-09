@@ -258,7 +258,7 @@ func registerTPCE(r registry.Registry) {
 		},
 	})
 
-	// Weekly, large sclae configuration.
+	// Weekly, large scale configuration.
 	largeWeekly := tpceOptions{
 		customers: 100_000,
 		nodes:     5,
