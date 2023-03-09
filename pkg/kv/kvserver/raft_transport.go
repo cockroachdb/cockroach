@@ -59,7 +59,7 @@ const (
 
 // targetRaftOutgoingBatchSize wraps "kv.raft.command.target_batch_size".
 var targetRaftOutgoingBatchSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.raft.command.target_batch_size",
 	"size of a batch of raft commands after which it will be sent without further batching",
 	64<<20, // 64 MB
