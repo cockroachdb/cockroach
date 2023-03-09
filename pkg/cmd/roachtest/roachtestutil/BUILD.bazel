@@ -1,9 +1,10 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "roachtestutil",
     srcs = [
+        "commandbuilder.go",
         "jaeger.go",
         "validation_check.go",
     ],
@@ -15,6 +16,14 @@ go_library(
         "//pkg/testutils/sqlutils",
         "@com_github_cockroachdb_errors//:errors",
     ],
+)
+
+go_test(
+    name = "roachtestutil_test",
+    srcs = ["commandbuilder_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":roachtestutil"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 get_x_data(name = "get_x_data")
