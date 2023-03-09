@@ -1570,6 +1570,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				require.Equal(t, "ISO,YMD", args.SessionDefaults["datestyle"])
 			},
 		},
+		{
+			// Regression test for issue #98301.
+			desc:  "special characters that look like urlencoded must not be decoded during option parsing",
+			query: "options=-c application_name=%2566%256f%256f",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "%66%6f%6f", args.SessionDefaults["application_name"])
+			},
+		},
 	}
 
 	baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
@@ -1623,14 +1632,12 @@ func TestSetSessionArguments(t *testing.T) {
 	)
 	defer cleanupFunc()
 
-	q := pgURL.Query()
-	q.Add("options", "  --user=test -c    search_path=public,testsp %20 "+
-		"--default-transaction-isolation=read\\ uncommitted   "+
-		"-capplication_name=test  "+
-		"--DateStyle=ymd\\ ,\\ iso\\  "+
-		"-c intervalstyle%3DISO_8601 "+
-		"-ccustom_option.custom_option=test2")
-	pgURL.RawQuery = q.Encode()
+	pgURL.RawQuery += `&options=` + "  --user=test -c    search_path=public,testsp %20 " +
+		"--default-transaction-isolation=read\\ uncommitted   " +
+		"-capplication_name=test  " +
+		"--DateStyle=ymd\\ ,\\ iso\\  " +
+		"-c intervalstyle%3DISO_8601 " +
+		"-ccustom_option.custom_option=test2"
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
 	if err != nil {
