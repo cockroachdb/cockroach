@@ -746,7 +746,7 @@ func (r *testRunner) runWorker(
 
 			var setupErr error
 			if c.spec.NodeCount > 0 { // skip during tests
-				setupErr = c.PutDefaultCockroach(ctx, l, t.Cockroach())
+				setupErr = c.PutCockroach(ctx, l, t)
 			}
 			if setupErr == nil {
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)

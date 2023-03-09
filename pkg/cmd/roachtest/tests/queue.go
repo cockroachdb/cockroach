@@ -46,7 +46,6 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	workloadNode := c.Spec().NodeCount
 
 	// Distribute programs to the correct nodes and start CockroachDB.
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, dbNodeCount))
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, dbNodeCount))
 
