@@ -265,7 +265,9 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	rows := size / rowEstimate
 	const minBytes = 16 << 20 // 16 MB
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	// Never run with runtime assertions as this makes this test take
+	// too long to complete.
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))

@@ -75,6 +75,15 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// How long to wait for data to be GCd during assert loop.
 	const gcRetryTimeout = 7 * time.Minute
 
+	var randomSeed int64
+	if usingRuntimeAssertions(t) {
+		// Do not use `0` as that is reserved to mean that we are running
+		// without runtime assertions.
+		for randomSeed == 0 {
+			randomSeed = rand.Int63()
+		}
+		c.SetRandomSeed(randomSeed)
+	}
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	s := install.MakeClusterSettings()
 	s.Env = append(s.Env, "COCKROACH_SCAN_INTERVAL=30s")
@@ -139,7 +148,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.L().Printf("performing clean-assert cycle #%d", i)
 
 			if err := retry.WithMaxAttempts(ctx, retry.Options{}, 3, func() error {
-				return deleteSomeTableDataWithOverlappingTombstones(ctx, t, c, conn, rng, m, 5)
+				return deleteSomeTableDataWithOverlappingTombstones(ctx, t, c, conn, rng, m, 5, randomSeed)
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +172,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		wlCancel()
 
 		if err := retry.WithMaxAttempts(ctx, retry.Options{}, 3, func() error {
-			err := deleteAllTableDataWithOverlappingTombstones(ctx, t, c, conn, rng, m, 5)
+			err := deleteAllTableDataWithOverlappingTombstones(ctx, t, c, conn, rng, m, 5, randomSeed)
 			if err != nil {
 				return err
 			}
@@ -480,6 +489,7 @@ func deleteAllTableDataWithOverlappingTombstones(
 	rng *rand.Rand,
 	tm tableMetadata,
 	fragments int,
+	randomSeed int64,
 ) error {
 	t.Helper()
 	encodeKey := func(index int64) roachpb.Key {
@@ -513,7 +523,7 @@ func deleteAllTableDataWithOverlappingTombstones(
 		t.L().Printf("adding range tombstone [%s, %s)", startKey, endKey)
 		addDeleteRangeUsingTombstone(&ba, startKey, endKey)
 	}
-	br, err := sendBatchRequest(ctx, t, c, 1, ba)
+	br, err := sendBatchRequest(ctx, t, c, 1, ba, randomSeed)
 	if err != nil {
 		return err
 	}
@@ -532,6 +542,7 @@ func deleteSomeTableDataWithOverlappingTombstones(
 	rng *rand.Rand,
 	tm tableMetadata,
 	rangeKeys int,
+	randomSeed int64,
 ) error {
 	t.Helper()
 	encodeKey := func(index int64) roachpb.Key {
@@ -558,7 +569,7 @@ func deleteSomeTableDataWithOverlappingTombstones(
 		t.L().Printf("adding range tombstone [%s, %s)", startKey, endKey)
 		addDeleteRangeUsingTombstone(&ba, startKey, endKey)
 	}
-	br, err := sendBatchRequest(ctx, t, c, 1, ba)
+	br, err := sendBatchRequest(ctx, t, c, 1, ba, randomSeed)
 	if err != nil {
 		return err
 	}
@@ -594,7 +605,12 @@ func addDeleteRangeUsingTombstone(ba *kvpb.BatchRequest, startKey, endKey roachp
 }
 
 func sendBatchRequest(
-	ctx context.Context, t test.Test, c cluster.Cluster, node int, ba kvpb.BatchRequest,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	node int,
+	ba kvpb.BatchRequest,
+	randomSeed int64,
 ) (kvpb.BatchResponse, error) {
 	reqArg, err := batchToJSONOrFatal(ba)
 	if err != nil {
@@ -604,8 +620,12 @@ func sendBatchRequest(
 	if err := c.PutString(ctx, reqArg, requestFileName, 0755, c.Node(node)); err != nil {
 		return kvpb.BatchResponse{}, err
 	}
-	res, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "./cockroach", "debug",
-		"send-kv-batch", "--insecure", requestFileName)
+	var debugEnv string
+	if randomSeed != 0 {
+		debugEnv = fmt.Sprintf("COCKROACH_RANDOM_SEED=%d ", randomSeed)
+	}
+	res, err := c.RunWithDetailsSingleNode(
+		ctx, t.L(), c.Node(node), debugEnv+"./cockroach debug send-kv-batch --insecure", requestFileName)
 	if err != nil {
 		return kvpb.BatchResponse{}, err
 	}
