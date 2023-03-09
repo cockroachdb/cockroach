@@ -30,8 +30,9 @@ type hibernateOptions struct {
 	testDir  string
 	buildCmd,
 	testCmd string
-	blocklistWithName blocklistWithName
-	dbSetupFunc       func(ctx context.Context, t test.Test, c cluster.Cluster)
+	blocklistWithName  listWithName
+	ignorelistWithName listWithName
+	dbSetupFunc        func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
 var (
@@ -40,9 +41,10 @@ var (
 		testDir:  "hibernate-core",
 		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb ` +
 			`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
-		testCmd:           "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
-		blocklistWithName: blocklistWithName{blocklistname: "hibernateBlockList", blocklist: hibernateBlockList},
-		dbSetupFunc:       nil,
+		testCmd:            "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
+		blocklistWithName:  listWithName{listName: "hibernateBlockList", list: hibernateBlockList},
+		ignorelistWithName: listWithName{listName: "hibernateIgnoreList", list: hibernateIgnoreList},
+		dbSetupFunc:        nil,
 	}
 	hibernateSpatialOpts = hibernateOptions{
 		testName: "hibernate-spatial",
@@ -51,7 +53,8 @@ var (
 			`--tests org.hibernate.spatial.dialect.postgis.*`,
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
-		blocklistWithName: blocklistWithName{blocklistname: "hibernateSpatialBlockList", blocklist: hibernateSpatialBlockList},
+		blocklistWithName:  listWithName{listName: "hibernateSpatialBlockList", list: hibernateSpatialBlockList},
+		ignorelistWithName: listWithName{listName: "hibernateSpatialIgnoreList", list: hibernateSpatialIgnoreList},
 		dbSetupFunc: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
@@ -169,8 +172,8 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			t.Fatal(err)
 		}
 
-		blocklistName := opt.blocklistWithName.blocklistname
-		expectedFailures := opt.blocklistWithName.blocklist
+		blocklistName := opt.blocklistWithName.listName
+		expectedFailures := opt.blocklistWithName.list
 
 		t.L().Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
@@ -228,7 +231,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blocklistName, expectedFailures, nil /* ignorelist */, version, supportedHibernateTag,
+			blocklistName, expectedFailures, opt.ignorelistWithName.list, version, supportedHibernateTag,
 		)
 	}
 
