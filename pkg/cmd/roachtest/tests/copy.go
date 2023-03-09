@@ -47,9 +47,20 @@ func registerCopy(r registry.Registry) {
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
 
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+		// We run this without metamorphic constants as kv-batch-size = 1 makes
+		// this test take far too long to complete.
+		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
+		// See: https://github.com/cockroachdb/cockroach/issues/113164
+		c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+		// Make sure the copy commands have sufficient time to finish when
+		// runtime assertions are enabled.
+		copyTimeout := 10 * time.Minute
+		if usingRuntimeAssertions(t) {
+			copyTimeout = 20 * time.Minute
+		}
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
@@ -100,7 +111,7 @@ func registerCopy(r registry.Registry) {
 				QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
 			}
 			runCopy := func(ctx context.Context, qu querier) error {
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Minute) // avoid infinite internal retries
+				ctx, cancel := context.WithTimeout(ctx, copyTimeout) // avoid infinite internal retries
 				defer cancel()
 
 				for lastID := -1; lastID+1 < rows; {
