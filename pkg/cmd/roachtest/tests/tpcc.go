@@ -145,9 +145,6 @@ func setupTPCC(
 
 	if opts.Start == nil {
 		opts.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// NB: workloadNode also needs ./cockroach because
-			// of `./cockroach workload` for usingImport.
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			settings := install.MakeClusterSettings()
 			if c.IsLocal() {
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
@@ -1422,11 +1419,6 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	loadGroups := makeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
 	roachNodes := loadGroups.roachNodes()
 	loadNodes := loadGroups.loadNodes()
-	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-	// Fixture import needs './cockroach workload' on loadNodes[0],
-	// and if we use haproxy (see below) we need it on the others
-	// as well.
-	c.Put(ctx, t.Cockroach(), "./cockroach", loadNodes)
 	// Don't encrypt in tpccbench tests.
 	startOpts, settings := b.startOpts()
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)

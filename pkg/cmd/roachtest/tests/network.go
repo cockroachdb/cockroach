@@ -37,8 +37,6 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Node(n)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-
 	t.L().Printf("starting nodes to initialize TLS certs...")
 	// NB: we need to start two times, because when we use
 	// c.Start() separately on nodes 1 and nodes 2-3,

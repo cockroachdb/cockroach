@@ -35,7 +35,6 @@ func registerSecure(r registry.Registry) {
 			Cluster:          r.MakeClusterSpec(numNodes),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				c.Put(ctx, t.Cockroach(), "./cockroach")
 				settings := install.MakeClusterSettings(install.SecureOption(true))
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 				db := c.Conn(ctx, t.L(), 1)
@@ -59,7 +58,6 @@ func registerSecure(r registry.Registry) {
 // multitenantSmokeTest verifies that a secure sql pod can connect to kv server
 // and that tenant is is properly transmitted via cert.
 func multitenantSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings(install.SecureOption(true))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 

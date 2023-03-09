@@ -66,8 +66,6 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	for i := 0; ; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		if shouldExit() {

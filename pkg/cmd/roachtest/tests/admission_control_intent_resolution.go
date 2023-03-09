@@ -67,7 +67,6 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")

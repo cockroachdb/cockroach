@@ -41,7 +41,6 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 				workloadNode   = c.Node(crdbNodeCount + 1)
 			)
 			t.Status(`set up Unified Architecture Cluster`)
-			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 
 			// In order to observe the app tenant's db console, create a secure

@@ -132,6 +132,13 @@ type TestSpec struct {
 	// ExtraLabels are test-specific labels that will be added to the Github
 	// issue created when a failure occurs, in addition to default labels.
 	ExtraLabels []string
+
+	// CockroachBinary is the cockroach binary that will be uploaded
+	// to every node in the cluster at the start of the test. We upload to
+	// every node so that we can fetch logs in the case of a failure.
+	// If one is not specified, the default behavior is to upload
+	// a binary with the crdb_test flag randomly enabled or disabled.
+	CockroachBinary ClusterCockroachBinary
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
@@ -426,3 +433,13 @@ func setToString(validValues []string, m map[string]struct{}) string {
 	}
 	return strings.Join(elems, ",")
 }
+
+// ClusterCockroachBinary specifies the type of cockroach binaries that
+// can be uploaded to the cluster.
+type ClusterCockroachBinary int
+
+const (
+	RandomizedCockroach ClusterCockroachBinary = iota
+	StandardCockroach
+	RuntimeAssertionsCockroach
+)
