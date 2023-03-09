@@ -65,7 +65,6 @@ func runReplicaGCChangedPeers(
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, 3))
 

@@ -274,7 +274,6 @@ func setupAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) (clusterstats.StatCollector, func(context.Context)) {
 	workloadNode := c.Spec().NodeCount
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	t.Status("starting cluster")
 	for i := 1; i <= spec.nodes; i++ {
