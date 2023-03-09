@@ -427,7 +427,11 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
+	// We run this without runtime assertions as the tests make incorrect
+	// assumptions about the absolute values of QPS.
+	// See: https://github.com/cockroachdb/cockroach/issues/112664
+	// TODO(DarrylWong): once the above issue is resolved, use t.Cockroach()
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	startOpts := option.DefaultStartOptsNoBackups()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -581,7 +585,9 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	rows := size / rowEstimate
 	const minBytes = 16 << 20 // 16 MB
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	// Never run with runtime assertions as this makes this test take
+	// too long to complete.
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
