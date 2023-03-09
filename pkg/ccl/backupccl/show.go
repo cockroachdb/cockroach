@@ -192,6 +192,9 @@ func showBackupTypeCheck(
 	}
 	if err := exprutil.TypeCheck(
 		ctx, "SHOW BACKUP", p.SemaCtx(),
+		exprutil.Ints{
+			backup.Options.CheckConnectionConcurrency,
+		},
 		exprutil.Strings{
 			backup.Path,
 			backup.Options.EncryptionPassphrase,
@@ -252,6 +255,13 @@ func showBackupPlanHook(
 				return nil, nil, nil, false, err
 			}
 			params.MinDuration = parsed
+		}
+		if showStmt.Options.CheckConnectionConcurrency != nil {
+			concurrency, err := exprEval.Int(ctx, showStmt.Options.CheckConnectionConcurrency)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			params.Concurrency = concurrency
 		}
 		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, params)
 	}

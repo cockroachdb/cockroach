@@ -165,6 +165,7 @@ type ShowBackupOptions struct {
 
 	CheckConnectionTransferSize Expr
 	CheckConnectionDuration     Expr
+	CheckConnectionConcurrency  Expr
 }
 
 var _ NodeFormatter = &ShowBackupOptions{}
@@ -234,6 +235,11 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("TIME = ")
 		ctx.FormatNode(o.CheckConnectionDuration)
 	}
+	if o.CheckConnectionConcurrency != nil {
+		maybeAddSep()
+		ctx.WriteString("CONCURRENTLY = ")
+		ctx.FormatNode(o.CheckConnectionConcurrency)
+	}
 }
 
 func (o ShowBackupOptions) IsDefault() bool {
@@ -248,7 +254,8 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.DebugMetadataSST == options.DebugMetadataSST &&
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
-		o.CheckConnectionDuration == options.CheckConnectionDuration
+		o.CheckConnectionDuration == options.CheckConnectionDuration &&
+		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
@@ -331,6 +338,12 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	}
 
 	o.CheckConnectionDuration, err = combineExpr(o.CheckConnectionDuration, other.CheckConnectionDuration,
+		"time")
+	if err != nil {
+		return err
+	}
+
+	o.CheckConnectionConcurrency, err = combineExpr(o.CheckConnectionConcurrency, other.CheckConnectionConcurrency,
 		"time")
 	if err != nil {
 		return err
