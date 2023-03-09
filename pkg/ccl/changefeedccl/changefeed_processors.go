@@ -313,7 +313,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
+		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.sliMetrics, ca.isSinkless())
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -930,7 +930,13 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
-	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed)); err != nil {
+
+	sliMertics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	if err != nil {
+		return nil, err
+	}
+
+	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed), sliMertics); err != nil {
 		return nil, err
 	}
 

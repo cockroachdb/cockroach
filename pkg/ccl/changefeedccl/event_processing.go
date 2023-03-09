@@ -93,21 +93,22 @@ func newEventConsumer(
 	expr execinfrapb.Expression,
 	knobs TestingKnobs,
 	metrics *Metrics,
+	sliMetrics *sliMetrics,
 	isSinkless bool,
 ) (eventConsumer, EventSink, error) {
 	cfg := flowCtx.Cfg
 	evalCtx := flowCtx.EvalCtx
 
+	encodingOpts, err := feed.Opts.GetEncodingOptions()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	pacerRequestUnit := changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV)
 	enablePacer := changefeedbase.EventConsumerElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
-		var err error
-		encodingOpts, err := feed.Opts.GetEncodingOptions()
-		if err != nil {
-			return nil, err
-		}
-		encoder, err := getEncoder(encodingOpts, feed.Targets)
+		encoder, err := getEncoder(encodingOpts, feed.Targets, sliMetrics)
 		if err != nil {
 			return nil, err
 		}
