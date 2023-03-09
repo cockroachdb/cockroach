@@ -43,7 +43,7 @@ func registerTPCE(r registry.Registry) {
 		racks := opts.nodes
 
 		t.Status("installing cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+		c.Put(ctx, t.StandardCockroach(), "./cockroach", roachNodes)
 
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.StoreCount = opts.ssds

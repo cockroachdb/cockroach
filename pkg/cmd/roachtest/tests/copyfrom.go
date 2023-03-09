@@ -122,7 +122,7 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 }
 
 func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
