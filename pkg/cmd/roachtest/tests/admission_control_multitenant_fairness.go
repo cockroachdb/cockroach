@@ -135,7 +135,7 @@ func runMultiTenantFairness(
 	}
 
 	t.L().Printf("starting cockroach securely (<%s)", time.Minute)
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Start(ctx, t.L(),
 		option.DefaultStartOptsNoBackups(),
 		install.MakeClusterSettings(install.SecureOption(true)),

@@ -34,7 +34,7 @@ const (
 func runConnectionLatencyTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int, password bool,
 ) {
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach")
+	err := c.PutE(ctx, t.L(), t.StandardCockroach(), "./cockroach")
 	require.NoError(t, err)
 
 	err = c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
