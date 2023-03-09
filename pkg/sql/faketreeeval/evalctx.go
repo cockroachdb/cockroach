@@ -490,7 +490,7 @@ func (ep *DummyEvalPlanner) SpanStats(
 
 // GetDetailsForSpanStats is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) GetDetailsForSpanStats(
-	context.Context, int, int,
+	context.Context, int, int, func() (string, string),
 ) (it eval.InternalRows, err error) {
 	return
 }
