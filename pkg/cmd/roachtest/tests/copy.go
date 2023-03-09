@@ -47,7 +47,6 @@ func registerCopy(r registry.Registry) {
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
 
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 		// We run this without metamorphic constants as kv-batch-size = 1 makes
 		// this test take far too long to complete.

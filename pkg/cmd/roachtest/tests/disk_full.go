@@ -40,7 +40,6 @@ func registerDiskFull(r registry.Registry) {
 			}
 
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			// Node 1 will soon be killed, when the ballast file fills up its disk. To
