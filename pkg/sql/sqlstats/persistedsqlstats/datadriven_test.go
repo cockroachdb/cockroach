@@ -16,6 +16,7 @@ package persistedsqlstats_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"strings"
 	"testing"
 	"time"
@@ -104,10 +105,13 @@ func TestSQLStatsDataDriven(t *testing.T) {
 		case "exec-sql":
 			stmts := strings.Split(d.Input, "\n")
 			for i := range stmts {
-				_, err := sqlConn.Exec(stmts[i])
-				if err != nil {
-					t.Errorf("failed to execute stmt %s due to %s", stmts[i], err.Error())
-				}
+				testutils.SucceedsSoon(t, func() error {
+					_, exSqlErr := sqlConn.Exec(stmts[i])
+					if exSqlErr != nil {
+						return fmt.Errorf("failed to execute stmt %s due to %s", stmts[i], exSqlErr.Error())
+					}
+					return nil
+				})
 			}
 		case "observe-sql":
 			actual := observer.QueryStr(t, d.Input)
