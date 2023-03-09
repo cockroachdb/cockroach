@@ -657,6 +657,24 @@ func TestProxyRefuseConn(t *testing.T) {
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
+func TestProxyTCPProbe(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	te := newTester()
+	defer te.Close()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	_, addr, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
+
+	// Simulate a TCP probe.
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+}
+
 func TestDenylistUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
