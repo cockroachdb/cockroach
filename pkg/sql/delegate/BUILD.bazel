@@ -58,11 +58,13 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/syntheticprivilege",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/intsets",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

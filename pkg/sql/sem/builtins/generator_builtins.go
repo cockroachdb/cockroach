@@ -606,6 +606,27 @@ The last argument is a JSONB object containing the following optional fields:
 			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.",
 			volatility.Stable,
 		),
+		// Database name overload
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_name", Typ: types.String},
+			},
+			tableSpanStatsGeneratorType,
+			makeTableSpanStatsGenerator,
+			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for tables of the provided database name.",
+			volatility.Stable,
+		),
+		// Table name overload
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+			},
+			tableSpanStatsGeneratorType,
+			makeTableSpanStatsGenerator,
+			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table name.",
+			volatility.Stable,
+		),
 	),
 }
 
@@ -2934,17 +2955,19 @@ type tableSpanStatsIterator struct {
 	currDbId          int
 	currTableId       int
 	currStatsResponse *roachpb.SpanStatsResponse
-	singleTableReq    bool
+	getNamesForQuery  func() (string, string)
 }
 
-func newTableSpanStatsIterator(eval *eval.Context, dbId int, tableId int) *tableSpanStatsIterator {
-	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, currDbId: dbId, currTableId: tableId, singleTableReq: tableId != 0}
+func newTableSpanStatsIterator(
+	eval *eval.Context, dbId int, tableId int, dbName string, tableName string,
+) *tableSpanStatsIterator {
+	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, currDbId: dbId, currTableId: tableId, getNamesForQuery: func() (string, string) { return dbName, tableName }}
 }
 
 // Start implements the tree.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	var err error = nil
-	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.currDbId, tssi.currTableId)
+	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.currDbId, tssi.currTableId, tssi.getNamesForQuery)
 	return err
 }
 
@@ -3019,17 +3042,29 @@ func makeTableSpanStatsGenerator(
 	}
 	dbId := 0
 	tableId := 0
+	var dbName string
+	var tableName string
 	if len(args) > 0 {
-		dbId = int(tree.MustBeDInt(args[0]))
-		if dbId <= 0 {
-			return nil, errors.New("provided database id must be greater than or equal to 1")
+		switch args[0].(type) {
+		case *tree.DString:
+			dbName = string(tree.MustBeDString(args[0]))
+		case *tree.DInt:
+			dbId = int(tree.MustBeDInt(args[0]))
+		}
+		if dbId <= 0 && dbName == "" {
+			return nil, errors.New("provided database id must be greater than or equal to 1 or name must be non-empty")
 		}
 	}
 	if len(args) > 1 {
-		tableId = int(tree.MustBeDInt(args[1]))
-		if tableId <= 0 {
-			return nil, errors.New("provided table id must be greater than or equal to 1")
+		switch args[1].(type) {
+		case *tree.DString:
+			tableName = string(tree.MustBeDString(args[1]))
+		case *tree.DInt:
+			tableId = int(tree.MustBeDInt(args[1]))
+		}
+		if tableId <= 0 && tableName == "" {
+			return nil, errors.New("provided table id must be greater than or equal to 1 or name must be non-empty")
 		}
 	}
-	return newTableSpanStatsIterator(evalCtx, dbId, tableId), nil
+	return newTableSpanStatsIterator(evalCtx, dbId, tableId, dbName, tableName), nil
 }

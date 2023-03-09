@@ -89,8 +89,10 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 	// Resolve the target table/index if running FROM TABLE/INDEX.
 	var idx cat.Index
 	var resName tree.TableName
+	var isFromTableOrIndex bool
 	switch n.Source {
 	case tree.ShowRangesTable, tree.ShowRangesIndex:
+		isFromTableOrIndex = true
 		var err error
 		idx, resName, err = cat.ResolveTableIndex(
 			d.ctx, d.catalog, cat.Flags{
@@ -367,13 +369,29 @@ AND s.end_key > r.start_key`)
               ON r.table_id = t.table_id`, dbName.String(), dbNameCol)
 	}
 	buf.WriteString("\n),\n") // end of named_ranges CTE.
+	// If with details we need to get approximate_disk_bytes from tenant_span_stats.
+	if n.Options.Details {
+		buf.WriteString("span_stats AS (SELECT sum(approximate_disk_bytes) AS approx_disk_bytes FROM crdb_internal.tenant_span_stats(")
+		if dbName != "" {
+			if isFromTableOrIndex {
+				fmt.Fprintf(&buf, `'%s', '%s'`, dbName, string(idx.Table().Name()))
+			} else {
+				fmt.Fprintf(&buf, `'%s'`, dbName)
+			}
+		}
+		buf.WriteString(")),\n")
+	}
 	buf.WriteString("intermediate AS (SELECT r.*")
 	// If details were requested, also include the extra
 	// columns from crdb_internal.ranges.
 	if n.Options.Details {
-		fmt.Fprintf(&buf, ",\n  %s", colinfo.RangesExtraRenders)
+		fmt.Fprintf(&buf, ",s.*,\n  %s", colinfo.RangesExtraRenders)
 	}
-	buf.WriteString("\nFROM named_ranges r)\n")
+	buf.WriteString("\nFROM named_ranges r")
+	if n.Options.Details {
+		buf.WriteString(", span_stats s")
+	}
+	buf.WriteString(")\n")
 
 	// Time to assemble the final projection.
 
@@ -656,6 +674,7 @@ AND s.end_key > r.start_key`)
 			}
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))
 		}
+		buf.WriteString(",\n  approx_disk_bytes")
 	}
 
 	// Complete this CTE. and add an order if needed.
