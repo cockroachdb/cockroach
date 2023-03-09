@@ -591,6 +591,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 
 var decodeKeyOptions struct {
 	encoding keyFormat
+	userKey  bool
 }
 
 var debugDecodeKeyCmd = &cobra.Command{
@@ -598,6 +599,8 @@ var debugDecodeKeyCmd = &cobra.Command{
 	Short: "decode <key>",
 	Long: `
 Decode encoded keys provided as command arguments and pretty-print them.
+Decode command could be used with either encoded engine keys that contain
+timestamp or user keys used in range descriptors, range keys etc.
 Key encoding type could be changed using encoding flag.
 For example:
 
@@ -620,11 +623,15 @@ For example:
 			if err != nil {
 				return err
 			}
-			k, err := storage.DecodeMVCCKey(b)
-			if err != nil {
-				return err
+			if decodeKeyOptions.userKey {
+				fmt.Println(roachpb.Key(b))
+			} else {
+				k, err := storage.DecodeMVCCKey(b)
+				if err != nil {
+					return err
+				}
+				fmt.Println(k)
 			}
-			fmt.Println(k)
 		}
 		return nil
 	},
@@ -1492,6 +1499,7 @@ func init() {
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
+	f.BoolVar(&decodeKeyOptions.userKey, "user-key", false, "key type")
 
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
