@@ -10,7 +10,7 @@
 
 import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
-import { TimeScale, api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";
@@ -81,23 +81,5 @@ export function createOpenDiagnosticsModalAction(
     payload: {
       statementFingerprint,
     },
-  };
-}
-
-/***************************************
-        Combined Stats Actions
-****************************************/
-
-// Setting the timescale using this action type has some additional
-// side effects, see statementSagas.ts for the saga function:
-export const SET_GLOBAL_TIME_SCALE =
-  "cockroachui/statements/SET_GLOBAL_TIME_SCALE";
-
-export function setGlobalTimeScaleAction(
-  ts: TimeScale,
-): PayloadAction<TimeScale> {
-  return {
-    type: SET_GLOBAL_TIME_SCALE,
-    payload: ts,
   };
 }

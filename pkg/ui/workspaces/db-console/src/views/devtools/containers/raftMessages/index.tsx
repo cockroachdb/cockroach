@@ -28,7 +28,6 @@ import {
   nodeIDsSelector,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { nodeIDAttr } from "src/util/constants";
 import {
   GraphDashboardProps,
@@ -46,6 +45,7 @@ import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import { TimeWindow, setMetricsFixedWindow } from "src/redux/timeScale";
 import { TimeScale } from "@cockroachlabs/cluster-ui";
+import { setTimeScale } from "src/redux/timeScale";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
@@ -225,7 +225,7 @@ const mapDispatchToProps = {
   hoverOn: hoverOnAction,
   hoverOff: hoverOffAction,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale,
 };
 
 export default withRouter(

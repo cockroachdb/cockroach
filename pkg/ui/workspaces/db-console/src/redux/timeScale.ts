@@ -14,7 +14,7 @@
  */
 
 import { Action } from "redux";
-import { put, takeEvery } from "redux-saga/effects";
+import { all, put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 import _ from "lodash";
 import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
@@ -25,6 +25,11 @@ import {
   getValueFromSessionStorage,
   setLocalSetting,
 } from "src/redux/localsettings";
+import {
+  invalidateExecutionInsights,
+  invalidateStatements,
+  invalidateTxnInsights,
+} from "./apiReducers";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
 export const SET_METRICS_MOVING_WINDOW =
@@ -219,8 +224,21 @@ export const adjustTimeScale = (
   return result;
 };
 
+export function* setGlobalTimeScaleEffect({
+  payload,
+}: PayloadAction<TimeScale>) {
+  yield all([
+    put(invalidateStatements()),
+    put(invalidateExecutionInsights()),
+    put(invalidateTxnInsights()),
+  ]);
+
+  // Persist value in local settings.
+  // Note that db-console uses the value from redux in the app
+  // and the local storage value to initialize the value.
+  yield put(setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, payload));
+}
+
 export function* timeScaleSaga() {
-  yield takeEvery(SET_SCALE, function* ({ payload }: PayloadAction<TimeScale>) {
-    yield put(setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, payload));
-  });
+  yield takeEvery(SET_SCALE, setGlobalTimeScaleEffect);
 }

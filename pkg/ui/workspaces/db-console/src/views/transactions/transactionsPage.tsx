@@ -36,14 +36,13 @@ import {
   TransactionsPageRootProps,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
 import {
   recentTransactionsPageActionCreators,
   mapStateToRecentTransactionsPageProps,
 } from "./recentTransactionsSelectors";
-import { selectTimeScale } from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import {
   selectStatementsLastUpdated,
   selectStatementsDataValid,
@@ -106,7 +105,7 @@ const fingerprintsPageActions = {
   refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
-  onTimeScaleChange: setGlobalTimeScaleAction,
+  onTimeScaleChange: setTimeScale,
   // We use `null` when the value was never set and it will show all columns.
   // If the user modifies the selection and no columns are selected,
   // the function will save the value as a blank space, otherwise

@@ -34,7 +34,6 @@ import {
 import {
   cancelStatementDiagnosticsReportAction,
   createStatementDiagnosticsReportAction,
-  setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import {
@@ -50,7 +49,7 @@ import { StatementDetailsResponseMessage } from "src/util/api";
 import { getMatchParamByName, queryByName } from "src/util/query";
 
 import { appNamesAttr, statementAttr } from "src/util/constants";
-import { selectTimeScale } from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment";
 
@@ -157,7 +156,7 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
     };
   },
   onTabChanged: trackStatementDetailsSubnavSelectionAction,
-  onTimeScaleChange: setGlobalTimeScaleAction,
+  onTimeScaleChange: setTimeScale,
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
   onDiagnosticCancelRequest: (
     report: clusterUiApi.StatementDiagnosticsReport,

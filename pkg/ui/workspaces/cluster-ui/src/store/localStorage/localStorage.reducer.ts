@@ -58,6 +58,11 @@ type Payload = {
   value: any;
 };
 
+type TimeScalePayload = {
+  key: "timeScale/SQLActivity";
+  value: TimeScale;
+};
+
 const defaultSortSetting: SortSetting = {
   ascending: false,
   columnTitle: "executionCount",
@@ -204,6 +209,9 @@ const localStorageSlice = createSlice({
   reducers: {
     update: (state: any, action: PayloadAction<Payload>) => {
       state[action.payload.key] = action.payload.value;
+    },
+    updateGlobalTimeScale: (state, action: PayloadAction<TimeScalePayload>) => {
+      state["timeScale/SQLActivity"] = action.payload.value;
     },
   },
 });

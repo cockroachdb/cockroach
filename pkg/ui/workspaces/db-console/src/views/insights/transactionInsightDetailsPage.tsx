@@ -24,8 +24,7 @@ import {
   selectTransactionInsightDetailsError,
   selectTransactionInsightDetailsMaxSizeReached,
 } from "src/views/insights/insightsSelectors";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { selectTimeScale } from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
 
 const mapStateToProps = (
@@ -46,7 +45,7 @@ const mapStateToProps = (
 
 const mapDispatchToProps: TransactionInsightDetailsDispatchProps = {
   refreshTransactionInsightDetails: refreshTxnInsightDetails,
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale,
   refreshUserSQLRoles: refreshUserSQLRoles,
 };
 

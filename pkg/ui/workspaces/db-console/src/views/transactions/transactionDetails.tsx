@@ -31,8 +31,7 @@ import {
   TransactionDetailsProps,
   TransactionDetails,
 } from "@cockroachlabs/cluster-ui";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { selectTimeScale } from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelectors";
 import { selectHasAdminRole } from "src/redux/user";
 
@@ -97,7 +96,7 @@ export default withRouter(
       refreshData: refreshStatements,
       refreshNodes,
       refreshUserSQLRoles,
-      onTimeScaleChange: setGlobalTimeScaleAction,
+      onTimeScaleChange: setTimeScale,
       refreshTransactionInsights: refreshTxnInsights,
     },
   )(TransactionDetails),

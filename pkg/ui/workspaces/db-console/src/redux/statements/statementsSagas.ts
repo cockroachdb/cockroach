@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeEvery, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 
 import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
-  SET_GLOBAL_TIME_SCALE,
   CANCEL_STATEMENT_DIAGNOSTICS_REPORT,
   cancelStatementDiagnosticsReportCompleteAction,
   cancelStatementDiagnosticsReportFailedAction,
@@ -23,16 +22,11 @@ import {
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
-  invalidateStatements,
-  invalidateExecutionInsights,
-  invalidateTxnInsights,
 } from "src/redux/apiReducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { TimeScale } from "@cockroachlabs/cluster-ui";
-import { setTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 export function* createDiagnosticsReportSaga(
@@ -118,21 +112,9 @@ export function* cancelDiagnosticsReportSaga(
   }
 }
 
-export function* setCombinedStatementsTimeScaleSaga(
-  action: PayloadAction<TimeScale>,
-) {
-  const ts = action.payload;
-
-  yield put(setTimeScale(ts));
-  yield put(invalidateStatements());
-  yield put(invalidateExecutionInsights());
-  yield put(invalidateTxnInsights());
-}
-
 export function* statementsSaga() {
   yield all([
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
     takeEvery(CANCEL_STATEMENT_DIAGNOSTICS_REPORT, cancelDiagnosticsReportSaga),
-    takeLatest(SET_GLOBAL_TIME_SCALE, setCombinedStatementsTimeScaleSaga),
   ]);
 }

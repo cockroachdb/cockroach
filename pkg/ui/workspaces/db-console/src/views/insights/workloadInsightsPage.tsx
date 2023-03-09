@@ -35,8 +35,7 @@ import {
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { selectTimeScale } from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 
 export const insightStatementColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -85,7 +84,7 @@ const TransactionDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale,
   refreshTransactionInsights: refreshTxnInsights,
 };
 
@@ -96,7 +95,7 @@ const StatementDispatchProps: StatementInsightsViewDispatchProps = {
   refreshStatementInsights: refreshStmtInsights,
   onColumnsChange: (value: string[]) =>
     insightStatementColumnsLocalSetting.set(value.join(",")),
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale,
 };
 
 type StateProps = {

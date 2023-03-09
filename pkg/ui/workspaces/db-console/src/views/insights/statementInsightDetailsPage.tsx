@@ -17,9 +17,9 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
 import { refreshUserSQLRoles } from "src/redux/apiReducers";
 import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
+import { setTimeScale } from "src/redux/timeScale";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -34,7 +34,7 @@ const mapStateToProps = (
 };
 
 const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale,
   refreshUserSQLRoles: refreshUserSQLRoles,
 };
 

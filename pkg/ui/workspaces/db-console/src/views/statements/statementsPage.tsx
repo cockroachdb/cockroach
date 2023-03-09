@@ -52,7 +52,6 @@ import {
   cancelStatementDiagnosticsReportAction,
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
-  setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import {
   trackCancelDiagnosticsBundleAction,
@@ -66,7 +65,7 @@ import {
   recentStatementsViewActions,
   mapStateToRecentStatementViewProps,
 } from "./recentStatementsSelectors";
-import { selectTimeScale } from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import {
   selectStatementsLastUpdated,
   selectStatementsDataValid,
@@ -287,7 +286,7 @@ export const searchLocalSetting = new LocalSetting(
 const fingerprintsPageActions = {
   refreshStatements: refreshStatements,
   refreshDatabases: refreshDatabases,
-  onTimeScaleChange: setGlobalTimeScaleAction,
+  onTimeScaleChange: setTimeScale,
   refreshStatementDiagnosticsRequests,
   refreshNodes,
   refreshUserSQLRoles,

@@ -37,8 +37,8 @@ import {
   selectHasAdminRole,
 } from "src/redux/user";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+import { setTimeScale } from "src/redux/timeScale";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const mapStateToProps = createSelector(
@@ -117,5 +117,5 @@ export const mapDispatchToProps = {
   resetIndexUsageStats: resetIndexUsageStatsAction,
   refreshNodes,
   refreshUserSQLRoles,
-  onTimeScaleChange: setGlobalTimeScaleAction,
+  onTimeScaleChange: setTimeScale,
 };
