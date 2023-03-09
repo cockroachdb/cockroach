@@ -31,16 +31,21 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
+	ts, hostDB, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
 			InsecureWebAccess: true,
 			// Must disable test tenant because test below assumes that
 			// it is connecting to the host tenant.
 			DisableDefaultTestTenant: true,
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	ts := tc.Server(0)
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// We disable the split queue as an untimely split can cause the QPS
+					// stat to be split over multiple ranges for the tenant.
+					DisableSplitQueue: true,
+				},
+			},
+		})
+	defer ts.Stopper().Stop(ctx)
 
 	_, db := serverutils.StartTenant(
 		t, ts, base.TestTenantArgs{TenantID: serverutils.TestTenantID()},
@@ -54,8 +59,7 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	r.Exec(t, `INSERT INTO foo.qps_test VALUES('abc')`)
 
 	// Host connection.
-	conn := tc.ServerConn(0)
-	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB := sqlutils.MakeSQLRunner(hostDB)
 
 	var rangeID int
 	stmt := fmt.Sprintf(
