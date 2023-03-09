@@ -82,7 +82,7 @@ func (l *RedirectLogger) Errorf(format string, v ...interface{}) {
 
 func (l *RedirectLogger) Fatal(v ...interface{}) {
 	l.print(4, v...)
-	panic(v)
+	panic(fmt.Sprint(v...))
 }
 
 func (l *RedirectLogger) Fatalf(format string, v ...interface{}) {
@@ -92,7 +92,7 @@ func (l *RedirectLogger) Fatalf(format string, v ...interface{}) {
 
 func (l *RedirectLogger) Panic(v ...interface{}) {
 	l.print(4, v...)
-	panic(v)
+	panic(fmt.Sprint(v...))
 }
 
 func (l *RedirectLogger) Panicf(format string, v ...interface{}) {

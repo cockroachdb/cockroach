@@ -60,7 +60,7 @@ func (l *nodeTestHarness) Warningf(format string, v ...interface{}) {
 
 func (l *nodeTestHarness) Fatal(v ...interface{}) {
 	l.t.Error(v...)
-	panic(v)
+	panic(fmt.Sprint(v...))
 }
 
 func (l *nodeTestHarness) Fatalf(format string, v ...interface{}) {
@@ -70,7 +70,7 @@ func (l *nodeTestHarness) Fatalf(format string, v ...interface{}) {
 
 func (l *nodeTestHarness) Panic(v ...interface{}) {
 	l.t.Log(v...)
-	panic(v)
+	panic(fmt.Sprint(v...))
 }
 
 func (l *nodeTestHarness) Panicf(format string, v ...interface{}) {
