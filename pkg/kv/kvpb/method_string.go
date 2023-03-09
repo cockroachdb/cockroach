@@ -57,6 +57,7 @@ func _() {
 	_ = x[Barrier-46]
 	_ = x[Probe-47]
 	_ = x[IsSpanEmpty-48]
+	_ = x[MaxMethod-48]
 	_ = x[NumMethods-49]
 }
 

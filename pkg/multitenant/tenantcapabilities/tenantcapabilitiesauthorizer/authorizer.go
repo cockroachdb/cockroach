@@ -65,7 +65,8 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 
 	for _, ru := range ba.Requests {
-		requiredCap, hasCap := reqMethodToCap[ru.GetInner().Method()]
+		request := ru.GetInner()
+		requiredCap, hasCap := reqMethodToCap[request.Method()]
 		if requiredCap == noCapCheckNeeded {
 			continue
 		}
@@ -79,7 +80,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 			// disallowed. This prevents accidents where someone adds a new
 			// sensitive request type in KV and forgets to add an explicit
 			// authorization rule for it here.
-			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, ru.GetInner())
+			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, request)
 		}
 	}
 	return nil
