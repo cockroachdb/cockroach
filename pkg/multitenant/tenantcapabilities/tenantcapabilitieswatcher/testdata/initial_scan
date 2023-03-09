@@ -38,13 +38,13 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
-update: ten=15 cap={can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=11 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+update: ten=15 cap={can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 flush-state
 ----
-ten=11 cap={can_admin_split:false can_view_node_info:false can_view_tsdb_metrics:false}
-ten=15 cap={can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
+ten=11 cap={can_admin_split:false can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
+ten=15 cap={can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}
 
 get-capabilities ten=10
 ----
@@ -52,4 +52,4 @@ not-found
 
 get-capabilities ten=15
 ----
-{can_admin_split:true can_view_node_info:false can_view_tsdb_metrics:false}
+{can_admin_split:true can_admin_unsplit:false can_view_node_info:false can_view_tsdb_metrics:false}

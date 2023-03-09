@@ -1,14 +1,14 @@
 # Ensure the system tenant can issue any request, regardless of capabilities.
 
-has-capability-for-batch ten=system cmds=(split, scan, cput)
+has-capability-for-batch ten=system cmds=(AdminSplit, Scan, ConditionalPut)
 ----
 ok
 
-has-capability-for-batch ten=system cmds=(scan, cput)
+has-capability-for-batch ten=system cmds=(Scan, ConditionalPut)
 ----
 ok
 
-has-capability-for-batch ten=system cmds=(split)
+has-capability-for-batch ten=system cmds=(AdminSplit)
 ----
 ok
 
@@ -21,6 +21,6 @@ ok
 # things properly. For now, we test this case explicitly to ensure nothing
 # breaks.
 
-has-capability-for-batch ten=system cmds=(split)
+has-capability-for-batch ten=system cmds=(AdminSplit)
 ----
 ok

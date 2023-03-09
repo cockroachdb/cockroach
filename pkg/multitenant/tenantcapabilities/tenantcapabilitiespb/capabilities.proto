@@ -57,6 +57,10 @@ message TenantCapabilities {
   // Furthermore the span config reconciliation infrastructure is poorly
   // positioned to surface errors to the user.
   SpanConfigBounds span_config_bounds = 4;
+
+  // CanAdminUnsplit if set to true, grants the tenant the ability to
+  // successfully perform `AdminUnsplit` requests.
+  bool can_admin_unsplit = 5;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

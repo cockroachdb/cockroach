@@ -66,6 +66,23 @@ SELECT crdb_internal.pretty_key(key, 0) FROM crdb_internal.scan(crdb_internal.ta
 /10/Table/106/1/1/0
 /10/Table/106/1/2/0
 
+# Regression test for a panic when the end key was equal to the Next() key of the last key returned.
+statement ok
+SELECT
+	crdb_internal.pretty_key(key, 0)
+FROM
+	crdb_internal.scan(
+		ARRAY[
+			crdb_internal.table_span($tableid)[1],
+			(
+				SELECT key || '\x00'::BYTES
+				FROM crdb_internal.scan(crdb_internal.table_span($tableid))
+				ORDER BY key DESC
+				LIMIT 1
+			)
+		]
+	)
+
 # An error should be returned when an invalid range ID is specified.
 statement error pq: range with ID 1000000 not found
 SELECT key FROM crdb_internal.list_sql_keys_in_range(1000000)
