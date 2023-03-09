@@ -30,7 +30,7 @@ import {
 import { cockroach } from "src/js/protos";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const { nodeIDs, storeSources, nodeDisplayNameByID, storeIDsByNodeID } =
     props;
 
@@ -97,6 +97,24 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.rebalancing.queriespersecond"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Average Replica CPU per Node"
+      tooltip={`Moving average of all replica CPU usage on each node per second.
+         Tracks roughly the last 30 minutes of usage. Used for load-based
+         rebalancing decisions.`}
+    >
+      <Axis units={AxisUnits.Duration} label="CPU time">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rebalancing.cpunanospersecond"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
