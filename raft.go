@@ -571,7 +571,9 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		return false
 	}
 
-	term, errt := r.raftLog.term(pr.Next - 1)
+	lastIndex, nextIndex := pr.Next-1, pr.Next
+	lastTerm, errt := r.raftLog.term(lastIndex)
+
 	var ents []pb.Entry
 	var erre error
 	// In a throttled StateReplicate only send empty MsgApp, to ensure progress.
@@ -581,7 +583,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	// leader to send an append), allowing it to be acked or rejected, both of
 	// which will clear out Inflights.
 	if pr.State != tracker.StateReplicate || !pr.Inflights.Full() {
-		ents, erre = r.raftLog.entries(pr.Next, r.maxMsgSize)
+		ents, erre = r.raftLog.entries(nextIndex, r.maxMsgSize)
 	}
 
 	if len(ents) == 0 && !sendIfEmpty {
@@ -616,15 +618,15 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	}
 
 	// Send the actual MsgApp otherwise, and update the progress accordingly.
-	next := pr.Next // save Next for later, as the progress update can change it
-	if err := pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents)), next); err != nil {
+	if err := pr.UpdateOnEntriesSend(len(ents), uint64(payloadsSize(ents)), nextIndex); err != nil {
 		r.logger.Panicf("%x: %v", r.id, err)
 	}
+	// NB: pr has been updated, but we make sure to only use its old values below.
 	r.send(pb.Message{
 		To:      to,
 		Type:    pb.MsgApp,
-		Index:   next - 1,
-		LogTerm: term,
+		Index:   lastIndex,
+		LogTerm: lastTerm,
 		Entries: ents,
 		Commit:  r.raftLog.committed,
 	})
@@ -1651,7 +1653,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 	} else {
 		r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
-			r.id, r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
+			r.id, r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
 
 		// Return a hint to the leader about the maximum index and term that the
 		// two logs could be divergent at. Do this by searching through the
@@ -1907,7 +1909,7 @@ func (r *raft) abortLeaderTransfer() {
 
 // committedEntryInCurrentTerm return true if the peer has committed an entry in its term.
 func (r *raft) committedEntryInCurrentTerm() bool {
-	return r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(r.raftLog.committed)) == r.Term
+	return r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(r.raftLog.committed)) == r.Term
 }
 
 // responseToReadIndexReq constructs a response for `req`. If `req` comes from the peer
