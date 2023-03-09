@@ -57,6 +57,20 @@ var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
 	"kv.range_split.load_cpu_threshold",
 	"the CPU use per second over which, the range becomes a candidate for load based splitting",
 	500*time.Millisecond,
+	func(threshold time.Duration) error {
+		// We enforce a minimum because of recursive splitting that may occur if
+		// the threshold is set too low. There is a fixed CPU overhead for a
+		// replica. At the moment no split key will be produced unless there are
+		// more than 100 samples (batch requests) to that replica, however the
+		// memory overhead of tracking split keys in split/weighted_finder.go is
+		// noticeable and a finder is created after exceeding this threshold.
+		if threshold < 10*time.Millisecond {
+			return errors.Errorf(
+				"Cannot set `kv.range_split.load_cpu_threshold` less than 10ms",
+			)
+		}
+		return nil
+	},
 ).WithPublic()
 
 func (obj LBRebalancingObjective) ToSplitObjective() split.SplitObjective {

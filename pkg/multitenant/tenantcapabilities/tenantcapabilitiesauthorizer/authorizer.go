@@ -65,7 +65,8 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 
 	for _, ru := range ba.Requests {
-		requiredCap, hasCap := reqMethodToCap[ru.GetInner().Method()]
+		request := ru.GetInner()
+		requiredCap, hasCap := reqMethodToCap[request.Method()]
 		if requiredCap == noCapCheckNeeded {
 			continue
 		}
@@ -79,7 +80,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 			// disallowed. This prevents accidents where someone adds a new
 			// sensitive request type in KV and forgets to add an explicit
 			// authorization rule for it here.
-			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, ru.GetInner())
+			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, request)
 		}
 	}
 	return nil
@@ -117,7 +118,8 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.Scan:               noCapCheckNeeded,
 
 	// The following are authorized via specific capabilities.
-	kvpb.AdminSplit: tenantcapabilities.CanAdminSplit,
+	kvpb.AdminSplit:   tenantcapabilities.CanAdminSplit,
+	kvpb.AdminUnsplit: tenantcapabilities.CanAdminUnsplit,
 
 	// TODO(ecwall): The following should also be authorized via specific capabilities.
 	kvpb.AdminChangeReplicas: noCapCheckNeeded,
@@ -125,7 +127,6 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.AdminRelocateRange:  noCapCheckNeeded,
 	kvpb.AdminScatter:        noCapCheckNeeded,
 	kvpb.AdminTransferLease:  noCapCheckNeeded,
-	kvpb.AdminUnsplit:        noCapCheckNeeded,
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.

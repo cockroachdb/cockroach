@@ -32,16 +32,12 @@ func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba kvpb.BatchRequ
 	for _, cmd := range d.CmdArgs {
 		if cmd.Key == "cmds" {
 			for _, z := range cmd.Vals {
-				switch z {
-				case "split":
-					ba.Add(&kvpb.AdminSplitRequest{})
-				case "scan":
-					ba.Add(&kvpb.ScanRequest{})
-				case "cput":
-					ba.Add(&kvpb.ConditionalPutRequest{})
-				default:
+				method, ok := kvpb.StringToMethodMap[z]
+				if !ok {
 					t.Fatalf("unsupported request type: %s", z)
 				}
+				request := kvpb.CreateRequest(method)
+				ba.Add(request)
 			}
 		}
 	}

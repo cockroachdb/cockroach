@@ -2158,6 +2158,10 @@ type spanKeyIterator struct {
 	// the iterator maintains a small set of K/V pairs in the span,
 	// and accesses more in a streaming fashion.
 	kvs []roachpb.KeyValue
+
+	// resumeSpan is the resume span from the last ScanRequest.
+	resumeSpan *roachpb.Span
+
 	// index maintains the current position of the iterator in kvs.
 	index int
 	// A buffer to avoid allocating an array on every call to Values().
@@ -2189,15 +2193,14 @@ func (sp *spanKeyIterator) Next(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	// If we don't have any K/V pairs at all, then we're out of results.
-	if len(sp.kvs) == 0 {
+	// If we don't have a resume span, then we're out of results.
+	if sp.resumeSpan == nil {
 		return false, nil
 	}
 
 	// If we had some K/V pairs already, use the last key to constrain
 	// the result of the next scan.
-	startKey := sp.kvs[len(sp.kvs)-1].Key.Next()
-	err := sp.scan(ctx, startKey, sp.span.EndKey)
+	err := sp.scan(ctx, sp.resumeSpan.Key, sp.span.EndKey)
 	if err != nil {
 		return false, err
 	}
@@ -2224,6 +2227,7 @@ func (sp *spanKeyIterator) scan(
 	}
 	resp := br.Responses[0].GetScan()
 	sp.kvs = resp.Rows
+	sp.resumeSpan = resp.ResumeSpan
 	// The user of the generator first calls Next(), then Values(), so the index
 	// managing the iterator's position needs to start at -1 instead of 0.
 	sp.index = -1
