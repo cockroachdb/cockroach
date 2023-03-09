@@ -84,6 +84,9 @@ interface TState {
 export interface TransactionsPageStateProps {
   columns: string[];
   data: IStatementsResponse;
+  isDataValid: boolean;
+  isReqInFlight: boolean;
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   error?: Error | null;
   filters: Filters;
@@ -99,7 +102,7 @@ export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
-  resetSQLStats: (req: StatementsRequest) => void;
+  resetSQLStats: () => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
@@ -139,14 +142,6 @@ export class TransactionsPage extends React.Component<
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(this.state, stateFromHistory);
-
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    }
   }
 
   getStateFromHistory = (): Partial<TState> => {
@@ -191,17 +186,31 @@ export class TransactionsPage extends React.Component<
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
   };
+
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
-    this.props.resetSQLStats(req);
+    this.props.resetSQLStats();
   };
 
   componentDidMount(): void {
-    this.refreshData();
-    this.props.refreshUserSQLRoles();
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.changeTimeScale(ts);
+    } else if (
+      !this.props.isDataValid ||
+      !this.props.data ||
+      !this.props.lastUpdated
+    ) {
+      this.refreshData();
+    }
+
     if (!this.props.isTenant) {
       this.props.refreshNodes();
     }
+
+    this.props.refreshUserSQLRoles();
   }
 
   updateQueryParams(): void {
@@ -236,10 +245,17 @@ export class TransactionsPage extends React.Component<
     );
   }
 
-  componentDidUpdate(): void {
+  componentDidUpdate(prevProps: TransactionsPageProps): void {
     this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
+    }
+
+    if (
+      prevProps.timeScale !== this.props.timeScale ||
+      (prevProps.isDataValid && !this.props.isDataValid)
+    ) {
+      this.refreshData();
     }
   }
 
@@ -397,7 +413,8 @@ export class TransactionsPage extends React.Component<
       data?.transactions || [],
       internal_app_name_prefix,
     );
-    const longLoadingMessage = !this.props?.data && (
+
+    const longLoadingMessage = (
       <Delayed delay={moment.duration(2, "s")}>
         <InlineAlert
           intent="info"
@@ -448,7 +465,7 @@ export class TransactionsPage extends React.Component<
         </PageConfig>
         <div className={cx("table-area")}>
           <Loading
-            loading={!this.props?.data}
+            loading={this.props.isReqInFlight}
             page={"transactions"}
             error={this.props?.error}
             render={() => {
@@ -464,7 +481,7 @@ export class TransactionsPage extends React.Component<
                   : generateRegionNode(t, statements, nodeRegions),
               }));
               const { current, pageSize } = pagination;
-              const hasData = data.transactions?.length > 0;
+              const hasData = data?.transactions?.length > 0;
               const isUsedFilter = search?.length > 0;
 
               // Creates a list of all possible columns,
@@ -560,7 +577,7 @@ export class TransactionsPage extends React.Component<
               })
             }
           />
-          {longLoadingMessage}
+          {this.props.isReqInFlight && longLoadingMessage}
         </div>
       </>
     );
