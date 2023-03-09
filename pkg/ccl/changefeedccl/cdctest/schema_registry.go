@@ -25,9 +25,8 @@ import (
 
 // SchemaRegistry is the kafka schema registry used in tests.
 type SchemaRegistry struct {
-	server     *httptest.Server
-	statusCode int
-	mu         struct {
+	server *httptest.Server
+	mu     struct {
 		syncutil.Mutex
 		idAlloc  int32
 		schemas  map[int32]string
@@ -39,15 +38,6 @@ type SchemaRegistry struct {
 // tests.
 func StartTestSchemaRegistry() *SchemaRegistry {
 	r := makeTestSchemaRegistry()
-	r.server.Start()
-	return r
-}
-
-// StartErrorTestSchemaRegistry creates and starts schema registry for
-// tests which will return the supplied statusCode on each request.
-func StartErrorTestSchemaRegistry(statusCode int) *SchemaRegistry {
-	r := makeTestSchemaRegistry()
-	r.statusCode = statusCode
 	r.server.Start()
 	return r
 }
@@ -124,11 +114,6 @@ var (
 
 // requestHandler routes requests based on the Method and Path of the request.
 func (r *SchemaRegistry) requestHandler(hw http.ResponseWriter, hr *http.Request) {
-	if r.statusCode != 0 {
-		hw.WriteHeader(r.statusCode)
-		return
-	}
-
 	path := hr.URL.Path
 	method := hr.Method
 
