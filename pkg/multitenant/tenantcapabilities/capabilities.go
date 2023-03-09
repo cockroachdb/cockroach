@@ -36,8 +36,10 @@ type Watcher interface {
 // Reader provides access to the global tenant capability state. The global
 // tenant capability state may be arbitrarily stale.
 type Reader interface {
+	// GetCapabilities returns the tenant capabilities for the specified tenant.
 	GetCapabilities(id roachpb.TenantID) (_ TenantCapabilities, found bool)
-	GetCapabilitiesMap() map[roachpb.TenantID]TenantCapabilities
+	// GetGlobalCapabilityState returns the capability state for all tenants.
+	GetGlobalCapabilityState() map[roachpb.TenantID]TenantCapabilities
 }
 
 // Authorizer performs various kinds of capability checks for requests issued

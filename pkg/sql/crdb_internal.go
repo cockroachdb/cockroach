@@ -7579,7 +7579,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 			tenantID           roachpb.TenantID
 			tenantCapabilities tenantcapabilities.TenantCapabilities
 		}
-		tenantCapabilitiesMap := tenantCapabilitiesReader.GetCapabilitiesMap()
+		tenantCapabilitiesMap := tenantCapabilitiesReader.GetGlobalCapabilityState()
 		tenantCapabilitiesEntries := make([]tenantCapabilitiesEntry, 0, len(tenantCapabilitiesMap))
 		for tenantID, tenantCapabilities := range tenantCapabilitiesMap {
 			tenantCapabilitiesEntries = append(
