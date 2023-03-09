@@ -378,7 +378,7 @@ type Planner interface {
 
 	SpanStats(context.Context, roachpb.RKey, roachpb.RKey) (*roachpb.SpanStatsResponse, error)
 
-	GetDetailsForSpanStats(ctx context.Context, dbId int, tableId int) (InternalRows, error)
+	GetDetailsForSpanStats(ctx context.Context, dbId int, tableId int, dbName string, tableName string) (InternalRows, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
