@@ -153,6 +153,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		}
 		defer r.Body.Close()
 
+		redirectToHome := false
 		for _, name := range tenantNames {
 			server, err := c.getServer(ctx, name)
 			if err != nil {
@@ -185,6 +186,12 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 					name:      string(name),
 					setCookie: setCookieHeader,
 				})
+				// In the case of /demologin, we want to redirect to the home page.
+				// If we get back a cookie along with an http.StatusTemporaryRedirect
+				// code, be sure to transfer that into the ResponseWriter later.
+				if sw.code == http.StatusTemporaryRedirect {
+					redirectToHome = true
+				}
 			}
 		}
 		// If the map has entries, the method to create the aggregated session should
@@ -217,7 +224,11 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 					return
 				}
 			}
-			w.WriteHeader(http.StatusOK)
+			if redirectToHome {
+				http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			} else {
+				w.WriteHeader(http.StatusOK)
+			}
 		} else {
 			w.WriteHeader(http.StatusUnauthorized)
 		}
