@@ -135,7 +135,7 @@ export function sqlResultsAreEmpty(
 // different versions. For now we just try to give more info as to why
 // this page is unavailable for insights.
 const UPGRADE_RELATED_ERRORS = [
-  /relation "crdb_internal.txn_execution_insights" does not exist/i,
+  /relation "(.*)" does not exist/i,
   /column "(.*)" does not exist/i,
 ];
 

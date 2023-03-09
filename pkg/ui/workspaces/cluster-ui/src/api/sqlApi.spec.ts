@@ -95,7 +95,15 @@ describe("sqlApi", () => {
         expected: true,
       },
       {
+        msg: 'extra text____relation "my table that doesnt exist" does not exist++++ extra text',
+        expected: true,
+      },
+      {
         msg: 'column "hello" does not exist',
+        expected: true,
+      },
+      {
+        msg: 'blah blah blah column "my_new_column" does not exist obs-fun-times',
         expected: true,
       },
       {
