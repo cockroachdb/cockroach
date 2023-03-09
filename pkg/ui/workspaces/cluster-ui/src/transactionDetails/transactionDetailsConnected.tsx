@@ -52,6 +52,7 @@ export const selectTransaction = createSelector(
       return {
         isLoading: true,
         transaction: null,
+        isValid: transactionState.valid,
       };
     }
     const txnFingerprintId = getMatchParamByName(
@@ -68,6 +69,7 @@ export const selectTransaction = createSelector(
       isLoading: false,
       transaction: transaction,
       lastUpdated: transactionState.lastUpdated,
+      isValid: transactionState.valid,
     };
   },
 );
@@ -76,7 +78,7 @@ const mapStateToProps = (
   state: AppState,
   props: TransactionDetailsProps,
 ): TransactionDetailsStateProps => {
-  const { isLoading, transaction, lastUpdated } = selectTransaction(
+  const { isLoading, transaction, lastUpdated, isValid } = selectTransaction(
     state,
     props,
   );
@@ -96,6 +98,7 @@ const mapStateToProps = (
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     transactionInsights: selectTxnInsightsByFingerprint(state, props),
     hasAdminRole: selectHasAdminRole(state),
+    isDataValid: isValid,
   };
 };
 
