@@ -124,10 +124,13 @@ func Build(
 	}, nil
 }
 
-// CheckIfSupported returns if a statement is fully supported by the declarative
-// schema changer.
-func CheckIfSupported(version clusterversion.ClusterVersion, statement tree.Statement) bool {
-	return scbuildstmt.CheckIfStmtIsSupported(version, statement, sessiondatapb.UseNewSchemaChangerOn)
+// IsFullySupportedWithFalsePositive returns if a statement is fully supported
+// by the declarative schema changer.
+// It is possible of false positive but never false negative.
+func IsFullySupportedWithFalsePositive(
+	statement tree.Statement, version clusterversion.ClusterVersion,
+) bool {
+	return scbuildstmt.IsFullySupportedWithFalsePositive(statement, version, sessiondatapb.UseNewSchemaChangerOn)
 }
 
 // Export dependency interfaces.
