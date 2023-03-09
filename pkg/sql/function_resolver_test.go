@@ -367,7 +367,7 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ 
 			exprStr:          "lower('HI')",
 			searchPath:       []string{"sc1", "sc2"},
 			expectedFuncBody: "",
-			expectedFuncOID:  831,
+			expectedFuncOID:  853,
 			desiredType:      types.String,
 		},
 		{

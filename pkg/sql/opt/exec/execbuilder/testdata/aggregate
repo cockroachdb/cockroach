@@ -2,10 +2,11 @@
 
 statement ok
 CREATE TABLE kv (
-  k INT PRIMARY KEY,
-  v INT,
-  w INT,
-  s STRING
+  k   INT PRIMARY KEY,
+  v   INT,
+  w   INT,
+  s   STRING,
+  arr STRING[]
 )
 
 query T
@@ -21,38 +22,38 @@ vectorized: true
 • group (scalar)
 │ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: min(column7)
-│ aggregate 1: max(column7)
-│ aggregate 2: count(column10)
-│ aggregate 3: sum_int(column7)
-│ aggregate 4: avg(column7)
-│ aggregate 5: sum(column7)
-│ aggregate 6: stddev(column7)
-│ aggregate 7: variance(column7)
-│ aggregate 8: bool_and(column17)
-│ aggregate 9: bool_or(column19)
-│ aggregate 10: xor_agg(column21)
-│ aggregate 11: corr(column7, column7)
-│ aggregate 12: covar_pop(column7, column7)
-│ aggregate 13: covar_samp(column7, column7)
-│ aggregate 14: sqrdiff(column7)
-│ aggregate 15: regr_intercept(column7, column7)
-│ aggregate 16: regr_r2(column7, column7)
-│ aggregate 17: regr_slope(column7, column7)
-│ aggregate 18: regr_sxx(column7, column7)
-│ aggregate 19: regr_sxy(column7, column7)
-│ aggregate 20: regr_syy(column7, column7)
+│ aggregate 0: min(column8)
+│ aggregate 1: max(column8)
+│ aggregate 2: count(column11)
+│ aggregate 3: sum_int(column8)
+│ aggregate 4: avg(column8)
+│ aggregate 5: sum(column8)
+│ aggregate 6: stddev(column8)
+│ aggregate 7: variance(column8)
+│ aggregate 8: bool_and(column18)
+│ aggregate 9: bool_or(column20)
+│ aggregate 10: xor_agg(column22)
+│ aggregate 11: corr(column8, column8)
+│ aggregate 12: covar_pop(column8, column8)
+│ aggregate 13: covar_samp(column8, column8)
+│ aggregate 14: sqrdiff(column8)
+│ aggregate 15: regr_intercept(column8, column8)
+│ aggregate 16: regr_r2(column8, column8)
+│ aggregate 17: regr_slope(column8, column8)
+│ aggregate 18: regr_sxx(column8, column8)
+│ aggregate 19: regr_sxy(column8, column8)
+│ aggregate 20: regr_syy(column8, column8)
 │ aggregate 21: count_rows()
-│ aggregate 22: regr_avgx(column7, column7)
-│ aggregate 23: regr_avgy(column7, column7)
+│ aggregate 22: regr_avgx(column8, column8)
+│ aggregate 23: regr_avgy(column8, column8)
 │
 └── • render
-    │ columns: (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)
-    │ render column7: (1)[int]
-    │ render column10: (NULL)[unknown]
-    │ render column17: (true)[bool]
-    │ render column19: (false)[bool]
-    │ render column21: ('\x01')[bytes]
+    │ columns: (column8 int, column11 unknown, column18 bool, column20 bool, column22 bytes)
+    │ render column8: (1)[int]
+    │ render column11: (NULL)[unknown]
+    │ render column18: (true)[bool]
+    │ render column20: (false)[bool]
+    │ render column22: ('\x01')[bytes]
     │
     └── • scan
           columns: ()
@@ -76,33 +77,33 @@ vectorized: true
 │ aggregate 0: min(v)
 │ aggregate 1: max(v)
 │ aggregate 2: count(v)
-│ aggregate 3: sum_int(column10)
+│ aggregate 3: sum_int(column11)
 │ aggregate 4: avg(v)
 │ aggregate 5: sum(v)
 │ aggregate 6: stddev(v)
 │ aggregate 7: variance(v)
-│ aggregate 8: bool_and(column16)
-│ aggregate 9: bool_or(column16)
-│ aggregate 10: xor_agg(column19)
+│ aggregate 8: bool_and(column17)
+│ aggregate 9: bool_or(column17)
+│ aggregate 10: xor_agg(column20)
 │ aggregate 11: corr(v, k)
 │ aggregate 12: covar_pop(v, k)
 │ aggregate 13: covar_samp(v, k)
 │ aggregate 14: sqrdiff(v)
-│ aggregate 15: regr_intercept(column10, column10)
-│ aggregate 16: regr_r2(column10, column10)
-│ aggregate 17: regr_slope(column10, column10)
-│ aggregate 18: regr_sxx(column10, column10)
-│ aggregate 19: regr_sxy(column10, column10)
-│ aggregate 20: regr_syy(column10, column10)
+│ aggregate 15: regr_intercept(column11, column11)
+│ aggregate 16: regr_r2(column11, column11)
+│ aggregate 17: regr_slope(column11, column11)
+│ aggregate 18: regr_sxx(column11, column11)
+│ aggregate 19: regr_sxy(column11, column11)
+│ aggregate 20: regr_syy(column11, column11)
 │ aggregate 21: count_rows()
-│ aggregate 22: regr_avgx(column10, column10)
-│ aggregate 23: regr_avgy(column10, column10)
+│ aggregate 22: regr_avgx(column11, column11)
+│ aggregate 23: regr_avgy(column11, column11)
 │
 └── • render
-    │ columns: (column10 int, column16 bool, column19 bytes, k int, v int)
-    │ render column10: (1)[int]
-    │ render column16: ((v)[int] = (1)[int])[bool]
-    │ render column19: ((s)[string]::BYTES)[bytes]
+    │ columns: (column11 int, column17 bool, column20 bytes, k int, v int)
+    │ render column11: (1)[int]
+    │ render column17: ((v)[int] = (1)[int])[bool]
+    │ render column20: ((s)[string]::BYTES)[bytes]
     │ render k: (k)[int]
     │ render v: (v)[int]
     │
@@ -216,11 +217,11 @@ vectorized: true
 │ columns: (count int, r int)
 │ estimated row count: 1,000 (missing stats)
 │ aggregate 0: count_rows()
-│ group by: column8
+│ group by: column9
 │
 └── • render
-    │ columns: (column8 int)
-    │ render column8: ((k)[int] + (v)[int])[int]
+    │ columns: (column9 int)
+    │ render column9: ((k)[int] + (v)[int])[int]
     │
     └── • scan
           columns: (k int, v int)
@@ -322,23 +323,23 @@ vectorized: true
 • group (scalar)
 │ columns: (count)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: count(column13)
+│ aggregate 0: count(column15)
 │
 └── • distinct
-    │ columns: (column13)
+    │ columns: (column15)
     │ estimated row count: 1,000 (missing stats)
-    │ distinct on: column13
+    │ distinct on: column15
     │
     └── • render
-        │ columns: (column13)
-        │ render column13: ((k, v, w, s) AS k, v, w, s)
+        │ columns: (column15)
+        │ render column15: ((k, v, w, s, arr) AS k, v, w, s, arr)
         │
         └── • cross join (inner)
-            │ columns: (k, v, w, s)
+            │ columns: (k, v, w, s, arr)
             │ estimated row count: 1,000,000 (missing stats)
             │
             ├── • scan
-            │     columns: (k, v, w, s)
+            │     columns: (k, v, w, s, arr)
             │     estimated row count: 1,000 (missing stats)
             │     table: kv@kv_pkey
             │     spans: FULL SCAN
@@ -1224,13 +1225,13 @@ vectorized: true
     └── • group (hash)
         │ columns: (v int, count int, count_rows int)
         │ estimated row count: 100 (missing stats)
-        │ aggregate 0: count(column7)
+        │ aggregate 0: count(column8)
         │ aggregate 1: count_rows()
         │ group by: v
         │
         └── • render
-            │ columns: (column7 unknown, v int)
-            │ render column7: (NULL)[unknown]
+            │ columns: (column8 unknown, v int)
+            │ render column8: (NULL)[unknown]
             │ render v: (v)[int]
             │
             └── • scan
@@ -1249,12 +1250,12 @@ vectorized: true
 • group (hash)
 │ columns: (v, count)
 │ estimated row count: 33 (missing stats)
-│ aggregate 0: count(column7)
+│ aggregate 0: count(column8)
 │ group by: v
 │
 └── • render
-    │ columns: (column7, v)
-    │ render column7: NULL
+    │ columns: (column8, v)
+    │ render column8: NULL
     │ render v: v
     │
     └── • filter
@@ -1677,18 +1678,18 @@ vectorized: true
 │ render a: (1)[int]
 │
 └── • distinct
-    │ columns: (column7 decimal, v int)
+    │ columns: (column8 decimal, v int)
     │ estimated row count: 333 (missing stats)
-    │ distinct on: column7, v
+    │ distinct on: column8, v
     │
     └── • filter
-        │ columns: (column7 decimal, v int)
+        │ columns: (column8 decimal, v int)
         │ estimated row count: 333 (missing stats)
-        │ filter: ((column7)[decimal] > (1)[decimal])[bool]
+        │ filter: ((column8)[decimal] > (1)[decimal])[bool]
         │
         └── • render
-            │ columns: (column7 decimal, v int)
-            │ render column7: ((w)[int]::DECIMAL)[decimal]
+            │ columns: (column8 decimal, v int)
+            │ render column8: ((w)[int]::DECIMAL)[decimal]
             │ render v: (v)[int]
             │
             └── • scan
@@ -1777,6 +1778,29 @@ vectorized: true
           spans: FULL SCAN
 
 query T
+EXPLAIN (VERBOSE) SELECT array_cat_agg(arr) FROM (SELECT * FROM kv ORDER BY v)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (array_cat_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: array_cat_agg(arr)
+│
+└── • sort
+    │ columns: (v, arr)
+    │ ordering: +v
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +v
+    │
+    └── • scan
+          columns: (v, arr)
+          estimated row count: 1,000 (missing stats)
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
 ----
 distribution: local
@@ -1847,12 +1871,12 @@ vectorized: true
 • group (scalar)
 │ columns: (string_agg)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: string_agg(s, column7)
+│ aggregate 0: string_agg(s, column8)
 │
 └── • render
-    │ columns: (column7, k, s)
+    │ columns: (column8, k, s)
     │ ordering: +k
-    │ render column7: ','
+    │ render column8: ','
     │ render k: k
     │ render s: s
     │
@@ -1930,11 +1954,11 @@ vectorized: true
 • group (scalar)
 │ columns: (string_agg)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: string_agg(s, column7)
+│ aggregate 0: string_agg(s, column8)
 │
 └── • render
-    │ columns: (column7, s)
-    │ render column7: ', '
+    │ columns: (column8, s)
+    │ render column8: ', '
     │ render s: s
     │
     └── • scan
