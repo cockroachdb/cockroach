@@ -6432,7 +6432,7 @@ func mvccExportToWriter(
 	firstIteration := true
 	// skipTombstones controls whether we include tombstones.
 	//
-	// We want tombstones if we are exporting all reivions or if
+	// We want tombstones if we are exporting all revisions or if
 	// we have a StartTS. A non-empty StartTS is used by
 	// incremental backups and thus needs to see tombstones if
 	// that happens to be the latest value.
@@ -6441,7 +6441,10 @@ func mvccExportToWriter(
 	var rows RowCounter
 	// Only used if trackKeyBoundary is true.
 	var curKey roachpb.Key
+
 	var resumeKey MVCCKey
+	var resumeIsCPUOverLimit bool
+
 	var rangeKeys MVCCRangeKeyStack
 	var rangeKeysSize int64
 
@@ -6513,7 +6516,8 @@ func mvccExportToWriter(
 				if isNewKey {
 					resumeKey.Timestamp = hlc.Timestamp{}
 				}
-				return rows.BulkOpSummary, ExportRequestResumeInfo{ResumeKey: resumeKey, CPUOverlimit: true}, nil
+				resumeIsCPUOverLimit = true
+				break
 			}
 		}
 
@@ -6722,7 +6726,7 @@ func mvccExportToWriter(
 		rows.BulkOpSummary.DataSize += rangeKeysSize
 	}
 
-	return rows.BulkOpSummary, ExportRequestResumeInfo{ResumeKey: resumeKey}, nil
+	return rows.BulkOpSummary, ExportRequestResumeInfo{ResumeKey: resumeKey, CPUOverlimit: resumeIsCPUOverLimit}, nil
 }
 
 // MVCCExportOptions contains options for MVCCExportToSST.
