@@ -766,7 +766,6 @@ GO_TARGETS = [
     "//pkg/ccl/sqlitelogictestccl:sqlitelogictestccl_test",
     "//pkg/ccl/sqlproxyccl/acl:acl",
     "//pkg/ccl/sqlproxyccl/acl:acl_test",
-    "//pkg/ccl/sqlproxyccl/acl:denylist",
     "//pkg/ccl/sqlproxyccl/balancer:balancer",
     "//pkg/ccl/sqlproxyccl/balancer:balancer_test",
     "//pkg/ccl/sqlproxyccl/interceptor:interceptor",
