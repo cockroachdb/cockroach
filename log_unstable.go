@@ -210,21 +210,28 @@ func (u *unstable) truncateAndAppend(ents []pb.Entry) {
 	default:
 		// truncate to after and copy to u.entries then append.
 		u.logger.Infof("truncate the unstable entries before index %d", after)
-		keep := u.slice(u.offset, after)
-		u.entries = append([]pb.Entry{}, keep...)
-		u.entries = append(u.entries, ents...)
+		keep := u.slice(u.offset, after)  // NB: appending to this slice is safe,
+		u.entries = append(keep, ents...) // and will reallocate/copy it
 		// Only in-progress entries before after are still considered to be
 		// in-progress.
 		u.offsetInProgress = min(u.offsetInProgress, after)
 	}
 }
 
-// slice returns the entries from the unstable log with indexes in the
-// range [lo, hi). The entire range must be stored in the unstable log
-// or the method will panic.
+// slice returns the entries from the unstable log with indexes in the range
+// [lo, hi). The entire range must be stored in the unstable log or the method
+// will panic. The returned slice can be appended to, but the entries in it must
+// not be changed because they are still shared with unstable.
+//
+// TODO(pavelkalinnikov): this, and similar []pb.Entry slices, may bubble up all
+// the way to the application code through Ready struct. Protect other slices
+// similarly, and document how the client can use them.
 func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
 	u.mustCheckOutOfBounds(lo, hi)
-	return u.entries[lo-u.offset : hi-u.offset]
+	// NB: use the full slice expression to limit what the caller can do with the
+	// returned slice. For example, an append will reallocate and copy this slice
+	// instead of corrupting the neighbouring u.entries.
+	return u.entries[lo-u.offset : hi-u.offset : hi-u.offset]
 }
 
 // u.offset <= lo <= hi <= u.offset+len(u.entries)
