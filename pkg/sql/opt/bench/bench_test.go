@@ -717,7 +717,6 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	}
 
 	// Setup the default session settings.
-	h.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	h.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	h.evalCtx.SessionData().ZigzagJoinEnabled = true
 	h.evalCtx.SessionData().OptimizerUseForecasts = true
@@ -2197,7 +2196,6 @@ var slowQueries = [...]benchQuery{
 func BenchmarkSlowQueries(b *testing.B) {
 	for _, query := range slowQueries {
 		h := newHarness(b, query, slowSchemas)
-		h.evalCtx.SessionData().ReorderJoinsLimit = 8
 		b.Run(query.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				h.runSimple(b, query, Explore)
