@@ -82,6 +82,7 @@ describe("SQLStats sagas", () => {
           lastError: null,
           valid: true,
           lastUpdated,
+          inFlight: false,
         })
         .run();
     });
@@ -97,6 +98,7 @@ describe("SQLStats sagas", () => {
           lastError: error,
           valid: false,
           lastUpdated,
+          inFlight: false,
         })
         .run();
     });
@@ -117,6 +119,7 @@ describe("SQLStats sagas", () => {
           lastError: null,
           valid: false,
           lastUpdated: null,
+          inFlight: false,
         })
         .run();
     });
@@ -132,6 +135,7 @@ describe("SQLStats sagas", () => {
           lastError: err,
           valid: false,
           lastUpdated,
+          inFlight: false,
         })
         .run();
     });
