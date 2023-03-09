@@ -247,8 +247,9 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	ms.initCtx.close(err)
 
 	if err == nil {
-		doneCtx.close(m.receiveEventsFromNode(ctx, ms))
+		err = m.receiveEventsFromNode(ctx, ms)
 	}
+	doneCtx.close(err)
 
 	// We propagated error to the caller via init/done context.
 	return nil //nolint:returnerrcheck
@@ -288,9 +289,13 @@ func (m *rangefeedMuxer) demuxLoop(ctx context.Context) (retErr error) {
 			case <-ctx.Done():
 				return ctx.Err()
 			case producer.eventCh <- &e.RangeFeedEvent:
+			case <-producer.callerCtx.Done():
+				if log.V(1) {
+					log.Infof(ctx, "received stray event, but caller exited: stream=%d: e=%v", e.StreamID, e)
+				}
 			case <-producer.muxClientCtx.Done():
 				if log.V(1) {
-					log.Infof(ctx, "received stray event stream %d: %v", e.StreamID, e)
+					log.Infof(ctx, "received stray event, but node mux exited: stream=%d: e=%v", e.StreamID, e)
 				}
 			}
 		}
