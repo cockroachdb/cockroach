@@ -14,11 +14,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -59,8 +62,12 @@ type failure struct {
 type testImpl struct {
 	spec *registry.TestSpec
 
-	cockroach          string // path to main cockroach binary
-	cockroachShort     string // path to cockroach-short binary compiled with --crdb_test build tag
+	cockroach   string // path to main cockroach binary
+	cockroachEA string // path to cockroach-short binary compiled with --crdb_test build tag
+
+	randomCockroachOnce sync.Once
+	randomizedCockroach string // either `cockroach` or `cockroach-short`, picked randomly
+
 	deprecatedWorkload string // path to workload binary
 	debug              bool   // whether the test is in debug mode.
 	// buildVersion is the version of the Cockroach binary that the test will run
@@ -131,13 +138,51 @@ func (t *testImpl) BuildVersion() *version.Version {
 	return t.buildVersion
 }
 
-// Cockroach returns the path to the cockroach binary.
+// Cockroach will return either `RuntimeAssertionsCockroach()` or
+// `StandardCockroach()`, picked randomly. Once a random choice has
+// been made, the same binary will be returned on every call to
+// `Cockroach`, to avoid errors that may arise from binaries having a
+// different value for metamorphic constants.
 func (t *testImpl) Cockroach() string {
-	return t.cockroach
+	// If the test is a benchmark test, we don't want to enable assertions
+	// as it will slow down performance.
+	if t.spec.Benchmark {
+		t.l.Printf("Benchmark test, running with standard cockroach")
+		return t.StandardCockroach()
+	}
+	t.randomCockroachOnce.Do(func() {
+		assertionsEnabledProbability := 0.5
+		// If the user specified a custom seed to be used with runtime
+		// assertions, assume they want to run the test with assertions
+		// enabled, making it easier to reproduce issues.
+		if os.Getenv(test.EnvAssertionsEnabledSeed) != "" {
+			assertionsEnabledProbability = 1
+		}
+
+		if rand.Float64() < assertionsEnabledProbability {
+			// The build with runtime assertions should exist in every nightly
+			// CI build, but we can't assume it exists in every roachtest call.
+			if path := t.RuntimeAssertionsCockroach(); path != "" {
+				t.l.Printf("Runtime assertions enabled")
+				t.randomizedCockroach = path
+				return
+			} else {
+				t.l.Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
+			}
+		}
+		t.l.Printf("Runtime assertions disabled")
+		t.randomizedCockroach = t.StandardCockroach()
+	})
+
+	return t.randomizedCockroach
 }
 
-func (t *testImpl) CockroachShort() string {
-	return t.cockroachShort
+func (t *testImpl) RuntimeAssertionsCockroach() string {
+	return t.cockroachEA
+}
+
+func (t *testImpl) StandardCockroach() string {
+	return t.cockroach
 }
 
 func (t *testImpl) DeprecatedWorkload() string {
