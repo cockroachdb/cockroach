@@ -19,6 +19,10 @@ type SortSetting = {
   columnTitle: string;
 };
 
+export enum LocalStorageKeys {
+  GLOBAL_TIME_SCALE = "timeScale/SQLActivity",
+}
+
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
   "showColumns/ActiveStatementsPage": string;
@@ -28,7 +32,7 @@ export type LocalStorageState = {
   "showColumns/SessionsPage": string;
   "showColumns/StatementInsightsPage": string;
   "showColumns/JobsPage": string;
-  "timeScale/SQLActivity": TimeScale;
+  [LocalStorageKeys.GLOBAL_TIME_SCALE]: TimeScale;
   "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
   "sortSetting/StatementsPage": SortSetting;
@@ -56,6 +60,10 @@ export type LocalStorageState = {
 type Payload = {
   key: keyof LocalStorageState;
   value: any;
+};
+
+type TypedPayload<T> = {
+  value: T;
 };
 
 const defaultSortSetting: SortSetting = {
@@ -134,8 +142,8 @@ const initialState: LocalStorageState = {
   "showSetting/JobsPage":
     JSON.parse(localStorage.getItem("showSetting/JobsPage")) ||
     defaultJobShowSetting,
-  "timeScale/SQLActivity":
-    JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
+  [LocalStorageKeys.GLOBAL_TIME_SCALE]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.GLOBAL_TIME_SCALE)) ||
     defaultTimeScaleSelected,
   "sortSetting/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/ActiveStatementsPage")) ||
@@ -204,6 +212,12 @@ const localStorageSlice = createSlice({
   reducers: {
     update: (state: any, action: PayloadAction<Payload>) => {
       state[action.payload.key] = action.payload.value;
+    },
+    updateTimeScale: (
+      state,
+      action: PayloadAction<TypedPayload<TimeScale>>,
+    ) => {
+      state[LocalStorageKeys.GLOBAL_TIME_SCALE] = action.payload.value;
     },
   },
 });
