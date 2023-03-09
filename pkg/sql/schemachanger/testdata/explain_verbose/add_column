@@ -1,7 +1,10 @@
 /* setup */
 CREATE DATABASE db;
-CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
 CREATE SEQUENCE db.public.sq1;
+INSERT INTO db.public.tbl VALUES(-1);
+INSERT INTO db.public.tbl VALUES(-2);
+INSERT INTO db.public.tbl VALUES(-3);
 
 /* test */
 EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42;
@@ -12,38 +15,38 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 8 elements transitioning toward PUBLIC
+│       ├── • 9 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   ├── • Column:{DescID: 106, ColumnID: 3}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │   │     rule: "column existence precedes index existence"
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -58,7 +61,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │   │     rule: "column existence precedes column dependents"
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -70,12 +79,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │       └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │             rule: "index data exists as soon as index accepts backfills"
 │       │
-│       ├── • 3 elements transitioning toward TRANSIENT_ABSENT
+│       ├── • 4 elements transitioning toward TRANSIENT_ABSENT
 │       │   │
 │       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │   │     rule: "column existence precedes temp index existence"
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
@@ -87,31 +96,37 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
-│       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │       │     rule: "column existence precedes column dependents"
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 10 Mutation operations
+│       └── • 12 Mutation operations
 │           │
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
-│           │       ColumnID: 2
-│           │       PgAttributeNum: 2
+│           │       ColumnID: 3
+│           │       PgAttributeNum: 3
 │           │       TableID: 106
 │           │
 │           ├── • SetColumnName
-│           │     ColumnID: 2
+│           │     ColumnID: 3
 │           │     Name: j
 │           │     TableID: 106
 │           │
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
-│           │       ColumnID: 2
+│           │       ColumnID: 3
 │           │       ElementCreationMetadata:
 │           │         in231OrLater: true
 │           │       TableID: 106
@@ -123,7 +138,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │
 │           ├── • AddColumnDefaultExpression
 │           │     Default:
-│           │       ColumnID: 2
+│           │       ColumnID: 3
 │           │       Expression:
 │           │         Expr: 42:::INT8
 │           │       TableID: 106
@@ -148,6 +163,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     Kind: 2
 │           │     TableID: 106
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     Ordinal: 1
+│           │     TableID: 106
+│           │
 │           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
@@ -161,28 +183,35 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     IndexID: 3
 │           │     TableID: 106
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
 │           └── • AddColumnToIndex
-│                 ColumnID: 2
+│                 ColumnID: 3
 │                 IndexID: 3
 │                 Kind: 2
+│                 Ordinal: 1
 │                 TableID: 106
 │
 ├── • PreCommitPhase
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 8 elements transitioning toward PUBLIC
+│   │   ├── • 9 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 3}
 │   │   │   │     DELETE_ONLY → ABSENT
 │   │   │   │
-│   │   │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│   │   │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 3}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
-│   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
-│   │   │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│   │   │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -194,10 +223,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
 │   │   │   └── • IndexData:{DescID: 106, IndexID: 2}
 │   │   │         PUBLIC → ABSENT
 │   │   │
-│   │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
+│   │   ├── • 4 elements transitioning toward TRANSIENT_ABSENT
 │   │   │   │
 │   │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │   │     DELETE_ONLY → ABSENT
@@ -205,7 +237,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
-│   │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
 │   │   │         PUBLIC → ABSENT
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -215,38 +250,38 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 8 elements transitioning toward PUBLIC
+│       ├── • 9 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   ├── • Column:{DescID: 106, ColumnID: 3}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │   │     rule: "column existence precedes index existence"
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -261,7 +296,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │   │     rule: "column existence precedes column dependents"
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -273,12 +314,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │       └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │             rule: "index data exists as soon as index accepts backfills"
 │       │
-│       ├── • 3 elements transitioning toward TRANSIENT_ABSENT
+│       ├── • 4 elements transitioning toward TRANSIENT_ABSENT
 │       │   │
 │       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │   │   │     rule: "column existence precedes temp index existence"
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
@@ -290,31 +331,37 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
-│       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │       │     rule: "column existence precedes column dependents"
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 14 Mutation operations
+│       └── • 16 Mutation operations
 │           │
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
-│           │       ColumnID: 2
-│           │       PgAttributeNum: 2
+│           │       ColumnID: 3
+│           │       PgAttributeNum: 3
 │           │       TableID: 106
 │           │
 │           ├── • SetColumnName
-│           │     ColumnID: 2
+│           │     ColumnID: 3
 │           │     Name: j
 │           │     TableID: 106
 │           │
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
-│           │       ColumnID: 2
+│           │       ColumnID: 3
 │           │       ElementCreationMetadata:
 │           │         in231OrLater: true
 │           │       TableID: 106
@@ -326,7 +373,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │
 │           ├── • AddColumnDefaultExpression
 │           │     Default:
-│           │       ColumnID: 2
+│           │       ColumnID: 3
 │           │       Expression:
 │           │         Expr: 42:::INT8
 │           │       TableID: 106
@@ -355,6 +402,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     Kind: 2
 │           │     TableID: 106
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     Ordinal: 1
+│           │     TableID: 106
+│           │
 │           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
@@ -376,6 +430,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     ColumnID: 2
 │           │     IndexID: 3
 │           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     Ordinal: 1
 │           │     TableID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -401,22 +462,22 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 3}
 │   │   │   │   │ DELETE_ONLY → WRITE_ONLY
 │   │   │   │   │
-│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
 │   │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │   │   │
-│   │   │   │   └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│   │   │   │   └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
 │   │   │   │         rule: "DEFAULT or ON UPDATE existence precedes writes to column"
 │   │   │   │
-│   │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
 │   │   │       │ ABSENT → WRITE_ONLY
 │   │   │       │
-│   │   │       ├── • SameStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │       ├── • SameStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
 │   │   │       │     rule: "column writable right before column constraint is enforced."
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
 │   │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │   │   │
 │   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
@@ -424,7 +485,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │   │   │ DELETE_ONLY → WRITE_ONLY
 │   │   │   │   │
-│   │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
 │   │   │   │   │     rule: "column is WRITE_ONLY before temporary index is WRITE_ONLY"
 │   │   │   │   │
 │   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
@@ -433,7 +494,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │   │   │   │   │     rule: "index-column added to index before temp index receives writes"
 │   │   │   │   │
-│   │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│   │   │   │   │     rule: "index-column added to index before temp index receives writes"
+│   │   │   │   │
+│   │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
 │   │   │   │         rule: "index-column added to index before temp index receives writes"
 │   │   │   │
 │   │   │   └── • IndexData:{DescID: 106, IndexID: 3}
@@ -445,7 +509,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   └── • 5 Mutation operations
 │   │       │
 │   │       ├── • MakeDeleteOnlyColumnWriteOnly
-│   │       │     ColumnID: 2
+│   │       │     ColumnID: 3
 │   │       │     TableID: 106
 │   │       │
 │   │       ├── • MakeDeleteOnlyIndexWriteOnly
@@ -453,7 +517,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │       │     TableID: 106
 │   │       │
 │   │       ├── • MakeAbsentColumnNotNullWriteOnly
-│   │       │     ColumnID: 2
+│   │       │     ColumnID: 3
 │   │       │     TableID: 106
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
@@ -477,6 +541,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │       │     rule: "index-column added to index before index is backfilled"
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │       │     rule: "index-column added to index before index is backfilled"
+│   │   │       │
+│   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
 │   │   │       │     rule: "index-column added to index before index is backfilled"
 │   │   │       │
 │   │   │       └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
@@ -585,13 +652,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │   │
-│       │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│       │   └── • ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
 │       │       │ WRITE_ONLY → VALIDATED
 │       │       │
 │       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │       │     rule: "index is ready to be validated before we validate constraint on it"
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
 │       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
 │       └── • 2 Validation operations
@@ -601,7 +668,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     TableID: 106
 │           │
 │           └── • ValidateColumnNotNull
-│                 ColumnID: 2
+│                 ColumnID: 3
 │                 IndexIDForValidation: 2
 │                 TableID: 106
 │
@@ -611,31 +678,31 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │
     │   ├── • 4 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+    │   │   ├── • Column:{DescID: 106, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 3}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │     rule: "swapped primary index public before column"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -654,7 +721,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
     │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │
     │   │   ├── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
@@ -663,16 +733,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "index existence precedes index dependents"
     │   │   │
-    │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
     │   │       │ VALIDATED → PUBLIC
     │   │       │
-    │   │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
     │   │       │     rule: "column existence precedes column dependents"
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
     │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │
-    │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
+    │   ├── • 4 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
@@ -686,7 +756,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │   │ PUBLIC → TRANSIENT_ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
     │   │       │
     │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
@@ -706,7 +782,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │             rule: "index no longer public before dependents, excluding columns"
     │   │
-    │   └── • 12 Mutation operations
+    │   └── • 13 Mutation operations
     │       │
     │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
@@ -737,8 +813,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     Kind: 2
     │       │     TableID: 106
     │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     Ordinal: 1
+    │       │     TableID: 106
+    │       │
     │       ├── • MakeValidatedColumnNotNullPublic
-    │       │     ColumnID: 2
+    │       │     ColumnID: 3
     │       │     TableID: 106
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
@@ -746,7 +829,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     TableID: 106
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
-    │       │     ColumnID: 2
+    │       │     ColumnID: 3
     │       │     TableID: 106
     │       │
     │       ├── • RefreshStats
@@ -758,7 +841,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -773,12 +856,21 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
     │   │       │     rule: "dependents removed before index"
     │   │       │
-    │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │       │     rule: "dependents removed before index"
+    │   │       │
+    │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
     │   │             rule: "dependents removed before index"
     │   │
-    │   ├── • 2 elements transitioning toward ABSENT
+    │   ├── • 3 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
     │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
@@ -790,7 +882,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │       └── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │             rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │
-    │   └── • 5 Mutation operations
+    │   └── • 6 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 3
@@ -803,6 +895,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 1
     │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 1
+    │       │     Kind: 2
     │       │     TableID: 106
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -832,6 +930,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
         │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
