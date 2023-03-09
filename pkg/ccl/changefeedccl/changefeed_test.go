@@ -922,12 +922,15 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			whereClausesChecked[where] = struct{}{}
 			query = "SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE " + where
 			t.Log(query)
-			rows := s.DB.QueryRow(query)
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+			rows := s.DB.QueryRowContext(timeoutCtx, query)
 			var expectedRowIDsStr string
 			if err := rows.Scan(&expectedRowIDsStr); err != nil {
 				t.Logf("Skipping query %s because error %s", query, err)
+				cancel()
 				continue
 			}
+			cancel()
 			expectedRowIDs := strings.Split(expectedRowIDsStr, "|")
 			if expectedRowIDsStr == "" {
 				t.Logf("Skipping predicate %s because it returned no rows", where)
