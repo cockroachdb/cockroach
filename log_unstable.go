@@ -194,27 +194,26 @@ func (u *unstable) restore(s pb.Snapshot) {
 }
 
 func (u *unstable) truncateAndAppend(ents []pb.Entry) {
-	// TODO(nvanbenschoten): rename this variable to firstAppIndex.
-	after := ents[0].Index
+	fromIndex := ents[0].Index
 	switch {
-	case after == u.offset+uint64(len(u.entries)):
-		// after is the next index in the u.entries, so append directly.
+	case fromIndex == u.offset+uint64(len(u.entries)):
+		// fromIndex is the next index in the u.entries, so append directly.
 		u.entries = append(u.entries, ents...)
-	case after <= u.offset:
-		u.logger.Infof("replace the unstable entries from index %d", after)
+	case fromIndex <= u.offset:
+		u.logger.Infof("replace the unstable entries from index %d", fromIndex)
 		// The log is being truncated to before our current offset
 		// portion, so set the offset and replace the entries.
 		u.entries = ents
-		u.offset = after
+		u.offset = fromIndex
 		u.offsetInProgress = u.offset
 	default:
-		// truncate to after and copy to u.entries then append.
-		u.logger.Infof("truncate the unstable entries before index %d", after)
-		keep := u.slice(u.offset, after)  // NB: appending to this slice is safe,
-		u.entries = append(keep, ents...) // and will reallocate/copy it
-		// Only in-progress entries before after are still considered to be
+		// Truncate to fromIndex (exclusive), and append the new entries.
+		u.logger.Infof("truncate the unstable entries before index %d", fromIndex)
+		keep := u.slice(u.offset, fromIndex) // NB: appending to this slice is safe,
+		u.entries = append(keep, ents...)    // and will reallocate/copy it
+		// Only in-progress entries before fromIndex are still considered to be
 		// in-progress.
-		u.offsetInProgress = min(u.offsetInProgress, after)
+		u.offsetInProgress = min(u.offsetInProgress, fromIndex)
 	}
 }
 
