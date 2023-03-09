@@ -60,7 +60,7 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 	// Upload binaries and start cluster.
 	uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
 
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), roachNodes)
+	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(install.SecureOption(true)), roachNodes)
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {

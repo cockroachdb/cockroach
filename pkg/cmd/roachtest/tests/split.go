@@ -423,7 +423,11 @@ func registerLoadSplits(r registry.Registry) {
 // conditions defined by the params. It checks whether certain number of
 // splits occur in different workload scenarios.
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	// We run this without runtime assertions as the tests make incorrect assumptions about the
+	// absolute values of QPS.
+	// See: (TODO: Add a github issue here)
+	// TODO: once the above issue is resolved, use t.Cockroach()
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(4))
 	startOpts := option.DefaultStartOptsNoBackups()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -577,7 +581,9 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	rows := size / rowEstimate
 	const minBytes = 16 << 20 // 16 MB
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	// Never run with runtime assertions as this makes this test take
+	// too long to complete.
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))

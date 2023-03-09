@@ -28,6 +28,8 @@ import (
 // if 'crdb_test' build flag is specified (this is the case for all test
 // targets).
 func IsMetamorphicBuild() bool {
+	// TODO: remove this just a sanity check
+	fmt.Printf("CHECKING IF METAMORPHIC BUILD: %t", metamorphicBuild)
 	return metamorphicBuild
 }
 

@@ -145,6 +145,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	if opts.start == nil {
 		opts.start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Status("installing cockroach")
+			// TODO: this one might time out
 			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 
 			startOpts := option.DefaultStartOpts()
@@ -258,7 +259,7 @@ func registerTPCE(r registry.Registry) {
 		},
 	})
 
-	// Weekly, large sclae configuration.
+	// Weekly, large scale configuration.
 	largeWeekly := tpceOptions{
 		customers: 100_000,
 		nodes:     5,
