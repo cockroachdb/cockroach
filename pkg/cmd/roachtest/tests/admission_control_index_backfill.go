@@ -151,7 +151,6 @@ func registerIndexBackfill(r registry.Registry) {
 			// large index backfills while it's running.
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 					startOpts := option.DefaultStartOptsNoBackups()
 					startOpts.RoachprodOpts.Sequential = false // the cluster's already bootstrapped
 					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))

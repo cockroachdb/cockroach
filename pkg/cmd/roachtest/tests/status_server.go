@@ -28,7 +28,6 @@ import (
 )
 
 func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Get the ids for each node.

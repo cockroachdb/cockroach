@@ -32,7 +32,6 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	corruptNodes := crdbNodes
 
 	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	{
