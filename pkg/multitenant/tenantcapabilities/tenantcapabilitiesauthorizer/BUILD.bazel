@@ -13,6 +13,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",

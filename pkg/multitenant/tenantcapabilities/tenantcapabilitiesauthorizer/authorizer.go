@@ -16,10 +16,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
+)
+
+// authorizerEnabled dictates whether the Authorizer performs any capability
+// checks or not. It is intended as an escape hatch to turn off the tenant
+// capabilities infrastructure; as such, it is intended to be a sort of hammer
+// of last resort, and isn't expected to be used during normal cluster
+// operation.
+var authorizerEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"tenant_capabilities.authorizer.enabled",
+	"enable the use of the kv accessor",
+	true,
 )
 
 // Authorizer is a concrete implementation of the tenantcapabilities.Authorizer
@@ -51,8 +64,8 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 func (a *Authorizer) HasCapabilityForBatch(
 	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest,
 ) error {
-	if tenID.IsSystem() {
-		return nil // the system tenant is allowed to do as it pleases
+	if a.elideCapabilityChecks(ctx, tenID) {
+		return nil
 	}
 	if a.capabilitiesReader == nil {
 		err := errors.AssertionFailedf("trying to perform capability check when no reader exists")
@@ -88,8 +101,8 @@ func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
 }
 
 func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil // the system tenant is allowed to do as it pleases
+	if a.elideCapabilityChecks(ctx, tenID) {
+		return nil
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
@@ -106,8 +119,8 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 }
 
 func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil // the system tenant is allowed to do as it pleases
+	if a.elideCapabilityChecks(ctx, tenID) {
+		return nil
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
@@ -121,4 +134,17 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
 	}
 	return nil
+}
+
+// elideCapabilityChecks returns true if capability checks should be skipped for
+// the supplied tenant.
+func (a *Authorizer) elideCapabilityChecks(ctx context.Context, tenID roachpb.TenantID) bool {
+	if tenID.IsSystem() {
+		return true // the system tenant is allowed to do as it pleases
+	}
+	if !authorizerEnabled.Get(&a.settings.SV) {
+		log.VInfof(ctx, 3, "authorizer turned off; eliding capability checks")
+		return true
+	}
+	return false
 }
