@@ -104,6 +104,24 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Average Replica CPU per Node"
+      tooltip={`Moving average of all replica CPU usage on each node per second.
+         Tracks roughly the last 30 minutes of usage. Used for load-based
+         rebalancing decisions.`}
+    >
+      <Axis units={AxisUnits.Duration} label="CPU time">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rebalancing.cpunanospersecond"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Logical Bytes per Node"
       tooltip={<LogicalBytesGraphTooltip />}
     >
