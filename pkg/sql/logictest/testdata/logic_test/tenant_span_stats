@@ -50,15 +50,15 @@ database_id table_id
 106         108
 
 # Assert that we cannot provide an invalid database id.
-query error pq: provided database id must be greater than or equal to 1
+statement error pq: provided database id must be greater than or equal to 1 or name must be non-empty
 SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(0)
 
 # Assert that we cannot provide an invalid table id.
-query error pq: provided table id must be greater than or equal to 1
+statement error pq: provided table id must be greater than or equal to 1 or name must be non-empty
 SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(1, -1)
 
 # Assert that we cannot provide an invalid database id with a valid table id.
-query error pq: provided database id must be greater than or equal to 1
+statement error pq: provided database id must be greater than or equal to 1 or name must be non-empty
 SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(-1, 1)
 
 # SELECT * FROM crdb_internal.tenant_span_stats(1000):
@@ -85,6 +85,27 @@ SELECT database_id, table_id, range_count > 0 as range_count, live_bytes > 0 as 
 ----
 database_id table_id range_count live_bytes total_bytes live_percentage
 106         108      true        true       true        true
+
+# Assert we can pass db name and table name strings
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats('a') LIMIT 0
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats('a', 'a.b') LIMIT 0
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+# Assert it returns errors if empty string
+statement error pq: provided database id must be greater than or equal to 1 or name must be non-empty
+SELECT * FROM crdb_internal.tenant_span_stats('') LIMIT 0
+
+statement error pq: provided table id must be greater than or equal to 1 or name must be non-empty
+SELECT * FROM crdb_internal.tenant_span_stats('a', '') LIMIT 0
+
+statement error pq: provided database id must be greater than or equal to 1 or name must be non-empty
+SELECT * FROM crdb_internal.tenant_span_stats('', 'a.b') LIMIT 0
 
 # Create a second user without VIEWACTIVITY permission.
 statement ok

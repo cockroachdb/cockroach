@@ -89,8 +89,10 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 	// Resolve the target table/index if running FROM TABLE/INDEX.
 	var idx cat.Index
 	var resName tree.TableName
+	var isFromTableOrIndex bool
 	switch n.Source {
 	case tree.ShowRangesTable, tree.ShowRangesIndex:
+		isFromTableOrIndex = true
 		var err error
 		idx, resName, err = cat.ResolveTableIndex(
 			d.ctx, d.catalog, cat.Flags{
@@ -338,6 +340,21 @@ AND s.end_key > r.start_key`)
 		dbNameCol = ", database_name"
 	}
 
+	// If WITH DETAILS we will need approximate_disk_bytes from tenant_span_stats either summed or per table (if WITH TABLES).
+	// This pre-writes the parameters to pass into tenant_span_stats.
+	tenantSpanStats := ""
+	if n.Options.Details {
+		tenantSpanStats = "crdb_internal.tenant_span_stats("
+		if dbName != "" {
+			if isFromTableOrIndex {
+				tenantSpanStats += fmt.Sprintf(`'%s', '%s'`, dbName, string(idx.Table().Name()))
+			} else {
+				tenantSpanStats += fmt.Sprintf(`'%s'`, dbName)
+			}
+		}
+		tenantSpanStats += ")"
+	}
+
 	switch mode {
 	case tree.UniqueRanges:
 		// De-duplicate the range rows, keep only the range metadata.
@@ -346,34 +363,53 @@ AND s.end_key > r.start_key`)
 			fmt.Fprintf(&buf, ", %s", tree.NameString(c))
 		}
 		buf.WriteString("\nFROM ranges")
-
 	case tree.ExpandTables:
-		// Add table name details.
-		fmt.Fprintf(&buf, `
-          SELECT r.* %[2]s, t.schema_name, t.name AS table_name
-            FROM ranges r
- LEFT OUTER JOIN %[1]s.crdb_internal.tables t
-              ON r.table_id = t.table_id`, dbName.String(), dbNameCol)
-
+		// Add table name details. Also add approximate_disk_bytes if WITH DETAILS is specified.
+		fmt.Fprintf(&buf, "SELECT r.* %s, t.schema_name, t.name AS table_name ", dbNameCol)
+		if n.Options.Details {
+			buf.WriteString(", approximate_disk_bytes AS approx_disk_bytes ")
+		}
+		fmt.Fprintf(&buf, "FROM ranges r\n LEFT OUTER JOIN %s.crdb_internal.tables t ON r.table_id = t.table_id\n", dbName.String())
+		if n.Options.Details {
+			fmt.Fprintf(&buf, "LEFT OUTER JOIN %s AS s ON r.table_id = s.table_id", tenantSpanStats)
+		}
 	case tree.ExpandIndexes:
-		// Add table/index name details.
-		fmt.Fprintf(&buf, `
-          SELECT r.* %[2]s, t.schema_name, t.name AS table_name, ti.index_name
-            FROM ranges r
- LEFT OUTER JOIN %[1]s.crdb_internal.table_indexes ti
-              ON r.table_id = ti.descriptor_id
-             AND r.index_id = ti.index_id
- LEFT OUTER JOIN %[1]s.crdb_internal.tables t
-              ON r.table_id = t.table_id`, dbName.String(), dbNameCol)
+		// Add table/index name details and approximate_disk_bytes if WITH DETAILS is specified.
+		fmt.Fprintf(&buf, "SELECT r.* %s, t.schema_name, t.name AS table_name, ti.index_name ", dbNameCol)
+		if n.Options.Details {
+			buf.WriteString(", approximate_disk_bytes AS approx_disk_bytes ")
+		}
+		fmt.Fprintf(&buf, `FROM ranges r
+		 LEFT OUTER JOIN %[1]s.crdb_internal.table_indexes ti ON r.table_id = ti.descriptor_id AND r.index_id = ti.index_id
+		 LEFT OUTER JOIN %[1]s.crdb_internal.tables t ON r.table_id = t.table_id`, dbName.String())
+		if n.Options.Details {
+			fmt.Fprintf(&buf, "\nLEFT OUTER JOIN %s AS s ON r.table_id = s.table_id", tenantSpanStats)
+		}
 	}
 	buf.WriteString("\n),\n") // end of named_ranges CTE.
+
+	// If WITH DETAILS we need to get approximate_disk_bytes from tenant_span_stats.
+	// It should be a summation unless WITH TABLES/INDEXES.
+	sumApproxDiskBytes := n.Options.Details && mode != tree.ExpandIndexes && mode != tree.ExpandTables
+	if sumApproxDiskBytes {
+		fmt.Fprintf(&buf, "span_stats AS (SELECT sum(approximate_disk_bytes) AS approx_disk_bytes FROM %s),\n", tenantSpanStats)
+	}
 	buf.WriteString("intermediate AS (SELECT r.*")
 	// If details were requested, also include the extra
 	// columns from crdb_internal.ranges.
 	if n.Options.Details {
-		fmt.Fprintf(&buf, ",\n  %s", colinfo.RangesExtraRenders)
+		if sumApproxDiskBytes {
+			fmt.Fprintf(&buf, ",s.*,\n  %s", colinfo.RangesExtraRenders)
+		} else {
+			fmt.Fprintf(&buf, ",\n  %s", colinfo.RangesExtraRenders)
+		}
 	}
-	buf.WriteString("\nFROM named_ranges r)\n")
+	buf.WriteString("\nFROM named_ranges r")
+	// span_stats only exist if WITH DETAILS and not WITH TABLES/INDEXES is specified.
+	if sumApproxDiskBytes {
+		buf.WriteString(", span_stats s")
+	}
+	buf.WriteString(")\n")
 
 	// Time to assemble the final projection.
 
@@ -656,6 +692,7 @@ AND s.end_key > r.start_key`)
 			}
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))
 		}
+		buf.WriteString(",\n  approx_disk_bytes")
 	}
 
 	// Complete this CTE. and add an order if needed.

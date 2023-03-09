@@ -878,7 +878,7 @@ func (p *planner) SpanStats(
 // No rows will be returned for database/table ids that do not correspond to an actual
 // database/table.
 func (p *planner) GetDetailsForSpanStats(
-	ctx context.Context, dbId int, tableId int,
+	ctx context.Context, dbId int, tableId int, dbName string, tableName string,
 ) (eval.InternalRows, error) {
 	query := `SELECT parent_id, table_id FROM crdb_internal.tables`
 	var args []interface{}
@@ -889,6 +889,12 @@ func (p *planner) GetDetailsForSpanStats(
 	} else if dbId != 0 {
 		query += ` WHERE parent_id = $1`
 		args = append(args, dbId)
+	} else if tableName != "" {
+		query += ` WHERE database_name = $1 AND name = $2`
+		args = append(args, dbName, tableName)
+	} else if dbName != "" {
+		query += ` WHERE database_name = $1`
+		args = append(args, dbName)
 	} else {
 		// Some tables belonging to crdb_internal.tables are not affiliated with a database
 		// and have a parent_id of 0 (usually crdb_internal or pg catalog tables), which aren't useful to the user.
