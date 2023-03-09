@@ -32,6 +32,7 @@ var tpccMergeResultsCmd = &cobra.Command{
 func init() {
 	flags := tpccMergeResultsCmd.Flags()
 	flags.Int("warehouses", 0, "number of aggregate warehouses in all of the histograms")
+	_ = tpccMergeResultsCmd.MarkFlagRequired("warehouses")
 }
 
 func tpccMergeResults(cmd *cobra.Command, args []string) error {
