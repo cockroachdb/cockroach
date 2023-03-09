@@ -1584,12 +1584,6 @@ var charts = []sectionDescription{
 					"changefeed.internal_retry_message_count",
 				},
 			},
-			{
-				Title: "Schema Registry Retries",
-				Metrics: []string{
-					"changefeed.schema_registry.retry_count",
-				},
-			},
 		},
 	},
 	{

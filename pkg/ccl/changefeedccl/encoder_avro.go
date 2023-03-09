@@ -74,10 +74,7 @@ var encoderCacheConfig = cache.Config{
 }
 
 func newConfluentAvroEncoder(
-	opts changefeedbase.EncodingOptions,
-	targets changefeedbase.Targets,
-	p externalConnectionProvider,
-	sliMetrics *sliMetrics,
+	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets, p externalConnectionProvider,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts.AvroSchemaPrefix,
@@ -105,7 +102,7 @@ func newConfluentAvroEncoder(
 			changefeedbase.OptConfluentSchemaRegistry, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
 
-	reg, err := newConfluentSchemaRegistry(opts.SchemaRegistryURI, p, sliMetrics)
+	reg, err := newConfluentSchemaRegistry(opts.SchemaRegistryURI, p)
 	if err != nil {
 		return nil, err
 	}
