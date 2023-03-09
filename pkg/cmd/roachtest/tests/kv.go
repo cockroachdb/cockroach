@@ -916,8 +916,9 @@ func measureQPS(ctx context.Context, t test.Test, db *gosql.DB, duration time.Du
 // transfers.
 func registerKVRestartImpact(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Skip:    "#95159",
 		Name:    "kv/restart/nodes=12",
+    // This test is expensive (104vcpu), we run it weekly.
+		Tags:    []string{`weekly`},
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(13, spec.CPU(8)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
