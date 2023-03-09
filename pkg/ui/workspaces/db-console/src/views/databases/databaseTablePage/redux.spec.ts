@@ -16,9 +16,9 @@ import {
   DatabaseTablePageActions,
   DatabaseTablePageData,
   DatabaseTablePageDataDetails,
-  DatabaseTablePageDataStats,
   DatabaseTablePageIndexStats,
   util,
+  api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -26,6 +26,7 @@ import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import { makeTimestamp } from "src/views/databases/utils";
+import moment from "moment";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -97,10 +98,6 @@ class TestDriver {
     expect(this.properties().details).toEqual(expected);
   }
 
-  assertTableStats(expected: DatabaseTablePageDataStats) {
-    expect(this.properties().stats).toEqual(expected);
-  }
-
   assertIndexStats(
     expected: DatabaseTablePageIndexStats,
     compareTimestamps: boolean = true,
@@ -126,10 +123,6 @@ class TestDriver {
   }
   async refreshTableDetails() {
     return this.actions.refreshTableDetails(this.database, this.table);
-  }
-
-  async refreshTableStats() {
-    return this.actions.refreshTableStats(this.database, this.table);
   }
 
   async refreshIndexStats() {
@@ -178,16 +171,11 @@ describe("Database Table Page", function () {
           livePercentage: 0,
           liveBytes: 0,
           totalBytes: 0,
-        },
-        automaticStatsCollectionEnabled: true,
-        stats: {
-          loading: false,
-          loaded: false,
-          lastError: undefined,
           sizeInBytes: 0,
           rangeCount: 0,
           nodesByRegionString: "",
         },
+        automaticStatsCollectionEnabled: true,
         indexStats: {
           loading: false,
           loaded: false,
@@ -201,25 +189,66 @@ describe("Database Table Page", function () {
   });
 
   it("loads table details", async function () {
-    fakeApi.stubTableDetails("DATABASE", "TABLE", {
-      grants: [
-        { user: "admin", privileges: ["CREATE", "DROP"] },
-        { user: "public", privileges: ["SELECT"] },
+    const mockStatsLastCreatedTimestamp = moment();
+
+    fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
+      clusterUiApi.createTableDetailsReq("DATABASE", "TABLE"),
+      [
+        // Table ID query
+        { rows: [{ table_id: "1" }] },
+        // Table grants query
+        {
+          rows: [
+            { user: "admin", privileges: ["CREATE", "DROP"] },
+            { user: "public", privileges: ["SELECT"] },
+          ],
+        },
+        // Table schema details query
+        {
+          rows: [
+            {
+              columns: ["colA", "colB", "c"],
+              indexes: ["primary", "anotha", "one"],
+            },
+          ],
+        },
+        // Table create statement query
+        { rows: [{ statement: "CREATE TABLE foo" }] },
+        // Table zone config statement query
+        {},
+        // Table heuristics query
+        { rows: [{ stats_last_created_at: mockStatsLastCreatedTimestamp }] },
+        // Table span stats query
+        {
+          rows: [
+            {
+              approximate_disk_bytes: 23,
+              live_bytes: 45,
+              total_bytes: 45,
+              range_count: 56,
+              live_percentage: 1,
+            },
+          ],
+        },
+        // Table index usage statistics query
+        {
+          rows: [
+            {
+              last_read: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              unused_threshold: "1m",
+            },
+          ],
+        },
+        // Table zone config query
+        {},
+        // Table replicas query
+        {
+          rows: [{ replicas: [1, 2, 3, 4, 5] }],
+        },
       ],
-      indexes: [
-        { name: "primary" },
-        { name: "another_index", seq: new Long(1) },
-        { name: "another_index", seq: new Long(2) },
-      ],
-      create_table_statement: "CREATE TABLE foo",
-      zone_config: {
-        num_replicas: 5,
-      },
-      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
-      data_total_bytes: new Long(456789),
-      data_live_bytes: new Long(12345),
-      data_live_percentage: 2.0,
-    });
+      1,
+    );
 
     await driver.refreshTableDetails();
 
@@ -229,35 +258,18 @@ describe("Database Table Page", function () {
       lastError: null,
       createStatement: "CREATE TABLE foo",
       replicaCount: 5,
-      indexNames: ["primary", "another_index"],
+      indexNames: ["primary", "anotha", "one"],
       grants: [
         { user: "admin", privileges: ["CREATE", "DROP"] },
         { user: "public", privileges: ["SELECT"] },
       ],
-      statsLastUpdated: util.TimestampToMoment(
-        makeTimestamp("0001-01-01T00:00:00Z"),
-      ),
-      livePercentage: 2.0,
-      liveBytes: 12345,
-      totalBytes: 456789,
-    });
-  });
-
-  it("loads table stats", async function () {
-    fakeApi.stubTableStats("DATABASE", "TABLE", {
-      range_count: new Long(4200),
-      approximate_disk_bytes: new Long(44040192),
-    });
-
-    await driver.refreshTableStats();
-
-    driver.assertTableStats({
-      loading: false,
-      loaded: true,
-      lastError: null,
-      sizeInBytes: 44040192,
-      rangeCount: 4200,
-      nodesByRegionString: "",
+      statsLastUpdated: mockStatsLastCreatedTimestamp.toISOString(),
+      livePercentage: 1,
+      liveBytes: 45,
+      totalBytes: 45,
+      sizeInBytes: 23,
+      rangeCount: 56,
+      nodesByRegionString: "undefined(n1,n2,n3,n4,n5)",
     });
   });
 
