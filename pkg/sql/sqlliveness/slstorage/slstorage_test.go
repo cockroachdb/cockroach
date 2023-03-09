@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -72,17 +74,14 @@ func testStorage(t *testing.T) {
 	setup := func(t *testing.T) (
 		*hlc.Clock, *timeutil.ManualTime, *cluster.Settings, *stop.Stopper, *slstorage.Storage,
 	) {
-		dbName := t.Name()
-
-		tableID := newSqllivenessTable(t, tDB, dbName)
-
+		table := newSqllivenessTable(t, tDB, s)
 		timeSource := timeutil.NewManualTime(t0)
 		clock := hlc.NewClockForTesting(timeSource)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
 		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-			tableID, rbrIndexID, timeSource.NewTimer)
+			s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
 
@@ -336,8 +335,8 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	dbName := t.Name()
-	tableID := newSqllivenessTable(t, tDB, dbName)
+
+	table := newSqllivenessTable(t, tDB, s)
 
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClockForTesting(timeSource)
@@ -347,7 +346,7 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
 	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID, rbrIndexID, timeSource.NewTimer)
+		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	const (
@@ -504,8 +503,7 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-	dbName := t.Name()
-	tableID := newSqllivenessTable(t, tDB, dbName)
+	table := newSqllivenessTable(t, tDB, s)
 
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClockForTesting(timeSource)
@@ -515,12 +513,12 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
 	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID, rbrIndexID, timeSource.NewTimer)
+		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	// Synchronize reading from the store with the blocked channel by detecting
 	// a Get to the table.
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.GetID()))
 	var blockChannel atomic.Value
 	var blocked int64
 	resetBlockedChannel := func() { blockChannel.Store(make(chan struct{})) }
@@ -709,13 +707,12 @@ func testDeleteMidUpdateFails(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Set up a fake storage implementation using a separate table.
-	dbName := t.Name()
-	tableID := newSqllivenessTable(t, tdb, dbName)
+	table := newSqllivenessTable(t, tdb, s)
 
 	storage := slstorage.NewTestingStorage(
 		s.DB().AmbientContext,
 		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
-		tableID, rbrIndexID, timeutil.DefaultTimeSource{}.NewTimer,
+		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeutil.DefaultTimeSource{}.NewTimer,
 	)
 
 	// Insert a session.
@@ -730,7 +727,7 @@ func testDeleteMidUpdateFails(t *testing.T) {
 	) *kvpb.Error {
 		if get, ok := request.GetArg(kvpb.Get); !ok || !bytes.HasPrefix(
 			get.(*kvpb.GetRequest).Key,
-			keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
+			keys.SystemSQLCodec.TablePrefix(uint32(table.GetID())),
 		) {
 			return nil
 		}
@@ -757,7 +754,7 @@ func testDeleteMidUpdateFails(t *testing.T) {
 	unblock := <-getChan
 
 	// Delete the session being updated.
-	tdb.Exec(t, `DELETE FROM "`+dbName+`".sqlliveness WHERE true`)
+	tdb.Exec(t, `DELETE FROM "`+t.Name()+`".sqlliveness WHERE true`)
 
 	// Unblock the update and ensure that it saw that its session was deleted.
 	close(unblock)
@@ -766,32 +763,14 @@ func testDeleteMidUpdateFails(t *testing.T) {
 	require.NoError(t, res.err)
 }
 
-// rbrIndexID is the index id used to access the regional by row index in
-// tests. In production it will be index 2, but the freshly created test table
-// will have index 1.
-const rbrIndexID = 1
-
-func newSqllivenessTable(t *testing.T, db *sqlutils.SQLRunner, dbName string) (tableID descpb.ID) {
-	var schema string
-	if systemschema.TestSupportMultiRegion() {
-		schema = systemschema.MrSqllivenessTableSchema
-	} else {
-		schema = systemschema.SqllivenessTableSchema
-	}
+func newSqllivenessTable(
+	t *testing.T, db *sqlutils.SQLRunner, s serverutils.TestServerInterface,
+) (tableID catalog.TableDescriptor) {
 	t.Helper()
-	db.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, dbName))
-	tableName := "sqlliveness"
-	schema = strings.Replace(schema,
-		fmt.Sprintf("CREATE TABLE system.%s", tableName),
-		fmt.Sprintf(`CREATE TABLE "%s".%s`, dbName, tableName),
-		1)
-	db.Exec(t, schema)
-	db.QueryRow(t, `
-		select u.id 
-		from system.namespace t
-		join system.namespace u 
-		  on t.id = u."parentID" 
-		where t.name = $1 and u.name = $2`,
-		dbName, tableName).Scan(&tableID)
-	return tableID
+	db.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, t.Name()))
+	db.Exec(t, strings.Replace(systemschema.SqllivenessTableSchema,
+		"CREATE TABLE system.sqlliveness",
+		fmt.Sprintf(`CREATE TABLE "%s".sqlliveness`, t.Name()),
+		1))
+	return desctestutils.TestingGetTableDescriptor(s.DB(), s.Codec(), t.Name(), "public", "sqlliveness")
 }
