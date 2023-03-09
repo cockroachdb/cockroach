@@ -14,7 +14,7 @@
  */
 
 import { Action } from "redux";
-import { put, takeEvery } from "redux-saga/effects";
+import { put, takeEvery, all } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 import _ from "lodash";
 import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
@@ -25,6 +25,11 @@ import {
   getValueFromSessionStorage,
   setLocalSetting,
 } from "src/redux/localsettings";
+import {
+  invalidateStmtInsights,
+  invalidateTxnInsights,
+  invalidateStatements,
+} from "./apiReducers";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
 export const SET_METRICS_MOVING_WINDOW =
@@ -110,14 +115,17 @@ export function timeScaleReducer(
     }
     case SET_METRICS_MOVING_WINDOW: {
       const { payload: tw } = action as PayloadAction<TimeWindow>;
-      state = _.cloneDeep(state);
+      // We don't want to deep clone the state here, because we're
+      // not changing the scale object here. For components observing
+      // timescale changes, we don't want to update them unnecessarily.
+      state = { ...state, metricsTime: _.cloneDeep(state.metricsTime) };
       state.metricsTime.currentWindow = tw;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = false;
       return state;
     }
     case SET_METRICS_FIXED_WINDOW: {
       const { payload: data } = action as PayloadAction<TimeWindow>;
-      state = _.cloneDeep(state);
+      state = { ...state, metricsTime: _.cloneDeep(state.metricsTime) };
       state.metricsTime.currentWindow = data;
       state.metricsTime.isFixedWindow = true;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = false;
@@ -222,5 +230,10 @@ export const adjustTimeScale = (
 export function* timeScaleSaga() {
   yield takeEvery(SET_SCALE, function* ({ payload }: PayloadAction<TimeScale>) {
     yield put(setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, payload));
+    yield all([
+      put(invalidateStatements()),
+      put(invalidateStmtInsights()),
+      put(invalidateTxnInsights()),
+    ]);
   });
 }

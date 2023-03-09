@@ -411,6 +411,8 @@ const transactionInsightsReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
 );
 export const refreshTransactionInsights = transactionInsightsReducerObj.refresh;
+export const invalidateTxnInsights =
+  transactionInsightsReducerObj.invalidateData;
 
 const statementInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getStatementInsightsApi,
@@ -419,6 +421,8 @@ const statementInsightsReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
 );
 export const refreshStatementInsights = statementInsightsReducerObj.refresh;
+export const invalidateStmtInsights =
+  statementInsightsReducerObj.invalidateData;
 
 export const transactionInsightRequestKey = (
   req: clusterUiApi.TransactionInsightEventDetailsRequest,

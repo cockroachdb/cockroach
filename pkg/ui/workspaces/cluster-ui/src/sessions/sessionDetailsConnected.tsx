@@ -42,8 +42,7 @@ export const SessionDetailsPageConnected = withRouter(
       refreshNodes: nodesActions.refresh,
       refreshNodesLiveness: nodesLivenessActions.refresh,
       setTimeScale: (ts: TimeScale) =>
-        localStorageActions.update({
-          key: "timeScale/SQLActivity",
+        localStorageActions.updateTimeScale({
           value: ts,
         }),
       onTerminateSessionClick: () =>

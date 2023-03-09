@@ -33,7 +33,6 @@ import CancelStatementDiagnosticsReportRequest = cockroach.server.serverpb.Cance
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
-  invalidateStatements,
 } from "src/redux/apiReducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
@@ -152,9 +151,7 @@ export function* setCombinedStatementsTimeScaleSaga(
   action: PayloadAction<TimeScale>,
 ) {
   const ts = action.payload;
-
   yield put(setTimeScale(ts));
-  yield put(invalidateStatements());
 }
 
 export function* statementsSaga() {

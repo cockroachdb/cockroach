@@ -136,6 +136,13 @@ export const selectStatementsDataValid = createSelector(
   },
 );
 
+export const selectStatementsDataInFlight = createSelector(
+  sqlStatsSelector,
+  (state: SQLStatsState): boolean => {
+    return state.inFlight;
+  },
+);
+
 export const selectStatements = createSelector(
   sqlStatsSelector,
   (_: AppState, props: RouteComponentProps) => props,
