@@ -39,6 +39,7 @@ import { initializeAnalytics } from "./analytics";
 import { DataFromServer } from "src/util/dataFromServer";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
+import { createSelector } from "reselect";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -51,6 +52,7 @@ export interface AdminUIState {
   timeScale: TimeScaleState;
   uiData: UIDataState;
   login: LoginAPIState;
+  flags: FeatureFlags;
 }
 
 const emptyDataFromServer: DataFromServer = {
@@ -64,6 +66,15 @@ const emptyDataFromServer: DataFromServer = {
   Tag: "",
   Version: "",
 };
+
+export const featureFlagSelector = createSelector(
+  (state: AdminUIState) => state.flags,
+  flags => flags,
+);
+
+export function flagsReducer(state = emptyDataFromServer.FeatureFlags) {
+  return state;
+}
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
@@ -86,6 +97,7 @@ export function createAdminUIStore(
       timeScale: timeScaleReducer,
       uiData: uiDataReducer,
       login: loginReducer,
+      flags: flagsReducer,
     }),
     {
       login: {
@@ -96,6 +108,7 @@ export function createAdminUIStore(
         oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
         oidcButtonText: dataFromServer.OIDCButtonText,
       },
+      flags: dataFromServer.FeatureFlags,
     },
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),

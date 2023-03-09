@@ -1869,8 +1869,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 			db:               s.db,
 		}), /* apiServer */
 		serverpb.FeatureFlags{
-			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
-		}, /* flags */
+			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
+			DisableKvLevelAdvancedDebug: false,
+		},
 	); err != nil {
 		return err
 	}
