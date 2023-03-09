@@ -15,3 +15,6 @@ export const selectStatementsLastUpdated = (state: AdminUIState) =>
 
 export const selectStatementsDataValid = (state: AdminUIState) =>
   state.cachedData.statements?.valid;
+
+export const selectStatementsDataInFlight = (state: AdminUIState) =>
+  state.cachedData.statements?.inFlight;
