@@ -694,7 +694,7 @@ func compareForWindow(evalCtx *EvalContext, left, right Datum) (int, error) {
 			return 0, err
 		}
 	}
-	return left.Compare(evalCtx, right), nil
+	return left.CompareError(evalCtx, right)
 }
 
 // WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.

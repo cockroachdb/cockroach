@@ -424,7 +424,9 @@ func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool,
 		}
 		var found bool
 		for _, hay := range haystack.Array {
-			if needle.Compare(ctx, hay) == 0 {
+			if cmp, err := needle.CompareError(ctx, hay); err != nil {
+				return DBoolFalse, err
+			} else if cmp == 0 {
 				found = true
 				break
 			}
@@ -2207,7 +2209,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.EQ)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.EQ))
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2263,7 +2265,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.LT)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.LT))
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2319,7 +2321,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.LE)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.LE))
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2405,7 +2407,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 				if left == DNull || right == DNull {
 					return MakeDBool(left == DNull && right == DNull), nil
 				}
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom))
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2803,7 +2805,9 @@ func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 	return cmpOpScalarFn(ctx, left, right, treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)), nil
 }
 
-func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op treecmp.ComparisonOperator) Datum {
+func cmpOpTupleFn(
+	ctx *EvalContext, left, right DTuple, op treecmp.ComparisonOperator,
+) (Datum, error) {
 	cmp := 0
 	sawNull := false
 	for i, leftElem := range left.D {
@@ -2823,7 +2827,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op treecmp.ComparisonOpe
 			case treecmp.IsNotDistinctFrom:
 				// For IS NOT DISTINCT FROM, NULLs are "equal".
 				if leftElem != DNull || rightElem != DNull {
-					return DBoolFalse
+					return DBoolFalse, nil
 				}
 
 			default:
@@ -2832,10 +2836,14 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op treecmp.ComparisonOpe
 				// NULL. This is because NULL is thought of as "unknown" and tuple
 				// inequality is defined lexicographically, so once a NULL comparison is
 				// seen, the result of the entire tuple comparison is unknown.
-				return DNull
+				return DNull, nil
 			}
 		} else {
-			cmp = leftElem.Compare(ctx, rightElem)
+			var err error
+			cmp, err = leftElem.CompareError(ctx, rightElem)
+			if err != nil {
+				return DNull, err
+			}
 			if cmp != 0 {
 				break
 			}
@@ -2846,9 +2854,9 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op treecmp.ComparisonOpe
 		// The op is EQ and all non-NULL elements are equal, but we saw at least
 		// one NULL element. Since NULL comparisons are treated as unknown, the
 		// result of the comparison becomes unknown (NULL).
-		return DNull
+		return DNull, nil
 	}
-	return b
+	return b, nil
 }
 
 func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
@@ -2899,7 +2907,9 @@ func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 						sawNull = true
 					} else {
 						// Use the EQ function which properly handles NULLs.
-						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), treecmp.MakeComparisonOperator(treecmp.EQ)); res == DNull {
+						if res, err := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), treecmp.MakeComparisonOperator(treecmp.EQ)); err != nil {
+							return DNull, err
+						} else if res == DNull {
 							sawNull = true
 						} else if res == DBoolTrue {
 							return DBoolTrue, nil
