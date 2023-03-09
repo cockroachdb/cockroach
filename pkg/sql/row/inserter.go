@@ -27,7 +27,7 @@ import (
 
 // Inserter abstracts the key/value operations for inserting table rows.
 type Inserter struct {
-	Helper                rowHelper
+	Helper                RowHelper
 	InsertCols            []catalog.Column
 	InsertColIDtoRowIndex catalog.TableColMap
 
@@ -53,7 +53,7 @@ func MakeInserter(
 	metrics *rowinfra.Metrics,
 ) (Inserter, error) {
 	ri := Inserter{
-		Helper: newRowHelper(
+		Helper: NewRowHelper(
 			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), sv, internal, metrics,
 		),
 
@@ -61,20 +61,27 @@ func MakeInserter(
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 	}
 
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
-		if _, ok := ri.InsertColIDtoRowIndex.Get(colID); !ok {
-			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetKeyColumnName(i))
-		}
+	if err := CheckPrimaryKeyColumns(tableDesc, ri.InsertColIDtoRowIndex); err != nil {
+		return Inserter{}, err
 	}
 
 	return ri, nil
 }
 
+func CheckPrimaryKeyColumns(tableDesc catalog.TableDescriptor, colMap catalog.TableColMap) error {
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
+		if _, ok := colMap.Get(colID); !ok {
+			return fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetKeyColumnName(i))
+		}
+	}
+	return nil
+}
+
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
 func insertCPutFn(
-	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
@@ -86,7 +93,7 @@ func insertCPutFn(
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertPutFn(
-	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
@@ -95,16 +102,16 @@ func insertPutFn(
 }
 
 // insertDelFn is used by insertRow to delete existing rows.
-func insertDelFn(ctx context.Context, b putter, key *roachpb.Key, traceKV bool) {
+func insertDelFn(ctx context.Context, b Putter, key *roachpb.Key, traceKV bool) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "Del %s", *key)
 	}
 	b.Del(key)
 }
 
-// insertPutFn is used by insertRow when conflicts should be ignored.
+// insertInvertedPutFn is used by insertRow when conflicts should be ignored.
 func insertInvertedPutFn(
-	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
@@ -112,18 +119,11 @@ func insertInvertedPutFn(
 	b.InitPut(key, value, false)
 }
 
-type putter interface {
-	CPut(key, value interface{}, expValue []byte)
-	Put(key, value interface{})
-	InitPut(key, value interface{}, failOnTombstones bool)
-	Del(key ...interface{})
-}
-
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *Inserter) InsertRow(
 	ctx context.Context,
-	b putter,
+	b Putter,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	overwrite bool,
@@ -177,7 +177,7 @@ func (ri *Inserter) InsertRow(
 				e := &entries[i]
 
 				if ri.Helper.Indexes[idx].ForcePut() {
-					// See the comemnt on (catalog.Index).ForcePut() for more details.
+					// See the comment on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
 				} else {
 					putFn(ctx, b, &e.Key, &e.Value, traceKV)
