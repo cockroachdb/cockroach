@@ -444,7 +444,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 				if w.waitFraction == 0 {
 					w.numConns = w.workers
 				} else {
-					w.numConns = w.activeWarehouses * numConnsPerWarehouse
+					partitionFactor := 1
+					countAffinity := len(w.affinityPartitions)
+					if countAffinity > 0 && w.partitions > 0 {
+						partitionFactor = w.partitions / countAffinity
+					}
+
+					w.numConns = (w.activeWarehouses * numConnsPerWarehouse)
+					w.numConns = w.numConns / partitionFactor
 				}
 			}
 
@@ -897,6 +904,7 @@ func (w *tpcc) Ops(
 	// startup can be slow).
 	cfg.MaxConnsPerPool = w.connFlags.Concurrency
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
+	fmt.Printf("Max Total connections %d Max connections per pool %d ... \n", cfg.MaxTotalConnections, cfg.MaxConnsPerPool)
 
 	// If queries were specified before each operation, then lets
 	// execute those.

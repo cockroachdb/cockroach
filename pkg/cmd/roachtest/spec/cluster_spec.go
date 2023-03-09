@@ -149,7 +149,7 @@ type ClusterSpec struct {
 // MakeClusterSpec makes a ClusterSpec.
 func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 	spec := ClusterSpec{NodeCount: nodeCount}
-	defaultOpts := []Option{CPU(4), WorkloadNodeCPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
+	defaultOpts := []Option{CPU(4), WorkloadNodeCPU(4), WorkloadNodeCount(1), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o(&spec)
 	}
