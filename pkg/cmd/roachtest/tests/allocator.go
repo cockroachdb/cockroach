@@ -164,9 +164,11 @@ func registerAllocator(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    `replicate/wide`,
-		Owner:   registry.OwnerKV,
-		Timeout: 10 * time.Minute,
+		Name:  `replicate/wide`,
+		Owner: registry.OwnerKV,
+		// Allow a longer running time to account for runs that use a
+		// cockroach build with runtime assertions enabled.
+		Timeout: 30 * time.Minute,
 		Cluster: r.MakeClusterSpec(9, spec.CPU(1)),
 		Run:     runWideReplication,
 	})
