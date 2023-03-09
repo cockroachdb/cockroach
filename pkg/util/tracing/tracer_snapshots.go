@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/petermattis/goid"
 )
 
 // SpansSnapshot represents a snapshot of all the open spans at a certain point
@@ -297,5 +298,57 @@ func (t *Tracer) runPeriodicSnapshotsLoop(
 			case <-settingChange:
 			}
 		}
+	}
+}
+
+// MaybeRecordStackHistory records in the span found in the passed context, if
+// there is one and it is verbose or has a sink, any stacks found for the
+// current goroutine in the currently stored tracer automatic snapshots, since
+// the passed time (generally when this goroutine started processing this
+// request/op). See the "trace.snapshot.rate" setting for controlling whether
+// such automatic snapshots are available to be searched and if so at what
+// granularity.
+func (sp *Span) MaybeRecordStackHistory(since time.Time) {
+	if sp == nil || !sp.i.hasVerboseSink() {
+		return
+	}
+
+	t := sp.Tracer()
+	id := int(goid.Get())
+
+	var prevStack string
+
+	t.snapshotsMu.Lock()
+	defer t.snapshotsMu.Unlock()
+	for i := 0; i < t.snapshotsMu.autoSnapshots.Len(); i++ {
+		s := t.snapshotsMu.autoSnapshots.Get(i)
+		if s.CapturedAt.Before(since) {
+			continue
+		}
+		stack, ok := s.Stacks[id]
+		if ok {
+			sp.RecordStructured(stackDelta(prevStack, stack, timeutil.Since(s.CapturedAt)))
+			prevStack = stack
+		}
+	}
+}
+
+func stackDelta(base, change string, age time.Duration) Structured {
+	if base == "" {
+		return &tracingpb.CapturedStack{Stack: change, Age: age}
+	}
+
+	var i, lines int
+	for i = range base {
+		c := base[len(base)-1-i]
+		if i > len(change) || change[len(change)-1-i] != c {
+			break
+		}
+		if c == '\n' {
+			lines++
+		}
+	}
+	return &tracingpb.CapturedStack{
+		Stack: change[:len(change)-i], SharedSuffix: int32(i), SharedLines: int32(lines),
 	}
 }
