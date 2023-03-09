@@ -5,3 +5,13 @@ SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA 
 
 statement ok
 SELECT a.job_id, b.job_id FROM [SHOW JOBS] a, [SHOW JOBS] b;
+
+
+# Regression tests for panic when SET avoid_buffering = true has been called. (#98204)
+user testuser
+
+statement ok
+SET avoid_buffering = true;
+
+statement ok
+SELECT crdb_internal.has_role_option('VIEWACTIVITY')

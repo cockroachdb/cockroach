@@ -1271,7 +1271,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Certain statements want their results to go to the client
 	// directly. Configure this here.
-	if planner.curPlan.avoidBuffering || ex.sessionData().AvoidBuffering {
+	//
+	// DisableBuffering is not supported by the InternalExecutor
+	// which uses streamingCommandResults.
+	avoidBuffering := planner.curPlan.avoidBuffering || ex.sessionData().AvoidBuffering
+	isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
+	if avoidBuffering && !isInternal {
 		res.DisableBuffering()
 	}
 
