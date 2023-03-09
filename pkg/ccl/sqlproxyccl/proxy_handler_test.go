@@ -657,6 +657,26 @@ func TestProxyRefuseConn(t *testing.T) {
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
+func TestProxyHandler_handle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	te := newTester()
+	defer te.Close()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	proxy, _, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
+
+	p1, p2 := net.Pipe()
+	require.NoError(t, p1.Close())
+
+	// Check that handle does not return any error if the incoming connection
+	// has no data packets.
+	require.Nil(t, proxy.handler.handle(ctx, p2))
+}
+
 func TestDenylistUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
