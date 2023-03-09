@@ -42,6 +42,8 @@ type metrics struct {
 	QueryCancelForwarded      *metric.Counter
 	QueryCancelIgnored        *metric.Counter
 	QueryCancelSuccessful     *metric.Counter
+
+	AccessControlFileErrorCount *metric.Gauge
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -209,6 +211,12 @@ var (
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	accessControlFileErrorCount = metric.Metadata{
+		Name:        "proxy.access_control.errors",
+		Help:        "Numbers of access control list files that are currently having errors",
+		Measurement: "Access Control File Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -262,6 +270,8 @@ func makeProxyMetrics() metrics {
 		QueryCancelIgnored:        metric.NewCounter(metaQueryCancelIgnored),
 		QueryCancelForwarded:      metric.NewCounter(metaQueryCancelForwarded),
 		QueryCancelSuccessful:     metric.NewCounter(metaQueryCancelSuccessful),
+
+		AccessControlFileErrorCount: metric.NewGauge(accessControlFileErrorCount),
 	}
 }
 
