@@ -23,9 +23,6 @@ import {
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
-  invalidateStatements,
-  invalidateExecutionInsights,
-  invalidateTxnInsights,
 } from "src/redux/apiReducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
@@ -124,9 +121,6 @@ export function* setCombinedStatementsTimeScaleSaga(
   const ts = action.payload;
 
   yield put(setTimeScale(ts));
-  yield put(invalidateStatements());
-  yield put(invalidateExecutionInsights());
-  yield put(invalidateTxnInsights());
 }
 
 export function* statementsSaga() {
