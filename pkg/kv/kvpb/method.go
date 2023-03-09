@@ -10,11 +10,20 @@
 
 package kvpb
 
+import "github.com/cockroachdb/cockroach/pkg/util/stringerutil"
+
 // Method is the enumerated type for methods.
 type Method int
 
 // SafeValue implements redact.SafeValue.
 func (Method) SafeValue() {}
+
+var StringToMethodMap = stringerutil.StringToEnumValueMap(
+	_Method_index[:],
+	_Method_name,
+	0,
+	MaxMethod,
+)
 
 //go:generate stringer -type=Method
 const (
@@ -174,6 +183,8 @@ const (
 	// IsSpanEmpty is a non-transaction read request used to determine whether
 	// a span contains any keys whatsoever (garbage or otherwise).
 	IsSpanEmpty
+	// MaxMethod is the maximum method.
+	MaxMethod Method = iota - 1
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )
