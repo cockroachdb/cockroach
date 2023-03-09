@@ -21,8 +21,6 @@ import {
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
-import { actions as stmtInsightActions } from "../insights/statementInsights";
-import { actions as txnInsightActions } from "../insights/transactionInsights";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   yield put(sqlStatsActions.request(action.payload));
@@ -44,24 +42,19 @@ export function* updateSQLStatsTimeScaleSaga(
 ) {
   const { ts } = action.payload;
   yield put(
-    localStorageActions.update({
-      key: "timeScale/SQLActivity",
+    localStorageActions.updateTimeScale({
       value: ts,
     }),
   );
-  yield all([
-    put(sqlStatsActions.invalidated()),
-    put(stmtInsightActions.invalidated()),
-    put(txnInsightActions.invalidated()),
-  ]);
 }
 
-export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
+export function* resetSQLStatsSaga() {
   try {
     yield call(resetSQLStats);
-    yield put(sqlDetailsStatsActions.invalidateAll());
-    yield put(sqlStatsActions.invalidated());
-    yield put(sqlStatsActions.refresh(action.payload));
+    yield all([
+      put(sqlDetailsStatsActions.invalidateAll()),
+      put(sqlStatsActions.invalidated()),
+    ]);
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }
