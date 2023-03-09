@@ -117,7 +117,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 func registerImportTPCC(r registry.Registry) {
 	runImportTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
-		c.Put(ctx, t.Cockroach(), "./cockroach")
+		c.Put(ctx, t.StandardCockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
@@ -215,7 +215,7 @@ func registerImportTPCH(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
 
-				c.Put(ctx, t.Cockroach(), "./cockroach")
+				c.Put(ctx, t.StandardCockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				conn := c.Conn(ctx, t.L(), 1)
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {

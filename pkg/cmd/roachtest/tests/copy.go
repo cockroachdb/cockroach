@@ -50,6 +50,13 @@ func registerCopy(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
+		// Make sure the copy commands have sufficient time to finish when
+		// runtime assertions are enabled.
+		copyTimeout := 10 * time.Minute
+		if usingRuntimeAssertions(t) {
+			copyTimeout = 20 * time.Minute
+		}
+
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			db := c.Conn(ctx, t.L(), 1)
@@ -99,7 +106,7 @@ func registerCopy(r registry.Registry) {
 				QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
 			}
 			runCopy := func(ctx context.Context, qu querier) error {
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Minute) // avoid infinite internal retries
+				ctx, cancel := context.WithTimeout(ctx, copyTimeout) // avoid infinite internal retries
 				defer cancel()
 
 				for lastID := -1; lastID+1 < rows; {

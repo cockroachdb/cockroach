@@ -90,12 +90,25 @@ func destinationName(c cluster.Cluster) string {
 }
 
 func importBankDataSplit(
-	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster,
+	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster, perfRun bool,
 ) string {
 	dest := destinationName(c)
 
+	cockroach := t.Cockroach()
+	startOpts := option.DefaultStartOptsNoBackups()
+	if perfRun {
+		cockroach = t.StandardCockroach()
+	} else if usingRuntimeAssertions(t) {
+		// When running these imports tests with runtime assertions
+		// enabled, increase SQL's memory budget to avoid 'budget
+		// exceeded' failures.
+		startOpts.RoachprodOpts.ExtraArgs = append(
+			startOpts.RoachprodOpts.ExtraArgs,
+			"--max-sql-memory=50%",
+		)
+	}
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
@@ -120,8 +133,10 @@ func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, 
 	c.Run(ctx, c.Node(1), importArgs...)
 }
 
-func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
-	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
+func importBankData(
+	ctx context.Context, rows int, t test.Test, c cluster.Cluster, perfRun bool,
+) string {
+	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c, perfRun)
 }
 
 func registerBackupNodeShutdown(r registry.Registry) {
@@ -136,7 +151,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			// works so the job doesn't complete immediately.
 			rows = rows5GiB
 		}
-		return importBankData(ctx, rows, t, c)
+		return importBankData(ctx, rows, t, c, false /* perfRun */)
 	}
 
 	r.Add(registry.TestSpec{
@@ -622,7 +637,7 @@ func registerBackup(r registry.Registry) {
 			if c.IsLocal() {
 				rows = 100
 			}
-			dest := importBankData(ctx, rows, t, c)
+			dest := importBankData(ctx, rows, t, c, true /* perfRun */)
 			tick, perfBuf := initBulkJobPerfArtifacts("backup/2TB", 2*time.Hour)
 
 			m := c.NewMonitor(ctx)
@@ -671,7 +686,7 @@ func registerBackup(r registry.Registry) {
 
 				rows := 100
 
-				dest := importBankData(ctx, rows, t, c)
+				dest := importBankData(ctx, rows, t, c, false /* perfRun */)
 
 				var backupPath, kmsURI string
 				var err error
@@ -779,7 +794,7 @@ func registerBackup(r registry.Registry) {
 				if c.IsLocal() {
 					rows = 100
 				}
-				dest := importBankData(ctx, rows, t, c)
+				dest := importBankData(ctx, rows, t, c, false /* perfRun */)
 
 				conn := c.Conn(ctx, t.L(), 1)
 				m := c.NewMonitor(ctx)

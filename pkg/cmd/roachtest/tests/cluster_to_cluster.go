@@ -658,7 +658,11 @@ func stopReplicationStream(
 	t test.Test, destSQL *sqlutils.SQLRunner, ingestionJob int, cutoverTime time.Time,
 ) {
 	destSQL.Exec(t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJob, cutoverTime)
-	err := retry.ForDuration(time.Minute*5, func() error {
+	waitForJobDuration := 5 * time.Minute
+	if usingRuntimeAssertions(t) {
+		waitForJobDuration = 10 * time.Minute
+	}
+	err := retry.ForDuration(waitForJobDuration, func() error {
 		var status string
 		var payloadBytes []byte
 		destSQL.QueryRow(t, `SELECT status, payload FROM system.jobs WHERE id = $1`,

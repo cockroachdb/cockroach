@@ -18,7 +18,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -550,7 +552,7 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	if startOpts.Target == StartDefault || startOpts.Target == StartTenantSQL {
-		args = append(args, c.generateStartFlagsSQL()...)
+		args = append(args, c.generateStartFlagsSQL(startOpts)...)
 	}
 
 	args = append(args, startOpts.ExtraArgs...)
@@ -618,12 +620,29 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 	return args
 }
 
+var maxSQLMemoryRE = regexp.MustCompile(`^--max-sql-memory=(\d)+%$`)
+
 // generateStartFlagsSQL generates `cockroach start` and `cockroach mt
 // start-sql` arguments that are relevant for the SQL layers, used by both KV
 // and storage layers (and in particular, are never used by `
-func (c *SyncedCluster) generateStartFlagsSQL() []string {
+func (c *SyncedCluster) generateStartFlagsSQL(opts StartOpts) []string {
+	formatArg := func(m int) string {
+		return fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(m))
+	}
+
 	var args []string
-	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(25)))
+	if idx := argExists(opts.ExtraArgs, "--max-sql-memory"); idx == -1 {
+		args = append(args, formatArg(25))
+	} else {
+		arg := opts.ExtraArgs[idx]
+		matches := maxSQLMemoryRE.FindStringSubmatch(arg)
+		mem, err := strconv.ParseInt(matches[1], 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("invalid --max-sql-memory parameter: %s", arg))
+		}
+
+		opts.ExtraArgs[idx] = formatArg(int(mem))
+	}
 	return args
 }
 

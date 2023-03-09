@@ -94,6 +94,7 @@ func registerSQLSmith(r registry.Registry) {
 
 		// With 50% chance use the cockroach-short binary that was compiled with
 		// --crdb_test build tag.
+		c.SetRandomSeed(rng.Int63())
 		maybeUseBuildWithEnabledAssertions(ctx, t, c, rng, 0.5 /* eaProb */)
 
 		setupFunc, ok := setups[setupName]
