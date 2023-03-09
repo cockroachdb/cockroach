@@ -73,7 +73,7 @@ func (h *CPUUsageHelper) EndCollection(ctx context.Context) (ruFomCPU float64) {
 // GetCPUSeconds returns the total CPU usage of the current process in seconds.
 // It is used for measuring tenant RU consumption.
 func GetCPUSeconds(ctx context.Context) (cpuSecs float64) {
-	userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+	userTimeMillis, sysTimeMillis, err := status.GetProcCPUTime(ctx)
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		return 0
