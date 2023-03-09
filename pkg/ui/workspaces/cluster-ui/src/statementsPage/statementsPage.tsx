@@ -82,8 +82,6 @@ import { filteredStatementsData } from "../sqlActivity/util";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
-const POLLING_INTERVAL_MILLIS = 300000;
-
 // Most of the props are supposed to be provided as connected props
 // from redux store.
 // StatementsPageDispatchProps, StatementsPageStateProps, and StatementsPageOuterProps interfaces
@@ -141,7 +139,6 @@ export interface StatementsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
-  startRequest?: Date;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
@@ -187,7 +184,6 @@ export class StatementsPage extends React.Component<
   StatementsPageState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
-  refreshDataTimeout: NodeJS.Timeout;
 
   constructor(props: StatementsPageProps) {
     super(props);
@@ -196,7 +192,6 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
-      startRequest: new Date(),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -267,10 +262,6 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.refreshStatements(ts);
-    this.setState({
-      startRequest: new Date(),
-    });
   };
 
   resetPagination = (): void => {
@@ -284,29 +275,9 @@ export class StatementsPage extends React.Component<
     });
   };
 
-  clearRefreshDataTimeout(): void {
-    if (this.refreshDataTimeout != null) {
-      clearTimeout(this.refreshDataTimeout);
-    }
-  }
-
-  resetPolling(ts: TimeScale): void {
-    this.clearRefreshDataTimeout();
-    if (ts.key !== "Custom") {
-      this.refreshDataTimeout = setTimeout(
-        this.refreshStatements,
-        POLLING_INTERVAL_MILLIS, // 5 minutes
-        ts,
-      );
-    }
-  }
-
-  refreshStatements = (ts?: TimeScale): void => {
-    const time = ts ?? this.props.timeScale;
-    const req = stmtsRequestFromTimeScale(time);
+  refreshStatements = (): void => {
+    const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.refreshStatements(req);
-
-    this.resetPolling(time);
   };
 
   refreshDatabases = (): void => {
@@ -316,40 +287,17 @@ export class StatementsPage extends React.Component<
   resetSQLStats = (): void => {
     const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.resetSQLStats(req);
-    this.setState({
-      startRequest: new Date(),
-    });
   };
 
   componentDidMount(): void {
-    this.setState({
-      startRequest: new Date(),
-    });
-
-    // For the first data fetch for this page, we refresh immediately if:
-    // - Last updated is null (no statements fetched previously)
-    // - The data is not valid (time scale may have changed on other pages)
-    // - The time range selected is a moving window and the last udpated time
-    // is >= 5 minutes.
-    // Otherwise, we schedule a refresh at 5 mins from the lastUpdated time if
-    // the time range selected is a moving window (i.e. not custom).
-    const now = moment();
-    let nextRefresh = null;
-    if (this.props.lastUpdated == null || !this.props.isDataValid) {
-      nextRefresh = now;
-    } else if (this.props.timeScale.key !== "Custom") {
-      nextRefresh = this.props.lastUpdated
-        .clone()
-        .add(POLLING_INTERVAL_MILLIS, "milliseconds");
-    }
-    if (nextRefresh) {
-      this.refreshDataTimeout = setTimeout(
-        this.refreshStatements,
-        Math.max(0, nextRefresh.diff(now, "milliseconds")),
-      );
-    }
-
     this.refreshDatabases();
+    if (
+      !this.props.isDataValid ||
+      !this.props.lastUpdated ||
+      !this.props.statements
+    ) {
+      this.refreshStatements();
+    }
 
     this.props.refreshUserSQLRoles();
     this.props.refreshNodes();
@@ -390,17 +338,20 @@ export class StatementsPage extends React.Component<
     );
   }
 
-  componentDidUpdate = (): void => {
+  componentDidUpdate = (prevProps: StatementsPageProps): void => {
     this.updateQueryParams();
     this.props.refreshNodes();
     if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
       this.props.refreshStatementDiagnosticsRequests();
     }
+
+    if (this.props.timeScale !== prevProps.timeScale) {
+      this.refreshStatements();
+    }
   };
 
   componentWillUnmount(): void {
     this.props.dismissAlertMessage();
-    this.clearRefreshDataTimeout();
   }
 
   onChangePage = (current: number): void => {
