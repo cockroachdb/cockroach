@@ -35,16 +35,16 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (b)
 statement ok
 ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTRT
+SELECT description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
-WHERE job_type = 'SCHEMA CHANGE'
+WHERE job_type in ('NEW SCHEMA CHANGE', 'SCHEMA CHANGE')
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
+ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
 
-statement error pgcode 42710 constraint with name \"foo\" already exists
+statement error pgcode 42P07 .* name \"foo\" already exists
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -84,6 +84,7 @@ ALTER TABLE t ADD CONSTRAINT dne_unique UNIQUE (dne)
 # We ignore the job status because GC for temporary indexes used
 # during backfills may already running rather than waiting for the GC
 # TTL depending on the timing.
+onlyif config local-legacy-schema-changer
 query TTT
 SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name
 FROM crdb_internal.jobs
@@ -1924,7 +1925,7 @@ subtest unique_index_duplicate_name
 statement ok
 CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
 
-statement error pgcode 42710 constraint with name \"idx\" already exists
+statement error pgcode 42P07 .* name \"idx\" already exists
 ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
 
 # Regression test for a bug which occurred when adding a foreign key
