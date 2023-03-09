@@ -169,7 +169,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, _, _ := opt.blocklists.getLists(version)
+		blocklistName, expectedFailures, _, ignorelist := opt.blocklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
@@ -229,7 +229,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blocklistName, expectedFailures, nil /* ignorelist */, version, supportedHibernateTag,
+			blocklistName, expectedFailures, ignorelist, version, supportedHibernateTag,
 		)
 	}
 

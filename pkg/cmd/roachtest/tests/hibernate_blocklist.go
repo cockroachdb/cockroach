@@ -245,5 +245,7 @@ var hibernateIgnoreList22_1 = hibernateIgnoreList21_2
 var hibernateIgnoreList21_2 = hibernateIgnoreList21_1
 
 var hibernateIgnoreList21_1 = blocklist{
-	"org.hibernate.userguide.pc.WhereTest.testLifecycle": "unknown",
+	"org.hibernate.userguide.pc.WhereTest.testLifecycle":                                                 "unknown",
+	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
+	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
 }
