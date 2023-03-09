@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/base64"
 	"net"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -267,15 +266,9 @@ type option struct {
 // parseOptions parses the given string into the options. The options must be
 // separated by space and have one of the following patterns:
 // '-c key=value', '-ckey=value', '--key=value'
-func parseOptions(optionsString string) ([]option, error) {
-	var res []option
-	optionsRaw, err := url.QueryUnescape(optionsString)
-	if err != nil {
-		return nil, pgerror.Newf(pgcode.ProtocolViolation, "failed to unescape options %q", optionsString)
-	}
-
+func parseOptions(optionsString string) (res []option, err error) {
 	lastWasDashC := false
-	opts := splitOptions(optionsRaw)
+	opts := splitOptions(optionsString)
 
 	for i := 0; i < len(opts); i++ {
 		prefix := ""
