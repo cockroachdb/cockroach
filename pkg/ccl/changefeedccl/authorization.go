@@ -68,6 +68,7 @@ func authorizeUserToCreateChangefeed(
 	sinkURI string,
 	hasSelectPrivOnAllTables bool,
 	hasChangefeedPrivOnAllTables bool,
+	otherExternalURIs ...string,
 ) error {
 	isAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
@@ -109,27 +110,32 @@ func authorizeUserToCreateChangefeed(
 
 	enforceExternalConnections := changefeedbase.RequireExternalConnectionSink.Get(&p.ExecCfg().Settings.SV)
 	if enforceExternalConnections {
-		uri, err := url.Parse(sinkURI)
-		if err != nil {
-			return errors.Newf("failed to parse url %s", sinkURI)
-		}
-		if uri.Scheme == changefeedbase.SinkSchemeExternalConnection {
-			ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
+		for _, uriString := range append(otherExternalURIs, sinkURI) {
+			if uriString == "" {
+				continue
+			}
+			uri, err := url.Parse(uriString)
 			if err != nil {
-				return errors.Wrap(err, "failed to load external connection object")
+				return errors.Newf("failed to parse url %s", uriString)
 			}
-			ecPriv := &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: ec.ConnectionName(),
+			if uri.Scheme == changefeedbase.SinkSchemeExternalConnection {
+				ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
+				if err != nil {
+					return errors.Wrap(err, "failed to load external connection object")
+				}
+				ecPriv := &syntheticprivilege.ExternalConnectionPrivilege{
+					ConnectionName: ec.ConnectionName(),
+				}
+				if err := p.CheckPrivilege(ctx, ecPriv, privilege.USAGE); err != nil {
+					return err
+				}
+			} else {
+				return pgerror.Newf(
+					pgcode.InsufficientPrivilege,
+					`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
+					privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Key(),
+				)
 			}
-			if err := p.CheckPrivilege(ctx, ecPriv, privilege.USAGE); err != nil {
-				return err
-			}
-		} else {
-			return pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
-				privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Key(),
-			)
 		}
 	}
 
