@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 )
 
@@ -35,6 +36,19 @@ var rangeDescPageSize = settings.RegisterIntSetting(
 	func(i int64) error {
 		if i < 5 || i > 25000 {
 			return fmt.Errorf("expected range_desc_page_size to be in range [5, 25000], got %d", i)
+		}
+		return nil
+	},
+)
+
+var conformanceReportRateLimit = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"spanconfig.reporter.report_rate_limit",
+	"the number of calls per second allowed to SpanConfigConformance",
+	1.0,
+	func(f float64) error {
+		if f < 0 || f > 1e9 {
+			return fmt.Errorf("expected report_rate_limit to be in range [0, 1e9], got %f", f)
 		}
 		return nil
 	},
@@ -78,8 +92,9 @@ type Reporter struct {
 		spanconfig.StoreReader
 	}
 
-	settings *cluster.Settings
-	knobs    *spanconfig.TestingKnobs
+	settings    *cluster.Settings
+	knobs       *spanconfig.TestingKnobs
+	rateLimiter *quotapool.RateLimiter
 }
 
 var _ spanconfig.Reporter = &Reporter{}
@@ -93,10 +108,23 @@ func New(
 	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
 ) *Reporter {
+
+	limit := quotapool.Limit(conformanceReportRateLimit.Get(&settings.SV))
 	r := &Reporter{
 		settings: settings,
 		knobs:    knobs,
+		rateLimiter: quotapool.NewRateLimiter(
+			"spanconfig-conformance-report-rate-limiter",
+			limit,
+			int64(limit),
+		),
 	}
+
+	conformanceReportRateLimit.SetOnChange(&settings.SV, func(ctx context.Context) {
+		newLimit := quotapool.Limit(conformanceReportRateLimit.Get(&settings.SV))
+		r.rateLimiter.UpdateLimit(newLimit, int64(newLimit))
+	})
+
 	r.dep.Liveness = liveness
 	r.dep.StoreResolver = resolver
 	r.dep.Scanner = scanner
@@ -117,6 +145,11 @@ func New(
 func (r *Reporter) SpanConfigConformance(
 	ctx context.Context, spans []roachpb.Span,
 ) (roachpb.SpanConfigConformanceReport, error) {
+	err := r.rateLimiter.WaitN(ctx, 1)
+	if err != nil {
+		return roachpb.SpanConfigConformanceReport{}, err
+	}
+
 	report := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
