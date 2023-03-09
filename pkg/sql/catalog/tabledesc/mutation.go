@@ -12,6 +12,7 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,10 +32,11 @@ var _ catalog.Mutation = mutation{}
 // and is embedded in table element interface implementations column and index
 // as well as mutation.
 type maybeMutation struct {
-	mutationID         descpb.MutationID
-	mutationDirection  descpb.DescriptorMutation_Direction
-	mutationState      descpb.DescriptorMutation_State
-	mutationIsRollback bool
+	mutationID                     descpb.MutationID
+	mutationDirection              descpb.DescriptorMutation_Direction
+	mutationState                  descpb.DescriptorMutation_State
+	mutationIsRollback             bool
+	mutationForcePutForIndexWrites bool
 }
 
 // IsMutation returns true iff this table element is in a mutation.
@@ -355,11 +357,13 @@ func newMutationCache(desc *descpb.TableDescriptor) *mutationCache {
 			})
 			backingStructs[i].column = &columns[len(columns)-1]
 		} else if pb := m.GetIndex(); pb != nil {
-			indexes = append(indexes, index{
+			idx := index{
 				maybeMutation: mm,
 				desc:          pb,
 				ordinal:       1 + len(desc.Indexes) + len(indexes),
-			})
+			}
+			idx.mutationForcePutForIndexWrites = determineIfIndexNeedsForcePuts(idx, desc)
+			indexes = append(indexes, idx)
 			backingStructs[i].index = &indexes[len(indexes)-1]
 		} else if pb := m.GetConstraint(); pb != nil {
 			switch pb.ConstraintType {
@@ -445,4 +449,27 @@ func newMutationCache(desc *descpb.TableDescriptor) *mutationCache {
 		}
 	}
 	return &c
+}
+
+// determineIfIndexNeedsForcePuts based on a given index this function will
+// determine if this mutation should set the force puts flag. This flag indicates
+// that conditional puts are not safe. See index.ForcePut for the exact
+// scenarios.
+func determineIfIndexNeedsForcePuts(index catalog.Index, tableDesc *descpb.TableDescriptor) bool {
+	// If we are doing any of the following mutations, then force puts:
+	//   - delete preserving indexes
+	//   - merging indexes
+	//   - dropping primary indexes
+	if index.Merging() || index.IndexDesc().UseDeletePreservingEncoding ||
+		index.Dropped() && index.IsUnique() && index.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
+		return true
+	}
+
+	// If we are adding primary indexes with new columns (same key), then
+	// we should also force puts. Attempting conditional puts for UPDATE's
+	// can end badly since we need to compute the expected value with the
+	// new columns.
+	return index.GetEncodingType() == catenumpb.PrimaryIndexEncoding &&
+		catalog.MakeTableColSet(tableDesc.PrimaryIndex.KeyColumnIDs...).Equals(
+			catalog.MakeTableColSet(index.IndexDesc().KeyColumnIDs...))
 }
