@@ -90,12 +90,16 @@ func destinationName(c cluster.Cluster) string {
 }
 
 func importBankDataSplit(
-	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster,
+	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster, perfRun bool,
 ) string {
 	dest := destinationName(c)
 
+	cockroach := t.Cockroach()
+	if perfRun {
+		cockroach = t.StandardCockroach()
+	}
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
@@ -120,8 +124,10 @@ func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, 
 	c.Run(ctx, c.Node(1), importArgs...)
 }
 
-func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
-	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
+func importBankData(
+	ctx context.Context, rows int, t test.Test, c cluster.Cluster, perfRun bool,
+) string {
+	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c, perfRun)
 }
 
 func registerBackupNodeShutdown(r registry.Registry) {
@@ -136,7 +142,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			// works so the job doesn't complete immediately.
 			rows = rows5GiB
 		}
-		return importBankData(ctx, rows, t, c)
+		return importBankData(ctx, rows, t, c, false /* perfRun */)
 	}
 
 	r.Add(registry.TestSpec{
@@ -622,7 +628,7 @@ func registerBackup(r registry.Registry) {
 			if c.IsLocal() {
 				rows = 100
 			}
-			dest := importBankData(ctx, rows, t, c)
+			dest := importBankData(ctx, rows, t, c, true /* perfRun */)
 			tick, perfBuf := initBulkJobPerfArtifacts("backup/2TB", 2*time.Hour)
 
 			m := c.NewMonitor(ctx)
@@ -671,7 +677,7 @@ func registerBackup(r registry.Registry) {
 
 				rows := 100
 
-				dest := importBankData(ctx, rows, t, c)
+				dest := importBankData(ctx, rows, t, c, false /* perfRun */)
 
 				var backupPath, kmsURI string
 				var err error
@@ -779,7 +785,7 @@ func registerBackup(r registry.Registry) {
 				if c.IsLocal() {
 					rows = 100
 				}
-				dest := importBankData(ctx, rows, t, c)
+				dest := importBankData(ctx, rows, t, c, false /* perfRun */)
 
 				conn := c.Conn(ctx, t.L(), 1)
 				m := c.NewMonitor(ctx)

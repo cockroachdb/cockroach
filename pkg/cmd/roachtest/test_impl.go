@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -123,12 +124,24 @@ func (t *testImpl) BuildVersion() *version.Version {
 	return t.buildVersion
 }
 
-func (t *testImpl) Cockroach() string {
-	return t.cockroach
+func (t *testImpl) Cockroach(opts ...test.BinaryChoiceOption) string {
+	// TODO(renato): use 0.5 as the actual default probability of
+	// running with assertions enabled.
+	defaultOptions := []test.BinaryChoiceOption{test.ProbabilityOption(0.0)}
+	binaryChoice := test.NewBinaryChoice(append(defaultOptions, opts...)...)
+	if binaryChoice.Generate() == test.Zero {
+		return t.StandardCockroach()
+	}
+
+	return t.RuntimeAssertionsCockroach()
 }
 
-func (t *testImpl) CockroachShort() string {
+func (t *testImpl) RuntimeAssertionsCockroach() string {
 	return t.cockroachShort
+}
+
+func (t *testImpl) StandardCockroach() string {
+	return t.cockroach
 }
 
 func (t *testImpl) DeprecatedWorkload() string {

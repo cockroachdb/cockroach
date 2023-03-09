@@ -462,7 +462,7 @@ func (cj *changefeedJob) waitForCompletion() {
 	}
 }
 
-func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester {
+func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, perfRun bool) cdcTester {
 	tester := cdcTester{
 		ctx:          ctx,
 		t:            t,
@@ -481,7 +481,13 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	}
 	tester.logger = changefeedLogger
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	// Allow cockroach with runtime assertions enabled unless this is a
+	// performance test.
+	cockroach := t.Cockroach()
+	if perfRun {
+		cockroach = t.StandardCockroach()
+	}
+	c.Put(ctx, cockroach, "./cockroach")
 
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true")
@@ -902,7 +908,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, true)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
@@ -926,7 +932,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
@@ -950,7 +956,7 @@ func registerCDC(r registry.Registry) {
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
@@ -973,7 +979,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
@@ -992,7 +998,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
@@ -1016,7 +1022,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.startCRDBChaos()
@@ -1045,7 +1051,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			workloadStart := timeutil.Now()
@@ -1076,7 +1082,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			// Sending data to Google Cloud Storage is a bit slower than sending to
@@ -1102,7 +1108,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
@@ -1133,7 +1139,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
@@ -1165,7 +1171,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
+			ct := newCDCTester(ctx, t, c, false /* perfRun */)
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "30m"})

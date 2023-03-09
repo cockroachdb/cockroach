@@ -11,17 +11,86 @@
 package test
 
 import (
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
+const (
+	// Zero and One are the possible return values for a BinaryChoice.
+	Zero = iota
+	One
+)
+
+// BinaryChoice allows the selection of two possible options; the
+// random number generator and the probability of a choice are
+// customizable using `BinaryChoiceOption`.
+type BinaryChoice struct {
+	rng             *rand.Rand
+	probabilityZero float64
+}
+
+type BinaryChoiceOption func(*BinaryChoice)
+
+// RNGOption allows callers to use their own random number generator
+// when making a binary choice.
+func RNGOption(rng *rand.Rand) BinaryChoiceOption {
+	return func(bc *BinaryChoice) {
+		bc.rng = rng
+	}
+}
+
+// ProbabilityOption allows callers to set their own probability of
+// returning `0` when generating a binary choice.
+func ProbabilityOption(p float64) BinaryChoiceOption {
+	return func(bc *BinaryChoice) {
+		bc.probabilityZero = p
+	}
+}
+
+// NewBinaryChoice generates a BinaryChoice with the options provided,
+// if any.
+func NewBinaryChoice(opts ...BinaryChoiceOption) *BinaryChoice {
+	var result BinaryChoice
+	for _, opt := range opts {
+		opt(&result)
+	}
+
+	return &result
+}
+
+// Generate returns either Zero or One, based on the value produced by
+// the underlying random number generator and the probability of a
+// Zero choice.
+func (bc *BinaryChoice) Generate() int {
+	var val float64
+	if bc.rng == nil {
+		val = rand.Float64()
+	} else {
+		val = bc.rng.Float64()
+	}
+
+	if val < bc.probabilityZero {
+		return Zero
+	}
+
+	return One
+}
+
 // Test is the interface through which roachtests interact with the
 // test harness.
 type Test interface {
-	Cockroach() string // path to main cockroach binary
-	// CockroachShort returns the path to cockroach-short binary compiled with
-	// --crdb_test build tag, or an empty string if no such binary was given.
-	CockroachShort() string
+	// StandardCockroach returns path to main cockroach binary, compiled
+	// without runtime assertions.
+	StandardCockroach() string
+	// RuntimeAssertionsCockroach returns the path to cockroach-short
+	// binary compiled with --crdb_test build tag, or an empty string if
+	// no such binary was given.
+	RuntimeAssertionsCockroach() string
+	// Cockroach returns either StandardCockroach or RuntimeAssertionsCockroach,
+	// picked randomly based on the options passed.
+	Cockroach(...BinaryChoiceOption) string
 	Name() string
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"

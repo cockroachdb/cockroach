@@ -62,11 +62,15 @@ func (t testWrapper) BuildVersion() *version.Version {
 	panic("implement me")
 }
 
-func (t testWrapper) Cockroach() string {
+func (t testWrapper) Cockroach(...test2.BinaryChoiceOption) string {
 	return "./dummy-path/to/cockroach"
 }
 
-func (t testWrapper) CockroachShort() string {
+func (t testWrapper) StandardCockroach() string {
+	return "./dummy-path/to/cockroach"
+}
+
+func (t testWrapper) RuntimeAssertionsCockroach() string {
 	return "./dummy-path/to/cockroach-short"
 }
 
