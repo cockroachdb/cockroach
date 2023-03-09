@@ -220,6 +220,12 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 		require.NoError(t, desctestutils.TestingValidateSelf(gen))
 
+		switch gen.GetID() {
+		case keys.SqllivenessID:
+			gen.TableDescriptor.PrimaryIndex.ID = 2
+			gen.TableDescriptor.NextIndexID = 3
+		}
+
 		if desc.TableDesc().Equal(gen.TableDesc()) {
 			return
 		}

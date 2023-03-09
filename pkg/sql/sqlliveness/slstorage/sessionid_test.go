@@ -90,6 +90,7 @@ func TestSessionIDEncoding(t *testing.T) {
 		{
 			name:    "legacy_session",
 			session: sqlliveness.SessionID(id1.GetBytes()),
+			region:  enum.One,
 			id:      id1,
 		},
 		{

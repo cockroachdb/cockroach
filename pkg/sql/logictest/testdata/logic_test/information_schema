@@ -1676,6 +1676,7 @@ system              public             29_46_1_not_null                         
 system              public             primary                                                                                                         system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             29_39_1_not_null                                                                                                system         public        sqlliveness                      CHECK            NO             NO
 system              public             29_39_2_not_null                                                                                                system         public        sqlliveness                      CHECK            NO             NO
+system              public             29_39_3_not_null                                                                                                system         public        sqlliveness                      CHECK            NO             NO
 system              public             primary                                                                                                         system         public        sqlliveness                      PRIMARY KEY      NO             NO
 system              public             29_34_1_not_null                                                                                                system         public        statement_bundle_chunks          CHECK            NO             NO
 system              public             29_34_3_not_null                                                                                                system         public        statement_bundle_chunks          CHECK            NO             NO
@@ -1876,6 +1877,7 @@ system              public             29_37_4_not_null                         
 system              public             29_37_9_not_null                                                                                                executor_type IS NOT NULL
 system              public             29_39_1_not_null                                                                                                session_id IS NOT NULL
 system              public             29_39_2_not_null                                                                                                expiration IS NOT NULL
+system              public             29_39_3_not_null                                                                                                crdb_region IS NOT NULL
 system              public             29_3_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_40_1_not_null                                                                                                major IS NOT NULL
 system              public             29_40_2_not_null                                                                                                minor IS NOT NULL
@@ -2034,6 +2036,7 @@ system         public        span_stats_tenant_boundaries     tenant_id         
 system         public        span_stats_unique_keys           id                                                                                                        system              public             primary
 system         public        span_stats_unique_keys           key_bytes                                                                                                 system              public             unique_keys_key_bytes_idx
 system         public        sql_instances                    id                                                                                                        system              public             primary
+system         public        sqlliveness                      crdb_region                                                                                               system              public             primary
 system         public        sqlliveness                      session_id                                                                                                system              public             primary
 system         public        statement_bundle_chunks          id                                                                                                        system              public             primary
 system         public        statement_diagnostics            id                                                                                                        system              public             primary
@@ -2331,6 +2334,7 @@ system         public        sql_instances                    id                
 system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3
 system         public        sql_instances                    sql_addr                                                                                                  5
+system         public        sqlliveness                      crdb_region                                                                                               3
 system         public        sqlliveness                      expiration                                                                                                2
 system         public        sqlliveness                      session_id                                                                                                1
 system         public        statement_bundle_chunks          data                                                                                                      3

@@ -11,6 +11,8 @@
 package slstorage
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -68,8 +70,15 @@ func MakeSessionID(region []byte, id uuid.UUID) (sqlliveness.SessionID, error) {
 func UnsafeDecodeSessionID(session sqlliveness.SessionID) (region, id []byte, err error) {
 	b := session.UnsafeBytes()
 	if len(b) == legacyLen {
-		// Legacy format of SessionID.
-		return nil, b, nil
+		// TODO(jeffswenson): once the V23_1_SystemRbrCleanup version gate is
+		// deleted, replace this branch with a validation error.
+		_ = clusterversion.V23_1_SystemRbrCleanup
+
+		// Legacy format of SessionID. Treat the session as if it belongs to
+		// region enum.One. This may crop up briefly if a session was created
+		// with an old binary right before the server is upgraded and the
+		// upgrade is kicked off while the session is still 'live'.
+		return enum.One, b, nil
 	}
 	if len(b) < minimumNonLegacyLen {
 		// The smallest valid v1 session id is a [version, 1, single_byte_region, uuid...],
