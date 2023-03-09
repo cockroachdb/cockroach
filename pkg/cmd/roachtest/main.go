@@ -74,7 +74,8 @@ func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 }
 
 func main() {
-	rand.Seed(timeutil.Now().UnixNano())
+	globalSeed := timeutil.Now().UnixNano()
+	rand.Seed(globalSeed)
 	username := os.Getenv("ROACHPROD_USER")
 	parallelism := 10
 	var cpuQuota int
@@ -232,6 +233,7 @@ runner itself.
 			return runTests(tests.RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
+				globalSeed:             globalSeed,
 				cpuQuota:               cpuQuota,
 				runSkipped:             runSkipped,
 				debugMode:              debugModeFromOpts(),
@@ -370,6 +372,7 @@ runner itself.
 type cliCfg struct {
 	args                   []string
 	count                  int
+	globalSeed             int64
 	cpuQuota               int
 	debugMode              debugMode
 	runSkipped             bool
@@ -450,6 +453,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		literalArtifactsDir: cfg.literalArtifactsDir,
 		runnerLogPath:       runnerLogPath,
 	}
+	l.Printf("global random seed: %d", cfg.globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
 			fmt.Sprintf(":%d", cfg.promPort),

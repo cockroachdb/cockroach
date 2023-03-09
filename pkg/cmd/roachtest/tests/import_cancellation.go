@@ -45,7 +45,7 @@ func registerImportCancellation(r registry.Registry) {
 func runImportCancellation(
 	ctx context.Context, t test.Test, c cluster.Cluster, rangeTombstones bool,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	t.Status("starting csv servers")

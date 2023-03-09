@@ -57,7 +57,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("copying binaries")
-	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", roachNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	filename := b.benchType

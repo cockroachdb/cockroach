@@ -48,7 +48,7 @@ func registerSnapshotOverload(r registry.Registry) {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
 			}
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+			c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := crdbNodes + 1
 			for i := 1; i <= crdbNodes; i++ {
