@@ -87,3 +87,8 @@ func (s *SettingsWatcher) MakeVersionGuard(
 func (v *VersionGuard) IsActive(version clusterversion.Key) bool {
 	return v.activeVersion.IsActive(version)
 }
+
+// TestMakeVersionGuard initializes a version guard at specific version.
+func TestMakeVersionGuard(activeVersion clusterversion.ClusterVersion) VersionGuard {
+	return VersionGuard{activeVersion: activeVersion}
+}

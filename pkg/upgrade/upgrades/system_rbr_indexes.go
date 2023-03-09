@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -84,24 +85,21 @@ func cleanUpRegionalByTableIndex(
 }
 
 func migrations(codec keys.SQLCodec) (result []rbrMigration) {
-	// TODO(jeffswenson): enable the migrations along with the PRs that add
-	// version gates for the sub systems interacting with the table..
 	return []rbrMigration{
-		// sqlLivenessMigration(codec),
+		sqlLivenessMigration(codec),
 		// sqlInstanceMigration(codec),
 		// leaseMigration(codec),
 	}
 }
 
-// TODO(jeffswenson): enable this migration
-//func sqlLivenessMigration(codec keys.SQLCodec) rbrMigration {
-//	descriptor := systemschema.SqllivenessTable()
-//	return rbrMigration{
-//		tableName:       "sqlliveness",
-//		keyMapper:       makeKeyMapper(codec, descriptor, 1),
-//		finalDescriptor: descriptor,
-//	}
-//}
+func sqlLivenessMigration(codec keys.SQLCodec) rbrMigration {
+	descriptor := systemschema.SqllivenessTable()
+	return rbrMigration{
+		tableName:       "sqlliveness",
+		keyMapper:       makeKeyMapper(codec, descriptor, 1),
+		finalDescriptor: descriptor,
+	}
+}
 
 // TODO(jeffswenson): enable this migration
 //func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
