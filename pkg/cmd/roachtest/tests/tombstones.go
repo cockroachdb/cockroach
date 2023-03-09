@@ -47,7 +47,6 @@ func registerPointTombstone(r registry.Registry) {
 			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
 			t.Status("starting cluster")
-			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
 
 			// Wait for upreplication.

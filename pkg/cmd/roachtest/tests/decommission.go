@@ -147,7 +147,6 @@ func runDrainAndDecommission(
 		t.Fatal("improper configuration: replication factor greater than number of nodes in the test")
 	}
 	pinnedNode := 1
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
@@ -251,7 +250,6 @@ func runDecommission(
 	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
 	// through which we run the workload and other queries.
 	pinnedNode := 1
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
@@ -389,7 +387,6 @@ func runDecommission(
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 
@@ -999,16 +996,12 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		decommNodeID = numNodes
 		decommNode   = c.Node(decommNodeID)
 	)
-
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err)
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	h := newDecommTestHelper(t, c)
 
 	run := func(db *gosql.DB, query string) error {
-		_, err = db.ExecContext(ctx, query)
+		_, err := db.ExecContext(ctx, query)
 		t.L().Printf("run: %s\n", query)
 		return err
 	}
@@ -1018,11 +1011,11 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		defer db.Close()
 
 		// Increase the speed of decommissioning.
-		err = run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		err := run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 		require.NoError(t, err)
 
 		// Wait for initial up-replication.
-		err := WaitFor3XReplication(ctx, t, db)
+		err = WaitFor3XReplication(ctx, t, db)
 		require.NoError(t, err)
 	}
 
@@ -1093,13 +1086,10 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	var verboseStoreLogRe = regexp.MustCompile("possible decommission stall detected")
 
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err)
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	run := func(db *gosql.DB, query string) {
-		_, err = db.ExecContext(ctx, query)
+		_, err := db.ExecContext(ctx, query)
 		require.NoError(t, err)
 		t.L().Printf("run: %s\n", query)
 	}
@@ -1144,7 +1134,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("checking for decommissioning replicas report...")
 	testutils.SucceedsWithin(t, func() error {
 		for nodeID := 1; nodeID <= numNodes; nodeID++ {
-			if err = c.RunE(ctx,
+			if err := c.RunE(ctx,
 				c.Node(nodeID),
 				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
 			); err == nil {

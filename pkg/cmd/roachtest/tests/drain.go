@@ -318,16 +318,11 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 // runClusterNotAtQuorum is to verify that draining works even when the cluster
 // is not at quorum.
 func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	db := c.Conn(ctx, t.L(), 1)
 	defer func() { _ = db.Close() }()
 
-	err = WaitFor3XReplication(ctx, t, db)
+	err := WaitFor3XReplication(ctx, t, db)
 	require.NoError(t, err)
 
 	stopOpts := option.DefaultStopOpts()
@@ -358,12 +353,6 @@ func prepareCluster(
 	connectionWait time.Duration,
 	queryWait time.Duration,
 ) {
-	var err error
-	err = c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	db := c.Conn(ctx, t.L(), 1)
@@ -376,7 +365,7 @@ func prepareCluster(
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connections.timeout = '%fs'", connectionWait.Seconds()),
 	}
 	for _, stmt := range waitPhasesSettingStmts {
-		_, err = db.ExecContext(ctx, stmt)
+		_, err := db.ExecContext(ctx, stmt)
 		require.NoError(t, err, "cannot set cluster setting")
 	}
 }

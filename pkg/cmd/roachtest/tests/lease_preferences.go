@@ -213,7 +213,6 @@ func runLeasePreferences(
 		spec.ranges = 100
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	t.Status("starting cluster")
 	startNodes(allNodes...)
 

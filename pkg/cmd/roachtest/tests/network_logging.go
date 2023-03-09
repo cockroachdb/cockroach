@@ -61,7 +61,6 @@ func registerNetworkLogging(r registry.Registry) {
 		// Install Cockroach, including on the workload node,
 		// since we'll use ./cockroach workload.
 		t.Status("installing cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 
 		// Start each node with a log config containing fluent-server and http-server sinks.
 		t.Status("starting cockroach on nodes")

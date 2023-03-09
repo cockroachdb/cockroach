@@ -147,7 +147,6 @@ func runAdmissionControlFollowerOverload(
 	phaseDuration := time.Hour
 
 	nodes := c.Range(1, 3)
-	c.Put(ctx, t.Cockroach(), "cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
 	db := c.Conn(ctx, t.L(), 1)
 	require.NoError(t, WaitFor3XReplication(ctx, t, db))

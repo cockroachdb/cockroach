@@ -493,7 +493,6 @@ func (rd *replicationDriver) setupC2C(
 		require.NotEqual(t, "", rd.rs.multiregion.workloadNodeZone)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	srcCluster := c.Range(1, rd.rs.srcNodes)
 	dstCluster := c.Range(rd.rs.srcNodes+1, rd.rs.srcNodes+rd.rs.dstNodes)
 	workloadNode := c.Node(rd.rs.srcNodes + rd.rs.dstNodes + 1)

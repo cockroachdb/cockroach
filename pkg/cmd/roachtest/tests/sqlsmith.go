@@ -101,7 +101,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		t.L().Printf("seed: %d", seed)
 
 		c.SetRandomSeed(rng.Int63())
-		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]

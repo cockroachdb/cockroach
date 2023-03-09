@@ -33,10 +33,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c cluster.Cluster,
 		disableStreamer bool,
 	) {
-		// We run this test without runtime assertions as it pushes the VMs way
-		// past the overload point, so it cannot withstand any metamorphic
-		// perturbations.
-		c.Put(ctx, t.StandardCockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
@@ -222,6 +218,10 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(numNodes),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		// We run this test without runtime assertions as it pushes the VMs way
+		// past the overload point, so it cannot withstand any metamorphic
+		// perturbations.
+		CockroachBinary: registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},
