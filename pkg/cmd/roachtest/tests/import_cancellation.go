@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -51,7 +50,9 @@ func registerImportCancellation(r registry.Registry) {
 func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	startOpts := maybeUseMemoryBudget(t, 50)
+	startOpts.RoachprodOpts.ScheduleBackups = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 

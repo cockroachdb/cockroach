@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -41,6 +43,7 @@ var (
 
 	parallelism int
 	cpuQuota    int
+	globalSeed  int64
 
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
@@ -153,6 +156,9 @@ func addRunBenchCommonFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(
 		&forceCloudCompat, "force-cloud-compat", false, "Includes tests that are not marked as compatible with the cloud used")
 	addSuiteAndOwnerFlags(cmd)
+	cmd.Flags().Int64Var(
+		&globalSeed, "global-seed", randutil.NewPseudoSeed(),
+		"The global random seed used for all tests.")
 }
 
 func addRunFlags(runCmd *cobra.Command) {
@@ -179,6 +185,8 @@ func addBenchFlags(benchCmd *cobra.Command) {
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), filter *registry.TestFilter) error {
+	//lint:ignore SA1019 deprecated
+	rand.Seed(globalSeed)
 	r := makeTestRegistry(cloud)
 
 	// actual registering of tests
@@ -257,6 +265,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		literalArtifactsDir: literalArtifactsDir,
 		runnerLogPath:       runnerLogPath,
 	}
+	l.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
 			fmt.Sprintf(":%d", promPort),
