@@ -13,18 +13,14 @@ import { util } from "@cockroachlabs/cluster-ui";
 export const indexNameAttr = "index_name";
 
 export const {
-  aggregationIntervalAttr,
   aggregatedTsAttr,
   appAttr,
   appNamesAttr,
-  dashQueryString,
   dashboardNameAttr,
   databaseAttr,
   databaseNameAttr,
-  fingerprintIDAttr,
   implicitTxnAttr,
   nodeIDAttr,
-  nodeQueryString,
   rangeIDAttr,
   statementAttr,
   sessionAttr,
@@ -32,6 +28,5 @@ export const {
   tableNameAttr,
   txnFingerprintIdAttr,
   unset,
-  viewAttr,
   REMOTE_DEBUGGING_ERROR_TEXT,
 } = util;

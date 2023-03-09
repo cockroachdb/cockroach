@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "../../queryFilter";
@@ -19,12 +18,16 @@ type SortSetting = {
   columnTitle: string;
 };
 
+export enum LocalStorageKeys {
+  GLOBAL_TIME_SCALE = "timeScale/SQLActivity",
+}
+
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
   "showColumns/SessionsPage": string;
-  "timeScale/SQLActivity": TimeScale;
+  [LocalStorageKeys.GLOBAL_TIME_SCALE]: TimeScale;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
@@ -37,7 +40,11 @@ export type LocalStorageState = {
 
 type Payload = {
   key: keyof LocalStorageState;
-  value: any;
+  value: unknown;
+};
+
+export type TypedPayload<T> = {
+  value: T;
 };
 
 const defaultSortSetting: SortSetting = {
@@ -61,8 +68,8 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
   "showColumns/SessionsPage":
     JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
-  "timeScale/SQLActivity":
-    JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
+  [LocalStorageKeys.GLOBAL_TIME_SCALE]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.GLOBAL_TIME_SCALE)) ||
     defaultTimeScaleSelected,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
@@ -93,6 +100,12 @@ const localStorageSlice = createSlice({
   reducers: {
     update: (state: any, action: PayloadAction<Payload>) => {
       state[action.payload.key] = action.payload.value;
+    },
+    updateTimeScale: (
+      state,
+      action: PayloadAction<TypedPayload<TimeScale>>,
+    ) => {
+      state[LocalStorageKeys.GLOBAL_TIME_SCALE] = action.payload.value;
     },
   },
 });
