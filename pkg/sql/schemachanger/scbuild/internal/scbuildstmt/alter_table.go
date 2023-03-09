@@ -14,82 +14,30 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
-// supportedAlterTableCommand tracks metadata for ALTER TABLE commands that are
-// implemented by the new schema changer.
-type supportedAlterTableCommand struct {
-	// fn is a function to perform a schema change.
-	fn interface{}
-	// on indicates that this statement is on by default.
-	on bool
-	// extraChecks contains a function to determine whether the command is
-	// supported. These extraChecks are important to be able to avoid any
-	// extra round-trips to resolve the descriptor and its elements if we know
-	// that we cannot process the command.
-	extraChecks interface{}
-	// minSupportedClusterVersion is the minimal binary version that supports this
-	// ALTER TABLE command in the declarative schema changer.
-	minSupportedClusterVersion clusterversion.Key
-}
+type supportedAlterTableCommand = supportedStatement
 
 // supportedAlterTableStatements tracks alter table operations fully supported by
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {fn: alterTableAddColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {fn: alterTableDropColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {fn: alterTableAlterPrimaryKey, on: true, minSupportedClusterVersion: clusterversion.V22_2},
-	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):      {fn: alterTableSetNotNull, on: true, minSupportedClusterVersion: clusterversion.V23_1},
-	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
-		t *tree.AlterTableAddConstraint,
-	) bool {
-		if _, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok {
-			// Support ALTER TABLE ... ADD PRIMARY KEY [NOT VALID]
-			// Support ALTER TABLE ... ADD UNIQUE WITHOUT INDEX [NOT VALID]
-			// Support ALTER TABLE ... ADD UNIQUE [NOT VALID]
-			return true
-		}
-
-		// Support ALTER TABLE ... ADD CONSTRAINT CHECK [NOT VALID]
-		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok {
-			return true
-		}
-
-		// Support ALTER TABLE ... ADD CONSTRAINT FOREIGN KEY [NOT VALID]
-		if _, ok := t.ConstraintDef.(*tree.ForeignKeyConstraintTableDef); ok {
-			return true
-		}
-
-		return false
-	}, minSupportedClusterVersion: clusterversion.V23_1},
-	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, minSupportedClusterVersion: clusterversion.V23_1},
-	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, minSupportedClusterVersion: clusterversion.V23_1},
-}
-
-// alterTableAddConstraintMinSupportedClusterVersion tracks the minimal supported cluster version
-// for each supported ALTER TABLE ADD CONSTRAINT command.
-// They key is constructed as "ADD" + constraint type + validation behavior, joined with "_".
-// E.g. "ADD_PRIMARY_KEY_DEFAULT", "ADD_CHECK_SKIP", "ADD_FOREIGN_KEY_DEFAULT", etc.
-var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
-	"ADD_PRIMARY_KEY_DEFAULT":          clusterversion.V22_2,
-	"ADD_UNIQUE_DEFAULT":               clusterversion.V23_1,
-	"ADD_CHECK_DEFAULT":                clusterversion.V23_1,
-	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1,
-	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1,
-	"ADD_PRIMARY_KEY_SKIP":             clusterversion.V23_1,
-	"ADD_UNIQUE_SKIP":                  clusterversion.V23_1,
-	"ADD_CHECK_SKIP":                   clusterversion.V23_1,
-	"ADD_UNIQUE_WITHOUT_INDEX_SKIP":    clusterversion.V23_1,
-	"ADD_FOREIGN_KEY_SKIP":             clusterversion.V23_1,
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {fn: alterTableAddColumn, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {fn: alterTableDropColumn, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {fn: alterTableAlterPrimaryKey, on: true, checks: alterTableAlterPrimaryKeyChecks},
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {fn: alterTableSetNotNull, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {fn: alterTableAddConstraint, on: true, checks: alterTableAddConstraintChecks},
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: isV231Active},
 }
 
 func init() {
@@ -107,99 +55,84 @@ func init() {
 			callBackType.In(2) != reflect.TypeOf((*scpb.Table)(nil)) ||
 			callBackType.In(3) != statementType {
 			panic(errors.AssertionFailedf("%v entry for alter table statement "+
-				"does not have a valid signature got %v", statementType, callBackType))
+				"does not have a valid signature; got %v", statementType, callBackType))
 		}
-		if statementEntry.extraChecks != nil {
-			extraChecks := reflect.TypeOf(statementEntry.extraChecks)
-			if extraChecks.Kind() != reflect.Func {
-				panic(errors.AssertionFailedf("%v extra checks for statement is "+
+		if statementEntry.checks != nil {
+			checks := reflect.TypeOf(statementEntry.checks)
+			if checks.Kind() != reflect.Func {
+				panic(errors.AssertionFailedf("%v checks for statement is "+
 					"not a function", statementType))
 			}
-			if extraChecks.NumIn() != 1 ||
-				extraChecks.In(0) != statementType ||
-				extraChecks.NumOut() != 1 ||
-				extraChecks.Out(0) != boolType {
-				panic(errors.AssertionFailedf("%v extra checks for alter table statement "+
-					"does not have a valid signature got %v", statementType, callBackType))
+			if checks.NumIn() != 3 ||
+				(checks.In(0) != statementType && !statementType.Implements(checks.In(0))) ||
+				checks.In(1) != reflect.TypeOf(sessiondatapb.UseNewSchemaChangerOff) ||
+				checks.In(2) != reflect.TypeOf((*clusterversion.ClusterVersion)(nil)).Elem() ||
+				checks.NumOut() != 1 ||
+				checks.Out(0) != boolType {
+				panic(errors.AssertionFailedf("%v checks does not have a valid signature; got %v",
+					statementType, checks))
 			}
 		}
 	}
 }
 
-// AlterTableIsSupported determines if the entire set of alter table commands
+// alterTableChecks determines if the entire set of alter table commands
 // are supported.
-func alterTableIsSupported(n *tree.AlterTable, mode sessiondatapb.NewSchemaChangerMode) bool {
+func alterTableChecks(
+	n *tree.AlterTable,
+	mode sessiondatapb.NewSchemaChangerMode,
+	activeVersion clusterversion.ClusterVersion,
+) bool {
+	// For ALTER TABLE stmt, we will need to further check whether each
+	// individual command is fully supported.
+	n.HoistAddColumnConstraints(func() {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
+	})
 	for _, cmd := range n.Cmds {
-		// Check if an entry exists for the statement type, in which
-		// case. It's either fully or partially supported. Check the commands
-		// first, since we don't want to do extra work in this transaction
-		// only to bail out later.
-		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-		if !ok {
-			return false
-		}
-
-		// If the schema changer is not globally enabled, then the on flag will
-		// determine enablement,
-		if !info.on &&
-			mode == sessiondatapb.UseNewSchemaChangerOn {
+		if !isFullySupportedWithFalsePositiveInternal(supportedAlterTableStatements,
+			reflect.TypeOf(cmd), reflect.ValueOf(cmd), mode, activeVersion) {
 			return false
 		}
 	}
 	return true
 }
 
-// alterTableAllCmdsSupportedInCurrentClusterVersion determines if all commands
-// in this `ALTER TABLE` statement are supported under the current cluster version.
-func alterTableAllCmdsSupportedInCurrentClusterVersion(
-	activeVersion clusterversion.ClusterVersion, n *tree.AlterTable,
+func alterTableAlterPrimaryKeyChecks(
+	t *tree.AlterTableAlterPrimaryKey,
+	mode sessiondatapb.NewSchemaChangerMode,
+	activeVersion clusterversion.ClusterVersion,
 ) bool {
-	for _, cmd := range n.Cmds {
-		if addConstraint, isAddConstraint := cmd.(*tree.AlterTableAddConstraint); isAddConstraint {
-			if !alterTableAddConstraintSupportedInCurrentClusterVersion(activeVersion, addConstraint) {
-				return false
-			}
-		} else {
-			minSupportedClusterVersion := supportedAlterTableStatements[reflect.TypeOf(cmd)].minSupportedClusterVersion
-			if !activeVersion.IsActive(minSupportedClusterVersion) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// alterTableAddConstraintSupportedInCurrentClusterVersion determines if a particular
-// AlterTableAddConstraint command is supported under the current cluster version.
-func alterTableAddConstraintSupportedInCurrentClusterVersion(
-	activeVersion clusterversion.ClusterVersion, constraint *tree.AlterTableAddConstraint,
-) bool {
-	var cmdKey string
-	// Figure out alter table add constraint command type: PRIMARY_KEY, CHECK, FOREIGN_KEY, or UNIQUE
-	switch d := constraint.ConstraintDef.(type) {
-	case *tree.UniqueConstraintTableDef:
-		if d.PrimaryKey {
-			cmdKey = "ADD_PRIMARY_KEY"
-		} else if d.WithoutIndex {
-			cmdKey = "ADD_UNIQUE_WITHOUT_INDEX"
-		}
-	case *tree.CheckConstraintTableDef:
-		cmdKey = "ADD_CHECK"
-	case *tree.ForeignKeyConstraintTableDef:
-		cmdKey = "ADD_FOREIGN_KEY"
-	}
-	// Figure out command validation behavior: DEFAULT or SKIP
-	if constraint.ValidationBehavior == tree.ValidationDefault {
-		cmdKey += "_DEFAULT"
-	} else {
-		cmdKey += "_SKIP"
-	}
-
-	minSupportedClusterVersion, ok := alterTableAddConstraintMinSupportedClusterVersion[cmdKey]
-	if !ok {
+	// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from V22_2.
+	if !isV222Active(t, mode, activeVersion) {
 		return false
 	}
-	return activeVersion.IsActive(minSupportedClusterVersion)
+	// Start supporting ALTER PRIMARY KEY USING HASH from V23_1.
+	if t.Sharded != nil && !activeVersion.IsActive(clusterversion.V23_1) {
+		return false
+	}
+	return true
+}
+
+func alterTableAddConstraintChecks(
+	t *tree.AlterTableAddConstraint,
+	mode sessiondatapb.NewSchemaChangerMode,
+	activeVersion clusterversion.ClusterVersion,
+) bool {
+	// Start supporting ADD PRIMARY KEY from V22_2.
+	if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+		return isV222Active(t, mode, activeVersion)
+	}
+
+	// Start supporting all other ADD CONSTRAINTs from V23_1, including
+	// - ADD PRIMARY KEY NOT VALID
+	// - ADD UNIQUE [NOT VALID]
+	// - ADD CHECK [NOT VALID]
+	// - ADD FOREIGN KEY [NOT VALID]
+	// - ADD UNIQUE WITHOUT INDEX [NOT VALID]
+	if !isV231Active(t, mode, activeVersion) {
+		return false
+	}
+	return true
 }
 
 // AlterTable implements ALTER TABLE.
@@ -222,12 +155,9 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.IncrementSchemaChangeAlterCounter("table")
 	for _, cmd := range n.Cmds {
-		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-		if !ok {
-			panic(scerrors.NotImplementedError(n))
-		}
+		// Invoke the callback function for each command.
 		b.IncrementSchemaChangeAlterCounter("table", cmd.TelemetryName())
-		// Invoke the callback function, with the concrete types.
+		info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
 		fn := reflect.ValueOf(info.fn)
 		fn.Call([]reflect.Value{
 			reflect.ValueOf(b),

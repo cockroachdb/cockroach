@@ -669,7 +669,7 @@ t  CREATE TABLE public.t (
 statement ok
 CREATE INDEX i ON t (x);
 
-statement error pgcode 42710 constraint with name \"i\" already exists
+statement error 42P07 constraint with name \"i\" already exists
 ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
 
 # Regression for #45362.

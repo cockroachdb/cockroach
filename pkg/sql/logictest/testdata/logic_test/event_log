@@ -149,11 +149,11 @@ ALTER TABLE a ADD CONSTRAINT foo UNIQUE(val)
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
-WHERE "eventType" = 'alter_table'
+WHERE "eventType" in ('alter_table', 'create_index')
 ORDER BY "timestamp", info
 ----
 1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
-1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD CONSTRAINT foo UNIQUE (val)", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
+1  {"EventType": "create_index", "IndexName": "foo", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD CONSTRAINT foo UNIQUE (val)", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'  FROM system.eventlog
@@ -166,14 +166,13 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'Error'
   FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
-1  {"EventType": "reverse_schema_change", "InstanceID": 1, "MutationID": 1, "SQLSTATE": "23505"}
-
+1  {"EventType": "reverse_schema_change", "InstanceID": 1, "SQLSTATE": "23505"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change_rollback'
 ----
-1  {"EventType": "finish_schema_change_rollback", "InstanceID": 1, "MutationID": 1}
+1  {"EventType": "finish_schema_change_rollback", "InstanceID": 1}
 
 # Create an Index on the table
 #################

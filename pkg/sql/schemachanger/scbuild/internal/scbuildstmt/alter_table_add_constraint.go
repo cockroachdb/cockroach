@@ -50,11 +50,12 @@ func alterTableAddConstraint(
 				panic(sqlerrors.NewUnsupportedUnvalidatedConstraintError(catconstants.ConstraintTypeUnique))
 			}
 			CreateIndex(b, &tree.CreateIndex{
-				Name:      d.Name,
-				Table:     *tn,
-				Unique:    true,
-				Columns:   d.Columns,
-				Predicate: d.Predicate,
+				Name:        d.Name,
+				Table:       *tn,
+				Unique:      true,
+				Columns:     d.Columns,
+				Predicate:   d.Predicate,
+				IfNotExists: d.IfNotExists,
 			})
 		}
 	case *tree.CheckConstraintTableDef:
