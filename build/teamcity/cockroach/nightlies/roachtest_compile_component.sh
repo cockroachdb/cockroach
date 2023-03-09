@@ -83,7 +83,13 @@ case "$component" in
     ;;
   roachtest)
     # Roachtest binary.
-    bazel_args=(//pkg/cmd/roachtest)
+    # N.B. We always compile the roachtest binary with crdb_test so the same serialization
+    # on the wire is established with cockroach binaries built under crdb_test.
+    # E.g. KVNemesisSeq is used only under crdb_test builds. If the cockroach binary is
+    # built with crdb_test, it will expect this field to be sent by the roachtest runner.
+    # Note that the opposite is not true, and a cockroach binary built without crdb_test
+    # is still compatible with a roachtest binary built with it.
+    bazel_args=(//pkg/cmd/roachtest --crdb_test)
     artifacts=("pkg/cmd/roachtest/roachtest_/roachtest:bin/roachtest.$os-$arch")
     ;;
   *)

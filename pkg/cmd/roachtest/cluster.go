@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
@@ -689,8 +690,13 @@ type clusterImpl struct {
 	// BAZEL_COVER_DIR will be set to this value when starting a node.
 	goCoverDir string
 
-	os   string     // OS of the cluster
-	arch vm.CPUArch // CPU architecture of the cluster
+	os         string     // OS of the cluster
+	arch       vm.CPUArch // CPU architecture of the cluster
+	randomSeed struct {
+		mu   syncutil.Mutex
+		seed *int64
+	}
+
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
 }
@@ -2003,10 +2009,16 @@ func (c *clusterImpl) StartE(
 
 	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
 
-	if !envExists(settings.Env, "COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH") {
-		// Panic on span use-after-Finish, so we catch such bugs.
-		settings.Env = append(settings.Env, "COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH=true")
+	setUnlessExists := func(name string, value interface{}) {
+		if !envExists(settings.Env, name) {
+			settings.Env = append(settings.Env, fmt.Sprintf("%s=%s", name, fmt.Sprint(value)))
+		}
 	}
+	// Panic on span use-after-Finish, so we catch such bugs.
+	setUnlessExists("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
+	// Set the same seed on every node, to be used by builds with
+	// runtime assertions enabled.
+	setUnlessExists("COCKROACH_RANDOM_SEED", c.cockroachRandomSeed())
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
@@ -2069,6 +2081,38 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 		}
 		return os.Chmod(path, 0600)
 	})
+}
+
+// SetRandomSeed sets the random seed to be used by the cluster. If
+// not called, clusters generate a random seed from the global
+// generator in the `rand` package. This function must be called
+// before any nodes in the cluster start.
+func (c *clusterImpl) SetRandomSeed(seed int64) {
+	c.randomSeed.seed = &seed
+}
+
+// cockroachRandomSeed returns the `COCKROACH_RANDOM_SEED` to be used
+// by this cluster. The seed may have been previously set by a
+// previous call to `StartE`, or by the user via `SetRandomSeed`. If
+// not set, this function will generate a seed and return it.
+func (c *clusterImpl) cockroachRandomSeed() int64 {
+	c.randomSeed.mu.Lock()
+	defer c.randomSeed.mu.Unlock()
+
+	// If the user provided a seed via environment variable, always use
+	// that, even if the test attempts to set a different seed.
+	if seedStr := os.Getenv(test.EnvAssertionsEnabledSeed); seedStr != "" {
+		seedOverride, err := strconv.ParseInt(seedStr, 0, 64)
+		if err != nil {
+			panic(fmt.Sprintf("error parsing %s: %s", test.EnvAssertionsEnabledSeed, err))
+		}
+		c.randomSeed.seed = &seedOverride
+	} else if c.randomSeed.seed == nil {
+		seed := rand.Int63()
+		c.randomSeed.seed = &seed
+	}
+
+	return *c.randomSeed.seed
 }
 
 // Start is like StartE() except that it will fatal the test on error.
