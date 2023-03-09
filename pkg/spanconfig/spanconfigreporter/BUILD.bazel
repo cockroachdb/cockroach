@@ -16,6 +16,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/util/quotapool",
         "//pkg/util/rangedesc",
         "@com_github_cockroachdb_errors//:errors",
     ],
