@@ -231,7 +231,7 @@ func IntersectSpan(
 
 // SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
 var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,

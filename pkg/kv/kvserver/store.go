@@ -135,7 +135,7 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
 	1<<40,
@@ -143,7 +143,7 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_addsstable_requests",
 	"number of concurrent AddSSTable requests per store before queueing",
 	1,
@@ -156,7 +156,7 @@ var addSSTableRequestLimit = settings.RegisterIntSetting(
 // disk, so we can allow a greater amount of concurrency than regular AddSSTable
 // requests. Applied independently of concurrent_addsstable_requests.
 var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
 	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
 	10,
@@ -165,7 +165,7 @@ var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
 
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
 var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.rangefeed.concurrent_catchup_iterators",
 	"number of rangefeeds catchup iterators a store will allow concurrently before queueing",
 	16,
@@ -175,7 +175,7 @@ var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas.
 var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.store.system_config_update.queue_add_rate",
 	"the rate (per second) at which the store will add, all replicas to the split and merge queue due to system config gossip",
 	.5,
@@ -186,7 +186,7 @@ var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
 // enqueuing replicas. The default is relatively high to deal with startup
 // scenarios.
 var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.store.system_config_update.queue_add_burst",
 	"the burst rate at which the store will add all replicas to the split and merge queue due to system config gossip",
 	32,
@@ -196,7 +196,7 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 // leaseTransferWait is the timeout for a single iteration of draining range leases.
 var leaseTransferWait = func() *settings.DurationSetting {
 	s := settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.SystemOnly,
 		leaseTransferWaitSettingName,
 		"the timeout for a single iteration of the range lease transfer phase of draining "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
@@ -224,7 +224,7 @@ const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 // here since we check it in the caller to limit generated requests as well
 // to prevent excessive queuing.
 var ExportRequestsLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	3,
@@ -1129,7 +1129,7 @@ type StoreConfig struct {
 // Decommissioning events are not controlled by this setting.
 var logRangeAndNodeEventsEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
-		settings.TenantReadOnly,
+		settings.SystemOnly,
 		"kv.log_range_and_node_events.enabled",
 		"set to true to transactionally log range events"+
 			" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
