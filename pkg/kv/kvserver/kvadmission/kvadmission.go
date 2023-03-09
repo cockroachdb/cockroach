@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -92,6 +93,18 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 		"for each store. It can be over-ridden on a per-store basis using the --store flag",
 	0).WithPublic()
 
+// FlowTokenDispatchInterval determines the frequency at which we check for
+// pending flow token dispatches from idle/culled connections in order to
+// deliver them.
+var FlowTokenDispatchInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_token.dispatch_interval",
+	"the interval at which the raft transport checks for pending flow token dispatches "+
+		"from idle/culled connections and delivers them; set to 0 to disable the mechanism",
+	time.Second,
+	settings.NonNegativeDuration,
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -152,6 +165,7 @@ type controllerImpl struct {
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
+	kvFlowController           kvflowcontrol.Controller
 	settings                   *cluster.Settings
 	every                      log.EveryN
 }
@@ -178,12 +192,14 @@ func MakeController(
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
+	kvFlowController kvflowcontrol.Controller,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
+		kvFlowController:           kvFlowController,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -777,6 +778,14 @@ type Replica struct {
 		pausedFollowers map[roachpb.ReplicaID]struct{}
 
 		slowProposalCount int64 // updated in refreshProposalsLocked
+
+		// flowControlHandle is used to interface with replication flow control,
+		// backed by the node-level kvflowcontrol.Controller than manages flow
+		// tokens for on a per <tenant,work class> basis. flowControlHandle is
+		// actively used on replicas initiating replication traffic, i.e. are
+		// both the leaseholder and raft leader.
+		flowControlHandle        *kvflowhandle.Handle
+		flowControlHandleMetrics *kvflowhandle.Metrics
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own

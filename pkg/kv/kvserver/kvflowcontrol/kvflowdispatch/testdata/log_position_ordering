@@ -9,6 +9,13 @@ node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=4/20
 node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=5/20
 ----
 
+# Verify that the metrics indicate one coalesced dispatch for 4/20.
+metrics
+----
+nodes=1
+[regular] pending=1 coalesced=1
+[elastic] pending=0 coalesced=0
+
 pending-dispatch-for node=n1
 ----
 range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=5/20
@@ -17,6 +24,13 @@ dispatch
 node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=6/20
 node=n1 range=r1 pri=normal-pri store=s1 up-to-log-position=6/19
 ----
+
+# Verify that the metrics increment the coalesced count for 6/19.
+metrics
+----
+nodes=1
+[regular] pending=1 coalesced=2
+[elastic] pending=0 coalesced=0
 
 pending-dispatch-for node=n1
 ----

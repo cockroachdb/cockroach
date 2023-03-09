@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -27,6 +28,7 @@ type Dispatch struct {
 		// outbox maintains pending dispatches on a per-node basis.
 		outbox map[roachpb.NodeID]dispatches
 	}
+	metrics *metrics
 }
 
 // dispatchKey is used to coalesce dispatches bound for a given node. If
@@ -44,19 +46,24 @@ type dispatches map[dispatchKey]kvflowcontrolpb.RaftLogPosition
 var _ kvflowcontrol.Dispatch = &Dispatch{}
 
 // New constructs a new Dispatch.
-func New() *Dispatch {
+func New(registry *metric.Registry) *Dispatch {
 	d := &Dispatch{}
 	d.mu.outbox = make(map[roachpb.NodeID]dispatches)
+	d.metrics = newMetrics()
+	registry.AddMetricStruct(d.metrics)
 	return d
 }
 
 // Dispatch is part of the kvflowcontrol.Dispatch interface.
 func (d *Dispatch) Dispatch(nodeID roachpb.NodeID, entries kvflowcontrolpb.AdmittedRaftLogEntries) {
+	// XXX: Implement local fast path. If local node ID, find the relevant
+	// kvflowcontrol.Handle and invoke ReturnTokensUpto.
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if _, ok := d.mu.outbox[nodeID]; !ok {
 		d.mu.outbox[nodeID] = dispatches{}
+		d.metrics.PendingNodes.Inc(1)
 	}
 
 	dk := dispatchKey{
@@ -64,9 +71,24 @@ func (d *Dispatch) Dispatch(nodeID roachpb.NodeID, entries kvflowcontrolpb.Admit
 		entries.StoreID,
 		admissionpb.WorkPriority(entries.AdmissionPriority),
 	}
+
 	existing, found := d.mu.outbox[nodeID][dk]
+	wc := admissionpb.WorkClassFromPri(dk.WorkPriority)
 	if !found || existing.Less(entries.UpToRaftLogPosition) {
 		d.mu.outbox[nodeID][dk] = entries.UpToRaftLogPosition
+
+		if !found {
+			d.metrics.PendingDispatches[wc].Inc(1)
+		} else {
+			// We're replacing an existing dispatch with one with a higher log
+			// position. Increment the coalesced metric.
+			d.metrics.CoalescedDispatches[wc].Inc(1)
+		}
+	}
+	if found && !existing.Less(entries.UpToRaftLogPosition) {
+		// We're dropping a dispatch given we already have a pending one with a
+		// higher log position. Increment the coalesced metric.
+		d.metrics.CoalescedDispatches[wc].Inc(1)
 	}
 }
 
@@ -101,7 +123,16 @@ func (d *Dispatch) PendingDispatchFor(
 			AdmissionPriority:   int32(key.WorkPriority),
 			UpToRaftLogPosition: dispatch,
 		})
+		wc := admissionpb.WorkClassFromPri(key.WorkPriority)
+		d.metrics.PendingDispatches[wc].Dec(1)
 	}
+
 	delete(d.mu.outbox, nodeID)
+	d.metrics.PendingNodes.Dec(1)
 	return entries
+}
+
+// testingMetrics returns the underlying metrics struct for testing purposes.
+func (d *Dispatch) testingMetrics() *metrics {
+	return d.metrics
 }

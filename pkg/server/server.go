@@ -41,6 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -265,7 +270,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
 		admissionOptions.Override(opts)
 	}
-	gcoords := admission.NewGrantCoordinators(cfg.AmbientCtx, st, admissionOptions, registry)
+	kvflowTokenDispatch := kvflowdispatch.New(registry)
+	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	gcoords := admission.NewGrantCoordinators(
+		cfg.AmbientCtx,
+		st,
+		admissionOptions,
+		registry,
+		admittedEntryAdaptor,
+	)
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
@@ -525,8 +538,31 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		/* deterministic */ false,
 	)
 
+	var admissionControl struct {
+		schedulerLatencyListener admission.SchedulerLatencyListener
+		kvFlowController         kvflowcontrol.Controller
+		kvAdmissionController    kvadmission.Controller
+		kvFlowHandleMetrics      *kvflowhandle.Metrics
+	}
+	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
+	admissionControl.kvFlowController = kvflowcontroller.New(registry, st, clock)
+	admissionControl.kvAdmissionController = kvadmission.MakeController(
+		gcoords.Regular.GetWorkQueue(admission.KVWork),
+		gcoords.Elastic,
+		gcoords.Stores,
+		admissionControl.kvFlowController,
+		cfg.Settings,
+	)
+	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(registry)
+
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx,
+		st,
+		cfg.AmbientCtx.Tracer,
+		nodeDialer,
+		grpcServer.Server,
+		stopper,
+		kvflowTokenDispatch,
 	)
 	registry.AddMetricStruct(raftTransport.Metrics())
 
@@ -746,6 +782,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 		RangeLogWriter:           rangeLogWriter,
+		KVAdmissionController:    admissionControl.kvAdmissionController,
+		KVFlowController:         admissionControl.kvFlowController,
+		KVFlowHandleMetrics:      admissionControl.kvFlowHandleMetrics,
+		SchedulerLatencyListener: admissionControl.schedulerLatencyListener,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -1937,6 +1977,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Start the closed timestamp loop.
 	s.ctSender.Run(workersCtx, state.nodeID)
+
+	if err := s.raftTransport.Start(workersCtx); err != nil {
+		return errors.Wrapf(err, "failed to run raft transport loop")
+	}
 
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all startupmigrations and permanent

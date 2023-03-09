@@ -327,7 +327,11 @@ package kvflowcontrol
 //   it can transition into the mode described in I3a where we deduct/block for
 //   flow tokens for subsequent quorum writes.
 //
-// I12. How does this interact with epoch-LIFO? Or CreateTime ordering
+// I12. What happens when a range {un,}quiesces?
+// - All held tokens on the leaseholder+leader are returned back to the pool.
+//   The replica-level kvflowcontrol.Handle is re-instantiated once unquiesced.
+//
+// I13. How does this interact with epoch-LIFO? Or CreateTime ordering
 //      generally?
 // - Background: Epoch-LIFO tries to reduce lower percentile admission queueing
 //   delay (at the expense of higher percentile delay) by switching between the
@@ -426,6 +430,7 @@ package kvflowcontrol
 //   - Because the fan-in effects of epoch-LIFO are not well understood (by this
 //     author at least), we just disable it below-raft.
 //
+// I13.
 // ---
 //
 // [^1]: kvserverpb.RaftMessageRequest is the unit of what's sent

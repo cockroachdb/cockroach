@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +42,7 @@ func TestDispatch(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				dispatch = New()
+				dispatch = New(metric.NewRegistry())
 				return ""
 
 			case "dispatch":
@@ -148,6 +149,9 @@ func TestDispatch(t *testing.T) {
 				}
 				return buf.String()
 
+			case "metrics":
+				return printMetrics(dispatch)
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -166,4 +170,20 @@ func parseLogPosition(t *testing.T, input string) kvflowcontrolpb.RaftLogPositio
 		Term:  uint64(term),
 		Index: uint64(index),
 	}
+}
+
+func printMetrics(d *Dispatch) string {
+	metrics := d.testingMetrics()
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf(`nodes=%d
+[regular] pending=%d coalesced=%d
+[elastic] pending=%d coalesced=%d
+`,
+		metrics.PendingNodes.Value(),
+		metrics.PendingDispatches[admissionpb.RegularWorkClass].Value(),
+		metrics.CoalescedDispatches[admissionpb.RegularWorkClass].Count(),
+		metrics.PendingDispatches[admissionpb.ElasticWorkClass].Value(),
+		metrics.CoalescedDispatches[admissionpb.ElasticWorkClass].Count(),
+	))
+	return buf.String()
 }

@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -279,6 +280,20 @@ func (s *Store) HandleRaftRequest(
 		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
 		return nil
+	}
+	if len(req.AdmittedRaftLogEntries) > 0 {
+		replica := s.GetReplicaIfExists(req.RangeID)
+		if replica != nil {
+			for _, admittedEntries := range req.AdmittedRaftLogEntries {
+				var handle kvflowcontrol.Handle
+				handle.ReturnTokensUpto(
+					ctx,
+					admissionpb.WorkPriority(admittedEntries.AdmissionPriority),
+					admittedEntries.UpToRaftLogPosition,
+					kvflowcontrol.Stream{StoreID: admittedEntries.StoreID},
+				)
+			}
+		}
 	}
 	enqueue := s.HandleRaftUncoalescedRequest(ctx, req, respStream)
 	if enqueue {

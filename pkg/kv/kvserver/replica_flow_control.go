@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -79,6 +80,7 @@ var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
 	base.SlowRequestThreshold, quotapool.LogSlowAcquisition,
 )
 
+// XXX: Rename.
 func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
 ) {
@@ -113,6 +115,16 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
+
+			if r.mu.flowControlHandle != nil {
+				log.Fatal(ctx, "flowControlHandle was not nil before becoming the leader")
+			}
+			r.mu.flowControlHandle = kvflowhandle.New(
+				r.store.cfg.KVFlowController,
+				r.store.cfg.KVFlowHandleMetrics,
+				r.store.cfg.Clock,
+			)
+			log.VInfof(ctx, 1, "assumed raft leadership: initializing flow tracker")
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 			// We unblock all ongoing and subsequent quota acquisition goroutines

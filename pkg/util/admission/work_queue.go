@@ -418,7 +418,7 @@ func (q *WorkQueue) timeNow() time.Time {
 }
 
 func (q *WorkQueue) epochLIFOEnabled() bool {
-	// We don't use epoch LIFO for below-raft admission control. See I12 from
+	// We don't use epoch LIFO for below-raft admission control. See I13 from
 	// kvflowcontrol/doc.go.
 	return EpochLIFOEnabled.Get(&q.settings.SV) && !q.usesAsyncAdmit
 }
@@ -1785,9 +1785,10 @@ type StoreWorkQueue struct {
 		syncutil.Mutex
 		s map[roachpb.RangeID]*sequencer // cleaned up periodically
 	}
-	stopCh     chan struct{}
-	timeSource timeutil.TimeSource
-	settings   *cluster.Settings
+	stopCh             chan struct{}
+	timeSource         timeutil.TimeSource
+	settings           *cluster.Settings
+	onLogEntryAdmitted OnLogEntryAdmitted
 
 	knobs *TestingKnobs
 }
@@ -1929,16 +1930,28 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	additionalTokensNeeded := q.granters[wc].storeWriteDone(originalTokens, storeWorkDoneInfo)
 	q.q[wc].adjustTenantTokens(tenantID, additionalTokensNeeded)
 
-	// TODO(irfansharif): Dispatch flow token returns here. We want to
-	// inform (a) the origin node of writes at (b) a given priority, to
-	// (c) the given range, at (d) the given log position on (e) the
-	// local store. Part of #95563.
-	//
-	_ = rwi.Origin      // (a)
-	_ = pri             // (b)
-	_ = rwi.RangeID     // (c)
-	_ = rwi.LogPosition // (d)
-	_ = q.storeID       // (e)
+	// Inform callers of the entry we just admitted.
+	q.onLogEntryAdmitted.AdmittedLogEntry(
+		rwi.Origin,
+		pri,
+		q.storeID,
+		rwi.RangeID,
+		rwi.LogPosition,
+	)
+}
+
+// OnLogEntryAdmitted is used to observe the specific entries (identified by
+// rangeID + log position) that were admitted. Since admission control for log
+// entries is asynchronous/non-blocking, this allows callers to do requisite
+// post-admission bookkeeping.
+type OnLogEntryAdmitted interface {
+	AdmittedLogEntry(
+		origin roachpb.NodeID, /* node where the entry originated */
+		pri admissionpb.WorkPriority, /* admission priority of the entry */
+		storeID roachpb.StoreID, /* store on which the entry was admitted */
+		rangeID roachpb.RangeID, /* identifying range for the log entry */
+		pos LogPosition, /* log position of the entry that was admitted*/
+	)
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.
@@ -2032,6 +2045,7 @@ func makeStoreWorkQueue(
 	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
 	knobs *TestingKnobs,
+	onLogEntryAdmitted OnLogEntryAdmitted,
 ) storeRequester {
 	if knobs == nil {
 		knobs = &TestingKnobs{}
@@ -2040,12 +2054,13 @@ func makeStoreWorkQueue(
 		opts.timeSource = timeutil.DefaultTimeSource{}
 	}
 	q := &StoreWorkQueue{
-		storeID:    storeID,
-		granters:   granters,
-		knobs:      knobs,
-		stopCh:     make(chan struct{}),
-		timeSource: opts.timeSource,
-		settings:   settings,
+		storeID:            storeID,
+		granters:           granters,
+		knobs:              knobs,
+		stopCh:             make(chan struct{}),
+		timeSource:         opts.timeSource,
+		settings:           settings,
+		onLogEntryAdmitted: onLogEntryAdmitted,
 	}
 
 	opts.usesAsyncAdmit = true

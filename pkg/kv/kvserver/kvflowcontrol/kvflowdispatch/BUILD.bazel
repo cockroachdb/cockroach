@@ -3,7 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvflowdispatch",
-    srcs = ["kvflowdispatch.go"],
+    srcs = [
+        "dummy.go",
+        "kvflowdispatch.go",
+        "kvflowdispatch_metrics.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",
     visibility = ["//visibility:public"],
     deps = [
@@ -11,6 +15,7 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/metric",
         "//pkg/util/syncutil",
     ],
 )
@@ -28,6 +33,7 @@ go_test(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],

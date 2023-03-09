@@ -20,6 +20,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -27,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -144,10 +149,11 @@ type RaftMessageHandler interface {
 // which remote hung up.
 type RaftTransport struct {
 	log.AmbientContext
-	st      *cluster.Settings
-	tracer  *tracing.Tracer
-	stopper *stop.Stopper
-	metrics *RaftTransportMetrics
+	st                  *cluster.Settings
+	tracer              *tracing.Tracer
+	stopper             *stop.Stopper
+	metrics             *RaftTransportMetrics
+	kvflowTokenDispatch kvflowcontrol.DispatchReader
 
 	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*raftSendQueue
 	dialer   *nodedialer.Dialer
@@ -157,6 +163,8 @@ type RaftTransport struct {
 // raftSendQueue is a queue of outgoing RaftMessageRequest messages.
 type raftSendQueue struct {
 	reqs chan *kvserverpb.RaftMessageRequest
+	// The specific node this queue is sending RaftMessageRequests to.
+	nodeID roachpb.NodeID
 	// The number of bytes in flight. Must be updated *atomically* on sending and
 	// receiving from the reqs channel.
 	bytes atomic.Int64
@@ -169,7 +177,7 @@ func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTr
 		return nil, errors.New("dummy resolver")
 	}
 	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st, tracer,
-		nodedialer.New(nil, resolver), nil, nil)
+		nodedialer.New(nil, resolver), nil, nil, kvflowdispatch.NewDummyDispatch())
 }
 
 // NewRaftTransport creates a new RaftTransport.
@@ -180,19 +188,65 @@ func NewRaftTransport(
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
+	kvflowTokenDispatch kvflowcontrol.DispatchReader,
 ) *RaftTransport {
 	t := &RaftTransport{
-		AmbientContext: ambient,
-		st:             st,
-		tracer:         tracer,
-		stopper:        stopper,
-		dialer:         dialer,
+		AmbientContext:      ambient,
+		st:                  st,
+		tracer:              tracer,
+		stopper:             stopper,
+		dialer:              dialer,
+		kvflowTokenDispatch: kvflowTokenDispatch,
 	}
 	t.initMetrics()
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
 	}
 	return t
+}
+
+// XXX: Document. Use PendingDispatch for guaranteed-delivery
+// process when there's nothing to piggy back on. Only
+// do it for idle+culled connections.
+func (t *RaftTransport) Start(ctx context.Context) error {
+	return t.stopper.RunAsyncTask(
+		ctx,
+		"kvserver.RaftTransport: flow token dispatch",
+		func(ctx context.Context) {
+			settingChangeCh := make(chan struct{}, 1)
+			kvadmission.FlowTokenDispatchInterval.SetOnChange(
+				&t.st.SV, func(ctx context.Context) {
+					select {
+					case settingChangeCh <- struct{}{}:
+					default:
+					}
+				})
+
+			timer := timeutil.NewTimer()
+			defer timer.Stop()
+			for {
+				interval := kvadmission.FlowTokenDispatchInterval.Get(&t.st.SV)
+				if interval > 0 {
+					timer.Reset(interval)
+				} else {
+					// Disable the mechanism.
+					timer.Stop()
+					timer = timeutil.NewTimer()
+				}
+				select {
+				case <-timer.C:
+					timer.Read = true
+					for _, nodeID := range t.kvflowTokenDispatch.PendingDispatch() {
+					}
+				case <-settingChangeCh:
+					// Loop around to use the updated timer.
+					continue
+				case <-t.stopper.ShouldQuiesce():
+					return
+				}
+			}
+		},
+	)
 }
 
 // Metrics returns metrics tracking this transport.
@@ -446,6 +500,23 @@ func (t *RaftTransport) processQueue(
 			size := int64(req.Size())
 			q.bytes.Add(-size)
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
+
+			// Piggyback any pending flow token dispatches on raft transport
+			// messages already bound for the remote node. If the stream over
+			// which we're returning these flow tokens breaks, this is detected
+			// by the remote node, where tokens were originally deducted, who
+			// then frees up all held tokens (see I1 from kvflowcontrol/doc.go).
+			req.AdmittedRaftLogEntries = t.kvflowTokenDispatch.PendingDispatchFor(q.nodeID)
+			if log.V(2) {
+				for _, admittedEntries := range req.AdmittedRaftLogEntries {
+					log.Infof(ctx, "informing n%s of below-raft admission (r%d s%s pri=%s up-to-%s)",
+						q.nodeID, admittedEntries.RangeID, admittedEntries.StoreID,
+						admissionpb.WorkPriority(admittedEntries.AdmissionPriority),
+						admittedEntries.UpToRaftLogPosition.String(),
+					)
+				}
+			}
+
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 			// Pull off as many queued requests as possible, within reason.
@@ -486,7 +557,10 @@ func (t *RaftTransport) getQueue(
 	queuesMap := &t.queues[class]
 	value, ok := queuesMap.Load(int64(nodeID))
 	if !ok {
-		q := raftSendQueue{reqs: make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize)}
+		q := raftSendQueue{
+			reqs:   make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize),
+			nodeID: nodeID,
+		}
 		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
 	}
 	return (*raftSendQueue)(value), ok
