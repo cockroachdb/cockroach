@@ -1155,9 +1155,11 @@ func (p *Partition) SetDatums(datums []tree.Datums) {
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
 type TableStat struct {
-	js      stats.JSONStatistic
-	tt      *Table
-	evalCtx *eval.Context
+	js            stats.JSONStatistic
+	tt            *Table
+	evalCtx       *eval.Context
+	histogram     []cat.HistogramBucket
+	histogramType *types.T
 }
 
 var _ cat.TableStatistic = &TableStat{}
@@ -1203,6 +1205,9 @@ func (ts *TableStat) AvgSize() uint64 {
 
 // Histogram is part of the cat.TableStatistic interface.
 func (ts *TableStat) Histogram() []cat.HistogramBucket {
+	if ts.histogram != nil {
+		return ts.histogram
+	}
 	evalCtx := ts.evalCtx
 	if evalCtx == nil {
 		evalCtxVal := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -1217,15 +1222,14 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	}
 	colType := tree.MustBeStaticallyKnownType(colTypeRef)
 
-	var histogram []cat.HistogramBucket
 	var offset int
 	if ts.js.NullCount > 0 {
 		// A bucket for NULL is not persisted, but we create a fake one to
 		// make histograms easier to work with. The length of histogram
 		// is therefore 1 greater than the length of ts.js.HistogramBuckets.
 		// NOTE: This matches the logic in the TableStatisticsCache.
-		histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets)+1)
-		histogram[0] = cat.HistogramBucket{
+		ts.histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets)+1)
+		ts.histogram[0] = cat.HistogramBucket{
 			NumEq:         float64(ts.js.NullCount),
 			NumRange:      0,
 			DistinctRange: 0,
@@ -1233,33 +1237,37 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 		}
 		offset = 1
 	} else {
-		histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
+		ts.histogram = make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
 		offset = 0
 	}
 
-	for i := offset; i < len(histogram); i++ {
+	for i := offset; i < len(ts.histogram); i++ {
 		bucket := &ts.js.HistogramBuckets[i-offset]
 		datum, err := rowenc.ParseDatumStringAs(colType, bucket.UpperBound, evalCtx)
 		if err != nil {
 			panic(err)
 		}
-		histogram[i] = cat.HistogramBucket{
+		ts.histogram[i] = cat.HistogramBucket{
 			NumEq:         float64(bucket.NumEq),
 			NumRange:      float64(bucket.NumRange),
 			DistinctRange: bucket.DistinctRange,
 			UpperBound:    datum,
 		}
 	}
-	return histogram
+	return ts.histogram
 }
 
 // HistogramType is part of the cat.TableStatistic interface.
 func (ts *TableStat) HistogramType() *types.T {
+	if ts.histogramType != nil {
+		return ts.histogramType
+	}
 	colTypeRef, err := parser.GetTypeFromValidSQLSyntax(ts.js.HistogramColumnType)
 	if err != nil {
 		panic(err)
 	}
-	return tree.MustBeStaticallyKnownType(colTypeRef)
+	ts.histogramType = tree.MustBeStaticallyKnownType(colTypeRef)
+	return ts.histogramType
 }
 
 // IsForecast is part of the cat.TableStatistic interface.
