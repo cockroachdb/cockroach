@@ -562,11 +562,12 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
+	// Validate the encoder. We can pass an empty slimetrics struct here since the encoder will not be used.
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
 		return nil, err
 	}
-	if _, err := getEncoder(encodingOpts, AllTargets(details), makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB)); err != nil {
+	if _, err := getEncoder(encodingOpts, AllTargets(details), makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
 		return nil, err
 	}
 

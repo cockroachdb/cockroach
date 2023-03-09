@@ -53,8 +53,9 @@ type confluentSchemaRegistry struct {
 	// The current defaults for httputil.Client sets
 	// DisableKeepAlive's true so we don't have persistent
 	// connections to clean up on teardown.
-	client    *httputil.Client
-	retryOpts retry.Options
+	client     *httputil.Client
+	retryOpts  retry.Options
+	sliMetrics *sliMetrics
 }
 
 var _ schemaRegistry = (*confluentSchemaRegistry)(nil)
@@ -97,7 +98,7 @@ func getAndDeleteParams(u *url.URL) (schemaRegistryParams, error) {
 }
 
 func newConfluentSchemaRegistry(
-	baseURL string, p externalConnectionProvider,
+	baseURL string, p externalConnectionProvider, sliMetrics *sliMetrics,
 ) (*confluentSchemaRegistry, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -109,7 +110,7 @@ func newConfluentSchemaRegistry(
 		if err != nil {
 			return nil, err
 		}
-		return newConfluentSchemaRegistry(actual, p)
+		return newConfluentSchemaRegistry(actual, p, sliMetrics)
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {
@@ -127,11 +128,12 @@ func newConfluentSchemaRegistry(
 	}
 
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxRetries = 2
+	retryOpts.MaxRetries = 5
 	return &confluentSchemaRegistry{
-		baseURL:   u,
-		client:    httpClient,
-		retryOpts: retryOpts,
+		baseURL:    u,
+		client:     httpClient,
+		retryOpts:  retryOpts,
+		sliMetrics: sliMetrics,
 	}, nil
 }
 
@@ -195,8 +197,8 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	}
 
 	var id int32
-	err := r.doWithRetry(ctx, func() error {
-		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, &buf)
+	err := r.doWithRetry(ctx, func() (e error) {
+		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, bytes.NewReader(buf.Bytes()))
 		if err != nil {
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}
@@ -236,7 +238,10 @@ func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() err
 		if err == nil {
 			return nil
 		}
-		log.VInfof(ctx, 2, "retrying schema registry operation: %s", err.Error())
+		if r.sliMetrics != nil {
+			r.sliMetrics.SchemaRegistryRetries.Inc(1)
+		}
+		log.VInfof(ctx, 1, "retrying schema registry operation: %s", err.Error())
 	}
 	return changefeedbase.MarkRetryableError(err)
 }
