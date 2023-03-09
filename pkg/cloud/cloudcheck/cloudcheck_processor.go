@@ -52,24 +52,53 @@ func checkURI(
 	opener cloud.ExternalStorageFromURIFactory,
 	location string,
 	username username.SQLUsername,
-	transferSize int64,
+	params Params,
 ) result {
+	ctxDone := ctx.Done()
+
+	transferSize := params.TransferSize
 	if transferSize == 0 {
 		transferSize = 32 << 20
 	}
 
-	var res result
-	store, err := opener(ctx, location, username)
-	if err != nil {
-		res.error = errors.Wrapf(err, "opening external storage").Error()
-		return res
+	var total result
+
+	start := timeutil.Now()
+	for {
+		select {
+		case <-ctxDone:
+			return total
+		default:
+		}
+
+		store, err := opener(ctx, location, username)
+		if err != nil {
+			total.error = errors.Wrapf(err, "opening external storage").Error()
+			return total
+		}
+		defer store.Close()
+
+		res, err := checkStorage(ctx, store, transferSize)
+		if err != nil {
+			res.error = err.Error()
+		}
+
+		total.wroteBytes += res.wroteBytes
+		total.wroteTime += res.wroteTime
+		total.readBytes += res.readBytes
+		total.readTime += res.readTime
+
+		// We break on !total.ok below so setting it here overwrites zero-value.
+		total.ok = res.ok
+		total.error = res.error
+		total.canDelete = res.canDelete
+
+		if !total.ok || timeutil.Since(start) > params.MinDuration {
+			break
+		}
 	}
-	defer store.Close()
-	res, err = checkStorage(ctx, store, transferSize)
-	if err != nil {
-		res.error = err.Error()
-	}
-	return res
+
+	return total
 }
 
 func checkStorage(
@@ -173,7 +202,7 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		p.FlowCtx.Cfg.ExternalStorageFromURI,
 		p.spec.Location,
 		p.FlowCtx.EvalCtx.SessionData().User(),
-		p.spec.TransferSize,
+		p.spec.Params,
 	)
 	return rowenc.EncDatumRow{
 		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(p.EvalCtx.NodeID.SQLInstanceID()))),

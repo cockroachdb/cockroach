@@ -196,7 +196,8 @@ func showBackupTypeCheck(
 			backup.Path,
 			backup.Options.EncryptionPassphrase,
 			backup.Options.EncryptionInfoDir,
-			backup.Options.TransferSize,
+			backup.Options.CheckConnectionTransferSize,
+			backup.Options.CheckConnectionDuration,
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backup.InCollection),
@@ -229,9 +230,9 @@ func showBackupPlanHook(
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
-		var transferSize int64
-		if showStmt.Options.TransferSize != nil {
-			transferSizeStr, err := exprEval.String(ctx, showStmt.Options.TransferSize)
+		var params cloudcheck.Params
+		if showStmt.Options.CheckConnectionTransferSize != nil {
+			transferSizeStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionTransferSize)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
@@ -239,9 +240,20 @@ func showBackupPlanHook(
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
-			transferSize = parsed
+			params.TransferSize = parsed
 		}
-		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, transferSize)
+		if showStmt.Options.CheckConnectionDuration != nil {
+			durationStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionDuration)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			parsed, err := time.ParseDuration(durationStr)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			params.MinDuration = parsed
+		}
+		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, params)
 	}
 
 	if showStmt.Path == nil && showStmt.InCollection != nil {
