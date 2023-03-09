@@ -59,6 +59,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"gopkg.in/yaml.v3"
 )
 
 // To ensure tenant startup code is included.
@@ -667,8 +668,8 @@ func TestDenylistUpdate(t *testing.T) {
 	denyList, err := os.CreateTemp("", "*_denylist.yml")
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(denyList.Name()) }()
-	dlf := acl.File{Seq: 0}
-	bytes, err := dlf.Serialize()
+	dlf := acl.DenylistFile{Seq: 0}
+	bytes, err := yaml.Marshal(&dlf)
 	require.NoError(t, err)
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
@@ -748,7 +749,7 @@ func TestDenylistUpdate(t *testing.T) {
 			Reason:     "test-denied",
 		},
 	}
-	bytes, err = dlf.Serialize()
+	bytes, err = yaml.Marshal(&dlf)
 	require.NoError(t, err)
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)

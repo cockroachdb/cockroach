@@ -10,15 +10,18 @@ package acl
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/google/btree"
 )
 
 // Watcher maintains a list of connections waiting for changes to the
-// denylist. If a connection is added to the denylist, the watcher notifies
-// the connection via the Listener.Denied channel.
+// access control list. If a connection becomes blocked because of changes
+// to the access control list, the watcher notifies the connection via the
+// Listener.Denied channel.
 //
 // All of Watcher's methods are thread safe.
 type Watcher struct {
@@ -29,11 +32,13 @@ type Watcher struct {
 	// connections with identical tags.
 	nextID int64
 
-	// All of the listeners waiting for changes to the denylist.
+	options *aclOptions
+
+	// All of the listeners waiting for changes to the access control list.
 	listeners *btree.BTree
 
-	// The current value of the denylist.
-	list *Denylist
+	// These control whether or not a connection is allowd based on it's ConnectionTags.
+	controllers []AccessController
 }
 
 // Listener contains the channel notified when a connection is denied
@@ -44,8 +49,8 @@ type listener struct {
 	mu struct {
 		syncutil.Mutex
 
-		// The denied callback is notified iff the connection was added to
-		// the denylist. After the callback is notified once, denied is set
+		// The denied callback is notified iff the connection was blocked.
+		// After the callback is notified once, denied is set
 		// to nil to prevent duplicate calls.
 		denied func(error)
 	}
@@ -54,62 +59,119 @@ type listener struct {
 	// connection tags.
 	id int64
 
-	// Used to identify if the connection matches the deny list.
+	// Used to identify if the connection matches the access control list.
 	connection ConnectionTags
 }
 
-// ConnectionTags contains connection properties to match against the denylist.
-type ConnectionTags struct {
-	IP      string
-	Cluster string
+// Option allows configuration of an access control list service.
+type Option func(*aclOptions)
+
+type aclOptions struct {
+	pollingInterval time.Duration
+	timeSource      timeutil.TimeSource
+	errorCount      *metric.Gauge
+	allowlistFile   string
+	denylistFile    string
 }
 
-// NilWatcher produces a watcher that allows every connection. It is intended
-// for use when the denylist is disabled.
-func NilWatcher() *Watcher {
-	c := make(chan *Denylist)
-	close(c)
-	return newWatcher(emptyList(), c)
+// WithPollingInterval specifies interval between polling for config file
+// changes.
+func WithPollingInterval(d time.Duration) Option {
+	return func(op *aclOptions) {
+		op.pollingInterval = d
+	}
 }
 
-// WatcherFromFile produces a watcher that reads the denylist from a file and
-// periodically polls the file for changes. If the file is unreadable or contains
-// invalid content, the watcher fails open and allows all connections.
-func WatcherFromFile(ctx context.Context, filename string, opts ...Option) *Watcher {
-	dl, dlc := newDenylistWithFile(ctx, filename, opts...)
-	return newWatcher(dl, dlc)
+// WithTimeSource overrides the time source used to check expiration times.
+func WithTimeSource(t timeutil.TimeSource) Option {
+	return func(op *aclOptions) {
+		op.timeSource = t
+	}
 }
 
-// newWatcher create a Watcher for watching changes to the Denylist.
-// Internally newWatcher spins up a goroutine that notifies listeners
-// when they are added to the Denylist. The goroutine exits when the
-// input channel is closed.
-func newWatcher(list *Denylist, next chan *Denylist) *Watcher {
+func WithErrorCount(errorCount *metric.Gauge) Option {
+	return func(op *aclOptions) {
+		op.errorCount = errorCount
+	}
+}
+
+func WithAllowListFile(allowlistFile string) Option {
+	return func(op *aclOptions) {
+		op.allowlistFile = allowlistFile
+	}
+}
+
+func WithDenyListFile(denylistFile string) Option {
+	return func(op *aclOptions) {
+		op.denylistFile = denylistFile
+	}
+}
+
+func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
+	options := &aclOptions{
+		pollingInterval: defaultPollingInterval,
+		timeSource:      timeutil.DefaultTimeSource{},
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
 	w := &Watcher{
-		listeners: btree.New(8),
-		list:      list,
+		listeners:   btree.New(8),
+		options:     options,
+		controllers: make([]AccessController, 0),
 	}
 
-	go func() {
-		for n := range next {
-			w.updateDenyList(n)
+	if options.allowlistFile != "" {
+		c, next, err := newAccessControllerFromFile[*Allowlist](ctx, options.allowlistFile, w.options.pollingInterval, w.options.errorCount)
+		if err != nil {
+			return nil, err
 		}
-	}()
+		w.addAccessController(c, next)
+	}
+	if options.denylistFile != "" {
+		c, next, err := newAccessControllerFromFile[*Denylist](ctx, options.denylistFile, w.options.pollingInterval, w.options.errorCount)
+		if err != nil {
+			return nil, err
+		}
+		w.addAccessController(c, next)
+	}
+	return w, nil
+}
 
-	return w
+func (w *Watcher) addAccessController(controller AccessController, next chan AccessController) {
+	index := len(w.controllers)
+	w.controllers = append(w.controllers, controller)
+
+	if next != nil {
+		go func() {
+			for n := range next {
+				w.updateAccessController(index, n)
+			}
+		}()
+	}
+}
+
+func (w *Watcher) updateAccessController(index int, controller AccessController) {
+	w.mu.Lock()
+	copy := w.listeners.Clone()
+	w.controllers[index] = controller
+	controllers := append([]AccessController(nil), w.controllers...)
+	w.mu.Unlock()
+
+	checkListeners(copy, w.options.timeSource, controllers)
 }
 
 // ListenForDenied Adds a listener to the watcher for the given connection. If the
-// connection is already on the denylist a nil remove function is returned and an error
+// connection is already blocked a nil remove function is returned and an error
 // is returned immediately.
 //
 // Example Usage:
 //
 //	remove, err := w.ListenForDenied(connection, func(err error) {
-//	  /* connection was added to the deny list */
+//	  /* connection was blocked by change */
 //	})
 //
-// if err != nil { /*connection already on the denylist*/ }
+// if err != nil { /*connection already blocked*/ }
 // defer remove()
 //
 // Warning:
@@ -118,7 +180,7 @@ func (w *Watcher) ListenForDenied(connection ConnectionTags, callback func(error
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if err := checkConnection(connection, w.list); err != nil {
+	if err := checkConnection(connection, w.options.timeSource, w.controllers); err != nil {
 		return nil, err
 	}
 
@@ -133,26 +195,6 @@ func (w *Watcher) ListenForDenied(connection ConnectionTags, callback func(error
 
 	w.listeners.ReplaceOrInsert(l)
 	return func() { w.removeListener(l) }, nil
-}
-
-func (w *Watcher) updateDenyList(list *Denylist) {
-	w.mu.Lock()
-	copy := w.listeners.Clone()
-	w.list = list
-	w.mu.Unlock()
-
-	copy.Ascend(func(i btree.Item) bool {
-		lst := i.(*listener)
-		if err := checkConnection(lst.connection, list); err != nil {
-			lst.mu.Lock()
-			defer lst.mu.Unlock()
-			if lst.mu.denied != nil {
-				lst.mu.denied(err)
-				lst.mu.denied = nil
-			}
-		}
-		return true
-	})
 }
 
 func (w *Watcher) removeListener(l *listener) {
@@ -173,14 +215,30 @@ func (l *listener) Less(than btree.Item) bool {
 	return l.id < than.(*listener).id
 }
 
-func checkConnection(connection ConnectionTags, list *Denylist) error {
-	ip := DenyEntity{Item: connection.IP, Type: IPAddrType}
-	if err := list.Denied(ip); err != nil {
-		return errors.Wrapf(err, "connection ip '%v' denied", connection.IP)
-	}
-	cluster := DenyEntity{Item: connection.Cluster, Type: ClusterType}
-	if err := list.Denied(cluster); err != nil {
-		return errors.Wrapf(err, "connection cluster '%v' denied", connection.Cluster)
+func checkListeners(
+	listeners *btree.BTree, timesource timeutil.TimeSource, controllers []AccessController,
+) {
+	listeners.Ascend(func(i btree.Item) bool {
+		lst := i.(*listener)
+		if err := checkConnection(lst.connection, timesource, controllers); err != nil {
+			lst.mu.Lock()
+			defer lst.mu.Unlock()
+			if lst.mu.denied != nil {
+				lst.mu.denied(err)
+				lst.mu.denied = nil
+			}
+		}
+		return true
+	})
+}
+
+func checkConnection(
+	connection ConnectionTags, timesource timeutil.TimeSource, controllers []AccessController,
+) error {
+	for _, c := range controllers {
+		if err := c.CheckConnection(connection, timesource); err != nil {
+			return err
+		}
 	}
 	return nil
 }

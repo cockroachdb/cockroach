@@ -2,27 +2,10 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "denylist",
-    srcs = [
-        "denylist.go",
-        "file.go",
-        "watcher.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/log",
-        "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_google_btree//:btree",
-        "@in_gopkg_yaml_v2//:yaml_v2",
-    ],
-)
-
-go_library(
     name = "acl",
     srcs = [
+        "access_control.go",
+        "allowlist.go",
         "denylist.go",
         "file.go",
         "watcher.go",
@@ -31,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -49,6 +33,7 @@ go_test(
     embed = [":acl"],
     deps = [
         "//pkg/util/leaktest",
+        "//pkg/util/metric",
         "//pkg/util/timeutil",
         "@com_github_google_btree//:btree",
         "@com_github_stretchr_testify//require",
