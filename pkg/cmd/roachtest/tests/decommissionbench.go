@@ -368,7 +368,7 @@ func setupDecommissionBench(
 	workloadNode, pinnedNode int,
 	importCmd string,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= benchSpec.nodes; i++ {
 		// Don't start a scheduled backup as this roachtest reports to roachperf.

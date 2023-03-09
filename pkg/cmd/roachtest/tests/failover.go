@@ -94,7 +94,7 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 5))
 
 	conn := c.Conn(ctx, t.L(), 1)
