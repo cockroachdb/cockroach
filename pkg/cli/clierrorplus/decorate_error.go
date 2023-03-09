@@ -44,7 +44,8 @@ import (
 //	dial tcp <addr>: <syscall>: No connection could be made because the target machine actively refused it.
 //
 // So we look for the common bit.
-var reGRPCConnRefused = regexp.MustCompile(`Error while dialing dial tcp .*: connection.* refused`)
+// See: https://github.com/grpc/grpc-go/blob/master/internal/transport/http2_client.go#L216
+var reGRPCConnRefused = regexp.MustCompile(`[E|e]rror while dialing:? dial tcp .*: connection.* refused`)
 
 // reGRPCNoTLS is a regular expression that can be applied to the
 // details of a GRPC auth failure when the server is insecure.
