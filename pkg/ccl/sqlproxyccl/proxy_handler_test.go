@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
@@ -686,6 +686,13 @@ func TestDenylistUpdate(t *testing.T) {
 	denyList, err := os.CreateTemp("", "*_denylist.yml")
 	require.NoError(t, err)
 
+	defer func() { _ = os.Remove(denyList.Name()) }()
+	dlf := acl.File{Seq: 0}
+	bytes, err := dlf.Serialize()
+	require.NoError(t, err)
+	_, err = denyList.Write(bytes)
+	require.NoError(t, err)
+
 	sql, sqlDB, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: false,
@@ -715,10 +722,10 @@ func TestDenylistUpdate(t *testing.T) {
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		time.AfterFunc(100*time.Millisecond, func() {
-			dlf := denylist.File{
-				Denylist: []*denylist.DenyEntry{
+			dlf := acl.File{
+				Denylist: []*acl.DenyEntry{
 					{
-						Entity:     denylist.DenyEntity{Type: denylist.IPAddrType, Item: "127.0.0.1"},
+						Entity:     acl.DenyEntity{Type: acl.IPAddrType, Item: "127.0.0.1"},
 						Expiration: timeutil.Now().Add(time.Minute),
 						Reason:     "test-denied",
 					},
@@ -739,20 +746,47 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	defer func() { _ = os.Remove(denyList.Name()) }()
 
-	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Eventuallyf(
-			t,
-			func() bool {
-				_, err = conn.Exec(context.Background(), "SELECT 1")
-				return err != nil
-			},
-			time.Second, 5*time.Millisecond,
-			"Expected the connection to eventually fail",
-		)
-		require.Regexp(t, "unexpected EOF|connection reset by peer", err.Error())
-		require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
-	})
+	// Establish a connection.
+	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
+	db, err := gosql.Open("postgres", url)
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	require.NoError(t, err)
+
+	// Use a single connection so that we don't reopen when the connection
+	// is closed.
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	// Once connection has been established, attempt to update denylist.
+	dlf.Seq++
+	dlf.Denylist = []*acl.DenyEntry{
+		{
+			Entity:     acl.DenyEntity{Type: acl.IPAddrType, Item: "127.0.0.1"},
+			Expiration: timeutil.Now().Add(time.Minute),
+			Reason:     "test-denied",
+		},
+	}
+	bytes, err = dlf.Serialize()
+	require.NoError(t, err)
+	_, err = denyList.Write(bytes)
+	require.NoError(t, err)
+
+	// Subsequent Exec calls will eventually fail.
+	require.Eventuallyf(
+		t,
+		func() bool {
+			_, err = conn.ExecContext(ctx, "SELECT 1")
+			return err != nil
+		},
+		time.Second, 5*time.Millisecond,
+		"Expected the connection to eventually fail",
+	)
+	require.Regexp(t, "closed|bad connection", err.Error())
+	require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 }
 
 func TestDirectoryConnect(t *testing.T) {

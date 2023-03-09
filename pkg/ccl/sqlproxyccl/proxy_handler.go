@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
@@ -140,7 +140,7 @@ type proxyHandler struct {
 	incomingCert certmgr.Cert
 
 	// denyListWatcher provides access control.
-	denyListWatcher *denylist.Watcher
+	denyListWatcher *acl.Watcher
 
 	// throttleService will do throttling of incoming connection requests.
 	throttleService throttler.Service
@@ -193,10 +193,10 @@ func newProxyHandler(
 
 	// If denylist functionality is requested, create the denylist service.
 	if options.Denylist != "" {
-		handler.denyListWatcher = denylist.WatcherFromFile(ctx, options.Denylist,
-			denylist.WithPollingInterval(options.PollConfigInterval))
+		handler.denyListWatcher = acl.WatcherFromFile(ctx, options.Denylist,
+			acl.WithPollingInterval(options.PollConfigInterval))
 	} else {
-		handler.denyListWatcher = denylist.NilWatcher()
+		handler.denyListWatcher = acl.NilWatcher()
 	}
 
 	handler.throttleService = throttler.NewLocalService(
@@ -363,7 +363,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	errConnection := make(chan error, 1)
 
 	removeListener, err := handler.denyListWatcher.ListenForDenied(
-		denylist.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
+		acl.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
 		func(err error) {
 			err = withCode(errors.Wrap(err,
 				"connection added to deny list"), codeExpiredClientConnection)
