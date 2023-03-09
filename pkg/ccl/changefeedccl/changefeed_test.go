@@ -4371,6 +4371,10 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `CHANGEFEED requires an enterprise license`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
 	)
+	sqlDB.ExpectErr(
+		t, `use of AS SELECT requires an enterprise license`,
+		`CREATE CHANGEFEED AS SELECT * FROM foo`,
+	)
 	enableEnterprise()
 
 	// Watching system.jobs would create a cycle, since the resolved timestamp
