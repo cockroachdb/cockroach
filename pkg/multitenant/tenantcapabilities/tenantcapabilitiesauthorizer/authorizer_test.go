@@ -130,7 +130,7 @@ func (m mockReader) GetCapabilities(
 	return cp, found
 }
 
-// GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
-func (m mockReader) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+// GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
+func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
 	return m
 }

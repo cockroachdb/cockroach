@@ -85,8 +85,8 @@ func (w *Watcher) GetCapabilities(
 	return cp, found
 }
 
-// GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
-func (w *Watcher) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
+// GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
+func (w *Watcher) GetGlobalCapabilityState() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	result := make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities, len(w.mu.store))
