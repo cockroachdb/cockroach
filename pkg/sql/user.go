@@ -681,12 +681,14 @@ func MaybeConvertStoredPasswordHash(
 
 	autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&execCfg.Settings.SV)
 	autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&execCfg.Settings.SV)
-	hashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
+	autoRehashOnCostChangeBool := security.AutoRehashOnSCRAMCostChange.Get(&execCfg.Settings.SV)
+	configuredSCRAMCost := security.SCRAMCost.Get(&execCfg.Settings.SV)
+	configuredHashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
 
 	converted, prevHash, newHash, newMethod, err := password.MaybeConvertPasswordHash(
 		ctx,
-		autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool,
-		hashMethod, cleartext, currentHash,
+		autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool, autoRehashOnCostChangeBool,
+		configuredHashMethod, configuredSCRAMCost, cleartext, currentHash,
 		security.GetExpensiveHashComputeSem(ctx),
 		log.Infof,
 	)

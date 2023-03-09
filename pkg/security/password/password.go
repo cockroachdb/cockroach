@@ -35,7 +35,7 @@ const (
 	// DefaultBcryptCost is the hashing cost for the hashing method crdb-bcrypt.
 	DefaultBcryptCost = 10
 	// DefaultSCRAMCost is the hashing cost for the hashing method SCRAM.
-	DefaultSCRAMCost = 119680
+	DefaultSCRAMCost = 10610
 	// ScramMinCost is as per RFC 5802.
 	ScramMinCost = 4096
 	// ScramMaxCost is an arbitrary value to prevent unreasonably long logins
@@ -645,38 +645,38 @@ func CheckPasswordHashValidity(
 // server.user_login.password_hashes.default_cost.scram_sha_256 and
 // re-encode their passwords.
 var BcryptCostToSCRAMIterCount = []int64{
-	0,            // 0-3 are not valid bcrypt costs.
-	0,            // 0-3 are not valid bcrypt costs.
-	0,            // 0-3 are not valid bcrypt costs.
-	0,            // 0-3 are not valid bcrypt costs.
-	4096,         // 4 - special case to select lowest cost possible. Model would predict 7000.
-	9420,         // 5
-	12977,        // 6
-	20090,        // 7
-	34318,        // 8
-	62772,        // 9
-	119680,       // 10 - common default, 50-100ms login latency on 2021 hardware
-	233497,       // 11
-	461131,       // 12
-	916398,       // 13
-	1826932,      // 14
-	3648001,      // 15
-	7290139,      // 16
-	14574415,     // 17
-	29142967,     // 18
-	58280072,     // 19
-	116554280,    // 20
-	233102696,    // 21
-	466199529,    // 22
-	932393195,    // 23
-	1864780528,   // 24
-	3729555192,   // 25
-	7459104520,   // 26
-	14918203177,  // 27
-	29836400491,  // 28
-	59672795119,  // 29
-	119345584374, // 30
-	238691162884, // 31
+	0,           // 0-3 are not valid bcrypt costs.
+	0,           // 0-3 are not valid bcrypt costs.
+	0,           // 0-3 are not valid bcrypt costs.
+	0,           // 0-3 are not valid bcrypt costs.
+	4096,        // 4 - special case to select lowest cost possible. Model would predict 1288.
+	4096,        // 5 - special case to select lowest cost possible. Model would predict 1654.
+	4096,        // 6 - special case to select lowest cost possible. Model would predict 2384.
+	4096,        // 7 - special case to select lowest cost possible. Model would predict 3846.
+	6768,        // 8
+	8768,        // 9
+	10610,       // 10 - common default, 50-100ms login latency on 2021 hardware
+	24302,       // 11
+	47682,       // 12
+	94441,       // 13
+	187958,      // 14
+	374993,      // 15
+	749063,      // 16
+	1497202,     // 17
+	2993481,     // 18
+	5986039,     // 19
+	11971154,    // 20
+	23941385,    // 21
+	47881848,    // 22
+	95762772,    // 23
+	191524622,   // 24
+	383048320,   // 25
+	766095717,   // 26
+	1532190512,  // 27
+	3064380100,  // 28
+	6128759277,  // 29
+	12257517630, // 30
+	24515034337, // 31
 }
 
 // ScramIterCountToBcryptCost computes the inverse of the
@@ -701,9 +701,9 @@ func ScramIterCountToBcryptCost(scramIters int) int {
 // See the documentation on BcryptCostToSCRAMIterCount[] for details.
 func MaybeConvertPasswordHash(
 	ctx context.Context,
-	autoUpgradePasswordHashes bool,
-	autoDowngradePasswordHashesBool bool,
+	autoUpgradePasswordHashes, autoDowngradePasswordHashesBool, autoRehashOnCostChangeBool bool,
 	configuredHashMethod HashMethod,
+	configuredSCRAMCost int64,
 	cleartext string,
 	hashed PasswordHash,
 	hashSem HashSemaphore,
@@ -761,6 +761,42 @@ func MaybeConvertPasswordHash(
 			return false, nil, nil, "", err
 		}
 		return true, bh, newHash, HashSCRAMSHA256.String(), nil
+	}
+
+	// Now check updating SCRAM hashes with a new cost. We need the following:
+	// - password currently hashed using scram-sha-256.
+	// - cost conversion enabled by cluster setting.
+	// - the configured default method is scram-sha-256.
+	// - the current password cost is different than the configured default cost.
+	if isScram && autoRehashOnCostChangeBool && configuredHashMethod == HashSCRAMSHA256 {
+		ok, parts := isSCRAMHash(sh.bytes)
+		if !ok {
+			// The caller should only call this function after authentication
+			// has succeeded, so the scram hash should have been validated
+			// already.
+			return false, nil, nil, "", errors.AssertionFailedf("programming error: authn succeeded but invalid scram hash")
+		}
+		scramIters, err := parts.getIters()
+		if err != nil {
+			// The caller should only call this function after authentication
+			// has succeeded, so the scram iters should have been validated
+			// already.
+			return false, nil, nil, "", errors.NewAssertionErrorWithWrappedErrf(err, "programming error: authn succeeded but invalid scram hash")
+		}
+
+		if scramIters < ScramMinCost || scramIters > ScramMaxCost {
+			// The scramIters being out of range is a violation of our SCRAM preconditions.
+			return false, nil, nil, "", errors.AssertionFailedf("unexpected: scram iteration count %d is out of bounds", scramIters)
+		}
+
+		if configuredSCRAMCost != int64(scramIters) {
+			newHash, err := hashAndValidate(ctx, int(configuredSCRAMCost), HashSCRAMSHA256, cleartext, hashSem)
+			if err != nil {
+				// This call only fail with hard errors.
+				return false, nil, nil, "", err
+			}
+			return true, sh.bytes, newHash, HashSCRAMSHA256.String(), nil
+		}
 	}
 
 	// Now check downgrading hashes. We need the following:
