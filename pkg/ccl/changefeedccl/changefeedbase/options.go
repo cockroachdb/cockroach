@@ -887,6 +887,10 @@ func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {
 	return s.getDurationValue(OptMinCheckpointFrequency)
 }
 
+func (s StatementOptions) GetConfluentSchemaRegistry() string {
+	return s.m[OptConfluentSchemaRegistry]
+}
+
 // GetPTSExpiration returns the maximum age of the protected timestamp record.
 // Changefeeds that fail to update their records in time will be canceled.
 func (s StatementOptions) GetPTSExpiration() (time.Duration, error) {
