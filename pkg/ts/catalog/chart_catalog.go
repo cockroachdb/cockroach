@@ -119,6 +119,7 @@ var charts = []sectionDescription{
 					"sys.cpu.sys.percent",
 					"sys.cpu.user.percent",
 					"sys.cpu.combined.percent-normalized",
+					"sys.cpu.host.combined.percent-normalized",
 				},
 			},
 			{

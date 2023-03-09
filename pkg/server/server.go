@@ -382,7 +382,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
 		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
-	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
+	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock.WallClock())
 	registry.AddMetricStruct(runtimeSampler)
 	// Save a reference to this sampler for use by additional servers
 	// started via the server controller.
