@@ -32,6 +32,7 @@ import { nodeRegionsByIDSelector } from "../store/nodes";
 import {
   selectStatementsLastUpdated,
   selectStatementsDataValid,
+  selectStatementsDataInFlight,
 } from "src/statementsPage/statementsPage.selectors";
 import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
@@ -75,6 +76,7 @@ export const TransactionsPageConnected = withRouter(
         columns: selectTxnColumns(state),
         data: selectTransactionsData(state),
         isDataValid: selectStatementsDataValid(state),
+        isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectTransactionsLastError(state),
