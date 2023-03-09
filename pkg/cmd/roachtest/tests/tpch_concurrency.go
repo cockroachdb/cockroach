@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -94,6 +95,13 @@ func registerTPCHConcurrency(r registry.Registry) {
 			t.Status(fmt.Sprintf("running with concurrency = %d", concurrency))
 			// Run each query once on each connection.
 			for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
+				if queryNum == 15 {
+					// Skip Q15 because it involves a schema change which - when
+					// run with high concurrency - takes non-trivial amount of
+					// time.
+					t.Status("skipping Q", queryNum)
+					continue
+				}
 				t.Status("running Q", queryNum)
 				// The way --max-ops flag works is as follows: the global ops
 				// counter is incremented **after** each worker completes a
@@ -159,7 +167,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// additional step to ensure that some kind of lower bound for the
 		// supported concurrency is always sustained and fail the test if it
 		// isn't.
-		minConcurrency, maxConcurrency := 50, 110
+		minConcurrency, maxConcurrency := 800, 1200
 		// Run the binary search to find the largest concurrency that doesn't
 		// crash a node in the cluster. The current range is represented by
 		// [minConcurrency, maxConcurrency).
@@ -185,9 +193,15 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c.Run(ctx, c.Node(numNodes), cmd)
 	}
 
+	// Each iteration of the binary search can take on the order of 2 hours, so
+	// use the longest timeout allowed by the roachtest infra (without marking
+	// the test as "weekly").
+	const timeout = 18 * time.Hour
+
 	r.Add(registry.TestSpec{
 		Name:    "tpch_concurrency",
 		Owner:   registry.OwnerSQLQueries,
+		Timeout: timeout,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
@@ -197,6 +211,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "tpch_concurrency/no_streamer",
 		Owner:   registry.OwnerSQLQueries,
+		Timeout: timeout,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
