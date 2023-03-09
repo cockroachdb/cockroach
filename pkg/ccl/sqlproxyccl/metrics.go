@@ -21,6 +21,7 @@ type metrics struct {
 	ClientDisconnectCount  *metric.Counter
 	CurConnCount           *metric.Gauge
 	RoutingErrCount        *metric.Counter
+	AcceptedConnCount      *metric.Counter
 	RefusedConnCount       *metric.Counter
 	SuccessfulConnCount    *metric.Counter
 	ConnectionLatency      metric.IHistogram
@@ -100,6 +101,12 @@ var (
 		Name:        "proxy.err.client_disconnect",
 		Help:        "Number of disconnects initiated by clients",
 		Measurement: "Client Disconnects",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAcceptedConnCount = metric.Metadata{
+		Name:        "proxy.sql.accepted_conns",
+		Help:        "Number of accepted connections",
+		Measurement: "Accepted connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRefusedConnCount = metric.Metadata{
@@ -221,6 +228,7 @@ func makeProxyMetrics() metrics {
 		ClientDisconnectCount:  metric.NewCounter(metaClientDisconnectCount),
 		CurConnCount:           metric.NewGauge(metaCurConnCount),
 		RoutingErrCount:        metric.NewCounter(metaRoutingErrCount),
+		AcceptedConnCount:      metric.NewCounter(metaAcceptedConnCount),
 		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
 		ConnectionLatency: metric.NewHistogram(metric.HistogramOptions{
