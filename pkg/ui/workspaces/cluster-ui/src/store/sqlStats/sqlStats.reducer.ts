@@ -22,6 +22,7 @@ export type SQLStatsState = {
   lastError: Error;
   valid: boolean;
   lastUpdated: moment.Moment | null;
+  inFlight: boolean;
 };
 
 const initialState: SQLStatsState = {
@@ -29,6 +30,7 @@ const initialState: SQLStatsState = {
   lastError: null,
   valid: false,
   lastUpdated: null,
+  inFlight: false,
 };
 
 export type UpdateTimeScalePayload = {
@@ -44,19 +46,25 @@ const sqlStatsSlice = createSlice({
       state.valid = true;
       state.lastError = null;
       state.lastUpdated = moment.utc();
+      state.inFlight = false;
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
       state.lastError = action.payload;
       state.lastUpdated = moment.utc();
+      state.inFlight = false;
     },
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, action: PayloadAction<StatementsRequest>) => {},
-    request: (_, action: PayloadAction<StatementsRequest>) => {},
-    updateTimeScale: (_, action: PayloadAction<UpdateTimeScalePayload>) => {},
-    reset: (_, action: PayloadAction<StatementsRequest>) => {},
+    refresh: (state, action: PayloadAction<StatementsRequest>) => {
+      state.inFlight = true;
+    },
+    request: (state, action: PayloadAction<StatementsRequest>) => {
+      state.inFlight = true;
+    },
+    updateTimeScale: (_, _action: PayloadAction<UpdateTimeScalePayload>) => {},
+    reset: (_, _action: PayloadAction<StatementsRequest>) => {},
   },
 });
 

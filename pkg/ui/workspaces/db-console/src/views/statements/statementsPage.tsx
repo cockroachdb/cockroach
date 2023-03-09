@@ -70,6 +70,7 @@ import { selectTimeScale } from "src/redux/timeScale";
 import {
   selectStatementsLastUpdated,
   selectStatementsDataValid,
+  selectStatementsDataInFlight,
 } from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
@@ -380,6 +381,7 @@ export default withRouter(
         sortSetting: sortSettingLocalSetting.selector(state),
         statements: selectStatements(state, props),
         isDataValid: selectStatementsDataValid(state),
+        isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
         totalFingerprints: selectTotalFingerprints(state),

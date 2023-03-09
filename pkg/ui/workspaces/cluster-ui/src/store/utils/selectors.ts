@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+import { LocalStorageKeys } from "../localStorage";
 import { AppState } from "../reducers";
 
 export const adminUISelector = createSelector(
@@ -23,5 +24,5 @@ export const localStorageSelector = createSelector(
 
 export const selectTimeScale = createSelector(
   localStorageSelector,
-  localStorage => localStorage["timeScale/SQLActivity"],
+  localStorage => localStorage[LocalStorageKeys.GLOBAL_TIME_SCALE],
 );
