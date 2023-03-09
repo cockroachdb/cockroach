@@ -160,6 +160,7 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 		stacks = make([]byte, n)
 		nbytes := runtime.Stack(stacks, true /* all */)
 		if nbytes < len(stacks) {
+			stacks = stacks[:nbytes]
 			break
 		}
 	}
