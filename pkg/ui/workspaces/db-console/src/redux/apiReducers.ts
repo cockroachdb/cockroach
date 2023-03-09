@@ -329,6 +329,7 @@ const queriesReducerObj = new CachedDataReducer(
   "statements",
   null,
   moment.duration(30, "m"),
+  true, // Allow new requests to replace in flight ones.
 );
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
