@@ -24,9 +24,12 @@ import {
 
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
+import moment from "moment";
 
 const getEmptyData = () =>
   extend({}, data, { transactions: [], statements: [] });
+
+const lastUpdated = moment.utc();
 
 storiesOf("Transactions Page", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
@@ -50,6 +53,9 @@ storiesOf("Transactions Page", module)
       resetSQLStats={noop}
       search={""}
       sortSetting={sortSetting}
+      lastUpdated={lastUpdated}
+      isDataValid={true}
+      isReqInFlight={false}
     />
   ))
   .add("without data", () => {
@@ -70,6 +76,9 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
+        isDataValid={true}
+        isReqInFlight={false}
       />
     );
   })
@@ -98,6 +107,9 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
+        isDataValid={true}
+        isReqInFlight={false}
       />
     );
   })
@@ -119,6 +131,9 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
+        isDataValid={true}
+        isReqInFlight={true}
       />
     );
   })
@@ -147,6 +162,9 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
+        isDataValid={false}
+        isReqInFlight={false}
       />
     );
   });
