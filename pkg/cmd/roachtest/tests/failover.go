@@ -94,7 +94,7 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 5))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -206,7 +206,7 @@ func runFailoverNonSystem(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -347,7 +347,7 @@ func runFailoverLiveness(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -487,7 +487,7 @@ func runFailoverSystemNonLiveness(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)

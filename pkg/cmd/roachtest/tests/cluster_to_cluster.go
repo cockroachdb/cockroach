@@ -307,7 +307,10 @@ type replicationTestSpec struct {
 }
 
 func (sp *replicationTestSpec) setupC2C(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	// Unfortunately, these tests can timeout when run with runtime
+	// assertions enabled and we have no way to set the roachtest timeout
+	// at runtime, so we stick with the standard cockroach build.
+	c.Put(ctx, t.StandardCockroach(), "./cockroach")
 	srcCluster := c.Range(1, sp.srcNodes)
 	dstCluster := c.Range(sp.srcNodes+1, sp.srcNodes+sp.dstNodes)
 	workloadNode := c.Node(sp.srcNodes + sp.dstNodes + 1)

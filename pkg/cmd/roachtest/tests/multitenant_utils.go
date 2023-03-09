@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -189,11 +190,12 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		"--store=" + tn.storeDir()}
 
 	internalIPs, err := c.InternalIP(ctx, t.L(), c.Node(tn.node))
+	randomSeed := rand.Int63()
+	c.SetRandomSeed(randomSeed)
 	require.NoError(t, err)
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), internalIPs[0], binary, tn.kvAddrs, tn.tenantID,
-		tn.httpPort, tn.sqlPort,
-		extraArgs...,
+		tn.httpPort, tn.sqlPort, randomSeed, extraArgs...,
 	)
 
 	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "")
@@ -255,6 +257,7 @@ func startTenantServer(
 	tenantID int,
 	httpPort int,
 	sqlPort int,
+	randomSeed int64,
 	extraFlags ...string,
 ) chan error {
 	args := []string{
@@ -269,8 +272,15 @@ func startTenantServer(
 
 	errCh := make(chan error, 1)
 	go func() {
+		// Set the same random seed for every tenant; this picked up by
+		// runs that use a build with runtime assertions enabled, and
+		// ignored otherwise.
+		env := append(
+			[]string{fmt.Sprintf("COCKROACH_RANDOM_SEED=%d", randomSeed)},
+			config.DefaultEnvVars()...,
+		)
 		errCh <- c.RunE(tenantCtx, node,
-			append(append(append([]string{}, config.DefaultEnvVars()...), binary, "mt", "start-sql"), args...)...,
+			append(append(env, binary, "mt", "start-sql"), args...)...,
 		)
 		close(errCh)
 	}()

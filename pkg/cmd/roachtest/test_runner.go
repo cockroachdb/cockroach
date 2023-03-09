@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -268,10 +267,6 @@ func (r *testRunner) Run(
 	if clusterAllocator == nil {
 		clusterAllocator = defaultClusterAllocator(r, clustersOpt, lopt)
 	}
-
-	// Seed the default rand source so that different runs get different cluster
-	// IDs.
-	rand.Seed(timeutil.Now().UnixNano())
 
 	n := len(tests)
 	if n*count < parallelism {

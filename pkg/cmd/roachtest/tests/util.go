@@ -139,25 +139,25 @@ func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 func maybeUseBuildWithEnabledAssertions(
 	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, eaProb float64,
 ) {
+	cockroach := t.StandardCockroach()
 	if rng.Float64() < eaProb {
-		// Check whether the cockroach-short binary is available.
-		if t.CockroachShort() != "" {
-			randomSeed := rng.Int63()
-			t.Status(
-				"using cockroach-short binary compiled with --crdb_test "+
-					"build tag and COCKROACH_RANDOM_SEED=", randomSeed,
-			)
-			c.Put(ctx, t.CockroachShort(), "./cockroach")
-			// We need to ensure that all nodes in the cluster start with the
-			// same random seed (if not, some assumptions can be violated - for
-			// example that coldata.BatchSize() values are the same on all
-			// nodes).
-			settings := install.MakeClusterSettings()
-			settings.Env = append(settings.Env, fmt.Sprintf("COCKROACH_RANDOM_SEED=%d", randomSeed))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
-			return
-		}
+		cockroach = t.RuntimeAssertionsCockroach()
 	}
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	if cockroach == t.RuntimeAssertionsCockroach() {
+		t.Status(
+			"using cockroach-short binary compiled with --crdb_test build tag",
+		)
+	}
+
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+}
+
+// usingRuntimeAssertions returns true if calls to `t.Cockroach()` for
+// this test will return the cockroach build with runtime
+// assertions. Note that calling this function only makes sense if the
+// test uploads cockroach using `t.Cockroach` (instead of calling
+// t.StandardCockroach or t.RuntimeAssertionsCockroach directly).
+func usingRuntimeAssertions(t test.Test) bool {
+	return t.Cockroach() == t.RuntimeAssertionsCockroach()
 }

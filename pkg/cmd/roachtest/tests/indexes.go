@@ -44,7 +44,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+			c.Put(ctx, t.StandardCockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 			conn := c.Conn(ctx, t.L(), 1)
