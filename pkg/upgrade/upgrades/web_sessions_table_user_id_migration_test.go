@@ -84,18 +84,7 @@ func runTestWebSessionsUserIDMigration(t *testing.T, numUsers int) {
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.WebSessionsTable, getTableDescForSystemWebSessionsTableBeforeUserIDCol)
 
 	// Create test users.
-	tx, err := db.BeginTx(ctx, nil /* opts */)
-	require.NoError(t, err)
-	txRunner := sqlutils.MakeSQLRunner(tx)
-	for i := 0; i < numUsers; i++ {
-		// Group statements into transactions of 100 users to speed up creation.
-		if i != 0 && i%100 == 0 {
-			err := tx.Commit()
-			require.NoError(t, err)
-			tx, err = db.BeginTx(ctx, nil /* opts */)
-			require.NoError(t, err)
-			txRunner = sqlutils.MakeSQLRunner(tx)
-		}
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
 		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
 
 		// Simulate the INSERT that happens in the actual authentication code.
@@ -109,13 +98,11 @@ VALUES (
 	'2023-02-14 20:56:30.699447'
 )
 `, i))
-	}
-	err = tx.Commit()
-	require.NoError(t, err)
+	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions", [][]string{{strconv.Itoa(numUsers)}})
 
 	// Run migrations.
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn).String())
 	require.NoError(t, err)
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,

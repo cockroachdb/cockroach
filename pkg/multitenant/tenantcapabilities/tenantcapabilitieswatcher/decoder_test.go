@@ -80,5 +80,5 @@ func TestDecodeCapabilities(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, tenantID, got.TenantID)
-	require.Equal(t, info.Capabilities, got.TenantCapabilities)
+	require.Equal(t, &info.Capabilities, got.TenantCapabilities)
 }
