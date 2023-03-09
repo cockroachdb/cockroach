@@ -213,6 +213,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		if err != nil {
 			return err
 		}
+		s.metrics.AcceptedConnCount.Inc(1)
 
 		err = s.Stopper.RunAsyncTask(ctx, "proxy-con-serve", func(ctx context.Context) {
 			defer func() { _ = conn.Close() }()

@@ -35,6 +35,22 @@ func tlsConfig() (*tls.Config, error) {
 	}, nil
 }
 
+func TestFrontendAdmitWithNoBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cli, srv := net.Pipe()
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+
+	// Close the connection to simulate no bytes.
+	cli.Close()
+
+	fe := FrontendAdmit(srv, nil)
+	require.EqualError(t, fe.Err, noStartupMessage.Error())
+	require.NotNil(t, fe.Conn)
+	require.Nil(t, fe.Msg)
+}
+
 func TestFrontendAdmitWithClientSSLDisableAndCustomParam(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -45,6 +45,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/batcheval/result",
@@ -53,7 +54,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

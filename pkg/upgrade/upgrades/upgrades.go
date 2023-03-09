@@ -263,6 +263,18 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillDatabaseRoleSettingsTableRoleIDColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"backfill system tables with regional by row compatible indexes",
+		toCV(clusterversion.V23_1_SystemRbrReadNew),
+		upgrade.NoPrecondition,
+		backfillRegionalByRowIndex,
+	),
+	upgrade.NewTenantUpgrade(
+		"clean up old indexes for regional by row compatible system tables",
+		toCV(clusterversion.V23_1_SystemRbrCleanup),
+		upgrade.NoPrecondition,
+		cleanUpRegionalByTableIndex,
+	),
 }
 
 func init() {

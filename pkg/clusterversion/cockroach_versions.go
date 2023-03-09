@@ -454,6 +454,25 @@ const (
 	// on Pebble stores that have shared storage configured.
 	V23_1SetPebbleCreatorID
 
+	// V23_1_SystemRbrDualWrite indicates regional by row compatible system
+	// tables should write to the old and new indexes. See
+	// system_rbr_indexes.go for more details.
+	V23_1_SystemRbrDualWrite
+
+	// V23_1_SystemRbrReadNew indicates regional by row compatible system
+	// tables should read from the new index. See system_rbr_indexes.go for
+	// more details.
+	V23_1_SystemRbrReadNew
+
+	// V23_1_SystemRbrReadNew indicates regional by row compatible system
+	// tables no longer need to write to the old index. See
+	// system_rbr_indexes.go for more details.
+	V23_1_SystemRbrSingleWrite
+
+	// V23_1_SystemRbrCleanup is used to gate an upgrade job that cleans up old
+	// keys that are not regional by row compatible.
+	V23_1_SystemRbrCleanup
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -782,6 +801,22 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1SetPebbleCreatorID,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 64},
+	},
+	{
+		Key:     V23_1_SystemRbrDualWrite,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 66},
+	},
+	{
+		Key:     V23_1_SystemRbrReadNew,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 68},
+	},
+	{
+		Key:     V23_1_SystemRbrSingleWrite,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 70},
+	},
+	{
+		Key:     V23_1_SystemRbrCleanup,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 72},
 	},
 
 	// *************************************************

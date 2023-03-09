@@ -299,11 +299,16 @@ func newProxyHandler(
 // handle is called by the proxy server to handle a single incoming client
 // connection.
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) error {
-	connRecievedTime := timeutil.Now()
+	connReceivedTime := timeutil.Now()
 
 	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = fe.Conn.Close() }()
 	if fe.Err != nil {
+		// If a startup message cannot be read at all, assume TCP probe, and
+		// return silently.
+		if errors.Is(fe.Err, noStartupMessage) {
+			return nil
+		}
 		SendErrToClient(fe.Conn, fe.Err)
 		return fe.Err
 	}
@@ -436,7 +441,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	handler.cancelInfoMap.addCancelInfo(connector.CancelInfo.proxySecretID(), connector.CancelInfo)
 
 	// Record the connection success and how long it took.
-	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connRecievedTime).Nanoseconds())
+	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connReceivedTime).Nanoseconds())
 	handler.metrics.SuccessfulConnCount.Inc(1)
 
 	log.Infof(ctx, "new connection")
