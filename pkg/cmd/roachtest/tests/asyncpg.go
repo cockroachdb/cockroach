@@ -47,7 +47,16 @@ func registerAsyncpg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+
+		// This test assumes that multiple_active_portals_enabled is false, but through
+		// metamorphic constants, it is possible for them to be enabled. We disable
+		// metamorphic testing to avoid this. Note the asyncpg test suite drops the
+		// database so we can't set the session variable like we do in pgjdbc.
+		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
+		// See: https://github.com/cockroachdb/cockroach/issues/113164
+		settings := install.MakeClusterSettings()
+		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), settings, c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
