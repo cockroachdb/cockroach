@@ -87,8 +87,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Average Queries per Node"
-      tooltip={`Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each node per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.`}
+      title="Average Replica Queries per Node"
+      tooltip={`Moving average of the number of KV batch requests processed by
+         leaseholder replicas on each node per second. Tracks roughly the last
+         30 minutes of requests. Used for load-based rebalancing decisions.`}
     >
       <Axis label="queries">
         {_.map(nodeIDs, nid => (
