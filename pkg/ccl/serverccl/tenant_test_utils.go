@@ -145,18 +145,6 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
-	return NewTestTenantHelperWithTenantArgs(t, tenantClusterSize, knobs, func(int, *base.TestTenantArgs) {})
-}
-
-// NewTestTenantHelperWithTenantArgs constructs a TenantTestHelper instance,
-// offering the caller the opportunity to modify the arguments passed when
-// starting each tenant.
-func NewTestTenantHelperWithTenantArgs(
-	t *testing.T,
-	tenantClusterSize int,
-	knobs base.TestingKnobs,
-	customizeTenantArgs func(tenantIdx int, tenantArgs *base.TestTenantArgs),
-) TenantTestHelper {
 	t.Helper()
 
 	params, _ := tests.CreateTestServerParams()
@@ -176,7 +164,6 @@ func NewTestTenantHelperWithTenantArgs(
 			tenantClusterSize,
 			security.EmbeddedTenantIDs()[0],
 			knobs,
-			customizeTenantArgs,
 		),
 		// Spin up a small tenant cluster under a different tenant ID to test
 		// tenant isolation.
@@ -186,7 +173,6 @@ func NewTestTenantHelperWithTenantArgs(
 			1, /* tenantClusterSize */
 			security.EmbeddedTenantIDs()[1],
 			knobs,
-			func(int, *base.TestTenantArgs) {},
 		),
 	}
 }
@@ -234,7 +220,6 @@ func newTenantClusterHelper(
 	tenantClusterSize int,
 	tenantID uint64,
 	knobs base.TestingKnobs,
-	customizeTenantArgs func(tenantIdx int, tenantArgs *base.TestTenantArgs),
 ) TenantClusterHelper {
 	t.Helper()
 
@@ -242,7 +227,6 @@ func newTenantClusterHelper(
 	for i := 0; i < tenantClusterSize; i++ {
 		args := tests.CreateTestTenantParams(roachpb.MustMakeTenantID(tenantID))
 		args.TestingKnobs = knobs
-		customizeTenantArgs(i, &args)
 		cluster[i] = newTestTenant(t, server, args)
 	}
 
