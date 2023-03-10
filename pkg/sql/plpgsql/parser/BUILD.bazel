@@ -47,6 +47,7 @@ go_library(
         "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",  # keep
     ],

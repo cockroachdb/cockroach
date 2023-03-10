@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -98,6 +99,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			// Check the language here, before attempting to parse the function body.
 			if _, err := funcinfo.FunctionLangToProto(opt); err != nil {
 				panic(err)
+			}
+
+			if opt == tree.FunctionLangPlPgSQL {
+				if err := plpgsql.DealWithPlpgsqlFunc(cf); err != nil {
+					panic(err)
+				}
 			}
 		}
 	}
@@ -329,3 +336,4 @@ func checkStmtVolatility(
 		}
 	}
 }
+
