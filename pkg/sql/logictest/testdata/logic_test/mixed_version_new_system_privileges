@@ -1,0 +1,18 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+upgrade 0
+
+upgrade 1
+
+statement error upgrade must be finalized before using MODIFYSQLCLUSTERSETTING
+GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
+
+statement error upgrade must be finalized before using VIEWJOB
+GRANT SYSTEM VIEWJOB TO testuser
+
+# Verify that a non-root user can login on the upgraded node.
+user testuser nodeidx=0
+
+# The non-root user should not be able to set cluster settings on the new node.
+statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 8

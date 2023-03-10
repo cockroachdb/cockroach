@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -38,6 +40,17 @@ func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
 	privilegesTableHasUserIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
 		clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn)
+	if !params.p.ExecCfg().Settings.Version.IsActive(
+		params.ctx,
+		clusterversion.V23_1AllowNewSystemPrivileges,
+	) {
+		if n.desiredprivs.Contains(privilege.MODIFYSQLCLUSTERSETTING) {
+			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MODIFYSQLCLUSTERSETTING system privilege")
+		}
+		if n.desiredprivs.Contains(privilege.VIEWJOB) {
+			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using VIEWJOB system privilege")
+		}
+	}
 
 	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
