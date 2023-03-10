@@ -114,7 +114,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.Settings = execCfg.Settings
 	evalCtx.Codec = execCfg.Codec
 	evalCtx.Tracer = execCfg.AmbientCtx.Tracer
-	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
+	evalCtx.SQLLivenessReader = execCfg.SQLLiveness.BlockingReader()
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
