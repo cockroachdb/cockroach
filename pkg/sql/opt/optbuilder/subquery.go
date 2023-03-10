@@ -372,11 +372,19 @@ func (b *Builder) buildMultiRowSubquery(
 		))
 	}
 
-	// Construct the outer Any(...) operator.
-	out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{
-		Cmp:          cmp,
-		OriginalExpr: s.Subquery,
-	})
+	if b.insideUDF {
+		// Any expressions cannot be built by the optimizer within a UDF, so
+		// build them as subqueries with ScalarGroupBy expressions instead.
+		sub := b.factory.CustomFuncs().ConstructGroupByAny(scalar, cmp, input)
+		out = b.factory.ConstructSubquery(sub, &memo.SubqueryPrivate{OriginalExpr: s.Subquery})
+	} else {
+		// Construct the outer Any(...) operator.
+		out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{
+			Cmp:          cmp,
+			OriginalExpr: s.Subquery,
+		})
+	}
+
 	switch c.Operator.Symbol {
 	case treecmp.NotIn, treecmp.All:
 		// NOT Any(...)
