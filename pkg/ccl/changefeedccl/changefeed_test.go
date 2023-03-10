@@ -5729,6 +5729,56 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
 }
 
+// TestChangefeedRetryableErrorTelemetry tests that we log retryable errors to telemetry logging channels.
+func TestChangefeedRetryableErrorTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		raised := false
+		knobs.RaiseRetryableError = func() error {
+			if !raised {
+				raised = true
+				return errors.New("")
+			}
+			return nil
+		}
+
+		beforeCreate := timeutil.Now()
+		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo`)
+		defer closeFeed(t, foo)
+
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+
+		var logs []eventpb.ChangefeedRetryableError
+		testutils.SucceedsSoon(t, func() error {
+			logs = checkChangefeedRetryableErrorLog(t, beforeCreate.UnixNano())
+			if len(logs) == 0 {
+				return errors.New("no logs found")
+			}
+			return nil
+		})
+		require.Equal(t, 1, len(logs))
+		// In tests, we can expect the raw error string
+		// "cf.knobs.RaiseRetryableError" encapsulated by redaction markers. See
+		// log.WithMarkedSensitiveData.
+		require.Equal(t, "‹cf.knobs.RaiseRetryableError›", logs[0].Error)
+		require.Equal(t, int64(jobFeed.JobID()), logs[0].JobId)
+		require.Equal(t, int32(1), logs[0].NumTables)
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+}
+
 func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

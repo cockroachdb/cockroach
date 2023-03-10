@@ -1125,17 +1125,19 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		// Terminate changefeed if needed.
-		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, err); err != nil {
-			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
+		if termErr := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, err); termErr != nil {
+			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, termErr)
 			// Best effort -- update job status to make it clear why changefeed shut down.
 			// This won't always work if this node is being shutdown/drained.
-			b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", err)
-			return err
+			b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", termErr)
+			return termErr
 		}
 
 		// All other errors retry.
+		logChangefeedRetryableErrorTelemetry(ctx, b.job, err)
 		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
 		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable error: %s", err)
+
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			sli, err := metrics.getSLIMetrics(details.Opts[changefeedbase.OptMetricsScope])
 			if err != nil {
@@ -1321,6 +1323,21 @@ func logChangefeedFailedTelemetry(
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
 		CommonChangefeedEventDetails: changefeedEventDetails,
 		FailureType:                  failureType,
+	}
+
+	log.StructuredEvent(ctx, changefeedFailedEvent)
+}
+
+// logChangefeedRetryableErrorTelemetry logs a retryable error for enterprise changefeeds.
+func logChangefeedRetryableErrorTelemetry(ctx context.Context, job *jobs.Job, err error) {
+	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
+	changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
+	changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description)
+
+	changefeedFailedEvent := &eventpb.ChangefeedRetryableError{
+		CommonChangefeedEventDetails: changefeedEventDetails,
+		JobId:                        int64(job.ID()),
+		Error:                        err.Error(),
 	}
 
 	log.StructuredEvent(ctx, changefeedFailedEvent)

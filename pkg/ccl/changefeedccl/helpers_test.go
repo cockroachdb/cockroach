@@ -1137,6 +1137,24 @@ func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateCh
 	return matchingEntries
 }
 
+func checkChangefeedRetryableErrorLog(
+	t *testing.T, startTime int64,
+) []eventpb.ChangefeedRetryableError {
+	var matchingEntries []eventpb.ChangefeedRetryableError
+
+	logStrings := checkStructuredLogs(t, "changefeed_retryable_error", startTime)
+	for _, m := range logStrings {
+		jsonPayload := []byte(m)
+		var event eventpb.ChangefeedRetryableError
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		matchingEntries = append(matchingEntries, event)
+	}
+
+	return matchingEntries
+}
+
 func checkChangefeedFailedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedFailed {
 	var matchingEntries []eventpb.ChangefeedFailed
 
