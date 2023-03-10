@@ -144,6 +144,10 @@ DECLARE
 BEGIN
 a := NULL;
 b = 7 + 7;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 9d8f6e2f08b (sql: Add telemetry for parsable plpgsql statements)
 END
 'LANGUAGE PLPGSQL;
 ----
