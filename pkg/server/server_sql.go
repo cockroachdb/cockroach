@@ -558,11 +558,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 
 	cfg.sqlInstanceStorage = instancestorage.NewStorage(
-		cfg.db, codec, cfg.sqlLivenessProvider.CachedReader(), cfg.Settings, cfg.clock, cfg.rangeFeedFactory)
+		cfg.db, codec, cfg.sqlLivenessProvider.CachedReader(), cfg.Settings,
+		cfg.clock, cfg.rangeFeedFactory,
+	)
 	cfg.sqlInstanceReader = instancestorage.NewReader(
-		cfg.sqlInstanceStorage,
-		cfg.sqlLivenessProvider,
-		cfg.stopper)
+		cfg.sqlInstanceStorage, cfg.sqlLivenessProvider.BlockingReader(),
+		cfg.stopper,
+	)
 
 	// We can't use the nodeDailer as the podNodeDailer unless we
 	// are serving the system tenant despite the fact that we've
@@ -787,7 +789,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RowMetrics:         &rowMetrics,
 		InternalRowMetrics: &internalRowMetrics,
 
-		SQLLivenessReader: cfg.sqlLivenessProvider,
+		SQLLivenessReader: cfg.sqlLivenessProvider.BlockingReader(),
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
 		PodNodeDialer:     cfg.podNodeDialer,
