@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
@@ -84,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -91,7 +93,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -1361,6 +1365,8 @@ func (s *SQLServer) preStart(
 	knobs base.TestingKnobs,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
+	injectedSQLCh := make(chan *jobspb.InjectedSQLDetails, len(s.cfg.InjectedSQL))
+
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
 	// until a connection is established to the cluster and its ID has been
@@ -1369,6 +1375,16 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
+		// TODO(knz) plug the channel to the connector.
+		close(injectedSQLCh)
+	} else {
+		for _, j := range s.cfg.InjectedSQL {
+			// One-off configuration.
+			// This is non-blocking because we've pre-sized the
+			// channel buffer above.
+			injectedSQLCh <- j
+		}
+		close(injectedSQLCh)
 	}
 
 	// Initialize the settings watcher early in sql server startup. Settings
@@ -1592,7 +1608,101 @@ func (s *SQLServer) preStart(
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+
+	if err := stopper.RunAsyncTask(ctx, "inject-sql", func(ctx context.Context) {
+		for {
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case injectedSQLDetails := <-injectedSQLCh:
+				if injectedSQLDetails == nil {
+					// Channel was closed. Nothing else to do.
+					return
+				}
+
+				// TODO(knz): only create the job after a version gate has
+				// been reached.
+
+				jobRecord := jobs.Record{
+					Description:   "injected job",
+					Username:      username.NodeUserName(),
+					Statements:    []string{"(...injected statements...)"},
+					Details:       *injectedSQLDetails,
+					Progress:      jobspb.InjectedSQLProgress{},
+					RunningStatus: "executing",
+					CreatedBy: &jobs.CreatedByInfo{
+						Name: "injected",
+						ID:   injectedSQLDetails.InjectionID,
+					},
+				}
+
+				if err := s.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					// If we already have a job with the same injection ID, do nothing.
+					row, err := txn.QueryRowEx(ctx, "get-injected-job", txn.KV(),
+						sessiondata.InternalExecutorOverride{User: username.NodeUserName(), Database: catconstants.SystemDatabaseName},
+						"SELECT id FROM system.jobs WHERE created_by_type = 'injected' AND created_by_id = $1", jobRecord.CreatedBy.ID)
+					if err != nil {
+						return err
+					}
+					if row != nil {
+						// Job entry already exists.
+						log.Infof(ctx, "job already exists for injected SQL payload %d: %v",
+							jobRecord.CreatedBy.ID, row[0])
+						return nil
+					}
+					jobID := s.jobRegistry.MakeJobID()
+					_, err = s.jobRegistry.CreateJobWithTxn(ctx, jobRecord, jobID, txn)
+					return err
+				}); err != nil {
+					log.Warningf(ctx, "unable to create job for %+v: %v", injectedSQLDetails, err)
+				}
+			}
+		}
+	}); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+type createInjectedSQLResumer struct {
+	job *jobs.Job
+}
+
+func (c *createInjectedSQLResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+	details := c.job.Details().(jobspb.InjectedSQLDetails)
+	qosLevel := sessiondatapb.SystemHigh
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		for _, stmt := range details.Statements {
+			_, err := txn.ExecEx(ctx, "exec-injected-stmt", txn.KV(), sessiondata.InternalExecutorOverride{
+				User:             username.NodeUserName(),
+				Database:         catconstants.SystemDatabaseName,
+				QualityOfService: &qosLevel,
+			}, stmt)
+			log.Infof(ctx, "WOO: stmt %q -> %v", stmt, err)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *createInjectedSQLResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
+	return nil
+}
+
+func init() {
+	createInjectedSQLFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return &createInjectedSQLResumer{job: job}
+	}
+	jobs.RegisterConstructor(jobspb.TypeInjectedSQL, createInjectedSQLFn, jobs.DisablesTenantCostControl)
 }
 
 // SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID

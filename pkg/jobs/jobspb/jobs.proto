@@ -854,6 +854,21 @@ message SchemaChangeDetails {
   // Next id 13.
 }
 
+// InjectedSQLDetails represents a SQL payload injected from "outside"
+// the SQL layer, during initialization.
+message InjectedSQLDetails {
+  // InjectionID is the idempotency key for this injected job payload
+  // within the tenant. It ensures that if multiple SQL servers receive
+  // a job payload with that ID, only one job will be created.
+  int64 injection_id = 1 [(gogoproto.customname) = "InjectionID"];
+  // Statements represents the SQL statements to execute.
+  repeated string statements = 2;
+}
+
+message InjectedSQLProgress {
+
+}
+
 message SchemaChangeProgress {
 
 }
@@ -1221,6 +1236,8 @@ message Payload {
     // PollJobsStats jobs poll the jobs table for statistics metrics as the number of
     // paused jobs.
     PollJobsStatsDetails poll_jobs_stats = 39;
+
+    InjectedSQLDetails injectedSQL = 41;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1248,7 +1265,7 @@ message Payload {
   // specifies how old such record could get before this job is canceled.
   int64 maximum_pts_age = 40 [(gogoproto.casttype) = "time.Duration",  (gogoproto.customname) = "MaximumPTSAge"];
 
-  // NEXT ID: 41
+  // NEXT ID: 42
 }
 
 message Progress {
@@ -1290,6 +1307,7 @@ message Progress {
     SchemaTelemetryProgress schema_telemetry = 26;
     KeyVisualizerProgress keyVisualizerProgress = 27;
     PollJobsStatsProgress pollJobsStats = 28;
+    InjectedSQLProgress injectedSQL = 29;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1321,6 +1339,7 @@ enum Type {
   AUTO_SCHEMA_TELEMETRY = 17 [(gogoproto.enumvalue_customname) = "TypeAutoSchemaTelemetry"];
   KEY_VISUALIZER = 18 [(gogoproto.enumvalue_customname) = "TypeKeyVisualizer"];
   POLL_JOBS_STATS = 19 [(gogoproto.enumvalue_customname) = "TypePollJobsStats"];
+  INJECTED_SQL = 20 [(gogoproto.enumvalue_customname) = "TypeInjectedSQL"];
 }
 
 message Job {

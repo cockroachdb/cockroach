@@ -639,6 +639,7 @@ func setDemoContextDefaults() {
 	demoCtx.Multitenant = true
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
+	demoCtx.InjectedSQL = nil
 
 	demoCtx.pidFile = ""
 	demoCtx.disableEnterpriseFeatures = false

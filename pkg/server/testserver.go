@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -246,6 +247,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if params.SnapshotSendLimit != 0 {
 		cfg.SnapshotSendLimit = params.SnapshotSendLimit
+	}
+	if params.InjectedSQL != nil {
+		is := params.InjectedSQL.([]*jobspb.InjectedSQLDetails)
+		cfg.InjectedSQL = is
 	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where

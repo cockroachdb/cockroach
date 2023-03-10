@@ -48,6 +48,7 @@ var (
 	_ Details = RowLevelTTLDetails{}
 	_ Details = SchemaTelemetryDetails{}
 	_ Details = KeyVisualizerDetails{}
+	_ Details = InjectedSQLDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -68,6 +69,7 @@ var (
 	_ ProgressDetails = RowLevelTTLProgress{}
 	_ ProgressDetails = SchemaTelemetryProgress{}
 	_ ProgressDetails = KeyVisualizerProgress{}
+	_ ProgressDetails = InjectedSQLProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -146,6 +148,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoSQLStatsCompaction,
 	TypeAutoSchemaTelemetry,
 	TypePollJobsStats,
+	TypeInjectedSQL,
 }
 
 // DetailsType returns the type for a payload detail.
@@ -191,6 +194,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeKeyVisualizer, nil
 	case *Payload_PollJobsStats:
 		return TypePollJobsStats, nil
+	case *Payload_InjectedSQL:
+		return TypeInjectedSQL, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -231,6 +236,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeAutoSchemaTelemetry:          SchemaTelemetryDetails{},
 	TypeKeyVisualizer:                KeyVisualizerDetails{},
 	TypePollJobsStats:                PollJobsStatsDetails{},
+	TypeInjectedSQL:                  InjectedSQLDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -278,6 +284,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_KeyVisualizerProgress{KeyVisualizerProgress: &d}
 	case PollJobsStatsProgress:
 		return &Progress_PollJobsStats{PollJobsStats: &d}
+	case InjectedSQLProgress:
+		return &Progress_InjectedSQL{InjectedSQL: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -323,6 +331,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.KeyVisualizerDetails
 	case *Payload_PollJobsStats:
 		return *d.PollJobsStats
+	case *Payload_InjectedSQL:
+		return *d.InjectedSQL
 	default:
 		return nil
 	}
@@ -368,6 +378,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.KeyVisualizerProgress
 	case *Progress_PollJobsStats:
 		return *d.PollJobsStats
+	case *Progress_InjectedSQL:
+		return *d.InjectedSQL
 	default:
 		return nil
 	}
@@ -437,6 +449,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_KeyVisualizerDetails{KeyVisualizerDetails: &d}
 	case PollJobsStatsDetails:
 		return &Payload_PollJobsStats{PollJobsStats: &d}
+	case InjectedSQLDetails:
+		return &Payload_InjectedSQL{InjectedSQL: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -472,7 +486,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 20
+const NumJobTypes = 21
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

@@ -22,6 +22,7 @@ go_library(
         "//pkg/cli/cliflags",
         "//pkg/cli/democluster/api",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",

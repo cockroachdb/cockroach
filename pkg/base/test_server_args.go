@@ -168,6 +168,12 @@ type TestServerArgs struct {
 	// ObsServiceAddr is the address to which events will be exported over OTLP.
 	// If empty, exporting events is inhibited.
 	ObsServiceAddr string
+
+	// InjectedSQL configures some configuration SQL to inject as
+	// one-off jobs into the SQL system. This is used when setting up
+	// clusters initially.
+	// The concrete type of this field must be []*jobspb.InjectedSQLDetails.
+	InjectedSQL interface{}
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

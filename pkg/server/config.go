@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -257,6 +258,11 @@ type BaseConfig struct {
 	// These events are meant for the Observability Service, but they might pass
 	// through an OpenTelemetry Collector.
 	ObsServiceAddr string
+
+	// InjectedSQL configures some configuration SQL to inject as
+	// one-off jobs into the SQL system. This is used when setting up
+	// clusters initially.
+	InjectedSQL []*jobspb.InjectedSQLDetails
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -110,6 +111,9 @@ type Context struct {
 	// DisableServerController is true if we want to avoid the server
 	// controller to instantiate tenant secondary servers.
 	DisableServerController bool
+
+	// InjectedSQL contains initial SQL to execute upon cluster creation.
+	InjectedSQL []*jobspb.InjectedSQLDetails
 }
 
 // IsInteractive returns true if the demo cluster configuration

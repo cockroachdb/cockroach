@@ -393,6 +393,11 @@ func init() {
 		// planning?
 		if cmd != connectInitCmd && cmd != connectJoinCmd {
 			cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
+
+			// Cluster initialization. We only do this for a regular start command;
+			// SQL-only servers get their initialization payload from their tenant
+			// configuration.
+			cliflagcfg.VarFlag(f, &profileSetter{profileName: "default", injected: &serverCfg.InjectedSQL}, cliflags.InitProfile)
 		}
 	}
 
@@ -828,6 +833,8 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 		cliflagcfg.StringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
 		cliflagcfg.StringFlag(f, &demoCtx.pidFile, cliflags.PIDFile)
+
+		cliflagcfg.VarFlag(f, &profileSetter{profileName: "default", injected: &demoCtx.InjectedSQL}, cliflags.InitProfile)
 	}
 
 	{
