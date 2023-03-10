@@ -273,19 +273,22 @@ func entsSize(ents []pb.Entry) entryEncodingSize {
 	return size
 }
 
+// limitSize returns the longest prefix of the given entries slice, such that
+// its total byte size does not exceed maxSize. Always returns a non-empty slice
+// if the input is non-empty, so, as an exception, if the size of the first
+// entry exceeds maxSize, a non-empty slice with just this entry is returned.
 func limitSize(ents []pb.Entry, maxSize entryEncodingSize) []pb.Entry {
 	if len(ents) == 0 {
 		return ents
 	}
 	size := ents[0].Size()
-	var limit int
-	for limit = 1; limit < len(ents); limit++ {
+	for limit := 1; limit < len(ents); limit++ {
 		size += ents[limit].Size()
 		if entryEncodingSize(size) > maxSize {
-			break
+			return ents[:limit]
 		}
 	}
-	return ents[:limit]
+	return ents
 }
 
 // entryPayloadSize represents the size of one or more entries' payloads.
