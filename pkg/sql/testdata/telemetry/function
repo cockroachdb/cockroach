@@ -1,0 +1,47 @@
+feature-counters
+CREATE FUNCTION myfunc() RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+BEGIN
+a := NULL;
+b = 7 + 7;
+END
+$$
+----
+error: pq: unimplemented: plpgsql not supported for udf
+errorcodes.0A000                      1
+sql.ddl.started.count                 1
+sql.exec.query.is-vectorized          3
+sql.plan.ops.cmp.int = int            1
+sql.plan.opt.node.sort                1
+sql.plan.opt.order-by-nulls-standard  3
+sql.plpgsql.stmt_assign               2
+sql.query.count.internal              3
+sql.query.started.count               1
+sql.query.started.count.internal      3
+sql.select.count.internal             3
+sql.select.started.count.internal     3
+unimplemented.plpgsql                 1
+
+
+feature-counters
+CREATE FUNCTION myf() RETURNS INT STABLE LANGUAGE plpgsql AS $$
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+$$
+----
+error: pq: unimplemented: plpgsql not supported for udf
+errorcodes.0A000                   1
+sql.ddl.started.count              1
+sql.exec.query.is-vectorized       2
+sql.plpgsql.stmt_assign            2
+sql.plpgsql.stmt_open              1
+sql.query.count.internal           2
+sql.query.started.count            1
+sql.query.started.count.internal   2
+sql.select.count.internal          2
+sql.select.started.count.internal  2
+unimplemented.plpgsql              1
