@@ -208,7 +208,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	// We may not have the requisite certificates to start DMS/RDS on non-AWS invocations.
 	if cloud := c.Spec().Cloud; cloud != spec.AWS {
-		t.Skip("skipping test on cloud %s", cloud)
+		t.Skipf("skipping test on cloud %s", cloud)
 		return
 	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-1"))

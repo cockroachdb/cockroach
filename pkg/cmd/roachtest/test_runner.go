@@ -834,9 +834,7 @@ func (r *testRunner) runTest(
 	if runCount > 1 {
 		runID += fmt.Sprintf("#%d", runNum)
 	}
-	if teamCity {
-		shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), runID)
-	} else {
+	if !teamCity {
 		shout(ctx, l, stdout, "=== RUN   %s", runID)
 	}
 
@@ -847,6 +845,7 @@ func (r *testRunner) runTest(
 	t.runner = callerName()
 	t.runnerID = goid.Get()
 
+	s := t.Spec().(*registry.TestSpec)
 	defer func() {
 		t.end = timeutil.Now()
 
@@ -862,28 +861,47 @@ func (r *testRunner) runTest(
 		t.mu.done = true
 		t.mu.Unlock()
 
-		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
-		if t.Failed() {
-			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
-
+		if s.Skip != "" {
+			// When skipping a test, we should not report ##teamcity[testStarted...] or ##teamcity[testFinished...]
+			// service messages else the test will be reported as having run twice.
 			if teamCity {
-				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(output), runID)
+				shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s' duration='%d']\n",
+					s.Name, teamCityEscape(s.Skip), t.duration().Milliseconds())
 			}
-
-			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
-
-			if err := github.MaybePost(t, l, output); err != nil {
-				shout(ctx, l, stdout, "failed to post issue: %s", err)
-			}
+			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "N/A", s.Skip)
 		} else {
-			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
-			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
-			// TeamCity regards the test as successful.
+			// Delaying the ##teamcity[testStarted...] service message until the test is finished allows us to branch
+			// separately for skipped tests. The duration of the test is passed to ##teamcity[testFinished...] to
+			// for accurate reporting in the TC UI.
+			if teamCity {
+				shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), runID)
+			}
+
+			durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
+			if t.Failed() {
+				output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
+
+				if teamCity {
+					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
+					// TeamCity regards the test as successful.
+					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
+						s.Name, teamCityEscape(output), runID)
+				}
+
+				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
+
+				if err := github.MaybePost(t, l, output); err != nil {
+					shout(ctx, l, stdout, "failed to post issue: %s", err)
+				}
+			} else {
+				shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
+			}
+
+			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
+				t.Name(), runID, t.duration().Milliseconds())
 		}
 
 		if teamCity {
-			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), runID)
 
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
@@ -915,13 +933,13 @@ func (r *testRunner) runTest(
 		r.status.Lock()
 		delete(r.status.running, t)
 		// Only include tests with a Run function in the summary output.
-		if t.Spec().(*registry.TestSpec).Run != nil {
+		if s.Run != nil {
 			if t.Failed() {
 				r.status.fail[t] = struct{}{}
-			} else if t.Spec().(*registry.TestSpec).Skip == "" {
-				r.status.pass[t] = struct{}{}
-			} else {
+			} else if s.Skip != "" {
 				r.status.skip[t] = struct{}{}
+			} else {
+				r.status.pass[t] = struct{}{}
 			}
 		}
 		r.status.Unlock()
@@ -930,7 +948,7 @@ func (r *testRunner) runTest(
 	t.start = timeutil.Now()
 
 	timeout := 10 * time.Hour
-	if d := t.Spec().(*registry.TestSpec).Timeout; d != 0 {
+	if d := s.Timeout; d != 0 {
 		timeout = d
 	}
 	// Make sure the cluster has enough life left for the test plus enough headroom
@@ -972,7 +990,7 @@ func (r *testRunner) runTest(
 		}()
 
 		// This is the call to actually run the test.
-		t.Spec().(*registry.TestSpec).Run(runCtx, t, c)
+		s.Run(runCtx, t, c)
 	}()
 
 	var timedOut bool
