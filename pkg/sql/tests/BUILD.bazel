@@ -28,6 +28,7 @@ go_test(
     name = "tests_test",
     size = "large",
     srcs = [
+        "allow_role_memberships_to_change_during_transaction_test.go",
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
         "copy_file_upload_test.go",
