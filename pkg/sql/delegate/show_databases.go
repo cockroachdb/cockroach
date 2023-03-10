@@ -48,5 +48,5 @@ ON
 ORDER BY
 	database_name`
 
-	return parse(query)
+	return d.parse(query)
 }
