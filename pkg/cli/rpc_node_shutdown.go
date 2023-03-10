@@ -89,8 +89,8 @@ func doDrain(
 		}
 	}
 	if minWait > drainCtx.drainWait {
-		log.Infof(ctx, "--drain-wait is %s, but the server.shutdown.{drain,query,connection,lease_transfer}_wait "+
-			"cluster settings require a value of at least %s; using the larger value",
+		fmt.Fprintf(stderr, "warning: --drain-wait is %s, but the server.shutdown.{drain,query,connection,lease_transfer}_wait "+
+			"cluster settings require a value of at least %s; using the larger value\n",
 			drainCtx.drainWait, minWait)
 		drainCtx.drainWait = minWait + 10*time.Second
 	}
