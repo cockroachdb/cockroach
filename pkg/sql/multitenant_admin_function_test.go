@@ -54,11 +54,7 @@ var ctx = context.Background()
 
 type testClusterCfg struct {
 	base.TestClusterArgs
-	numNodes            int
-	setupClusterSetting *settings.BoolSetting
-	queryClusterSetting *settings.BoolSetting
-	setupCapability     tenantcapabilities.CapabilityID
-	queryCapability     tenantcapabilities.CapabilityID
+	numNodes int
 }
 
 func createTestClusterArgs(numReplicas, numVoters int32) base.TestClusterArgs {
@@ -248,11 +244,10 @@ type testCase struct {
 
 func (tc testCase) runTest(
 	t *testing.T,
-	makeTestClusterCfg func() testClusterCfg,
+	cfg testClusterCfg,
 	execQueries func(serverutils.TestClusterInterface, *gosql.DB, string, tenantExpected),
 ) {
 
-	cfg := makeTestClusterCfg()
 	testingKnobs := &cfg.ServerArgs.Knobs
 	if testingKnobs.Store == nil {
 		testingKnobs.Store = &kvserver.StoreTestingKnobs{}
@@ -341,27 +336,27 @@ func (tc testCase) runTest(
 	secondaryDB := createSecondaryDB(
 		tenantID1,
 		true, /* skipSQLSystemTentantCheck */
-		cfg.setupClusterSetting,
-		cfg.queryClusterSetting,
+		tc.setupClusterSetting,
+		tc.queryClusterSetting,
 	)
-	setCapabilities(tenantID1, cfg.setupCapability, cfg.queryCapability)
+	setCapabilities(tenantID1, tc.setupCapability, tc.queryCapability)
 
 	tenantID2 := serverutils.TestTenantID2()
 	secondaryWithoutClusterSettingDB := createSecondaryDB(
 		tenantID2,
 		false, /* skipSQLSystemTentantCheck */
-		cfg.setupClusterSetting,
+		tc.setupClusterSetting,
 	)
-	setCapabilities(tenantID2, cfg.setupCapability)
+	setCapabilities(tenantID2, tc.setupCapability)
 
 	tenantID3 := serverutils.TestTenantID3()
 	secondaryWithoutCapabilityDB := createSecondaryDB(
 		tenantID3,
 		false, /* skipSQLSystemTentantCheck */
-		cfg.setupClusterSetting,
-		cfg.queryClusterSetting,
+		tc.setupClusterSetting,
+		tc.queryClusterSetting,
 	)
-	setCapabilities(tenantID3, cfg.setupCapability)
+	setCapabilities(tenantID3, tc.setupCapability)
 
 	// Wait for cluster settings to propagate async.
 	for _, fn := range waitForTenantCapabilitiesFns {
@@ -598,14 +593,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tc.runTest(
 				t,
-				func() testClusterCfg {
-					return testClusterCfg{
-						setupClusterSetting: tc.setupClusterSetting,
-						queryClusterSetting: tc.queryClusterSetting,
-						setupCapability:     tc.setupCapability,
-						queryCapability:     tc.queryCapability,
-					}
-				},
+				testClusterCfg{},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
 					setups := tc.setups
 					setup := tc.setup
@@ -652,24 +640,11 @@ func TestTruncateTable(t *testing.T) {
 			},
 		},
 		setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
+		setupCapability:     tenantcapabilities.CanAdminSplit,
 	}
 	tc.runTest(
 		t,
-		func() testClusterCfg {
-			return testClusterCfg{
-				TestClusterArgs: base.TestClusterArgs{
-					ServerArgs: base.TestServerArgs{
-						Knobs: base.TestingKnobs{
-							TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
-								AuthorizerSkipAdminSplitCapabilityChecks: true,
-							},
-						},
-					},
-				},
-				setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-				setupCapability:     tenantcapabilities.CanAdminSplit,
-			}
-		},
+		testClusterCfg{},
 		func(_ serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
 			_, err := db.ExecContext(ctx, createTable)
 			message := fmt.Sprintf("tenant=%s", tenant)
@@ -729,12 +704,9 @@ func TestRelocateVoters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tc.runTest(
 				t,
-				func() testClusterCfg {
-					return testClusterCfg{
-						numNodes:            numNodes,
-						TestClusterArgs:     createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
-						queryClusterSetting: tc.queryClusterSetting,
-					}
+				testClusterCfg{
+					numNodes:        numNodes,
+					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -802,12 +774,9 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tc.runTest(
 				t,
-				func() testClusterCfg {
-					return testClusterCfg{
-						numNodes:            numNodes,
-						TestClusterArgs:     createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
-						queryClusterSetting: tc.queryClusterSetting,
-					}
+				testClusterCfg{
+					numNodes:        numNodes,
+					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -884,12 +853,9 @@ func TestRelocateNonVoters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tc.runTest(
 				t,
-				func() testClusterCfg {
-					return testClusterCfg{
-						numNodes:            numNodes,
-						TestClusterArgs:     createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
-						queryClusterSetting: tc.queryClusterSetting,
-					}
+				testClusterCfg{
+					numNodes:        numNodes,
+					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -952,12 +918,9 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tc.runTest(
 				t,
-				func() testClusterCfg {
-					return testClusterCfg{
-						numNodes:            numNodes,
-						TestClusterArgs:     createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
-						queryClusterSetting: tc.queryClusterSetting,
-					}
+				testClusterCfg{
+					numNodes:        numNodes,
+					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
