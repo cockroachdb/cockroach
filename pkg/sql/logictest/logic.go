@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1320,7 +1321,16 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 	}
 
 	t.testserverCluster = ts
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, func() {
+		// The call to ts.Stop() cleans up the cockroach-go testserver logs, so
+		// we copy them over so we can see them in the artifacts.
+		src := ts.BaseDir()
+		dst := filepath.Join(t.sharedIODir, filepath.Base(src))
+		if err := fileutil.CopyDir(src, dst); err != nil {
+			t.Fatal(err)
+		}
+		ts.Stop()
+	})
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
 }

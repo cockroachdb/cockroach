@@ -66,6 +66,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/binfetcher",
         "//pkg/util/envutil",
+        "//pkg/util/fileutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/retry",
