@@ -61,6 +61,10 @@ message TenantCapabilities {
   // CanAdminUnsplit if set to true, grants the tenant the ability to
   // successfully perform `AdminUnsplit` requests.
   bool can_admin_unsplit = 5;
+
+  // CanAdminScatter if set to true, grants the tenant the ability to
+  // successfully perform `AdminScatter` requests.
+  bool can_admin_scatter = 6;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

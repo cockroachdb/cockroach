@@ -570,7 +570,11 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
 			},
+			secondaryWithoutCapability: tenantExpected{
+				errorMessage: `does not have capability "can_admin_scatter"`,
+			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
+			queryCapability:     tenantcapabilities.CanAdminScatter,
 		},
 		{
 			desc:  "ALTER INDEX x SCATTER",
@@ -585,7 +589,11 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
 			},
+			secondaryWithoutCapability: tenantExpected{
+				errorMessage: `does not have capability "can_admin_scatter"`,
+			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
+			queryCapability:     tenantcapabilities.CanAdminScatter,
 		},
 	}
 
@@ -634,13 +642,13 @@ func TestTruncateTable(t *testing.T) {
 			},
 		},
 		secondaryWithoutCapability: tenantExpected{
-			result: [][]string{
-				{"<before:/Tenant/20/Table/104/1/1>", "…/104/2/1"},
-				{"…/104/2/1", "<after:/Tenant/21>"},
-			},
+			// CanAdminScatter will default to true so this will open happen if it is
+			// set to false.
+			errorMessage: `does not have capability "can_admin_scatter"`,
 		},
 		setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 		setupCapability:     tenantcapabilities.CanAdminSplit,
+		queryCapability:     tenantcapabilities.CanAdminScatter,
 	}
 	tc.runTest(
 		t,
@@ -651,10 +659,15 @@ func TestTruncateTable(t *testing.T) {
 			require.NoErrorf(t, err, message)
 			_, err = db.ExecContext(ctx, "ALTER TABLE t SPLIT AT VALUES (1);")
 			require.NoErrorf(t, err, message)
-			_, err = db.ExecContext(ctx, "TRUNCATE TABLE t;")
-			require.NoErrorf(t, err, message)
-			rows, err := db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM INDEX t@primary];")
-			expected.validate(t, rows, err, message)
+
+			// validateErr and validateRows come from separate queries for TRUNCATE.
+			_, validateErr := db.ExecContext(ctx, "TRUNCATE TABLE t;")
+			var validateRows *gosql.Rows
+			if err == nil {
+				validateRows, err = db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM INDEX t@primary];")
+				require.NoErrorf(t, err, message)
+			}
+			expected.validate(t, validateRows, validateErr, message)
 		},
 	)
 }

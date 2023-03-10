@@ -52,6 +52,8 @@ func (t *TenantCapabilities) Cap(
 	capabilityID tenantcapabilities.CapabilityID,
 ) tenantcapabilities.Capability {
 	switch capabilityID {
+	case tenantcapabilities.CanAdminScatter:
+		return boolCap{&t.CanAdminScatter}
 	case tenantcapabilities.CanAdminSplit:
 		return boolCap{&t.CanAdminSplit}
 	case tenantcapabilities.CanAdminUnsplit:
@@ -69,6 +71,8 @@ func (t *TenantCapabilities) Cap(
 // GetBool implements the tenantcapabilities.TenantCapabilities interface. It is an optimization.
 func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityID) bool {
 	switch capabilityID {
+	case tenantcapabilities.CanAdminScatter:
+		return t.CanAdminScatter
 	case tenantcapabilities.CanAdminSplit:
 		return t.CanAdminSplit
 	case tenantcapabilities.CanAdminUnsplit:
