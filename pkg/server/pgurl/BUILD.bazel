@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "pgurl",
     srcs = [
+        "extended_options.go",
         "generate.go",
         "parse.go",
         "pgurl.go",

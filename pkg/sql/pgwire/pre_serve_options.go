@@ -17,9 +17,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -143,16 +143,20 @@ func parseClientProvidedSessionParameters(
 			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
 
 		case "options":
-			opts, err := parseOptions(value)
+			opts, err := pgurl.ParseExtendedOptions(value)
 			if err != nil {
-				return args, err
+				return args, pgerror.WithCandidateCode(err, pgcode.ProtocolViolation)
 			}
-			for _, opt := range opts {
+			for opt, values := range opts {
+				var optvalue string
+				if len(values) > 0 {
+					optvalue = values[0]
+				}
 				// crdb:jwt_auth_enabled must be passed as an option in order for us to support non-CRDB
 				// clients. jwt_auth_enabled is not a session variable. We extract it separately here.
-				switch strings.ToLower(opt.key) {
+				switch strings.ToLower(opt) {
 				case "crdb:jwt_auth_enabled":
-					b, err := strconv.ParseBool(opt.value)
+					b, err := strconv.ParseBool(optvalue)
 					if err != nil {
 						return args, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "crdb:jwt_auth_enabled")
 					}
@@ -164,7 +168,7 @@ func parseClientProvidedSessionParameters(
 						return args, pgerror.Newf(pgcode.InvalidParameterValue,
 							"cannot specify system identity via options")
 					}
-					args.SystemIdentity, _ = username.MakeSQLUsernameFromUserInput(opt.value, username.PurposeValidation)
+					args.SystemIdentity, _ = username.MakeSQLUsernameFromUserInput(optvalue, username.PurposeValidation)
 					continue
 
 				case "cluster":
@@ -174,12 +178,12 @@ func parseClientProvidedSessionParameters(
 					}
 					// The syntax after '.' will be extended in later versions.
 					// The period itself cannot occur in a tenant name.
-					parts := strings.SplitN(opt.value, ".", 2)
+					parts := strings.SplitN(optvalue, ".", 2)
 					args.tenantName = parts[0]
 					hasTenantSelectOption = true
 					continue
 				}
-				err = loadParameter(ctx, opt.key, opt.value, &args.SessionArgs)
+				err = loadParameter(ctx, opt, optvalue, &args.SessionArgs)
 				if err != nil {
 					return args, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
@@ -255,106 +259,6 @@ func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs
 			"parameter %q cannot be changed", key)
 	}
 	return nil
-}
-
-// option represents an option argument passed in the connection URL.
-type option struct {
-	key   string
-	value string
-}
-
-// parseOptions parses the given string into the options. The options must be
-// separated by space and have one of the following patterns:
-// '-c key=value', '-ckey=value', '--key=value'
-func parseOptions(optionsString string) (res []option, err error) {
-	lastWasDashC := false
-	opts := splitOptions(optionsString)
-
-	for i := 0; i < len(opts); i++ {
-		prefix := ""
-		if len(opts[i]) > 1 {
-			prefix = opts[i][:2]
-		}
-
-		switch {
-		case opts[i] == "-c":
-			lastWasDashC = true
-			continue
-		case lastWasDashC:
-			lastWasDashC = false
-			// if the last option was '-c' parse current option with no regard to
-			// the prefix
-			prefix = ""
-		case prefix == "--" || prefix == "-c":
-			lastWasDashC = false
-		default:
-			return nil, pgerror.Newf(pgcode.ProtocolViolation,
-				"option %q is invalid, must have prefix '-c' or '--'", opts[i])
-		}
-
-		opt, err := splitOption(opts[i], prefix)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, opt)
-	}
-	return res, nil
-}
-
-// splitOptions slices the given string into substrings separated by space
-// unless the space is escaped using backslashes '\\'. It also skips multiple
-// subsequent spaces.
-func splitOptions(options string) []string {
-	var res []string
-	var sb strings.Builder
-	i := 0
-	for i < len(options) {
-		sb.Reset()
-		// skip leading space
-		for i < len(options) && unicode.IsSpace(rune(options[i])) {
-			i++
-		}
-		if i == len(options) {
-			break
-		}
-
-		lastWasEscape := false
-
-		for i < len(options) {
-			if unicode.IsSpace(rune(options[i])) && !lastWasEscape {
-				break
-			}
-			if !lastWasEscape && options[i] == '\\' {
-				lastWasEscape = true
-			} else {
-				lastWasEscape = false
-				sb.WriteByte(options[i])
-			}
-			i++
-		}
-
-		res = append(res, sb.String())
-	}
-
-	return res
-}
-
-// splitOption splits the given opt argument into substrings separated by '='.
-// It returns an error if the given option does not comply with the pattern
-// "key=value" and the number of elements in the result is not two.
-// splitOption removes the prefix from the key and replaces '-' with '_' so
-// "--option-name=value" becomes [option_name, value].
-func splitOption(opt, prefix string) (option, error) {
-	kv := strings.Split(opt, "=")
-
-	if len(kv) != 2 {
-		return option{}, pgerror.Newf(pgcode.ProtocolViolation,
-			"option %q is invalid, check '='", opt)
-	}
-
-	kv[0] = strings.TrimPrefix(kv[0], prefix)
-
-	return option{key: strings.ReplaceAll(kv[0], "-", "_"), value: kv[1]}, nil
 }
 
 // Note: Usage of an env var here makes it possible to unconditionally
