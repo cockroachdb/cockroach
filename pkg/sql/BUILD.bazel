@@ -429,6 +429,7 @@ go_library(
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
+        "//pkg/sql/plpgsql/parser",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
         "//pkg/sql/querycache",

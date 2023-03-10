@@ -10,3 +10,28 @@ BEGIN
 ASSIGN johnny := null
 ASSIGN gyro := 7 + 7
 END
+
+parse
+DECLARE
+BEGIN
+a := NULL;
+END
+----
+DECLARE
+BEGIN
+ASSIGN a := null
+END
+
+
+feature-count
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+CASE hello
+WHEN world THEN
+END CASE;
+END
+----
+stmt_assign: 2
+stmt_case: 1

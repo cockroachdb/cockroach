@@ -28,8 +28,13 @@ func TestParseDataDriver(t *testing.T) {
 				if err != nil {
 					d.Fatalf(t, "unexpected parse error: %v", err)
 				}
-
 				// TODO(chengxiong): add pretty print round trip test.
+				return fn.String()
+			case "feature-count":
+				fn, err := parser.ParseAndIncPlpgCounter(d.Input, true)
+				if err != nil {
+					d.Fatalf(t, "unexpected parse error: %v", err)
+				}
 				return fn.String()
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)

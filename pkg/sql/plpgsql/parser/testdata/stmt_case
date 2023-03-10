@@ -103,3 +103,20 @@ ELSE
   CALL a function/procedure
 END CASE
 END
+
+
+feature-count
+DECLARE
+  order_cnt integer := 10;
+BEGIN
+  CASE
+  WHEN order_cnt BETWEEN 0 AND 100 THEN
+    CALL fn(1);
+  WHEN order_cnt > 100 THEN
+    CALL fn(2);
+  ELSE
+    CALL fn(3);
+END CASE;
+END
+----
+stmt_case: 1

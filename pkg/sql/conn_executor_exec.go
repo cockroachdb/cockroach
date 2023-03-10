@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -655,6 +656,16 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		return nil, nil, nil
+
+	case *tree.CreateFunction:
+		for _, option := range s.Options {
+			switch opt := option.(type) {
+			case tree.FunctionLanguage:
+				if opt == tree.FunctionLangPlPgSQL {
+					return makeErrEvent(plpgsql.DealWithPlpgsqlFunc(s))
+				}
+			}
+		}
 	}
 
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)

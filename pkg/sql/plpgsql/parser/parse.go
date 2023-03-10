@@ -11,7 +11,12 @@
 package parser
 
 import (
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"go/constant"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
@@ -164,8 +169,62 @@ func (p *Parser) parse(
 	}, nil
 }
 
+// PlpgSQLStmtCounter is used to accurately report telemetry for plpgsql
+// statements. We can not use the counters due to counters needing to
+// be reset after every statement using reporter.ReportDiagnostics.
+type PlpgSQLStmtCounter map[string]int
+
+func (p *PlpgSQLStmtCounter) String() string {
+	var buf strings.Builder
+	for k, v := range *p {
+		buf.WriteString(fmt.Sprintf("%s: %d\n", k, v))
+
+	}
+	return buf.String()
+}
+
+func ParseAndIncPlpgCounter(sql string, isTest bool) (PlpgSQLStmtCounter, error) {
+	stmtCnt := PlpgSQLStmtCounter{}
+	stmt, err := Parse(sql)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range stmt.AST.Body {
+		taggedStmt, ok := s.(plpgsqltree.TaggedPLpgSQLStatement)
+		if !ok {
+			panic(fmt.Sprintf("no tag found for stmt %q", s))
+		}
+		tag := taggedStmt.PlpgSQLStatementTag()
+		telemetry.Inc(sqltelemetry.PlpgsqlStmtCounter(tag))
+
+		if isTest {
+			_, ok = stmtCnt[tag]
+			if !ok {
+				stmtCnt[tag] = 1
+			} else {
+				stmtCnt[tag]++
+			}
+		}
+	}
+	return stmtCnt, nil
+}
+
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (Statement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
+}
+
+func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
+	// assert that the language is PLPGSQL
+	var funcBodyStr string
+	for _, option := range stmt.Options {
+		switch opt := option.(type) {
+		case tree.FunctionBodyStr:
+			funcBodyStr = string(opt)
+		}
+	}
+	_, _ = ParseAndIncPlpgCounter(funcBodyStr, false)
+
+	return unimplemented.New("plpgsql", "plpgsql not supported for udf")
 }
