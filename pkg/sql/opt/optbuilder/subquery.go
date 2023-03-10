@@ -372,11 +372,18 @@ func (b *Builder) buildMultiRowSubquery(
 		))
 	}
 
-	// Construct the outer Any(...) operator.
-	out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{
-		Cmp:          cmp,
-		OriginalExpr: s.Subquery,
-	})
+	if b.udfDepth > 0 {
+		// Any expressions are cannot be built by the optimizer within a UDF, so
+		// building them as regular subqueries instead.
+		out = b.buildAnyAsSubquery(scalar, cmp, input, s.Subquery)
+	} else {
+		// Construct the outer Any(...) operator.
+		out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{
+			Cmp:          cmp,
+			OriginalExpr: s.Subquery,
+		})
+	}
+
 	switch c.Operator.Symbol {
 	case treecmp.NotIn, treecmp.All:
 		// NOT Any(...)
@@ -384,6 +391,115 @@ func (b *Builder) buildMultiRowSubquery(
 	}
 
 	return out, outScope
+}
+
+// buildAnyAsSubquery builds an Any expression as a SubqueryExpr. An Any
+// expression such as the one below has peculiar behavior.
+//
+//	i <comp> ANY (<subquery>)
+//
+// The logic for evaluating this comparison is:
+//
+//  1. If the subquery results in zero rows, then the expression evaluates to
+//     false, even if i is NULL.
+//  2. Otherwise, if the comparison between i and any value returned by the
+//     subquery is true, then the expression evaluates to true.
+//  3. Otherwise, if any values returned by the subquery are NULL, then the
+//     expression evaluates to NULL.
+//  4. Otherwise, if i is NULL, then the expression evaluates to NULL.
+//  5. Otherwise, the expression evaluates to false.
+//
+// We use the following transformation to express this logic:
+//
+//	i = ANY (SELECT a FROM t)
+//	=>
+//	SELECT count > 0 AND (bool_or OR (null_count > 0 AND NULL))
+//	FROM (
+//	  SELECT
+//	    count(*) AS count,
+//	    bool_or(cmp) AS bool_or,
+//	    count(*) FILTER (is_null) AS null_count
+//	  FROM (
+//	    SELECT a = i AS cmp, a IS NULL AS is_null
+//	    FROM (
+//	      SELECT a FROM t
+//	    )
+//	  )
+//	)
+func (b *Builder) buildAnyAsSubquery(
+	left opt.ScalarExpr, op opt.Operator, sub memo.RelExpr, origExpr *tree.Subquery,
+) opt.ScalarExpr {
+	f := b.factory
+	md := f.Metadata()
+	subCol := sub.Relational().OutputCols.SingleColumn()
+
+	// Create projections of:
+	//   left <op> subCol
+	//   left IS NULL
+	cmpCol := md.AddColumn("cmp", types.Bool)
+	isNullCol := md.AddColumn("is_null", types.Bool)
+	var isNull opt.ScalarExpr
+	if md.ColumnMeta(subCol).Type.Family() == types.TupleFamily {
+		// If the subquery results in a tuple, we must use an IsTupleNullExpr.
+		isNull = f.ConstructIsTupleNull(f.ConstructVariable(subCol))
+	} else {
+		isNull = f.ConstructIs(f.ConstructVariable(subCol), memo.NullSingleton)
+	}
+	projections := memo.ProjectionsExpr{
+		f.ConstructProjectionsItem(
+			b.constructComparisonWithOp(op, left, f.ConstructVariable(subCol)),
+			cmpCol,
+		),
+		f.ConstructProjectionsItem(isNull, isNullCol),
+	}
+	out := f.ConstructProject(sub, projections, opt.ColSet{} /* passthrough */)
+
+	// Create aggregations for:
+	//   count(*)
+	//   bool_or(cmpCol)
+	//   count(*) FILTER (isNullCol)
+	countCol := md.AddColumn("count", types.Int)
+	boolOrCol := md.AddColumn("bool_or", types.Bool)
+	nullCountCol := md.AddColumn("null_count", types.Int)
+	aggs := memo.AggregationsExpr{
+		f.ConstructAggregationsItem(f.ConstructCountRows(), countCol),
+		f.ConstructAggregationsItem(f.ConstructBoolOr(f.ConstructVariable(cmpCol)), boolOrCol),
+		f.ConstructAggregationsItem(
+			f.ConstructAggFilter(
+				f.ConstructCountRows(),
+				f.ConstructVariable(isNullCol),
+			),
+			nullCountCol,
+		),
+	}
+	out = f.ConstructScalarGroupBy(out, aggs, &memo.GroupingPrivate{})
+
+	// Create a projection of:
+	//   countCol > 0 AND (boolOrCol OR (nullCountCol > 0 AND NULL))
+	resCol := md.AddColumn("any", types.Bool)
+	resultProj := memo.ProjectionsExpr{
+		f.ConstructProjectionsItem(
+			f.ConstructAnd(
+				f.ConstructGt(
+					f.ConstructVariable(countCol),
+					f.ConstructConstVal(tree.DZero, types.Int),
+				),
+				f.ConstructOr(
+					f.ConstructVariable(boolOrCol),
+					f.ConstructAnd(
+						f.ConstructGt(
+							f.ConstructVariable(nullCountCol),
+							f.ConstructConstVal(tree.DZero, types.Int),
+						),
+						memo.NullSingleton,
+					),
+				),
+			),
+			resCol,
+		),
+	}
+	out = b.factory.ConstructProject(out, resultProj, opt.ColSet{})
+	return b.factory.ConstructSubquery(out, &memo.SubqueryPrivate{OriginalExpr: origExpr})
 }
 
 var _ tree.Expr = &subquery{}

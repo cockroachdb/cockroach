@@ -125,6 +125,13 @@ type Builder struct {
 	// are disabled and only statements whitelisted are allowed.
 	insideFuncDef bool
 
+	// udfDepth tracks the depth of UDFs within which the current expressions
+	// are being built. It is incremented before building statements in a UDF
+	// and decremented after all the statements in a UDF have been built. If
+	// udfDepth is greater than zero, then the builder is currently building
+	// expressions within one or more UDFs.
+	udfDepth int
+
 	// If set, we are collecting view dependencies in schemaDeps. This can only
 	// happen inside view/function definitions.
 	//

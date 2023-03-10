@@ -687,6 +687,7 @@ func (b *Builder) buildUDF(
 	// Build an expression for each statement in the function body.
 	rels := make(memo.RelListExpr, len(stmts))
 	isSetReturning := o.Class == tree.GeneratorClass
+	b.udfDepth++
 	for i := range stmts {
 		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 		expr := stmtScope.expr
@@ -768,6 +769,7 @@ func (b *Builder) buildUDF(
 			PhysProps: physProps,
 		}
 	}
+	b.udfDepth--
 
 	out = b.factory.ConstructUDF(
 		args,

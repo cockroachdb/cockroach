@@ -2812,6 +2812,130 @@ SELECT a, sub_two() FROM sub_all
 5  2
 6  2
 
+subtest any_subquery
+
+statement ok
+CREATE TABLE any_tab (
+  a INT,
+  b INT
+)
+
+statement ok
+CREATE FUNCTION any_fn(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT i = ANY(SELECT a FROM any_tab)
+$$
+
+statement ok
+CREATE FUNCTION any_fn_lt(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT i < ANY(SELECT a FROM any_tab)
+$$
+
+statement ok
+CREATE FUNCTION any_fn_tuple(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT (i, j) = ANY(SELECT a, b FROM any_tab)
+$$
+
+# If the subquery returns no rows, the result should always be false.
+query BBB
+SELECT any_fn(1), any_fn(4), any_fn(NULL::INT)
+----
+false  false  false
+
+query BBB
+SELECT any_fn_lt(1), any_fn_lt(4), any_fn_lt(NULL::INT)
+----
+false  false  false
+
+query BBB
+SELECT any_fn_tuple(1, 10), any_fn_tuple(1, 20), any_fn_tuple(NULL::INT, NULL::INT)
+----
+false  false  false
+
+statement ok
+INSERT INTO any_tab VALUES (1, 10), (3, 30)
+
+query BBB
+SELECT any_fn(1), any_fn(4), any_fn(NULL::INT)
+----
+true  false  NULL
+
+query BBB
+SELECT any_fn_lt(1), any_fn_lt(4), any_fn_lt(NULL::INT)
+----
+true  false  NULL
+
+query BBB
+SELECT any_fn_tuple(1, 10), any_fn_tuple(1, 20), any_fn_tuple(NULL::INT, NULL::INT)
+----
+true  false  NULL
+
+statement ok
+INSERT INTO any_tab VALUES (NULL, NULL)
+
+query BBB
+SELECT any_fn(1), any_fn(4), any_fn(NULL::INT)
+----
+true  NULL  NULL
+
+query BBB
+SELECT any_fn_lt(1), any_fn_lt(4), any_fn_lt(NULL::INT)
+----
+true  NULL  NULL
+
+query BBB
+SELECT any_fn_tuple(1, 10), any_fn_tuple(1, 20), any_fn_tuple(NULL::INT, NULL::INT)
+----
+true  NULL  NULL
+
+statement ok
+CREATE FUNCTION any_fn2(i INT) RETURNS SETOF INT LANGUAGE SQL AS $$
+  SELECT b FROM (VALUES (1), (2), (3), (NULL)) v(b)
+  WHERE b = ANY (SELECT a FROM any_tab WHERE a <= i)
+$$
+
+query I
+SELECT any_fn2(2)
+----
+1
+
+query I
+SELECT any_fn2(3)
+----
+1
+3
+
+subtest all_subquery
+
+statement ok
+CREATE TABLE all_tab (a INT)
+
+statement ok
+CREATE FUNCTION all_fn(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT i = ALL(SELECT a FROM all_tab)
+$$
+
+# If the subquery returns no rows, the result should always be true.
+query BBB
+SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
+----
+true  true  true
+
+statement ok
+INSERT INTO all_tab VALUES (1), (1);
+
+query BBB
+SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
+----
+true  false  NULL
+
+statement ok
+INSERT INTO all_tab VALUES (NULL);
+
+query BBB
+SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
+----
+NULL  false  NULL
+
 
 subtest variadic
 
@@ -2922,10 +3046,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100264  f_93314         105  1546506610  14  false  false  false  v  0  100263  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100266  f_93314_alias   105  1546506610  14  false  false  false  v  0  100265  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100270  f_93314_comp    105  1546506610  14  false  false  false  v  0  100267  ·  {}  NULL  SELECT (1, 2);
-100271  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100269  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100271  f_93314         105  1546506610  14  false  false  false  v  0  100270  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100273  f_93314_alias   105  1546506610  14  false  false  false  v  0  100272  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100277  f_93314_comp    105  1546506610  14  false  false  false  v  0  100274  ·  {}  NULL  SELECT (1, 2);
+100278  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100276  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.
