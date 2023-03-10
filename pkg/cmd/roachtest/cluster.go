@@ -15,6 +15,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"io"
 	"io/fs"
 	"net"
@@ -2382,8 +2383,7 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 }
 
 func (c *clusterImpl) IsLocal() bool {
-	// FIXME: I think radu made local more flexible and local is a prefix?
-	return c.name == "local"
+	return config.IsLocalClusterName(c.name)
 }
 
 func (c *clusterImpl) IsSecure() bool {
