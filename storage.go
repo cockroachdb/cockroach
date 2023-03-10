@@ -48,10 +48,28 @@ type Storage interface {
 
 	// InitialState returns the saved HardState and ConfState information.
 	InitialState() (pb.HardState, pb.ConfState, error)
-	// Entries returns a slice of log entries in the range [lo,hi).
-	// MaxSize limits the total size of the log entries returned, but
-	// Entries returns at least one entry if any.
+
+	// Entries returns a slice of consecutive log entries in the range [lo, hi),
+	// starting from lo. The maxSize limits the total size of the log entries
+	// returned, but Entries returns at least one entry if any.
+	//
+	// The caller of Entries owns the returned slice, and may append to it. The
+	// individual entries in the slice must not be mutated, neither by the Storage
+	// implementation nor the caller. Note that raft may forward these entries
+	// back to the application via Ready struct, so the corresponding handler must
+	// not mutate entries either (see comments in Ready struct).
+	//
+	// Since the caller may append to the returned slice, Storage implementation
+	// must protect its state from corruption that such appends may cause. For
+	// example, common ways to do so are:
+	//  - allocate the slice before returning it (safest option),
+	//  - return a slice protected by Go full slice expression, which causes
+	//  copying on appends (see MemoryStorage).
+	//
+	// Returns ErrCompacted if entry lo has been compacted, or ErrUnavailable if
+	// encountered an unavailable entry in [lo, hi).
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
+
 	// Term returns the term of entry i, which must be in the range
 	// [FirstIndex()-1, LastIndex()]. The term of the entry before
 	// FirstIndex is retained for matching purposes even though the
