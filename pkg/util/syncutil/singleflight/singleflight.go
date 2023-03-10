@@ -251,7 +251,13 @@ func (c *call) result(ctx context.Context, leader bool) Result {
 		case <-c.c:
 		case <-ctx.Done():
 			op := fmt.Sprintf("%s:%s", c.opName, c.key)
-			if !leader {
+			if leader {
+				// If a goroutine waiting for the result is the leader, it is possible
+				// that it has shared resources with the call. In order to prevent
+				// any data races, we must block until the call is completed.
+				log.Eventf(ctx, "interrupted during singleflight %s, blocking until call completion", op)
+				<-c.c
+			} else {
 				log.Eventf(ctx, "waiting for singleflight interrupted: %v", ctx.Err())
 				// If we're recording, copy over the call's trace.
 				sp := tracing.SpanFromContext(ctx)
