@@ -13,31 +13,27 @@ package tests
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"path/filepath"
-	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -46,193 +42,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// HealthChecker runs a regular check that verifies that a specified subset
-// of (CockroachDB) nodes look "very healthy". That is, there are no stuck
-// proposals, liveness problems, or whatever else might get added in the
-// future.
-type HealthChecker struct {
-	t      test.Test
-	c      cluster.Cluster
-	nodes  option.NodeListOption
-	doneCh chan struct{}
-}
-
-// NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(t test.Test, c cluster.Cluster, nodes option.NodeListOption) *HealthChecker {
-	return &HealthChecker{
-		t:      t,
-		c:      c,
-		nodes:  nodes,
-		doneCh: make(chan struct{}),
-	}
-}
-
-// Done signals the HealthChecker's Runner to shut down.
-func (hc *HealthChecker) Done() {
-	close(hc.doneCh)
-}
-
-type gossipAlert struct {
-	NodeID, StoreID       int
-	Category, Description string
-	Value                 float64
-}
-
-type gossipAlerts []gossipAlert
-
-func (g gossipAlerts) String() string {
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
-	for _, a := range g {
-		fmt.Fprintf(tw, "n%d/s%d\t%.2f\t%s\t%s\n", a.NodeID, a.StoreID, a.Value, a.Category, a.Description)
-	}
-	_ = tw.Flush()
-	return buf.String()
-}
-
-// Runner makes sure the gossip_alerts table is empty at all times.
-//
-// TODO(tschottdorf): actually let this fail the test instead of logging complaints.
-func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
-	logger, err := hc.t.L().ChildLogger("health")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		logger.Printf("health check terminated with %v\n", err)
-	}()
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-hc.doneCh:
-			return nil
-		case <-ticker.C:
-		}
-
-		tBegin := timeutil.Now()
-
-		nodeIdx := 1 + rand.Intn(len(hc.nodes))
-		db, err := hc.c.ConnE(ctx, hc.t.L(), nodeIdx)
-		if err != nil {
-			return err
-		}
-		// TODO(tschottdorf): remove replicate queue failures when the cluster first starts.
-		// Ditto queue.raftsnapshot.process.failure.
-		_, err = db.Exec(`USE system`)
-		if err != nil {
-			return err
-		}
-		rows, err := db.QueryContext(ctx, `SELECT * FROM crdb_internal.gossip_alerts ORDER BY node_id ASC, store_id ASC `)
-		_ = db.Close()
-		if err != nil {
-			return err
-		}
-		var rr gossipAlerts
-		for rows.Next() {
-			a := gossipAlert{StoreID: -1}
-			var storeID gosql.NullInt64
-			if err := rows.Scan(&a.NodeID, &storeID, &a.Category, &a.Description, &a.Value); err != nil {
-				return err
-			}
-			if storeID.Valid {
-				a.StoreID = int(storeID.Int64)
-			}
-			rr = append(rr, a)
-		}
-		if len(rr) > 0 {
-			logger.Printf(rr.String() + "\n")
-			// TODO(tschottdorf): see method comment.
-			// return errors.New(rr.String())
-		}
-
-		if elapsed := timeutil.Since(tBegin); elapsed > 10*time.Second {
-			err := errors.Errorf("health check against node %d took %s", nodeIdx, elapsed)
-			logger.Printf("%+v", err)
-			// TODO(tschottdorf): see method comment.
-			// return err
-		}
-	}
-}
-
-// DiskUsageLogger regularly logs the disk spaced used by the nodes in the cluster.
-type DiskUsageLogger struct {
-	t      test.Test
-	c      cluster.Cluster
-	doneCh chan struct{}
-}
-
-// NewDiskUsageLogger populates a DiskUsageLogger.
-func NewDiskUsageLogger(t test.Test, c cluster.Cluster) *DiskUsageLogger {
-	return &DiskUsageLogger{
-		t:      t,
-		c:      c,
-		doneCh: make(chan struct{}),
-	}
-}
-
-// Done instructs the Runner to terminate.
-func (dul *DiskUsageLogger) Done() {
-	close(dul.doneCh)
-}
-
-// Runner runs in a loop until Done() is called and prints the cluster-wide per
-// node disk usage in descending order.
-func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
-	l, err := dul.t.L().ChildLogger("diskusage")
-	if err != nil {
-		return err
-	}
-	quietLogger, err := dul.t.L().ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
-	if err != nil {
-		return err
-	}
-
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-dul.doneCh:
-			return nil
-		case <-ticker.C:
-		}
-
-		type usage struct {
-			nodeNum int
-			bytes   int
-		}
-
-		var bytesUsed []usage
-		for i := 1; i <= dul.c.Spec().NodeCount; i++ {
-			cur, err := getDiskUsageInBytes(ctx, dul.c, quietLogger, i)
-			if err != nil {
-				// This can trigger spuriously as compactions remove files out from under `du`.
-				l.Printf("%s", errors.Wrapf(err, "node #%d", i))
-				cur = -1
-			}
-			bytesUsed = append(bytesUsed, usage{
-				nodeNum: i,
-				bytes:   cur,
-			})
-		}
-		sort.Slice(bytesUsed, func(i, j int) bool { return bytesUsed[i].bytes > bytesUsed[j].bytes }) // descending
-
-		var s []string
-		for _, usage := range bytesUsed {
-			s = append(s, fmt.Sprintf("n#%d: %s", usage.nodeNum, humanizeutil.IBytes(int64(usage.bytes))))
-		}
-
-		l.Printf("%s\n", strings.Join(s, ", "))
-	}
-}
 func registerRestoreNodeShutdown(r registry.Registry) {
 	sp := restoreSpecs{
 		hardware: makeHardwareSpecs(hardwareSpecs{}),
@@ -328,9 +137,9 @@ func registerRestore(r registry.Registry) {
 			withPauseSpecs.getRuntimeSpecs(ctx, t, c)
 			// Run the disk usage logger in the monitor to guarantee its
 			// having terminated when the test ends.
-			dul := NewDiskUsageLogger(t, c)
+			dul := roachtestutil.NewDiskUsageLogger(t, c)
 			m.Go(dul.Runner)
-			hc := NewHealthChecker(t, c, c.All())
+			hc := roachtestutil.NewHealthChecker(t, c, c.All())
 			m.Go(hc.Runner)
 
 			jobIDCh := make(chan jobspb.JobID)
@@ -541,9 +350,9 @@ func registerRestore(r registry.Registry) {
 
 				// Run the disk usage logger in the monitor to guarantee its
 				// having terminated when the test ends.
-				dul := NewDiskUsageLogger(t, c)
+				dul := roachtestutil.NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
-				hc := NewHealthChecker(t, c, c.All())
+				hc := roachtestutil.NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
 				sp.getRuntimeSpecs(ctx, t, c)
@@ -830,7 +639,7 @@ func (sp *restoreSpecs) runDetached(
 func (sp *restoreSpecs) initRestorePerfMetrics(
 	ctx context.Context, durationGauge *prometheus.GaugeVec,
 ) func() {
-	dut, err := NewDiskUsageTracker(sp.c, sp.t.L())
+	dut, err := roachtestutil.NewDiskUsageTracker(sp.c, sp.t.L())
 	require.NoError(sp.t, err)
 	startTime := timeutil.Now()
 	startDu := dut.GetDiskUsage(ctx, sp.c.All())
