@@ -3163,3 +3163,49 @@ CREATE FUNCTION f_97854 (f FLOAT) RETURNS CHAR LANGUAGE SQL AS $$ SELECT 'f' $$;
 # TODO(#88318): In Postgres, the float overload is chosen.
 statement error pgcode 42725 ambiguous call: f_97854\(decimal\).*
 SELECT f_97854(1.0)
+
+# Regression test for #93861 - non-strict UDFs should be evaluated with NULL
+# arguments.
+subtest regression_93861
+
+statement ok
+CREATE TABLE t93861(x INT);
+INSERT INTO t93861 VALUES (1), (2), (NULL);
+CREATE FUNCTION f93861_scalar (i INT) RETURNS INT CALLED ON NULL INPUT
+  LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f93861_strict_scalar (i INT) RETURNS INT STRICT
+  LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f93861_setof (i INT) RETURNS SETOF INT CALLED ON NULL INPUT
+  LANGUAGE SQL AS $$ SELECT * FROM generate_series(1, 3) $$;
+CREATE FUNCTION f93861_strict_setof (i INT) RETURNS SETOF INT STRICT
+  LANGUAGE SQL AS $$ SELECT * FROM generate_series(1, 3) $$;
+
+query III
+SELECT x, f93861_scalar(x), f93861_strict_scalar(x) FROM t93861;
+----
+1     1  1
+2     1  1
+NULL  1  NULL
+
+query II
+SELECT x, f93861_setof(x) FROM t93861;
+----
+1     1
+1     2
+1     3
+2     1
+2     2
+2     3
+NULL  1
+NULL  2
+NULL  3
+
+query II
+SELECT x, f93861_strict_setof(x) FROM t93861;
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
