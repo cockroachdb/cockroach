@@ -27,7 +27,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const commitTemplate = `release: released CockroachDB version %s; next version: %s
+// first %s is the released version. Second is an optional message
+// about the next released version for releases that include the
+// version.txt file.
+const commitTemplate = `release: released CockroachDB version %s%s
 
 Release note: None
 `
@@ -292,7 +295,7 @@ func createPullRequest(repo prRepo, dest string) (string, error) {
 // `prRepo`) already exists. Returns a description of the PR when it
 // exists and any errors found in the process.
 func prExists(repo prRepo, dest string, released, next *semver.Version) (string, error) {
-	title := strings.Split(fmt.Sprintf(commitTemplate, released, next), "\n")[0]
+	title := strings.Split(updateCommitMessage(released, next), "\n")[0]
 	fmt.Printf("checking if PR %q already exists\n", title)
 	query := fmt.Sprintf("in:title %q", title)
 	args := []string{
@@ -361,7 +364,6 @@ func randomString(n int) string {
 }
 
 func productionRepos(released, next *semver.Version) ([]prRepo, error) {
-	defaultCommitMessage := fmt.Sprintf(commitTemplate, released, next)
 	// Add a random 4-letter string to the end of the branch name to make it unique.
 	// This simplifies recovery in case something goes wrong with pushes or PR creation.
 	defaultPrBranch := fmt.Sprintf("update-versions-%s-%s", released, randomString(4))
@@ -385,9 +387,10 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 			branch:         branch,
 			prBranch:       defaultPrBranch,
 			githubUsername: "cockroach-teamcity",
-			commitMessage:  defaultCommitMessage,
+			commitMessage:  updateCommitMessage(released, next),
 		}
 	}
+
 	// The roachtest predecessor file changed locations after a
 	// refactoring that took place in the 23.1 cycle, so we account for
 	// that difference here.
@@ -411,10 +414,18 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 	// for other versions it is the next release version's branch. The following logic combines all
 	// changes in a single PR.
 	updateVersionPr := newCrdbRepo(nextBranch)
-	updateVersionPr.commands = []*exec.Cmd{
-		updateRoachtestPred(nextBranch),
-		exec.Command(self, "set-cockroach-version", "--version", next.Original()),
+	updateVersionPr.commands = []*exec.Cmd{updateRoachtestPred(nextBranch)}
+	// Releases 23.{minor} and above include the version.txt file that
+	// needs to be bumped when a release is published.
+	// TODO(renato): remove this logic once we stop releasing anything
+	// older than v23.
+	if hasVersionTxt(released) {
+		updateVersionPr.commands = append(
+			updateVersionPr.commands,
+			exec.Command(self, "set-cockroach-version", "--version", next.Original()),
+		)
 	}
+
 	if latest {
 		updateVersionPr.commands = append(updateVersionPr.commands,
 			exec.Command(self, "set-orchestration-version", "--template-dir", "./cloud/kubernetes/templates",
@@ -439,7 +450,7 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       defaultPrBranch,
-			commitMessage:  defaultCommitMessage,
+			commitMessage:  updateCommitMessage(released, next),
 			commands: []*exec.Cmd{
 				exec.Command("make", fmt.Sprintf("VERSION=%s", released), "PRODUCT=cockroach"),
 			},
@@ -450,7 +461,7 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       defaultPrBranch,
-			commitMessage:  defaultCommitMessage,
+			commitMessage:  updateCommitMessage(released, next),
 			commands: []*exec.Cmd{
 				exec.Command("bazel", "build", "//build"),
 				exec.Command("sh", "-c", fmt.Sprintf("$(bazel info bazel-bin)/build/build_/build %s", released.Original())),
@@ -472,7 +483,9 @@ func isLatestStableBranch(version *semver.Version) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cannot parse latest version: %w", err)
 	}
-	return version.GreaterThan(latestVersion), nil
+	// Check if the version we processing here is greater than or equal
+	// to the latest known released version.
+	return version.Compare(latestVersion) >= 0, nil
 }
 
 func nextReleaseBranch(version *semver.Version) (string, error) {
@@ -495,4 +508,18 @@ func parseVersion(versionStr string) (*semver.Version, error) {
 	}
 
 	return version, nil
+}
+
+// hasVersionTxt returns whether a given version uses the version.txt
+// file to determine binary version.
+func hasVersionTxt(version *semver.Version) bool {
+	return version.Major() >= 23
+}
+
+func updateCommitMessage(released, next *semver.Version) string {
+	var nextVersionMsg string
+	if hasVersionTxt(released) {
+		nextVersionMsg = ". Next version: %s" + next.String()
+	}
+	return fmt.Sprintf(commitTemplate, released, nextVersionMsg)
 }
