@@ -172,6 +172,24 @@ type planner struct {
 	// a SQL session.
 	isInternalPlanner bool
 
+	atomic struct {
+		// innerPlansMustUseLeafTxn is set to 1 if the "outer" plan is using
+		// the LeafTxn forcing the "inner" plans to use the LeafTxns too. An
+		// example of this is apply-join iterations when the main query has
+		// concurrency.
+		//
+		// Note that even though the planner is not safe for concurrent usage,
+		// the "outer" plan modifies this field _before_ the "inner" plans start
+		// or _after_ the "inner" plans finish, so we could have avoided the
+		// usage of an atomic here, but we choose to be defensive about it.
+		// TODO(yuzefovich): this is a bit hacky. The problem is that the
+		// incorrect txn on the planner has already been captured by the
+		// planNodeToRowSource adapter before the "outer" query figured out that
+		// it must use the LeafTxn. Solving that issue properly is not trivial
+		// and is tracked in #41992.
+		innerPlansMustUseLeafTxn uint32
+	}
+
 	monitor *mon.BytesMonitor
 
 	// Corresponding Statement for this query.
