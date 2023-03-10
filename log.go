@@ -510,7 +510,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	}
 	// Otherwise, total size of unstable does not exceed maxSize-size, so total
 	// size of ents+unstable does not exceed maxSize. Simply concatenate them.
-	return append(ents, unstable...), nil
+	return extend(ents, unstable), nil
 }
 
 // l.firstIndex <= lo <= hi <= l.firstIndex + len(l.entries)

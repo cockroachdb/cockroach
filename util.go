@@ -318,3 +318,20 @@ func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
 	}
 	l.Panic(err)
 }
+
+// extend appends vals to the given dst slice. It differs from the standard
+// slice append only in the way it allocates memory. If cap(dst) is not enough
+// for appending the values, precisely size len(dst)+len(vals) is allocated.
+//
+// Use this instead of standard append in situations when this is the last
+// append to dst, so there is no sense in allocating more than needed.
+func extend(dst, vals []pb.Entry) []pb.Entry {
+	need := len(dst) + len(vals)
+	if need <= cap(dst) {
+		return append(dst, vals...) // does not allocate
+	}
+	buf := make([]pb.Entry, need, need) // allocates precisely what's needed
+	copy(buf, dst)
+	copy(buf[len(dst):], vals)
+	return buf
+}
