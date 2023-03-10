@@ -110,6 +110,7 @@ SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
 true
 
 # Wait for migrations to run.
+# The sleep directive is needed to reduce flakiness.
 
 sleep 10s
 
