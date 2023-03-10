@@ -1,0 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "funcinfo",
+    srcs = ["properties.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")
