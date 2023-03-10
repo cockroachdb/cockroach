@@ -1472,10 +1472,10 @@ def go_deps():
         name = "com_github_cockroachdb_cockroach_go_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cockroach-go/v2",
-        sha256 = "25cad5851ca08d3a7d29fe70efc112541ffe3cce4d27d9e59d5ca804558a36ea",
-        strip_prefix = "github.com/cockroachdb/cockroach-go/v2@v2.3.0",
+        sha256 = "07b899931415f8bd6ecaf72706e4e62163e9b5b59ae4cd75f80d6c84915f74e2",
+        strip_prefix = "github.com/cockroachdb/cockroach-go/v2@v2.3.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.3.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.3.1.zip",
         ],
     )
     go_repository(
