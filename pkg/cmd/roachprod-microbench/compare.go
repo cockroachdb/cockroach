@@ -27,7 +27,11 @@ import (
 func compareBenchmarks(
 	packages []string, currentDir, previousDir string,
 ) (map[string][]*benchstat.Table, error) {
-	packageResults := make(map[string][][]*benchfmt.Result)
+	type packageResults struct {
+		old []*benchfmt.Result
+		new []*benchfmt.Result
+	}
+	combinedResults := make(map[string]*packageResults)
 	var resultMutex syncutil.Mutex
 	var wg sync.WaitGroup
 	errorsFound := false
@@ -37,10 +41,10 @@ func compareBenchmarks(
 			defer wg.Done()
 			basePackage := pkg[:strings.Index(pkg[4:]+"/", "/")+4]
 			resultMutex.Lock()
-			results, ok := packageResults[basePackage]
+			results, ok := combinedResults[basePackage]
 			if !ok {
-				results = [][]*benchfmt.Result{make([]*benchfmt.Result, 0), make([]*benchfmt.Result, 0)}
-				packageResults[basePackage] = results
+				results = &packageResults{}
+				combinedResults[basePackage] = results
 			}
 			resultMutex.Unlock()
 
@@ -50,7 +54,7 @@ func compareBenchmarks(
 			if err := readReportFile(joinPath(previousDir, getReportLogName(reportLogName, pkg)),
 				func(result *benchfmt.Result) {
 					resultMutex.Lock()
-					results[0] = append(results[0], result)
+					results.old = append(results.old, postfixResultWithPackage(pkg, result))
 					resultMutex.Unlock()
 				}); err != nil &&
 				!isNotFoundError(err) {
@@ -60,7 +64,7 @@ func compareBenchmarks(
 			if err := readReportFile(joinPath(currentDir, getReportLogName(reportLogName, pkg)),
 				func(result *benchfmt.Result) {
 					resultMutex.Lock()
-					results[1] = append(results[1], result)
+					results.new = append(results.new, postfixResultWithPackage(pkg, result))
 					resultMutex.Unlock()
 				}); err != nil &&
 				!isNotFoundError(err) {
@@ -75,21 +79,55 @@ func compareBenchmarks(
 	}
 
 	tableResults := make(map[string][]*benchstat.Table)
-	for pkgGroup, results := range packageResults {
+	for pkgGroup, results := range combinedResults {
 		var c benchstat.Collection
 		c.Alpha = 0.05
 		c.Order = benchstat.Reverse(benchstat.ByDelta)
 		// Only add the results if both sets are present.
-		if len(results[0]) > 0 && len(results[1]) > 0 {
-			c.AddResults("old", results[0])
-			c.AddResults("new", results[1])
-			tables := c.Tables()
+		if len(results.old) > 0 && len(results.new) > 0 {
+			c.AddResults("old", results.old)
+			c.AddResults("new", results.new)
+			tables := prefixBenchmarkNamesWithPackage(c.Tables())
 			tableResults[pkgGroup] = tables
-		} else if len(results[0])+len(results[1]) > 0 {
+		} else if len(results.old)+len(results.new) > 0 {
 			l.Printf("Only one set of results present for %s", pkgGroup)
 		}
 	}
 	return tableResults, nil
+}
+
+// postfixResultWithPackage appends the package name to the benchmark name
+// following a special separator. This is done to avoid prefixing the benchmark
+// name with the package name, as this would break the parsing of the benchmark
+// name by benchstat further down the line.
+func postfixResultWithPackage(pkg string, result *benchfmt.Result) *benchfmt.Result {
+	fields := strings.Fields(result.Content)
+	if !strings.HasPrefix(fields[0], "Benchmark") {
+		return result
+	}
+
+	fields[0] = fields[0] + "*" + pkg
+	return &benchfmt.Result{
+		Labels:     result.Labels,
+		NameLabels: result.NameLabels,
+		LineNum:    result.LineNum,
+		Content:    strings.Join(fields, " "),
+	}
+}
+
+// prefixBenchmarkNamesWithPackage prefixes the benchmark name with the package
+// name by using the post-fixing done in postfixResultWithPackage.
+func prefixBenchmarkNamesWithPackage(tables []*benchstat.Table) []*benchstat.Table {
+	for _, table := range tables {
+		for _, row := range table.Rows {
+			splitIndex := strings.LastIndex(row.Benchmark, "*")
+			if splitIndex == -1 {
+				continue
+			}
+			row.Benchmark = row.Benchmark[splitIndex+1:] + "/" + row.Benchmark[:splitIndex]
+		}
+	}
+	return tables
 }
 
 func publishToGoogleSheets(
