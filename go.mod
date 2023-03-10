@@ -162,7 +162,7 @@ require (
 	github.com/klauspost/compress v1.15.15
 	github.com/klauspost/pgzip v1.2.5
 	github.com/knz/bubbline v0.0.0-20230205122847-05558f88fdc4
-	github.com/knz/go-libedit v1.10.1
+	github.com/knz/go-libedit v1.10.2-0.20230308124748-6f1b59dd42bc
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0
 	github.com/kr/text v0.2.0
@@ -422,7 +422,5 @@ replace github.com/abourget/teamcity => github.com/cockroachdb/teamcity v0.0.0-2
 replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc
-
-replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
