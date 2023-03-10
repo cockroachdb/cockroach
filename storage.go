@@ -279,8 +279,9 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	offset := entries[0].Index - ms.ents[0].Index
 	switch {
 	case uint64(len(ms.ents)) > offset:
-		ms.ents = append([]pb.Entry{}, ms.ents[:offset]...)
-		ms.ents = append(ms.ents, entries...)
+		// NB: full slice expression protects ms.ents at index >= offset from
+		// rewrites, as they may still be referenced from outside MemoryStorage.
+		ms.ents = append(ms.ents[:offset:offset], entries...)
 	case uint64(len(ms.ents)) == offset:
 		ms.ents = append(ms.ents, entries...)
 	default:
