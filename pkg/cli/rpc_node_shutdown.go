@@ -64,6 +64,37 @@ func doDrain(
 		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
+	shutdownSettings, err := c.Settings(ctx, &serverpb.SettingsRequest{
+		Keys: []string{
+			"server.shutdown.drain_wait",
+			"server.shutdown.connection_wait",
+			"server.shutdown.query_wait",
+			"server.shutdown.lease_transfer_wait",
+		},
+		UnredactedValues: true,
+	})
+	if err != nil {
+		return false, true, err
+	}
+
+	minWait := time.Duration(0)
+	for k, v := range shutdownSettings.KeyValues {
+		wait, err := time.ParseDuration(v.Value)
+		if err != nil {
+			return false, true, err
+		}
+		minWait += wait
+		if k == "server.shutdown.query_wait" {
+			minWait += wait
+		}
+	}
+	if minWait > drainCtx.drainWait {
+		log.Infof(ctx, "--drain-wait is %s, but the server.shutdown.{drain,query,connection,lease_transfer}_wait "+
+			"cluster settings require a value of at least %s; using the larger value",
+			drainCtx.drainWait, minWait)
+		drainCtx.drainWait = minWait + 10*time.Second
+	}
+
 	err = contextutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
