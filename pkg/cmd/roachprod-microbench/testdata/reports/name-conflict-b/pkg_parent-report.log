@@ -1,0 +1,1 @@
+BenchmarkWithNameConflict 100 100 ns/op 100 B/op 100 allocs/op
