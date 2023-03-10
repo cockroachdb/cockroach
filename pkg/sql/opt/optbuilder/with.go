@@ -195,6 +195,14 @@ func (b *Builder) buildCTE(
 	cte *tree.CTE, inScope *scope, isRecursive bool,
 ) (memo.RelExpr, physical.Presentation, opt.Ordering) {
 	if !isRecursive {
+		if cte.Stmt.StatementReturnType() != tree.Rows {
+			err := pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"WITH clause %q does not return any columns",
+				tree.ErrString(&cte.Name),
+			)
+			panic(errors.WithHint(err, "missing RETURNING clause?"))
+		}
 		cteScope := b.buildStmt(cte.Stmt, nil /* desiredTypes */, inScope)
 		cteScope.removeHiddenCols()
 		if !b.evalCtx.SessionData().PropagateInputOrdering {
