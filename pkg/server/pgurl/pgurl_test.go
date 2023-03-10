@@ -144,3 +144,25 @@ var _ = ProtoUndefined
 var _ = TLSVerifyCA
 var _ = TLSPrefer
 var _ = TLSAllow
+
+func TestParseExtendedOptions(t *testing.T) {
+	u, err := Parse("postgres://localhost?options= " +
+		"--user=test " +
+		"-c    search_path=public,testsp %20%09 " +
+		"--default-transaction-isolation=read\\ uncommitted   " +
+		"-capplication_name=test  " +
+		"--DateStyle=ymd\\ ,\\ iso\\  " +
+		"-c intervalstyle%3DISO_8601 " +
+		"-ccustom_option.custom_option=test2")
+	require.NoError(t, err)
+	opts := u.GetOption("options")
+	kvs, err := ParseExtendedOptions(opts)
+	require.NoError(t, err)
+	require.Equal(t, kvs.Get("user"), "test")
+	require.Equal(t, kvs.Get("search_path"), "public,testsp")
+	require.Equal(t, kvs.Get("default_transaction_isolation"), "read uncommitted")
+	require.Equal(t, kvs.Get("application_name"), "test")
+	require.Equal(t, kvs.Get("DateStyle"), "ymd , iso ")
+	require.Equal(t, kvs.Get("intervalstyle"), "ISO_8601")
+	require.Equal(t, kvs.Get("custom_option.custom_option"), "test2")
+}
