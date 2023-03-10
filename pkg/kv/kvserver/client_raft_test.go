@@ -5573,6 +5573,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	skip.WithIssue(t, 98412)
 	// These variables track the request count to make sure that all of the
 	// requests have made it to the Replica.
 	var (
