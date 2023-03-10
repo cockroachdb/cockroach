@@ -304,7 +304,9 @@ func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ve
 			}
 			storeDirectory := result.Stdout
 			disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
-			c.Run(ctx, nodeIDs, fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath))
+			cmd := fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath)
+			c.Run(ctx, nodeIDs, cmd)
+			t.L().Printf("Disabling job adoption on node %v: > %v\n", nodeID, cmd)
 
 			// Wait for no jobs to be running on the node that we have halted
 			// adoption on.
@@ -348,7 +350,9 @@ func enableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ver
 			}
 			storeDirectory := result.Stdout
 			disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
-			c.Run(ctx, nodeIDs, fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath))
+			cmd := fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath)
+			c.Run(ctx, nodeIDs, cmd)
+			t.L().Printf("Enabling job adoption on node %v: > %v\n", nodeID, cmd)
 		}
 
 		// Reset the env variable that controls how many jobs are claimed by the
