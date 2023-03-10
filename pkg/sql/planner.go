@@ -902,3 +902,12 @@ func (p *planner) GetDetailsForSpanStats(
 		args...,
 	)
 }
+
+// MaybeReallocateAnnotations is part of the eval.Planner interface.
+func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
+	if len(p.SemaCtx().Annotations) > int(numAnnotations) {
+		return
+	}
+	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
+	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
+}

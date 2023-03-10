@@ -32,7 +32,7 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 	}
 
 	if name == "all" {
-		return parse(
+		return d.parse(
 			"SELECT variable, value FROM crdb_internal.session_variables WHERE hidden = FALSE",
 		)
 	}
@@ -43,7 +43,7 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 	// hit the database resolution path giving us a database is undefined
 	// error. The below query allows us to keep this behaviour.
 	if name == "database" {
-		return parse(
+		return d.parse(
 			"SELECT value as database FROM crdb_internal.session_variables WHERE variable = 'database'")
 	}
 

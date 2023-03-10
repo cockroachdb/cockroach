@@ -19,7 +19,7 @@ import (
 // Privileges: SELECT on system.users.
 func (d *delegator) delegateShowRoles() (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Roles)
-	return parse(`
+	return d.parse(`
 SELECT
 	u.username,
 	IFNULL(string_agg(o.option || COALESCE('=' || o.value, ''), ', ' ORDER BY o.option), '') AS options,

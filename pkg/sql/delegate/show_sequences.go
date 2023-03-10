@@ -35,5 +35,5 @@ func (d *delegator) delegateShowSequences(n *tree.ShowSequences) (tree.Statement
 		name.String(), // note: (tree.Name).String() != string(name)
 		lexbase.EscapeSQLString(string(name)),
 	)
-	return parse(getSequencesQuery)
+	return d.parse(getSequencesQuery)
 }

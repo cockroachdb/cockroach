@@ -48,5 +48,5 @@ AND function_name = %[2]s
 	}
 
 	fullQuery := fmt.Sprintf(query, lexbase.EscapeSQLString(udfSchema), lexbase.EscapeSQLString(un.Parts[0]))
-	return parse(fullQuery)
+	return d.parse(fullQuery)
 }
