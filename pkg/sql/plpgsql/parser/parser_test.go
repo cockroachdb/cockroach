@@ -42,7 +42,6 @@ func TestParseDataDriver(t *testing.T) {
 				if err != nil {
 					d.Fatalf(t, "unexpected parse error: %v", err)
 				}
-
 				return fn.String()
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
