@@ -2721,7 +2721,9 @@ func (ex *connExecutor) execCopyIn(
 		},
 		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+			autoCommitSave := p.autoCommit
 			ex.resetPlanner(ctx, p, txn, stmtTS)
+			p.autoCommit = autoCommitSave
 		},
 	}
 	// If COPY is not atomic, then each batch must manage the txn state.

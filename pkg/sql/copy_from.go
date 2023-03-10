@@ -802,19 +802,7 @@ func (c *copyMachine) readBinarySignature() ([]byte, error) {
 func (p *planner) preparePlannerForCopy(
 	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, implicitTxn bool,
 ) func(context.Context, error) error {
-	autoCommit := false
 	txnOpt.resetPlanner(ctx, p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
-	if implicitTxn {
-		if p.SessionData().CopyFromAtomicEnabled {
-			// If the COPY should be atomic, only the final batch can commit.
-			autoCommit = finalBatch
-		} else {
-			// Otherwise we do the original behavior of committing each batch.
-			autoCommit = true
-		}
-	}
-	p.autoCommit = autoCommit
-
 	return func(ctx context.Context, prevErr error) (err error) {
 		// Ensure that we clean up any accumulated extraTxnState state if we've
 		// been handed a mechanism to do so.
