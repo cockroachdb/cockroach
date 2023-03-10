@@ -396,6 +396,10 @@ func (p *fakePlannerWithMonitor) EnforceHomeRegion() bool {
 	return false
 }
 
+// MaybeReallocateAnnotations is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }

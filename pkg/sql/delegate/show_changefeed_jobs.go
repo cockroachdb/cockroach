@@ -86,5 +86,5 @@ FROM
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 
-	return parse(sqlStmt)
+	return d.parse(sqlStmt)
 }

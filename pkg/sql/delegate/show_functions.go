@@ -80,5 +80,5 @@ ORDER BY 1, 2, 4;
 		&name.CatalogName,
 		schemaClause,
 	)
-	return parse(query)
+	return d.parse(query)
 }

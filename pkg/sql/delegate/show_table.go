@@ -51,7 +51,7 @@ WHERE name = %s
 		return nil, err
 	}
 
-	return parse(fmt.Sprintf(showCreateQuery, lexbase.EscapeSQLString(n.Name.Object())))
+	return d.parse(fmt.Sprintf(showCreateQuery, lexbase.EscapeSQLString(n.Name.Object())))
 }
 
 func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement, error) {
@@ -274,7 +274,7 @@ func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
 		lexbase.EscapeSQLString(databaseLiteral),
 	)
 
-	return parse(query)
+	return d.parse(query)
 }
 
 // showTableDetails returns the AST of a query which extracts information about
@@ -311,5 +311,5 @@ func (d *delegator) showTableDetails(
 		dataSource.PostgresDescriptorID(),
 	)
 
-	return parse(fullQuery)
+	return d.parse(fullQuery)
 }

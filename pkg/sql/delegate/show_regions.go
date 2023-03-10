@@ -30,7 +30,7 @@ func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, er
 	switch n.ShowRegionsFrom {
 	case tree.ShowRegionsFromAllDatabases:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromAllDatabases)
-		return parse(`
+		return d.parse(`
 SELECT
 	name as database_name,
 	regions,
@@ -76,7 +76,7 @@ ORDER BY "primary" DESC, "secondary" DESC, "region"`,
 			lexbase.EscapeSQLString(dbName),
 		)
 
-		return parse(query)
+		return d.parse(query)
 
 	case tree.ShowRegionsFromCluster:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
@@ -94,7 +94,7 @@ ORDER BY
 			zonesClause,
 		)
 
-		return parse(query)
+		return d.parse(query)
 	case tree.ShowRegionsFromDefault:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.Regions)
 
@@ -140,7 +140,7 @@ ORDER BY zones_table.region
 `,
 			zonesClause,
 		)
-		return parse(query)
+		return d.parse(query)
 	case tree.ShowSuperRegionsFromDatabase:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.SuperRegions)
 
@@ -150,7 +150,7 @@ SELECT database_name, super_region_name, regions
   FROM crdb_internal.super_regions
  WHERE database_name = '%s'`, n.DatabaseName)
 
-		return parse(query)
+		return d.parse(query)
 	}
 	return nil, errors.Newf("unhandled ShowRegionsFrom: %v", n.ShowRegionsFrom)
 }

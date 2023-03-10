@@ -21,5 +21,5 @@ func (d *delegator) delegateShowFullTableScans() (tree.Statement, error) {
   SELECT 
     key AS query, count, rows_read_avg, bytes_read_avg, service_lat_avg, contention_time_avg, max_mem_usage_avg, network_bytes_avg, cpu_sql_nanos_avg, max_retries
   FROM crdb_internal.node_statement_statistics WHERE full_scan = TRUE ORDER BY count DESC`
-	return parse(query)
+	return d.parse(query)
 }

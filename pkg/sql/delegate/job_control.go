@@ -70,7 +70,7 @@ func (d *delegator) delegateJobControl(stmt ControlJobsDelegate) (tree.Statement
 	// nodes.
 
 	if stmt.Schedules != nil {
-		return parse(fmt.Sprintf(`%s JOBS SELECT id FROM system.jobs WHERE jobs.created_by_type = '%s' 
+		return d.parse(fmt.Sprintf(`%s JOBS SELECT id FROM system.jobs WHERE jobs.created_by_type = '%s' 
 AND jobs.status IN (%s) AND jobs.created_by_id IN (%s)`,
 			tree.JobCommandToStatement[stmt.Command], jobs.CreatedByScheduledJobs, filterClause,
 			stmt.Schedules))
@@ -96,7 +96,7 @@ AND jobs.status IN (%s) AND jobs.created_by_id IN (%s)`,
        )
   WHERE correct_type
 );`
-		return parse(fmt.Sprintf(queryStrFormat, tree.JobCommandToStatement[stmt.Command], protobufNameForType[stmt.Type], filterClause))
+		return d.parse(fmt.Sprintf(queryStrFormat, tree.JobCommandToStatement[stmt.Command], protobufNameForType[stmt.Type], filterClause))
 	}
 
 	return nil, errors.AssertionFailedf("Missing Schedules or Type clause in delegate parameters")

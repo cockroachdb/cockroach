@@ -34,5 +34,5 @@ FROM `
 	if !n.All {
 		filter = " WHERE application_name NOT LIKE '" + catconstants.InternalAppNamePrefix + "%'"
 	}
-	return parse(query + table + filter)
+	return d.parse(query + table + filter)
 }

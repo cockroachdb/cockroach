@@ -61,5 +61,5 @@ FROM
 WHERE types.typtype = 'e' %[2]s
 ORDER BY (nsp.nspname, types.typname)
 `, &name.CatalogName, schemaClause)
-	return parse(query)
+	return d.parse(query)
 }

@@ -69,7 +69,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		ORDER BY
 			1, 2, 3, 4, 5, 6, 7, 8, 9;
 		`
-		return parse(fmt.Sprintf(showTablePartitionsQuery,
+		return d.parse(fmt.Sprintf(showTablePartitionsQuery,
 			lexbase.EscapeSQLString(resName.Table()),
 			lexbase.EscapeSQLString(resName.Catalog()),
 			resName.CatalogName.String()))
@@ -105,7 +105,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			tables.name, partitions.name, 1, 4, 5, 6, 7, 8, 9;
 		`
 		// Note: n.Database.String() != string(n.Database)
-		return parse(fmt.Sprintf(showDatabasePartitionsQuery, n.Database.String(), lexbase.EscapeSQLString(string(n.Database))))
+		return d.parse(fmt.Sprintf(showDatabasePartitionsQuery, n.Database.String(), lexbase.EscapeSQLString(string(n.Database))))
 	}
 
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
@@ -164,7 +164,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	ORDER BY
 		1, 2, 3, 4, 5, 6, 7, 8, 9;
 	`
-	return parse(fmt.Sprintf(showIndexPartitionsQuery,
+	return d.parse(fmt.Sprintf(showIndexPartitionsQuery,
 		lexbase.EscapeSQLString(n.Index.Index.String()),
 		lexbase.EscapeSQLString(resName.Table()),
 		resName.Table(),
