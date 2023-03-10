@@ -75,17 +75,17 @@ func (g gossipAlerts) String() string {
 //
 // TODO(tschottdorf): actually let this fail the test instead of logging complaints.
 func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
+	var nodeIdx int
 	logger, err := hc.t.L().ChildLogger("health")
 	if err != nil {
 		return err
 	}
 	defer func() {
-		logger.Printf("health check terminated with %v\n", err)
+		logger.Printf("health check terminated on node %d with %v\n", nodeIdx, err)
 	}()
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -97,7 +97,7 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 
 		tBegin := timeutil.Now()
 
-		nodeIdx := 1 + rand.Intn(len(hc.nodes))
+		nodeIdx = 1 + rand.Intn(len(hc.nodes))
 		db, err := hc.c.ConnE(ctx, hc.t.L(), nodeIdx)
 		if err != nil {
 			return err
