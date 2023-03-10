@@ -562,7 +562,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.clock, cfg.rangeFeedFactory,
 	)
 	cfg.sqlInstanceReader = instancestorage.NewReader(
-		cfg.sqlInstanceStorage, cfg.sqlLivenessProvider.BlockingReader(),
+		cfg.sqlInstanceStorage, cfg.sqlLivenessProvider.CachedReader(),
 		cfg.stopper,
 	)
 
@@ -789,7 +789,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RowMetrics:         &rowMetrics,
 		InternalRowMetrics: &internalRowMetrics,
 
-		SQLLivenessReader: cfg.sqlLivenessProvider.BlockingReader(),
+		SQLLivenessReader: cfg.sqlLivenessProvider.CachedReader(),
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
 		PodNodeDialer:     cfg.podNodeDialer,
