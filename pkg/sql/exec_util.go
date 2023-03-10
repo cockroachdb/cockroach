@@ -1244,7 +1244,7 @@ type ExecutorConfig struct {
 	MetricsRecorder    nodeStatusGenerator
 	SessionRegistry    *SessionRegistry
 	ClosedSessionCache *ClosedSessionCache
-	SQLLiveness        sqlliveness.Liveness
+	SQLLiveness        sqlliveness.Provider
 	JobRegistry        *jobs.Registry
 	VirtualSchemas     *VirtualSchemaHolder
 	DistSQLPlanner     *DistSQLPlanner

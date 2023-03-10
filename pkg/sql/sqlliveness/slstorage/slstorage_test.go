@@ -90,6 +90,7 @@ func testStorage(t *testing.T) {
 		clock, _, _, stopper, storage := setup(t)
 		storage.Start(ctx)
 		defer stopper.Stop(ctx)
+		reader := storage.BlockingReader()
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
 		id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
@@ -101,14 +102,14 @@ func testStorage(t *testing.T) {
 			require.Equal(t, int64(1), metrics.WriteSuccesses.Count())
 		}
 		{
-			isAlive, err := storage.IsAlive(ctx, id)
+			isAlive, err := reader.IsAlive(ctx, id)
 			require.NoError(t, err)
 			require.True(t, isAlive)
 			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
 		}
 		{
-			isAlive, err := storage.IsAlive(ctx, id)
+			isAlive, err := reader.IsAlive(ctx, id)
 			require.NoError(t, err)
 			require.True(t, isAlive)
 			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
@@ -120,6 +121,7 @@ func testStorage(t *testing.T) {
 		defer stopper.Stop(ctx)
 		slstorage.GCJitter.Override(ctx, &settings.SV, 0)
 		storage.Start(ctx)
+		reader := storage.BlockingReader()
 		metrics := storage.Metrics()
 
 		// GC will run some time after startup.
@@ -149,10 +151,10 @@ func testStorage(t *testing.T) {
 
 		// Verify they are alive.
 		{
-			isAlive1, err := storage.IsAlive(ctx, id1)
+			isAlive1, err := reader.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.True(t, isAlive1)
-			isAlive2, err := storage.IsAlive(ctx, id2)
+			isAlive2, err := reader.IsAlive(ctx, id2)
 			require.NoError(t, err)
 			require.True(t, isAlive2)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
@@ -169,7 +171,7 @@ func testStorage(t *testing.T) {
 
 		// Ensure that the cached value is still in use for id2.
 		{
-			isAlive, err := storage.IsAlive(ctx, id2)
+			isAlive, err := reader.IsAlive(ctx, id2)
 			require.NoError(t, err)
 			require.True(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
@@ -195,7 +197,7 @@ func testStorage(t *testing.T) {
 
 		// Ensure that we now see the id1 as dead. That fact will be cached.
 		{
-			isAlive, err := storage.IsAlive(ctx, id1)
+			isAlive, err := reader.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
@@ -203,7 +205,7 @@ func testStorage(t *testing.T) {
 		}
 		// Ensure that the fact that it's dead is cached.
 		{
-			isAlive, err := storage.IsAlive(ctx, id1)
+			isAlive, err := reader.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
@@ -219,7 +221,7 @@ func testStorage(t *testing.T) {
 
 		// Ensure that we now see the id2 as alive.
 		{
-			isAlive, err := storage.IsAlive(ctx, id2)
+			isAlive, err := reader.IsAlive(ctx, id2)
 			require.NoError(t, err)
 			require.True(t, isAlive)
 			require.Equal(t, int64(3), metrics.IsAliveCacheMisses.Count())
@@ -227,7 +229,7 @@ func testStorage(t *testing.T) {
 		}
 		// Ensure that the fact that it's still alive is cached.
 		{
-			isAlive, err := storage.IsAlive(ctx, id1)
+			isAlive, err := reader.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.False(t, isAlive)
 			require.Equal(t, int64(3), metrics.IsAliveCacheMisses.Count())
@@ -238,6 +240,7 @@ func testStorage(t *testing.T) {
 		clock, timeSource, _, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
 		storage.Start(ctx)
+		reader := storage.BlockingReader()
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
 		id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
@@ -249,7 +252,7 @@ func testStorage(t *testing.T) {
 			require.Equal(t, int64(1), metrics.WriteSuccesses.Count())
 		}
 		{
-			isAlive, err := storage.IsAlive(ctx, id)
+			isAlive, err := reader.IsAlive(ctx, id)
 			require.NoError(t, err)
 			require.True(t, isAlive)
 			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
@@ -260,7 +263,7 @@ func testStorage(t *testing.T) {
 		timeSource.Advance(time.Second + time.Nanosecond)
 		// Ensure that we discover it is no longer alive.
 		{
-			isAlive, err := storage.IsAlive(ctx, id)
+			isAlive, err := reader.IsAlive(ctx, id)
 			require.NoError(t, err)
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
@@ -269,7 +272,7 @@ func testStorage(t *testing.T) {
 		}
 		// Ensure that the fact that it is no longer alive is cached.
 		{
-			isAlive, err := storage.IsAlive(ctx, id)
+			isAlive, err := reader.IsAlive(ctx, id)
 			require.NoError(t, err)
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
@@ -349,6 +352,7 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 		tableID, rbrIndexID, timeSource.NewTimer)
 	storage.Start(ctx)
+	reader := storage.BlockingReader()
 
 	const (
 		runsPerWorker   = 100
@@ -447,7 +451,7 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 			for i := 0; i < runsPerWorker; i++ {
 				time.Sleep(time.Microsecond)
 				i, id := pickSession()
-				isAlive, err := storage.IsAlive(ctx, id)
+				isAlive, err := reader.IsAlive(ctx, id)
 				assert.NoError(t, err)
 				checkIsAlive(t, i, isAlive)
 			}
@@ -605,7 +609,7 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 		// Now launch another, synchronous reader, which will join
 		// the single-flight.
 		g.Go(func() (err error) {
-			alive, err = storage.IsAlive(ctx, sid)
+			alive, err = storage.BlockingReader().IsAlive(ctx, sid)
 			return err
 		})
 		// Sleep some tiny amount of time to hopefully allow the other
@@ -650,7 +654,7 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 		// Now launch another, synchronous reader, which will join
 		// the single-flight.
 		g.Go(func() (err error) {
-			alive, err = storage.IsAlive(toCancel, sid)
+			alive, err = storage.BlockingReader().IsAlive(toCancel, sid)
 			return err
 		})
 
