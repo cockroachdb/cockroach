@@ -1329,3 +1329,228 @@ project
                                     └── gt
                                          ├── variable: a:7
                                          └── variable: i:6
+
+
+# --------------------------------------------------
+# UDFs with ANY/ALL expressions.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION any_fn(i INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i = ANY(SELECT a FROM abc)'
+----
+
+build format=show-scalars
+SELECT any_fn(10)
+----
+project
+ ├── columns: any_fn:11
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: any_fn [as=any_fn:11]
+           ├── params: i:1
+           ├── args
+           │    └── const: 10
+           └── body
+                └── limit
+                     ├── columns: "?column?":10
+                     ├── project
+                     │    ├── columns: "?column?":10
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── subquery [as="?column?":10]
+                     │              └── project
+                     │                   ├── columns: case:9
+                     │                   ├── scalar-group-by
+                     │                   │    ├── columns: bool_or:8
+                     │                   │    ├── project
+                     │                   │    │    ├── columns: notnull:7!null
+                     │                   │    │    ├── select
+                     │                   │    │    │    ├── columns: a:2!null
+                     │                   │    │    │    ├── project
+                     │                   │    │    │    │    ├── columns: a:2!null
+                     │                   │    │    │    │    └── scan abc
+                     │                   │    │    │    │         └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │                   │    │    │    └── filters
+                     │                   │    │    │         └── is-not
+                     │                   │    │    │              ├── eq
+                     │                   │    │    │              │    ├── variable: i:1
+                     │                   │    │    │              │    └── variable: a:2
+                     │                   │    │    │              └── false
+                     │                   │    │    └── projections
+                     │                   │    │         └── is-not [as=notnull:7]
+                     │                   │    │              ├── variable: a:2
+                     │                   │    │              └── null
+                     │                   │    └── aggregations
+                     │                   │         └── bool-or [as=bool_or:8]
+                     │                   │              └── variable: notnull:7
+                     │                   └── projections
+                     │                        └── case [as=case:9]
+                     │                             ├── true
+                     │                             ├── when
+                     │                             │    ├── and
+                     │                             │    │    ├── variable: bool_or:8
+                     │                             │    │    └── is-not
+                     │                             │    │         ├── variable: i:1
+                     │                             │    │         └── null
+                     │                             │    └── true
+                     │                             ├── when
+                     │                             │    ├── is
+                     │                             │    │    ├── variable: bool_or:8
+                     │                             │    │    └── null
+                     │                             │    └── false
+                     │                             └── null
+                     └── const: 1
+
+exec-ddl
+CREATE FUNCTION all_fn(i INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i < ALL(SELECT a FROM abc WHERE b > i)'
+----
+
+build format=show-scalars
+SELECT all_fn(10)
+----
+project
+ ├── columns: all_fn:11
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: all_fn [as=all_fn:11]
+           ├── params: i:1
+           ├── args
+           │    └── const: 10
+           └── body
+                └── limit
+                     ├── columns: "?column?":10
+                     ├── project
+                     │    ├── columns: "?column?":10
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── not [as="?column?":10]
+                     │              └── subquery
+                     │                   └── project
+                     │                        ├── columns: case:9
+                     │                        ├── scalar-group-by
+                     │                        │    ├── columns: bool_or:8
+                     │                        │    ├── project
+                     │                        │    │    ├── columns: notnull:7!null
+                     │                        │    │    ├── select
+                     │                        │    │    │    ├── columns: a:2!null
+                     │                        │    │    │    ├── project
+                     │                        │    │    │    │    ├── columns: a:2!null
+                     │                        │    │    │    │    └── select
+                     │                        │    │    │    │         ├── columns: a:2!null b:3!null c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │                        │    │    │    │         ├── scan abc
+                     │                        │    │    │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │                        │    │    │    │         └── filters
+                     │                        │    │    │    │              └── gt
+                     │                        │    │    │    │                   ├── variable: b:3
+                     │                        │    │    │    │                   └── variable: i:1
+                     │                        │    │    │    └── filters
+                     │                        │    │    │         └── is-not
+                     │                        │    │    │              ├── ge
+                     │                        │    │    │              │    ├── variable: i:1
+                     │                        │    │    │              │    └── variable: a:2
+                     │                        │    │    │              └── false
+                     │                        │    │    └── projections
+                     │                        │    │         └── is-not [as=notnull:7]
+                     │                        │    │              ├── variable: a:2
+                     │                        │    │              └── null
+                     │                        │    └── aggregations
+                     │                        │         └── bool-or [as=bool_or:8]
+                     │                        │              └── variable: notnull:7
+                     │                        └── projections
+                     │                             └── case [as=case:9]
+                     │                                  ├── true
+                     │                                  ├── when
+                     │                                  │    ├── and
+                     │                                  │    │    ├── variable: bool_or:8
+                     │                                  │    │    └── is-not
+                     │                                  │    │         ├── variable: i:1
+                     │                                  │    │         └── null
+                     │                                  │    └── true
+                     │                                  ├── when
+                     │                                  │    ├── is
+                     │                                  │    │    ├── variable: bool_or:8
+                     │                                  │    │    └── null
+                     │                                  │    └── false
+                     │                                  └── null
+                     └── const: 1
+
+exec-ddl
+CREATE FUNCTION any_fn_tuple(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT (i, j) = ANY(SELECT a, b FROM abc)'
+----
+
+build format=show-scalars
+SELECT any_fn_tuple(10, 20)
+----
+project
+ ├── columns: any_fn_tuple:13
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: any_fn_tuple [as=any_fn_tuple:13]
+           ├── params: i:1 j:2
+           ├── args
+           │    ├── const: 10
+           │    └── const: 20
+           └── body
+                └── limit
+                     ├── columns: "?column?":12
+                     ├── project
+                     │    ├── columns: "?column?":12
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── subquery [as="?column?":12]
+                     │              └── project
+                     │                   ├── columns: case:11
+                     │                   ├── scalar-group-by
+                     │                   │    ├── columns: bool_or:10
+                     │                   │    ├── project
+                     │                   │    │    ├── columns: notnull:9!null
+                     │                   │    │    ├── select
+                     │                   │    │    │    ├── columns: column8:8
+                     │                   │    │    │    ├── project
+                     │                   │    │    │    │    ├── columns: column8:8
+                     │                   │    │    │    │    ├── project
+                     │                   │    │    │    │    │    ├── columns: a:3!null b:4
+                     │                   │    │    │    │    │    └── scan abc
+                     │                   │    │    │    │    │         └── columns: a:3!null b:4 c:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+                     │                   │    │    │    │    └── projections
+                     │                   │    │    │    │         └── tuple [as=column8:8]
+                     │                   │    │    │    │              ├── variable: a:3
+                     │                   │    │    │    │              └── variable: b:4
+                     │                   │    │    │    └── filters
+                     │                   │    │    │         └── is-not
+                     │                   │    │    │              ├── eq
+                     │                   │    │    │              │    ├── tuple
+                     │                   │    │    │              │    │    ├── variable: i:1
+                     │                   │    │    │              │    │    └── variable: j:2
+                     │                   │    │    │              │    └── variable: column8:8
+                     │                   │    │    │              └── false
+                     │                   │    │    └── projections
+                     │                   │    │         └── is-tuple-not-null [as=notnull:9]
+                     │                   │    │              └── variable: column8:8
+                     │                   │    └── aggregations
+                     │                   │         └── bool-or [as=bool_or:10]
+                     │                   │              └── variable: notnull:9
+                     │                   └── projections
+                     │                        └── case [as=case:11]
+                     │                             ├── true
+                     │                             ├── when
+                     │                             │    ├── and
+                     │                             │    │    ├── variable: bool_or:10
+                     │                             │    │    └── is-tuple-not-null
+                     │                             │    │         └── tuple
+                     │                             │    │              ├── variable: i:1
+                     │                             │    │              └── variable: j:2
+                     │                             │    └── true
+                     │                             ├── when
+                     │                             │    ├── is
+                     │                             │    │    ├── variable: bool_or:10
+                     │                             │    │    └── null
+                     │                             │    └── false
+                     │                             └── null
+                     └── const: 1
