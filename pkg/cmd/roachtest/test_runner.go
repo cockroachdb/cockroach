@@ -847,6 +847,7 @@ func (r *testRunner) runTest(
 	t.runner = callerName()
 	t.runnerID = goid.Get()
 
+	s := t.Spec().(*registry.TestSpec)
 	defer func() {
 		t.end = timeutil.Now()
 
@@ -867,8 +868,10 @@ func (r *testRunner) runTest(
 			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
 
 			if teamCity {
+				// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
+				// TeamCity regards the test as successful.
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(output), runID)
+					s.Name, teamCityEscape(output), runID)
 			}
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
@@ -876,14 +879,21 @@ func (r *testRunner) runTest(
 			if err := github.MaybePost(t, l, output); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
+		} else if s.Skip != "" {
+			// Though there is a TeamCity `##teamcity[testIgnored ...]` service message, if emitted here, will result in the UI showing
+			// the test has having run twice. Instead, we simply suppress emitting the `##teamcity[testFinished ...]` message which will
+			// result in the test being shown once as ignored.
+			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, durationStr, s.Skip)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
-			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
-			// TeamCity regards the test as successful.
 		}
 
 		if teamCity {
-			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), runID)
+			// As noted above, if we want TeamCity to mark a test as ignored, we should suppress the
+			// `##teamcity[testFinished ...]` message.
+			if s.Skip == "" {
+				shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), runID)
+			}
 
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
@@ -915,13 +925,13 @@ func (r *testRunner) runTest(
 		r.status.Lock()
 		delete(r.status.running, t)
 		// Only include tests with a Run function in the summary output.
-		if t.Spec().(*registry.TestSpec).Run != nil {
+		if s.Run != nil {
 			if t.Failed() {
 				r.status.fail[t] = struct{}{}
-			} else if t.Spec().(*registry.TestSpec).Skip == "" {
-				r.status.pass[t] = struct{}{}
-			} else {
+			} else if s.Skip != "" {
 				r.status.skip[t] = struct{}{}
+			} else {
+				r.status.pass[t] = struct{}{}
 			}
 		}
 		r.status.Unlock()
@@ -930,7 +940,7 @@ func (r *testRunner) runTest(
 	t.start = timeutil.Now()
 
 	timeout := 10 * time.Hour
-	if d := t.Spec().(*registry.TestSpec).Timeout; d != 0 {
+	if d := s.Timeout; d != 0 {
 		timeout = d
 	}
 	// Make sure the cluster has enough life left for the test plus enough headroom
@@ -972,7 +982,7 @@ func (r *testRunner) runTest(
 		}()
 
 		// This is the call to actually run the test.
-		t.Spec().(*registry.TestSpec).Run(runCtx, t, c)
+		s.Run(runCtx, t, c)
 	}()
 
 	var timedOut bool
