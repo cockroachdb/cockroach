@@ -473,6 +473,15 @@ const (
 	// keys that are not regional by row compatible.
 	V23_1_SystemRbrCleanup
 
+	// V23_1ExternalConnectionsTableHasOwnerIDColumn is the version where the
+	// owner_id column has been added to the system.external_connections table.
+	V23_1ExternalConnectionsTableHasOwnerIDColumn
+
+	// V23_1ExternalConnectionsTableOwnerIDColumnBackfilled is the version
+	// where the owner_id column in the system.external_connections table
+	// has been backfilled.
+	V23_1ExternalConnectionsTableOwnerIDColumnBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -817,6 +826,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_SystemRbrCleanup,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 72},
+	},
+	{
+		Key:     V23_1ExternalConnectionsTableHasOwnerIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 74},
+	},
+	{
+		Key:     V23_1ExternalConnectionsTableOwnerIDColumnBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 76},
 	},
 
 	// *************************************************

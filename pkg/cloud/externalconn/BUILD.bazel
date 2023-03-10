@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
     ],
 )
 

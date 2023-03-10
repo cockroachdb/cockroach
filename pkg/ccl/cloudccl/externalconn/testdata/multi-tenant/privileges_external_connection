@@ -22,7 +22,7 @@ CREATE EXTERNAL CONNECTION "global-privileged" AS 'nodelocal://1/foo'
 
 inspect-system-table
 ----
-global-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} testuser
+global-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} testuser 100
 
 exec-sql
 DROP EXTERNAL CONNECTION "global-privileged";
@@ -57,8 +57,8 @@ pq: user testuser does not have DROP privilege on external_connection drop-privi
 
 inspect-system-table
 ----
-drop-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} root
-drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} root
+drop-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} root 1
+drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} root 1
 
 exec-sql
 GRANT DROP ON EXTERNAL CONNECTION "drop-privileged" TO testuser;
@@ -76,7 +76,7 @@ pq: user testuser does not have DROP privilege on external_connection drop-privi
 
 inspect-system-table
 ----
-drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} root
+drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}} root 1
 
 exec-sql
 DROP EXTERNAL CONNECTION 'drop-privileged-dup'
