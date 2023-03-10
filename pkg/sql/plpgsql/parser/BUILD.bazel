@@ -38,6 +38,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/telemetry",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
@@ -45,7 +46,9 @@ go_library(
         "//pkg/sql/scanner",
         "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

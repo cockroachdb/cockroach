@@ -12,7 +12,6 @@ package plpgsqltree
 
 import (
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -24,6 +23,10 @@ type PLpgSQLStatement interface {
 	GetLineNo() int
 	GetStmtID() uint
 	plpgsqlStmt()
+}
+
+type TaggedPLpgSQLStatement interface {
+	PlpgSQLStatementTag() string
 }
 
 type PLpgSQLStatementImpl struct {
@@ -71,6 +74,10 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("<NOT DONE YET>")
 }
 
+func (s *PLpgSQLStmtBlock) PlpgSQLStatementTag() string {
+	return "stmt_block"
+}
+
 // stmt_assign
 type PLpgSQLStmtAssign struct {
 	PLpgSQLStatement
@@ -78,6 +85,10 @@ type PLpgSQLStmtAssign struct {
 	Var string
 	// TODO(jane): It should be PLpgSQLExpr.
 	Value string
+}
+
+func (s *PLpgSQLStmtAssign) PlpgSQLStatementTag() string {
+	return "stmt_assign"
 }
 
 func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
@@ -115,6 +126,10 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("<NOT DONE YET>")
 }
 
+func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
+	return "stmt_if"
+}
+
 type PLpgSQLStmtIfElseIfArm struct {
 	PLpgSQLStatementImpl
 	LineNo int
@@ -129,6 +144,10 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString("\t")
 		stmt.Format(ctx)
 	}
+}
+
+func (s *PLpgSQLStmtIfElseIfArm) PlpgSQLStatementTag() string {
+	return "stmt_if_else_if"
 }
 
 // stmt_case
@@ -164,6 +183,10 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 
 }
 
+func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
+	return "stmt_case"
+}
+
 type PLpgSQLStmtCaseWhenArm struct {
 	LineNo int
 	// TODO: Change to PLpgSQLExpr
@@ -189,7 +212,8 @@ type PLpgSQLStmtSimpleLoop struct {
 	Body  []PLpgSQLStatement
 }
 
-func (s *PLpgSQLStmtSimpleLoop) Format(ctx *tree.FmtCtx) {
+func (s *PLpgSQLStmtSimpleLoop) PlpgSQLStatementTag() string {
+	return "stmt_simple_loop"
 }
 
 // stmt_while
@@ -201,6 +225,10 @@ type PLpgSQLStmtWhileLoop struct {
 }
 
 func (s *PLpgSQLStmtWhileLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtWhileLoop) PlpgSQLStatementTag() string {
+	return "stmt_while"
 }
 
 // stmt_for
@@ -218,6 +246,10 @@ type PLpgSQLStmtForIntLoop struct {
 func (s *PLpgSQLStmtForIntLoop) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtForIntLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_int_loop"
+}
+
 type PLpgSQLStmtForQueryLoop struct {
 	PLpgSQLStatementImpl
 	Label string
@@ -226,6 +258,10 @@ type PLpgSQLStmtForQueryLoop struct {
 }
 
 func (s *PLpgSQLStmtForQueryLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtForQueryLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_query_loop"
 }
 
 type PLpgSQLStmtForQuerySelectLoop struct {
@@ -505,6 +541,10 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
+func (s *PLpgSQLStmtOpen) PlpgSQLStatementTag() string {
+	return "stmt_open"
+}
+
 // stmt_fetch
 // stmt_move (where IsMove = true)
 type PLpgSQLStmtFetch struct {
@@ -521,6 +561,10 @@ type PLpgSQLStmtFetch struct {
 func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtFetch) PlpgSQLStatementTag() string {
+	return "stmt_fetch"
+}
+
 // stmt_close
 type PLpgSQLStmtClose struct {
 	PLpgSQLStatementImpl
@@ -532,6 +576,10 @@ func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CLOSE a cursor\n")
 	ctx.WriteString("<NOT DONE YET>")
 
+}
+
+func (s *PLpgSQLStmtClose) PlpgSQLStatementTag() string {
+	return "stmt_close"
 }
 
 // stmt_commit
@@ -559,4 +607,8 @@ type PLpgSQLStmtNull struct {
 
 func (s *PLpgSQLStmtNull) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("NULL\n")
+}
+
+func (s *PLpgSQLStmtNull) PlpgSQLStatementTag() string {
+	return "stmt_null"
 }
