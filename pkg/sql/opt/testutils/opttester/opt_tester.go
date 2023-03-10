@@ -295,6 +295,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats = true
 	ot.evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins = true
+	ot.evalCtx.SessionData().OptimizerAlwaysUseHistograms = true
 
 	return ot
 }

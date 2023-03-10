@@ -484,13 +484,13 @@ upsert t64570
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 9.14483333
+ ├── cost: 9.0725
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── stats: [rows=1]
-      ├── cost: 9.13483333
+      ├── cost: 9.0625
       ├── key: ()
       ├── fd: ()-->(6-11)
       ├── values
@@ -505,8 +505,10 @@ upsert t64570
       │    ├── columns: x:9!null y:10!null v:11
       │    ├── constraint: /9/10: [/10/10 - /10/10]
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=0.9333333, distinct(9)=0.933333, null(9)=0, distinct(10)=0.933333, null(10)=0, distinct(9,10)=0.933333, null(9,10)=0]
-      │    ├── cost: 9.066
+      │    ├── stats: [rows=6e-10, distinct(9)=6e-10, null(9)=0, distinct(10)=6e-10, null(10)=0, distinct(9,10)=6e-10, null(9,10)=0]
+      │    │   histogram(9)=
+      │    │   histogram(10)=
+      │    ├── cost: 9.01
       │    ├── key: ()
       │    └── fd: ()-->(9-11)
       └── filters (true)
