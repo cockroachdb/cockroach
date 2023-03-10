@@ -123,18 +123,3 @@ func (m *Metrics) loadNodeMetrics(nodeID roachpb.NodeID) NodeMetrics {
 	m.mu.nm[nodeID] = nm
 	return nm
 }
-
-func (m *Metrics) unlinkNodeMetrics(nodeID roachpb.NodeID) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.mu.nm == nil {
-		return
-	}
-	if nm, ok := m.mu.nm[nodeID]; !ok {
-		nm.HeartbeatLoopsStarted.Unlink()
-		nm.HeartbeatConnectionFailures.Unlink()
-		nm.HeartbeatsNominal.Unlink()
-		nm.HeartbeatRoundTripLatency.Unlink()
-		delete(m.mu.nm, nodeID)
-	}
-}

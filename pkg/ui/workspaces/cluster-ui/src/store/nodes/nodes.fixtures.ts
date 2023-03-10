@@ -306,7 +306,7 @@ export const getNodeStatus = (): INodeStatus => {
       "rpc.heartbeats.failed": 0,
       "rpc.heartbeats.initializing": 0,
       "rpc.heartbeats.connection_failures": 0,
-      "rpc.heartbeats.round-trip-latency": 0,
+      "rpc.heartbeats.round-trip.latency": 0,
       "rpc.heartbeats.loops.started": 1,
       "rpc.heartbeats.nominal": 1,
       "schedules.error": 0,

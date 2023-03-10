@@ -497,7 +497,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Latency",
 				Metrics: []string{
-					"rpc.heartbeats.round-trip-latency",
+					"rpc.heartbeats.round-trip.latency",
 				},
 				AxisLabel: "Heartbeat Latency",
 			},
