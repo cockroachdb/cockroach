@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -593,11 +592,11 @@ func TestMVCCHistories(t *testing.T) {
 						msEvalDiff := *e.ms
 						msEvalDiff.Subtract(msEvalBefore)
 						msEvalDiff.AgeTo(msEngineDiff.LastUpdateNanos)
-						buf.Printf("stats: %s\n", formatStats(msEvalDiff, true))
+						buf.Printf("stats: %s\n", msEvalDiff.Formatted(true /* delta */))
 
 						if msEvalDiff != msEngineDiff {
 							e.t.Errorf("MVCC stats mismatch for %q at %s\nReturned: %s\nExpected: %s",
-								d.Cmd, d.Pos, formatStats(msEvalDiff, true), formatStats(msEngineDiff, true))
+								d.Cmd, d.Pos, msEvalDiff.Formatted(true /* delta */), msEngineDiff.Formatted(true /* delta */))
 						}
 					}
 
@@ -636,7 +635,7 @@ func TestMVCCHistories(t *testing.T) {
 						require.NoError(t, err)
 						msFinal.Add(ms)
 					}
-					buf.Printf("stats: %s\n", formatStats(msFinal, false))
+					buf.Printf("stats: %s\n", ms.Formatted(false /* delta */))
 				}
 
 				signalError := e.t.Errorf
@@ -2036,55 +2035,6 @@ func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
 	}
 	rangeKeys.CloneInto(&e.iterRangeKeys)
 	return rangeKeyChanged
-}
-
-// formatStats formats MVCC stats.
-func formatStats(ms enginepb.MVCCStats, delta bool) string {
-	// Split stats into field pairs. Subindex 1 is key, 2 is value.
-	fields := regexp.MustCompile(`(\w+):(-?\d+)`).FindAllStringSubmatch(ms.String(), -1)
-
-	// Sort some fields in preferred order, keeping the rest as-is at the end.
-	//
-	// TODO(erikgrinaker): Consider just reordering the MVCCStats struct fields
-	// instead, which determines the order of MVCCStats.String().
-	order := []string{"key_count", "key_bytes", "val_count", "val_bytes",
-		"range_key_count", "range_key_bytes", "range_val_count", "range_val_bytes",
-		"live_count", "live_bytes", "gc_bytes_age",
-		"intent_count", "intent_bytes", "separated_intent_count", "intent_age"}
-	sort.SliceStable(fields, func(i, j int) bool {
-		for _, name := range order {
-			if fields[i][1] == name {
-				return true
-			} else if fields[j][1] == name {
-				return false
-			}
-		}
-		return false
-	})
-
-	// Format and output fields.
-	var s string
-	for _, field := range fields {
-		key, value := field[1], field[2]
-
-		// Always skip zero-valued fields and LastUpdateNanos.
-		if value == "0" || key == "last_update_nanos" {
-			continue
-		}
-
-		if len(s) > 0 {
-			s += " "
-		}
-		s += key + "="
-		if delta && value[0] != '-' {
-			s += "+" // prefix unsigned deltas with +
-		}
-		s += value
-	}
-	if len(s) == 0 && delta {
-		return "no change"
-	}
-	return s
 }
 
 // evalCtx stored the current state of the environment of a running
