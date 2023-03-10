@@ -53,7 +53,7 @@ var (
 		return *bv
 	}()
 	previousVersion = func() string {
-		pv, err := clusterupgrade.PredecessorVersion(buildVersion)
+		pv, err := version.PredecessorVersion(buildVersion)
 		if err != nil {
 			panic(err)
 		}

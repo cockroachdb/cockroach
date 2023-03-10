@@ -27,6 +27,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build",
         "//pkg/build/bazel",
         "//pkg/cloud/externalconn/providers",
         "//pkg/clusterversion",
@@ -67,8 +68,10 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/version",
         "@com_github_cockroachdb_cockroach_go_v2//testserver",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",

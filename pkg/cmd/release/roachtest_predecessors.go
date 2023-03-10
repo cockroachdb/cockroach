@@ -33,8 +33,10 @@ var roachtestPredecessorsCmd = &cobra.Command{
 }
 
 func init() {
-	roachtestPredecessorsCmd.Flags().StringVar(&roachtestPredecessorsFlags.file, "version-map-file",
-		"pkg/cmd/roachtest/roachtestutil/clusterupgrade/predecessor_version.json", "version map json file")
+	roachtestPredecessorsCmd.Flags().StringVar(
+		&roachtestPredecessorsFlags.file, "version-map-file",
+		"pkg/util/version/predecessor_version.json", "version map json file",
+	)
 	roachtestPredecessorsCmd.Flags().StringVar(&roachtestPredecessorsFlags.versionStr, versionFlag, "", "cockroachdb version")
 	_ = roachtestPredecessorsCmd.MarkFlagRequired(versionFlag)
 }

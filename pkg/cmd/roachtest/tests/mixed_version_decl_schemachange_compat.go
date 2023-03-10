@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -131,7 +130,7 @@ func runDeclSchemaChangeCompatMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	versionRegex := regexp.MustCompile(`(\d+\.\d+)`)
-	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
+	predecessorVersion, err := version.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

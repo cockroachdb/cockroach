@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,7 +143,7 @@ func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
+			predV, err := version.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

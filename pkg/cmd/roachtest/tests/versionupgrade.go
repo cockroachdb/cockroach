@@ -347,7 +347,7 @@ func makeVersionFixtureAndFatal(
 		useLocalBinary = true
 	}
 
-	predecessorVersion, err := clusterupgrade.PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	predecessorVersion, err := version.PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}

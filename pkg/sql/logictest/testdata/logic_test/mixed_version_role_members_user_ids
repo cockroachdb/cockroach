@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-22.2-master
+# LogicTest: cockroach-go-testserver-upgrade-to-master
 
 # Verify that all nodes are running 22.2 binaries.
 

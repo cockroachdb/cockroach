@@ -354,7 +354,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(node int) versionStep {
 func runCDCMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
-	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
+	predecessorVersion, err := version.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
