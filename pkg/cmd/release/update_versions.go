@@ -395,7 +395,7 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 	// older than v23 releases.
 	releaseBranchRe := regexp.MustCompile(`^release-(\d\d).\d.*`)
 	updateRoachtestPred := func(branch string) *exec.Cmd {
-		predecessorFile := "pkg/cmd/roachtest/roachtestutil/clusterupgrade/predecessor_version.json"
+		predecessorFile := "pkg/util/version/predecessor_version.json"
 		if matches := releaseBranchRe.FindStringSubmatch(branch); matches != nil {
 			major, _ := strconv.Atoi(matches[1])
 			if major < 23 {

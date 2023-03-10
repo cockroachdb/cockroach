@@ -78,7 +78,7 @@ func runSchemaChangeMixedVersions(
 	concurrency int,
 	buildVersion version.Version,
 ) {
-	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
+	predecessorVersion, err := version.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -452,7 +452,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			roachNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
 			oldNodes := c.Nodes(3, 4)
-			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
+			predV, err := version.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
