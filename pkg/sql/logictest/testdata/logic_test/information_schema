@@ -4946,6 +4946,7 @@ WHERE
 variable                                              value
 allow_ordinal_column_references                       off
 allow_prepare_as_opt_plan                             off
+allow_role_memberships_to_change_during_transaction   off
 alter_primary_region_super_region_override            off
 application_name                                      ·
 avoid_buffering                                       off
