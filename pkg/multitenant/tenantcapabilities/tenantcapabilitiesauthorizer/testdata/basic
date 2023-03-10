@@ -1,8 +1,12 @@
-upsert ten=10 can_admin_split=true can_admin_unsplit=true can_view_node_info=true can_view_tsdb_metrics=true
+upsert ten=10 can_admin_scatter=true can_admin_split=true can_admin_unsplit=true can_view_node_info=true can_view_tsdb_metrics=true
 ----
 ok
 
-upsert ten=11 can_admin_split=false can_admin_unsplit=false can_view_node_info=false can_view_tsdb_metrics=false
+upsert ten=11 can_admin_scatter=false can_admin_split=false can_admin_unsplit=false can_view_node_info=false can_view_tsdb_metrics=false
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
 ----
 ok
 
@@ -15,6 +19,10 @@ ok
 has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
 ----
 ok
+
+has-capability-for-batch ten=11 cmds=(AdminScatter, Scan, ConditionalPut)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
 # Tenant 11 shouldn't be able to issue splits.
 has-capability-for-batch ten=11 cmds=(AdminSplit, Scan, ConditionalPut)
@@ -43,9 +51,13 @@ ok
 
 # Lastly, flip tenant 10's capability for splits; ensure it can no longer issue
 # splits as a result.
-upsert ten=10 can_admin_split=false can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true
 ----
 ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
 has-capability-for-batch ten=10 cmds=(AdminSplit, Scan, ConditionalPut)
 ----
