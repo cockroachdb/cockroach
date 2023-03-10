@@ -1329,3 +1329,203 @@ project
                                     └── gt
                                          ├── variable: a:7
                                          └── variable: i:6
+
+
+# --------------------------------------------------
+# UDFs with ANY/ALL expressions.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION any_fn(i INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i = ANY(SELECT a FROM abc)'
+----
+
+build format=show-scalars
+SELECT any_fn(10)
+----
+project
+ ├── columns: any_fn:14
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: any_fn [as=any_fn:14]
+           ├── params: i:1
+           ├── args
+           │    └── const: 10
+           └── body
+                └── limit
+                     ├── columns: "?column?":13
+                     ├── project
+                     │    ├── columns: "?column?":13
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── subquery [as="?column?":13]
+                     │              └── project
+                     │                   ├── columns: any:12
+                     │                   ├── scalar-group-by
+                     │                   │    ├── columns: count:9!null bool_or:10 bool_or_null:11
+                     │                   │    ├── project
+                     │                   │    │    ├── columns: cmp:7 is_null:8!null
+                     │                   │    │    ├── project
+                     │                   │    │    │    ├── columns: a:2!null
+                     │                   │    │    │    └── scan abc
+                     │                   │    │    │         └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │                   │    │    └── projections
+                     │                   │    │         ├── eq [as=cmp:7]
+                     │                   │    │         │    ├── variable: i:1
+                     │                   │    │         │    └── variable: a:2
+                     │                   │    │         └── is [as=is_null:8]
+                     │                   │    │              ├── variable: a:2
+                     │                   │    │              └── null
+                     │                   │    └── aggregations
+                     │                   │         ├── count-rows [as=count:9]
+                     │                   │         ├── bool-or [as=bool_or:10]
+                     │                   │         │    └── variable: cmp:7
+                     │                   │         └── bool-or [as=bool_or_null:11]
+                     │                   │              └── variable: is_null:8
+                     │                   └── projections
+                     │                        └── and [as=any:12]
+                     │                             ├── gt
+                     │                             │    ├── variable: count:9
+                     │                             │    └── const: 0
+                     │                             └── or
+                     │                                  ├── variable: bool_or:10
+                     │                                  └── and
+                     │                                       ├── variable: bool_or_null:11
+                     │                                       └── null
+                     └── const: 1
+
+exec-ddl
+CREATE FUNCTION all_fn(i INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i < ALL(SELECT a FROM abc WHERE b > i)'
+----
+
+build format=show-scalars
+SELECT all_fn(10)
+----
+project
+ ├── columns: all_fn:14
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: all_fn [as=all_fn:14]
+           ├── params: i:1
+           ├── args
+           │    └── const: 10
+           └── body
+                └── limit
+                     ├── columns: "?column?":13
+                     ├── project
+                     │    ├── columns: "?column?":13
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── not [as="?column?":13]
+                     │              └── subquery
+                     │                   └── project
+                     │                        ├── columns: any:12
+                     │                        ├── scalar-group-by
+                     │                        │    ├── columns: count:9!null bool_or:10 bool_or_null:11
+                     │                        │    ├── project
+                     │                        │    │    ├── columns: cmp:7 is_null:8!null
+                     │                        │    │    ├── project
+                     │                        │    │    │    ├── columns: a:2!null
+                     │                        │    │    │    └── select
+                     │                        │    │    │         ├── columns: a:2!null b:3!null c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │                        │    │    │         ├── scan abc
+                     │                        │    │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │                        │    │    │         └── filters
+                     │                        │    │    │              └── gt
+                     │                        │    │    │                   ├── variable: b:3
+                     │                        │    │    │                   └── variable: i:1
+                     │                        │    │    └── projections
+                     │                        │    │         ├── ge [as=cmp:7]
+                     │                        │    │         │    ├── variable: i:1
+                     │                        │    │         │    └── variable: a:2
+                     │                        │    │         └── is [as=is_null:8]
+                     │                        │    │              ├── variable: a:2
+                     │                        │    │              └── null
+                     │                        │    └── aggregations
+                     │                        │         ├── count-rows [as=count:9]
+                     │                        │         ├── bool-or [as=bool_or:10]
+                     │                        │         │    └── variable: cmp:7
+                     │                        │         └── bool-or [as=bool_or_null:11]
+                     │                        │              └── variable: is_null:8
+                     │                        └── projections
+                     │                             └── and [as=any:12]
+                     │                                  ├── gt
+                     │                                  │    ├── variable: count:9
+                     │                                  │    └── const: 0
+                     │                                  └── or
+                     │                                       ├── variable: bool_or:10
+                     │                                       └── and
+                     │                                            ├── variable: bool_or_null:11
+                     │                                            └── null
+                     └── const: 1
+
+exec-ddl
+CREATE FUNCTION any_fn_tuple(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT (i, j) = ANY(SELECT a, b FROM abc)'
+----
+
+build format=show-scalars
+SELECT any_fn_tuple(10, 20)
+----
+project
+ ├── columns: any_fn_tuple:16
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: any_fn_tuple [as=any_fn_tuple:16]
+           ├── params: i:1 j:2
+           ├── args
+           │    ├── const: 10
+           │    └── const: 20
+           └── body
+                └── limit
+                     ├── columns: "?column?":15
+                     ├── project
+                     │    ├── columns: "?column?":15
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── subquery [as="?column?":15]
+                     │              └── project
+                     │                   ├── columns: any:14
+                     │                   ├── scalar-group-by
+                     │                   │    ├── columns: count:11!null bool_or:12 bool_or_null:13
+                     │                   │    ├── project
+                     │                   │    │    ├── columns: cmp:9 is_null:10!null
+                     │                   │    │    ├── project
+                     │                   │    │    │    ├── columns: column8:8
+                     │                   │    │    │    ├── project
+                     │                   │    │    │    │    ├── columns: a:3!null b:4
+                     │                   │    │    │    │    └── scan abc
+                     │                   │    │    │    │         └── columns: a:3!null b:4 c:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+                     │                   │    │    │    └── projections
+                     │                   │    │    │         └── tuple [as=column8:8]
+                     │                   │    │    │              ├── variable: a:3
+                     │                   │    │    │              └── variable: b:4
+                     │                   │    │    └── projections
+                     │                   │    │         ├── eq [as=cmp:9]
+                     │                   │    │         │    ├── tuple
+                     │                   │    │         │    │    ├── variable: i:1
+                     │                   │    │         │    │    └── variable: j:2
+                     │                   │    │         │    └── variable: column8:8
+                     │                   │    │         └── is-tuple-null [as=is_null:10]
+                     │                   │    │              └── variable: column8:8
+                     │                   │    └── aggregations
+                     │                   │         ├── count-rows [as=count:11]
+                     │                   │         ├── bool-or [as=bool_or:12]
+                     │                   │         │    └── variable: cmp:9
+                     │                   │         └── bool-or [as=bool_or_null:13]
+                     │                   │              └── variable: is_null:10
+                     │                   └── projections
+                     │                        └── and [as=any:14]
+                     │                             ├── gt
+                     │                             │    ├── variable: count:11
+                     │                             │    └── const: 0
+                     │                             └── or
+                     │                                  ├── variable: bool_or:12
+                     │                                  └── and
+                     │                                       ├── variable: bool_or_null:13
+                     │                                       └── null
+                     └── const: 1
