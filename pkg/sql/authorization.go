@@ -542,11 +542,16 @@ func MemberOfWithAdminOption(
 	// in-flight for each user. The role_memberships table version is also part
 	// of the request key so that we don't read data from an old version of the
 	// table.
-	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
+	future, leader := roleMembersCache.populateCacheGroup.DoChan(ctx,
 		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
 		singleflight.DoOpts{
-			Stop:               roleMembersCache.stopper,
-			InheritCancelation: false,
+			Stop: roleMembersCache.stopper,
+			// Inheriting the cancellation is not great, but there isn't much choice
+			// because the underlying goroutine uses the leader's transaction, and if
+			// the leader is canceled and wants to return, it needs to first ensure
+			// that the goroutine inside the singleflight has finished using that
+			// transaction.
+			InheritCancelation: true,
 		},
 		func(ctx context.Context) (interface{}, error) {
 			return resolveMemberOfWithAdminOption(
@@ -555,6 +560,15 @@ func MemberOfWithAdminOption(
 			)
 		})
 	var memberships map[username.SQLUsername]bool
+	select {
+	case <-future.C():
+	case <-ctx.Done():
+		if leader {
+			res := future.WaitForResult(context.Background())
+			return nil, errors.CombineErrors(res.Err, ctx.Err())
+		}
+		return nil, ctx.Err()
+	}
 	res := future.WaitForResult(ctx)
 	if res.Err != nil {
 		return nil, res.Err
