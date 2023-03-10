@@ -47,7 +47,6 @@ import (
 func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 96334)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
 	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
@@ -146,7 +145,17 @@ func TestColdStartLatency(t *testing.T) {
 	}
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
+	// Shorten the closed timestamp target duration so that span configs
+	// propagate more rapidly.
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
+	// Lengthen the lead time for the global tables to prevent overload from
+	// resulting in delays in propagating closed timestamps and, ultimately
+	// forcing requests from being redirected to the leaseholder. Without this
+	// change, the test sometimes is flakey because the latency budget allocated
+	// to closed timestamp propagation proves to be insufficient. This value is
+	// very cautious, and makes this already slow test even slower.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50 ms'")
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '1500ms'`)
 	tdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`)
 
 	applyGlobalTables := func(t *testing.T, db *gosql.DB, isTenant bool) {
