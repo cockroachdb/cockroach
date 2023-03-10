@@ -144,6 +144,7 @@ DECLARE
 BEGIN
 a := NULL;
 b = 7 + 7;
+
 END
 'LANGUAGE PLPGSQL;
 ----
