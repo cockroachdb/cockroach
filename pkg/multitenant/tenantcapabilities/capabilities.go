@@ -160,6 +160,12 @@ type TenantCapabilities interface {
 const (
 	_ CapabilityID = iota
 
+	// CanAdminScatter describes the ability of a tenant to perform manual
+	// KV scatter requests. These operations need a capability
+	// because excessive KV range scatter can overwhelm the storage
+	// cluster.
+	CanAdminScatter // can_admin_scatter
+
 	// CanAdminSplit describes the ability of a tenant to perform manual
 	// KV range split requests. These operations need a capability
 	// because excessive KV range splits can overwhelm the storage
@@ -222,6 +228,7 @@ const (
 func (c CapabilityID) CapabilityType() Type {
 	switch c {
 	case
+		CanAdminScatter,
 		CanAdminSplit,
 		CanAdminUnsplit,
 		CanViewNodeInfo,

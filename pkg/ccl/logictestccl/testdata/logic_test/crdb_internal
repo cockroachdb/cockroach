@@ -194,10 +194,12 @@ query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache
 ----
 tenant_id  capability_id          capability_value
+1          can_admin_scatter      false
 1          can_admin_split        false
 1          can_admin_unsplit      false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false
+1          can_admin_scatter      false
 5          can_admin_split        false
 5          can_admin_unsplit      false
 5          can_view_node_info     false
@@ -211,10 +213,12 @@ query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache
 ----
 tenant_id  capability_id          capability_value
+1          can_admin_scatter      false
 1          can_admin_split        false
 1          can_admin_unsplit      false
 1          can_view_node_info     false
 1          can_view_tsdb_metrics  false
+5          can_admin_scatter      false
 5          can_admin_split        true
 5          can_admin_unsplit      false
 5          can_view_node_info     false
