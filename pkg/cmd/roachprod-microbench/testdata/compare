@@ -1,0 +1,72 @@
+# Compare reports containing benchmarks with the same name, but different packages
+compare name-conflict-a name-conflict-b
+
+----
+----
+Sheet: pkg/parent
+name                             old time/op    new time/op    delta
+pkg/parent/WithNameConflict         100ns ± 0%     100ns ± 0%   ~     (all equal)
+pkg/parent/sub/WithNameConflict    2.00µs ± 0%    2.00µs ± 0%   ~     (all equal)
+
+name                             old alloc/op   new alloc/op   delta
+pkg/parent/WithNameConflict          100B ± 0%      100B ± 0%   ~     (all equal)
+pkg/parent/sub/WithNameConflict    2.00kB ± 0%    2.00kB ± 0%   ~     (all equal)
+
+name                             old allocs/op  new allocs/op  delta
+pkg/parent/WithNameConflict           100 ± 0%       100 ± 0%   ~     (all equal)
+pkg/parent/sub/WithNameConflict     2.00k ± 0%     2.00k ± 0%   ~     (all equal)
+----
+----
+
+# Compare reports with the same set of benchmarks
+compare set-a set-b
+----
+----
+Sheet: pkg/util
+name                                      old time/op    new time/op    delta
+pkg/util/hlc/DecimalToHLC-8                  391ns ± 1%     395ns ± 1%  +1.24%  (p=0.000 n=9+10)
+pkg/util/hlc/TimestampIsEmpty/all-8         1.41ns ± 3%    1.39ns ± 3%    ~     (p=0.148 n=10+10)
+pkg/util/hlc/TimestampIsEmpty/empty-8       0.88ns ± 2%    0.89ns ± 2%    ~     (p=0.436 n=10+10)
+pkg/util/hlc/TimestampIsEmpty/walltime-8    1.40ns ± 3%    1.39ns ± 3%    ~     (p=0.404 n=10+10)
+pkg/util/hlc/TimestampString-8              69.2ns ± 0%    70.4ns ± 0%  +1.77%  (p=0.000 n=9+8)
+pkg/util/hlc/TimestampStringSynthetic-8     69.6ns ± 1%    69.9ns ± 0%    ~     (p=0.112 n=8+7)
+pkg/util/hlc/Update-8                       67.6ms ± 2%    69.0ms ± 5%    ~     (p=0.143 n=10+10)
+
+name                                      old alloc/op   new alloc/op   delta
+pkg/util/hlc/DecimalToHLC-8                  0.00B          0.00B         ~     (all equal)
+pkg/util/hlc/TimestampIsEmpty/all-8          0.00B          0.00B         ~     (all equal)
+pkg/util/hlc/TimestampIsEmpty/empty-8        0.00B          0.00B         ~     (all equal)
+pkg/util/hlc/TimestampIsEmpty/walltime-8     0.00B          0.00B         ~     (all equal)
+pkg/util/hlc/TimestampString-8               24.0B ± 0%     24.0B ± 0%    ~     (all equal)
+pkg/util/hlc/TimestampStringSynthetic-8      24.0B ± 0%     24.0B ± 0%    ~     (all equal)
+pkg/util/hlc/Update-8                       6.19kB ±28%    6.04kB ±16%    ~     (p=0.965 n=10+8)
+
+name                                      old allocs/op  new allocs/op  delta
+pkg/util/hlc/DecimalToHLC-8                   0.00           0.00         ~     (all equal)
+pkg/util/hlc/TimestampIsEmpty/all-8           0.00           0.00         ~     (all equal)
+pkg/util/hlc/TimestampIsEmpty/empty-8         0.00           0.00         ~     (all equal)
+pkg/util/hlc/TimestampIsEmpty/walltime-8      0.00           0.00         ~     (all equal)
+pkg/util/hlc/TimestampString-8                1.00 ± 0%      1.00 ± 0%    ~     (all equal)
+pkg/util/hlc/TimestampStringSynthetic-8       1.00 ± 0%      1.00 ± 0%    ~     (all equal)
+pkg/util/hlc/Update-8                         46.8 ± 9%      46.4 ± 7%    ~     (p=0.909 n=10+8)
+
+Sheet: pkg/server
+name                                            old time/op    new time/op    delta
+pkg/server/AdminAPIDataDistribution-8              558ms ± 2%     811ms ± 2%  +45.39%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/grpcMeta-8     63.8µs ± 2%     0.9µs ± 2%  -98.58%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/no_parent-8    62.3µs ± 2%     0.9µs ± 3%  -98.57%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/traceInfo-8    62.3µs ± 1%     0.9µs ± 3%  -98.58%  (p=0.000 n=10+10)
+
+name                                            old alloc/op   new alloc/op   delta
+pkg/server/AdminAPIDataDistribution-8             88.0MB ± 1%   102.4MB ± 0%  +16.39%  (p=0.000 n=10+9)
+pkg/server/SetupSpanForIncomingRPC/grpcMeta-8     62.6kB ± 0%     0.3kB ± 0%  -99.49%  (p=0.002 n=8+10)
+pkg/server/SetupSpanForIncomingRPC/no_parent-8    62.0kB ± 0%     0.3kB ± 0%  -99.48%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/traceInfo-8    62.0kB ± 0%     0.3kB ± 0%  -99.48%  (p=0.000 n=10+10)
+
+name                                            old allocs/op  new allocs/op  delta
+pkg/server/AdminAPIDataDistribution-8               620k ± 0%      787k ± 0%  +26.92%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/grpcMeta-8       27.0 ± 0%       3.0 ± 0%  -88.89%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/no_parent-8      21.0 ± 0%       3.0 ± 0%  -85.71%  (p=0.000 n=10+10)
+pkg/server/SetupSpanForIncomingRPC/traceInfo-8      21.0 ± 0%       3.0 ± 0%  -85.71%  (p=0.000 n=10+10)
+----
+----
