@@ -342,7 +342,7 @@ func registerRestore(r registry.Registry) {
 
 				if c.Spec().Cloud != sp.backup.cloud {
 					// For now, only run the test on the cloud provider that also stores the backup.
-					t.Skip("test configured to run on %s", sp.backup.cloud)
+					t.Skipf("test configured to run on %s", sp.backup.cloud)
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
