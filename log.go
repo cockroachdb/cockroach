@@ -491,10 +491,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	if hi > l.unstable.offset {
 		unstable := l.unstable.slice(max(lo, l.unstable.offset), hi)
 		if len(ents) > 0 {
-			combined := make([]pb.Entry, len(ents)+len(unstable))
-			n := copy(combined, ents)
-			copy(combined[n:], unstable)
-			ents = combined
+			ents = append(ents, unstable...)
 		} else {
 			ents = unstable
 		}
