@@ -130,8 +130,11 @@ func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 		return nil, ErrUnavailable
 	}
 
-	ents := ms.ents[lo-offset : hi-offset]
-	return limitSize(ents, entryEncodingSize(maxSize)), nil
+	ents := limitSize(ms.ents[lo-offset:hi-offset], entryEncodingSize(maxSize))
+	// NB: use the full slice expression to limit what the caller can do with the
+	// returned slice. For example, an append will reallocate and copy this slice
+	// instead of corrupting the neighbouring ms.ents.
+	return ents[:len(ents):len(ents)], nil
 }
 
 // Term implements the Storage interface.
