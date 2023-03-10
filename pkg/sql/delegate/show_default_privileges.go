@@ -66,5 +66,5 @@ func (d *delegator) delegateShowDefaultPrivileges(
 			query, d.evalCtx.SessionData().User())
 	}
 	query += " ORDER BY 1,2,3,4,5"
-	return parse(query)
+	return d.parse(query)
 }

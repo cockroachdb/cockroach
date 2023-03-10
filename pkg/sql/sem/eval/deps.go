@@ -379,6 +379,12 @@ type Planner interface {
 	SpanStats(context.Context, roachpb.RKey, roachpb.RKey) (*roachpb.SpanStatsResponse, error)
 
 	GetDetailsForSpanStats(ctx context.Context, dbId int, tableId int) (InternalRows, error)
+
+	// MaybeReallocateAnnotations makes a new annotations slice of size
+	// numAnnotations if one is maintained by this Planner and the current one has
+	// less than numAnnotations entries. If updated, the annotations in the eval
+	// context held in the planner is also updated.
+	MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

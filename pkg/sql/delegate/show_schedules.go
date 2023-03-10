@@ -77,7 +77,7 @@ WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
 	if len(whereExprs) > 0 {
 		whereClause = fmt.Sprintf("WHERE (%s)", strings.Join(whereExprs, " AND "))
 	}
-	return parse(fmt.Sprintf(
+	return d.parse(fmt.Sprintf(
 		"SELECT %s FROM system.scheduled_jobs %s",
 		strings.Join(columnExprs, ","),
 		whereClause,

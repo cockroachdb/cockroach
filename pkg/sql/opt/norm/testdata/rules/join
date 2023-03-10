@@ -1,3 +1,7 @@
+opt
+SHOW CHANGEFEED JOBS WITH alias_0 AS MATERIALIZED (CREATE TYPE "int" AS ENUM ()) SELECT * FROM alias_0
+----
+
 import file=tpcc_schema
 ----
 

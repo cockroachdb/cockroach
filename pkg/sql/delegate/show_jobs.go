@@ -23,7 +23,7 @@ import (
 func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	if n.Schedules != nil {
 		// Limit the jobs displayed to the ones started by specified schedules.
-		return parse(fmt.Sprintf(`
+		return d.parse(fmt.Sprintf(`
 SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_id IN (%s)
 `, jobs.CreatedByScheduledJobs, n.Schedules.String()),
 		)
@@ -94,5 +94,5 @@ SELECT *
   FROM jobs
  WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)`, sqlStmt)
 	}
-	return parse(sqlStmt)
+	return d.parse(sqlStmt)
 }

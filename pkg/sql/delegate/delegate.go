@@ -194,7 +194,10 @@ type delegator struct {
 	evalCtx *eval.Context
 }
 
-func parse(sql string) (tree.Statement, error) {
+func (d *delegator) parse(sql string) (tree.Statement, error) {
 	s, err := parser.ParseOne(sql)
+	if err == nil && s.AST != nil {
+		d.evalCtx.Planner.MaybeReallocateAnnotations(s.NumAnnotations)
+	}
 	return s.AST, err
 }

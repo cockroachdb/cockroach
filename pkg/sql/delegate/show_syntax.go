@@ -66,5 +66,5 @@ func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, erro
 	)
 	query.WriteString(") v(f, m)")
 
-	return parse(query.String())
+	return d.parse(query.String())
 }
