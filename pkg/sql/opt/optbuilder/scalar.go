@@ -769,15 +769,23 @@ func (b *Builder) buildUDF(
 		}
 	}
 
+	// For set-returning functions, we handle STRICT behavior in the routine
+	// execution logic. For scalar UDFs this is handled by a CASE statement - see
+	// below.
+	calledOnNullInput := true
+	if isSetReturning {
+		calledOnNullInput = o.CalledOnNullInput
+	}
 	out = b.factory.ConstructUDF(
 		args,
 		&memo.UDFPrivate{
-			Name:         def.Name,
-			Params:       params,
-			Body:         rels,
-			Typ:          f.ResolvedType(),
-			SetReturning: isSetReturning,
-			Volatility:   o.Volatility,
+			Name:              def.Name,
+			Params:            params,
+			Body:              rels,
+			Typ:               f.ResolvedType(),
+			SetReturning:      isSetReturning,
+			Volatility:        o.Volatility,
+			CalledOnNullInput: calledOnNullInput,
 		},
 	)
 
