@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -1413,6 +1414,10 @@ type ExecutorConfig struct {
 	NodeDescs kvcoord.NodeDescStore
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
+
+	// AutoConfigProvider informs the auto config runner job of new
+	// tasks to run.
+	AutoConfigProvider acprovider.Provider
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
