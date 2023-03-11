@@ -204,6 +204,8 @@ func (o *Outbox) Run(
 			return err
 		}
 
+		// TODO(yuzefovich): the row-based outbox sends the header as part of
+		// the first message with data, consider doing that here too.
 		log.VEvent(ctx, 2, "Outbox sending header")
 		// Send header message to establish the remote server (consumer).
 		if err := stream.Send(
@@ -218,7 +220,9 @@ func (o *Outbox) Run(
 		}
 		return nil
 	}(); err != nil {
-		// error during stream set up.
+		// An error during stream setup - the whole query will fail, so we might
+		// as well proactively cancel the flow on this node.
+		flowCtxCancel()
 		o.close(ctx)
 		return
 	}
