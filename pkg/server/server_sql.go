@@ -52,9 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	// Ensure the auto config runner job is registered to avoid log spam.
-	// Pending merge of https://github.com/cockroachdb/cockroach/pull/98466.
-	_ "github.com/cockroachdb/cockroach/pkg/server/autoconfig"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1028,6 +1027,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
+		// TODO(knz): We will replace this provider by an actual provider
+		// in a later commit.
+		AutoConfigProvider: acprovider.NoTaskProvider{},
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1103,6 +1105,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	if externalConnKnobs := cfg.TestingKnobs.ExternalConnection; externalConnKnobs != nil {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
+	}
+	if autoConfigKnobs := cfg.TestingKnobs.AutoConfig; autoConfigKnobs != nil {
+		knobs := autoConfigKnobs.(*autoconfig.TestingKnobs)
+		if knobs.Provider != nil {
+			execCfg.AutoConfigProvider = knobs.Provider
+		}
 	}
 
 	statsRefresher := stats.MakeRefresher(
