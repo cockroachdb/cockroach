@@ -17,6 +17,7 @@ genrule(
         "//pkg/multitenant/mtinfopb:mtinfopb_proto",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/server/autoconfig/autoconfigpb:autoconfigpb_proto",
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/serverpb:serverpb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",

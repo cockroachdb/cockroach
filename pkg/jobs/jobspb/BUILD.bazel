@@ -32,6 +32,7 @@ proto_library(
         "//pkg/kv/kvpb:kvpb_proto",
         "//pkg/multitenant/mtinfopb:mtinfopb_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/server/autoconfig/autoconfigpb:autoconfigpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
@@ -54,6 +55,7 @@ go_proto_library(
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",  # keep
+        "//pkg/server/autoconfig/autoconfigpb",
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",  # keep
