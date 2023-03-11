@@ -237,25 +237,33 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 		}
 	}
 
-	conn, err := execinfra.GetConnForOutbox(
-		ctx, m.flowCtx.Cfg.PodNodeDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
-	)
-	if err != nil {
-		// Log any Dial errors. This does not have a verbosity check due to being
-		// a critical part of query execution: if this step doesn't work, the
-		// receiving side might end up hanging or timing out.
-		log.Infof(ctx, "outbox: connection dial error: %+v", err)
-		return err
-	}
-	client := execinfrapb.NewDistSQLClient(conn)
-	if log.V(2) {
-		log.Infof(ctx, "outbox: calling FlowStream")
-	}
-	m.stream, err = client.FlowStream(ctx)
-	if err != nil {
-		if log.V(1) {
-			log.Infof(ctx, "FlowStream error: %s", err)
+	if err := func() error {
+		conn, err := execinfra.GetConnForOutbox(
+			ctx, m.flowCtx.Cfg.PodNodeDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+		)
+		if err != nil {
+			// Log any Dial errors. This does not have a verbosity check due to being
+			// a critical part of query execution: if this step doesn't work, the
+			// receiving side might end up hanging or timing out.
+			log.Infof(ctx, "outbox: connection dial error: %+v", err)
+			return err
 		}
+		client := execinfrapb.NewDistSQLClient(conn)
+		if log.V(2) {
+			log.Infof(ctx, "outbox: calling FlowStream")
+		}
+		m.stream, err = client.FlowStream(ctx)
+		if err != nil {
+			if log.V(1) {
+				log.Infof(ctx, "FlowStream error: %s", err)
+			}
+			return err
+		}
+		return nil
+	}(); err != nil {
+		// An error during stream setup - the whole query will fail, so we might
+		// as well proactively cancel the flow on this node.
+		m.flowCtxCancel()
 		return err
 	}
 	if log.V(2) {
