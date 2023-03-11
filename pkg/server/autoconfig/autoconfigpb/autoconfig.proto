@@ -1,0 +1,55 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.autoconfig.autoconfigpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/metadata.proto";
+
+// Task defines one auto config task to run by a tenant.
+message Task {
+  option (gogoproto.equal) = true;
+
+  // TaskID is the key for this task within one tenant.
+  // Tasks with a given ID are executed at least once, with
+  // extra efforts to make it exactly-once whenever possible.
+  // See the package-level documentation for package autoconfig
+  // for more details.
+  uint64 task_id = 1 [(gogoproto.customname) = "TaskID"];
+
+  // Description of what the auto configuration task does.
+  // This is reported unredactable in logs and telemetry and thus must be void of PII.
+  string description = 2;
+
+  // MinVersion is the minimum active cluster version that
+  // must be encountered before this task can run.
+  roachpb.Version min_version = 3 [(gogoproto.nullable) = false];
+
+  // Payload describes what the task should run.
+  oneof payload {
+      SimpleSQL simpleSQL = 4;
+  }
+
+  // NEXT ID: 4;
+}
+
+// SimpleSQL describes a list of SQL statements to run within one
+// transaction, using the node user identity. The task fails if the
+// transaction aborts with an error and is not auto-retried.
+message SimpleSQL {
+  option (gogoproto.equal) = true;
+
+  // SQL statements to execute.
+  repeated string statements = 1;
+
+  // NEXT ID: 2;
+}

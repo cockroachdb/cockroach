@@ -24,6 +24,7 @@ import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
+import "server/autoconfig/autoconfigpb/autoconfig.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -1170,6 +1171,13 @@ message AutoConfigRunnerDetails {
 message AutoConfigRunnerProgress {
 }
 
+message AutoConfigTaskDetails {
+  cockroach.server.autoconfig.autoconfigpb.Task task = 1 [(gogoproto.nullable) = false];
+}
+
+message AutoConfigTaskProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -1229,6 +1237,7 @@ message Payload {
     PollJobsStatsDetails poll_jobs_stats = 39;
 
     AutoConfigRunnerDetails auto_config_runner = 41;
+    AutoConfigTaskDetails auto_config_task = 42;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1299,6 +1308,7 @@ message Progress {
     KeyVisualizerProgress keyVisualizerProgress = 27;
     PollJobsStatsProgress pollJobsStats = 28;
     AutoConfigRunnerProgress auto_config_runner = 29;
+    AutoConfigTaskProgress auto_config_task = 30;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1331,6 +1341,7 @@ enum Type {
   KEY_VISUALIZER = 18 [(gogoproto.enumvalue_customname) = "TypeKeyVisualizer"];
   POLL_JOBS_STATS = 19 [(gogoproto.enumvalue_customname) = "TypePollJobsStats"];
   AUTO_CONFIG_RUNNER = 20 [(gogoproto.enumvalue_customname) = "TypeAutoConfigRunner"];
+  AUTO_CONFIG_TASK = 21 [(gogoproto.enumvalue_customname) = "TypeAutoConfigTask"];
 }
 
 message Job {
