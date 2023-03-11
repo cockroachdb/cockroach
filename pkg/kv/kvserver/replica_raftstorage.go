@@ -358,9 +358,9 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	// to different zones.
 	// Load the system config.
 	confReader, err := r.store.GetConfReader(ctx)
-	if errors.Is(err, errSysCfgUnavailable) {
-		// This could be before the system config was ever gossiped, or it
-		// expired. Let the gossip callback set the info.
+	if errors.Is(err, errSpanConfigsUnavailable) {
+		// This could be before the span config subscription was ever
+		// established.
 		log.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
 		return nil
 	}

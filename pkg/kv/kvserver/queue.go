@@ -322,13 +322,13 @@ type queueConfig struct {
 	// (if not already initialized) when deciding whether to process this
 	// replica.
 	needsRaftInitialized bool
-	// needsSystemConfig controls whether this queue requires a valid copy of the
-	// system config to operate on a replica. Not all queues require it, and it's
+	// needsSpanConfigs controls whether this queue requires a valid copy of the
+	// span configs to operate on a replica. Not all queues require it, and it's
 	// unsafe for certain queues to wait on it. For example, a raft snapshot may
-	// be needed in order to make it possible for the system config to become
-	// available (as observed in #16268), so the raft snapshot queue can't
-	// require the system config to already be available.
-	needsSystemConfig bool
+	// be needed in order to make it possible for the span config range to
+	// become available (as observed in #16268), so the raft snapshot queue
+	// can't require the span configs to already be available.
+	needsSpanConfigs bool
 	// acceptsUnsplitRanges controls whether this queue can process ranges that
 	// need to be split due to zone config settings. Ranges are checked before
 	// calling queueImpl.shouldQueue and queueImpl.process.
@@ -378,7 +378,7 @@ type queueConfig struct {
 //
 // Replicas are added asynchronously through `MaybeAddAsync` or `AddAsync`.
 // MaybeAddAsync checks the various requirements selected by the queue config
-// (needsSystemConfig, needsLease, acceptsUnsplitRanges) as well as the
+// (needsSpanConfigs, needsLease, acceptsUnsplitRanges) as well as the
 // queueImpl's `shouldQueue`. AddAsync does not check any of this and accept a
 // priority directly instead of getting it from `shouldQueue`. These methods run
 // with shared a maximum concurrency of `addOrMaybeAddSemSize`. If the maximum
@@ -473,9 +473,9 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 	ambient := store.cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
 
-	if !cfg.acceptsUnsplitRanges && !cfg.needsSystemConfig {
+	if !cfg.acceptsUnsplitRanges && !cfg.needsSpanConfigs {
 		log.Fatalf(ambient.AnnotateCtx(context.Background()),
-			"misconfigured queue: acceptsUnsplitRanges=false requires needsSystemConfig=true; got %+v", cfg)
+			"misconfigured queue: acceptsUnsplitRanges=false requires needsSpanConfigs=true; got %+v", cfg)
 	}
 
 	bq := baseQueue{
@@ -639,12 +639,12 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	ctx = repl.AnnotateCtx(ctx)
 	// Load the system config if it's needed.
 	var confReader spanconfig.StoreReader
-	if bq.needsSystemConfig {
+	if bq.needsSpanConfigs {
 		var err error
 		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
-			if errors.Is(err, errSysCfgUnavailable) && log.V(1) {
-				log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
+			if errors.Is(err, errSpanConfigsUnavailable) && log.V(1) {
+				log.Warningf(ctx, "unable to retrieve span configs, skipping: %v", err)
 			}
 			return
 		}
@@ -931,10 +931,10 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
 	// Load the system config if it's needed.
 	var confReader spanconfig.StoreReader
-	if bq.needsSystemConfig {
+	if bq.needsSpanConfigs {
 		var err error
 		confReader, err = bq.store.GetConfReader(ctx)
-		if errors.Is(err, errSysCfgUnavailable) {
+		if errors.Is(err, errSpanConfigsUnavailable) {
 			if log.V(1) {
 				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
 			}

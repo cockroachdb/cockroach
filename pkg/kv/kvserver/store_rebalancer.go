@@ -129,16 +129,17 @@ const (
 // will best accomplish the store-level goals.
 type StoreRebalancer struct {
 	log.AmbientContext
-	metrics           StoreRebalancerMetrics
-	st                *cluster.Settings
-	storeID           roachpb.StoreID
-	allocator         allocatorimpl.Allocator
-	storePool         storepool.AllocatorStorePool
-	rr                RangeRebalancer
-	replicaRankings   *ReplicaRankings
-	getRaftStatusFn   func(replica CandidateReplica) *raft.Status
-	processTimeoutFn  func(replica CandidateReplica) time.Duration
-	objectiveProvider RebalanceObjectiveProvider
+	metrics                 StoreRebalancerMetrics
+	st                      *cluster.Settings
+	storeID                 roachpb.StoreID
+	allocator               allocatorimpl.Allocator
+	storePool               storepool.AllocatorStorePool
+	rr                      RangeRebalancer
+	replicaRankings         *ReplicaRankings
+	getRaftStatusFn         func(replica CandidateReplica) *raft.Status
+	processTimeoutFn        func(replica CandidateReplica) time.Duration
+	objectiveProvider       RebalanceObjectiveProvider
+	subscribedToSpanConfigs func() bool
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -170,6 +171,11 @@ func NewStoreRebalancer(
 			return rq.processTimeoutFunc(st, replica.Repl())
 		},
 		objectiveProvider: objectiveProvider,
+		subscribedToSpanConfigs: func() bool {
+			// The store rebalancer makes use of span configs. Wait until we've
+			// established subscription.
+			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
+		},
 	}
 	sr.AddLogTag("store-rebalancer", nil)
 	rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
@@ -264,6 +270,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			// different or contradicting actions are then taken.
 			mode := sr.RebalanceMode()
 			if mode == LBRebalancingOff {
+				continue
+			}
+			if !sr.subscribedToSpanConfigs() {
 				continue
 			}
 			hottestRanges := sr.replicaRankings.TopLoad()

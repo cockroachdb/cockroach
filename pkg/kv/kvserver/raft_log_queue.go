@@ -177,7 +177,7 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       raftLogQueueConcurrency,
 			needsLease:           false,
-			needsSystemConfig:    false,
+			needsSpanConfigs:     false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftLogQueueSuccesses,
 			failures:             store.metrics.RaftLogQueueFailures,

@@ -112,7 +112,7 @@ func newTimeSeriesMaintenanceQueue(
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
-			needsSystemConfig:    false,
+			needsSpanConfigs:     false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
 			failures:             store.metrics.TimeSeriesMaintenanceQueueFailures,
