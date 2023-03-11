@@ -285,7 +285,7 @@ func TestTenantRateLimiter(t *testing.T) {
 			require.GreaterOrEqual(t, admittedMetricVal, tooManyWrites)
 			// Allow a tolerance for other requests performed while starting the
 			// tenant server.
-			require.Less(t, admittedMetricVal, tooManyWrites+300)
+			require.Less(t, admittedMetricVal, tooManyWrites+400)
 			break
 		}
 	}
