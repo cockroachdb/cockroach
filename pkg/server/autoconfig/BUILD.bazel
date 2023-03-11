@@ -1,16 +1,60 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "autoconfig",
-    srcs = ["auto_config.go"],
+    srcs = [
+        "auto_config.go",
+        "auto_config_env_runner.go",
+        "auto_config_task.go",
+        "doc.go",
+        "task_markers.go",
+        "testing_knobs.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/autoconfig",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/security/username",
+        "//pkg/server/autoconfig/acprovider",
+        "//pkg/server/autoconfig/autoconfigpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "autoconfig_test",
+    srcs = [
+        "auto_config_test.go",
+        "main_test.go",
+        "task_markers_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":autoconfig",
+        "//pkg/base",
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/server/autoconfig/acprovider",
+        "//pkg/server/autoconfig/autoconfigpb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
