@@ -383,6 +383,7 @@ func (m *Outbox) startWatchdogGoroutine(
 	stream := m.stream
 	wg.Add(1)
 	if err := m.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "watchdog", func(ctx context.Context) {
+		defer wg.Done()
 		for {
 			signal, err := stream.Recv()
 			if err != nil {
@@ -403,17 +404,11 @@ func (m *Outbox) startWatchdogGoroutine(
 			}
 		}
 		close(ch)
-		wg.Done()
 	}); err != nil {
 		wg.Done()
 		return nil, err
 	}
 	return ch, nil
-}
-
-func (m *Outbox) run(ctx context.Context, wg *sync.WaitGroup) {
-	m.setErr(m.mainLoop(ctx, wg))
-	wg.Done()
 }
 
 // Start starts the outbox.
@@ -423,7 +418,10 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	}
 	m.flowCtxCancel = flowCtxCancel
 	wg.Add(1)
-	go m.run(ctx, wg)
+	go func() {
+		defer wg.Done()
+		m.setErr(m.mainLoop(ctx, wg))
+	}()
 }
 
 // setErr sets the error stored in the Outbox if it hasn't been set previously.
