@@ -245,7 +245,7 @@ func TestReplicationStatsReport(t *testing.T) {
 		{
 			name: "simple no violations",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
@@ -262,7 +262,7 @@ func TestReplicationStatsReport(t *testing.T) {
 						},
 						zone: &zone{
 							// Change replication options so that db1 gets a report entry.
-							replicas: 3,
+							voters: 3,
 						},
 					},
 					{
@@ -326,7 +326,7 @@ func TestReplicationStatsReport(t *testing.T) {
 		{
 			name: "simple violations",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
@@ -381,7 +381,7 @@ func TestReplicationStatsReport(t *testing.T) {
 		{
 			name: "joint consensus",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
@@ -429,7 +429,138 @@ func TestReplicationStatsReport(t *testing.T) {
 					},
 				},
 			},
-		}}
+		},
+		{
+			name: "simple no violations with non-voters",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{voters: 1, nonVoters: 2},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1",
+								partitions: []partition{{
+									name:  "p1",
+									start: []int{100},
+									end:   []int{200},
+									zone:  &zone{constraints: "[+p1]"},
+								}},
+							},
+							{name: "t2"},
+						},
+						zone: &zone{
+							// Change replication options so that db1 gets a report entry.
+							nonVoters: 3,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "db1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       8,
+						unavailable:     0,
+						underReplicated: 0,
+						// All ranges are over-replicated because they have
+						// too many voters.
+						overReplicated: 8,
+					},
+				},
+				{
+					object: "t1.p1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       2,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  2,
+					},
+				},
+			},
+		},
+		{
+			name: "voters inherited and overwriting lower level num replicas",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{voters: 3, nonVoters: 1},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1",
+								partitions: []partition{{
+									name:  "p1",
+									start: []int{100},
+									end:   []int{200},
+									zone:  &zone{constraints: "[+p1]"},
+								}},
+							},
+							{name: "t2"},
+						},
+						zone: &zone{
+							// Change replication options so that db1 gets a report entry.
+							nonVoters: 2,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "db1",
+					zoneRangeStatus: zoneRangeStatus{
+						// no ranges are over-replicated because voters is inherited
+						// from the higher level
+						numRanges:       8,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+				{
+					object: "t1.p1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       2,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+			},
+		},
+	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			runReplicationStatsTest(t, tc)
