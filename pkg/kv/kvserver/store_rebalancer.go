@@ -107,6 +107,8 @@ type StoreRebalancer struct {
 	rr              RangeRebalancer
 	replRankings    *replicaRankings
 	getRaftStatusFn func(replica *Replica) *raft.Status
+
+	subscribedToSpanConfigs func() bool
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -126,6 +128,11 @@ func NewStoreRebalancer(
 		replRankings:   replRankings,
 		getRaftStatusFn: func(replica *Replica) *raft.Status {
 			return replica.RaftStatus()
+		},
+		subscribedToSpanConfigs: func() bool {
+			// The store rebalancer makes use of span configs. Wait until we've
+			// established subscription.
+			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 	}
 	sr.AddLogTag("store-rebalancer", nil)
@@ -169,6 +176,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 
 			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
 			if mode == LBRebalancingOff {
+				continue
+			}
+			if !sr.subscribedToSpanConfigs() {
 				continue
 			}
 

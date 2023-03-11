@@ -79,7 +79,7 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       splitQueueConcurrency,
 			needsLease:           true,
-			needsSystemConfig:    true,
+			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,
 			failures:             store.metrics.SplitQueueFailures,
@@ -131,6 +131,11 @@ func shouldSplitRange(
 	return shouldQ, priority
 }
 
+func (sq *splitQueue) enabled() bool {
+	st := sq.store.ClusterSettings()
+	return kvserverbase.SplitQueueEnabled.Get(&st.SV)
+}
+
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone,
@@ -138,6 +143,10 @@ func shouldSplitRange(
 func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
+	if !sq.enabled() {
+		return false, 0
+	}
+
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
@@ -163,6 +172,11 @@ var _ PurgatoryError = unsplittableRangeError{}
 func (sq *splitQueue) process(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if !sq.enabled() {
+		log.VEventf(ctx, 2, "skipping split: queue has been disabled")
+		return false, nil
+	}
+
 	processed, err = sq.processAttempt(ctx, r, confReader)
 	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split

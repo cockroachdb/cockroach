@@ -98,7 +98,7 @@ func (tq *testQueueImpl) updateChan() <-chan time.Time {
 func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
 	if !cfg.acceptsUnsplitRanges {
 		// Needed in order to pass the validation in newBaseQueue.
-		cfg.needsSystemConfig = true
+		cfg.needsSpanConfigs = true
 	}
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
@@ -579,7 +579,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	{
 		confReader, err := tc.store.GetConfReader(ctx)
 		require.Nil(t, confReader)
-		require.True(t, errors.Is(err, errSysCfgUnavailable))
+		require.True(t, errors.Is(err, errSpanConfigsUnavailable))
 	}
 
 	r, err := tc.store.GetReplica(1)
@@ -597,7 +597,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
 	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
-		needsSystemConfig:    true,
+		needsSpanConfigs:     true,
 		acceptsUnsplitRanges: true,
 		maxSize:              1,
 	})
@@ -623,7 +623,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	// Now check that a queue which doesn't require the system config can
 	// successfully add and process a replica.
 	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
-		needsSystemConfig:    false,
+		needsSpanConfigs:     false,
 		acceptsUnsplitRanges: true,
 		maxSize:              1,
 	})
