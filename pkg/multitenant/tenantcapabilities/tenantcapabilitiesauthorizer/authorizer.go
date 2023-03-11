@@ -58,10 +58,9 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
-		log.Infof(ctx,
+		log.VInfof(ctx, 2,
 			"no capability information for tenant %s; requests that require capabilities may be denied",
-			tenID,
-		)
+			tenID)
 	}
 
 	for _, ru := range ba.Requests {
