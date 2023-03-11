@@ -49,6 +49,8 @@ var (
 	_ Details = SchemaTelemetryDetails{}
 	_ Details = KeyVisualizerDetails{}
 	_ Details = AutoConfigRunnerDetails{}
+	_ Details = AutoConfigEnvRunnerDetails{}
+	_ Details = AutoConfigTaskDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -70,6 +72,8 @@ var (
 	_ ProgressDetails = SchemaTelemetryProgress{}
 	_ ProgressDetails = KeyVisualizerProgress{}
 	_ ProgressDetails = AutoConfigRunnerProgress{}
+	_ ProgressDetails = AutoConfigEnvRunnerProgress{}
+	_ ProgressDetails = AutoConfigTaskProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -149,6 +153,8 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoSchemaTelemetry,
 	TypePollJobsStats,
 	TypeAutoConfigRunner,
+	TypeAutoConfigEnvRunner,
+	TypeAutoConfigTask,
 	TypeKeyVisualizer,
 }
 
@@ -197,6 +203,10 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypePollJobsStats, nil
 	case *Payload_AutoConfigRunner:
 		return TypeAutoConfigRunner, nil
+	case *Payload_AutoConfigEnvRunner:
+		return TypeAutoConfigEnvRunner, nil
+	case *Payload_AutoConfigTask:
+		return TypeAutoConfigTask, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -238,6 +248,8 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeKeyVisualizer:                KeyVisualizerDetails{},
 	TypePollJobsStats:                PollJobsStatsDetails{},
 	TypeAutoConfigRunner:             AutoConfigRunnerDetails{},
+	TypeAutoConfigEnvRunner:          AutoConfigEnvRunnerDetails{},
+	TypeAutoConfigTask:               AutoConfigTaskDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -287,6 +299,10 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_PollJobsStats{PollJobsStats: &d}
 	case AutoConfigRunnerProgress:
 		return &Progress_AutoConfigRunner{AutoConfigRunner: &d}
+	case AutoConfigEnvRunnerProgress:
+		return &Progress_AutoConfigEnvRunner{AutoConfigEnvRunner: &d}
+	case AutoConfigTaskProgress:
+		return &Progress_AutoConfigTask{AutoConfigTask: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -334,6 +350,10 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.PollJobsStats
 	case *Payload_AutoConfigRunner:
 		return *d.AutoConfigRunner
+	case *Payload_AutoConfigEnvRunner:
+		return *d.AutoConfigEnvRunner
+	case *Payload_AutoConfigTask:
+		return *d.AutoConfigTask
 	default:
 		return nil
 	}
@@ -381,6 +401,10 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.PollJobsStats
 	case *Progress_AutoConfigRunner:
 		return *d.AutoConfigRunner
+	case *Progress_AutoConfigEnvRunner:
+		return *d.AutoConfigEnvRunner
+	case *Progress_AutoConfigTask:
+		return *d.AutoConfigTask
 	default:
 		return nil
 	}
@@ -452,6 +476,10 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_PollJobsStats{PollJobsStats: &d}
 	case AutoConfigRunnerDetails:
 		return &Payload_AutoConfigRunner{AutoConfigRunner: &d}
+	case AutoConfigEnvRunnerDetails:
+		return &Payload_AutoConfigEnvRunner{AutoConfigEnvRunner: &d}
+	case AutoConfigTaskDetails:
+		return &Payload_AutoConfigTask{AutoConfigTask: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -487,7 +515,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 21
+const NumJobTypes = 23
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this
