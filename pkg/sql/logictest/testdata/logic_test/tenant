@@ -32,16 +32,16 @@ CREATE TENANT "invalid.name"
 statement ok
 CREATE TENANT three
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBT colnames
+SELECT id, active, name
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name        crdb_internal.pb_to_json
-1   true    system      {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-one  {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-3   true    two         {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
-4   true    three       {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
+id  active  name
+1   true    system
+2   true    tenant-one
+3   true    two
+4   true    three
 
 query ITTT colnames
 SHOW TENANT system
@@ -152,23 +152,23 @@ DROP TENANT IF EXISTS dne
 statement ok
 CREATE TENANT four
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBT colnames
+SELECT id, active, name
 FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
-id  active  name  crdb_internal.pb_to_json
-5   true    four  {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
+id  active  name
+5   true    four
 
 statement ok
 DROP TENANT four
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBT colnames
+SELECT id, active, name
 FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
-id  active  name  crdb_internal.pb_to_json
+id  active  name
 
 statement error tenant "four" does not exist
 SHOW TENANT four
@@ -226,20 +226,25 @@ DROP TENANT "to-be-reclaimed"
 statement ok
 CREATE TENANT "to-be-reclaimed"
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBTTT colnames
+SELECT
+  id,
+  active,
+  name,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState') AS deprecated_data_state,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') AS dropped_name
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name             crdb_internal.pb_to_json
-1   true    system           {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-one       {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-3   true    two              {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
-4   true    three            {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
-5   false   NULL             {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "four", "tenantReplicationJobId": "0"}
-6   false   NULL             {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "DROP", "deprecatedId": "6", "droppedName": "five-requiring-quotes", "tenantReplicationJobId": "0"}
-7   false   NULL             {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "DROP", "deprecatedId": "7", "droppedName": "to-be-reclaimed", "tenantReplicationJobId": "0"}
-8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "8", "droppedName": "", "tenantReplicationJobId": "0"}
+id  active  name             deprecated_data_state  dropped_name
+1   true    system           READY                  ·
+2   true    tenant-one       READY                  ·
+3   true    two              READY                  ·
+4   true    three            READY                  ·
+5   false   NULL             DROP                   four
+6   false   NULL             DROP                   five-requiring-quotes
+7   false   NULL             DROP                   to-be-reclaimed
+8   true    to-be-reclaimed  READY                  ·
 
 # More valid tenant names.
 statement ok
