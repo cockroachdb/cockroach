@@ -220,14 +220,14 @@ func (s *ParallelUnorderedSynchronizer) init() {
 		go func(input colexecargs.OpWithMetaInfo, inputIdx int) {
 			span := s.tracingSpans[inputIdx]
 			defer func() {
+				defer s.externalWaitGroup.Done()
+				defer s.internalWaitGroup.Done()
 				if span != nil {
 					defer span.Finish()
 				}
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
 				}
-				s.internalWaitGroup.Done()
-				s.externalWaitGroup.Done()
 			}()
 			sendErr := func(err error) {
 				select {
