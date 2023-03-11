@@ -30,7 +30,7 @@ import * as format from "src/util/format";
 import {
   DATE_FORMAT,
   EncodeDatabaseTableUri,
-  EncodeDatabaseUri,
+  EncodeDatabaseUri, FormatWithTimezone,
 } from "src/util/format";
 import { mvccGarbage, syncHistory, unique } from "../util";
 
@@ -113,6 +113,7 @@ export interface DatabaseDetailsPageData {
   isTenant?: UIConfigState["isTenant"];
   viewMode: ViewMode;
   showNodeRegionsColumn?: boolean;
+  timezone?: string;
 }
 
 export interface DatabaseDetailsPageDataTable {
@@ -660,13 +661,13 @@ export class DatabaseDetailsPage extends React.Component<
             placement="bottom"
             title="The last time table statistics were created or updated."
           >
-            Table Stats Last Updated (UTC)
+            Table Stats Last Updated ({this.props.timezone || "UTC"})
           </Tooltip>
         ),
         cell: table =>
           !table.details.statsLastUpdated
             ? "No table statistics found"
-            : table.details.statsLastUpdated.format(DATE_FORMAT),
+            : FormatWithTimezone(table.details.statsLastUpdated, DATE_FORMAT, this.props.timezone),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",

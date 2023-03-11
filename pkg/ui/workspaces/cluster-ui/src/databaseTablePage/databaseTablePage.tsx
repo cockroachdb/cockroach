@@ -32,11 +32,11 @@ import {
 } from "src/summaryCard";
 import * as format from "src/util/format";
 import {
-  DATE_FORMAT,
+  DATE_FORMAT, DATE_FORMAT_24_TZ,
   DATE_FORMAT_24_UTC,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
-  EncodeUriName,
+  EncodeUriName, FormatWithTimezone,
 } from "src/util/format";
 import {
   ascendingAttr,
@@ -116,6 +116,7 @@ export interface DatabaseTablePageData {
   showNodeRegionsSection?: boolean;
   automaticStatsCollectionEnabled?: boolean;
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  timezone?: string;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -326,7 +327,7 @@ export class DatabaseTablePage extends React.Component<
     if (lastReset.isSame(this.minDate)) {
       return "Last reset: Never";
     } else {
-      return "Last reset: " + lastReset.format(DATE_FORMAT_24_UTC);
+      return "Last reset: " + FormatWithTimezone(lastReset, DATE_FORMAT_24_TZ, this.props.timezone);
     }
   }
 
@@ -336,9 +337,9 @@ export class DatabaseTablePage extends React.Component<
     if (indexStat.lastUsed.isSame(this.minDate)) {
       return "Never";
     }
-    return `Last ${indexStat.lastUsedType}: ${indexStat.lastUsed.format(
-      DATE_FORMAT,
-    )}`;
+    return `Last ${indexStat.lastUsedType}: ${FormatWithTimezone(
+      indexStat.lastUsed, DATE_FORMAT_24_TZ, this.props.timezone)
+    }`;
   }
 
   private renderIndexRecommendations = (
@@ -436,7 +437,7 @@ export class DatabaseTablePage extends React.Component<
     },
     {
       name: "last used",
-      title: "Last Used (UTC)",
+      title: `Last Used`,
       hideTitleUnderline: true,
       className: cx("index-stats-table__col-last-used"),
       cell: indexStat => this.getLastUsedString(indexStat),
@@ -584,9 +585,13 @@ export class DatabaseTablePage extends React.Component<
                           {this.props.details.statsLastUpdated && (
                             <SummaryCardItem
                               label="Table Stats Last Updated"
-                              value={this.props.details.statsLastUpdated.format(
-                                DATE_FORMAT_24_UTC,
-                              )}
+                              value={
+                                FormatWithTimezone(
+                                  this.props.details.statsLastUpdated,
+                                  DATE_FORMAT_24_TZ,
+                                  this.props.timezone,
+                                )
+                              }
                             />
                           )}
                           {this.props.automaticStatsCollectionEnabled !=

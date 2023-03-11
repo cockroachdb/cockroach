@@ -38,7 +38,7 @@ import {
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
-import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
+import {selectAutomaticStatsCollectionEnabled, selectTimezoneSetting} from "src/redux/clusterSettings";
 import { normalizePrivileges } from "../utils";
 
 const { TableDetailsRequest, TableStatsRequest, TableIndexStatsRequest } =
@@ -63,6 +63,7 @@ export const mapStateToProps = createSelector(
   state => selectAutomaticStatsCollectionEnabled(state),
   _ => isTenant,
   state => selectHasAdminRole(state),
+  state => selectTimezoneSetting(state),
   (
     database,
     table,
@@ -74,6 +75,7 @@ export const mapStateToProps = createSelector(
     automaticStatsCollectionEnabled,
     isTenant,
     hasAdminRole,
+    timezone,
   ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
@@ -190,6 +192,7 @@ export const mapStateToProps = createSelector(
         stats: indexStatsData,
         lastReset: lastReset,
       },
+      timezone
     };
   },
 );

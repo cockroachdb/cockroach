@@ -174,8 +174,8 @@ const RangeSelect = ({
             {shouldShowCustom ? (
               <div className={cx("custom-menu")}>
                 <DateRangeMenu
-                  startInit={selected.timeWindow.start.tz(timezoneLabel)}
-                  endInit={selected.timeWindow.end.tz(timezoneLabel)}
+                  startInit={selected.timeWindow.start}
+                  endInit={selected.timeWindow.end}
                   onSubmit={onCustomSelectWrapper}
                   onCancel={closeDropdown}
                   onReturnToPresetOptionsClick={onReturnToPresetOptionsClick}

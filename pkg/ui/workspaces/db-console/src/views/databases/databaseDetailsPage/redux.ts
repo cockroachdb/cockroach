@@ -36,6 +36,7 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString, normalizePrivileges } from "../utils";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const { DatabaseDetailsRequest, TableDetailsRequest, TableStatsRequest } =
   cockroach.server.serverpb;
@@ -102,7 +103,11 @@ export const mapStateToProps = createSelector(
   state => sortSettingGrantsLocalSetting.selector(state),
   state => filtersLocalTablesSetting.selector(state),
   state => searchLocalTablesSetting.selector(state),
-  (_: AdminUIState) => isTenant,
+  (state: AdminUIState) => {
+    // Typings don't allow for more than 12 selectors,
+    // so the last selector has disparate data stuffed into one.
+    return { isTenant, timezone: selectTimezoneSetting(state) }
+  },
   (
     database,
     databaseDetails,
@@ -115,9 +120,10 @@ export const mapStateToProps = createSelector(
     sortSettingGrants,
     filtersLocalTables,
     searchLocalTables,
-    isTenant,
+    isTenantAndTimezoneObj,
   ): DatabaseDetailsPageData => {
     return {
+      timezone: isTenantAndTimezoneObj.timezone,
       loading: !!databaseDetails[database]?.inFlight,
       loaded: !!databaseDetails[database]?.valid,
       lastError: databaseDetails[database]?.lastError,
@@ -129,7 +135,7 @@ export const mapStateToProps = createSelector(
       filters: filtersLocalTables,
       search: searchLocalTables,
       nodeRegions: nodeRegions,
-      isTenant: isTenant,
+      isTenant: isTenantAndTimezoneObj.isTenant,
       tables: _.map(databaseDetails[database]?.data?.table_names, table => {
         const tableId = generateTableID(database, table);
 
@@ -178,7 +184,7 @@ export const mapStateToProps = createSelector(
             nodesByRegionString: getNodesByRegionString(
               nodes,
               nodeRegions,
-              isTenant,
+              isTenantAndTimezoneObj.isTenant,
             ),
           },
         };

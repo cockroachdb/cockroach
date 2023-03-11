@@ -68,9 +68,11 @@ export function DateRangeMenu({
    *  the parent component to re-initialize this.
    */
   const [startMoment, setStartMoment] = useState<Moment>(
-    startInit || moment.tz(timezone),
+    startInit ? startInit.tz(timezone) : moment.tz(timezone)
   );
-  const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.tz(timezone));
+  const [endMoment, setEndMoment] = useState<Moment>(
+    endInit ? endInit.tz(timezone) : moment.tz(timezone)
+  );
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);

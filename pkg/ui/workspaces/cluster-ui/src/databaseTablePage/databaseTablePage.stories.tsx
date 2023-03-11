@@ -68,6 +68,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   resetIndexUsageStats: () => {},
   refreshSettings: () => {},
   refreshUserSQLRoles: () => {},
+  timezone: "UTC"
 };
 
 const name = randomName();
@@ -172,6 +173,7 @@ const withData: DatabaseTablePageProps = {
   resetIndexUsageStats: () => {},
   refreshSettings: () => {},
   refreshUserSQLRoles: () => {},
+  timezone: "UTC"
 };
 
 storiesOf("Database Table Page", module)
