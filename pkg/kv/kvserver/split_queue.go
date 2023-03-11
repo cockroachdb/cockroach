@@ -171,6 +171,22 @@ func shouldSplitRange(
 	return shouldQ, priority
 }
 
+func (sq *splitQueue) enabled() bool {
+	if !sq.store.cfg.SpanConfigsDisabled {
+		if sq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+			// If we don't have any span configs available, enabling the
+			// split queue would mean applying the statically configured range
+			// sizes in the fallback span config. For clusters configured with
+			// larger range sizes, this could lead to a burst of splitting post
+			// node-restart.
+			return false
+		}
+	}
+
+	st := sq.store.ClusterSettings()
+	return kvserverbase.SplitQueueEnabled.Get(&st.SV)
+}
+
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone,
@@ -178,6 +194,10 @@ func shouldSplitRange(
 func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
+	if !sq.enabled() {
+		return false, 0
+	}
+
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
@@ -203,6 +223,11 @@ var _ PurgatoryError = unsplittableRangeError{}
 func (sq *splitQueue) process(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if !sq.enabled() {
+		log.VEventf(ctx, 2, "skipping split: queue has been disabled")
+		return false, nil
+	}
+
 	processed, err = sq.processAttempt(ctx, r, confReader)
 	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split

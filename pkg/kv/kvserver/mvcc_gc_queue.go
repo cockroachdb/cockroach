@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -232,6 +233,24 @@ func (r mvccGCQueueScore) String() string {
 		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
 }
 
+func (mgcq *mvccGCQueue) enabled() bool {
+	if !mgcq.store.cfg.SpanConfigsDisabled {
+		if mgcq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+			// If we don't have any span configs available, enabling the
+			// MVCC GC queue would mean applying the statically configured
+			// default GC TTL and ignoring any set protected timestamps. The
+			// latter is best-effort protection, but for clusters configured
+			// with GC TTL greater than the default, post node-restart it could
+			// lead to a burst of MVCC GC activity and AOST queries failing to
+			// find expected data.
+			return false
+		}
+	}
+
+	st := mgcq.store.ClusterSettings()
+	return kvserverbase.MVCCGCQueueEnabled.Get(&st.SV)
+}
+
 // shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
@@ -239,6 +258,10 @@ func (r mvccGCQueueScore) String() string {
 func (mgcq *mvccGCQueue) shouldQueue(
 	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, float64) {
+	if !mgcq.enabled() {
+		return false, 0
+	}
+
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
 	conf := repl.SpanConfig()
@@ -672,6 +695,11 @@ func (r *replicaGCer) GC(
 func (mgcq *mvccGCQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if !mgcq.enabled() {
+		log.VEventf(ctx, 2, "skipping mvcc gc: queue has been disabled")
+		return false, nil
+	}
+
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	defer repl.MeasureReqCPUNanos(grunning.Time())

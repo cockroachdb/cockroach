@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"sync/atomic"
 	"time"
 
@@ -613,9 +614,27 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	return rq
 }
 
+func (rq *replicateQueue) enabled() bool {
+	if !rq.store.cfg.SpanConfigsDisabled {
+		if rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+			// If we don't have any span configs available, enabling the
+			// replicate queue would mean replicating towards the statically
+			// defined 3x replication in the fallback span config.
+			return false
+		}
+	}
+
+	st := rq.store.ClusterSettings()
+	return kvserverbase.ReplicateQueueEnabled.Get(&st.SV)
+}
+
 func (rq *replicateQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
+	if !rq.enabled() {
+		return false, 0
+	}
+
 	desc, conf := repl.DescAndSpanConfig()
 	action, priority := rq.allocator.ComputeAction(ctx, rq.storePool, conf, desc)
 
@@ -695,6 +714,11 @@ func (rq *replicateQueue) shouldQueue(
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if !rq.enabled() {
+		log.VEventf(ctx, 2, "skipping replication: queue has been disabled")
+		return false, nil
+	}
+
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
