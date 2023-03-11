@@ -70,7 +70,8 @@ func (a *Authorizer) HasCapabilityForBatch(
 			continue
 		}
 		if !hasCap || requiredCap == onlySystemTenant || !found || !cp.GetBool(requiredCap) {
-			if requiredCap == tenantcapabilities.CanAdminSplit && a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
+			if (requiredCap == tenantcapabilities.CanAdminSplit || requiredCap == tenantcapabilities.CanAdminScatter) &&
+				a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
 				continue
 			}
 			// All allowable request types must be explicitly opted into the
@@ -117,6 +118,7 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.Scan:               noCapCheckNeeded,
 
 	// The following are authorized via specific capabilities.
+	kvpb.AdminScatter: tenantcapabilities.CanAdminScatter,
 	kvpb.AdminSplit:   tenantcapabilities.CanAdminSplit,
 	kvpb.AdminUnsplit: tenantcapabilities.CanAdminUnsplit,
 
@@ -124,7 +126,6 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.AdminChangeReplicas: noCapCheckNeeded,
 	kvpb.AdminMerge:          noCapCheckNeeded,
 	kvpb.AdminRelocateRange:  noCapCheckNeeded,
-	kvpb.AdminScatter:        noCapCheckNeeded,
 	kvpb.AdminTransferLease:  noCapCheckNeeded,
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary

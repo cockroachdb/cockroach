@@ -27,11 +27,11 @@ CREATE DATABASE db1;
 ----
 
 query-sql
-SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
 ----
-1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-5 <nil> 2 0 false {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
-6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 system 1 2 true READY 
+5 <nil> 2 0 false DROP tenant-5
+6 tenant-6 1 1 true READY 
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster_without_tenants'
@@ -79,10 +79,10 @@ job paused at pausepoint
 # Application tenants backed up in an ACTIVE state should be moved to an ADD
 # state during restore.
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
+SELECT id,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-6 false {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "ADD", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 true READY 
+6 false ADD 
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = ''
@@ -100,10 +100,10 @@ USE defaultdb;
 
 # A dropped tenant should be restored as an inactive tenant.
 query-sql
-SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
 ----
-1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 system 1 2 true READY 
+6 tenant-6 1 1 true READY 
 
 
 exec-sql expect-error-regex=(tenant 6 not in backup)
@@ -131,11 +131,11 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newn
 ----
 
 query-sql
-SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
 ----
-1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2 newname 1 1 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 system 1 2 true READY 
+2 newname 1 1 true READY 
+6 tenant-6 1 1 true READY 
 
 # Check that another service mode is also preserved.
 exec-sql

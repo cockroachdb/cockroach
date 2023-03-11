@@ -31,6 +31,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "no-capabilities-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        false
 can_admin_unsplit      false
 can_view_node_info     false
@@ -50,6 +51,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        true
 can_admin_unsplit      false
 can_view_node_info     false
@@ -62,6 +64,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        false
 can_admin_unsplit      false
 can_view_node_info     false
@@ -81,6 +84,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-with-value-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        true
 can_admin_unsplit      false
 can_view_node_info     false
@@ -100,6 +104,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-with-expression-value-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        true
 can_admin_unsplit      false
 can_view_node_info     false
@@ -119,6 +124,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        true
 can_admin_unsplit      false
 can_view_node_info     true
@@ -131,6 +137,7 @@ query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
 capability_id          capability_value
+can_admin_scatter      false
 can_admin_split        false
 can_admin_unsplit      false
 can_view_node_info     false
