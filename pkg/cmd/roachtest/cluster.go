@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -2382,8 +2383,7 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 }
 
 func (c *clusterImpl) IsLocal() bool {
-	// FIXME: I think radu made local more flexible and local is a prefix?
-	return c.name == "local"
+	return config.IsLocalClusterName(c.name)
 }
 
 func (c *clusterImpl) IsSecure() bool {
