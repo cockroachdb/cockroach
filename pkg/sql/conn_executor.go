@@ -1911,6 +1911,7 @@ func (ex *connExecutor) run(
 
 		var err error
 		if err = ex.execCmd(); err != nil {
+			// Both of these errors are normal ways for the connExecutor to exit.
 			if errors.IsAny(err, io.EOF, errDrainingComplete) {
 				return nil
 			}
@@ -1934,7 +1935,7 @@ var errDrainingComplete = fmt.Errorf("draining done. this is a good time to fini
 // Returns drainingComplete if the session should finish because draining is
 // complete (i.e. we received a DrainRequest - possibly previously - and the
 // connection is found to be idle).
-func (ex *connExecutor) execCmd() error {
+func (ex *connExecutor) execCmd() (retErr error) {
 	ctx := ex.Ctx()
 	cmd, pos, err := ex.stmtBuf.CurCmd()
 	if err != nil {
@@ -2121,16 +2122,16 @@ func (ex *connExecutor) execCmd() error {
 		// Note that the Sync result will flush results to the network connection.
 		res = ex.clientComm.CreateSyncResult(pos)
 		if ex.draining {
-			// If we're draining, check whether this is a good time to finish the
+			// If we're draining, then after handing the Sync connExecutor state
+			// transition, check whether this is a good time to finish the
 			// connection. If we're not inside a transaction, we stop processing
 			// now. If we are inside a transaction, we'll check again the next time
 			// a Sync is processed.
-			if ex.idleConn() {
-				// If we're about to close the connection, close res in order to flush
-				// now, as we won't have an opportunity to do it later.
-				res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
-				return errDrainingComplete
-			}
+			defer func() {
+				if ex.idleConn() {
+					retErr = errDrainingComplete
+				}
+			}()
 		}
 	case CopyIn:
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
