@@ -479,6 +479,10 @@ const (
 	// since we've made mixed-version clusters tolerate new privileges.
 	V23_1AllowNewSystemPrivileges
 
+	// V23_1_CreateAutoConfigRunnerJob is the version where the auto
+	// config runner persistent job has been created.
+	V23_1_CreateAutoConfigRunnerJob
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -827,6 +831,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AllowNewSystemPrivileges,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 78},
+	},
+	{
+		Key:     V23_1_CreateAutoConfigRunnerJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 80},
 	},
 
 	// *************************************************
