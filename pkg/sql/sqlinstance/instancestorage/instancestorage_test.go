@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -77,7 +78,8 @@ func TestStorage(t *testing.T) {
 		clock := hlc.NewClockForTesting(nil)
 		stopper := stop.NewStopper()
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+		f := s.RangeFeedFactory().(*rangefeed.Factory)
+		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), s.Clock(), f)
 		return stopper, storage, slStorage, clock
 	}
 
@@ -282,8 +284,9 @@ func TestSQLAccess(t *testing.T) {
 	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+	f := s.RangeFeedFactory().(*rangefeed.Factory)
 	storage := instancestorage.NewTestingStorage(
-		kvDB, keys.SystemSQLCodec, table, slstorage.NewFakeStorage(), s.ClusterSettings())
+		kvDB, keys.SystemSQLCodec, table, slstorage.NewFakeStorage(), s.ClusterSettings(), s.Clock(), f)
 	const (
 		tierStr         = "region=test1,zone=test2"
 		expiration      = time.Minute
@@ -408,7 +411,8 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	stopper := stop.NewStopper()
 	slStorage := slstorage.NewFakeStorage()
 	defer stopper.Stop(ctx)
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+	f := s.RangeFeedFactory().(*rangefeed.Factory)
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), s.Clock(), f)
 	instancestorage.PreallocatedCount.Override(ctx, &s.ClusterSettings().SV, 1)
 
 	const (
@@ -553,7 +557,8 @@ func TestReclaimLoop(t *testing.T) {
 	tDB.Exec(t, schema)
 	tableID := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	slStorage := slstorage.NewFakeStorage()
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
+	f := s.RangeFeedFactory().(*rangefeed.Factory)
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings(), s.Clock(), f)
 	storage.TestingKnobs.JitteredIntervalFn = func(d time.Duration) time.Duration {
 		// For deterministic tests.
 		return d
