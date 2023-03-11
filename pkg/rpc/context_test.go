@@ -1648,10 +1648,8 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
 		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; ok {
-			fmt.Printf("RRRRRRRRRRRRRRRRR \n")
 			return errors.Errorf("expected to have removed latencyInfos, but found: %v", li)
 		}
-		fmt.Printf("DDDDDDDDDDDDDDDDD \n")
 		return nil
 	})
 }
