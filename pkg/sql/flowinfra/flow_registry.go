@@ -90,31 +90,6 @@ func NewInboundStreamInfo(
 	}
 }
 
-// connect marks s as connected. It is an error if s was already marked either
-// as connected or canceled. It should be called without holding any mutexes.
-func (s *InboundStreamInfo) connect(
-	flowID execinfrapb.FlowID, streamID execinfrapb.StreamID,
-) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.connected {
-		return errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
-	}
-	if s.mu.canceled {
-		return errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
-	}
-	s.mu.connected = true
-	return nil
-}
-
-// disconnect marks s as not connected. It should be called without holding any
-// mutexes.
-func (s *InboundStreamInfo) disconnect() {
-	s.mu.Lock()
-	s.mu.connected = false
-	s.mu.Unlock()
-}
-
 // finishLocked marks s as finished and calls onFinish. The mutex of s must be
 // held when calling this method.
 func (s *InboundStreamInfo) finishLocked() {
@@ -124,7 +99,6 @@ func (s *InboundStreamInfo) finishLocked() {
 	if s.mu.finished {
 		panic("double finish")
 	}
-
 	s.mu.finished = true
 	s.onFinish()
 }
@@ -484,11 +458,10 @@ func (fr *FlowRegistry) Drain(
 		}
 		// Now cancel all still running flows.
 		for _, f := range fr.flows {
-			if f.flow != nil && f.flow.ctxCancel != nil {
+			if f.flow != nil {
 				// f.flow might be nil when ConnectInboundStream() was
 				// called, but the consumer of that inbound stream hasn't
 				// been scheduled yet.
-				// f.flow.ctxCancel might be nil in tests.
 				f.flow.ctxCancel()
 			}
 		}
@@ -571,7 +544,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	streamID execinfrapb.StreamID,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
-) (*FlowBase, InboundStreamHandler, func(), error) {
+) (_ *FlowBase, _ InboundStreamHandler, cleanup func(), retErr error) {
 	fr.Lock()
 	entry := fr.getEntryLocked(flowID)
 	flow := entry.flow
@@ -604,30 +577,45 @@ func (fr *FlowRegistry) ConnectInboundStream(
 		}
 	}
 
+	defer func() {
+		if retErr != nil {
+			// If any error is encountered below, we know that the distributed
+			// query execution will fail, so we cancel the flow on this node. If
+			// this node is the gateway, this might actually be required for
+			// proper shutdown of the whole distributed plan.
+			flow.ctxCancel()
+		}
+	}()
+
 	// entry.inboundStreams is safe to access without holding the mutex since
 	// the map is not modified after Flow.Setup.
 	s, ok := entry.inboundStreams[streamID]
 	if !ok {
 		return nil, nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
 	}
-	// We now mark the stream as connected but, if an error happens later
-	// because the handshake fails, we reset the state; we want the stream to be
-	// considered timed out when the moment comes just as if this connection
-	// attempt never happened.
-	if err := s.connect(flowID, streamID); err != nil {
-		return nil, nil, nil, err
-	}
 
-	if err := stream.Send(&execinfrapb.ConsumerSignal{
+	// Don't mark s as connected until after the handshake succeeds.
+	handshakeErr := stream.Send(&execinfrapb.ConsumerSignal{
 		Handshake: &execinfrapb.ConsumerHandshake{
 			ConsumerScheduled:  true,
 			Version:            execinfra.Version,
 			MinAcceptedVersion: execinfra.MinAcceptedVersion,
 		},
-	}); err != nil {
-		s.disconnect()
-		return nil, nil, nil, err
-	}
+	})
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.canceled {
+		// Regardless of whether the handshake succeeded or not, this inbound
+		// stream has already been canceled and properly finished.
+		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
+	}
+	if handshakeErr != nil {
+		// The handshake failed, so we're canceling this stream.
+		s.mu.canceled = true
+		s.finishLocked()
+		return nil, nil, nil, handshakeErr
+	}
+	s.mu.connected = true
 	return flow, s.receiver, s.finish, nil
 }
