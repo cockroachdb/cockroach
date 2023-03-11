@@ -156,6 +156,7 @@ export const searchTransactionsData = (
   );
 };
 
+// TODO(todd): Remove unused nodeRegions parameter.
 export const filterTransactions = (
   data: Transaction[],
   filters: Filters,
@@ -210,31 +211,31 @@ export const filterTransactions = (
         timeValue === "empty",
     )
     .filter((t: Transaction) => {
-      // The transaction must contain at least one value of the nodes
-      // and regions list (if the list is not empty).
-      if (regions.length == 0 && nodes.length == 0) return true;
-      // If the cluster is a tenant cluster we don't care
-      // about nodes.
-      let foundRegion: boolean = regions.length == 0;
-      let foundNode: boolean = isTenant || nodes.length == 0;
+      // The transaction must contain at least one value of the regions list
+      // (if the list is not empty).
+      if (regions.length == 0) return true;
 
-      getStatementsByFingerprintId(
+      return getStatementsByFingerprintId(
         t.stats_data.statement_fingerprint_ids,
         statements,
-      ).some(stmt => {
-        stmt.stats.nodes &&
-          stmt.stats.nodes.some(node => {
-            if (foundRegion || regions.includes(nodeRegions[node.toString()])) {
-              foundRegion = true;
-            }
-            if (foundNode || nodes.includes("n" + node)) {
-              foundNode = true;
-            }
-            if (foundNode && foundRegion) return true;
-          });
-      });
+      ).some(stmt =>
+        stmt.stats.regions?.some(region => regions.includes(region)),
+      );
+    })
+    .filter((t: Transaction) => {
+      // The transaction must contain at least one value of the nodes list
+      // (if the list is not empty).
+      if (nodes.length == 0) return true;
 
-      return foundRegion && foundNode;
+      // If the cluster is a tenant cluster we don't care about nodes.
+      if (isTenant) return true;
+
+      return getStatementsByFingerprintId(
+        t.stats_data.statement_fingerprint_ids,
+        statements,
+      ).some(stmt =>
+        stmt.stats.nodes?.some(node => nodes.includes("n" + node)),
+      );
     });
 
   return {
@@ -249,32 +250,21 @@ export const filterTransactions = (
  * E.g. of one element of the list: `gcp-us-east1`
  * @param transaction: list of transactions.
  * @param statements: list of all statements collected.
- * @param nodeRegions: object with keys being the node id and the value
- * which region it belongs to.
  */
 export const generateRegion = (
   transaction: Transaction,
   statements: Statement[],
-  nodeRegions: { [p: string]: string },
 ): string[] => {
   const regions: Set<string> = new Set<string>();
-  // Get the list of statements that were executed on the transaction. Combine all
-  // nodes and regions of all the statements to a single list of `region: nodes`
-  // for the transaction.
-  // E.g. {"gcp-us-east1" : [1,3,4]}
+
   getStatementsByFingerprintId(
     transaction.stats_data.statement_fingerprint_ids,
     statements,
   ).forEach(stmt => {
-    stmt.stats.nodes &&
-      stmt.stats.nodes.forEach(n => {
-        regions.add(nodeRegions[n.toString()]);
-      });
+    stmt.stats.regions?.forEach(region => regions.add(region));
   });
 
-  return Array.from(regions)
-    .filter(r => r) // Remove undefined / unknown regions.
-    .sort();
+  return Array.from(regions).sort();
 };
 
 /**

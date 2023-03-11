@@ -260,7 +260,9 @@ export class TransactionDetails extends React.Component<
       );
     }
     this.props.refreshUserSQLRoles();
-    this.props.refreshNodes();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   componentWillUnmount(): void {
@@ -269,7 +271,9 @@ export class TransactionDetails extends React.Component<
 
   componentDidUpdate(prevProps: TransactionDetailsProps): void {
     this.getTransactionStateInfo(prevProps.transactionFingerprintId);
-    this.props.refreshNodes();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
