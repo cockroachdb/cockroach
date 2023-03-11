@@ -1970,7 +1970,7 @@ func shouldCampaignOnWake(
 	raftStatus raft.BasicStatus,
 	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
-	requiresExpiringLease bool,
+	requiresExpirationLease bool,
 ) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
@@ -1991,7 +1991,7 @@ func shouldCampaignOnWake(
 	}
 	// Avoid a circular dependency on liveness and skip the is leader alive
 	// check for ranges that always use expiration based leases.
-	if requiresExpiringLease {
+	if requiresExpirationLease {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader
@@ -2028,7 +2028,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpiringLeaseRLocked()) {
+	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpirationLeaseRLocked()) {
 		r.campaignLocked(ctx)
 	}
 }
@@ -2053,7 +2053,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
 	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
-	requiresExpiringLease bool,
+	requiresExpirationLease bool,
 	now hlc.Timestamp,
 ) bool {
 	// If we're already campaigning don't start a new term.
@@ -2076,7 +2076,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	// leader may be partitioned from the liveness range.
 	// See TestRequestsOnFollowerWithNonLiveLeaseholder for an example of a test
 	// that demonstrates this case.
-	if requiresExpiringLease {
+	if requiresExpirationLease {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader in
