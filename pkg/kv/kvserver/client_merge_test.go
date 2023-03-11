@@ -486,10 +486,15 @@ func mergeCheckingTimestampCaches(
 
 	manualClock := hlc.NewHybridManualClock()
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// TODO(erikgrinaker): Should this work with expiration leases?
+	// https://github.com/cockroachdb/cockroach/issues/98618
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
@@ -945,10 +950,16 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		return nil
 	}
 
+	st := cluster.MakeTestingClusterSettings()
+	// TODO(erikgrinaker): Should this work with expiration leases?
+	// https://github.com/cockroachdb/cockroach/issues/98618
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	tc = testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter: testingRequestFilter,
