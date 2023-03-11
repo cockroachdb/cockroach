@@ -3629,6 +3629,17 @@ var charts = []sectionDescription{
 					"jobs.auto_config_runner.resume_retry_error",
 				},
 			},
+			{
+				Title: "Auto Config Tasks",
+				Metrics: []string{
+					"jobs.auto_config_task.fail_or_cancel_completed",
+					"jobs.auto_config_task.fail_or_cancel_failed",
+					"jobs.auto_config_task.fail_or_cancel_retry_error",
+					"jobs.auto_config_task.resume_completed",
+					"jobs.auto_config_task.resume_failed",
+					"jobs.auto_config_task.resume_retry_error",
+				},
+			},
 		},
 	},
 	{
