@@ -244,7 +244,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
-	if p.repl.requiresExpiringLeaseRLocked() ||
+	if p.repl.requiresExpirationLeaseRLocked() ||
 		(transfer &&
 			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
@@ -763,13 +763,13 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 	return st.IsValid() && st.OwnedBy(r.store.StoreID())
 }
 
-// requiresExpiringLeaseRLocked returns whether this range unconditionally uses
-// an expiration-based lease. Ranges located before or including the node
+// requiresExpirationLeaseRLocked returns whether this range unconditionally
+// uses an expiration-based lease. Ranges located before or including the node
 // liveness table must always use expiration leases to avoid circular
 // dependencies on the node liveness table. All other ranges typically use
 // epoch-based leases, but may temporarily use expiration based leases during
 // lease transfers.
-func (r *Replica) requiresExpiringLeaseRLocked() bool {
+func (r *Replica) requiresExpirationLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
@@ -1003,7 +1003,7 @@ func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 // lease's expiration (and stasis period).
 func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
-	if r.requiresExpiringLeaseRLocked() {
+	if r.requiresExpirationLeaseRLocked() {
 		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
 	} else {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
