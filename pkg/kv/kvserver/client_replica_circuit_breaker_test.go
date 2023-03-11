@@ -691,6 +691,10 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	var rangeID int64             // atomic
 	slowThresh := &atomic.Value{} // supports .SetSlowThreshold(x)
 	slowThresh.Store(time.Duration(0))
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		SlowReplicationThresholdOverride: func(ba *kvpb.BatchRequest) time.Duration {
 			t.Helper()
@@ -738,6 +742,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings:   st,
 			RaftConfig: raftCfg,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{

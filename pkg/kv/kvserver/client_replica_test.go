@@ -2060,11 +2060,14 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, 2,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -4162,6 +4165,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 		return
 	}
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// TODO(erikgrinaker): Should this work with expiration leases?
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
 	var mu struct {
 		syncutil.Mutex
@@ -4170,6 +4176,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
