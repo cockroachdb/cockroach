@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -238,6 +238,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			DontUseJobs:                       true,
 			SkipJobMetricsPollingJobBootstrap: true,
+			SkipAutoConfigRunnerJobBootstrap:  true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 

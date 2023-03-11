@@ -282,6 +282,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillJobInfoTable,
 	),
+	upgrade.NewPermanentTenantUpgrade("create auto config runner job",
+		toCV(clusterversion.V23_1_CreateAutoConfigRunnerJob),
+		createAutoConfigRunnerJob,
+		"create auto config runner job",
+	),
 }
 
 func init() {
