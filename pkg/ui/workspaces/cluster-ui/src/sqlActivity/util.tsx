@@ -61,14 +61,7 @@ export function filteredStatementsData(
       // list if the list is not empty.
       statement =>
         regions.length == 0 ||
-        (statement.stats.nodes &&
-          containAny(
-            statement.stats.nodes.map(
-              node => nodeRegions[node.toString()],
-              regions,
-            ),
-            regions,
-          )),
+        statement.stats.regions?.some(region => regions.includes(region)),
     )
     .filter(
       // The statement must contain at least one value from the selected nodes

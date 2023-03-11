@@ -102,8 +102,8 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
 
   componentDidMount(): void {
-    this.props.refreshNodes();
     if (!this.props.isTenant) {
+      this.props.refreshNodes();
       this.props.refreshNodesLiveness();
     }
     this.props.refreshSessions();

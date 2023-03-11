@@ -73,7 +73,6 @@ export interface AggregateStatistics {
   diagnosticsReports?: StatementDiagnosticsReport[];
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload?: Long;
-  regions?: string[];
   regionNodes?: string[];
 }
 
@@ -356,9 +355,9 @@ function makeRegionsColumn(
       title: statisticsTableTitles.regions(statType),
       className: cx("statements-table__col-regions"),
       cell: (stmt: AggregateStatistics) => {
-        return longListWithTooltip(stmt.regions.sort().join(", "), 50);
+        return longListWithTooltip(stmt.stats.regions.sort().join(", "), 50);
       },
-      sort: (stmt: AggregateStatistics) => stmt.regions.sort().join(", "),
+      sort: (stmt: AggregateStatistics) => stmt.stats.regions.sort().join(", "),
     };
   } else {
     return {
@@ -417,7 +416,6 @@ export function populateRegionNodeForStatements(
           ")",
       );
     });
-    stmt.regions = Object.keys(regions).sort();
     stmt.regionNodes = regionNodes;
   });
 }
