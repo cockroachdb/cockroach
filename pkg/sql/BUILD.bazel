@@ -336,6 +336,7 @@ go_library(
         "//pkg/security/password",
         "//pkg/security/sessionrevival",
         "//pkg/security/username",
+        "//pkg/server/autoconfig/acprovider",
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
         "//pkg/server/status/statuspb",

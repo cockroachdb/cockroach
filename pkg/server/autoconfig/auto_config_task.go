@@ -1,0 +1,162 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package autoconfig
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
+)
+
+// createTaskJob creates a job to execute the given task.
+//
+// Refer to the package-level documentation for more details.
+func createTaskJob(
+	ctx context.Context,
+	txn isql.Txn,
+	registry *jobs.Registry,
+	jobID jobspb.JobID,
+	envID EnvironmentID,
+	task autoconfigpb.Task,
+) error {
+	jobRecord := jobs.Record{
+		Description: fmt.Sprintf("configuration task: %s", task.Description),
+		Username:    username.NodeUserName(),
+		Details:     jobspb.AutoConfigTaskDetails{EnvID: envID, Task: task},
+		Progress:    jobspb.AutoConfigTaskProgress{},
+		CreatedBy: &jobs.CreatedByInfo{
+			Name: fmt.Sprintf("%s:%s", AutoConfigTaskCreatedName, envID),
+			ID:   int64(task.TaskID),
+		},
+	}
+
+	_, err := registry.CreateJobWithTxn(ctx, jobRecord, jobID, txn)
+	return err
+}
+
+// AutoConfigTaskCreatedName is the value in created_by_name for jobs
+// created by the auto config runner.
+const AutoConfigTaskCreatedName = "auto-config-task"
+
+// taskRunner is the runner for one task.
+type taskRunner struct {
+	envID EnvironmentID
+	task  autoconfigpb.Task
+}
+
+var _ jobs.Resumer = (*taskRunner)(nil)
+
+// OnFailOrCancel is a part of the Resumer interface.
+func (r *taskRunner) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
+	ctx = logtags.AddTag(ctx, "taskenv", r.envID)
+	ctx = logtags.AddTag(ctx, "task", r.task.TaskID)
+	log.Infof(ctx, "task execution failed: %v", jobErr)
+
+	exec := execCtx.(sql.JobExecContext)
+	execCfg := exec.ExecCfg()
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return markTaskComplete(ctx, txn,
+			InfoKeyTaskRef{Environment: r.envID, Task: r.task.TaskID},
+			[]byte("task error"))
+	})
+}
+
+// Resume is part of the Resumer interface.
+func (r *taskRunner) Resume(ctx context.Context, execCtx interface{}) error {
+	ctx = logtags.AddTag(ctx, "taskenv", r.envID)
+	ctx = logtags.AddTag(ctx, "task", r.task.TaskID)
+	log.Infof(ctx, "starting execution")
+
+	exec := execCtx.(sql.JobExecContext)
+	execCfg := exec.ExecCfg()
+	switch payload := r.task.GetPayload().(type) {
+	case *autoconfigpb.Task_SimpleSQL:
+		return execSimpleSQL(ctx, execCfg, r.envID, r.task.TaskID, payload.SimpleSQL)
+
+	default:
+		return errors.AssertionFailedf("unknown task payload type: %T", payload)
+	}
+}
+
+// execSimpleSQL executs a SQL payload a a single combined transaction
+// that also includes the removal of the start marker and the creation
+// of the completion marker.
+func execSimpleSQL(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	envID EnvironmentID,
+	taskID TaskID,
+	sqlPayload *autoconfigpb.SimpleSQL,
+) error {
+	// Which SQL identity to use.
+	sqlUsername := username.RootUserName()
+	if sqlPayload.UsernameProto != "" {
+		sqlUsername = sqlPayload.UsernameProto.Decode()
+	}
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: sqlUsername,
+	}
+	// First execute all the non-transactional, idempotent SQL statements.
+	if len(sqlPayload.NonTransactionalStatements) > 0 {
+		exec := execCfg.InternalDB.Executor()
+		for _, stmt := range sqlPayload.NonTransactionalStatements {
+			log.Infof(ctx, "attempting execution of non-txn task statement:\n%s", stmt)
+			_, err := exec.ExecEx(ctx, "exec-task-statement", nil, /* txn */
+				execOverride, stmt)
+			if err != nil {
+				return err
+			}
+		}
+		log.Infof(ctx, "finished executing non-txn task statements")
+	}
+
+	// Now execute all the transactional, potentially not idempotent
+	// statements.
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		for _, stmt := range sqlPayload.TransactionalStatements {
+			log.Infof(ctx, "attempting execution of task statement:\n%s", stmt)
+			_, err := txn.ExecEx(ctx, "exec-task-statement",
+				txn.KV(),
+				execOverride,
+				stmt)
+			if err != nil {
+				return err
+			}
+		}
+		log.Infof(ctx, "finished executing txn statements")
+		return markTaskComplete(ctx, txn,
+			InfoKeyTaskRef{Environment: envID, Task: taskID},
+			[]byte("task success"))
+	})
+}
+
+func init() {
+	// Note: we disable tenant cost control because auto-config is used
+	// by operators and should thus not incur costs (or performance
+	// penalties) to tenants.
+	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		jd := job.Details()
+		details := jd.(jobspb.AutoConfigTaskDetails)
+		return &taskRunner{envID: details.EnvID, task: details.Task}
+	}
+	jobs.RegisterConstructor(jobspb.TypeAutoConfigTask, createResumerFn, jobs.DisablesTenantCostControl)
+}
