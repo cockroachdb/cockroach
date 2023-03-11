@@ -36,6 +36,33 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// ReplicateQueueEnabled is a setting that controls whether the replicate queue
+// is enabled.
+var ReplicateQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.replicate_queue.enabled",
+	"whether the replicate queue is enabled",
+	true,
+)
+
+// SplitQueueEnabled is a setting that controls whether the split queue is
+// enabled.
+var SplitQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.split_queue.enabled",
+	"whether the split queue is enabled",
+	true,
+)
+
+// MVCCGCQueueEnabled is a setting that controls whether the MVCC GC queue is
+// enabled.
+var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc_queue.enabled",
+	"whether the MVCC GC queue is enabled",
+	true,
+)
+
 // CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string
 

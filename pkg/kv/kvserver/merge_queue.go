@@ -116,7 +116,7 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			// factor.
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate, recoverySnapshotRate),
 			needsLease:           true,
-			needsSystemConfig:    true,
+			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: false,
 			successes:            store.metrics.MergeQueueSuccesses,
 			failures:             store.metrics.MergeQueueFailures,
@@ -129,15 +129,6 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 }
 
 func (mq *mergeQueue) enabled() bool {
-	if !mq.store.cfg.SpanConfigsDisabled {
-		if mq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
-			// If we don't have any span configs available, enabling range merges would
-			// be extremely dangerous -- we could collapse everything into a single
-			// range.
-			return false
-		}
-	}
-
 	st := mq.store.ClusterSettings()
 	return kvserverbase.MergeQueueEnabled.Get(&st.SV)
 }

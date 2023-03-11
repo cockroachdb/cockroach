@@ -67,12 +67,12 @@ func TestBlockedKVSubscriberDisablesMerges(t *testing.T) {
 	})
 
 	{
-		trace, processErr, err := store.Enqueue(
+		_, processErr, err := store.Enqueue(
 			ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
 		)
-		require.NoError(t, err)
 		require.NoError(t, processErr)
-		require.NoError(t, testutils.MatchInOrder(trace.String(), `skipping merge: queue has been disabled`))
+		require.Error(t, err)
+		require.True(t, testutils.IsError(err, `unable to retrieve conf reader`))
 	}
 
 	close(blockSubscriberCh)
@@ -89,6 +89,7 @@ func TestBlockedKVSubscriberDisablesMerges(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
+		require.Error(t, testutils.MatchInOrder(trace.String(), `unable to retrieve conf reader`))
 		require.Error(t, testutils.MatchInOrder(trace.String(), `skipping merge: queue has been disabled`))
 	}
 }
