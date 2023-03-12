@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -110,6 +111,10 @@ type Context struct {
 	// DisableServerController is true if we want to avoid the server
 	// controller to instantiate tenant secondary servers.
 	DisableServerController bool
+
+	// AutoConfigProvider provides auto-configuration tasks to apply on
+	// the cluster during server initialization.
+	AutoConfigProvider acprovider.Provider
 }
 
 // IsInteractive returns true if the demo cluster configuration
