@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -257,6 +258,10 @@ type BaseConfig struct {
 	// These events are meant for the Observability Service, but they might pass
 	// through an OpenTelemetry Collector.
 	ObsServiceAddr string
+
+	// AutoConfigProvider provides auto-configuration tasks to apply on
+	// the cluster during server initialization.
+	AutoConfigProvider acprovider.Provider
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -296,6 +301,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
 	}
+	cfg.AutoConfigProvider = acprovider.NoTaskProvider{}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
 	// container will prefix the value with the string "sql", resulting
