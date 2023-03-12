@@ -160,12 +160,11 @@ type TenantCapabilities interface {
 
 //go:generate stringer -type=CapabilityID -linecomment
 const (
-	_ CapabilityID = iota
 
 	// CanAdminScatter describes the ability of a tenant to scatter ranges using
 	// an AdminScatter request. By default, secondary tenants are allowed to
 	// scatter as doing so is integral to the performance of IMPORT/RESTORE.
-	CanAdminScatter // can_admin_scatter
+	CanAdminScatter CapabilityID = iota + MinCapabilityID // can_admin_scatter
 
 	// CanAdminSplit describes the ability of a tenant to perform KV requests to
 	// split ranges. By default, secondary tenants are allowed to perform splits
@@ -194,13 +193,17 @@ const (
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
 
-	MaxCapabilityID CapabilityID = iota - 1
+	// MaxCapabilityID is the value of the maximum CapabilityID.
+	MaxCapabilityID CapabilityID = iota + MinCapabilityID - 1
 )
+
+// MinCapabilityID is the value of the minimum CapabilityID.
+const MinCapabilityID CapabilityID = 1
 
 var stringToCapabilityIDMap = stringerutil.StringToEnumValueMap(
 	_CapabilityID_index[:],
 	_CapabilityID_name,
-	1,
+	MinCapabilityID,
 	MaxCapabilityID-1, // TODO: remove -1 when spanConfigBounds are supported.
 )
 
@@ -212,7 +215,7 @@ func CapabilityIDFromString(s string) (CapabilityID, bool) {
 
 // CapabilityIDs is a slice of all tenant capabilities.
 var CapabilityIDs = stringerutil.EnumValues(
-	1,
+	MinCapabilityID,
 	MaxCapabilityID-1, // TODO: remove -1 when spanConfigBounds are supported.
 )
 

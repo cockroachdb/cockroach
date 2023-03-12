@@ -15,6 +15,7 @@ func _() {
 	_ = x[CanViewTSDBMetrics-5]
 	_ = x[TenantSpanConfigBounds-6]
 	_ = x[MaxCapabilityID-6]
+	_ = x[MinCapabilityID-1]
 }
 
 const _CapabilityID_name = "can_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsspan_config_bounds"
