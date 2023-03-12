@@ -24,6 +24,7 @@ go_library(
         "//pkg/cli/cliflags",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/server/autoconfig/acprovider",
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/envutil",

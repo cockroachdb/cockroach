@@ -1,0 +1,81 @@
+profile
+multitenant+app+sharedservice
+----
+canonical profile name: multitenant+app+sharedservice
+server started
+
+connect-tenant
+application
+----
+ok
+
+system-sql
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN (
+'server.secondary_tenants.redact_trace.enabled',
+'sql.zone_configs.allow_for_secondary_tenant.enabled',
+'sql.multi_region.allow_abstractions_for_secondary_tenants.enabled',
+'sql.multi_region.allow_abstractions_for_secondary_tenants.enabled',
+'spanconfig.storage_coalesce_adjacent.enabled',
+'spanconfig.tenant_coalesce_adjacent.enabled',
+'sql.drop_tenant.enabled',
+'sql.create_tenant.default_template',
+'server.controller.default_tenant'
+)
+ORDER BY variable
+----
+server.controller.default_tenant application
+server.secondary_tenants.redact_trace.enabled false
+spanconfig.storage_coalesce_adjacent.enabled false
+spanconfig.tenant_coalesce_adjacent.enabled false
+sql.create_tenant.default_template template
+sql.drop_tenant.enabled false
+sql.multi_region.allow_abstractions_for_secondary_tenants.enabled true
+sql.zone_configs.allow_for_secondary_tenant.enabled true
+
+system-sql
+SELECT tenant_id, name, value FROM system.tenant_settings
+WHERE name IN (
+'sql.scatter.allow_for_secondary_tenant.enabled',
+'sql.split_at.allow_for_secondary_tenant.enabled'
+)
+ORDER BY tenant_id, name
+----
+2 sql.scatter.allow_for_secondary_tenant.enabled true
+2 sql.split_at.allow_for_secondary_tenant.enabled true
+3 sql.scatter.allow_for_secondary_tenant.enabled true
+3 sql.split_at.allow_for_secondary_tenant.enabled true
+
+system-sql
+SHOW TENANTS WITH CAPABILITIES
+----
+1 system ready shared can_admin_relocate_range false
+1 system ready shared can_admin_scatter true
+1 system ready shared can_admin_split true
+1 system ready shared can_admin_unsplit false
+1 system ready shared can_check_consistency false
+1 system ready shared can_use_nodelocal_storage false
+1 system ready shared can_view_node_info false
+1 system ready shared can_view_tsdb_metrics false
+1 system ready shared exempt_from_rate_limiting false
+1 system ready shared span_config_bounds {}
+2 template ready none can_admin_relocate_range true
+2 template ready none can_admin_scatter true
+2 template ready none can_admin_split true
+2 template ready none can_admin_unsplit true
+2 template ready none can_check_consistency true
+2 template ready none can_use_nodelocal_storage true
+2 template ready none can_view_node_info true
+2 template ready none can_view_tsdb_metrics true
+2 template ready none exempt_from_rate_limiting true
+2 template ready none span_config_bounds {}
+3 application ready shared can_admin_relocate_range true
+3 application ready shared can_admin_scatter true
+3 application ready shared can_admin_split true
+3 application ready shared can_admin_unsplit true
+3 application ready shared can_check_consistency true
+3 application ready shared can_use_nodelocal_storage true
+3 application ready shared can_view_node_info true
+3 application ready shared can_view_tsdb_metrics true
+3 application ready shared exempt_from_rate_limiting true
+3 application ready shared span_config_bounds {}
