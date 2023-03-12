@@ -1,0 +1,5 @@
+profile
+replication-target
+----
+canonical profile name: multitenant+noapp
+server started
