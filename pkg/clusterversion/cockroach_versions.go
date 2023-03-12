@@ -482,6 +482,11 @@ const (
 	// has been backfilled.
 	V23_1ExternalConnectionsTableOwnerIDColumnBackfilled
 
+	// V23_1JobInfoTableIsBackfilled is a version gate after which the
+	// system.jobs_info table has been backfilled with rows for the payload and
+	// progress of each job in the system.jobs table.
+	V23_1JobInfoTableIsBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -834,6 +839,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1ExternalConnectionsTableOwnerIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 76},
+	},
+	{
+		Key:     V23_1JobInfoTableIsBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 78},
 	},
 
 	// *************************************************
