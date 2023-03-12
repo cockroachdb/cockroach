@@ -319,7 +319,7 @@ func (r *Registry) resumeJob(
 
 	// If the job's type was registered to disable tenant cost control, then
 	// exclude the job's costs from tenant accounting.
-	if opts, ok := options[payload.Type()]; ok && opts.disableTenantCostControl {
+	if opts, ok := getRegisterOptions(payload.Type()); ok && opts.disableTenantCostControl {
 		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
 	}
 	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel); alreadyAdopted {

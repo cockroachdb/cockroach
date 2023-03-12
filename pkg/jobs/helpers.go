@@ -14,9 +14,15 @@ import "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 
 // ResetConstructors resets the registered Resumer constructors.
 func ResetConstructors() func() {
+	globalMu.Lock()
+	defer globalMu.Unlock()
 	old := make(map[jobspb.Type]Constructor)
-	for k, v := range constructors {
+	for k, v := range globalMu.constructors {
 		old[k] = v
 	}
-	return func() { constructors = old }
+	return func() {
+		globalMu.Lock()
+		defer globalMu.Unlock()
+		globalMu.constructors = old
+	}
 }
