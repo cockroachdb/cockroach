@@ -247,6 +247,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SnapshotSendLimit != 0 {
 		cfg.SnapshotSendLimit = params.SnapshotSendLimit
 	}
+	if params.AutoConfigProvider != nil {
+		cfg.AutoConfigProvider = params.AutoConfigProvider
+	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.

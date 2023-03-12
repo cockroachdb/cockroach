@@ -29,6 +29,7 @@ go_library(
         "//pkg/security/certnames",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/autoconfig/acprovider",
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
         "//pkg/server/status",
