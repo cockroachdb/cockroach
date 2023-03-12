@@ -2001,6 +2001,86 @@ func TestLeaseConcurrent(t *testing.T) {
 	})
 }
 
+// TestLeaseCallerCancelled tests that lease requests continue to completion
+// even when all callers have cancelled.
+func TestLeaseCallerCancelled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const num = 5
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var active, seen int32
+	var wg sync.WaitGroup
+	errC := make(chan error, 1)
+
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+	// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
+	// refreshes so that our lease proposal does not risk being rejected
+	// with an AmbiguousResultError.
+	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
+	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
+	cfg.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+		ll, ok := args.Req.Requests[0].GetInner().(*kvpb.RequestLeaseRequest)
+		if !ok || atomic.LoadInt32(&active) == 0 {
+			return nil
+		}
+		if c := atomic.AddInt32(&seen, 1); c > 1 {
+			// Morally speaking, this is an error, but reproposals can happen and so
+			// we warn (in case this trips the test up in more unexpected ways).
+			t.Logf("reproposal of %+v", ll)
+		}
+		// Wait for all lease requests to join the same LeaseRequest command
+		// and cancel.
+		wg.Wait()
+
+		// The lease request's context should not be cancelled. Propagate it up to
+		// the main test.
+		select {
+		case <-args.Ctx.Done():
+		case <-time.After(time.Second):
+		}
+		select {
+		case errC <- args.Ctx.Err():
+		default:
+		}
+		return nil
+	}
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	atomic.StoreInt32(&active, 1)
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
+	now := tc.Clock().NowAsClockTimestamp()
+	var llHandles []*leaseRequestHandle
+	for i := 0; i < num; i++ {
+		wg.Add(1)
+		tc.repl.mu.Lock()
+		status := tc.repl.leaseStatusAtRLocked(ctx, now)
+		llHandles = append(llHandles, tc.repl.requestLeaseLocked(ctx, status))
+		tc.repl.mu.Unlock()
+	}
+	for _, llHandle := range llHandles {
+		select {
+		case <-llHandle.C():
+			t.Fatal("lease request unexpectedly completed")
+		default:
+		}
+		llHandle.Cancel()
+		wg.Done()
+	}
+
+	select {
+	case err := <-errC:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for lease request")
+	}
+}
+
 // TestReplicaUpdateTSCache verifies that reads and ranged writes update the
 // timestamp cache. The test performs the operations with and without the use
 // of synthetic timestamps.
