@@ -44,21 +44,36 @@ func TestRandomizedCast(t *testing.T) {
 	evalCtx.StreamManagerFactory = &faketreeeval.DummyStreamManagerFactory{}
 	rng, _ := randutil.NewTestRand()
 
-	getValidSupportedCast := func() (from, to *types.T) {
-		for {
-			from, to = randgen.RandType(rng), randgen.RandType(rng)
-			if _, ok := cast.LookupCastVolatility(from, to); ok {
-				if colexecbase.IsCastSupported(from, to) {
-					return from, to
+	type typePair struct{ from, to *types.T }
+
+	numValidTypePairs := 0
+	countPairs := func(from, to *types.T) {
+		numValidTypePairs++
+	}
+	iterateValidPairs := func(op func(from, to *types.T)) {
+		for i := 0; i < len(randgen.SeedTypes); i++ {
+			for j := 0; i < len(randgen.SeedTypes) && i != j; i++ {
+				if _, ok := cast.LookupCastVolatility(randgen.SeedTypes[i], randgen.SeedTypes[j]); ok {
+					if colexecbase.IsCastSupported(randgen.SeedTypes[i], randgen.SeedTypes[j]) {
+						op(randgen.SeedTypes[i], randgen.SeedTypes[j])
+					}
 				}
 			}
 		}
 	}
+	iterateValidPairs(countPairs)
+	typePairs := make([]typePair, 0, numValidTypePairs)
+	appendPairToSlice := func(from, to *types.T) {
+		typePairs = append(typePairs, typePair{from: from, to: to})
+	}
+	iterateValidPairs(appendPairToSlice)
 	var numTypePairs = rng.Intn(10) + 1
 	numRows := 1 + rng.Intn(coldata.BatchSize()) + rng.Intn(3)*coldata.BatchSize()
 	log.Infof(ctx, "num rows = %d", numRows)
 	for run := 0; run < numTypePairs; run++ {
-		from, to := getValidSupportedCast()
+		randomTypePairIndex := rng.Intn(numTypePairs)
+		tp := typePairs[randomTypePairIndex]
+		from, to := tp.from, tp.to
 		log.Infof(ctx, "%s to %s", from.String(), to.String())
 		input := colexectestutils.Tuples{}
 		output := colexectestutils.Tuples{}
