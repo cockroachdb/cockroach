@@ -139,6 +139,7 @@
 /pkg/server/api_v2*.go                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/api_v2_auth*.go              @cockroachdb/obs-inf-prs @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/server/authentication*.go           @cockroachdb/server-prs  @cockroachdb/prodsec
+/pkg/server/autoconfig/                  @cockroachdb/jobs-prs    @cockroachdb/multi-tenant
 /pkg/server/auto_tls_init*go             @cockroachdb/server-prs  @cockroachdb/prodsec
 /pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
 /pkg/server/combined_statement_stats*.go @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
@@ -174,6 +175,7 @@
 /pkg/server/testserver*.go               @cockroachdb/test-eng    @cockroachdb/server-prs
 /pkg/server/tracedumper/                 @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/user*.go                     @cockroachdb/obs-inf-prs @cockroachdb/server-prs @cockroachdb/prodsec
+/pkg/configprofiles/                     @cockroachdb/multi-tenant @cockroachdb/server-prs
 
 
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs

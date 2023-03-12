@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -639,6 +640,7 @@ func setDemoContextDefaults() {
 	demoCtx.Multitenant = true
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
+	demoCtx.AutoConfigProvider = acprovider.NoTaskProvider{}
 
 	demoCtx.pidFile = ""
 	demoCtx.disableEnterpriseFeatures = false
