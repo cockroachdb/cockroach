@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1016,7 +1015,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		// TODO(knz): We will replace this provider by an actual provider
 		// in a later commit.
-		AutoConfigProvider: acprovider.NoTaskProvider{},
+		AutoConfigProvider: cfg.AutoConfigProvider,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

@@ -883,6 +883,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		StoreSpecs:              []base.StoreSpec{storeSpec},
 		SQLMemoryPoolSize:       demoCtx.SQLPoolMemorySize,
 		CacheSize:               demoCtx.CacheSize,
+		AutoConfigProvider:      demoCtx.AutoConfigProvider,
 		NoAutoInitializeCluster: true,
 		EnableDemoLoginEndpoint: true,
 		// Demo clusters by default will create their own tenants, so we
