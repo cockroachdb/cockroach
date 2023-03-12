@@ -1,0 +1,54 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "configprofiles",
+    srcs = [
+        "doc.go",
+        "profiles.go",
+        "provider.go",
+        "setter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/configprofiles",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/server/autoconfig/acprovider",
+        "//pkg/server/autoconfig/autoconfigpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "configprofiles_test",
+    srcs = [
+        "datadriven_test.go",
+        "main_test.go",
+        "profiles_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
+    embed = [":configprofiles"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build",
+        "//pkg/ccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/autoconfig/acprovider",
+        "//pkg/server/autoconfig/autoconfigpb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
+
+get_x_data(name = "get_x_data")
