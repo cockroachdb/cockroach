@@ -558,10 +558,10 @@ GRANT SELECT ON TABLE t to testuser
 
 user testuser
 
-statement error only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+statement error only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 SHOW RANGES FROM TABLE t
 
-statement error only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+statement error only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 SHOW RANGES FROM INDEX t@idx
 
 user root
@@ -576,6 +576,57 @@ SHOW RANGES FROM TABLE t
 
 statement ok
 SHOW RANGES FROM INDEX t@idx
+
+# Test permissions for showing ranges with VIEWACTIVITY privilege
+
+user root
+
+# Revoke ZONECONFIG, user should not have access to the table.
+statement ok
+REVOKE ZONECONFIG ON TABLE t FROM testuser
+
+user testuser
+
+statement error only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+SHOW RANGES FROM TABLE t
+
+statement error only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+SHOW RANGES FROM INDEX t@idx
+
+user root
+
+# Check user has access with VIEWACTIVITY
+statement ok
+ALTER ROLE testuser WITH VIEWACTIVITY
+
+user testuser
+
+statement ok
+SHOW RANGES FROM TABLE t
+
+statement ok
+SHOW RANGES FROM INDEX t@idx
+
+user root
+
+# Remove VIEWACTIVITY
+statement ok
+ALTER ROLE testuser with NOVIEWACTIVITY
+
+# Check user has access with VIEWACTIVITYREDACTED
+statement ok
+ALTER ROLE testuser with VIEWACTIVITYREDACTED
+
+user testuser
+
+statement ok
+SHOW RANGES FROM TABLE t
+
+statement ok
+SHOW RANGES FROM INDEX t@idx
+
+# Go back to root
+user root
 
 # This is a regression test for an issue in the vectorization of
 # crdb_internal.range_stats whereby NULLs in the input were not
