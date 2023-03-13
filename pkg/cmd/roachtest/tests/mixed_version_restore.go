@@ -13,6 +13,8 @@ package tests
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"math/rand"
 	"path/filepath"
 	"runtime"
@@ -82,6 +84,7 @@ type mixedVersionRestore struct {
 	cluster       cluster.Cluster
 	roachNodes    option.NodeListOption
 	collectionURI string
+	aost          string
 	// databases containing the restored table that are created in the test.
 	restoreDBs []*restoredDatabase
 	// the database with the backed up table
@@ -168,7 +171,8 @@ func (mvr *mixedVersionRestore) createBackupToRestore(
 	destNode := h.RandomNode(rng, mvr.roachNodes)
 	uri := fmt.Sprintf("nodelocal://%d/%s", destNode, "test_backup")
 	mvr.collectionURI = uri
-	stmt := fmt.Sprintf("BACKUP TABLE %s.%s INTO '%s'", mvr.database, mvr.table, uri)
+	mvr.aost = mvr.now()
+	stmt := fmt.Sprintf("BACKUP TABLE %s.%s INTO '%s' AS OF SYSTEM TIME '%s'", mvr.database, mvr.table, uri, mvr.aost)
 
 	l.Printf("running %s", stmt)
 
@@ -198,9 +202,10 @@ func (mvr *mixedVersionRestore) restoreDatabaseName(id int64, h *mixedversion.He
 	fromVersion := sanitizeVersionForBackup(testContext.FromVersion)
 	toVersion := sanitizeVersionForBackup(testContext.ToVersion)
 	sanitizedLabel := strings.ReplaceAll(label, " ", "_")
-	sanitizedLabel = strings.ReplaceAll(sanitizedLabel, ".", "_")
 
-	return fmt.Sprintf("%d_%s-to-%s_%s%s", id, fromVersion, toVersion, sanitizedLabel, finalizing)
+	name := fmt.Sprintf("db_%d_%s_to_%s_%s%s", id, fromVersion, toVersion, sanitizedLabel, finalizing)
+	name = strings.ReplaceAll(name, ".", "_")
+	return name
 }
 
 // waitForJobSuccess waits for the given job with the given ID to
@@ -251,15 +256,23 @@ func (mvr *mixedVersionRestore) waitForJobSuccess(
 // non-empty `timestamp` is passed, the fingerprints is calculated as
 // of that timestamp.
 func (mvr *mixedVersionRestore) computeFingerprint(
-	database, table string, rng *rand.Rand, h *mixedversion.Helper,
+	database, table, timestamp string, rng *rand.Rand, h *mixedversion.Helper,
 ) (string, error) {
-	var fprint string
-	query := fmt.Sprintf("SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s]", database, table)
+	var aost, fprint string
+	if timestamp != "" {
+		aost = fmt.Sprintf(" AS OF SYSTEM TIME '%s'", timestamp)
+	}
+
+	query := fmt.Sprintf("SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s]%s", database, table, aost)
 	if err := h.QueryRow(rng, query).Scan(&fprint); err != nil {
 		return "", err
 	}
 
 	return fprint, nil
+}
+
+func (mvr *mixedVersionRestore) now() string {
+	return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime()
 }
 
 // runBackup runs a `BACKUP` statement; the backup type `bType` needs
@@ -285,21 +298,22 @@ func (mvr *mixedVersionRestore) runRestore(
 		database: name,
 	}
 	options := []string{"detached", fmt.Sprintf("into_db='%s'", restoreDB.database)}
+	l.Printf("@@@ rdb=%s", name)
 
 	node, db := h.RandomDB(rng, nodes)
-	_, err := db.ExecContext(ctx, "CREATE DATABASE $1", name)
+	_, err := db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", name))
 	if err != nil {
 		return restoredDatabase{}, errors.Wrapf(err, "creating database %s", name)
 	}
 
 	stmt := fmt.Sprintf(
-		"RESTORE TABLE %s FROM latest IN '%s' WITH %s",
-		mvr.table, mvr.collectionURI, strings.Join(options, ", "),
+		"RESTORE TABLE %s.%s FROM latest IN '%s' AS OF SYSTEM TIME '%s' WITH %s",
+		mvr.database, mvr.table, mvr.collectionURI, mvr.aost, strings.Join(options, ", "),
 	)
 	l.Printf("restoring via node %d: %s", node, stmt)
 	var jobID int
 	if err := db.QueryRowContext(ctx, stmt).Scan(&jobID); err != nil {
-		return restoredDatabase{}, errors.Wrapf(err, "error while restoring into %s.%s", restoreDB.database, mvr.table, err)
+		return restoredDatabase{}, errors.Wrapf(err, "error while restoring into %s.%s", restoreDB.database, mvr.database, mvr.table, err)
 	}
 
 	l.Printf("waiting for job %d (%s)", jobID, restoreDB.database)
@@ -362,11 +376,11 @@ func (mvr *mixedVersionRestore) restoreTable(
 
 // sentinelFilePath returns the path to the file that prevents job
 // adoption on the given node.
-func (mvb *mixedVersionRestore) sentinelFilePath(
+func (mvr *mixedVersionRestore) sentinelFilePath(
 	ctx context.Context, l *logger.Logger, node int,
 ) (string, error) {
-	result, err := mvb.cluster.RunWithDetailsSingleNode(
-		ctx, l, mvb.cluster.Node(node), "echo -n {store-dir}",
+	result, err := mvr.cluster.RunWithDetailsSingleNode(
+		ctx, l, mvr.cluster.Node(node), "echo -n {store-dir}",
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve store directory from node %d: %w", node, err)
@@ -377,7 +391,7 @@ func (mvb *mixedVersionRestore) sentinelFilePath(
 // disableJobAdoption disables job adoption on the given nodes by
 // creating an empty file in `jobs.PreventAdoptionFile`. The function
 // returns once any currently running jobs on the nodes terminate.
-func (mvb *mixedVersionRestore) disableJobAdoption(
+func (mvr *mixedVersionRestore) disableJobAdoption(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, h *mixedversion.Helper,
 ) error {
 	l.Printf("disabling job adoption on nodes %v", nodes)
@@ -386,11 +400,11 @@ func (mvb *mixedVersionRestore) disableJobAdoption(
 		node := node // capture range variable
 		eg.Go(func() error {
 			l.Printf("node %d: disabling job adoption", node)
-			sentinelFilePath, err := mvb.sentinelFilePath(ctx, l, node)
+			sentinelFilePath, err := mvr.sentinelFilePath(ctx, l, node)
 			if err != nil {
 				return err
 			}
-			if err := mvb.cluster.RunE(ctx, mvb.cluster.Node(node), "touch", sentinelFilePath); err != nil {
+			if err := mvr.cluster.RunE(ctx, mvr.cluster.Node(node), "touch", sentinelFilePath); err != nil {
 				return fmt.Errorf("node %d: failed to touch sentinel file %q: %w", node, sentinelFilePath, err)
 			}
 
@@ -424,7 +438,7 @@ func (mvb *mixedVersionRestore) disableJobAdoption(
 }
 
 // enableJobAdoption (re-)enables job adoption on the given nodes.
-func (mvb *mixedVersionRestore) enableJobAdoption(
+func (mvr *mixedVersionRestore) enableJobAdoption(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) error {
 	l.Printf("enabling job adoption on nodes %v", nodes)
@@ -433,12 +447,12 @@ func (mvb *mixedVersionRestore) enableJobAdoption(
 		node := node // capture range variable
 		eg.Go(func() error {
 			l.Printf("node %d: enabling job adoption", node)
-			sentinelFilePath, err := mvb.sentinelFilePath(ctx, l, node)
+			sentinelFilePath, err := mvr.sentinelFilePath(ctx, l, node)
 			if err != nil {
 				return err
 			}
 
-			if err := mvb.cluster.RunE(ctx, mvb.cluster.Node(node), "rm -f", sentinelFilePath); err != nil {
+			if err := mvr.cluster.RunE(ctx, mvr.cluster.Node(node), "rm -f", sentinelFilePath); err != nil {
 				return fmt.Errorf("node %d: failed to remove sentinel file %q: %w", node, sentinelFilePath, err)
 			}
 
@@ -515,27 +529,27 @@ func (mvr *mixedVersionRestore) planAndRunRestores(
 // taken. This is accomplished by comparing the fingerprints after
 // restoring with the expected fingerpring associated with the backup
 // collection.
-func (mvb *mixedVersionRestore) verifyBackups(
+func (mvr *mixedVersionRestore) verifyBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	l.Printf("verifying %d restored tables from this test", len(mvb.restoreDBs))
-	originalFingerprint, err := mvb.computeFingerprint(mvb.database, mvb.table, rng, h)
+	l.Printf("verifying %d restored tables from this test", len(mvr.restoreDBs))
+	originalFingerprint, err := mvr.computeFingerprint(mvr.database, mvr.table, mvr.aost, rng, h)
 	if err != nil {
-		return errors.Wrapf(err, "backup %s: error computing fingerprint for %s.%s", mvb.database, mvb.table)
+		return errors.Wrapf(err, "backup %s: error computing fingerprint for %s.%s", mvr.database, mvr.table)
 	}
 
-	for _, restoredDB := range mvb.restoreDBs {
-		l.Printf("verifying %s.%s", restoredDB.database, mvb.table)
+	for _, restoredDB := range mvr.restoreDBs {
+		l.Printf("verifying %s.%s", restoredDB.database, mvr.table)
 
-		restoredFingerprint, err := mvb.computeFingerprint(restoredDB.database, mvb.table, rng, h)
+		restoredFingerprint, err := mvr.computeFingerprint(restoredDB.database, mvr.table, "", rng, h)
 		if err != nil {
-			return errors.Wrapf(err, "backup %s: error computing fingerprint for %s.%s", restoredDB.database, mvb.table)
+			return errors.Wrapf(err, "backup %s: error computing fingerprint for %s.%s", restoredDB.database, mvr.table)
 		}
 
 		if restoredFingerprint != originalFingerprint {
 			return fmt.Errorf(
 				"restore %s.%s: mismatched fingerprints (expected=%s | actual=%s)",
-				restoredDB.database, mvb.table, originalFingerprint, restoredFingerprint,
+				restoredDB.database, mvr.table, originalFingerprint, restoredFingerprint,
 			)
 		}
 
