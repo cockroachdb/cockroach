@@ -24,10 +24,10 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
-// RestoreCheckpointMaxBytes controls the maximum number of key bytes that will be added
+// restoreCheckpointMaxBytes controls the maximum number of key bytes that will be added
 // to the checkpoint record. The default is set using the same reasoning as
 // changefeed.frontier_checkpoint_max_bytes.
-var RestoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
+var restoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"restore.frontier_checkpoint_max_bytes",
 	"controls the maximum size of the restore checkpoint frontier as a the sum of the (span,"+
@@ -35,36 +35,43 @@ var RestoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	1<<20, // 1 MiB
 )
 
+// completedSpanTime indicates the timestamp that the progress frontier will
+// mark completed spans with.
+var completedSpanTime = hlc.MaxTimestamp
+
 type progressTracker struct {
-	syncutil.Mutex
-
-	checkpointFrontier *spanUtils.Frontier
-
 	// nextRequiredSpanKey maps a required span endkey to the subsequent requiredSpan's startKey.
 	nextRequiredSpanKey map[string]roachpb.Key
 
 	maxBytes int64
 
-	// res tracks the amount of data that has been ingested.
-	res roachpb.RowCount
+	mu struct {
+		// fields that may get updated while read are put in the lock.
+		syncutil.Mutex
 
-	// Note that the fields below are used for the deprecated high watermark progress
-	// tracker.
-	useFrontier bool
-	// highWaterMark represents the index into the requestsCompleted map.
-	highWaterMark int64
-	ceiling       int64
+		checkpointFrontier *spanUtils.Frontier
 
+		// res tracks the amount of data that has been ingested.
+		res roachpb.RowCount
+
+		// Note that the fields below are used for the deprecated high watermark progress
+		// tracker.
+		// highWaterMark represents the index into the requestsCompleted map.
+		highWaterMark int64
+		ceiling       int64
+
+		// As part of job progress tracking, inFlightImportSpans tracks all the
+		// spans that have been generated are being processed by the processors in
+		// distRestore. requestsCompleleted tracks the spans from
+		// inFlightImportSpans that have completed its processing. Once all spans up
+		// to index N have been processed (and appear in requestsCompleted), then
+		// any spans with index < N will be removed from both inFlightImportSpans
+		// and requestsCompleted maps.
+		inFlightImportSpans map[int64]roachpb.Span
+		requestsCompleted   map[int64]bool
+	}
+	useFrontier        bool
 	inFlightSpanFeeder chan execinfrapb.RestoreSpanEntry
-	// As part of job progress tracking, inFlightImportSpans tracks all the
-	// spans that have been generated are being processed by the processors in
-	// distRestore. requestsCompleleted tracks the spans from
-	// inFlightImportSpans that have completed its processing. Once all spans up
-	// to index N have been processed (and appear in requestsCompleted), then
-	// any spans with index < N will be removed from both inFlightImportSpans
-	// and requestsCompleted maps.
-	inFlightImportSpans map[int64]roachpb.Span
-	requestsCompleted   map[int64]bool
 }
 
 func makeProgressTracker(
@@ -94,17 +101,17 @@ func makeProgressTracker(
 		inFlightSpanFeeder = make(chan execinfrapb.RestoreSpanEntry, 1000)
 	}
 
-	return &progressTracker{
-		checkpointFrontier:  checkpointFrontier,
-		nextRequiredSpanKey: nextRequiredSpanKey,
-		maxBytes:            maxBytes,
-		useFrontier:         useFrontier,
-		highWaterMark:       -1,
-		ceiling:             0,
-		inFlightImportSpans: make(map[int64]roachpb.Span),
-		requestsCompleted:   make(map[int64]bool),
-		inFlightSpanFeeder:  inFlightSpanFeeder,
-	}, nil
+	pt := &progressTracker{}
+	pt.mu.checkpointFrontier = checkpointFrontier
+	pt.mu.highWaterMark = -1
+	pt.mu.ceiling = 0
+	pt.mu.inFlightImportSpans = make(map[int64]roachpb.Span)
+	pt.mu.requestsCompleted = make(map[int64]bool)
+	pt.nextRequiredSpanKey = nextRequiredSpanKey
+	pt.maxBytes = maxBytes
+	pt.useFrontier = useFrontier
+	pt.inFlightSpanFeeder = inFlightSpanFeeder
+	return pt, nil
 }
 
 func loadCheckpointFrontier(
@@ -163,18 +170,18 @@ func (pt *progressTracker) updateJobCallback(
 ) {
 	switch d := progressDetails.(type) {
 	case *jobspb.Progress_Restore:
-		pt.Lock()
+		pt.mu.Lock()
 		if pt.useFrontier {
 			// TODO (msbutler): this requires iterating over every span in the frontier,
 			// and rewriting every completed required span to disk.
 			// We may want to be more intelligent about this.
-			d.Restore.Checkpoint = persistFrontier(pt.checkpointFrontier, pt.maxBytes)
+			d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
 		} else {
-			if pt.highWaterMark >= 0 {
-				d.Restore.HighWater = pt.inFlightImportSpans[pt.highWaterMark].Key
+			if pt.mu.highWaterMark >= 0 {
+				d.Restore.HighWater = pt.mu.inFlightImportSpans[pt.mu.highWaterMark].Key
 			}
 		}
-		pt.Unlock()
+		pt.mu.Unlock()
 	default:
 		log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 	}
@@ -189,9 +196,9 @@ func (pt *progressTracker) ingestUpdate(
 	if err := pbtypes.UnmarshalAny(&rawProgress.ProgressDetails, &progDetails); err != nil {
 		log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 	}
-	pt.Lock()
-	defer pt.Unlock()
-	pt.res.Add(progDetails.Summary)
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	pt.mu.res.Add(progDetails.Summary)
 	if pt.useFrontier {
 		updateSpan := progDetails.DataSpan.Clone()
 		// If the completedSpan has the same end key as a requiredSpan_i, forward
@@ -202,43 +209,71 @@ func (pt *progressTracker) ingestUpdate(
 		// this trick, the spanFrontier will have O(requiredSpans) entries when the
 		// restore completes. This trick ensures all spans persisted to the frontier are adjacent,
 		// and consequently, will eventually merge.
+		//
+		// Here's a visual example:
+		//  - this restore has two required spans: [a,d) and [e,h).
+		//  - the restore span entry [c,d) just completed, implying the frontier logically looks like:
+		//
+		//	tC|             x---o
+		//	t0|
+		//	  keys--a---b---c---d---e---f---g---h->
+		//
+		// r-spans: |---span1---|   |---span2---|
+		//
+		// - since [c,d)'s endkey equals the required span (a,d]'s endkey,
+		//   also update the gap between required span 1 and 2 in the frontier:
+		//
+		//	tC|             x-------o
+		//	t0|
+		//	  keys--a---b---c---d---e---f---g---h->
+		//
+		// r-spans: |---span1---|   |---span2---|
+		//
+		// - this will ensure that when all subspans in required spans 1 and 2 complete,
+		//   the checkpoint frontier has one span:
+		//
+		//	tC|     x---------------------------o
+		//	t0|
+		//	  keys--a---b---c---d---e---f---g---h->
+		//
+		// r-spans: |---span1---|   |---span2---|
 		if newEndKey, ok := pt.nextRequiredSpanKey[updateSpan.EndKey.String()]; ok {
 			updateSpan.EndKey = newEndKey
 		}
-		if _, err := pt.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
+		if _, err := pt.mu.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
 			return err
 		}
 	} else {
 		idx := progDetails.ProgressIdx
 
-		if idx >= pt.ceiling {
-			for i := pt.ceiling; i <= idx; i++ {
+		if idx >= pt.mu.ceiling {
+			for i := pt.mu.ceiling; i <= idx; i++ {
 				importSpan, ok := <-pt.inFlightSpanFeeder
 				if !ok {
 					// The channel has been closed, there is nothing left to do.
 					log.Infof(ctx, "exiting restore checkpoint loop as the import span channel has been closed")
 					return nil
 				}
-				pt.inFlightImportSpans[i] = importSpan.Span
+				pt.mu.inFlightImportSpans[i] = importSpan.Span
 			}
-			pt.ceiling = idx + 1
+			pt.mu.ceiling = idx + 1
 		}
 
-		if sp, ok := pt.inFlightImportSpans[idx]; ok {
+		if sp, ok := pt.mu.inFlightImportSpans[idx]; ok {
 			// Assert that we're actually marking the correct span done. See #23977.
 			if !sp.Key.Equal(progDetails.DataSpan.Key) {
 				return errors.Newf("request %d for span %v does not match import span for same idx: %v",
 					idx, progDetails.DataSpan, sp,
 				)
 			}
-			pt.requestsCompleted[idx] = true
-			prevHighWater := pt.highWaterMark
-			for j := pt.highWaterMark + 1; j < pt.ceiling && pt.requestsCompleted[j]; j++ {
-				pt.highWaterMark = j
+			pt.mu.requestsCompleted[idx] = true
+			prevHighWater := pt.mu.highWaterMark
+			for j := pt.mu.highWaterMark + 1; j < pt.mu.ceiling && pt.mu.requestsCompleted[j]; j++ {
+				pt.mu.highWaterMark = j
 			}
-			for j := prevHighWater; j < pt.highWaterMark; j++ {
-				delete(pt.requestsCompleted, j)
-				delete(pt.inFlightImportSpans, j)
+			for j := prevHighWater; j < pt.mu.highWaterMark; j++ {
+				delete(pt.mu.requestsCompleted, j)
+				delete(pt.mu.inFlightImportSpans, j)
 			}
 		}
 	}

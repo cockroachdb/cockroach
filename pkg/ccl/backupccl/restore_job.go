@@ -292,17 +292,19 @@ func restore(
 		dataToRestore.getSpans(),
 		job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint,
 		on231,
-		RestoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV))
+		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV))
 	if err != nil {
 		return emptyRowCount, err
 	}
 
+	progressTracker.mu.Lock()
 	filter, err := makeSpanCoveringFilter(
-		progressTracker.checkpointFrontier,
+		progressTracker.mu.checkpointFrontier,
 		job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 		introducedSpanFrontier,
 		targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
 		progressTracker.useFrontier)
+	progressTracker.mu.Unlock()
 	if err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -412,8 +414,10 @@ func restore(
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
 		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", numImportSpans)
 	}
-
-	return progressTracker.res, nil
+	// progress go routines should be shutdown, but use lock just to be safe.
+	progressTracker.mu.Lock()
+	defer progressTracker.mu.Unlock()
+	return progressTracker.mu.res, nil
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup

@@ -275,10 +275,6 @@ func makeSimpleImportSpans(
 	return cover, nil
 }
 
-// completedSpanTime indicates the timestamp that the progress frontier will
-// mark completed spans with.
-var completedSpanTime = hlc.MaxTimestamp
-
 // createIntroducedSpanFrontier creates a span frontier that tracks the end time
 // of the latest incremental backup of each introduced span in the backup chain.
 // See ReintroducedSpans( ) for more information. Note: this function assumes
@@ -344,7 +340,7 @@ func (f spanCoveringFilter) filterCompleted(requiredSpan roachpb.Span) roachpb.S
 	if f.useFrontierCheckpointing {
 		return f.findToDoSpans(requiredSpan)
 	}
-	if requiredSpan.EndKey.Compare(f.highWaterMark) < 0 {
+	if requiredSpan.EndKey.Compare(f.highWaterMark) <= 0 {
 		return roachpb.Spans{}
 	}
 	if requiredSpan.Key.Compare(f.highWaterMark) < 0 {
@@ -513,7 +509,8 @@ func generateAndSendImportSpans(
 	}
 
 	for _, requiredSpan := range requiredSpans {
-		for _, span := range filter.filterCompleted(requiredSpan) {
+		filteredSpans := filter.filterCompleted(requiredSpan)
+		for _, span := range filteredSpans {
 			firstInSpan = true
 			layersCoveredLater := filter.getLayersCoveredLater(span, backups)
 			for {
