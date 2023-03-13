@@ -1242,6 +1242,16 @@ type castIdentityOp struct {
 
 var _ colexecop.ClosableOperator = &castIdentityOp{}
 
+// identityOrder is a slice in which every integer equals its ordinal.
+var identityOrder []int
+
+func init() {
+	identityOrder = make([]int, coldata.BatchSize())
+	for i := range identityOrder {
+		identityOrder[i] = i
+	}
+}
+
 func (c *castIdentityOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
@@ -1250,17 +1260,19 @@ func (c *castIdentityOp) Next() coldata.Batch {
 	}
 	projVec := batch.ColVec(c.outputIdx)
 	c.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		maxIdx := n
+		srcVec := batch.ColVec(c.colIdx)
 		if sel := batch.Selection(); sel != nil {
 			// We don't want to perform the deselection during copying, so we
-			// will copy everything up to (and including) the last selected
-			// element, without the selection vector.
-			maxIdx = sel[n-1] + 1
+			// use a special copy in which we use the identity order but apply
+			// the selection vector.
+			projVec.CopyWithReorderedSource(srcVec, sel[:n], identityOrder)
+		} else {
+			projVec.Copy(coldata.SliceArgs{
+				Src:         srcVec,
+				SrcStartIdx: 0,
+				SrcEndIdx:   n,
+			})
 		}
-		projVec.Copy(coldata.SliceArgs{
-			Src:       batch.ColVec(c.colIdx),
-			SrcEndIdx: maxIdx,
-		})
 	})
 	return batch
 }
