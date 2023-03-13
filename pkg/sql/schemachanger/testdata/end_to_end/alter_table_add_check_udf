@@ -22,7 +22,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -30,7 +30,7 @@ upsert descriptor #104
   +    - 2
   +    constraintId: 2
   +    expr: '[FUNCTION 100105](b) > 1:::INT8'
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_b
   +    validity: Validating
      columns:
      - id: 1
@@ -82,7 +82,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -90,7 +90,7 @@ upsert descriptor #104
   +    - 2
   +    constraintId: 2
   +    expr: '[FUNCTION 100105](b) > 1:::INT8'
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_b
   +    validity: Validating
      columns:
      - id: 1
@@ -172,17 +172,15 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #104
+validate CHECK constraint check_b in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 5 MutationType ops
+## PostCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
-       constraintId: 2
        expr: '[FUNCTION 100105](b) > 1:::INT8'
-  -    name: crdb_internal_constraint_2_name_placeholder
+       name: check_b
   -    validity: Validating
-  +    name: check_b
      columns:
      - id: 1
   ...

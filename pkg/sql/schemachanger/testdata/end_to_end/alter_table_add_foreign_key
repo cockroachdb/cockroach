@@ -1,10 +1,32 @@
 setup
 CREATE TABLE t1 (i INT PRIMARY KEY);
-CREATE TABLE t2 (i INT PRIMARY KEY)
+CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t2 VALUES(-1);
+INSERT INTO t2 VALUES(-2);
+INSERT INTO t2 VALUES(-3);
 ----
 ...
 +object {100 101 t1} -> 104
 +object {100 101 t2} -> 105
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t2 (i) VALUES($stageKey);
+INSERT INTO t2 (i) VALUES($stageKey + 1);
+INSERT INTO t1 (i) VALUES($stageKey);
+INSERT INTO t1 (i) VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t1 (i) VALUES($stageKey+3)
+----
+insert on table "t1" violates foreign key constraint "t1_i_fkey"
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t2;
+----
+true
 
 test
 ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i)
@@ -23,7 +45,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t1
-## StatementPhase stage 1 of 1 with 1 MutationType op
+## StatementPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -34,7 +56,7 @@ upsert descriptor #104
   +      constraintType: FOREIGN_KEY
   +      foreignKey:
   +        constraintId: 2
-  +        name: crdb_internal_constraint_2_name_placeholder
+  +        name: t1_i_fkey
   +        originColumnIds:
   +        - 1
   +        originTableId: 104
@@ -64,7 +86,7 @@ upsert descriptor #105
      id: 105
   +  inboundFks:
   +  - constraintId: 2
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: t1_i_fkey
   +    originColumnIds:
   +    - 1
   +    originTableId: 104
@@ -84,7 +106,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+## PreCommitPhase stage 2 of 2 with 5 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -114,7 +136,7 @@ upsert descriptor #104
   +      constraintType: FOREIGN_KEY
   +      foreignKey:
   +        constraintId: 2
-  +        name: crdb_internal_constraint_2_name_placeholder
+  +        name: t1_i_fkey
   +        originColumnIds:
   +        - 1
   +        originTableId: 104
@@ -154,7 +176,7 @@ upsert descriptor #105
      id: 105
   +  inboundFks:
   +  - constraintId: 2
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: t1_i_fkey
   +    originColumnIds:
   +    - 1
   +    originTableId: 104
@@ -180,10 +202,10 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate FOREIGN KEY constraint crdb_internal_constraint_2_name_placeholder in table #104
+validate FOREIGN KEY constraint t1_i_fkey in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 5 MutationType ops
+## PostCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -213,7 +235,7 @@ upsert descriptor #104
   -      constraintType: FOREIGN_KEY
   -      foreignKey:
   -        constraintId: 2
-  -        name: crdb_internal_constraint_2_name_placeholder
+  -        name: t1_i_fkey
   -        originColumnIds:
   -        - 1
   -        originTableId: 104
@@ -258,13 +280,6 @@ upsert descriptor #105
   -    revertible: true
      families:
      - columnIds:
-  ...
-     inboundFks:
-     - constraintId: 2
-  -    name: crdb_internal_constraint_2_name_placeholder
-  +    name: t1_i_fkey
-       originColumnIds:
-       - 1
   ...
        - 1
        referencedTableId: 105
