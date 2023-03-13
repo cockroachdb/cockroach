@@ -1909,6 +1909,8 @@ func (r *raft) abortLeaderTransfer() {
 
 // committedEntryInCurrentTerm return true if the peer has committed an entry in its term.
 func (r *raft) committedEntryInCurrentTerm() bool {
+	// NB: r.Term is never 0 on a leader, so if zeroTermOnOutOfBounds returns 0,
+	// we won't see it as a match with r.Term.
 	return r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(r.raftLog.committed)) == r.Term
 }
 
