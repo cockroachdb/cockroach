@@ -207,6 +207,10 @@ func (p *PreparedPortal) close(
 ) {
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
+	if p.pauseInfo != nil {
+		p.pauseInfo.cleanupAll()
+		p.pauseInfo = nil
+	}
 }
 
 func (p *PreparedPortal) size(portalName string) int64 {
