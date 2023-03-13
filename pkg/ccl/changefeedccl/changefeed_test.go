@@ -4579,19 +4579,31 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_user=a`,
 	)
 	sqlDB.ExpectErr(
-		t, `sasl_enabled must be enabled if a SASL user is provided`,
+		t, `sasl_user must be provided when SASL is enabled using mechanism SCRAM-SHA-256`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=SCRAM-SHA-256`,
+	)
+	sqlDB.ExpectErr(
+		t, `sasl_client_id must be provided when SASL is enabled using mechanism OAUTHBEARER`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER`,
+	)
+	sqlDB.ExpectErr(
+		t, `sasl_enabled must be enabled if sasl_user is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_user=a`,
 	)
 	sqlDB.ExpectErr(
-		t, `sasl_enabled must be enabled if a SASL password is provided`,
+		t, `sasl_enabled must be enabled if sasl_password is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_password=a`,
+	)
+	sqlDB.ExpectErr(
+		t, `sasl_client_id is only a valid parameter for sasl_mechanism=OAUTHBEARER`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_client_id=a`,
 	)
 	sqlDB.ExpectErr(
 		t, `sasl_enabled must be enabled to configure SASL mechanism`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_mechanism=SCRAM-SHA-256`,
 	)
 	sqlDB.ExpectErr(
-		t, `param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, or PLAIN`,
+		t, `param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
 	sqlDB.ExpectErr(
@@ -4952,7 +4964,6 @@ func TestChangefeedDescription(t *testing.T) {
 			require.Equal(t, tc.descr, description)
 		})
 	}
-
 }
 
 func TestChangefeedPanicRecovery(t *testing.T) {
