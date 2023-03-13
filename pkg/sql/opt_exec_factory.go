@@ -2038,8 +2038,10 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
-	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
-		return nil, err
+	if relocateSubject == tree.RelocateLease {
+		if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
+			return nil, err
+		}
 	}
 	return &relocateRange{
 		rows:            input.(planNode),

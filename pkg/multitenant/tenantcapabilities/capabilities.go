@@ -174,12 +174,13 @@ const MinCapabilityID = 1
 
 //go:generate stringer -type=CapabilityID -linecomment
 const (
+	CanAdminChangeReplicas CapabilityID = iota + MinCapabilityID // can_admin_change_replicas
 
 	// CanAdminScatter describes the ability of a tenant to perform manual
 	// KV scatter requests. These operations need a capability
 	// because excessive KV range scatter can overwhelm the storage
 	// cluster.
-	CanAdminScatter CapabilityID = iota + MinCapabilityID // can_admin_scatter
+	CanAdminScatter // can_admin_scatter
 
 	// CanAdminSplit describes the ability of a tenant to perform manual
 	// KV range split requests. These operations need a capability
@@ -244,6 +245,7 @@ const (
 func (c CapabilityID) CapabilityType() Type {
 	switch c {
 	case
+		CanAdminChangeReplicas,
 		CanAdminScatter,
 		CanAdminSplit,
 		CanAdminUnsplit,

@@ -8,18 +8,19 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[CanAdminScatter-1]
-	_ = x[CanAdminSplit-2]
-	_ = x[CanAdminUnsplit-3]
-	_ = x[CanViewNodeInfo-4]
-	_ = x[CanViewTSDBMetrics-5]
-	_ = x[TenantSpanConfigBounds-6]
-	_ = x[MaxCapabilityID-6]
+	_ = x[CanAdminChangeReplicas-1]
+	_ = x[CanAdminScatter-2]
+	_ = x[CanAdminSplit-3]
+	_ = x[CanAdminUnsplit-4]
+	_ = x[CanViewNodeInfo-5]
+	_ = x[CanViewTSDBMetrics-6]
+	_ = x[TenantSpanConfigBounds-7]
+	_ = x[MaxCapabilityID-7]
 }
 
-const _CapabilityID_name = "can_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsspan_config_bounds"
+const _CapabilityID_name = "can_admin_change_replicascan_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsspan_config_bounds"
 
-var _CapabilityID_index = [...]uint8{0, 17, 32, 49, 67, 88, 106}
+var _CapabilityID_index = [...]uint8{0, 25, 42, 57, 74, 92, 113, 131}
 
 func (i CapabilityID) String() string {
 	i -= 1
