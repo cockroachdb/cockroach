@@ -176,10 +176,16 @@ type TenantCapabilities interface {
 //go:generate stringer -type=CapabilityID -linecomment
 const (
 
+	// CanAdminRelocateRange describes the ability of a tenant to perform manual
+	// KV relocate range requests. These operations need a capability
+	// because excessive KV range relocation can overwhelm the storage
+	// cluster.
+	CanAdminRelocateRange CapabilityID = iota + MinCapabilityID // can_admin_relocate_range
+
 	// CanAdminScatter describes the ability of a tenant to scatter ranges using
 	// an AdminScatter request. By default, secondary tenants are allowed to
 	// scatter as doing so is integral to the performance of IMPORT/RESTORE.
-	CanAdminScatter CapabilityID = iota + MinCapabilityID // can_admin_scatter
+	CanAdminScatter // can_admin_scatter
 
 	// CanAdminSplit describes the ability of a tenant to perform KV requests to
 	// split ranges. By default, secondary tenants are allowed to perform splits
@@ -246,6 +252,7 @@ const (
 func (c CapabilityID) CapabilityType() Type {
 	switch c {
 	case
+		CanAdminRelocateRange,
 		CanAdminScatter,
 		CanAdminSplit,
 		CanAdminUnsplit,
