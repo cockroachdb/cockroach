@@ -111,8 +111,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// criterion. While such proposals can be reproposed, only the first
 			// instance that gets applied matters and so removing the command is
 			// always what we want to happen.
-			!cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex)
-
+			cmd.Cmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
 		if shouldRemove {
 			// Delete the proposal from the proposals map. There may be reproposals
 			// of the proposal in the pipeline, but those will all have the same max
