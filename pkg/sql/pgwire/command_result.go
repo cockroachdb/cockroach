@@ -383,6 +383,7 @@ func (c *conn) newCommandResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
+	forPausablePortal bool,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
@@ -401,10 +402,11 @@ func (c *conn) newCommandResult(
 	}
 	telemetry.Inc(sqltelemetry.PortalWithLimitRequestCounter)
 	return &limitedCommandResult{
-		limit:         limit,
-		portalName:    portalName,
-		implicitTxn:   implicitTxn,
-		commandResult: r,
+		limit:             limit,
+		portalName:        portalName,
+		implicitTxn:       implicitTxn,
+		commandResult:     r,
+		forPausablePortal: forPausablePortal,
 	}
 }
 
@@ -445,7 +447,9 @@ type limitedCommandResult struct {
 	seenTuples int
 	// If set, an error will be sent to the client if more rows are produced than
 	// this limit.
-	limit int
+	limit             int
+	reachedLimit      bool
+	forPausablePortal bool
 }
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
@@ -462,9 +466,17 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		if err := r.conn.Flush(r.pos); err != nil {
 			return err
 		}
-		r.seenTuples = 0
-
-		return r.moreResultsNeeded(ctx)
+		if r.forPausablePortal {
+			r.reachedLimit = true
+			return sql.ErrPortalLimitHasBeenReached
+		} else {
+			// TODO(janexing): we keep this part as for general portals, we would like
+			// to keep the execution logic to avoid bring too many bugs. Eventually
+			// we should remove them and use the "return the control to connExecutor"
+			// logic for all portals.
+			r.seenTuples = 0
+			return r.moreResultsNeeded(ctx)
+		}
 	}
 	return nil
 }
@@ -623,6 +635,13 @@ func (r *limitedCommandResult) rewindAndClosePortal(
 	// up back on it.
 	r.conn.stmtBuf.Rewind(ctx, rewindTo)
 	return sql.ErrLimitedResultClosed
+}
+
+func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
+	if r.reachedLimit {
+		r.commandResult.typ = noCompletionMsg
+	}
+	r.commandResult.Close(ctx, t)
 }
 
 // Get the column index for job id based on the result header defined in

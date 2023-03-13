@@ -1102,6 +1102,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ int,
 	_ string,
 	_ bool,
+	_ bool,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

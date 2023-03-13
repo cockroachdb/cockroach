@@ -1796,8 +1796,9 @@ func (c *conn) CreateStatementResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
+	forPausablePortal bool,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn)
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn, forPausablePortal)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.
