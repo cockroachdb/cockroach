@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +29,11 @@ import (
 // TestingRunInner exports the inner run method for testing purposes.
 func (s *KVSubscriber) TestingRunInner(ctx context.Context) error {
 	return s.rfc.Run(ctx)
+}
+
+// TestingUpdateMetrics exports the inner updateMetrics method for testing purposes.
+func (s *KVSubscriber) TestingUpdateMetrics(ctx context.Context) {
+	s.updateMetrics(ctx)
 }
 
 func TestGetProtectionTimestamps(t *testing.T) {
@@ -75,8 +81,10 @@ func TestGetProtectionTimestamps(t *testing.T) {
 	// Mark sp43 as excluded from backup.
 	sp43Cfg.cfg.ExcludeDataFromBackup = true
 
+	const timeDeltaFromTS1 = 10
+	mc := hlc.NewManualClock(ts1.WallTime + timeDeltaFromTS1)
 	subscriber := New(
-		nil, /* clock */
+		hlc.NewClock(mc.UnixNano, time.Nanosecond),
 		nil, /* rangeFeedFactory */
 		keys.SpanConfigurationsTableID,
 		1<<20, /* 1 MB */
@@ -132,6 +140,15 @@ func TestGetProtectionTimestamps(t *testing.T) {
 			testCase.test(t, m, subscriber)
 		})
 	}
+
+	// Test internal metrics. We should expect a protected record count of 3,
+	// ignoring the one from ts3 since it has both
+	// {IgnoreIfExcludedFromBackup,ExcludeDataFromBackup} are true. We should
+	// also observe the right delta between the oldest protected timestamp and
+	// current wall clock time.
+	subscriber.TestingUpdateMetrics(ctx)
+	require.Equal(t, int64(3), subscriber.metrics.ProtectedRecordCount.Value())
+	require.Equal(t, int64(timeDeltaFromTS1), subscriber.metrics.OldestProtectedRecordNanos.Value())
 }
 
 var _ spanconfig.Store = &manualStore{}
