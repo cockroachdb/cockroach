@@ -1503,8 +1503,15 @@ func (r *DistSQLReceiver) PushBatch(
 
 var (
 	// ErrLimitedResultNotSupported is an error produced by pgwire
-	// indicating an unsupported feature of row count limits was attempted.
-	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(40195, "multiple active portals not supported")
+	// indicating the user attempted to have multiple active portals but
+	// either without setting sql.defaults.multiple_active_portals.enabled to
+	// true or the underlying query does not satisfy the restriction.
+	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(
+		40195,
+		"multiple active portals not supported, "+
+			"please set sql.defaults.multiple_active_portals.enabled to true. "+
+			"(Note this feature is in preview)",
+	)
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
 	ErrLimitedResultClosed = errors.New("row count limit closed")
