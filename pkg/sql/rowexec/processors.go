@@ -80,9 +80,11 @@ func emitHelper(
 	case execinfra.NeedMoreRows:
 		return true
 	case execinfra.SwitchToAnotherPortal:
-		errMessage := "not allowed to pause and switch to another portal"
-		output.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.AssertionFailedf(errMessage)})
-		log.Fatalf(ctx, errMessage)
+		output.Push(
+			nil, /* row */
+			&execinfrapb.ProducerMetadata{
+				Err: errors.AssertionFailedf("not allowed to pause and switch to another portal"),
+			})
 		return false
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")

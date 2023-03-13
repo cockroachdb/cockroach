@@ -1757,42 +1757,48 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 	defer recv.Release()
 
-	evalCtx := planner.ExtendedEvalContext()
-	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
-		planner.txn, distribute)
-	planCtx.stmtType = recv.stmtType
-	// Skip the diagram generation since on this "main" query path we can get it
-	// via the statement bundle.
-	planCtx.skipDistSQLDiagramGeneration = true
-	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
-		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-	} else if planner.instrumentation.ShouldSaveFlows() {
-		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
-	}
-	planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
-	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+	var err error
 
-	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
-	if len(planner.curPlan.subqueryPlans) != 0 ||
-		len(planner.curPlan.cascades) != 0 ||
-		len(planner.curPlan.checkPlans) != 0 {
-		var serialEvalCtx extendedEvalContext
-		ex.initEvalCtx(ctx, &serialEvalCtx, planner)
-		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
-			// Reuse the same object if this factory is not used concurrently.
-			factoryEvalCtx := &serialEvalCtx
-			if usedConcurrently {
-				factoryEvalCtx = &extendedEvalContext{}
-				ex.initEvalCtx(ctx, factoryEvalCtx, planner)
-			}
-			ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
-			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
-			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
-			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
-			return factoryEvalCtx
+	if planner.hasFlowForPausablePortal() {
+		err = planner.resumeFlowForPausablePortal(ctx, recv)
+	} else {
+		evalCtx := planner.ExtendedEvalContext()
+		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
+			planner.txn, distribute)
+		planCtx.stmtType = recv.stmtType
+		// Skip the diagram generation since on this "main" query path we can get it
+		// via the statement bundle.
+		planCtx.skipDistSQLDiagramGeneration = true
+		if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
+			planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
+		} else if planner.instrumentation.ShouldSaveFlows() {
+			planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 		}
+		planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
+		planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+
+		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
+		if len(planner.curPlan.subqueryPlans) != 0 ||
+			len(planner.curPlan.cascades) != 0 ||
+			len(planner.curPlan.checkPlans) != 0 {
+			var serialEvalCtx extendedEvalContext
+			ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+			evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+				// Reuse the same object if this factory is not used concurrently.
+				factoryEvalCtx := &serialEvalCtx
+				if usedConcurrently {
+					factoryEvalCtx = &extendedEvalContext{}
+					ex.initEvalCtx(ctx, factoryEvalCtx, planner)
+				}
+				ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+				factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
+				factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
+				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
+				return factoryEvalCtx
+			}
+		}
+		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
 	}
-	err := ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
 	return recv.stats, err
 }
 
