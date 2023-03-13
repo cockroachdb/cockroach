@@ -735,6 +735,10 @@ var charts = []sectionDescription{
 				Title:   "Replica CPU Nanos Used Per Second",
 				Metrics: []string{"rebalancing.replicas.cpunanospersecond"},
 			},
+			{
+				Title:   "Replica Queries Per Second",
+				Metrics: []string{"rebalancing.replicas.queriespersecond"},
+			},
 		},
 	},
 	{
