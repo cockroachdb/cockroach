@@ -9,13 +9,14 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[NeedMoreRows-0]
-	_ = x[DrainRequested-1]
-	_ = x[ConsumerClosed-2]
+	_ = x[SwitchToAnotherPortal-1]
+	_ = x[DrainRequested-2]
+	_ = x[ConsumerClosed-3]
 }
 
-const _ConsumerStatus_name = "NeedMoreRowsDrainRequestedConsumerClosed"
+const _ConsumerStatus_name = "NeedMoreRowsSwitchToAnotherPortalDrainRequestedConsumerClosed"
 
-var _ConsumerStatus_index = [...]uint8{0, 12, 26, 40}
+var _ConsumerStatus_index = [...]uint8{0, 12, 33, 47, 61}
 
 func (i ConsumerStatus) String() string {
 	if i >= ConsumerStatus(len(_ConsumerStatus_index)-1) {
