@@ -150,11 +150,21 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 	t.Run("test tenant isolation", func(t *testing.T) {
 		_, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
-				NodeID:   "0", // 0 indicates we want stats from all nodes.
-				StartKey: roachpb.RKey(bSpan.Key),
-				EndKey:   roachpb.RKey(bSpan.EndKey),
+				NodeID: "0", // 0 indicates we want stats from all nodes.
+				Spans:  []roachpb.Span{bSpan},
 			})
 		require.Error(t, err)
+	})
+
+	t.Run("test invalid request payload", func(t *testing.T) {
+		_, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				Spans:    []roachpb.Span{aSpan},
+				StartKey: roachpb.RKey(aSpan.Key),
+				EndKey:   roachpb.RKey(aSpan.EndKey),
+			})
+		require.ErrorContains(t, err, `span stats request payload cannot populate both the key fields and spans field`)
 	})
 
 	t.Run("test KV node fan-out", func(t *testing.T) {
@@ -165,14 +175,6 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		makeKey := func(keys ...[]byte) roachpb.Key {
 			return bytes.Join(keys, nil)
 		}
-
-		controlStats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID:   "0", // 0 indicates we want stats from all nodes.
-				StartKey: roachpb.RKey(aSpan.Key),
-				EndKey:   roachpb.RKey(aSpan.EndKey),
-			})
-		require.NoError(t, err)
 
 		// Create a new range in this tenant.
 		_, _, err = helper.HostCluster().Server(0).SplitRange(makeKey(tPrefix, roachpb.Key("c")))
@@ -194,14 +196,81 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 
 		stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
-				NodeID:   "0", // 0 indicates we want stats from all nodes.
-				StartKey: roachpb.RKey(aSpan.Key),
-				EndKey:   roachpb.RKey(aSpan.EndKey),
+				NodeID: "0", // 0 indicates we want stats from all nodes.
+				Spans:  []roachpb.Span{aSpan},
 			})
 
 		require.NoError(t, err)
-		require.Equal(t, controlStats.RangeCount+1, stats.RangeCount)
-		require.Equal(t, controlStats.TotalStats.LiveCount+int64(len(incKeys)), stats.TotalStats.LiveCount)
+
+		controlSpanStats := controlStats.SpanToStats[aSpan.String()]
+		testSpanStats := stats.SpanToStats[aSpan.String()]
+		require.Equal(t, controlSpanStats.RangeCount+1, testSpanStats.RangeCount)
+		require.Equal(t, controlSpanStats.TotalStats.LiveCount+int64(len(incKeys)), testSpanStats.TotalStats.LiveCount)
+
+		// Make a multi-span call
+		type spanCase struct {
+			span               roachpb.Span
+			expectedRangeCount int32
+			expectedLiveCount  int64
+		}
+		spanCases := []spanCase{
+			{
+				// "a", "b" - single range, single key
+				span: roachpb.Span{
+					Key:    makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[0])),
+					EndKey: makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[1])),
+				},
+				expectedRangeCount: 1,
+				expectedLiveCount:  1,
+			},
+			{
+				// "d", "f" - single range, multiple keys
+				span: roachpb.Span{
+					Key:    makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[3])),
+					EndKey: makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[5])),
+				},
+				expectedRangeCount: 1,
+				expectedLiveCount:  2,
+			},
+			{
+				// "bb", "e" - multiple ranges, multiple keys
+				span: roachpb.Span{
+					Key:    makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[2])),
+					EndKey: makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[4])),
+				},
+				expectedRangeCount: 2,
+				expectedLiveCount:  2,
+			},
+
+			{
+				// "a", "d" - multiple ranges, multiple keys
+				span: roachpb.Span{
+					Key:    makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[0])),
+					EndKey: makeKey(keys.MakeTenantPrefix(tID), []byte(incKeys[3])),
+				},
+				expectedRangeCount: 2,
+				expectedLiveCount:  3,
+			},
+		}
+
+		var spans []roachpb.Span
+		for _, sc := range spanCases {
+			spans = append(spans, sc.span)
+		}
+
+		stats, err = tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID: "0", // 0 indicates we want stats from all nodes.
+				Spans:  spans,
+			})
+
+		require.NoError(t, err)
+		// Check each span has their expected values.
+		for _, sc := range spanCases {
+			spanStats := stats.SpanToStats[sc.span.String()]
+			require.Equal(t, spanStats.RangeCount, sc.expectedRangeCount, fmt.Sprintf("mismatch on expected range count for span case with span %v", sc.span.String()))
+			require.Equal(t, spanStats.TotalStats.LiveCount, sc.expectedLiveCount, fmt.Sprintf("mismatch on expected live count for span case with span %v", sc.span.String()))
+		}
 	})
 
 }

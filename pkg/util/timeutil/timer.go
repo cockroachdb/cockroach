@@ -11,6 +11,7 @@
 package timeutil
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -105,4 +106,9 @@ func (t *Timer) Stop() bool {
 	*t = Timer{}
 	timerPool.Put(t)
 	return res
+}
+
+func TimeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	fmt.Printf("%s took %s\n", name, elapsed)
 }

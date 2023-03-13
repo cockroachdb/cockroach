@@ -11,7 +11,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -78,22 +84,130 @@ func TestLocalSpanStats(t *testing.T) {
 		{"b", "bbb", 1, 2},
 	} {
 		start, end := tcase.startKey, tcase.endKey
+		span := roachpb.Span{
+			Key:    roachpb.Key(start),
+			EndKey: roachpb.Key(end),
+		}
+
 		result, err := s.status.getLocalStats(ctx,
 			&roachpb.SpanStatsRequest{
-				NodeID:   "0",
-				StartKey: roachpb.RKey(start),
-				EndKey:   roachpb.RKey(end),
+				NodeID: "0",
+				Spans:  []roachpb.Span{span},
 			},
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if a, e := result.RangeCount, tcase.expectedRanges; a != e {
+		resultSpanStats := result.SpanToStats[span.String()]
+		if a, e := resultSpanStats.RangeCount, tcase.expectedRanges; a != e {
 			t.Errorf("Expected %d ranges in span [%s - %s], found %d", e, start, end, a)
 		}
-		if a, e := result.TotalStats.LiveCount, tcase.expectedKeys; a != e {
+		if a, e := resultSpanStats.TotalStats.LiveCount, tcase.expectedKeys; a != e {
 			t.Errorf("Expected %d keys in span [%s - %s], found %d", e, start, end, a)
 		}
+	}
+}
+
+// BenchmarkSpanStats measures the cost of collecting span statistics.
+func BenchmarkSpanStats(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	createCluster := func(numNodes int) serverutils.TestClusterInterface {
+		return serverutils.StartNewTestCluster(b, numNodes,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationAuto,
+			})
+	}
+
+	clusterSpecs := []struct {
+		name     string
+		numNodes int
+	}{
+		{
+			name:     "3node",
+			numNodes: 3,
+		},
+		{
+			name:     "6node",
+			numNodes: 6,
+		},
+		{
+			name:     "9node",
+			numNodes: 9,
+		},
+	}
+
+	type testSpec struct {
+		numSpans  int
+		numRanges int
+	}
+
+	var testSpecs []testSpec
+	numSpanCases := []int{10, 100, 200, 500, 1000}
+	numRangeCases := []int{50, 100, 500}
+	for _, numSpans := range numSpanCases {
+		for _, numRanges := range numRangeCases {
+			testSpecs = append(testSpecs, testSpec{numSpans: numSpans, numRanges: numRanges})
+		}
+	}
+
+	for _, cluster := range clusterSpecs {
+		b.Run(cluster.name, func(b *testing.B) {
+			tc := createCluster(cluster.numNodes)
+			ctx := context.Background()
+			defer tc.Stopper().Stop(ctx)
+			for _, ts := range testSpecs {
+				b.Run(fmt.Sprintf("BenchmarkSpanStats - span stats for %d node cluster, collecting %d spans with %d ranges each",
+					cluster.numNodes,
+					ts.numSpans,
+					ts.numRanges,
+				), func(b *testing.B) {
+
+					tenant := tc.Server(0).TenantOrServer()
+					tenantCodec := keys.MakeSQLCodec(serverutils.TestTenantID())
+					tenantPrefix := tenantCodec.TenantPrefix()
+
+					makeKey := func(keys ...[]byte) roachpb.Key {
+						return bytes.Join(keys, nil)
+					}
+
+					var spans []roachpb.Span
+
+					// Create a table spans
+					var spanStartKey roachpb.Key
+					for i := 0; i < ts.numSpans; i++ {
+						spanStartKey = nil
+						// Create ranges.
+						var key roachpb.Key
+						for j := 0; j < ts.numRanges; j++ {
+							key = makeKey(tenantPrefix, []byte(strconv.Itoa(i*j)))
+							if spanStartKey == nil {
+								spanStartKey = key
+							}
+							_, _, err := tc.Server(0).SplitRange(key)
+							require.NoError(b, err)
+						}
+						spans = append(spans, roachpb.Span{
+							Key:    spanStartKey,
+							EndKey: key,
+						})
+					}
+
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						_, err := tenant.TenantStatusServer().(serverpb.TenantStatusServer).SpanStats(ctx,
+							&roachpb.SpanStatsRequest{
+								NodeID: "0", // 0 indicates we want stats from all nodes.
+								Spans:  spans,
+							})
+						require.Error(b, err)
+					}
+					b.StopTimer()
+				})
+			}
+		})
 	}
 }
