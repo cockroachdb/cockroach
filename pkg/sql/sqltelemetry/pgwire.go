@@ -68,3 +68,7 @@ var CloseRequestCounter = telemetry.GetCounterOnce("pgwire.command.close")
 // FlushRequestCounter is to be incremented every time a flush request
 // is made.
 var FlushRequestCounter = telemetry.GetCounterOnce("pgwire.command.flush")
+
+// MultipleActivePortalCounter is to be incremented every time the cluster setting
+// sql.defaults.multiple_active_portals.enabled is set true.
+var MultipleActivePortalCounter = telemetry.GetCounterOnce("pgwire.multiple_active_portals")

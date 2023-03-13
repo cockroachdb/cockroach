@@ -288,17 +288,24 @@ func (f *vectorizedFlow) Setup(
 	return ctx, opChains, nil
 }
 
+func (f *vectorizedFlow) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) error {
+	if err := f.FlowBase.SetNewRowSyncFlowConsumer(receiver); err != nil {
+		return err
+	}
+	return f.creator.flowCreatorHelper.updateOutputOnFlowCoordinator(receiver)
+}
+
 // Run is part of the Flow interface.
-func (f *vectorizedFlow) Run(ctx context.Context) {
+func (f *vectorizedFlow) Run(ctx context.Context, noWait bool) {
 	if f.batchFlowCoordinator == nil {
 		// If we didn't create a BatchFlowCoordinator, then we have a processor
 		// as the root, so we run this flow with the default implementation.
-		f.FlowBase.Run(ctx)
+		f.FlowBase.Run(ctx, noWait)
 		return
 	}
-
-	defer f.Wait()
-
+	if !noWait {
+		defer f.Wait()
+	}
 	if err := f.StartInternal(ctx, nil /* processors */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.GetRowSyncFlowConsumer().ProducerDone()
@@ -511,6 +518,10 @@ type flowCreatorHelper interface {
 	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
 	// done on the gateway node.
 	addFlowCoordinator(coordinator *FlowCoordinator)
+	// updateOutputOnFlowCoordinator updates the output for the first processor
+	// if it's a flow coordinator. This is called when we reuse the flow for
+	// a paused portal.
+	updateOutputOnFlowCoordinator(output execinfra.RowReceiver) (err error)
 	// getCtxDone returns done channel of the context of this flow.
 	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
@@ -1333,6 +1344,20 @@ func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) updateOutputOnFlowCoordinator(
+	output execinfra.RowReceiver,
+) error {
+	if len(r.processors) == 0 {
+		return errors.AssertionFailedf("no processor found for vectorizedFlowCreatorHelper")
+	}
+	fc, ok := r.processors[0].(*FlowCoordinator)
+	if !ok {
+		return errors.AssertionFailedf("the first processor is not a flow coordinator")
+	}
+	fc.UpdateOutput(output)
+	return nil
+}
+
 func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return r.f.GetCtxDone()
 }
@@ -1391,6 +1416,10 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
+
+func (r *noopFlowCreatorHelper) updateOutputOnFlowCoordinator(output execinfra.RowReceiver) error {
+	return nil
+}
 
 func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return nil
