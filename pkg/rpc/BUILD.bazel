@@ -59,6 +59,7 @@ go_library(
         "@com_github_cenkalti_backoff//:backoff",
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//grpc/status",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_facebookgo_clock//:clock",
