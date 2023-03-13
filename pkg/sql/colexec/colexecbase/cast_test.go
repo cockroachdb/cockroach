@@ -48,7 +48,8 @@ func TestRandomizedCast(t *testing.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
 			if _, ok := cast.LookupCastVolatility(from, to); ok {
-				if colexecbase.IsCastSupported(from, to) {
+				// Skip identical casts since they are not interesting.
+				if colexecbase.IsCastSupported(from, to) && !colexecbase.IsIdentityCast(from, to) {
 					return from, to
 				}
 			}

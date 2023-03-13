@@ -58,7 +58,9 @@ var (
 	_ = pgerror.Wrapf
 )
 
-func isIdentityCast(fromType, toType *types.T) bool {
+// IsIdentityCast returns whether a special "identity cast" operator is used for
+// the given type pair.
+func IsIdentityCast(fromType, toType *types.T) bool {
 	if fromType.Identical(toType) {
 		return true
 	}
@@ -96,7 +98,7 @@ func GetCastOperator(
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
 	}
-	if isIdentityCast(fromType, toType) {
+	if IsIdentityCast(fromType, toType) {
 		// bpchars require special handling.
 		if toType.Oid() == oid.T_bpchar {
 			return &castBPCharIdentityOp{castOpBase: base}, nil
@@ -639,7 +641,7 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
-	if isIdentityCast(fromType, toType) {
+	if IsIdentityCast(fromType, toType) {
 		return true
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -1250,16 +1252,21 @@ func (c *castIdentityOp) Next() coldata.Batch {
 	}
 	projVec := batch.ColVec(c.outputIdx)
 	c.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		maxIdx := n
+		minIdx, maxIdx := 0, n
 		if sel := batch.Selection(); sel != nil {
 			// We don't want to perform the deselection during copying, so we
-			// will copy everything up to (and including) the last selected
-			// element, without the selection vector.
-			maxIdx = sel[n-1] + 1
+			// will copy the whole "window" of values (which includes all
+			// selected elements).
+			// TODO(yuzefovich): we might copy over a lot of garbage (i.e. not
+			// selected values) that happens to be included in this window. If
+			// this becomes problematic, we might need to bring back "copy using
+			// selection vector" primitive.
+			minIdx, maxIdx = sel[0], sel[n-1]+1
 		}
 		projVec.Copy(coldata.SliceArgs{
-			Src:       batch.ColVec(c.colIdx),
-			SrcEndIdx: maxIdx,
+			Src:         batch.ColVec(c.colIdx),
+			SrcStartIdx: minIdx,
+			SrcEndIdx:   maxIdx,
 		})
 	})
 	return batch
