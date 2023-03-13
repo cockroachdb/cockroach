@@ -235,6 +235,11 @@ var (
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 10)
 
+	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
+	// a Raft command.
+	defaultRaftReproposalTimeoutTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_REPROPOSAL_TIMEOUT_TICKS", 15)
+
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
 	// Range's Raft log can grow to before log truncations are triggered while at
 	// least one follower is missing. If all followers are active, the quota pool
@@ -456,6 +461,11 @@ type RaftConfig struct {
 	// unless overridden.
 	RaftElectionTimeoutTicks int
 
+	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
+	// command. This also specifies the number of ticks between each reproposal
+	// check, so the actual timeout is 1-2 times this value.
+	RaftReproposalTimeoutTicks int
+
 	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
 	RaftHeartbeatIntervalTicks int
 
@@ -561,6 +571,9 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RangeLeaseRenewalFraction == 0 {
 		cfg.RangeLeaseRenewalFraction = defaultRangeLeaseRenewalFraction
+	}
+	if cfg.RaftReproposalTimeoutTicks == 0 {
+		cfg.RaftReproposalTimeoutTicks = defaultRaftReproposalTimeoutTicks
 	}
 	// TODO(andrei): -1 is a special value for RangeLeaseRenewalFraction which
 	// really means "0" (never renew), except that the zero value means "use

@@ -1228,17 +1228,14 @@ func (r *Replica) tick(
 		}
 	}
 
-	refreshAtDelta := r.store.cfg.RaftElectionTimeoutTicks
+	refreshAtDelta := r.store.cfg.RaftReproposalTimeoutTicks
 	if knob := r.store.TestingKnobs().RefreshReasonTicksPeriod; knob > 0 {
 		refreshAtDelta = knob
 	}
 	if !r.store.TestingKnobs().DisableRefreshReasonTicks && r.mu.ticks%refreshAtDelta == 0 {
-		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
-		// should wait before deciding that our previous proposal didn't go
-		// through. Note that the combination of the above condition and passing
-		// RaftElectionTimeoutTicks to refreshProposalsLocked means that commands
-		// will be refreshed when they have been pending for 1 to 2 election
-		// cycles.
+		// The combination of the above condition and passing refreshAtDelta to
+		// refreshProposalsLocked means that commands will be refreshed when they
+		// have been pending for 1 to 2 reproposal timeouts.
 		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
 	return true, nil
