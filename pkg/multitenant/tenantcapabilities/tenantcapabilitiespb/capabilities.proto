@@ -70,6 +70,10 @@ message TenantCapabilities {
   // successfully perform `AdminChangeReplicas`, `AdminRelocateRange`,
   // `AdminTransferLease` requests.
   bool can_admin_relocate_range = 7;
+
+  // CanAdminMerge if set to true, grants the tenant the ability to
+  // successfully perform `AdminMerge` requests.
+  bool can_admin_merge = 8;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

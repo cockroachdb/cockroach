@@ -178,11 +178,17 @@ const MinCapabilityID = 1
 //go:generate stringer -type=CapabilityID -linecomment
 const (
 
+	// CanAdminMerge describes the ability of a tenant to perform manual
+	// KV merge range requests. These operations need a capability
+	// because excessive KV range merging can overwhelm the storage
+	// cluster.
+	CanAdminMerge CapabilityID = iota + MinCapabilityID // can_admin_merge
+
 	// CanAdminRelocateRange describes the ability of a tenant to perform manual
 	// KV relocate range requests. These operations need a capability
 	// because excessive KV range relocation can overwhelm the storage
 	// cluster.
-	CanAdminRelocateRange CapabilityID = iota + MinCapabilityID // can_admin_relocate_range
+	CanAdminRelocateRange // can_admin_relocate_range
 
 	// CanAdminScatter describes the ability of a tenant to perform manual
 	// KV scatter requests. These operations need a capability
@@ -253,6 +259,7 @@ const (
 func (c CapabilityID) CapabilityType() Type {
 	switch c {
 	case
+		CanAdminMerge,
 		CanAdminRelocateRange,
 		CanAdminScatter,
 		CanAdminSplit,
