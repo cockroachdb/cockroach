@@ -148,6 +148,10 @@ func (ex *connExecutor) makePreparedPortal(
 		Qargs:      qargs,
 		OutFormats: outFormats,
 	}
+	// TODO(janexing): we added this line to avoid the unused lint error.
+	// Will remove it once the whole functionality of multple active portals
+	// is merged.
+	_ = enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }
 
