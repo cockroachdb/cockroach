@@ -1,6 +1,9 @@
 /* setup */
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t2 VALUES(-1);
+INSERT INTO t2 VALUES(-2);
+INSERT INTO t2 VALUES(-3);
 
 /* test */
 ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
@@ -12,18 +15,29 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward ABSENT
+        ├── • 2 elements transitioning toward ABSENT
         │   │
-        │   └── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-        │       │ WRITE_ONLY → ABSENT
+        │   ├── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │   │   │ WRITE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │   │   │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+        │   │         rule: "Constraint should be hidden before name"
+        │   │
+        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-        │       │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
-        │       │
-        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
-        │             rule: "dependents removed before constraint"
+        │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │             rule: "Constraint should be hidden before name"
         │
-        └── • 5 Mutation operations
+        └── • 6 Mutation operations
+            │
+            ├── • SetConstraintName
+            │     ConstraintID: 2
+            │     Name: crdb_internal_constraint_2_name_placeholder
+            │     TableID: 104
             │
             ├── • RemoveForeignKeyBackReference
             │     OriginConstraintID: 2

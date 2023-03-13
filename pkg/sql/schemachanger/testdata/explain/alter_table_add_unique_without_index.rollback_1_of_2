@@ -1,6 +1,9 @@
 /* setup */
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 SET experimental_enable_unique_without_index_constraints = true;
+INSERT INTO t VALUES(-1, -1);
+INSERT INTO t VALUES(-2, -2);
+INSERT INTO t VALUES(-3, -3);
 
 /* test */
 ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
@@ -9,9 +12,11 @@ EXPLAIN (ddl) rollback at post-commit stage 1 of 2;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›);
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
-           └── 3 Mutation operations
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
+           └── 4 Mutation operations
+                ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
                 ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

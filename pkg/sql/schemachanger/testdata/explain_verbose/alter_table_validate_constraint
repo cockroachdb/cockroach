@@ -11,13 +11,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-│       │       │ ABSENT → WRITE_ONLY
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │             rule: "simple constraint visible before name"
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
@@ -25,12 +31,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-│       │   │         rule: "dependents removed right before simple constraint"
+│       │   │         rule: "Constraint should be hidden before name"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
 │       │         PUBLIC → ABSENT
 │       │
-│       └── • 3 Mutation operations
+│       └── • 4 Mutation operations
 │           │
 │           ├── • SetConstraintName
 │           │     ConstraintID: 2
@@ -45,6 +51,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │           │     TableID: 104
 │           │     Validity: 2
 │           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 3
+│           │     Name: check_i
+│           │     TableID: 104
+│           │
 │           └── • RemoveCheckConstraint
 │                 ConstraintID: 2
 │                 TableID: 104
@@ -53,10 +64,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-│   │   │         WRITE_ONLY → ABSENT
+│   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│   │   │   │     WRITE_ONLY → ABSENT
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
+│   │   │         PUBLIC → ABSENT
 │   │   │
 │   │   ├── • 2 elements transitioning toward ABSENT
 │   │   │   │
@@ -73,13 +87,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-│       │       │ ABSENT → WRITE_ONLY
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │             rule: "simple constraint visible before name"
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
@@ -87,12 +107,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-│       │   │         rule: "dependents removed right before simple constraint"
+│       │   │         rule: "Constraint should be hidden before name"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
 │       │         PUBLIC → ABSENT
 │       │
-│       └── • 5 Mutation operations
+│       └── • 6 Mutation operations
 │           │
 │           ├── • SetConstraintName
 │           │     ConstraintID: 2
@@ -106,6 +126,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │           │     ConstraintID: 3
 │           │     TableID: 104
 │           │     Validity: 2
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 3
+│           │     Name: check_i
+│           │     TableID: 104
 │           │
 │           ├── • RemoveCheckConstraint
 │           │     ConstraintID: 2
@@ -147,26 +172,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
     │
     └── • Stage 2 of 2 in PostCommitPhase
         │
-        ├── • 2 elements transitioning toward PUBLIC
+        ├── • 1 element transitioning toward PUBLIC
         │   │
-        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-        │   │   │ VALIDATED → PUBLIC
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-        │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
-        │   │   │
-        │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
-        │   │         rule: "constraint dependent public right before complex constraint"
-        │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
-        │         ABSENT → PUBLIC
+        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+        │       │ VALIDATED → PUBLIC
+        │       │
+        │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+        │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
-        └── • 4 Mutation operations
-            │
-            ├── • SetConstraintName
-            │     ConstraintID: 3
-            │     Name: check_i
-            │     TableID: 104
+        └── • 3 Mutation operations
             │
             ├── • MakeValidatedCheckConstraintPublic
             │     ConstraintID: 3
