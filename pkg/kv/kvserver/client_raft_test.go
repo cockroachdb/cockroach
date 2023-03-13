@@ -1699,7 +1699,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 					// can easily create leader-not-leaseholder scenarios.
 					DisableLeaderFollowsLeaseholder: true,
 					// Refresh pending commands on every Raft group tick instead of
-					// every RaftElectionTimeoutTicks.
+					// every RaftReproposalTimeoutTicks.
 					RefreshReasonTicksPeriod: 1,
 				},
 			},

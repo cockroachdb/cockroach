@@ -34,6 +34,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 	leaseActive, leaseRenewal := cfg.RangeLeaseDurations()
 	nodeActive, nodeRenewal := cfg.NodeLivenessDurations()
 	raftElectionTimeout := cfg.RaftElectionTimeout()
+	raftReproposalTimeout := cfg.RaftTickInterval * time.Duration(cfg.RaftReproposalTimeoutTicks)
 	raftHeartbeatInterval := cfg.RaftTickInterval * time.Duration(cfg.RaftHeartbeatIntervalTicks)
 
 	{
@@ -41,6 +42,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 		s += spew.Sdump(cfg)
 		s += fmt.Sprintf("RaftHeartbeatInterval: %s\n", raftHeartbeatInterval)
 		s += fmt.Sprintf("RaftElectionTimeout: %s\n", raftElectionTimeout)
+		s += fmt.Sprintf("RaftReproposalTimeout: %s\n", raftReproposalTimeout)
 		s += fmt.Sprintf("RangeLeaseDurations: active=%s renewal=%s\n", leaseActive, leaseRenewal)
 		s += fmt.Sprintf("RangeLeaseAcquireTimeout: %s\n", cfg.RangeLeaseAcquireTimeout())
 		s += fmt.Sprintf("NodeLivenessDurations: active=%s renewal=%s\n", nodeActive, nodeRenewal)
