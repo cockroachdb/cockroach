@@ -254,41 +254,36 @@ func TestGrpcDialInternal_ReconnectWithPeerBreaker(t *testing.T) {
 
 	// validate that peer tracks correct info about failed connection
 	testutils.SucceedsSoon(t, func() error {
-		pc, ok := clientCtx.m.GetPeer(k)
-		require.True(t, ok)
-
-		pc.mu.Lock()
-		defer pc.mu.Unlock()
-		if err := pc.breaker.Signal().Err(); err == nil {
-			return errors.New("expecting error from breaker, but got nil")
-		}
-		if pc.mu.closed == true {
-			return errors.Errorf("expecting peer.mu.closed to be true")
-		}
-		if pc.mu.disconnected.IsZero() {
-			return errors.Errorf("expecting peer.mu.disconnected to be set to current time")
-		}
-		return nil
+		return clientCtx.m.inspectPeerE(k, func(k connKey, p *peer) error {
+			require.NotNil(t, p)
+			if err := p.b.Signal().Err(); err == nil {
+				return errors.New("expecting error from breaker, but got nil")
+			}
+			if p.disconnected.IsZero() {
+				return errors.Errorf("expecting peer.mu.disconnected to be set to current time")
+			}
+			return nil
+		})
 	})
 
 	hbSuccess.Store(true)
 	// Wait to reconnect to server with new connection.
 	testutils.SucceedsSoon(t, func() error {
-		pc, ok := clientCtx.m.GetPeer(k)
-		require.True(t, ok)
-		return pc.breaker.Signal().Err()
+		return clientCtx.m.inspectPeerE(k, func(k connKey, p *peer) error {
+			require.NotNil(t, p)
+			return p.b.Signal().Err()
+		})
 	})
 
 	hbDecommission.Store(true)
 	testutils.SucceedsSoon(t, func() error {
-		pc, ok := clientCtx.m.GetPeer(k)
-		require.True(t, ok)
-		pc.mu.Lock()
-		defer pc.mu.Unlock()
-		if !pc.mu.decommissioned {
-			return errors.New("expecting peer.mu.decommissioned to be true")
-		}
-		return nil
+		return clientCtx.m.inspectPeerE(k, func(k connKey, p *peer) error {
+			require.NotNil(t, p)
+			if !p.decommissioned {
+				return errors.New("expecting peer.mu.decommissioned to be true")
+			}
+			return nil
+		})
 	})
 }
 
@@ -1184,6 +1179,8 @@ func checkNominal(m *Metrics, exp int64) error {
 func TestConnectionRemoveNodeIDZero(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("TODO(XXX): figure out what to do with this test. We don't currently ever evict *peer so best this can do is check that Connect() fails but that's obvious the way the test sets things up...")
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -1193,9 +1190,7 @@ func TestConnectionRemoveNodeIDZero(t *testing.T) {
 	clientCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
 	// Provoke an error.
 	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1, DefaultClass).Connect(context.Background())
-	if err == nil {
-		t.Fatal("expected some kind of error, got nil")
-	}
+	require.Error(t, err)
 
 	// NB: this takes a moment because GRPCDialRaw only gives up on the initial
 	// connection after 1s (more precisely, the redialChan gets closed only after
@@ -1204,8 +1199,8 @@ func TestConnectionRemoveNodeIDZero(t *testing.T) {
 		var keys []connKey
 		clientCtx.m.mu.RLock()
 		defer clientCtx.m.mu.RUnlock()
-		for k, pc := range clientCtx.m.mu.m {
-			if _, ok := pc.conn(); ok {
+		for k, p := range clientCtx.m.mu.m {
+			if p.c.Health() == nil {
 				keys = append(keys, k)
 			}
 		}
@@ -2666,7 +2661,7 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 	// First, we shouldn't be able to dial again, even though we already have a
 	// connection.
 	_, err = rpcCtx.GRPCDialNode(addr, serverNodeID, SystemClass).Connect(ctx)
-	require.ErrorIs(t, err, errDialRejected)
+	require.ErrorIs(t, err, errQuiescing)
 	require.True(t, grpcutil.IsConnectionRejected(err))
 	require.True(t, grpcutil.IsAuthError(err))
 

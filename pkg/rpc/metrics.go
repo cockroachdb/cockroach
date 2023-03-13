@@ -63,6 +63,8 @@ Connections that are terminated as part of shutdown are excluded.
 
 func makeMetrics() Metrics {
 	return Metrics{
+		// TODO(XXX): what's the "started" metric for at this point? We have the number of nominal connections
+		// and the count of failed connection attempts.
 		HeartbeatLoopsStarted:       aggmetric.NewCounter(metaHeartbeatLoopsStarted, "dst"),
 		HeartbeatConnectionFailures: aggmetric.NewCounter(metaHeartbeatConnectionFailures, "dst"),
 		HeartbeatsNominal:           aggmetric.NewGauge(metaHeartbeatsNominal, "dst"),
