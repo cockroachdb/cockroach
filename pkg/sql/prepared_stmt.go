@@ -214,6 +214,10 @@ func (p *PreparedPortal) close(
 ) {
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
+	if p.pauseInfo != nil {
+		p.pauseInfo.cleanupAll()
+		p.pauseInfo = nil
+	}
 }
 
 func (p *PreparedPortal) size(portalName string) int64 {
@@ -256,11 +260,14 @@ type instrumentationHelperWrapper struct {
 	ih instrumentationHelper
 }
 
-// portalPauseInfo stored info that enables the pause of a portal. After pausing
+// portalPauseInfo stores info that enables the pause of a portal. After pausing
 // the portal, execute any other statement, and come back to re-execute it or
 // close it.
 type portalPauseInfo struct {
-	queryStats *topLevelQueryStats
+	// curRes is the command result of the current execution. For each execution
+	// we update this field. We need this when we encounter an error during
+	// execution, so that the error is correctly transmitted.
+	curRes RestrictedCommandResult
 	// sp stores the tracing span of the underlying statement. It is closed when
 	// the portal finishes.
 	sp *tracing.Span
@@ -278,18 +285,39 @@ type portalPauseInfo struct {
 	// ihWrapper stores the instrumentation helper that should be reused for
 	// each execution of the portal.
 	ihWrapper *instrumentationHelperWrapper
-	// The following 3 stacks store functions to call when close the portal.
+	// cancelQueryFunc will be called to cancel the context of the query when
+	// the portal is closed.
+	cancelQueryFunc context.CancelFunc
+	// cancelQueryCtx is the context to be canceled when closing the portal.
+	cancelQueryCtx context.Context
+	// curPlan collects the properties of the current plan being prepared.
+	// We reuse it when re-executing the portal.
+	planTop planTop
+	// queryStats stores statistics on query execution. It is incremented for
+	// each execution of the portal.
+	queryStats *topLevelQueryStats
+	// The following 4 stacks store functions to call when close the portal.
 	// They should be called in this order:
-	// flowCleanup -> execStmtCleanup -> exhaustPortal.
-	exhaustPortal   cleanupFuncStack
-	execStmtCleanup cleanupFuncStack
-	flowCleanup     cleanupFuncStack
+	// flowCleanup -> dispatchToExecEngCleanup -> execStmtInOpenStateCleanup ->
+	// exhaustPortal.
+	// Each stack is defined in the closure of its corresponding function.
+	// When encounter an error in any of these function, we run cleanup of this
+	// layer and its children layers and propagate the error to the parent layer.
+	// For example, when encounter an error in execStmtInOpenStateCleanup(),
+	// run flowCleanup -> dispatchToExecEngCleanup -> execStmtInOpenStateCleanup
+	// when exiting connExecutor.execStmtInOpenState(), and finally run
+	// exhaustPortal in connExecutor.execPortal().
+	exhaustPortal              cleanupFuncStack
+	execStmtInOpenStateCleanup cleanupFuncStack
+	dispatchToExecEngCleanup   cleanupFuncStack
+	flowCleanup                cleanupFuncStack
 }
 
 // cleanupAll is to run all the cleanup layers.
 func (pm *portalPauseInfo) cleanupAll() {
 	pm.flowCleanup.run()
-	pm.execStmtCleanup.run()
+	pm.dispatchToExecEngCleanup.run()
+	pm.execStmtInOpenStateCleanup.run()
 	pm.exhaustPortal.run()
 }
 

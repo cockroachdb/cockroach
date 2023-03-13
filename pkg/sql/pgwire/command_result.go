@@ -350,6 +350,11 @@ func (r *commandResult) release() {
 	*r = commandResult{released: true}
 }
 
+// IsReleased returns true if the current commandResult has been released.
+func (r *commandResult) IsReleased() bool {
+	return r.released
+}
+
 // assertNotReleased asserts that the commandResult is not being used after
 // being freed by one of the methods in the CommandResultClose interface. The
 // assertion can have false negatives, where it fails to detect a use-after-free
