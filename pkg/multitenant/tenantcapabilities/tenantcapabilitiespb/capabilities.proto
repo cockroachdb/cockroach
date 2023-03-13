@@ -65,6 +65,10 @@ message TenantCapabilities {
   // CanAdminScatter if set to true, grants the tenant the ability to
   // successfully perform `AdminScatter` requests.
   bool can_admin_scatter = 6;
+
+  // CanAdminScatter if set to true, grants the tenant the ability to
+  // successfully perform `AdminChangeReplicas` requests.
+  bool can_admin_change_replicas = 7;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

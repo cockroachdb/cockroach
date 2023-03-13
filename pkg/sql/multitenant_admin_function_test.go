@@ -41,13 +41,15 @@ import (
 )
 
 const (
-	createTable        = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemRangeID      = "58"
-	secondaryRangeID   = "59"
-	systemKey          = "\xc1"
-	systemKeyPretty    = "/Table/57"
-	secondaryKeyPretty = "/Tenant/10"
-	maxTimestamp       = "2262-04-11 23:47:16.854776 +0000 +0000"
+	createTable                         = "CREATE TABLE t(i int PRIMARY KEY);"
+	systemRangeID                       = "58"
+	secondaryRangeID                    = "59"
+	secondaryWithoutCapabilityRangeID   = "61"
+	systemKey                           = "\xc1"
+	systemKeyPretty                     = "/Table/57"
+	secondaryKeyPretty                  = "/Tenant/10"
+	secondaryWithoutCapabilityKeyPretty = "/Tenant/20"
+	maxTimestamp                        = "2262-04-11 23:47:16.854776 +0000 +0000"
 )
 
 var ctx = context.Background()
@@ -79,7 +81,7 @@ func verifyResults(t *testing.T, message string, rows *gosql.Rows, expectedResul
 	require.Equalf(t, len(expectedResults), len(actualResults), message)
 	for i, actualRowResult := range actualResults {
 		expectedRowResult := expectedResults[i]
-		require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d", message, i)
+		require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d\nexpected=%v\n  actual=%v", message, expectedRowResult, actualRowResult, i)
 		for j, actualColResult := range actualRowResult {
 			expectedColResult := expectedRowResult[j]
 			if expectedColResult == "" {
@@ -689,8 +691,9 @@ func TestRelocateVoters(t *testing.T) {
 				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_change_replicas"`}},
 			},
+			queryCapability: tenantcapabilities.CanAdminChangeReplicas,
 		},
 		{
 			desc:  "ALTER RANGE RELOCATE VOTERS",
@@ -702,8 +705,9 @@ func TestRelocateVoters(t *testing.T) {
 				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_change_replicas"`}},
 			},
+			queryCapability: tenantcapabilities.CanAdminChangeReplicas,
 		},
 	}
 
@@ -838,8 +842,9 @@ func TestRelocateNonVoters(t *testing.T) {
 				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_change_replicas"`}},
 			},
+			queryCapability: tenantcapabilities.CanAdminChangeReplicas,
 		},
 		{
 			desc:  "ALTER RANGE RELOCATE NONVOTERS",
@@ -851,8 +856,9 @@ func TestRelocateNonVoters(t *testing.T) {
 				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_change_replicas"`}},
 			},
+			queryCapability: tenantcapabilities.CanAdminChangeReplicas,
 		},
 	}
 
