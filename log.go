@@ -107,24 +107,25 @@ func (l *raftLog) String() string {
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
 func (l *raftLog) maybeAppend(index, logTerm, committed uint64, ents ...pb.Entry) (lastnewi uint64, ok bool) {
-	if l.matchTerm(index, logTerm) {
-		lastnewi = index + uint64(len(ents))
-		ci := l.findConflict(ents)
-		switch {
-		case ci == 0:
-		case ci <= l.committed:
-			l.logger.Panicf("entry %d conflict with committed entry [committed(%d)]", ci, l.committed)
-		default:
-			offset := index + 1
-			if ci-offset > uint64(len(ents)) {
-				l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(ents))
-			}
-			l.append(ents[ci-offset:]...)
-		}
-		l.commitTo(min(committed, lastnewi))
-		return lastnewi, true
+	if !l.matchTerm(index, logTerm) {
+		return 0, false
 	}
-	return 0, false
+
+	lastnewi = index + uint64(len(ents))
+	ci := l.findConflict(ents)
+	switch {
+	case ci == 0:
+	case ci <= l.committed:
+		l.logger.Panicf("entry %d conflict with committed entry [committed(%d)]", ci, l.committed)
+	default:
+		offset := index + 1
+		if ci-offset > uint64(len(ents)) {
+			l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(ents))
+		}
+		l.append(ents[ci-offset:]...)
+	}
+	l.commitTo(min(committed, lastnewi))
+	return lastnewi, true
 }
 
 func (l *raftLog) append(ents ...pb.Entry) uint64 {
