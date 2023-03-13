@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -235,80 +234,37 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 func registerRestoreNodeShutdown(r registry.Registry) {
+	sp := restoreSpecs{
+		hardware: makeHardwareSpecs(hardwareSpecs{}),
+		backup: makeBackupSpecs(
+			backupSpecs{workload: tpceRestore{customers: 5000},
+				version: "v22.2.1"}),
+		timeout: 1 * time.Hour,
+	}
+
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster, t test.Test) (string, error) {
-			t.L().Printf("connecting to gateway")
-			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
-			defer gatewayDB.Close()
-
-			t.L().Printf("creating bank database")
-			if _, err := gatewayDB.Exec("CREATE DATABASE bank"); err != nil {
-				return "", err
-			}
-
-			errCh := make(chan error, 1)
-			go func() {
-				defer close(errCh)
-
-				// 10 GiB restore.
-				restoreQuery := `RESTORE bank.bank FROM
-					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
-
-				t.L().Printf("starting to run the restore job")
-				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
-					errCh <- err
-				}
-				t.L().Printf("done running restore job")
-			}()
-
-			// Wait for the job.
-			retryOpts := retry.Options{
-				MaxRetries:     50,
-				InitialBackoff: 1 * time.Second,
-				MaxBackoff:     5 * time.Second,
-			}
-			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-				var jobCount int
-				if err := gatewayDB.QueryRowContext(ctx, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE'").Scan(&jobCount); err != nil {
-					return "", err
-				}
-
-				select {
-				case err := <-errCh:
-					// We got an error when starting the job.
-					return "", err
-				default:
-				}
-
-				if jobCount == 0 {
-					t.L().Printf("waiting for restore job")
-				} else if jobCount == 1 {
-					t.L().Printf("found restore job")
-					break
-				} else {
-					t.L().Printf("found multiple restore jobs -- erroring")
-					return "", errors.New("unexpectedly found multiple restore jobs")
-				}
-			}
-
-			var jobID string
-			if err := gatewayDB.QueryRowContext(ctx, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'").Scan(&jobID); err != nil {
-				return "", errors.Wrap(err, "querying the job ID")
-			}
-			return jobID, nil
+			sp.getRuntimeSpecs(ctx, t, c)
+			jobID, err := sp.runDetached(ctx, "DATABASE tpce", gatewayNode)
+			return fmt.Sprintf("%d", jobID), err
 		}
 	}
 
 	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/worker",
 		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: r.MakeClusterSpec(4),
+		Cluster: sp.hardware.makeClusterSpecs(r),
+		Timeout: sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
+
+			if c.Spec().Cloud != sp.backup.cloud {
+				// For now, only run the test on the cloud provider that also stores the backup.
+				t.Skip("test configured to run on %s", sp.backup.cloud)
+			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
-
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
 	})
@@ -316,10 +272,18 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/coordinator",
 		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: r.MakeClusterSpec(4),
+		Cluster: sp.hardware.makeClusterSpecs(r),
+		Timeout: sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+
 			gatewayNode := 2
 			nodeToShutdown := 2
+
+			if c.Spec().Cloud != sp.backup.cloud {
+				// For now, only run the test on the cloud provider that also stores the backup.
+				t.Skip("test configured to run on %s", sp.backup.cloud)
+			}
+
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
@@ -446,7 +410,7 @@ func registerRestore(r registry.Registry) {
 				defer close(jobIDCh)
 				t.Status(`running restore`)
 				metricCollector := withPauseSpecs.initRestorePerfMetrics(ctx, durationGauge)
-				jobID, err := withPauseSpecs.runDetached(ctx, "DATABASE tpce")
+				jobID, err := withPauseSpecs.runDetached(ctx, "DATABASE tpce", 1)
 				require.NoError(t, err)
 				jobIDCh <- jobID
 
@@ -840,14 +804,16 @@ func (sp *restoreSpecs) run(ctx context.Context, target string) error {
 	return sp.c.RunE(ctx, sp.c.Node(1), sp.restoreCmd(target, ""))
 }
 
-func (sp *restoreSpecs) runDetached(ctx context.Context, target string) (jobspb.JobID, error) {
-	if err := sp.c.RunE(ctx, sp.c.Node(1), sp.restoreCmd(target, "WITH DETACHED")); err != nil {
+func (sp *restoreSpecs) runDetached(
+	ctx context.Context, target string, node int,
+) (jobspb.JobID, error) {
+	if err := sp.c.RunE(ctx, sp.c.Node(node), sp.restoreCmd(target, "WITH DETACHED")); err != nil {
 		return 0, err
 	}
 
-	db, err := sp.c.ConnE(ctx, sp.t.L(), sp.c.Node(1)[0])
+	db, err := sp.c.ConnE(ctx, sp.t.L(), sp.c.Node(node)[0])
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
+		return 0, errors.Wrapf(err, "failed to connect to node %d; running restore detached", node)
 	}
 	var jobID jobspb.JobID
 	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
