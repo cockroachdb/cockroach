@@ -30,12 +30,13 @@ CREATE TENANT "no-capabilities-tenant";
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "no-capabilities-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        false
-can_admin_unsplit      false
-can_view_node_info     false
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           false
+can_admin_unsplit         false
+can_view_node_info        false
+can_view_tsdb_metrics     false
 
 subtest end
 
@@ -50,12 +51,13 @@ ALTER TENANT "bool-capability-no-value-tenant" GRANT CAPABILITY can_admin_split
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        true
-can_admin_unsplit      false
-can_view_node_info     false
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           true
+can_admin_unsplit         false
+can_view_node_info        false
+can_view_tsdb_metrics     false
 
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
@@ -63,12 +65,13 @@ ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        false
-can_admin_unsplit      false
-can_view_node_info     false
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           false
+can_admin_unsplit         false
+can_view_node_info        false
+can_view_tsdb_metrics     false
 
 subtest end
 
@@ -83,12 +86,13 @@ ALTER TENANT "bool-capability-with-value-tenant" GRANT CAPABILITY can_admin_spli
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-with-value-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        true
-can_admin_unsplit      false
-can_view_node_info     false
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           true
+can_admin_unsplit         false
+can_view_node_info        false
+can_view_tsdb_metrics     false
 
 subtest end
 
@@ -103,12 +107,13 @@ ALTER TENANT "bool-capability-with-expression-value-tenant" GRANT CAPABILITY can
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "bool-capability-with-expression-value-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        true
-can_admin_unsplit      false
-can_view_node_info     false
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           true
+can_admin_unsplit         false
+can_view_node_info        false
+can_view_tsdb_metrics     false
 
 subtest end
 
@@ -123,12 +128,13 @@ ALTER TENANT "multiple-capability-tenant" GRANT CAPABILITY can_admin_split, can_
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        true
-can_admin_unsplit      false
-can_view_node_info     true
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           true
+can_admin_unsplit         false
+can_view_node_info        true
+can_view_tsdb_metrics     false
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
@@ -136,11 +142,12 @@ ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can
 query TT colnames
 SELECT capability_id, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
-capability_id          capability_value
-can_admin_scatter      false
-can_admin_split        false
-can_admin_unsplit      false
-can_view_node_info     false
-can_view_tsdb_metrics  false
+capability_id             capability_value
+can_admin_relocate_range  false
+can_admin_scatter         false
+can_admin_split           false
+can_admin_unsplit         false
+can_view_node_info        false
+can_view_tsdb_metrics     false
 
 subtest end
