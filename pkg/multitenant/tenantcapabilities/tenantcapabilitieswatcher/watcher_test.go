@@ -225,13 +225,13 @@ func TestDataDriven(t *testing.T) {
 				)
 				lastUpdateTS = ts.Clock().Now()
 
-			case "get-capabilities":
+			case "get-altered-capabilities":
 				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
 				cp, found := watcher.GetCapabilities(tID)
 				if !found {
 					return "not-found"
 				}
-				return fmt.Sprintf("%v", tenantcapabilities.AllCapabilitiesString(cp))
+				return fmt.Sprintf("%v", tenantcapabilities.AlteredCapabilitiesString(cp))
 
 			case "flush-state":
 				var output strings.Builder
