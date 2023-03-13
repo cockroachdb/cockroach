@@ -155,7 +155,10 @@ func waitForPort(
 	if err := retry.WithMaxAttempts(ctx, retry.Options{
 		MaxBackoff: 500 * time.Millisecond,
 	}, 10, func() error {
-		return c.RunE(ctx, nodes, fmt.Sprintf("sudo lsof -i:%d | grep -q LISTEN", port))
+		fmt.Println("@@@ start wait")
+		res := c.RunE(ctx, nodes, fmt.Sprintf("lsof -i:%d | grep -q LISTEN", port))
+		fmt.Println("@@@ end wait res", res)
+		return res
 	}); err != nil {
 		return fmt.Errorf("timed out waiting for port %d: %w", port, err)
 	}

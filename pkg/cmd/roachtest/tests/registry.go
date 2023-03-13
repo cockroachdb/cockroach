@@ -103,6 +103,7 @@ func RegisterTests(r registry.Registry) {
 	registerReplicaGC(r)
 	registerRestart(r)
 	registerRestore(r)
+	registerRestoreMixedVersion(r)
 	registerRestoreNodeShutdown(r)
 	registerRoachmart(r)
 	registerRoachtest(r)
