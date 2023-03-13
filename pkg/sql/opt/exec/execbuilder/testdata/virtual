@@ -271,6 +271,19 @@ SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE status =
           table: jobs@jobs_status_idx
           spans: [/'paused' - /'paused']
 
+# Validate that the virtual index on 'job_type' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'CHANGEFEED'] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: jobs@jobs_job_type_idx
+          spans: [/'CHANGEFEED' - /'CHANGEFEED']
+
 # Regression test for not projecting away looked up columns by the left semi
 # virtual lookup join (#91012).
 statement ok
