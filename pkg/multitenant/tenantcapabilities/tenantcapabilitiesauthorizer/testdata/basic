@@ -1,8 +1,8 @@
-upsert ten=10 can_admin_scatter=true can_admin_split=true can_admin_unsplit=true can_view_node_info=true can_view_tsdb_metrics=true
+upsert ten=10 disable_admin_scatter=false disable_admin_split=false can_admin_unsplit=true can_view_node_info=true can_view_tsdb_metrics=true
 ----
 ok
 
-upsert ten=11 can_admin_scatter=false can_admin_split=false can_admin_unsplit=false can_view_node_info=false can_view_tsdb_metrics=false
+upsert ten=11 disable_admin_scatter=true disable_admin_split=true can_admin_unsplit=false can_view_node_info=false can_view_tsdb_metrics=false
 ----
 ok
 
@@ -22,21 +22,21 @@ ok
 
 has-capability-for-batch ten=11 cmds=(AdminScatter, Scan, ConditionalPut)
 ----
-client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+client tenant capability "disable_admin_scatter" prevents operation (*kvpb.AdminScatterRequest)
 
 # Tenant 11 shouldn't be able to issue splits.
 has-capability-for-batch ten=11 cmds=(AdminSplit, Scan, ConditionalPut)
 ----
-client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+client tenant capability "disable_admin_split" prevents operation (*kvpb.AdminSplitRequest)
 
 has-capability-for-batch ten=11 cmds=(AdminUnsplit, Scan, ConditionalPut)
 ----
 client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest)
 
 # Test that the order of the split request doesn't have any effect.
-has-capability-for-batch ten=11 cmds=(Scan, ConditionalPut)
+has-capability-for-batch ten=11 cmds=(Scan, ConditionalPut, AdminSplit)
 ----
-ok
+client tenant capability "disable_admin_split" prevents operation (*kvpb.AdminSplitRequest)
 
 # However, a batch request which doesn't include a split (by tenant 11) should
 # work as you'd expect.
@@ -51,17 +51,18 @@ ok
 
 # Lastly, flip tenant 10's capability for splits; ensure it can no longer issue
 # splits as a result.
-upsert ten=10 can_admin_scatter=false can_admin_split=false can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true
+upsert ten=10 disable_admin_scatter=false disable_admin_split=true can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true
 ----
 ok
 
-has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
-----
-client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
-
 has-capability-for-batch ten=10 cmds=(AdminSplit, Scan, ConditionalPut)
 ----
-client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+client tenant capability "disable_admin_split" prevents operation (*kvpb.AdminSplitRequest)
+
+# Does not affect admin scatters.
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
+----
+ok
 
 has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
 ----

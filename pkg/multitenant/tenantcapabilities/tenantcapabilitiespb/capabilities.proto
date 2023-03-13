@@ -30,16 +30,16 @@ import "roachpb/span_config.proto";
 message TenantCapabilities {
   option (gogoproto.equal) = true;
 
-  // CanAdminSplit if set to true, grants the tenant the ability to
+  // DisableAdminSplit, if set to true, revokes the tenants ability to
   // successfully perform `AdminSplit` requests.
-  bool can_admin_split = 1;
+  bool disable_admin_split = 1;
 
-  // CanViewNodeInfo if set to true, grants the tenant the ability
+  // CanViewNodeInfo, if set to true, grants the tenant the ability
   // retrieve node-level observability data at endpoints such as `_status/nodes`
   // and in the DB Console overview page.
   bool can_view_node_info = 2;
 
-  // CanViewTSDBMetrics if set to true, grants the tenant the ability to
+  // CanViewTSDBMetrics, if set to true, grants the tenant the ability to
   // make arbitrary queries of the TSDB of the entire cluster. Currently,
   // we do not store per-tenant metrics so this will surface system metrics
   // to the tenant.
@@ -58,13 +58,13 @@ message TenantCapabilities {
   // positioned to surface errors to the user.
   SpanConfigBounds span_config_bounds = 4;
 
-  // CanAdminUnsplit if set to true, grants the tenant the ability to
+  // CanAdminUnsplit if, set to true, grants the tenant the ability to
   // successfully perform `AdminUnsplit` requests.
   bool can_admin_unsplit = 5;
 
-  // CanAdminScatter if set to true, grants the tenant the ability to
+  // DisableAdminScatter, if set to true, revokes a tenant's the ability to
   // successfully perform `AdminScatter` requests.
-  bool can_admin_scatter = 6;
+  bool disable_admin_scatter = 6;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

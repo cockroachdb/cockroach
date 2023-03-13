@@ -47,15 +47,15 @@ func (b boolCap) Set(val interface{}) {
 	*b.cap = bval
 }
 
-// For implements the tenantcapabilities.TenantCapabilities interface.
+// Cap implements the tenantcapabilities.TenantCapabilities interface.
 func (t *TenantCapabilities) Cap(
 	capabilityID tenantcapabilities.CapabilityID,
 ) tenantcapabilities.Capability {
 	switch capabilityID {
-	case tenantcapabilities.CanAdminScatter:
-		return boolCap{&t.CanAdminScatter}
-	case tenantcapabilities.CanAdminSplit:
-		return boolCap{&t.CanAdminSplit}
+	case tenantcapabilities.DisableAdminScatter:
+		return boolCap{&t.DisableAdminScatter}
+	case tenantcapabilities.DisableAdminSplit:
+		return boolCap{&t.DisableAdminSplit}
 	case tenantcapabilities.CanAdminUnsplit:
 		return boolCap{&t.CanAdminUnsplit}
 	case tenantcapabilities.CanViewNodeInfo:
@@ -68,13 +68,14 @@ func (t *TenantCapabilities) Cap(
 	}
 }
 
-// GetBool implements the tenantcapabilities.TenantCapabilities interface. It is an optimization.
+// GetBool implements the tenantcapabilities.TenantCapabilities interface.
+// It is an optimization.
 func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityID) bool {
 	switch capabilityID {
-	case tenantcapabilities.CanAdminScatter:
-		return t.CanAdminScatter
-	case tenantcapabilities.CanAdminSplit:
-		return t.CanAdminSplit
+	case tenantcapabilities.DisableAdminScatter:
+		return t.DisableAdminScatter
+	case tenantcapabilities.DisableAdminSplit:
+		return t.DisableAdminSplit
 	case tenantcapabilities.CanAdminUnsplit:
 		return t.CanAdminUnsplit
 	case tenantcapabilities.CanViewNodeInfo:

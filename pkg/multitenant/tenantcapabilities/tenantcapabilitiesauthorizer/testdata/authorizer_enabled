@@ -1,10 +1,10 @@
-upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false
+upsert ten=10 disable_admin_scatter=true disable_admin_split=true can_view_node_info=false can_view_tsdb_metrics=false
 ----
 ok
 
 has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
 ----
-client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+client tenant capability "disable_admin_scatter" prevents operation (*kvpb.AdminScatterRequest)
 
 has-node-status-capability ten=10
 ----
@@ -42,7 +42,7 @@ ok
 
 has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
 ----
-client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+client tenant capability "disable_admin_scatter" prevents operation (*kvpb.AdminScatterRequest)
 
 has-node-status-capability ten=10
 ----

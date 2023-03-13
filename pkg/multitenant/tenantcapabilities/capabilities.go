@@ -162,17 +162,16 @@ type TenantCapabilities interface {
 const (
 	_ CapabilityID = iota
 
-	// CanAdminScatter describes the ability of a tenant to perform manual
-	// KV scatter requests. These operations need a capability
-	// because excessive KV range scatter can overwhelm the storage
-	// cluster.
-	CanAdminScatter // can_admin_scatter
+	// DisableAdminScatter disallows a secondary tenant from being able to scatter
+	// ranges using an AdminScatter request. By default, secondary tenants are
+	// allowed to scatter as doing so is integral to the performance of
+	// IMPORT/RESTORE.
+	DisableAdminScatter // disable_admin_scatter
 
-	// CanAdminSplit describes the ability of a tenant to perform manual
-	// KV range split requests. These operations need a capability
-	// because excessive KV range splits can overwhelm the storage
-	// cluster.
-	CanAdminSplit // can_admin_split
+	// DisableAdminSplit disallows a secondary tenant from being able to perform
+	// KV requests to split ranges. By default, secondary tenants are allowed to
+	// perform splits as doing so is integral to performance of IMPORT/RESTORE.
+	DisableAdminSplit // disable_admin_split
 
 	// CanAdminUnsplit describes the ability of a tenant to perform manual
 	// KV range unsplit requests. These operations need a capability
@@ -230,8 +229,8 @@ const (
 func (c CapabilityID) CapabilityType() Type {
 	switch c {
 	case
-		CanAdminScatter,
-		CanAdminSplit,
+		DisableAdminScatter,
+		DisableAdminSplit,
 		CanAdminUnsplit,
 		CanViewNodeInfo,
 		CanViewTSDBMetrics:

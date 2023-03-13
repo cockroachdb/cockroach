@@ -78,22 +78,39 @@ func (a *Authorizer) HasCapabilityForBatch(
 
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
-		requiredCap, hasCap := reqMethodToCap[request.Method()]
-		if requiredCap == noCapCheckNeeded {
+		capability, hasCap := reqMethodToCap[request.Method()]
+		if capability == noCapCheckNeeded {
 			continue
 		}
-		if !hasCap || requiredCap == onlySystemTenant || !found || !cp.GetBool(requiredCap) {
-			if (requiredCap == tenantcapabilities.CanAdminSplit || requiredCap == tenantcapabilities.CanAdminScatter) &&
-				a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
-				continue
+		switch request.Method() {
+		case kvpb.AdminSplit, kvpb.AdminScatter:
+			// AdminSplit and AdminScatter requests must are codified as
+			// "disable_admin_{split,scatter}" in the capabilities proto, as tenants
+			// have the ability to perform splits and scatters by default. This is
+			// because things like IMPORT/RESTORE rely on these operations for
+			// performance. As such, they must be explicitly revoked by the operator.
+			// This is in contrast to other capabilities that require authorization,
+			// which are explicitly granted.
+			if !found {
+				return nil // allowed by default
 			}
-			// All allowable request types must be explicitly opted into the
-			// reqMethodToCap map. If a request type is missing from the map
-			// (!hasCap), we must be conservative and assume it is
-			// disallowed. This prevents accidents where someone adds a new
-			// sensitive request type in KV and forgets to add an explicit
-			// authorization rule for it here.
-			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, request)
+			if disabled := cp.GetBool(capability); disabled {
+				return errors.Newf(
+					"client tenant capability %q prevents operation (%T)", capability, request,
+				)
+			}
+		default:
+			// All other requests that require capabilities are expressed in their
+			// "enabled" form.
+			if !hasCap || capability == onlySystemTenant || !found || !cp.GetBool(capability) {
+				// All allowable request types must be explicitly opted into the
+				// reqMethodToCap map. If a request type is missing from the map
+				// (!hasCap), we must be conservative and assume it is
+				// disallowed. This prevents accidents where someone adds a new
+				// sensitive request type in KV and forgets to add an explicit
+				// authorization rule for it here.
+				return errors.Newf("client tenant does not have capability %q (%T)", capability, request)
+			}
 		}
 	}
 	return nil
@@ -131,8 +148,8 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.Scan:               noCapCheckNeeded,
 
 	// The following are authorized via specific capabilities.
-	kvpb.AdminScatter: tenantcapabilities.CanAdminScatter,
-	kvpb.AdminSplit:   tenantcapabilities.CanAdminSplit,
+	kvpb.AdminScatter: tenantcapabilities.DisableAdminScatter,
+	kvpb.AdminSplit:   tenantcapabilities.DisableAdminSplit,
 	kvpb.AdminUnsplit: tenantcapabilities.CanAdminUnsplit,
 
 	// TODO(ecwall): The following should also be authorized via specific capabilities.

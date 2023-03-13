@@ -454,16 +454,16 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x89\x89", "/1", maxTimestamp}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92\xf0\x89\x89", "/104/1/1", maxTimestamp}},
+				errorMessage: `capability "disable_admin_split" prevents operation`,
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_split"`,
+				result: [][]string{{"\xfe\x9c\xf0\x89\x89", "/104/1/1", maxTimestamp}},
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			queryCapability:     tenantcapabilities.CanAdminSplit,
+			queryCapability:     tenantcapabilities.DisableAdminSplit,
 		},
 		{
 			desc:  "ALTER INDEX x SPLIT AT",
@@ -473,16 +473,16 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x8a\x89", "/1", maxTimestamp}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xf0\x8a\x89", "/104/2/1", maxTimestamp}},
+				errorMessage: `capability "disable_admin_split" prevents operation`,
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_split"`,
+				result: [][]string{{"\xf0\x8a\x89", "/104/2/1", maxTimestamp}},
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			queryCapability:     tenantcapabilities.CanAdminSplit,
+			queryCapability:     tenantcapabilities.DisableAdminSplit,
 		},
 		{
 			desc:  "ALTER TABLE x UNSPLIT AT",
@@ -498,7 +498,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -518,7 +517,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -535,7 +533,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -555,7 +552,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -565,16 +561,16 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{systemKey, systemKeyPretty}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
+				errorMessage: `capability "disable_admin_scatter" prevents operation`,
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_scatter"`,
+				result: [][]string{{"\xfe\x9c", "/Tenant/20"}},
 			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
-			queryCapability:     tenantcapabilities.CanAdminScatter,
+			queryCapability:     tenantcapabilities.DisableAdminScatter,
 		},
 		{
 			desc:  "ALTER INDEX x SCATTER",
@@ -584,16 +580,16 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x8a", "/Table/104/2"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", "/Tenant/10"}},
+				errorMessage: `capability "disable_admin_scatter" prevents operation`,
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_scatter"`,
+				result: [][]string{{"\xfe\x9c", "/Tenant/20"}},
 			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
-			queryCapability:     tenantcapabilities.CanAdminScatter,
+			queryCapability:     tenantcapabilities.DisableAdminScatter,
 		},
 	}
 
@@ -641,14 +637,7 @@ func TestTruncateTable(t *testing.T) {
 				{"…/104/2/1", "<after:/Tenant/11>"},
 			},
 		},
-		secondaryWithoutCapability: tenantExpected{
-			// CanAdminScatter will default to true so this will open happen if it is
-			// set to false.
-			errorMessage: `does not have capability "can_admin_scatter"`,
-		},
 		setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-		setupCapability:     tenantcapabilities.CanAdminSplit,
-		queryCapability:     tenantcapabilities.CanAdminScatter,
 	}
 	tc.runTest(
 		t,

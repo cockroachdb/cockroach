@@ -12,7 +12,7 @@ has-capability-for-batch ten=system cmds=(AdminSplit)
 ----
 ok
 
-upsert ten=system can_admin_split=false
+upsert ten=system disable_admin_split=false
 ----
 ok
 
