@@ -2944,6 +2944,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		replicaCPUNanosPerSecond := loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 		averageCPUNanosPerSecond += replicaCPUNanosPerSecond
 		s.metrics.RecentReplicaCPUNanosPerSecond.RecordValue(replicaCPUNanosPerSecond)
+		s.metrics.RecentReplicaQueriesPerSecond.RecordValue(loadStats.QueriesPerSecond)
 
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
@@ -3016,6 +3017,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	if err := s.metrics.RecentReplicaCPUNanosPerSecond.Rotate(); err != nil {
+		return err
+	}
+	if err := s.metrics.RecentReplicaQueriesPerSecond.Rotate(); err != nil {
 		return err
 	}
 
