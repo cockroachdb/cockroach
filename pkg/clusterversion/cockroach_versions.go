@@ -203,11 +203,6 @@ const (
 	TODODelete_V22_2RemoveGrantPrivilege
 	// TODODelete_V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
 	TODODelete_V22_2MVCCRangeTombstones
-	// TODODelete_V22_2UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
-	// by IDs rather than by their names. For example, a column's DEFAULT (or
-	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
-	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
-	TODODelete_V22_2UpgradeSequenceToBeReferencedByID
 	// TODODelete_V22_2SampledStmtDiagReqs enables installing statement diagnostic requests that
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
@@ -273,10 +268,6 @@ const (
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	TODODelete_V22_2NoNonMVCCAddSSTable
-	// TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
-	// ids in sequences' back references and attempts a best-effort-based matching
-	// to update those column IDs.
-	TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences
 	// TODODelete_V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
 	// leaseholder nodes.
 	TODODelete_V22_2TTLDistSQL
@@ -580,10 +571,6 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
 	},
 	{
-		Key:     TODODelete_V22_2UpgradeSequenceToBeReferencedByID,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
-	},
-	{
 		Key:     TODODelete_V22_2SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
@@ -654,10 +641,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
-	},
-	{
-		Key:     TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
 	},
 	{
 		Key:     TODODelete_V22_2TTLDistSQL,
