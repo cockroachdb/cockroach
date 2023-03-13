@@ -862,12 +862,11 @@ func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngest
 
 // SpanStats returns a stats for the given span of keys.
 func (p *planner) SpanStats(
-	ctx context.Context, startKey roachpb.RKey, endKey roachpb.RKey,
+	ctx context.Context, spans roachpb.Spans,
 ) (*roachpb.SpanStatsResponse, error) {
 	req := &roachpb.SpanStatsRequest{
-		NodeID:   "0",
-		StartKey: startKey,
-		EndKey:   endKey,
+		NodeID: "0",
+		Spans:  spans,
 	}
 	return p.ExecCfg().TenantStatusServer.SpanStats(ctx, req)
 }

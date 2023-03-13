@@ -3474,11 +3474,13 @@ func (s *statusServer) SpanStats(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
+	//fmt.Println("status server span stats")
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
+	//fmt.Println("status server - passed admin check")
 	return s.sqlServer.tenantConnect.SpanStats(ctx, req)
 }
 
@@ -3487,11 +3489,13 @@ func (s *systemStatusServer) SpanStats(
 ) (*roachpb.SpanStatsResponse, error) {
 	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
+	//fmt.Println("system status server span stats")
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
+	//fmt.Println("system status server - passed admin check")
 	return s.getSpanStatsInternal(ctx, req)
 }
 

@@ -199,10 +199,14 @@ func (a tenantAuthorizer) authGetRangeDescriptors(
 func (a tenantAuthorizer) authSpanStats(
 	tenID roachpb.TenantID, args *roachpb.SpanStatsRequest,
 ) error {
-	return validateSpan(tenID, roachpb.Span{
-		Key:    args.StartKey.AsRawKey(),
-		EndKey: args.EndKey.AsRawKey(),
-	})
+	var err error
+	for _, span := range args.Spans {
+		err = validateSpan(tenID, span)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC

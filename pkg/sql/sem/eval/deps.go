@@ -376,7 +376,7 @@ type Planner interface {
 	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
 	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
 
-	SpanStats(context.Context, roachpb.RKey, roachpb.RKey) (*roachpb.SpanStatsResponse, error)
+	SpanStats(context.Context, roachpb.Spans) (*roachpb.SpanStatsResponse, error)
 
 	GetDetailsForSpanStats(ctx context.Context, dbId int, tableId int) (InternalRows, error)
 }

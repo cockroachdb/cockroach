@@ -1359,9 +1359,8 @@ func (s *adminServer) statsForSpan(
 						if err == nil {
 							client := serverpb.NewStatusClient(conn)
 							req := roachpb.SpanStatsRequest{
-								StartKey: rSpan.Key,
-								EndKey:   rSpan.EndKey,
-								NodeID:   nodeID.String(),
+								Spans:  []roachpb.Span{span},
+								NodeID: nodeID.String(),
 							}
 							spanResponse, err = client.SpanStats(ctx, &req)
 						}
@@ -1396,9 +1395,9 @@ func (s *adminServer) statsForSpan(
 					},
 				)
 			} else {
-				tableStatResponse.Stats.Add(resp.resp.TotalStats)
-				tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
-				tableStatResponse.ApproximateDiskBytes += resp.resp.ApproximateDiskBytes
+				tableStatResponse.Stats.Add(resp.resp.SpanToStats[span.String()].TotalStats)
+				tableStatResponse.ReplicaCount += int64(resp.resp.SpanToStats[span.String()].RangeCount)
+				tableStatResponse.ApproximateDiskBytes += resp.resp.SpanToStats[span.String()].ApproximateDiskBytes
 			}
 		case <-ctx.Done():
 			// Caller gave up, stop doing work.
