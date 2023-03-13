@@ -910,7 +910,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlStatusServer.TxnIDResolution,
 		&contentionMetrics,
 	)
-	contentionRegistry.Start(ctx, cfg.stopper)
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
 	*execCfg = sql.ExecutorConfig{
@@ -1388,6 +1387,8 @@ func (s *SQLServer) preStart(
 	}
 
 	s.leaseMgr.SetRegionPrefix(regionPhysicalRep)
+
+	s.execCfg.ContentionRegistry.Start(ctx, stopper)
 
 	// Start the sql liveness subsystem. We'll need it to get a session.
 	s.sqlLivenessProvider.Start(ctx, regionPhysicalRep)
