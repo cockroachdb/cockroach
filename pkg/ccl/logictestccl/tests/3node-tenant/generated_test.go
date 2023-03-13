@@ -1912,6 +1912,13 @@ func TestTenantLogic_truncate(
 	runLogicTest(t, "truncate")
 }
 
+func TestTenantLogic_truncate_with_concurrent_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "truncate_with_concurrent_mutation")
+}
+
 func TestTenantLogic_tuple(
 	t *testing.T,
 ) {
