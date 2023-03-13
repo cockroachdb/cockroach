@@ -11,11 +11,12 @@ func _() {
 	_ = x[NeedMoreRows-0]
 	_ = x[DrainRequested-1]
 	_ = x[ConsumerClosed-2]
+	_ = x[SwitchToAnotherPortal-3]
 }
 
-const _ConsumerStatus_name = "NeedMoreRowsDrainRequestedConsumerClosed"
+const _ConsumerStatus_name = "NeedMoreRowsDrainRequestedConsumerClosedSwitchToAnotherPortal"
 
-var _ConsumerStatus_index = [...]uint8{0, 12, 26, 40}
+var _ConsumerStatus_index = [...]uint8{0, 12, 26, 40, 61}
 
 func (i ConsumerStatus) String() string {
 	if i >= ConsumerStatus(len(_ConsumerStatus_index)-1) {

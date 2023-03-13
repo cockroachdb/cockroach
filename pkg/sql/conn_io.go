@@ -660,6 +660,7 @@ type ClientComm interface {
 		limit int,
 		portalName string,
 		implicitTxn bool,
+		isForPausablePortal bool,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult

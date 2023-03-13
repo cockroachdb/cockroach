@@ -121,6 +121,27 @@ type canModifySchema interface {
 	modifiesSchema() bool
 }
 
+// IsReadOnly returns true if the stmt cannot either modify the schema or
+// write data.
+// TODO(janexing): This can be buggy and we should be more accurate.
+func IsReadOnly(stmt Statement) bool {
+	if CanModifySchema(stmt) || CanWriteData(stmt) {
+		return false
+	}
+	switch t := stmt.(type) {
+	case *Select:
+		if t.With != nil {
+			ctes := t.With.CTEList
+			for _, cte := range ctes {
+				if !IsReadOnly(cte.Stmt) {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {

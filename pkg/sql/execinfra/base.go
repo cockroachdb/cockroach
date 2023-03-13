@@ -48,6 +48,11 @@ const (
 	// rows or metadata. This is also commonly returned in case the consumer has
 	// encountered an error.
 	ConsumerClosed
+	// SwitchToAnotherPortal indicates that the we received exec command for
+	// a different portal, and may come back to continue executing the current
+	// portal later. If the cluster setting sql.defaults.multiple_active_portals.enabled
+	// is set to be true, we do nothing and return the control to the connExecutor.
+	SwitchToAnotherPortal
 )
 
 type receiverBase interface {
@@ -196,6 +201,10 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 			case ConsumerClosed:
 				src.ConsumerClosed()
 				dst.ProducerDone()
+				return
+			case SwitchToAnotherPortal:
+				// Do nothing here and return the control to the connExecutor to execute
+				// the other portal, i.e. we leave the current portal open.
 				return
 			}
 		}
