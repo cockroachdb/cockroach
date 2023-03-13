@@ -430,7 +430,7 @@ func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) {
 	c.alloc = colmem.NewLimitedAllocator(ctx, &c.rowsMemAcc, nil, factory)
 	c.alloc.SetMaxBatchSize(c.copyBatchRowSize)
 	// TODO(cucaroach): check that batch isn't unnecessarily allocating selection vector.
-	c.accHelper.Init(c.alloc, c.maxRowMem, typs)
+	c.accHelper.Init(c.alloc, c.maxRowMem, typs, false /*alwaysReallocate*/)
 	// Start with small number of rows, compromise between going too big and
 	// overallocating memory and avoiding some doubling growth batches.
 	c.batch, _ = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 64)
