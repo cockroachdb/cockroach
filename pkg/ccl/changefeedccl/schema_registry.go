@@ -89,7 +89,7 @@ func newConfluentSchemaRegistry(baseURL string) (*confluentSchemaRegistry, error
 	}
 
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxRetries = 2
+	retryOpts.MaxRetries = 5
 	return &confluentSchemaRegistry{
 		baseURL:   u,
 		client:    httpClient,
@@ -141,8 +141,7 @@ func (r *confluentSchemaRegistry) Ping(ctx context.Context) error {
 // RegisterSchemaForSubject registers the given schema for the given
 // subject. The schema type is assumed to be AVRO.
 //
-//   https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
-//
+//	https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
 func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	ctx context.Context, subject string, schema string,
 ) (int32, error) {
@@ -158,8 +157,8 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	}
 
 	var id int32
-	err := r.doWithRetry(ctx, func() error {
-		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, &buf)
+	err := r.doWithRetry(ctx, func() (e error) {
+		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, bytes.NewReader(buf.Bytes()))
 		if err != nil {
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}
@@ -199,7 +198,7 @@ func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() err
 		if err == nil {
 			return nil
 		}
-		log.VInfof(ctx, 2, "retrying schema registry operation: %s", err.Error())
+		log.VInfof(ctx, 1, "retrying schema registry operation: %s", err.Error())
 	}
 	return changefeedbase.MarkRetryableError(err)
 }
