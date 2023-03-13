@@ -231,7 +231,7 @@ func TestDataDriven(t *testing.T) {
 				if !found {
 					return "not-found"
 				}
-				return fmt.Sprintf("%v", tenantcapabilities.AllCapabilitiesString(cp))
+				return fmt.Sprintf("%v", tenantcapabilities.TestingAlteredCapabilitiesString(cp))
 
 			case "flush-state":
 				var output strings.Builder
