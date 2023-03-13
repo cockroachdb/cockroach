@@ -1998,6 +1998,15 @@ INSERT INTO abcd VALUES
 statement ok
 INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
 
+statement error pgcode 0A000 creating partial statistics with a WHERE clause is not yet supported
+CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1;
+
+statement error pgcode 0A000 creating partial statistics at extremes is not yet supported
+CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
+
+statement ok
+SET enable_create_stats_using_extremes = on
+
 statement ok
 CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
 
