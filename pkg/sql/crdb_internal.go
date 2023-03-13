@@ -7169,7 +7169,8 @@ CREATE TABLE crdb_internal.%s (
   causes                     STRING[] NOT NULL,
   stmt_execution_ids         STRING[] NOT NULL,
   cpu_sql_nanos              INT8,
-  last_error_code            STRING
+  last_error_code            STRING,
+  status                     STRING NOT NULL
 )`
 
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
@@ -7298,6 +7299,7 @@ func populateTxnExecutionInsights(
 			stmtIDs,
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
 			tree.NewDString(errorCode),
+			tree.NewDString(insight.Transaction.Status.String()),
 		))
 
 		if err != nil {

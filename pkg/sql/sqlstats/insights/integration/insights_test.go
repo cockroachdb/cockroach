@@ -286,6 +286,7 @@ func TestFailedInsights(t *testing.T) {
 		problems    string
 		errorCode   string
 		endTxn      bool
+		txnStatus   string
 	}{
 		{
 			// Single-statement txn that will fail.
@@ -294,6 +295,7 @@ func TestFailedInsights(t *testing.T) {
 			problems:    "{FailedExecution}",
 			errorCode:   "42501",
 			endTxn:      true,
+			txnStatus:   "Failed",
 		},
 		{
 			// Multi-statement txn that will fail.
@@ -302,6 +304,7 @@ func TestFailedInsights(t *testing.T) {
 			problems:    "{FailedExecution}",
 			errorCode:   "22012",
 			endTxn:      true,
+			txnStatus:   "Failed",
 		},
 		{
 			// Multi-statement txn with a slow stmt and then a failed execution.
@@ -310,6 +313,7 @@ func TestFailedInsights(t *testing.T) {
 			problems:    "{SlowExecution,FailedExecution}",
 			errorCode:   "42P07",
 			endTxn:      true,
+			txnStatus:   "Failed",
 		},
 		{
 			// Multi-statement txn with a slow stmt but no failures.
@@ -318,6 +322,7 @@ func TestFailedInsights(t *testing.T) {
 			problems:    "{SlowExecution}",
 			errorCode:   "",
 			endTxn:      false,
+			txnStatus:   "Completed",
 		},
 	}
 
@@ -329,17 +334,18 @@ func TestFailedInsights(t *testing.T) {
 
 		testutils.SucceedsWithin(t, func() error {
 			var row *gosql.Row
-			var query, problems, errorCode string
+			var query, problems, status, errorCode string
 
 			// Query the node txn execution insights table.
 			row = conn.QueryRowContext(ctx, "SELECT "+
 				"query, "+
 				"problems, "+
+				"status, "+
 				"COALESCE(last_error_code, '') last_error_code "+
 				"FROM crdb_internal.node_txn_execution_insights "+
 				"WHERE query = $1 AND app_name = $2 ", tc.fingerprint, appName)
 
-			err = row.Scan(&query, &problems, &errorCode)
+			err = row.Scan(&query, &problems, &status, &errorCode)
 
 			if err != nil {
 				return err
@@ -347,6 +353,10 @@ func TestFailedInsights(t *testing.T) {
 
 			if problems != tc.problems {
 				return fmt.Errorf("expected problems to be '%s', but was '%s'. stmts: %s", tc.problems, problems, tc.stmts)
+			}
+
+			if status != tc.txnStatus {
+				return fmt.Errorf("expected status to be '%s', but was '%s'. stmts: %s", tc.txnStatus, status, tc.stmts)
 			}
 
 			if errorCode != tc.errorCode {
