@@ -1367,10 +1367,13 @@ func TestSpanStatsResponse(t *testing.T) {
 	}
 
 	var response roachpb.SpanStatsResponse
+	span := roachpb.Span{
+		Key:    roachpb.RKeyMin.AsRawKey(),
+		EndKey: roachpb.RKeyMax.AsRawKey(),
+	}
 	request := roachpb.SpanStatsRequest{
-		NodeID:   "1",
-		StartKey: []byte(roachpb.RKeyMin),
-		EndKey:   []byte(roachpb.RKeyMax),
+		NodeID: "1",
+		Spans:  []roachpb.Span{span},
 	}
 
 	url := ts.AdminURL() + statusPrefix + "span"
@@ -1381,7 +1384,8 @@ func TestSpanStatsResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, e := int(response.RangeCount), initialRanges; a != e {
+	responseSpanStats := response.SpanToStats[span.String()]
+	if a, e := int(responseSpanStats.RangeCount), initialRanges; a != e {
 		t.Errorf("expected %d ranges, found %d", e, a)
 	}
 }
@@ -1396,10 +1400,13 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
 	rpcContext := newRPCTestContext(ctx, ts, ts.RPCContext().Config)
+	span := roachpb.Span{
+		roachpb.RKeyMin.AsRawKey(),
+		roachpb.RKeyMax.AsRawKey(),
+	}
 	request := roachpb.SpanStatsRequest{
-		NodeID:   "1",
-		StartKey: []byte(roachpb.RKeyMin),
-		EndKey:   []byte(roachpb.RKeyMax),
+		NodeID: "1",
+		Spans:  []roachpb.Span{span},
 	}
 
 	url := ts.ServingRPCAddr()
@@ -1418,7 +1425,8 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, e := int(response.RangeCount), initialRanges; a != e {
+	responseSpanStats := response.SpanToStats[span.String()]
+	if a, e := int(responseSpanStats.RangeCount), initialRanges; a != e {
 		t.Fatalf("expected %d ranges, found %d", e, a)
 	}
 }

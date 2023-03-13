@@ -483,7 +483,7 @@ func (ep *DummyEvalPlanner) GetRangeDescByID(
 
 // SpanStats is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) SpanStats(
-	context.Context, roachpb.RKey, roachpb.RKey,
+	context.Context, roachpb.Spans,
 ) (stats *roachpb.SpanStatsResponse, err error) {
 	return
 }
