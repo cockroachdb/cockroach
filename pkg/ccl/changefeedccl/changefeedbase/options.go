@@ -198,6 +198,11 @@ const (
 	SinkParamSASLUser               = `sasl_user`
 	SinkParamSASLPassword           = `sasl_password`
 	SinkParamSASLMechanism          = `sasl_mechanism`
+	SinkParamSASLClientID           = `sasl_client_id`
+	SinkParamSASLClientSecret       = `sasl_client_secret`
+	SinkParamSASLTokenURL           = `sasl_token_url`
+	SinkParamSASLScopes             = `sasl_scopes`
+	SinkParamSASLGrantType          = `sasl_grant_type`
 
 	RegistryParamCACert     = `ca_cert`
 	RegistryParamClientCert = `client_cert`

@@ -195,14 +195,14 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			expectedError: "sasl_password must be provided when SASL is enabled",
 		},
 		{
-			name:          "sasl_enabled must be enabled if a SASL user is provided",
+			name:          "sasl_enabled must be enabled if sasl_user is provided",
 			uri:           "kafka://nope/?sasl_user=a",
-			expectedError: "sasl_enabled must be enabled if a SASL user is provided",
+			expectedError: "sasl_enabled must be enabled if sasl_user is provided",
 		},
 		{
-			name:          "sasl_enabled must be enabled if a SASL password is provided",
+			name:          "sasl_enabled must be enabled if sasl_password is provided",
 			uri:           "kafka://nope/?sasl_password=a",
-			expectedError: "sasl_enabled must be enabled if a SASL password is provided",
+			expectedError: "sasl_enabled must be enabled if sasl_password is provided",
 		},
 		{
 			name:          "sasl_enabled must be enabled to configure SASL mechanism",
@@ -210,9 +210,9 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			expectedError: "sasl_enabled must be enabled to configure SASL mechanism",
 		},
 		{
-			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, or PLAIN",
+			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
 			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported",
-			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, or PLAIN",
+			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
