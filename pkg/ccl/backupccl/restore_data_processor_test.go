@@ -127,7 +127,7 @@ func slurpSSTablesLatestKey(
 		if err != nil {
 			t.Fatal(err)
 		}
-		kvs = append(kvs, storage.MVCCKeyValue{Key: it.Key(), Value: val.Value.RawBytes})
+		kvs = append(kvs, storage.MVCCKeyValue{Key: it.UnsafeKey().Clone(), Value: val.Value.RawBytes})
 	}
 	return kvs
 }

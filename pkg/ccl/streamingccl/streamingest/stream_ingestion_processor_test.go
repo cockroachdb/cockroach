@@ -385,19 +385,19 @@ func assertEqualKVs(
 
 		// We only want to process MVCC KVs with a ts less than or equal to the max
 		// resolved ts for this partition.
-		if partitionTimestamp.Less(it.Key().Timestamp) {
+		if partitionTimestamp.Less(it.UnsafeKey().Timestamp) {
 			continue
 		}
 
-		newKey := (prevKey != nil && !it.Key().Key.Equal(prevKey)) || prevKey == nil
-		prevKey = it.Key().Key
+		newKey := (prevKey != nil && !it.UnsafeKey().Key.Equal(prevKey)) || prevKey == nil
+		prevKey = it.UnsafeKey().Clone().Key
 
 		if newKey {
 			// All value ts should have been drained at this point, otherwise there is
 			// a mismatch between the streamed and ingested data.
 			require.Equal(t, 0, len(valueTimestampTuples))
 			valueTimestampTuples, err = streamValidator.getValuesForKeyBelowTimestamp(
-				string(it.Key().Key), partitionTimestamp)
+				string(it.UnsafeKey().Key), partitionTimestamp)
 			require.NoError(t, err)
 		}
 
@@ -408,10 +408,10 @@ func assertEqualKVs(
 		v, err := it.Value()
 		require.NoError(t, err)
 		require.Equal(t, roachpb.KeyValue{
-			Key: it.Key().Key,
+			Key: it.UnsafeKey().Key,
 			Value: roachpb.Value{
 				RawBytes:  v,
-				Timestamp: it.Key().Timestamp,
+				Timestamp: it.UnsafeKey().Timestamp,
 			},
 		}, latestVersionInChain)
 		// Truncate the latest version which we just checked against in preparation

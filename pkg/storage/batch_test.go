@@ -674,8 +674,8 @@ func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid, err=%v", err)
 	}
-	if string(iter.Key().Key) != "b" {
-		t.Fatalf("expected b, but got %s", iter.Key())
+	if string(iter.UnsafeKey().Key) != "b" {
+		t.Fatalf("expected b, but got %s", iter.UnsafeKey())
 	}
 	iter.Close()
 
@@ -750,8 +750,8 @@ func TestBatchIteration(t *testing.T) {
 	if ok, err := iter.Valid(); !ok {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(iter.Key(), k1) {
-		t.Fatalf("expected %s, got %s", k1, iter.Key())
+	if !reflect.DeepEqual(iter.UnsafeKey(), k1) {
+		t.Fatalf("expected %s, got %s", k1, iter.UnsafeKey())
 	}
 	checkValErr := func(v []byte, err error) []byte {
 		require.NoError(t, err)
@@ -764,8 +764,8 @@ func TestBatchIteration(t *testing.T) {
 	if ok, err := iter.Valid(); !ok {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(iter.Key(), k2) {
-		t.Fatalf("expected %s, got %s", k2, iter.Key())
+	if !reflect.DeepEqual(iter.UnsafeKey(), k2) {
+		t.Fatalf("expected %s, got %s", k2, iter.UnsafeKey())
 	}
 	if !reflect.DeepEqual(checkValErr(iter.Value()), v2) {
 		t.Fatalf("expected %s, got %s", v2, checkValErr(iter.Value()))
@@ -774,7 +774,7 @@ func TestBatchIteration(t *testing.T) {
 	if ok, err := iter.Valid(); err != nil {
 		t.Fatal(err)
 	} else if ok {
-		t.Fatalf("expected invalid, got valid at key %s", iter.Key())
+		t.Fatalf("expected invalid, got valid at key %s", iter.UnsafeKey())
 	}
 
 	// Reverse iteration.
@@ -782,8 +782,8 @@ func TestBatchIteration(t *testing.T) {
 	if ok, err := iter.Valid(); !ok {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(iter.Key(), k2) {
-		t.Fatalf("expected %s, got %s", k2, iter.Key())
+	if !reflect.DeepEqual(iter.UnsafeKey(), k2) {
+		t.Fatalf("expected %s, got %s", k2, iter.UnsafeKey())
 	}
 	if !reflect.DeepEqual(checkValErr(iter.Value()), v2) {
 		t.Fatalf("expected %s, got %s", v2, checkValErr(iter.Value()))
@@ -793,8 +793,8 @@ func TestBatchIteration(t *testing.T) {
 	if ok, err := iter.Valid(); !ok || err != nil {
 		t.Fatalf("expected success, but got invalid: %v", err)
 	}
-	if !reflect.DeepEqual(iter.Key(), k1) {
-		t.Fatalf("expected %s, got %s", k1, iter.Key())
+	if !reflect.DeepEqual(iter.UnsafeKey(), k1) {
+		t.Fatalf("expected %s, got %s", k1, iter.UnsafeKey())
 	}
 	if !reflect.DeepEqual(checkValErr(iter.Value()), v1) {
 		t.Fatalf("expected %s, got %s", v1, checkValErr(iter.Value()))

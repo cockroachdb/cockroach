@@ -495,7 +495,7 @@ func getExpectationsGenerator(
 				}
 				p, r := it.HasPointAndRange()
 				if p {
-					k := it.Key()
+					k := it.UnsafeKey().Clone()
 					v, err := it.Value()
 					require.NoError(t, err)
 					if len(baseKey) == 0 {

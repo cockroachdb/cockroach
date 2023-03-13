@@ -349,9 +349,9 @@ func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
 				p, r := iter.HasPointAndRange()
 				if p {
 					if !reverse {
-						actualKeys = append(actualKeys, iter.Key())
+						actualKeys = append(actualKeys, iter.UnsafeKey().Clone())
 					} else {
-						actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+						actualKeys = append([]storage.MVCCKey{iter.UnsafeKey().Clone()}, actualKeys...)
 					}
 				}
 				if r {

@@ -248,11 +248,11 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 			i.valid = false
 			return
 		}
-		tbiKey := i.timeBoundIter.Key().Key
-		if tbiKey.Compare(startKey.Key) > 0 {
+		unsafeTBIKey := i.timeBoundIter.UnsafeKey().Key
+		if unsafeTBIKey.Compare(startKey.Key) > 0 {
 			// If the first key that the TBI sees is ahead of the given startKey, we
 			// can seek directly to the first version of the key.
-			startKey = MakeMVCCMetadataKey(tbiKey)
+			startKey = MakeMVCCMetadataKey(unsafeTBIKey.Clone())
 		}
 	}
 	prevRangeKey := i.rangeKeys.Bounds.Key.Clone()
@@ -437,7 +437,7 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 		case MVCCIncrementalIterIntentPolicyError:
 			i.err = &kvpb.WriteIntentError{
 				Intents: []roachpb.Intent{
-					roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
+					roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()),
 				},
 			}
 			i.valid = false
@@ -446,7 +446,7 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 			// We are collecting intents, so we need to save it and advance to its proposed value.
 			// Caller could then use a value key to update proposed row counters for the sake of bookkeeping
 			// and advance more.
-			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key))
+			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()))
 			return nil
 		case MVCCIncrementalIterIntentPolicyEmit:
 			// We will emit this intent to the caller.

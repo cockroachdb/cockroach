@@ -368,12 +368,11 @@ func (p *pebbleIterator) Valid() (bool, error) {
 		return false, p.iter.Error()
 	}
 
-	// The MVCCIterator interface is broken in that it silently discards
-	// the error when UnsafeKey(), Key() are unable to parse the key as
-	// an MVCCKey. This is especially problematic if the caller is
-	// accidentally iterating into the lock table key space, since that
-	// parsing will fail. We do a cheap check here to make sure we are
-	// not in the lock table key space.
+	// The MVCCIterator interface is broken in that it silently discards the
+	// error when UnsafeKey() is unable to parse the key as an MVCCKey. This is
+	// especially problematic if the caller is accidentally iterating into the
+	// lock table key space, since that parsing will fail. We do a cheap check
+	// here to make sure we are not in the lock table key space.
 	//
 	// TODO(sumeer): fix this properly by changing those method signatures.
 	k := p.iter.Key()
@@ -603,15 +602,6 @@ func (p *pebbleIterator) PrevEngineKeyWithLimit(
 		return state, p.iter.Error()
 	}
 	return state, nil
-}
-
-// Key implements the MVCCIterator interface.
-func (p *pebbleIterator) Key() MVCCKey {
-	key := p.UnsafeKey()
-	keyCopy := make([]byte, len(key.Key))
-	copy(keyCopy, key.Key)
-	key.Key = keyCopy
-	return key
 }
 
 // EngineKey implements the EngineIterator interface.

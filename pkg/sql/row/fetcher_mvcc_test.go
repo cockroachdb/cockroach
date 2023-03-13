@@ -63,7 +63,7 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 			}
 			value := mvccValue.Value
 			value.Timestamp = it.UnsafeKey().Timestamp
-			kv := roachpb.KeyValue{Key: it.Key().Key, Value: value}
+			kv := roachpb.KeyValue{Key: it.UnsafeKey().Key.Clone(), Value: value}
 			kvs = append(kvs, kv)
 		}
 		return nil

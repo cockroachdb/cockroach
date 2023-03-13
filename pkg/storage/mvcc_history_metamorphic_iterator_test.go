@@ -374,10 +374,6 @@ func (m *metamorphicMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUI
 	m.moveAround()
 }
 
-func (m *metamorphicMVCCIterator) Key() storage.MVCCKey {
-	return m.it.(storage.MVCCIterator).Key()
-}
-
 func (m *metamorphicMVCCIterator) UnsafeRawKey() []byte {
 	return m.it.(storage.MVCCIterator).UnsafeRawKey()
 }

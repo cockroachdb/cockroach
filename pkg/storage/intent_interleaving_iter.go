@@ -982,14 +982,6 @@ func (i *intentInterleavingIter) ValueLen() int {
 	return i.iter.ValueLen()
 }
 
-func (i *intentInterleavingIter) Key() MVCCKey {
-	key := i.UnsafeKey()
-	keyCopy := make([]byte, len(key.Key))
-	copy(keyCopy, key.Key)
-	key.Key = keyCopy
-	return key
-}
-
 func (i *intentInterleavingIter) Value() ([]byte, error) {
 	if i.isCurAtIntentIter() {
 		return i.intentIter.Value()

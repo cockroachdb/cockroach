@@ -171,20 +171,20 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if ok, err := iter.Valid(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), insideKey) {
-			t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey) {
+			t.Fatalf("expected key %s, got %s", insideKey, iter.UnsafeKey())
 		}
 		iter.Next()
 		if ok, err := iter.Valid(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), insideKey2) {
-			t.Fatalf("expected key %s, got %s", insideKey2, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey2) {
+			t.Fatalf("expected key %s, got %s", insideKey2, iter.UnsafeKey())
 		}
 		// Scan out of bounds.
 		iter.Next()
 		if ok, err := iter.Valid(); ok {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		} else if err != nil {
 			// Scanning out of bounds sets Valid() to false but is not an error.
 			t.Errorf("unexpected error on iterator: %+v", err)
@@ -210,20 +210,20 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if ok, err := iter.Valid(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), insideKey2) {
-			t.Fatalf("expected key %s, got %s", insideKey2, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey2) {
+			t.Fatalf("expected key %s, got %s", insideKey2, iter.UnsafeKey())
 		}
 		iter.Prev()
 		if ok, err := iter.Valid(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), insideKey) {
-			t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey) {
+			t.Fatalf("expected key %s, got %s", insideKey, iter.UnsafeKey())
 		}
 		// Scan out of bounds.
 		iter.Prev()
 		if ok, err := iter.Valid(); ok {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		} else if err != nil {
 			t.Errorf("unexpected error on iterator: %+v", err)
 		}
@@ -236,7 +236,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		// SeekLT to the lower bound is invalid.
 		iter.SeekLT(insideKey)
 		if ok, err := iter.Valid(); ok {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		} else if !isReadSpanErr(err) {
 			t.Fatalf("SeekLT: unexpected error %v", err)
 		}
@@ -390,16 +390,16 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		if ok, err := iter.Valid(); !ok {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), k1) {
-			t.Fatalf("expected key %s, got %s", k1, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), k1) {
+			t.Fatalf("expected key %s, got %s", k1, iter.UnsafeKey())
 		}
 
 		iter.Next()
 		if ok, err := iter.Valid(); !ok {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), k2) {
-			t.Fatalf("expected key %s, got %s", k2, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), k2) {
+			t.Fatalf("expected key %s, got %s", k2, iter.UnsafeKey())
 		}
 	}()
 
@@ -410,15 +410,15 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 
 		iter.SeekGE(k1)
 		if ok, _ := iter.Valid(); ok {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		}
 
 		iter.SeekGE(k2)
 		if ok, err := iter.Valid(); !ok {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
-		if !reflect.DeepEqual(iter.Key(), k2) {
-			t.Fatalf("expected key %s, got %s", k2, iter.Key())
+		if !reflect.DeepEqual(iter.UnsafeKey(), k2) {
+			t.Fatalf("expected key %s, got %s", k2, iter.UnsafeKey())
 		}
 	}()
 
@@ -430,12 +430,12 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 
 		iter.SeekGE(k1)
 		if ok, _ := iter.Valid(); ok {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		}
 
 		iter.SeekGE(k2)
 		if ok, _ := iter.Valid(); ok {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		}
 	}
 

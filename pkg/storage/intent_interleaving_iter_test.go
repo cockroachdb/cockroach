@@ -99,11 +99,6 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		return
 	}
 	k1 := makePrintableKey(iter.UnsafeKey())
-	k2 := makePrintableKey(iter.Key())
-	if !k1.Equal(k2) {
-		fmt.Fprintf(b, "output: key: %s != %s\n", k1, k2)
-		return
-	}
 	engineKey, ok := DecodeEngineKey(iter.UnsafeRawKey())
 	if !ok {
 		fmt.Fprintf(b, "output: could not DecodeEngineKey: %x\n", iter.UnsafeRawKey())

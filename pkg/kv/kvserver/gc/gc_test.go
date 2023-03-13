@@ -1534,7 +1534,7 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 				v = prefix + string(b)
 			}
 			result = append(result, tableCell{
-				key:   it.Key(),
+				key:   it.UnsafeKey().Clone(),
 				value: v,
 			})
 			prefix = ""

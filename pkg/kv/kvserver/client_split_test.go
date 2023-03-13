@@ -393,9 +393,9 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 			break
 		}
 
-		if bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(roachpb.KeyMin)) ||
-			bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(splitKey)) {
-			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.Key())
+		if bytes.HasPrefix([]byte(iter.UnsafeKey().Key), txnPrefix(roachpb.KeyMin)) ||
+			bytes.HasPrefix([]byte(iter.UnsafeKey().Key), txnPrefix(splitKey)) {
+			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.UnsafeKey())
 		}
 	}
 }

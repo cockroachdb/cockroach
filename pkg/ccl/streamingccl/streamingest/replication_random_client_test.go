@@ -329,18 +329,18 @@ func assertExactlyEqualKVs(
 			}
 			break
 		}
-		if maxKVTimestampSeen.Less(it.Key().Timestamp) {
-			maxKVTimestampSeen = it.Key().Timestamp
+		if maxKVTimestampSeen.Less(it.UnsafeKey().Timestamp) {
+			maxKVTimestampSeen = it.UnsafeKey().Timestamp
 		}
-		newKey := (prevKey != nil && !it.Key().Key.Equal(prevKey)) || prevKey == nil
-		prevKey = it.Key().Key
+		newKey := (prevKey != nil && !it.UnsafeKey().Key.Equal(prevKey)) || prevKey == nil
+		prevKey = it.UnsafeKey().Clone().Key
 
 		if newKey {
 			// All value ts should have been drained at this point, otherwise there is
 			// a mismatch between the streamed and ingested data.
 			require.Equal(t, 0, len(valueTimestampTuples))
 			valueTimestampTuples, err = streamValidator.getValuesForKeyBelowTimestamp(
-				string(it.Key().Key), frontierTimestamp)
+				string(it.UnsafeKey().Key), frontierTimestamp)
 			require.NoError(t, err)
 		}
 
@@ -357,10 +357,10 @@ func assertExactlyEqualKVs(
 		v, err := it.Value()
 		require.NoError(t, err)
 		require.Equal(t, roachpb.KeyValue{
-			Key: it.Key().Key,
+			Key: it.UnsafeKey().Key,
 			Value: roachpb.Value{
 				RawBytes:  v,
-				Timestamp: it.Key().Timestamp,
+				Timestamp: it.UnsafeKey().Timestamp,
 			},
 		}, latestVersionInChain)
 		matchingKVs++
