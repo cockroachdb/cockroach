@@ -18,7 +18,6 @@ import (
 	"io"
 	"net/url"
 	"regexp"
-	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -599,53 +598,4 @@ func TestTinyRows(t *testing.T) {
 
 	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader("true\nfalse\n"), "COPY t FROM STDIN")
 	require.NoError(t, err)
-}
-
-// BenchmarkCopyFrom measures copy performance against a TestServer.
-func BenchmarkCopyFrom(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{
-		Settings: cluster.MakeTestingClusterSettings(),
-	})
-	defer s.Stopper().Stop(ctx)
-
-	url, cleanup := sqlutils.PGUrl(b, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
-	defer cleanup()
-	var sqlConnCtx clisqlclient.Context
-	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
-
-	err := conn.Exec(ctx, lineitemSchema)
-	require.NoError(b, err)
-
-	// send data in 5 batches of 10k rows
-	const ROWS = sql.CopyBatchRowSizeDefault * 4
-	datalen := 0
-	var rows []string
-	for i := 0; i < ROWS; i++ {
-		row := fmt.Sprintf(csvData, i)
-		rows = append(rows, row)
-		datalen += len(row)
-	}
-	rowsize := datalen / ROWS
-	for _, batchSizeFactor := range []float64{.5, 1, 2, 4} {
-		batchSize := int(batchSizeFactor * sql.CopyBatchRowSizeDefault)
-		b.Run(fmt.Sprintf("%d", batchSize), func(b *testing.B) {
-			actualRows := rows[:batchSize]
-			for i := 0; i < b.N; i++ {
-				pprof.Do(ctx, pprof.Labels("run", "copy"), func(ctx context.Context) {
-					numrows, err := conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(strings.Join(actualRows, "\n")), "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';")
-					require.NoError(b, err)
-					require.Equal(b, int(numrows), len(actualRows))
-				})
-				b.StopTimer()
-				err = conn.Exec(ctx, "TRUNCATE TABLE lineitem")
-				require.NoError(b, err)
-				b.StartTimer()
-			}
-			b.SetBytes(int64(len(actualRows) * rowsize))
-		})
-	}
 }

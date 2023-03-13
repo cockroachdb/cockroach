@@ -254,13 +254,14 @@ type copyMachine struct {
 	scratchRow    []tree.Datum
 	batch         coldata.Batch
 	alloc         *colmem.Allocator
+	accHelper     colmem.SetAccountingHelper
+	typs          []*types.T
 	valueHandlers []tree.ValueHandler
 	ph            pgdate.ParseHelper
 
 	// For testing we want to be able to override this on the instance level.
 	copyBatchRowSize int
 	maxRowMem        int64
-	vectorExtraMem   int64
 	implicitTxn      bool
 	copyFastPath     bool
 	vectorized       bool
@@ -329,6 +330,7 @@ func newCopyMachine(
 		}
 		typs[i] = col.GetType()
 	}
+	c.typs = typs
 	// If there are no column specifiers and we expect non-visible columns
 	// to have field data then we have to populate the expectedHiddenColumnIdxs
 	// field with the columns indexes we expect to be hidden.
@@ -426,8 +428,12 @@ func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) {
 	c.vectorized = true
 	factory := coldataext.NewExtendedColumnFactory(c.p.EvalContext())
 	c.alloc = colmem.NewLimitedAllocator(ctx, &c.rowsMemAcc, nil, factory)
+	c.alloc.SetMaxBatchSize(c.copyBatchRowSize)
 	// TODO(cucaroach): check that batch isn't unnecessarily allocating selection vector.
-	c.batch = c.alloc.NewMemBatchWithFixedCapacity(typs, c.copyBatchRowSize)
+	c.accHelper.Init(c.alloc, c.maxRowMem, typs)
+	// Start with small number of rows, compromise between going too big and
+	// overallocating memory and avoiding some doubling growth batches.
+	c.batch, _ = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 64)
 	initialMemUsage := c.rowsMemAcc.Used()
 	if initialMemUsage > c.maxRowMem {
 		// Some tests set the max raft command size lower and if the metamorphic
@@ -641,12 +647,16 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		if err != nil {
 			return err
 		}
+		var batchDone bool
+		if !brk && c.vectorized {
+			batchDone = c.accHelper.AccountForSet(c.batch.Length() - 1)
+		}
 		// If we have a full batch of rows or we have exceeded maxRowMem process
 		// them. Only set finalBatch to true if this is the last
 		// CopyData segment AND we have no more data in the buffer.
-		if len := c.currentBatchSize(); c.rowsMemAcc.Used() > c.maxRowMem || len == c.copyBatchRowSize {
+		if len := c.currentBatchSize(); c.rowsMemAcc.Used() > c.maxRowMem || len == c.copyBatchRowSize || batchDone {
 			if len != c.copyBatchRowSize {
-				log.VEventf(ctx, 2, "copy batch flushing due to memory usage %d > %d", c.rowsMemAcc.Used(), c.maxRowMem)
+				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", c.batch.Length(), c.rowsMemAcc.Used(), c.maxRowMem)
 			}
 			if err := c.processRows(ctx, final && c.buf.Len() == 0); err != nil {
 				return err
@@ -812,14 +822,9 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 				vh[i].Null()
 				continue
 			}
-			siz, err := tree.ParseAndRequireStringHandler(c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx, c.valueHandlers[i], &c.ph)
-			if err != nil {
+			if err := tree.ParseAndRequireStringHandler(c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx, c.valueHandlers[i], &c.ph); err != nil {
 				return err
 			}
-			if err := c.rowsMemAcc.Grow(ctx, siz); err != nil {
-				return err
-			}
-			c.vectorExtraMem += siz
 		}
 		c.batch.SetLength(c.batch.Length() + 1)
 	} else {
@@ -1121,11 +1126,16 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	c.insertedRows += numRows
 	// We're done reset for next batch.
 	if c.vectorized {
-		c.rowsMemAcc.Shrink(ctx, c.vectorExtraMem)
-		c.vectorExtraMem = 0
-		c.batch.ResetInternalBatch()
-		for _, vh := range c.valueHandlers {
-			vh.Reset()
+		var realloc bool
+		c.batch, realloc = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 0)
+		if realloc {
+			for i := range c.typs {
+				c.valueHandlers[i] = coldataext.MakeVecHandler(c.batch.ColVec(i))
+			}
+		} else {
+			for _, vh := range c.valueHandlers {
+				vh.Reset()
+			}
 		}
 	} else {
 		if err := c.rows.UnsafeReset(ctx); err != nil {
@@ -1235,14 +1245,9 @@ func (c *copyMachine) readTextTupleVec(ctx context.Context, parts [][]byte) erro
 			// This just bypasses DecodeRawBytesToByteArrayAuto, not sure why...
 			c.valueHandlers[i].Bytes(encoding.UnsafeConvertStringToBytes(s))
 		default:
-			siz, err := tree.ParseAndRequireStringHandler(c.resultColumns[i].Typ, s, c.parsingEvalCtx, c.valueHandlers[i], &c.ph)
-			if err != nil {
+			if err := tree.ParseAndRequireStringHandler(c.resultColumns[i].Typ, s, c.parsingEvalCtx, c.valueHandlers[i], &c.ph); err != nil {
 				return err
 			}
-			if err := c.rowsMemAcc.Grow(ctx, siz); err != nil {
-				return err
-			}
-			c.vectorExtraMem += siz
 		}
 	}
 	c.batch.SetLength(c.batch.Length() + 1)

@@ -168,14 +168,14 @@ type ValueHandler interface {
 	Date(d pgdate.Date)
 	Datum(d Datum)
 	Bool(b bool)
-	Bytes(b []byte) int64
+	Bytes(b []byte)
 	// Decimal returns a pointer into the vec for in place construction.
 	Decimal() *apd.Decimal
 	Float(f float64)
 	Int(i int64)
 	Duration(d duration.Duration)
-	JSON(j json.JSON) int64
-	String(s string) int64
+	JSON(j json.JSON)
+	String(s string)
 	TimestampTZ(t time.Time)
 	Reset()
 }
@@ -187,7 +187,7 @@ var fixedDecimalSize uintptr = (&apd.Decimal{}).Size()
 // handled by ParseAndRequireString.
 func ParseAndRequireStringHandler(
 	t *types.T, s string, ctx ParseContext, vh ValueHandler, ph *pgdate.ParseHelper,
-) (extraSize int64, err error) {
+) (err error) {
 	switch t.Family() {
 	case types.BoolFamily:
 		var b bool
@@ -197,7 +197,7 @@ func ParseAndRequireStringHandler(
 	case types.BytesFamily:
 		var res []byte
 		if res, err = lex.DecodeRawBytesToByteArrayAuto(encoding.UnsafeConvertStringToBytes(s)); err == nil {
-			extraSize = vh.Bytes(res)
+			vh.Bytes(res)
 		} else {
 			err = MakeParseError(s, types.Bytes, err)
 		}
@@ -214,7 +214,6 @@ func ParseAndRequireStringHandler(
 			// Erase any invalid results.
 			*dec = apd.Decimal{}
 		}
-		extraSize = int64(dec.Size() - fixedDecimalSize)
 	case types.FloatFamily:
 		var f float64
 		if f, err = strconv.ParseFloat(s, 64); err == nil {
@@ -232,13 +231,13 @@ func ParseAndRequireStringHandler(
 	case types.JsonFamily:
 		var j json.JSON
 		if j, err = json.ParseJSON(s); err == nil {
-			extraSize = vh.JSON(j)
+			vh.JSON(j)
 		} else {
 			err = pgerror.Wrapf(err, pgcode.Syntax, "could not parse JSON")
 		}
 	case types.StringFamily:
 		s = truncateString(s, t)
-		extraSize += vh.String(s)
+		vh.String(s)
 	case types.TimestampTZFamily:
 		// TODO(cucaroach): can we refactor the next 3 case arms to be simpler
 		// and avoid code duplication?
@@ -281,17 +280,16 @@ func ParseAndRequireStringHandler(
 		var d DEnum
 		d, err = MakeDEnumFromLogicalRepresentation(t, s)
 		if err == nil {
-			extraSize = vh.Bytes(d.PhysicalRep)
+			vh.Bytes(d.PhysicalRep)
 		}
 	default:
 		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-			return 0, errors.AssertionFailedf("unexpected type %v in datum case arm, does a new type need to be handled?", t)
+			return errors.AssertionFailedf("unexpected type %v in datum case arm, does a new type need to be handled?", t)
 		}
 		var d Datum
 		if d, _, err = ParseAndRequireString(t, s, ctx); err == nil {
 			vh.Datum(d)
-			extraSize = int64(d.Size())
 		}
 	}
-	return extraSize, err
+	return err
 }
