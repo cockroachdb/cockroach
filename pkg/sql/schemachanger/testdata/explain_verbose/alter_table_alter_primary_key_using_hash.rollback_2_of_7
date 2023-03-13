@@ -11,7 +11,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 21 elements transitioning toward ABSENT
+    │   ├── • 22 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -43,8 +43,14 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
     │   │   │   │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
-    │   │   │         rule: "dependents removed before constraint"
+    │   │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
+    │   │   │         rule: "Constraint should be hidden before name"
+    │   │   │
+    │   │   ├── • ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+    │   │   │         rule: "Constraint should be hidden before name"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ BACKFILL_ONLY → ABSENT
@@ -184,11 +190,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │       └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
     │   │             rule: "index no longer public before index name"
     │   │
-    │   └── • 23 Mutation operations
+    │   └── • 24 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 3
     │       │     Name: crdb_internal_column_3_name_placeholder
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetConstraintName
+    │       │     ConstraintID: 2
+    │       │     Name: crdb_internal_constraint_2_name_placeholder
     │       │     TableID: 104
     │       │
     │       ├── • RemoveColumnFromIndex

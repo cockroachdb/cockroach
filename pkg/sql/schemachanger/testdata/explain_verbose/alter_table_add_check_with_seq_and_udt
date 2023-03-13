@@ -12,61 +12,21 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-│       │       │ ABSENT → WRITE_ONLY
-│       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
-│       │
-│       └── • 3 Mutation operations
-│           │
-│           ├── • AddCheckConstraint
-│           │     CheckExpr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
-│           │     ColumnIDs:
-│           │     - 1
-│           │     - 2
-│           │     ConstraintID: 2
-│           │     TableID: 107
-│           │     Validity: 2
-│           │
-│           ├── • UpdateTableBackReferencesInTypes
-│           │     BackReferencedTableID: 107
-│           │     TypeIDs:
-│           │     - 105
-│           │     - 106
-│           │
-│           └── • UpdateTableBackReferencesInSequences
-│                 BackReferencedTableID: 107
-│                 SequenceIDs:
-│                 - 104
-│
-├── • PreCommitPhase
-│   │
-│   ├── • Stage 1 of 2 in PreCommitPhase
-│   │   │
-│   │   ├── • 1 element transitioning toward PUBLIC
-│   │   │   │
-│   │   │   └── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-│   │   │         WRITE_ONLY → ABSENT
-│   │   │
-│   │   └── • 1 Mutation operation
-│   │       │
-│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
-│   │             {}
-│   │
-│   └── • Stage 2 of 2 in PreCommitPhase
-│       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       │   ├── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-│       │       │ ABSENT → WRITE_ONLY
+│       │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │             rule: "simple constraint visible before name"
 │       │
-│       └── • 8 Mutation operations
+│       └── • 4 Mutation operations
 │           │
 │           ├── • AddCheckConstraint
 │           │     CheckExpr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
@@ -87,6 +47,71 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │           │     BackReferencedTableID: 107
 │           │     SequenceIDs:
 │           │     - 104
+│           │
+│           └── • SetConstraintName
+│                 ConstraintID: 2
+│                 Name: check_i_j
+│                 TableID: 107
+│
+├── • PreCommitPhase
+│   │
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 2 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│   │   │   │     WRITE_ONLY → ABSENT
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
+│   │   │         PUBLIC → ABSENT
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │             rule: "simple constraint visible before name"
+│       │
+│       └── • 9 Mutation operations
+│           │
+│           ├── • AddCheckConstraint
+│           │     CheckExpr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+│           │     ColumnIDs:
+│           │     - 1
+│           │     - 2
+│           │     ConstraintID: 2
+│           │     TableID: 107
+│           │     Validity: 2
+│           │
+│           ├── • UpdateTableBackReferencesInTypes
+│           │     BackReferencedTableID: 107
+│           │     TypeIDs:
+│           │     - 105
+│           │     - 106
+│           │
+│           ├── • UpdateTableBackReferencesInSequences
+│           │     BackReferencedTableID: 107
+│           │     SequenceIDs:
+│           │     - 104
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: check_i_j
+│           │     TableID: 107
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -140,26 +165,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
     │
     └── • Stage 2 of 2 in PostCommitPhase
         │
-        ├── • 2 elements transitioning toward PUBLIC
+        ├── • 1 element transitioning toward PUBLIC
         │   │
-        │   ├── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-        │   │   │ VALIDATED → PUBLIC
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-        │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
-        │   │   │
-        │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before complex constraint"
-        │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
-        │         ABSENT → PUBLIC
+        │   └── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+        │       │ VALIDATED → PUBLIC
+        │       │
+        │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+        │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
-        └── • 7 Mutation operations
-            │
-            ├── • SetConstraintName
-            │     ConstraintID: 2
-            │     Name: check_i_j
-            │     TableID: 107
+        └── • 6 Mutation operations
             │
             ├── • MakeValidatedCheckConstraintPublic
             │     ConstraintID: 2

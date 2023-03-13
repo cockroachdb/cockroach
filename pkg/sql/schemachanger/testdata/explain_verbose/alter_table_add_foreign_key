@@ -1,6 +1,9 @@
 /* setup */
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t2 VALUES(-1);
+INSERT INTO t2 VALUES(-2);
+INSERT INTO t2 VALUES(-3);
 
 /* test */
 EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
@@ -11,51 +14,21 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-│       │       │ ABSENT → WRITE_ONLY
-│       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-│       │             rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
-│       │
-│       └── • 1 Mutation operation
-│           │
-│           └── • AddForeignKeyConstraint
-│                 ColumnIDs:
-│                 - 1
-│                 ConstraintID: 2
-│                 ReferencedColumnIDs:
-│                 - 1
-│                 ReferencedTableID: 105
-│                 TableID: 104
-│                 Validity: 2
-│
-├── • PreCommitPhase
-│   │
-│   ├── • Stage 1 of 2 in PreCommitPhase
-│   │   │
-│   │   ├── • 1 element transitioning toward PUBLIC
-│   │   │   │
-│   │   │   └── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-│   │   │         WRITE_ONLY → ABSENT
-│   │   │
-│   │   └── • 1 Mutation operation
-│   │       │
-│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
-│   │             {}
-│   │
-│   └── • Stage 2 of 2 in PreCommitPhase
-│       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       │   ├── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│       │   │         rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
-│       │   └── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-│       │       │ ABSENT → WRITE_ONLY
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-│       │             rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│       │             rule: "simple constraint visible before name"
 │       │
-│       └── • 4 Mutation operations
+│       └── • 2 Mutation operations
 │           │
 │           ├── • AddForeignKeyConstraint
 │           │     ColumnIDs:
@@ -66,6 +39,61 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │           │     ReferencedTableID: 105
 │           │     TableID: 104
 │           │     Validity: 2
+│           │
+│           └── • SetConstraintName
+│                 ConstraintID: 2
+│                 Name: t1_i_fkey
+│                 TableID: 104
+│
+├── • PreCommitPhase
+│   │
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 2 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│   │   │   │     WRITE_ONLY → ABSENT
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+│   │   │         PUBLIC → ABSENT
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│       │   │         rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+│       │             rule: "simple constraint visible before name"
+│       │
+│       └── • 5 Mutation operations
+│           │
+│           ├── • AddForeignKeyConstraint
+│           │     ColumnIDs:
+│           │     - 1
+│           │     ConstraintID: 2
+│           │     ReferencedColumnIDs:
+│           │     - 1
+│           │     ReferencedTableID: 105
+│           │     TableID: 104
+│           │     Validity: 2
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: t1_i_fkey
+│           │     TableID: 104
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -109,26 +137,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
     │
     └── • Stage 2 of 2 in PostCommitPhase
         │
-        ├── • 2 elements transitioning toward PUBLIC
+        ├── • 1 element transitioning toward PUBLIC
         │   │
-        │   ├── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-        │   │   │ VALIDATED → PUBLIC
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
-        │   │   │     rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
-        │   │   │
-        │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before complex constraint"
-        │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
-        │         ABSENT → PUBLIC
+        │   └── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │       │ VALIDATED → PUBLIC
+        │       │
+        │       └── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │             rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
-        └── • 5 Mutation operations
-            │
-            ├── • SetConstraintName
-            │     ConstraintID: 2
-            │     Name: t1_i_fkey
-            │     TableID: 104
+        └── • 4 Mutation operations
             │
             ├── • MakeValidatedForeignKeyConstraintPublic
             │     ConstraintID: 2

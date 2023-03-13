@@ -10,7 +10,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 18 elements transitioning toward PUBLIC
+│       ├── • 19 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 104, ColumnID: 3}
 │       │   │   │ ABSENT → DELETE_ONLY
@@ -37,6 +37,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   ├── • ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+│       │   │         rule: "simple constraint visible before name"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
@@ -178,7 +184,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │       │       └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
 │       │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │
-│       └── • 21 Mutation operations
+│       └── • 22 Mutation operations
 │           │
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
@@ -215,6 +221,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │           │     FromHashShardedColumn: true
 │           │     TableID: 104
 │           │     Validity: 2
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: check_crdb_internal_j_shard_3
+│           │     TableID: 104
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -343,7 +354,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 18 elements transitioning toward PUBLIC
+│   │   ├── • 19 elements transitioning toward PUBLIC
 │   │   │   │
 │   │   │   ├── • Column:{DescID: 104, ColumnID: 3}
 │   │   │   │     DELETE_ONLY → ABSENT
@@ -356,6 +367,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │   │   │   │
 │   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
 │   │   │   │     WRITE_ONLY → ABSENT
+│   │   │   │
+│   │   │   ├── • ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
+│   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │     BACKFILL_ONLY → ABSENT
@@ -423,7 +437,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 18 elements transitioning toward PUBLIC
+│       ├── • 19 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 104, ColumnID: 3}
 │       │   │   │ ABSENT → DELETE_ONLY
@@ -450,6 +464,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   ├── • ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+│       │   │         rule: "simple constraint visible before name"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
@@ -591,7 +611,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │       │       └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
 │       │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │
-│       └── • 27 Mutation operations
+│       └── • 28 Mutation operations
 │           │
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
@@ -628,6 +648,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │           │     FromHashShardedColumn: true
 │           │     TableID: 104
 │           │     Validity: 2
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: check_crdb_internal_j_shard_3
+│           │     TableID: 104
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -1113,7 +1138,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
     │
     ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 7 elements transitioning toward PUBLIC
+    │   ├── • 6 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -1157,14 +1182,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
     │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
-    │   │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
-    │   │   │   │
-    │   │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
-    │   │   │         rule: "constraint dependent public right before complex constraint"
-    │   │   │
-    │   │   ├── • ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
-    │   │   │     ABSENT → PUBLIC
+    │   │   │   └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+    │   │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
@@ -1258,7 +1277,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
     │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │             rule: "index no longer public before dependents, excluding columns"
     │   │
-    │   └── • 18 Mutation operations
+    │   └── • 17 Mutation operations
     │       │
     │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
@@ -1273,9 +1292,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
     │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • SetConstraintName
+    │       ├── • MakeValidatedCheckConstraintPublic
     │       │     ConstraintID: 2
-    │       │     Name: check_crdb_internal_j_shard_3
     │       │     TableID: 104
     │       │
     │       ├── • SetIndexName
@@ -1313,10 +1331,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 5
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeValidatedCheckConstraintPublic
-    │       │     ConstraintID: 2
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic

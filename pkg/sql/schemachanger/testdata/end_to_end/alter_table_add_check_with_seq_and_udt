@@ -26,7 +26,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 3 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -65,7 +65,7 @@ upsert descriptor #107
   +    - 2
   +    constraintId: 2
   +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_i_j
   +    validity: Validating
      columns:
      - id: 1
@@ -104,7 +104,7 @@ upsert descriptor #107
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+## PreCommitPhase stage 2 of 2 with 9 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -167,7 +167,7 @@ upsert descriptor #107
   +    - 2
   +    constraintId: 2
   +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_i_j
   +    validity: Validating
      columns:
      - id: 1
@@ -231,10 +231,10 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #107
+validate CHECK constraint check_i_j in table #107
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 7 MutationType ops
+## PostCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -284,11 +284,9 @@ upsert descriptor #106
   +  version: "3"
 upsert descriptor #107
   ...
-       constraintId: 2
        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
-  -    name: crdb_internal_constraint_2_name_placeholder
+       name: check_i_j
   -    validity: Validating
-  +    name: check_i_j
      columns:
      - id: 1
   ...
