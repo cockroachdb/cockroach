@@ -383,6 +383,7 @@ func (c *conn) newCommandResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
+	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
@@ -401,10 +402,11 @@ func (c *conn) newCommandResult(
 	}
 	telemetry.Inc(sqltelemetry.PortalWithLimitRequestCounter)
 	return &limitedCommandResult{
-		limit:         limit,
-		portalName:    portalName,
-		implicitTxn:   implicitTxn,
-		commandResult: r,
+		limit:            limit,
+		portalName:       portalName,
+		implicitTxn:      implicitTxn,
+		commandResult:    r,
+		portalPausablity: portalPausability,
 	}
 }
 
@@ -445,7 +447,9 @@ type limitedCommandResult struct {
 	seenTuples int
 	// If set, an error will be sent to the client if more rows are produced than
 	// this limit.
-	limit int
+	limit            int
+	reachedLimit     bool
+	portalPausablity sql.PortalPausablity
 }
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
@@ -462,9 +466,17 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		if err := r.conn.Flush(r.pos); err != nil {
 			return err
 		}
-		r.seenTuples = 0
-
-		return r.moreResultsNeeded(ctx)
+		if r.portalPausablity == sql.PausablePortal {
+			r.reachedLimit = true
+			return sql.ErrPortalLimitHasBeenReached
+		} else {
+			// TODO(janexing): we keep this part as for general portals, we would like
+			// to keep the execution logic to avoid bring too many bugs. Eventually
+			// we should remove them and use the "return the control to connExecutor"
+			// logic for all portals.
+			r.seenTuples = 0
+			return r.moreResultsNeeded(ctx)
+		}
 	}
 	return nil
 }
@@ -480,6 +492,17 @@ func (r *limitedCommandResult) SupportsAddBatch() bool {
 // when a limit has been specified.
 func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 	// Keep track of the previous CmdPos so we can rewind if needed.
+	errBasedOnPausability := func(pausablity sql.PortalPausablity) error {
+		switch pausablity {
+		case sql.PortalPausabilityDisabled:
+			return sql.ErrLimitedResultNotSupported
+		case sql.NotPausablePortalForUnsupportedStmt:
+			return sql.ErrStmtNotSupportedForPausablePortal
+		default:
+			return errors.AssertionFailedf("unsupported pausability type for a portal")
+		}
+	}
+
 	prevPos := r.conn.stmtBuf.AdvanceOne()
 	for {
 		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
@@ -493,7 +516,7 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// next message is a delete portal.
 			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
 				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
 					"cannot close a portal while a different one is open")
 			}
 			return r.rewindAndClosePortal(ctx, prevPos)
@@ -501,7 +524,7 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
 				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
 					"cannot execute a portal while a different one is open")
 			}
 			r.limit = c.Limit
@@ -544,7 +567,7 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			}
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+			return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
 				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
 		}
 		prevPos = curPos
@@ -623,6 +646,13 @@ func (r *limitedCommandResult) rewindAndClosePortal(
 	// up back on it.
 	r.conn.stmtBuf.Rewind(ctx, rewindTo)
 	return sql.ErrLimitedResultClosed
+}
+
+func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
+	if r.reachedLimit {
+		r.commandResult.typ = noCompletionMsg
+	}
+	r.commandResult.Close(ctx, t)
 }
 
 // Get the column index for job id based on the result header defined in
