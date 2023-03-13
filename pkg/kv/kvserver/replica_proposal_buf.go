@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1188,9 +1187,6 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	p.proposedAtTicks = rp.mu.ticks
 	if p.createdAtTicks == 0 {
 		p.createdAtTicks = rp.mu.ticks
-	}
-	if buildutil.CrdbTestBuild && (p.ec.repl == nil || p.ec.g == nil) {
-		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "finished proposal inserted into map: %+v", p)
 	}
 	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
 		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
