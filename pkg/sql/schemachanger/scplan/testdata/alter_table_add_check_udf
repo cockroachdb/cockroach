@@ -6,9 +6,10 @@ CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
 ops
 ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.AddCheckConstraint
       CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
@@ -22,15 +23,21 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
       BackReferencedTableID: 104
       FunctionIDs:
       - 105
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: check_b
+      TableID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], WRITE_ONLY] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 5 MutationType ops
+PreCommitPhase stage 2 of 2 with 6 MutationType ops
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.AddCheckConstraint
       CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
@@ -44,6 +51,10 @@ PreCommitPhase stage 2 of 2 with 5 MutationType ops
       BackReferencedTableID: 104
       FunctionIDs:
       - 105
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: check_b
+      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -70,15 +81,10 @@ PostCommitPhase stage 1 of 2 with 1 ValidationType op
     *scop.ValidateConstraint
       ConstraintID: 2
       TableID: 104
-PostCommitPhase stage 2 of 2 with 5 MutationType ops
+PostCommitPhase stage 2 of 2 with 4 MutationType ops
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.SetConstraintName
-      ConstraintID: 2
-      Name: check_b
-      TableID: 104
     *scop.MakeValidatedCheckConstraintPublic
       ConstraintID: 2
       TableID: 104
@@ -110,7 +116,7 @@ ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
-- from: [ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC]
-  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC]
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
+  to:   [ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC]
   kind: SameStagePrecedence
-  rule: constraint dependent public right before complex constraint
+  rule: simple constraint visible before name

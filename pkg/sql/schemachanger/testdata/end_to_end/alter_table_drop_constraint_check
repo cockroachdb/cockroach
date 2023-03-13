@@ -23,13 +23,11 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_constraint
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #104
   ...
-       constraintId: 2
        expr: i > 0:::INT8
-  -    name: check_i
-  +    name: crdb_internal_constraint_2_name_placeholder
+       name: check_i
   +    validity: Dropping
      columns:
      - id: 1
@@ -63,13 +61,11 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
   ...
-       constraintId: 2
        expr: i > 0:::INT8
-  -    name: check_i
-  +    name: crdb_internal_constraint_2_name_placeholder
+       name: check_i
   +    validity: Dropping
      columns:
      - id: 1
@@ -125,7 +121,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -133,7 +129,7 @@ upsert descriptor #104
   -    - 1
   -    constraintId: 2
   -    expr: i > 0:::INT8
-  -    name: crdb_internal_constraint_2_name_placeholder
+  -    name: check_i
   -    validity: Dropping
   +  checks: []
      columns:

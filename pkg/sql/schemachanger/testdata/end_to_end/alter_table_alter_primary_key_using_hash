@@ -21,14 +21,14 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 21 MutationType ops
+## StatementPhase stage 1 of 1 with 22 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
   +  - constraintId: 2
   +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
   +    fromHashShardedColumn: true
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_crdb_internal_j_shard_3
   +    validity: Validating
      columns:
      - id: 1
@@ -205,14 +205,14 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 27 MutationType ops
+## PreCommitPhase stage 2 of 2 with 28 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
   +  - constraintId: 2
   +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
   +    fromHashShardedColumn: true
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_crdb_internal_j_shard_3
   +    validity: Validating
      columns:
      - id: 1
@@ -417,7 +417,7 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 6 MutationType ops
 upsert descriptor #104
   ...
-       name: crdb_internal_constraint_2_name_placeholder
+       name: check_crdb_internal_j_shard_3
        validity: Validating
   +  - columnIds:
   +    - 3
@@ -560,15 +560,14 @@ begin transaction #9
 validate forward indexes [2] in table #104
 validate forward indexes [4] in table #104
 validate CHECK constraint crdb_internal_j_shard_3_auto_not_null in table #104
-validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #104
+validate CHECK constraint check_crdb_internal_j_shard_3 in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 18 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 17 MutationType ops
 upsert descriptor #104
   ...
-       expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
        fromHashShardedColumn: true
-  -    name: crdb_internal_constraint_2_name_placeholder
+       name: check_crdb_internal_j_shard_3
   -    validity: Validating
   -  - columnIds:
   -    - 3
@@ -576,7 +575,6 @@ upsert descriptor #104
   -    isNonNullConstraint: true
   -    name: crdb_internal_j_shard_3_auto_not_null
   -    validity: Validating
-  +    name: check_crdb_internal_j_shard_3
      columns:
      - id: 1
   ...
