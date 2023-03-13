@@ -631,7 +631,7 @@ func (v *validator) processOp(op Operation) {
 					}
 				}
 
-				key := iter.Key().Key
+				key := iter.UnsafeKey().Clone().Key
 				rawValue, err := iter.Value()
 				if err != nil {
 					return err

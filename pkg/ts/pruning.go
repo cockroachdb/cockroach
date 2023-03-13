@@ -73,7 +73,7 @@ func (tsdb *DB) findTimeSeries(
 		} else if !ok || !iter.UnsafeKey().Less(end) {
 			break
 		}
-		foundKey := iter.Key().Key
+		foundKey := iter.UnsafeKey().Key.Clone()
 
 		// Extract the name and resolution from the discovered key.
 		name, _, res, tsNanos, err := DecodeDataKey(foundKey)

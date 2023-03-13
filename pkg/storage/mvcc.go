@@ -5889,7 +5889,7 @@ func MVCCFindSplitKey(
 		if _, _, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
 			// The first key in this range represents a row in a SQL table. Advance the
 			// minSplitKey past this row to avoid the problems described above.
-			firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)
+			firstRowKey, err := keys.EnsureSafeSplitKey(it.UnsafeKey().Key.Clone())
 			if err != nil {
 				return nil, err
 			}
@@ -5900,7 +5900,7 @@ func MVCCFindSplitKey(
 	if minSplitKey == nil {
 		// The first key in the range does not represent a row in a SQL table.
 		// Allow a split at any key that sorts after it.
-		minSplitKey = it.Key().Key.Next()
+		minSplitKey = it.UnsafeKey().Key.Clone().Next()
 	}
 
 	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)

@@ -264,7 +264,7 @@ func CheckSSTConflicts(
 				// will likely resolve the returned intents and retry the call, which
 				// would be quadratic, so this significantly reduces the overall number
 				// of scans.
-				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.Key().Key))
+				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
 				if int64(len(intents)) >= maxIntents {
 					return &kvpb.WriteIntentError{Intents: intents}
 				}
@@ -510,7 +510,7 @@ func CheckSSTConflicts(
 				if err = extIter.ValueProto(&mvccMeta); err != nil {
 					return enginepb.MVCCStats{}, err
 				}
-				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.Key().Key))
+				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
 				if int64(len(intents)) >= maxIntents {
 					return statsDiff, &kvpb.WriteIntentError{Intents: intents}
 				}
@@ -669,7 +669,7 @@ func CheckSSTConflicts(
 				// to do that is to copy the current iterator position in its entirety,
 				// call PeekRangeKeyLeft, and then SeekGE the engine iterator back
 				// to its original position.
-				savedExtKey := extIter.Key()
+				savedExtKey := extIter.UnsafeKey().Clone()
 				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter, sstRangeKeys.Bounds.Key)
 				if err != nil {
 					return enginepb.MVCCStats{}, err
@@ -937,7 +937,7 @@ func CheckSSTConflicts(
 			// Check for condition 1.
 			//
 			// NB: sstPrevRangeKeys is already a clone of the current sstRangeKeys.
-			sstPrevKey := sstIter.Key()
+			sstPrevKey := sstIter.UnsafeKey().Clone()
 			sstRangeKeys = sstPrevRangeKeys
 			if sstHasPoint {
 				sstIter.NextKey()
@@ -1005,7 +1005,7 @@ func CheckSSTConflicts(
 			}
 			extOK, extErr = extIter.Valid()
 		} else if !steppedExtIter {
-			oldKey := sstIter.Key()
+			oldKey := sstIter.UnsafeKey().Clone()
 			if sstHasPoint { // !extHasPoint
 				// Check if ext has a point at this key. If not, NextKey() on sstIter
 				// and seek extIter.
