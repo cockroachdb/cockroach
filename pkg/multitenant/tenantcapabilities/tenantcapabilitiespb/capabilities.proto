@@ -76,7 +76,10 @@ message TenantCapabilities {
   // successfully perform `AdminUnsplit` requests.
   bool can_admin_unsplit = 5;
 
-  // Next id: 7
+  // CanAdminRelocateRange if set to true, grants the tenant the ability to
+  // successfully perform `AdminChangeReplicas`, `AdminRelocateRange`,
+  // `AdminTransferLease` requests.
+  bool can_admin_relocate_range = 7;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

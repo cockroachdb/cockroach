@@ -2018,11 +2018,6 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
-
-	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
-		return nil, err
-	}
-
 	return &relocateNode{
 		subjectReplicas: relocateSubject,
 		tableDesc:       index.Table().(*optTable).desc,
@@ -2038,9 +2033,6 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
-	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
-		return nil, err
-	}
 	return &relocateRange{
 		rows:            input.(planNode),
 		subjectReplicas: relocateSubject,
