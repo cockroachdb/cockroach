@@ -1,0 +1,346 @@
+# Make sure that table cannot be truncated if an index is being dropped
+# concurrently.
+statement ok
+CREATE TABLE t1(a int primary key, b int);
+
+statement ok
+CREATE INDEX idx_b ON t1(b);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't1';
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT
+    id,
+    json_set(
+      d,
+      ARRAY['table', 'mutations'],
+      array_to_json(ARRAY['
+        {
+          "direction": "DROP",
+          "mutationId": 1,
+          "state": "WRITE_ONLY",
+          "index": {
+              "id": 2,
+              "keyColumnDirections": ["ASC"],
+              "keyColumnIds": [ 2 ],
+              "keyColumnNames": [ "b" ],
+              "keySuffixColumnIds": [ 1 ],
+              "name": "idx_t_b"
+          }
+        }'::JSON])
+    ) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t1" which has indexes being dropped
+TRUNCATE TABLE t1;
+
+# Make sure that table cannot be truncated if a column using UDY is being
+# dropped concurrently.
+statement ok
+CREATE TYPE e AS ENUM ('v1', 'v2');
+CREATE TABLE t2(a int primary key, b e);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't2';
+
+let $typ_id
+SELECT id + 100000 FROM system.namespace WHERE name = 'e';
+
+let $arr_typ_id
+SELECT id + 100000 FROM system.namespace WHERE name = '_e';
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT
+    id,
+    json_set(
+      json_remove_path( d, ARRAY['table', 'columns', '1']),
+      ARRAY['table', 'mutations'],
+      array_to_json(ARRAY['
+        {
+          "direction": "DROP", "mutationId": 1, "state": "WRITE_ONLY",
+          "column": {
+            "id": 2,
+            "name": "b",
+            "nullable": true,
+            "type": {
+              "family": "EnumFamily",
+              "oid": $typ_id,
+              "udtMetadata": {
+                  "arrayTypeOid": $arr_typ_id
+              }
+            }
+          }
+        }'::JSON])
+    ) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t2" which has a column \("b"\) being dropped which depends on another object
+TRUNCATE TABLE t2;
+
+# Make sure that table cannot be truncated when a constraint without index is
+# being added concurrently.
+statement ok
+CREATE TABLE t3(a INT PRIMARY KEY, b INT);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't3';
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT
+    id,
+    json_set(
+      d,
+      ARRAY['table', 'mutations'],
+      array_to_json(ARRAY['
+        {
+          "constraint": {
+            "check": {
+              "columnIds": [ 2 ],
+              "constraintId": 2,
+              "expr": "b > 1:::INT8",
+              "name": "ck_b",
+              "validity": "Validating"
+            },
+            "name": "ck_b"
+          },
+          "direction": "ADD",
+          "mutationId": 1,
+          "state": "DELETE_ONLY"
+        }'::JSON])
+    ) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t3" which has an ongoing CHECK constraint change
+TRUNCATE TABLE t3;
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT id, json_set( d, ARRAY['table', 'mutations'], '[]'::JSON) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+# Make sure table cannot be truncated if there is concurrent primary key change.
+statement ok
+CREATE TABLE t4(a INT PRIMARY KEY, b INT);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't4';
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT
+    id,
+    json_set(
+      json_set(d, ARRAY['table', 'nextIndexId'], '3'),
+      ARRAY['table', 'mutations'],
+      array_to_json(ARRAY['
+        {
+          "direction": "ADD",
+          "index": {
+            "constraintId": 2,
+            "id": 2,
+            "keyColumnDirections": [ "ASC" ],
+            "keyColumnIds": [ 2 ],
+            "keyColumnNames": [ "b" ],
+            "name": "new_primary_key",
+            "storeColumnIds": [ 1 ],
+            "storeColumnNames": [ "a" ],
+            "unique": true,
+            "version": 3
+          },
+          "mutationId": 1,
+          "state": "BACKFILLING"
+        }'::JSON,
+        '{
+          "direction": "ADD",
+          "mutationId": 1,
+          "primaryKeySwap": { "newPrimaryIndexId": 2, "oldPrimaryIndexId": 1 },
+          "state": "DELETE_ONLY"
+        }'::JSON])
+    ) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t4" which has an ongoing primary key change
+TRUNCATE TABLE t4;
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT id, json_set( d, ARRAY['table', 'mutations'], '[]'::JSON) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+# Make sure table cannot be truncated when there is concurrent column type
+# change.
+statement ok
+CREATE TABLE t5(a int primary key, b int);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't5';
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT
+    id,
+    json_set(
+      json_set(
+        json_set(d, ARRAY['table', 'nextColumnId'], '4'),
+        ARRAY['table', 'families'],
+        '[
+          {
+            "columnIds": [ 1, 2, 3 ],
+            "columnNames": [ "a", "b", "b_1" ],
+            "defaultColumnId": 2,
+            "name": "primary"
+          }
+        ]'::JSON
+      ),
+      ARRAY['table', 'mutations'],
+      array_to_json(ARRAY['
+        {
+          "column": {
+            "computeExpr": "b::STRING",
+            "id": 3,
+            "name": "b_1",
+            "nullable": true,
+            "type": { "family": "StringFamily", "oid": 25 }
+          },
+          "direction": "ADD",
+          "mutationId": 1,
+          "state": "DELETE_ONLY"
+        }'::JSON,
+        '{
+          "computedColumnSwap": { "inverseExpr": "b::INT8", "newColumnId": 3, "oldColumnId": 2 },
+          "direction": "ADD",
+          "mutationId": 1,
+          "state": "DELETE_ONLY"
+        }
+        '::JSON])
+    ) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t5" which has an ongoing column type change
+TRUNCATE TABLE t5;
+
+# Make sure that table cannot be truncated is there is a ongoing row level TTL
+# change.
+statement ok
+CREATE TABLE t6(a int primary key, b int);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't6';
+
+statement ok
+WITH to_json AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS d
+  FROM system.descriptor
+  WHERE id = $tbl_id
+),
+modified AS (
+  SELECT
+    id,
+    json_set(
+      json_set(
+        json_set(d, ARRAY['table', 'nextColumnId'], '4'),
+        ARRAY['table', 'families'],
+        '[
+          {
+            "columnIds": [ 1, 2, 3 ],
+            "columnNames": [ "a", "b", "crdb_internal_expiration" ],
+            "defaultColumnId": 2,
+            "name": "primary"
+          }
+        ]'::JSON
+      ),
+      ARRAY['table', 'mutations'],
+      array_to_json(ARRAY['
+        {
+          "column": {
+            "defaultExpr": "current_timestamp():::TIMESTAMPTZ",
+            "hidden": true,
+            "id": 3,
+            "name": "crdb_internal_expiration",
+            "onUpdateExpr": "current_timestamp():::TIMESTAMPTZ",
+            "type": { "family": "TimestampTZFamily", "oid": 1184 }
+          },
+          "direction": "ADD",
+          "mutationId": 1,
+          "state": "DELETE_ONLY"
+        }'::JSON,
+        '{
+          "direction": "ADD",
+          "modifyRowLevelTtl": {
+            "rowLevelTtl": { "durationExpr": "''00:10:00'':::INTERVAL" }
+          },
+          "mutationId": 1,
+          "state": "DELETE_ONLY"
+        }
+     '::JSON])
+    ) AS d
+  FROM to_json
+)
+SELECT crdb_internal.unsafe_upsert_descriptor( id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d), true)
+FROM modified;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t6" which has an ongoing row level TTL change
+TRUNCATE TABLE t6;
+
+statement ok
+USE test;
