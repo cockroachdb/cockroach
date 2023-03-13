@@ -1347,6 +1347,8 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 		r.status = execinfra.DrainRequested
+	} else if errors.Is(commErr, ErrPortalLimitHasBeenReached) {
+		r.status = execinfra.SwitchToAnotherPortal
 	} else {
 		// Set the error on the resultWriter to notify the consumer about
 		// it. Most clients don't care to differentiate between
@@ -1365,7 +1367,7 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 		// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead of
 		// changing the signature of AddRow, we have a sentinel error that
 		// is handled specially here.
-		if !errors.Is(commErr, ErrLimitedResultNotSupported) {
+		if !errors.Is(commErr, ErrLimitedResultNotSupported) && !errors.Is(commErr, ErrStmtNotSupportedForPausablePortal) {
 			r.commErr = commErr
 		}
 	}
@@ -1514,9 +1516,18 @@ var (
 			"please set sql.pgwire.multiple_active_portals.enabled to true. "+
 			"Note: this feature is in preview",
 	)
+	// ErrStmtNotSupportedForPausablePortal is returned when the user have set
+	// sql.pgwire.multiple_active_portals.enabled to true but set an unsupported
+	// statement for a portal.
+	ErrStmtNotSupportedForPausablePortal = unimplemented.NewWithIssue(
+		98911,
+		"the statement for a pausable portal must be a read-only SELECT query"+
+			" with no sub-queries or post-queries",
+	)
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
-	ErrLimitedResultClosed = errors.New("row count limit closed")
+	ErrLimitedResultClosed       = errors.New("row count limit closed")
+	ErrPortalLimitHasBeenReached = errors.New("limit has been reached")
 )
 
 // ProducerDone is part of the execinfra.RowReceiver interface.
