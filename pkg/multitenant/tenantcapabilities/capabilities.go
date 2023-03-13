@@ -13,7 +13,6 @@ package tenantcapabilities
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -96,25 +95,18 @@ func (u Update) String() string {
 	return fmt.Sprintf("update: %v", u.Entry)
 }
 
-// AllCapabilitiesString prints all capability values. This is different from
-// TenantCapabilities.String which only prints non-zero value fields.
-func AllCapabilitiesString(capabilities TenantCapabilities) string {
-	var builder strings.Builder
-	builder.WriteByte('{')
-	for i, capID := range CapabilityIDs {
-		if i > 0 {
-			builder.WriteByte(' ')
-		}
-		builder.WriteString(capID.String())
-		builder.WriteByte(':')
-		builder.WriteString(capabilities.Cap(capID).Get().String())
-	}
-	builder.WriteByte('}')
-	return builder.String()
+var defaultCaps TenantCapabilities
+
+// DefaultCapabilities returns the default state of capabilities.
+func DefaultCapabilities() TenantCapabilities {
+	return defaultCaps
 }
 
+// RegisterDefaultCapabilities is called from the tenantcapabilitiespb package.
+func RegisterDefaultCapabilities(caps TenantCapabilities) { defaultCaps = caps }
+
 func (u Entry) String() string {
-	return fmt.Sprintf("ten=%v cap=%v", u.TenantID, AllCapabilitiesString(u.TenantCapabilities))
+	return fmt.Sprintf("ten=%v cap=%v", u.TenantID, u.TenantCapabilities)
 }
 
 // CapabilityID represents a handle to a tenant capability.
