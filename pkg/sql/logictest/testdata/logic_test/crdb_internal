@@ -667,8 +667,11 @@ select crdb_internal.get_vmodule()
 query error pq: only users with the admin role are allowed to access the node runtime information
 select * from crdb_internal.node_runtime_info
 
-query error pq: only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 select * from crdb_internal.ranges
+
+query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+SHOW RANGES FROM TABLE foo
 
 query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
 select * from crdb_internal.gossip_nodes

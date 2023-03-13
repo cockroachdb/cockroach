@@ -3547,20 +3547,32 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		}
 		descs := all.OrderedDescriptors()
 
-		privCheckerFunc := func(desc catalog.Descriptor) bool {
+		privCheckerFunc := func(desc catalog.Descriptor) (bool, error) {
 			if hasAdmin {
-				return true
+				return true, nil
 			}
 
-			return p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) == nil
+			viewActOrViewActRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+			// Return if we have permission or encountered an error.
+			if viewActOrViewActRedact || err != nil {
+				return viewActOrViewActRedact, err
+			}
+			err = p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG)
+			return err == nil, err
 		}
 
-		hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
-			descriptorsByType(descs, privCheckerFunc)
-
-		// if the user has no ZONECONFIG privilege on any table/schema/database
+		hasPermission := false
+		for _, desc := range descs {
+			if ok, err := privCheckerFunc(desc); err != nil {
+				return nil, nil, err
+			} else if ok {
+				hasPermission = true
+				break
+			}
+		}
+		// if the user has no VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege on any table/schema/database
 		if !hasPermission {
-			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
+			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
 		}
 		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
