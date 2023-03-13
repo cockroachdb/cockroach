@@ -323,6 +323,8 @@ func (r *Registry) resumeJob(
 		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
 	}
 	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel); alreadyAdopted {
+		// Not needing the context after all. Avoid leaking resources.
+		cancel()
 		return nil
 	}
 
