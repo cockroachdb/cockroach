@@ -118,9 +118,28 @@ type preparedStatementsAccessor interface {
 	DeleteAll(ctx context.Context)
 }
 
+// PortalPausablity mark if the portal is pausable and the reason. This is
+// needed to give the correct error for usage of multiple active portals.
+type PortalPausablity int64
+
+const (
+	// PortalPausabilityDisabled is the default status of a portal when
+	// sql.pgwire.multiple_active_portals.enabled is false.
+	PortalPausabilityDisabled PortalPausablity = iota
+	// PausablePortal is set when sql.pgwire.multiple_active_portals.enabled is
+	// set to true and the underlying statement is a read-only SELECT query with
+	// no sub-queries or post-queries.
+	PausablePortal
+	// NotPausablePortalForUnsupportedStmt is used when the cluster setting
+	// sql.pgwire.multiple_active_portals.enabled is set to true, while we don't
+	// support underlying statement.
+	NotPausablePortalForUnsupportedStmt
+)
+
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
+	Name  string
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
 
@@ -131,6 +150,11 @@ type PreparedPortal struct {
 	// meaning that any additional attempts to execute it should return no
 	// rows.
 	exhausted bool
+
+	// portalPausablity is used to log the correct error message when user pause
+	// a portal.
+	// See comments for PortalPausablity for more details.
+	portalPausablity PortalPausablity
 }
 
 // makePreparedPortal creates a new PreparedPortal.
@@ -144,6 +168,7 @@ func (ex *connExecutor) makePreparedPortal(
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
+		Name:       name,
 		Stmt:       stmt,
 		Qargs:      qargs,
 		OutFormats: outFormats,
@@ -153,7 +178,7 @@ func (ex *connExecutor) makePreparedPortal(
 
 // accountForCopy updates the state to account for the copy of the
 // PreparedPortal (p is the copy).
-func (p PreparedPortal) accountForCopy(
+func (p *PreparedPortal) accountForCopy(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) error {
 	if err := prepStmtsNamespaceMemAcc.Grow(ctx, p.size(portalName)); err != nil {
@@ -165,13 +190,13 @@ func (p PreparedPortal) accountForCopy(
 }
 
 // close closes this portal.
-func (p PreparedPortal) close(
+func (p *PreparedPortal) close(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) {
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
 }
 
-func (p PreparedPortal) size(portalName string) int64 {
+func (p *PreparedPortal) size(portalName string) int64 {
 	return int64(uintptr(len(portalName)) + unsafe.Sizeof(p))
 }
