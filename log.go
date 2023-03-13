@@ -447,7 +447,10 @@ func (l *raftLog) matchTerm(i, term uint64) bool {
 }
 
 func (l *raftLog) maybeCommit(maxIndex, term uint64) bool {
-	if maxIndex > l.committed && l.zeroTermOnOutOfBounds(l.term(maxIndex)) == term {
+	// NB: term should never be 0 on a commit because the leader campaigns at
+	// least at term 1. But if it is 0 for some reason, we don't want to consider
+	// this a term match in case zeroTermOnOutOfBounds returns 0.
+	if maxIndex > l.committed && term != 0 && l.zeroTermOnOutOfBounds(l.term(maxIndex)) == term {
 		l.commitTo(maxIndex)
 		return true
 	}
