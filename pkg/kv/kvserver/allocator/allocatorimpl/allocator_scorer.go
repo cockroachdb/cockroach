@@ -218,7 +218,7 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 		"non io-overloaded stores, this is a superset of block_transfer_to",
 	"block_transfer_to",
 	map[int64]string{
-		int64(IOOverloadThresholdIgnore):         "ingore",
+		int64(IOOverloadThresholdIgnore):         "ignore",
 		int64(IOOverloadThresholdBlockTransfers): "block_transfer_to",
 		int64(IOOverloadThresholdShed):           "shed",
 	},
