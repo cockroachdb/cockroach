@@ -2025,19 +2025,20 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 
 	for _, in := range rows {
-		// system.jobs is part proper SQL columns, part protobuf, so we can't use the
-		// row struct directly.
-		inPayload, err := protoutil.Marshal(&jobspb.Payload{
+		rawPayload := &jobspb.Payload{
 			UsernameProto: username.RootUserName().EncodeProto(),
 			Details:       jobspb.WrapPayloadDetails(in.details),
-		})
+		}
+		// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+		// row struct directly.
+		inPayload, err := protoutil.Marshal(rawPayload)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
-			in.id, in.status, inPayload,
+			`INSERT INTO system.jobs (id, status, payload, job_type) VALUES ($1, $2, $3, $4)`,
+			in.id, in.status, inPayload, rawPayload.Type().String(),
 		)
 	}
 
