@@ -5,6 +5,7 @@ go_library(
     name = "oidcccl",
     srcs = [
         "authentication_oidc.go",
+        "claim_match.go",
         "settings.go",
         "state.go",
     ],
