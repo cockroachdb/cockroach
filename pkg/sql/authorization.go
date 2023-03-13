@@ -545,8 +545,10 @@ func MemberOfWithAdminOption(
 	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
 		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
 		singleflight.DoOpts{
-			Stop:               roleMembersCache.stopper,
-			InheritCancelation: false,
+			Stop: roleMembersCache.stopper,
+			// Inheriting the cancellation is not great, but there isn't much choice
+			// because the underlying goroutine uses the leader's transaction.
+			InheritCancelation: true,
 		},
 		func(ctx context.Context) (interface{}, error) {
 			return resolveMemberOfWithAdminOption(
