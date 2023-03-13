@@ -379,3 +379,32 @@ var ReplicaCPUTimeBuckets = []float64{
 	3079241055.330125, // 3.079241055s
 	4999999999.999990, // 4.999999999s
 }
+
+// ReplicaBatchRequestCountBuckets are prometheus histogram buckets suitable
+// for a histogram that records request counts to a replica. NOTE: The default
+// load based split threshold is 2500 Requests (>= BatchRequests) when QPS
+// splitting is enabled. We don't expect more than 2500 batch requests for a
+// replica in most clusters. However with CPU splits (default), this no longer
+// holds.
+var ReplicaBatchRequestCountBuckets = []float64{
+	1.000000,
+	1.664445,
+	2.770377,
+	4.611141,
+	7.674991,
+	12.774602,
+	21.262623,
+	35.390468,
+	58.905491,
+	98.044956,
+	163.190445,
+	271.621536,
+	452.099132,
+	752.494181,
+	1252.485246,
+	2084.692921,
+	3469.856899,
+	5775.386284,
+	9612.813352,
+	16000.000000,
+}

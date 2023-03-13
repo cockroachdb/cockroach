@@ -92,4 +92,9 @@ func TestHistogramBuckets(t *testing.T) {
 		verifyAndPrint(t, exp, ReplicaCPUTimeBuckets, LATENCY)
 	})
 
+	t.Run("ReplicaBatchRequestCountBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(1, 16e3, 20)
+		verifyAndPrint(t, exp, ReplicaBatchRequestCountBuckets, "")
+	})
+
 }
