@@ -41,6 +41,7 @@ type Allocator struct {
 	// allocation is denied by acc.
 	unlimitedAcc *mon.BoundAccount
 	factory      coldata.ColumnFactory
+	maxBatchSize int
 }
 
 // SelVectorSize returns the memory usage of the selection vector of the given
@@ -157,6 +158,19 @@ func NewLimitedAllocator(
 	}
 }
 
+// SetMaxBatchSize use this to get more or less than the coldata.BatchSize() default.
+func (a *Allocator) SetMaxBatchSize(siz int) {
+	a.maxBatchSize = siz
+}
+
+// SetMaxBatchSize use this to get more or less than the coldata.BatchSize() default.
+func (a *Allocator) getMaxBatchSize() int {
+	if a.maxBatchSize == 0 {
+		return coldata.BatchSize()
+	}
+	return a.maxBatchSize
+}
+
 // NewMemBatchWithFixedCapacity allocates a new in-memory coldata.Batch with the
 // given vector capacity.
 // Note: consider whether you want the dynamic batch size behavior (in which
@@ -216,13 +230,13 @@ func truncateToMemoryLimit(minDesiredCapacity int, maxBatchMemSize int64, typs [
 
 // growCapacity grows the capacity exponentially or up to minDesiredCapacity
 // (whichever is larger) without exceeding coldata.BatchSize().
-func growCapacity(oldCapacity int, minDesiredCapacity int) int {
+func growCapacity(oldCapacity int, minDesiredCapacity int, maxBatchSize int) int {
 	newCapacity := oldCapacity * 2
 	if newCapacity < minDesiredCapacity {
 		newCapacity = minDesiredCapacity
 	}
-	if newCapacity > coldata.BatchSize() {
-		newCapacity = coldata.BatchSize()
+	if newCapacity > maxBatchSize {
+		newCapacity = maxBatchSize
 	}
 	return newCapacity
 }
@@ -265,8 +279,8 @@ func (a *Allocator) resetMaybeReallocate(
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minDesiredCapacity %d", minDesiredCapacity))
 	} else if minDesiredCapacity == 0 {
 		minDesiredCapacity = 1
-	} else if minDesiredCapacity > coldata.BatchSize() {
-		minDesiredCapacity = coldata.BatchSize()
+	} else if minDesiredCapacity > a.getMaxBatchSize() {
+		minDesiredCapacity = a.getMaxBatchSize()
 	}
 	reallocated = true
 	if oldBatch == nil {
@@ -277,7 +291,7 @@ func (a *Allocator) resetMaybeReallocate(
 		var useOldBatch bool
 		// Avoid calculating the memory footprint if possible.
 		var oldBatchMemSize int64
-		if oldCapacity == coldata.BatchSize() {
+		if oldCapacity == a.getMaxBatchSize() {
 			// If old batch is already of the largest capacity, we will reuse
 			// it.
 			useOldBatch = true
@@ -285,7 +299,7 @@ func (a *Allocator) resetMaybeReallocate(
 			// Check that if we were to grow the capacity and allocate a new
 			// batch, the new batch would still not exceed the limit.
 			if estimatedMaxCapacity := truncateToMemoryLimit(
-				growCapacity(oldCapacity, minDesiredCapacity), maxBatchMemSize, typs,
+				growCapacity(oldCapacity, minDesiredCapacity, a.getMaxBatchSize()), maxBatchMemSize, typs,
 			); estimatedMaxCapacity < minDesiredCapacity {
 				// Reduce the ask according to the estimated maximum. Note that
 				// we do not set desiredCapacitySufficient to false since this
@@ -331,7 +345,7 @@ func (a *Allocator) resetMaybeReallocate(
 			newBatch = oldBatch
 		} else {
 			a.ReleaseMemory(oldBatchMemSize)
-			newCapacity := growCapacity(oldCapacity, minDesiredCapacity)
+			newCapacity := growCapacity(oldCapacity, minDesiredCapacity, a.getMaxBatchSize())
 			newCapacity = truncateToMemoryLimit(newCapacity, maxBatchMemSize, typs)
 			newBatch = a.NewMemBatchWithFixedCapacity(typs, newCapacity)
 		}
