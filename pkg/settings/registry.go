@@ -196,6 +196,7 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.locality_optimized_partitioned_index_scan.enabled":            {},
 	"sql.defaults.lock_timeout":                                                 {},
 	"sql.defaults.multiregion_placement_policy.enabled":                         {},
+	"sql.defaults.multiple_active_portals.enabled":                              {},
 	"sql.defaults.on_update_rehome_row.enabled":                                 {},
 	"sql.defaults.optimizer_use_histograms.enabled":                             {},
 	"sql.defaults.optimizer_use_multicol_stats.enabled":                         {},
