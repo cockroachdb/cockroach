@@ -1280,47 +1280,56 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
 func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
-	// During config initialization, NumNodes is required to be 3.
-	ports := make([]int, t.cfg.NumNodes)
-	for i := 0; i < len(ports); i++ {
-		port, err := getFreePort()
-		if err != nil {
-			t.Fatal(err)
+	// We have seen issues with ports being claimed for use (probably by a
+	// different test) after the call to getFreePort, so the cluster startup
+	// is in a retry loop to minimize the chance of hitting a transient issue.
+	err := retry.WithMaxAttempts(context.Background(), retry.Options{}, 3, func() error {
+		// During config initialization, NumNodes is required to be 3.
+		ports := make([]int, t.cfg.NumNodes)
+		for i := 0; i < len(ports); i++ {
+			port, err := getFreePort()
+			if err != nil {
+				return err
+			}
+			ports[i] = port
 		}
-		ports[i] = port
-	}
 
-	opts := []testserver.TestServerOpt{
-		testserver.ThreeNodeOpt(),
-		testserver.StoreOnDiskOpt(),
-		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
-		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
-		testserver.PollListenURLTimeoutOpt(120),
-		testserver.AddListenAddrPortOpt(ports[0]),
-		testserver.AddListenAddrPortOpt(ports[1]),
-		testserver.AddListenAddrPortOpt(ports[2]),
-	}
-	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		// If we're using a cockroach-short binary, that means it was locally
-		// built, so we need to opt-in to development upgrades.
-		opts = append(opts, testserver.EnvVarOpt([]string{
-			"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
-		}))
-	}
+		opts := []testserver.TestServerOpt{
+			testserver.ThreeNodeOpt(),
+			testserver.StoreOnDiskOpt(),
+			testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
+			testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
+			testserver.PollListenURLTimeoutOpt(120),
+			testserver.AddListenAddrPortOpt(ports[0]),
+			testserver.AddListenAddrPortOpt(ports[1]),
+			testserver.AddListenAddrPortOpt(ports[2]),
+		}
+		if strings.Contains(upgradeBinaryPath, "cockroach-short") {
+			// If we're using a cockroach-short binary, that means it was locally
+			// built, so we need to opt-in to development upgrades.
+			opts = append(opts, testserver.EnvVarOpt([]string{
+				"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
+			}))
+		}
 
-	ts, err := testserver.NewTestServer(opts...)
+		ts, err := testserver.NewTestServer(opts...)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < t.cfg.NumNodes; i++ {
+			// Wait for each node to be reachable.
+			if err := ts.WaitForInitFinishForNode(i); err != nil {
+				return err
+			}
+		}
+
+		t.testserverCluster = ts
+		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < t.cfg.NumNodes; i++ {
-		// Wait for each node to be reachable.
-		if err := ts.WaitForInitFinishForNode(i); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	t.testserverCluster = ts
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
 }
