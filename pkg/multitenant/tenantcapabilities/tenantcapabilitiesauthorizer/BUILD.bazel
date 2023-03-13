@@ -13,6 +13,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
@@ -29,10 +30,12 @@ go_test(
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

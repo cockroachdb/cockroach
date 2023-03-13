@@ -1,0 +1,53 @@
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
+
+# Disable the Authorizer.
+set-bool-cluster-setting name=tenant_capabilities.authorizer.enabled value=false
+----
+ok
+
+# Now that the Authorizer is disabled, all the checks that were previously
+# failing should continue to fail.
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+ok
+
+has-node-status-capability ten=10
+----
+ok
+
+has-tsdb-query-capability ten=10
+----
+ok
+
+# Enable the Authorizer again and ensure we start failing capability checks
+# again.
+set-bool-cluster-setting name=tenant_capabilities.authorizer.enabled value=true
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
