@@ -321,7 +321,7 @@ var (
 	metaAverageQueriesPerSecond = metric.Metadata{
 		Name:        "rebalancing.queriespersecond",
 		Help:        "Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.",
-		Measurement: "Keys/Sec",
+		Measurement: "Queries/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageWritesPerSecond = metric.Metadata{
