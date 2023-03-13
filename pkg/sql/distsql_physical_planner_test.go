@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1019,10 +1020,14 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				ranges: ranges,
 			}
 
+			nID := &base.NodeIDContainer{}
+			nID.Reset(tsp.nodes[gatewayNode-1].NodeID)
+
 			gw := gossip.MakeOptionalGossip(mockGossip)
 			dsp := DistSQLPlanner{
-				planVersion:          tc.planVersion,
-				st:                   cluster.MakeTestingClusterSettings(),
+				planVersion: tc.planVersion,
+				st: cluster.MakeTestingClusterSettingsWithVersions(
+					clusterversion.TestingBinaryMinSupportedVersion, clusterversion.TestingBinaryMinSupportedVersion, true),
 				gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
 				stopper:              stopper,
 				spanResolver:         tsp,
@@ -1037,7 +1042,8 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 						return true
 					},
 				},
-				codec: keys.SystemSQLCodec,
+				codec:      keys.SystemSQLCodec,
+				distSQLSrv: &distsql.ServerImpl{ServerConfig: execinfra.ServerConfig{NodeID: base.NewSQLIDContainerForNode(nID)}},
 			}
 
 			ctx := context.Background()
