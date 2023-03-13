@@ -255,6 +255,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			TestingKnobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				UpgradeManager: &upgradebase.TestingKnobs{
+					DontUseJobs: true,
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 						return []roachpb.Version{v1, v2}
 					},
