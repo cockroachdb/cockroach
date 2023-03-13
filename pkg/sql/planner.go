@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -201,6 +202,9 @@ type planner struct {
 	// home region is being enforced.
 	StmtNoConstantsWithHomeRegionEnforced string
 
+	// portal is set when the query is from a portal.
+	pausablePortal *PreparedPortal
+
 	instrumentation instrumentationHelper
 
 	// Contexts for different stages of planning and execution.
@@ -258,6 +262,24 @@ type planner struct {
 
 	// evalCatalogBuiltins is used as part of the eval.Context.
 	evalCatalogBuiltins evalcatalog.Builtins
+}
+
+// hasFlowForPausablePortal returns true if the planner is for re-executing a
+// portal. We reuse the flow stored in p.portal.pauseInfo.
+func (p *planner) hasFlowForPausablePortal() bool {
+	return p.pausablePortal != nil && p.pausablePortal.pauseInfo != nil && p.pausablePortal.pauseInfo.flow != nil
+}
+
+// resumeFlowForPausablePortal is called when re-executing a portal. We reuse
+// the flow with a new receiver, without re-generating the physical plan.
+func (p *planner) resumeFlowForPausablePortal(ctx context.Context, recv *DistSQLReceiver) error {
+	if !p.hasFlowForPausablePortal() {
+		return errors.AssertionFailedf("no flow found for pausable portal")
+	}
+	recv.discardRows = p.instrumentation.ShouldDiscardRows()
+	recv.outputTypes = p.pausablePortal.pauseInfo.outputTypes
+	p.pausablePortal.pauseInfo.flow.Resume(ctx, recv)
+	return recv.commErr
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -848,6 +870,7 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
+	p.pausablePortal = nil
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.

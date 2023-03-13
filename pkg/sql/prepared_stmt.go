@@ -15,12 +15,14 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -180,6 +182,22 @@ func (ex *connExecutor) makePreparedPortal(
 		Qargs:      qargs,
 		OutFormats: outFormats,
 	}
+	// TODO(janexing): maybe we should also add telemetry for the stmt that the
+	// portal hooks on.
+	enableMultipleActivePortals.SetOnChange(&ex.server.cfg.Settings.SV, func(ctx context.Context) {
+		telemetry.Inc(sqltelemetry.MultipleActivePortalCounter)
+	})
+
+	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
+		if tree.IsReadOnly(stmt.AST) {
+			portal.pauseInfo = &portalPauseInfo{queryStats: &topLevelQueryStats{}}
+			portal.portalPausablity = PausablePortal
+		} else {
+			// We have set sql.defaults.multiple_active_portals.enabled to true, but
+			// we don't support the underlying query for a pausable portal.
+			portal.portalPausablity = NotPausablePortalForUnsupportedStmt
+		}
+	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }
 
@@ -248,6 +266,7 @@ type instrumentationHelperWrapper struct {
 // the portal, execute any other statement, and come back to re-execute it or
 // close it.
 type portalPauseInfo struct {
+	queryStats *topLevelQueryStats
 	// sp stores the tracing span of the underlying statement. It is closed when
 	// the portal finishes.
 	sp *tracing.Span
