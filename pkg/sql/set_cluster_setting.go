@@ -63,6 +63,14 @@ type setClusterSettingNode struct {
 	value tree.TypedExpr
 }
 
+var modifyClusterSettingAppliesToAll = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.modify_cluster_setting_applies_to_all.enabled",
+	"a bool which indicates whether MODIFYCLUSTERSETTING is able to set all cluster settings "+
+		"or only settings with the sql.defaults prefix",
+	true,
+).WithPublic()
+
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
 
 	// First check system privileges.
@@ -95,10 +103,22 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	}
 
 	// The "set" action requires MODIFYCLUSTERSETTING.
-	if action == "set" && !hasModify {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with the %s privilege are allowed to %s cluster setting '%s'",
-			privilege.MODIFYCLUSTERSETTING, action, name)
+	if action == "set" {
+		isSqlSetting := strings.HasPrefix(name, "sql.defaults")
+		modifyClusterSettingAll := modifyClusterSettingAppliesToAll.Get(&p.ExecCfg().Settings.SV)
+		isAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasModify {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the %s privilege are allowed to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, action, name)
+		} else if !isAdmin && !modifyClusterSettingAll && !isSqlSetting {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"users with the %s privilege need the cluster setting %s to be set to true to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, modifyClusterSettingAppliesToAll.Key(), action, name)
+		}
 	}
 
 	if !hasView {
