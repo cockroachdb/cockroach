@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	pb "go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -4703,72 +4705,52 @@ func TestFastLogRejection(t *testing.T) {
 		},
 	}
 
-	for i, test := range tests {
+	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			s1 := NewMemoryStorage()
 			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
 			s1.Append(test.leaderLog)
+			last := test.leaderLog[len(test.leaderLog)-1]
+			s1.SetHardState(pb.HardState{
+				Term:   last.Term - 1,
+				Commit: last.Index,
+			})
+			n1 := newTestRaft(1, 10, 1, s1)
+			n1.becomeCandidate() // bumps Term to last.Term
+			n1.becomeLeader()
+
 			s2 := NewMemoryStorage()
 			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
 			s2.Append(test.followerLog)
-
-			n1 := newTestRaft(1, 10, 1, s1)
+			s2.SetHardState(pb.HardState{
+				Term:   last.Term,
+				Vote:   1,
+				Commit: 0,
+			})
 			n2 := newTestRaft(2, 10, 1, s2)
 
-			n1.becomeCandidate()
-			n1.becomeLeader()
-
-			n2.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHeartbeat})
-
+			require.NoError(t, n2.Step(pb.Message{From: 1, To: 2, Type: pb.MsgHeartbeat}))
 			msgs := n2.readMessages()
-			if len(msgs) != 1 {
-				t.Errorf("can't read 1 message from peer 2")
-			}
-			if msgs[0].Type != pb.MsgHeartbeatResp {
-				t.Errorf("can't read heartbeat response from peer 2")
-			}
-			if n1.Step(msgs[0]) != nil {
-				t.Errorf("peer 1 step heartbeat response fail")
-			}
+			require.Len(t, msgs, 1, "can't read 1 message from peer 2")
+			require.Equal(t, pb.MsgHeartbeatResp, msgs[0].Type)
 
+			require.NoError(t, n1.Step(msgs[0]))
 			msgs = n1.readMessages()
-			if len(msgs) != 1 {
-				t.Errorf("can't read 1 message from peer 1")
-			}
-			if msgs[0].Type != pb.MsgApp {
-				t.Errorf("can't read append from peer 1")
-			}
+			require.Len(t, msgs, 1, "can't read 1 message from peer 1")
+			require.Equal(t, pb.MsgApp, msgs[0].Type)
 
-			if n2.Step(msgs[0]) != nil {
-				t.Errorf("peer 2 step append fail")
-			}
+			require.NoError(t, n2.Step(msgs[0]), "peer 2 step append fail")
 			msgs = n2.readMessages()
-			if len(msgs) != 1 {
-				t.Errorf("can't read 1 message from peer 2")
-			}
-			if msgs[0].Type != pb.MsgAppResp {
-				t.Errorf("can't read append response from peer 2")
-			}
-			if !msgs[0].Reject {
-				t.Errorf("expected rejected append response from peer 2")
-			}
-			if msgs[0].LogTerm != test.rejectHintTerm {
-				t.Fatalf("#%d expected hint log term = %d, but got %d", i, test.rejectHintTerm, msgs[0].LogTerm)
-			}
-			if msgs[0].RejectHint != test.rejectHintIndex {
-				t.Fatalf("#%d expected hint index = %d, but got %d", i, test.rejectHintIndex, msgs[0].RejectHint)
-			}
+			require.Len(t, msgs, 1, "can't read 1 message from peer 2")
+			require.Equal(t, pb.MsgAppResp, msgs[0].Type)
+			require.True(t, msgs[0].Reject, "expected rejected append response from peer 2")
+			require.Equal(t, test.rejectHintTerm, msgs[0].LogTerm, "hint log term mismatch")
+			require.Equal(t, test.rejectHintIndex, msgs[0].RejectHint, "hint log index mismatch")
 
-			if n1.Step(msgs[0]) != nil {
-				t.Errorf("peer 1 step append fail")
-			}
+			require.NoError(t, n1.Step(msgs[0]), "peer 1 step append fail")
 			msgs = n1.readMessages()
-			if msgs[0].LogTerm != test.nextAppendTerm {
-				t.Fatalf("#%d expected log term = %d, but got %d", i, test.nextAppendTerm, msgs[0].LogTerm)
-			}
-			if msgs[0].Index != test.nextAppendIndex {
-				t.Fatalf("#%d expected index = %d, but got %d", i, test.nextAppendIndex, msgs[0].Index)
-			}
+			require.Equal(t, test.nextAppendTerm, msgs[0].LogTerm)
+			require.Equal(t, test.nextAppendIndex, msgs[0].Index)
 		})
 	}
 }
