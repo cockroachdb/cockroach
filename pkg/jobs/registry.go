@@ -1046,8 +1046,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case <-lc.updated:
 				lc.onUpdate()
 			case <-r.stopper.ShouldQuiesce():
-				log.Warningf(ctx, "canceling all adopted jobs due to stopper quiescing")
-				r.cancelAllAdoptedJobs()
+				// Note: the jobs are cancelled by virtue of being run with a
+				// WithCancelOnQuesce context. See the resumeJob() function.
 				return
 			case <-lc.timer.C:
 				lc.timer.Read = true

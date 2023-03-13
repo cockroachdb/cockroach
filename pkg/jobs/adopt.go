@@ -329,10 +329,13 @@ func (r *Registry) resumeJob(
 	}
 
 	r.metrics.ResumedJobs.Inc(1)
-	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
+	if err := r.stopper.RunAsyncTask(resumeCtx, job.taskName(), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
-		_ = r.runJob(resumeCtx, resumer, job, status, job.taskName())
+		var cleanup func()
+		ctx, cleanup = r.stopper.WithCancelOnQuiesce(ctx)
+		defer cleanup()
+		_ = r.runJob(ctx, resumer, job, status, job.taskName())
 	}); err != nil {
 		r.unregister(jobID)
 		// Also avoid leaking a goroutine in this case.
