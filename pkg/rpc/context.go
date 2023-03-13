@@ -2159,7 +2159,7 @@ func (p *Peer) conn() (*Connection, bool) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.closed {
+	if p.mu.closed || p.mu.decommissioned {
 		return nil, false
 	}
 	return p.c, p.c != nil
