@@ -3551,16 +3551,19 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			if hasAdmin {
 				return true
 			}
-
+			viewActOrViewActRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+			if viewActOrViewActRedact && err == nil {
+				return true
+			}
 			return p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) == nil
 		}
 
 		hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
 			descriptorsByType(descs, privCheckerFunc)
 
-		// if the user has no ZONECONFIG privilege on any table/schema/database
+		// if the user has no VIEWACTIVITY or ZONECONFIG privilege on any table/schema/database
 		if !hasPermission {
-			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
+			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the VIEWACTIVITY or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
 		}
 		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
