@@ -3427,7 +3427,7 @@ FROM crdb_internal.ranges_no_leases
 // table). It also returns maps of table descriptor IDs to the parent schema ID
 // and the parent (database) descriptor ID, to aid in necessary lookups.
 func descriptorsByType(
-	descs []catalog.Descriptor, privCheckerFunc func(desc catalog.Descriptor) bool,
+	descs []catalog.Descriptor, privCheckerFunc func(desc catalog.Descriptor) (bool, error),
 ) (
 	hasPermission bool,
 	dbNames map[uint32]string,
@@ -3436,6 +3436,7 @@ func descriptorsByType(
 	indexNames map[uint32]map[uint32]string,
 	schemaParents map[uint32]uint32,
 	parents map[uint32]uint32,
+	err error,
 ) {
 	// TODO(knz): maybe this could use internalLookupCtx.
 	dbNames = make(map[uint32]string)
@@ -3445,9 +3446,12 @@ func descriptorsByType(
 	schemaParents = make(map[uint32]uint32)
 	parents = make(map[uint32]uint32)
 	hasPermission = false
+	var ok bool
 	for _, desc := range descs {
 		id := uint32(desc.GetID())
-		if !privCheckerFunc(desc) {
+		if ok, err = privCheckerFunc(desc); err != nil {
+			return false, nil, nil, nil, nil, nil, nil, err
+		} else if !ok {
 			continue
 		}
 		hasPermission = true
@@ -3467,7 +3471,7 @@ func descriptorsByType(
 		}
 	}
 
-	return hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents
+	return hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents, nil
 }
 
 // lookupNamesByKey is a utility function that, given a key, utilizes the maps
@@ -3547,20 +3551,36 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		}
 		descs := all.OrderedDescriptors()
 
-		privCheckerFunc := func(desc catalog.Descriptor) bool {
+		privCheckerFunc := func(desc catalog.Descriptor) (bool, error) {
 			if hasAdmin {
-				return true
+				return true, nil
 			}
 
-			return p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) == nil
+			viewActOrViewActRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+			// Return if we have permission or encountered an error.
+			if viewActOrViewActRedact || err != nil {
+				return viewActOrViewActRedact, err
+			}
+			err = p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG)
+			// If the error is explicitly for insufficient privilege, return false but
+			// no error.
+			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+				return false, nil
+			}
+			// Return if successful or had an error (outside of insufficient privilege).
+			return err == nil, err
 		}
 
-		hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
+		hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents, err :=
 			descriptorsByType(descs, privCheckerFunc)
 
-		// if the user has no ZONECONFIG privilege on any table/schema/database
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// if the user has no VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege on any table/schema/database
 		if !hasPermission {
-			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
+			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
 		}
 		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
@@ -6276,19 +6296,32 @@ func genClusterLocksGenerator(
 		}
 		descs := all.OrderedDescriptors()
 
-		privCheckerFunc := func(desc catalog.Descriptor) bool {
+		privCheckerFunc := func(desc catalog.Descriptor) (bool, error) {
 			if hasAdmin {
-				return true
+				return true, nil
 			}
-			return p.CheckAnyPrivilege(ctx, desc) == nil
+			err = p.CheckAnyPrivilege(ctx, desc)
+			// If the error is explicitly for insufficient privilege, return false but
+			// no error.
+			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+				return false, nil
+			}
+			// Return if successful or had an error (outside of insufficient privilege).
+			return err == nil, err
 		}
 
-		_, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
+		_, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents, err :=
 			descriptorsByType(descs, privCheckerFunc)
+
+		if err != nil {
+			return nil, nil, err
+		}
 
 		var spansToQuery roachpb.Spans
 		for _, desc := range descs {
-			if !privCheckerFunc(desc) {
+			if ok, err := privCheckerFunc(desc); err != nil {
+				return nil, nil, err
+			} else if !ok {
 				continue
 			}
 			switch desc := desc.(type) {
