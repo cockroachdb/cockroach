@@ -1019,6 +1019,9 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				ranges: ranges,
 			}
 
+			nID := &base.NodeIDContainer{}
+			nID.Reset(tsp.nodes[gatewayNode-1].NodeID)
+
 			gw := gossip.MakeOptionalGossip(mockGossip)
 			dsp := DistSQLPlanner{
 				planVersion:          tc.planVersion,
@@ -1037,7 +1040,8 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 						return true
 					},
 				},
-				codec: keys.SystemSQLCodec,
+				codec:      keys.SystemSQLCodec,
+				distSQLSrv: &distsql.ServerImpl{ServerConfig: execinfra.ServerConfig{NodeID: base.NewSQLIDContainerForNode(nID)}},
 			}
 
 			ctx := context.Background()
