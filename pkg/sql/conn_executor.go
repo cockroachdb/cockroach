@@ -1975,6 +1975,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				0,  /* limit */
 				"", /* portalName */
 				ex.implicitTxn(),
+				false, /* forPausablePortal */
 			)
 			res = stmtRes
 
@@ -2057,6 +2058,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				tcmd.Limit,
 				portalName,
 				ex.implicitTxn(),
+				portal.isPausable(),
 			)
 			res = stmtRes
 

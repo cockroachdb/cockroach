@@ -1345,6 +1345,8 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 		r.status = execinfra.DrainRequested
+	} else if errors.Is(commErr, ErrPortalLimitHasBeenReached) {
+		r.status = execinfra.SwitchToAnotherPortal
 	} else {
 		// Set the error on the resultWriter to notify the consumer about
 		// it. Most clients don't care to differentiate between
@@ -1514,7 +1516,8 @@ var (
 	)
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
-	ErrLimitedResultClosed = errors.New("row count limit closed")
+	ErrLimitedResultClosed       = errors.New("row count limit closed")
+	ErrPortalLimitHasBeenReached = errors.New("limit has been reached")
 )
 
 // ProducerDone is part of the execinfra.RowReceiver interface.
