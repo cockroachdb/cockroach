@@ -96,5 +96,8 @@ func (c *ReplayProtectionFilterWrapper) run(args kvserverbase.FilterArgs) *kvpb.
 	c.Unlock()
 
 	res := future.WaitForResult(args.Ctx)
+	if res.Err != nil {
+		return kvpb.NewError(res.Err)
+	}
 	return shallowCloneErrorWithTxn(res.Val.(*kvpb.Error))
 }
