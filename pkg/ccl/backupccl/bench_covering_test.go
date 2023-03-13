@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -90,11 +91,29 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 
 											spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 
+											checkpointFrontier, err := loadCheckpointFrontier(backups[numBackups-1].Spans, []jobspb.RestoreProgress_FrontierEntry{})
+											require.NoError(b, err)
+
+											filter, err := makeSpanCoveringFilter(
+												checkpointFrontier,
+												nil,
+												introducedSpanFrontier,
+												0,
+												false)
+											require.NoError(b, err)
+
 											g := ctxgroup.WithContext(ctx)
 											g.GoCtx(func(ctx context.Context) error {
 												defer close(spanCh)
-												return generateAndSendImportSpans(ctx, backups[numBackups-1].Spans, backups,
-													layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier, nil, 0, spanCh, false)
+												return generateAndSendImportSpans(
+													ctx,
+													backups[numBackups-1].Spans,
+													backups,
+													layerToBackupManifestFileIterFactory,
+													nil,
+													filter,
+													false,
+													spanCh)
 											})
 
 											var cov []execinfrapb.RestoreSpanEntry

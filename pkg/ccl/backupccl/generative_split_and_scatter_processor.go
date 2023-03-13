@@ -281,28 +281,36 @@ func runGenerativeSplitAndScatter(
 		if err != nil {
 			return err
 		}
-
 		introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, spec.EndTime)
 		if err != nil {
 			return err
 		}
-
 		backupLocalityMap, err := makeBackupLocalityMap(spec.BackupLocalityInfo, spec.User())
 		if err != nil {
 			return err
 		}
-
+		checkpointFrontier, err := loadCheckpointFrontier(spec.Spans, spec.CheckpointedSpans)
+		if err != nil {
+			return err
+		}
+		filter, err := makeSpanCoveringFilter(
+			checkpointFrontier,
+			spec.HighWater,
+			introducedSpanFrontier,
+			spec.TargetSize,
+			spec.UseFrontierCheckpointing)
+		if err != nil {
+			return err
+		}
 		return generateAndSendImportSpans(
 			ctx,
 			spec.Spans,
 			backups,
 			layerToFileIterFactory,
 			backupLocalityMap,
-			introducedSpanFrontier,
-			spec.HighWater,
-			spec.TargetSize,
-			restoreSpanEntriesCh,
+			filter,
 			spec.UseSimpleImportSpans,
+			restoreSpanEntriesCh,
 		)
 	})
 
