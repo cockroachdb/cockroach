@@ -2066,7 +2066,7 @@ func (s *Store) WaitForInit() {
 // GetConfReader exposes access to a configuration reader.
 func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
-		return nil, errSysCfgUnavailable
+		return nil, errSpanConfigsUnavailable
 	}
 	if s.cfg.TestingKnobs.ConfReaderInterceptor != nil {
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
@@ -2078,11 +2078,31 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
-			return nil, errSysCfgUnavailable
+			return nil, errSpanConfigsUnavailable
 		}
 		return sysCfg, nil
 	}
 
+	if s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+		// This code path is used in various internal queues. It's important to
+		// surface explicitly that we don't have any span configs instead of
+		// falling back to the statically configured one.
+		// - enabling range merges would be extremely dangerous -- we could
+		//   collapse everything into a single range.
+		// - enabling the split queue would mean applying the statically
+		//   configured range sizes in the fallback span config. For clusters
+		//   configured with larger range sizes, this could lead to a burst of
+		//   splitting post node-restart.
+		// - enabling the MVCC GC queue would mean applying the statically
+		//   configured default GC TTL and ignoring any set protected
+		//   timestamps. The latter is best-effort protection, but for clusters
+		//   configured with GC TTL greater than the default, post node-restart
+		//   it could lead to a burst of MVCC GC activity and AOST queries
+		//   failing to find expected data.
+		// - enabling the replicate queue would mean replicating towards the
+		//   statically defined 3x replication in the fallback span config.
+		return nil, errSpanConfigsUnavailable
+	}
 	return s.cfg.SpanConfigSubscriber, nil
 }
 
@@ -3281,9 +3301,6 @@ func (s *Store) AllocatorCheckRange(
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
 	confReader, err := s.GetConfReader(ctx)
-	if err == nil {
-		err = s.WaitForSpanConfigSubscription(ctx)
-	}
 	if err != nil {
 		log.Eventf(ctx, "span configs unavailable: %s", err)
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err

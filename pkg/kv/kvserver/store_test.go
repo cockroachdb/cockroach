@@ -3462,7 +3462,7 @@ func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
 		} else {
 			// Expect error looking up spanConfig if we can't use the system config span,
 			// as the spanconfig.KVSubscriber infrastructure is not initialized.
-			require.ErrorIs(t, err, errSysCfgUnavailable)
+			require.ErrorIs(t, err, errSpanConfigsUnavailable)
 			require.Equal(t, allocatorimpl.AllocatorNoop, action)
 		}
 	})

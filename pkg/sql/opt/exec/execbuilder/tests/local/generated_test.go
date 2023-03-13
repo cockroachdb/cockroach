@@ -511,6 +511,13 @@ func TestExecBuild_sql_fn(
 	runExecBuildLogicTest(t, "sql_fn")
 }
 
+func TestExecBuild_sql_statistics_persisted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "sql_statistics_persisted")
+}
+
 func TestExecBuild_srfs(
 	t *testing.T,
 ) {

@@ -795,6 +795,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqltestutils",

@@ -50,7 +50,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			// leaseholder. Operating on a replica without holding the lease is the
 			// reason Raft snapshots cannot be performed by the replicateQueue.
 			needsLease:           false,
-			needsSystemConfig:    false,
+			needsSpanConfigs:     false,
 			acceptsUnsplitRanges: true,
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(recoverySnapshotRate, rebalanceSnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,

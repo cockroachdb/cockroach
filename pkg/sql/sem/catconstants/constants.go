@@ -159,6 +159,7 @@ const (
 	CrdbInternalSessionTraceTableID
 	CrdbInternalSessionVariablesTableID
 	CrdbInternalStmtStatsTableID
+	CrdbInternalStmtStatsPersistedTableID
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
 	CrdbInternalTableSpansTableID
@@ -166,6 +167,7 @@ const (
 	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTransactionStatsTableID
 	CrdbInternalTxnStatsTableID
+	CrdbInternalTxnStatsPersistedTableID
 	CrdbInternalZonesTableID
 	CrdbInternalInvalidDescriptorsTableID
 	CrdbInternalClusterDatabasePrivilegesTableID
