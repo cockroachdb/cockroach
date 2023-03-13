@@ -320,7 +320,6 @@ func TestBatchTimeout(t *testing.T) {
 	const timeout = 5 * time.Millisecond
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	sc := make(chanSender)
 	testCases := []struct {
 		requestTimeout  time.Duration
 		maxTimeout      time.Duration
@@ -350,6 +349,7 @@ func TestBatchTimeout(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("With%sRequestTimeout%sMaxTimeout", tc.requestTimeout, tc.maxTimeout),
 			func(t *testing.T) {
+				sc := make(chanSender)
 				b := New(Config{
 					// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
 					// immediately lead to a batch being sent.
@@ -387,8 +387,9 @@ func TestBatchTimeout(t *testing.T) {
 		)
 	}
 	t.Run("WithTimeoutAndPagination", func(t *testing.T) {
-		maxTimeout := 20 * time.Millisecond
+		maxTimeout := 45 * time.Second
 		firstAndSecondSendTimeDiff := 10 * time.Millisecond
+		sc := make(chanSender)
 		b := New(Config{
 			// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
 			// immediately lead to a batch being sent.
@@ -398,13 +399,14 @@ func TestBatchTimeout(t *testing.T) {
 			MaxTimeout:      maxTimeout,
 		})
 		// This test will simulate multiple calls to Send (due to pagination) and
-		// test that the MaxTimeout set is a timeout per batch rather than a
-		// timeout per request.
+		// test that the MaxTimeout set is a timeout per batch rather than a timeout
+		// per request. MaxTimeout is set to a large value, so the timeout should
+		// never actually be hit. This means that the subtest does not face the same
+		// timing issues that the subtests above do.
+		ctx := context.Background()
 		respChan := make(chan Response, 1)
-		if err := b.SendWithChan(context.Background(), respChan, 1, &kvpb.GetRequest{}); err != nil {
-			testutils.IsError(err, context.DeadlineExceeded.Error())
-			return
-		}
+		err := b.SendWithChan(ctx, respChan, 1, &kvpb.GetRequest{})
+		require.NoError(t, err)
 		// First call to Send.
 		s := <-sc
 		time.Sleep(firstAndSecondSendTimeDiff)
@@ -432,6 +434,7 @@ func TestBatchTimeout(t *testing.T) {
 		s.respChan <- batchResp{}
 	})
 	t.Run("NoTimeout", func(t *testing.T) {
+		sc := make(chanSender)
 		b := New(Config{
 			// MaxMsgsPerBatch of 2 is chosen so that the second call to Send will
 			// immediately lead to a batch being sent.
