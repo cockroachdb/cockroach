@@ -734,6 +734,14 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var enableMultipleActivePortals = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.defaults.multiple_active_portals.enabled",
+	"if true, named portals with read-only query can be executed in "+
+		"interleaving manner, but with local execution plan",
+	false,
+)
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
