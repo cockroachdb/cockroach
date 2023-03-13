@@ -150,6 +150,7 @@ func (ex *connExecutor) makePreparedPortal(
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
+	isInternal bool,
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
@@ -162,7 +163,7 @@ func (ex *connExecutor) makePreparedPortal(
 		// TODO(janexing): maybe we should also add telemetry for the stmt that the
 		// portal hooks on.
 		telemetry.Inc(sqltelemetry.MultipleActivePortalCounter)
-		if tree.IsReadOnly(stmt.AST) {
+		if tree.IsReadOnly(stmt.AST) && !isInternal {
 			portal.pauseInfo = &portalPauseInfo{}
 		}
 	}

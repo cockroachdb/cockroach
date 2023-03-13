@@ -937,7 +937,7 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums, isInternal: true}); err != nil {
 			return nil, err
 		}
 
