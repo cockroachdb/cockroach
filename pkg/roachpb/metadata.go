@@ -612,6 +612,17 @@ func (l Locality) Matches(filter Locality) (bool, Tier) {
 	return true, Tier{}
 }
 
+// SharedPrefix returns the number of this locality's tiers which match those
+// the passed locality.
+func (l Locality) SharedPrefix(other Locality) int {
+	for i := range l.Tiers {
+		if i >= len(other.Tiers) || l.Tiers[i] != other.Tiers[i] {
+			return i
+		}
+	}
+	return len(l.Tiers)
+}
+
 // Type returns the underlying type in string form. This is part of pflag's
 // value interface.
 func (Locality) Type() string {
