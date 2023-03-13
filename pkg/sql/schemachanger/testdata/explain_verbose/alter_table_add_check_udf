@@ -11,55 +11,21 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │       │ ABSENT → WRITE_ONLY
-│       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
-│       │
-│       └── • 2 Mutation operations
-│           │
-│           ├── • AddCheckConstraint
-│           │     CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
-│           │     ColumnIDs:
-│           │     - 2
-│           │     ConstraintID: 2
-│           │     TableID: 104
-│           │     Validity: 2
-│           │
-│           └── • AddTableConstraintBackReferencesInFunctions
-│                 BackReferencedConstraintID: 2
-│                 BackReferencedTableID: 104
-│                 FunctionIDs:
-│                 - 105
-│
-├── • PreCommitPhase
-│   │
-│   ├── • Stage 1 of 2 in PreCommitPhase
-│   │   │
-│   │   ├── • 1 element transitioning toward PUBLIC
-│   │   │   │
-│   │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│   │   │         WRITE_ONLY → ABSENT
-│   │   │
-│   │   └── • 1 Mutation operation
-│   │       │
-│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
-│   │             {}
-│   │
-│   └── • Stage 2 of 2 in PreCommitPhase
-│       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │       │ ABSENT → WRITE_ONLY
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │             rule: "simple constraint visible before name"
 │       │
-│       └── • 5 Mutation operations
+│       └── • 3 Mutation operations
 │           │
 │           ├── • AddCheckConstraint
 │           │     CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
@@ -74,6 +40,65 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │           │     BackReferencedTableID: 104
 │           │     FunctionIDs:
 │           │     - 105
+│           │
+│           └── • SetConstraintName
+│                 ConstraintID: 2
+│                 Name: check_b
+│                 TableID: 104
+│
+├── • PreCommitPhase
+│   │
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 2 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│   │   │   │     WRITE_ONLY → ABSENT
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│   │   │         PUBLIC → ABSENT
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │ ABSENT → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │             rule: "simple constraint visible before name"
+│       │
+│       └── • 6 Mutation operations
+│           │
+│           ├── • AddCheckConstraint
+│           │     CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
+│           │     ColumnIDs:
+│           │     - 2
+│           │     ConstraintID: 2
+│           │     TableID: 104
+│           │     Validity: 2
+│           │
+│           ├── • AddTableConstraintBackReferencesInFunctions
+│           │     BackReferencedConstraintID: 2
+│           │     BackReferencedTableID: 104
+│           │     FunctionIDs:
+│           │     - 105
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: check_b
+│           │     TableID: 104
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -117,26 +142,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
     │
     └── • Stage 2 of 2 in PostCommitPhase
         │
-        ├── • 2 elements transitioning toward PUBLIC
+        ├── • 1 element transitioning toward PUBLIC
         │   │
-        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │   │   │ VALIDATED → PUBLIC
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
-        │   │   │
-        │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before complex constraint"
-        │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
-        │         ABSENT → PUBLIC
+        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │ VALIDATED → PUBLIC
+        │       │
+        │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
-        └── • 5 Mutation operations
-            │
-            ├── • SetConstraintName
-            │     ConstraintID: 2
-            │     Name: check_b
-            │     TableID: 104
+        └── • 4 Mutation operations
             │
             ├── • MakeValidatedCheckConstraintPublic
             │     ConstraintID: 2

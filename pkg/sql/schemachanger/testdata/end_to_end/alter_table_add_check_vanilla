@@ -4,6 +4,24 @@ CREATE TABLE t (i INT PRIMARY KEY)
 ...
 +object {100 101 t} -> 104
 
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i) VALUES($stageKey);
+INSERT INTO t (i) VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i) VALUES(-1)
+----
+pq: failed to satisfy CHECK constraint .*
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2) FROM t;
+----
+true
+
 test
 ALTER TABLE t ADD CHECK (i > 0)
 ---
@@ -21,7 +39,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 1 MutationType op
+## StatementPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -29,7 +47,7 @@ upsert descriptor #104
   +    - 1
   +    constraintId: 2
   +    expr: i > 0:::INT8
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_i
   +    validity: Validating
      columns:
      - id: 1
@@ -67,7 +85,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -75,7 +93,7 @@ upsert descriptor #104
   +    - 1
   +    constraintId: 2
   +    expr: i > 0:::INT8
-  +    name: crdb_internal_constraint_2_name_placeholder
+  +    name: check_i
   +    validity: Validating
      columns:
      - id: 1
@@ -137,17 +155,15 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #104
+validate CHECK constraint check_i in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 4 MutationType ops
+## PostCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
   ...
-       constraintId: 2
        expr: i > 0:::INT8
-  -    name: crdb_internal_constraint_2_name_placeholder
+       name: check_i
   -    validity: Validating
-  +    name: check_i
      columns:
      - id: 1
   ...

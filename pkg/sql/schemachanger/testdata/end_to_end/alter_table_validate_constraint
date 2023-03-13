@@ -13,7 +13,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.validate_constraint
-## StatementPhase stage 1 of 1 with 3 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
   ...
      - columnIds:
@@ -21,9 +21,8 @@ upsert descriptor #104
   -    constraintId: 2
   +    constraintId: 3
        expr: i > 0:::INT8
-  -    name: check_i
+       name: check_i
   -    validity: Unvalidated
-  +    name: crdb_internal_constraint_3_name_placeholder
   +    validity: Validating
      columns:
      - id: 1
@@ -61,7 +60,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
      - columnIds:
@@ -69,9 +68,8 @@ upsert descriptor #104
   -    constraintId: 2
   +    constraintId: 3
        expr: i > 0:::INT8
-  -    name: check_i
+       name: check_i
   -    validity: Unvalidated
-  +    name: crdb_internal_constraint_3_name_placeholder
   +    validity: Validating
      columns:
      - id: 1
@@ -134,17 +132,15 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate CHECK constraint crdb_internal_constraint_3_name_placeholder in table #104
+validate CHECK constraint check_i in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 4 MutationType ops
+## PostCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
   ...
-       constraintId: 3
        expr: i > 0:::INT8
-  -    name: crdb_internal_constraint_3_name_placeholder
+       name: check_i
   -    validity: Validating
-  +    name: check_i
      columns:
      - id: 1
   ...
