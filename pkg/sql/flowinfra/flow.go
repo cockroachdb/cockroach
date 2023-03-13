@@ -88,12 +88,26 @@ type Flow interface {
 	// It needs to be called after Setup() and before Start/Run.
 	SetTxn(*kv.Txn)
 
+	// SetNewRowSyncFlowConsumer set the new SetNewRowSyncFlowConsumer for a flow.
+	// This is called when we re-execute a paused portal, for which we push the
+	// data from the stored flow to the new row receiver, i.e. the flow is retained
+	// for the portal, but the receiver is renewed for each portal execution.
+	SetNewRowSyncFlowConsumer(execinfra.RowReceiver)
+
 	// Start starts the flow. Processors run asynchronously in their own
 	// goroutines. Wait() needs to be called to wait for the flow to finish.
 	// See Run() for a synchronous version.
 	//
 	// If errors are encountered during the setup part, they're returned.
 	Start(context.Context) error
+
+	// Resume is similar to Run but without waiting the all flow to return and
+	// reaching completion.
+	// It is used only when we would like to retain multiple active portals.
+	// In that case, we keep the flow alive for those portal and reuse the flow
+	// when re-executing a portal. The flow would be clean up when the portal
+	// is closed, via the flowCleanupFuncs in sql.portalMeta.
+	Resume(context.Context, execinfra.RowReceiver)
 
 	// Run runs the flow to completion. The last processor is run in the current
 	// goroutine; others may run in different goroutines depending on how the
@@ -244,6 +258,10 @@ func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.EvalCtx.Txn = txn
 }
 
+func (f *FlowBase) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) {
+	f.rowSyncFlowConsumer = receiver
+}
+
 // ConcurrentTxnUse is part of the Flow interface.
 func (f *FlowBase) ConcurrentTxnUse() bool {
 	numProcessorsThatMightUseTxn := 0
@@ -368,6 +386,10 @@ func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
 	f.processors = processors
 }
 
+func (f *FlowBase) GetProcessors() []execinfra.Processor {
+	return f.processors
+}
+
 // AddRemoteStream adds a remote stream to this flow.
 func (f *FlowBase) AddRemoteStream(streamID execinfrapb.StreamID, streamInfo *InboundStreamInfo) {
 	f.inboundStreams[streamID] = streamInfo
@@ -466,10 +488,12 @@ func (f *FlowBase) Start(ctx context.Context) error {
 	return f.StartInternal(ctx, f.processors)
 }
 
-// Run is part of the Flow interface.
-func (f *FlowBase) Run(ctx context.Context) {
-	defer f.Wait()
+func (f *FlowBase) Resume(ctx context.Context, newOutput execinfra.RowReceiver) {
+	f.SetNewRowSyncFlowConsumer(newOutput)
+	f.RunImpl(ctx)
+}
 
+func (f *FlowBase) RunImpl(ctx context.Context) {
 	// We'll take care of the last processor in particular.
 	var headProc execinfra.Processor
 	if len(f.processors) == 0 {
@@ -488,6 +512,12 @@ func (f *FlowBase) Run(ctx context.Context) {
 	}
 	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
 	headProc.Run(ctx)
+}
+
+// Run is part of the Flow interface.
+func (f *FlowBase) Run(ctx context.Context) {
+	defer f.Wait()
+	f.RunImpl(ctx)
 }
 
 // Wait is part of the Flow interface.

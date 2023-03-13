@@ -116,6 +116,10 @@ func (f *FlowCoordinator) OutputTypes() []*types.T {
 	return f.input.OutputTypes()
 }
 
+func (f *FlowCoordinator) UpdateOutput(output execinfra.RowReceiver) {
+	f.ProcessorBaseNoHelper.Output = output
+}
+
 // Start is part of the execinfra.RowSource interface.
 func (f *FlowCoordinator) Start(ctx context.Context) {
 	ctx = f.StartInternal(ctx, "flow coordinator" /* name */)

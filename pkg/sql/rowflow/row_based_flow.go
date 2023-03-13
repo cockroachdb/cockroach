@@ -74,6 +74,10 @@ func (f *rowBasedFlow) Setup(
 	return ctx, nil, f.setupProcessors(ctx, spec, inputSyncs)
 }
 
+func (f *rowBasedFlow) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) {
+	f.FlowBase.SetNewRowSyncFlowConsumer(receiver)
+}
+
 // setupProcessors creates processors for each spec in f.spec, fusing processors
 // together when possible (when an upstream processor implements RowSource, only
 // has one output, and that output is a simple PASS_THROUGH output), and

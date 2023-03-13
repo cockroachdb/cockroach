@@ -831,14 +831,30 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.planner != nil {
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
-	ctx, flow, err := dsp.setupFlows(
-		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
-	)
-	// Make sure that the local flow is always cleaned up if it was created.
+
+	var flow flowinfra.Flow
+	var err error
+	if m := planCtx.getPortalPauseInfo(); m != nil && m.flow != nil {
+		flow = m.flow
+	} else {
+		ctx, flow, err = dsp.setupFlows(
+			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
+		)
+		if m := planCtx.getPortalPauseInfo(); m != nil {
+			m.flow = flow
+		}
+	}
+
 	if flow != nil {
-		defer func() {
-			flow.Cleanup(ctx)
-		}()
+		// Make sure that the local flow is always cleaned up if it was created.
+		// If the flow is not for retained portal, we clean the flow up here.
+		// Otherwise, we delay the clean up via flowCleanup until the portal
+		// is closed.
+		if planCtx.getPortalPauseInfo() == nil {
+			defer func() {
+				flow.Cleanup(ctx)
+			}()
+		}
 	}
 	if err != nil {
 		recv.SetError(err)
@@ -861,7 +877,11 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
-	flow.Run(ctx)
+	if planCtx.getPortalPauseInfo() != nil {
+		flow.Resume(ctx, recv)
+	} else {
+		flow.Run(ctx)
+	}
 }
 
 // DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that

@@ -288,17 +288,24 @@ func (f *vectorizedFlow) Setup(
 	return ctx, opChains, nil
 }
 
-// Run is part of the Flow interface.
-func (f *vectorizedFlow) Run(ctx context.Context) {
+func (f *vectorizedFlow) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) {
+	f.FlowBase.SetNewRowSyncFlowConsumer(receiver)
+	f.creator.flowCreatorHelper.updateOutputOnFlowCoordinator(receiver)
+}
+
+// Resume is part of the Flow interface.
+func (f *vectorizedFlow) Resume(ctx context.Context, newOutput execinfra.RowReceiver) {
+	f.SetNewRowSyncFlowConsumer(newOutput)
 	if f.batchFlowCoordinator == nil {
 		// If we didn't create a BatchFlowCoordinator, then we have a processor
 		// as the root, so we run this flow with the default implementation.
-		f.FlowBase.Run(ctx)
+		f.FlowBase.Resume(ctx, newOutput)
 		return
 	}
+	f.RunImpl(ctx)
+}
 
-	defer f.Wait()
-
+func (f *vectorizedFlow) RunImpl(ctx context.Context) {
 	if err := f.StartInternal(ctx, nil /* processors */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.GetRowSyncFlowConsumer().ProducerDone()
@@ -307,6 +314,19 @@ func (f *vectorizedFlow) Run(ctx context.Context) {
 
 	log.VEvent(ctx, 1, "running the batch flow coordinator in the flow's goroutine")
 	f.batchFlowCoordinator.Run(ctx)
+}
+
+// Run is part of the Flow interface.
+func (f *vectorizedFlow) Run(ctx context.Context) {
+	if f.batchFlowCoordinator == nil {
+		// If we didn't create a BatchFlowCoordinator, then we have a processor
+		// as the root, so we run this flow with the default implementation.
+		f.FlowBase.Run(ctx)
+		return
+	}
+	defer f.Wait()
+
+	f.RunImpl(ctx)
 }
 
 var _ colcontainer.GetPather = &vectorizedFlow{}
@@ -511,6 +531,10 @@ type flowCreatorHelper interface {
 	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
 	// done on the gateway node.
 	addFlowCoordinator(coordinator *FlowCoordinator)
+	// updateOutputOnFlowCoordinator updates the output for the first processor
+	// if it's a flow coordinator. This is called when we reuse the flow for
+	// a paused portal.
+	updateOutputOnFlowCoordinator(output execinfra.RowReceiver)
 	// getCtxDone returns done channel of the context of this flow.
 	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
@@ -1333,6 +1357,14 @@ func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) updateOutputOnFlowCoordinator(
+	receiver execinfra.RowReceiver,
+) {
+	if fc, ok := r.processors[0].(*FlowCoordinator); ok {
+		fc.UpdateOutput(receiver)
+	}
+}
+
 func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return r.f.GetCtxDone()
 }
@@ -1391,6 +1423,8 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
+
+func (r *noopFlowCreatorHelper) updateOutputOnFlowCoordinator(receiver execinfra.RowReceiver) {}
 
 func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return nil

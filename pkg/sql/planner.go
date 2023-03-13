@@ -199,6 +199,9 @@ type planner struct {
 	// home region is being enforced.
 	StmtNoConstantsWithHomeRegionEnforced string
 
+	// portal is set when the query is from a portal.
+	portal *PreparedPortal
+
 	instrumentation instrumentationHelper
 
 	// Contexts for different stages of planning and execution.
@@ -846,6 +849,7 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
+	p.portal = nil
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.
