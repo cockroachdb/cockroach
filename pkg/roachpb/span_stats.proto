@@ -15,6 +15,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/roachpb";
 import "storage/enginepb/mvcc.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
+import "roachpb/data.proto";
 
 // SpanStatsRequest is used to request a SpanStatsResponse for the given key
 // span and node id. A node_id value of 0 indicates that the server should
@@ -22,17 +23,32 @@ import "google/api/annotations.proto";
 // result from across the cluster.
 message SpanStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+
+  // Note: start_key and end_key are legacy fields, safe to deprecate (i.e. reserve) in 23.2.
+  // Callers are intended to use the spans field below.
+  // Field is not reserved as we use it to detect whether a request is being made from a previous
+  // versioned node (i.e. in a mixed-version cluster).
+  // TODO(thomas): reserved these fields in 23.2.
   bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
   bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
+
+  repeated Span spans = 4 [(gogoproto.nullable) = false];
 }
 
-message SpanStatsResponse {
+message SpanStats {
+  cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
   // range_count measures the number of ranges that the request span falls within.
   // A SpanStatsResponse for a span that lies within a range, and whose start
   // key sorts after the range start, and whose end key sorts before the
   // range end, will have a range_count value of 1.
   int32 range_count = 2;
   uint64 approximate_disk_bytes = 3;
-  cockroach.storage.enginepb.MVCCStats total_stats = 1
-  [(gogoproto.nullable) = false];
+}
+
+message SpanStatsResponse {
+  cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
+  // See the range_count comment for the SpanStats proto.
+  int32 range_count = 2;
+  uint64 approximate_disk_bytes = 3;
+  map<string, SpanStats> span_to_stats = 4;
 }
