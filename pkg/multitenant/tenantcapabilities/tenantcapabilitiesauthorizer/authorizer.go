@@ -83,6 +83,10 @@ func (a *Authorizer) HasCapabilityForBatch(
 			continue
 		}
 		if !hasCap || requiredCap == onlySystemTenant || !found || !cp.GetBool(requiredCap) {
+			// CanAdminSplit and CanAdminScatter have special handling here for tests
+			// that rely on them defaulting to true.
+			// TODO(ewall): Redesign as part of
+			//  https://github.com/cockroachdb/cockroach/issues/96736.
 			if (requiredCap == tenantcapabilities.CanAdminSplit || requiredCap == tenantcapabilities.CanAdminScatter) &&
 				a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
 				continue
