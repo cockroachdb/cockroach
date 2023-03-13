@@ -14,6 +14,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowsequencer",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
@@ -39,6 +40,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )

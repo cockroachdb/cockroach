@@ -522,8 +522,9 @@ func workKindString(workKind WorkKind) string {
 // all of these when StoreWorkQueue.AdmittedWorkDone is called, so that these
 // cumulative values are mutually consistent.
 type storeAdmissionStats struct {
-	// Total requests that called AdmittedWorkDone or BypassedWorkDone.
-	admittedCount uint64
+	// Total requests that called {Admitted,Bypassed}WorkDone, or in the case of
+	// replicated writes, the requests that called Admit.
+	workCount uint64
 	// Sum of StoreWorkDoneInfo.WriteBytes.
 	//
 	// TODO(sumeer): writeAccountedBytes and ingestedAccountedBytes are not
@@ -548,7 +549,7 @@ type storeAdmissionStats struct {
 	// (e.g. for logging).
 	aux struct {
 		// These bypassed numbers are already included in the corresponding
-		// {admittedCount, writeAccountedBytes, ingestedAccountedBytes}.
+		// {workCount, writeAccountedBytes, ingestedAccountedBytes}.
 		bypassedCount                  uint64
 		writeBypassedAccountedBytes    uint64
 		ingestedBypassedAccountedBytes uint64

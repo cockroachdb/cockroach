@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowsequencer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,6 +41,7 @@ type Handle struct {
 		// (identified by their log positions) have been admitted below-raft,
 		// streams disconnect, or the handle closed entirely.
 		perStreamTokenTracker map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker
+		sequencer             *kvflowsequencer.Sequencer
 		closed                bool
 	}
 }
@@ -52,6 +54,7 @@ func New(controller kvflowcontrol.Controller, metrics *Metrics, clock *hlc.Clock
 		clock:      clock,
 	}
 	h.mu.perStreamTokenTracker = map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker{}
+	h.mu.sequencer = kvflowsequencer.New()
 	return h
 }
 
@@ -101,28 +104,31 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 func (h *Handle) DeductTokensFor(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
+	ct time.Time,
 	pos kvflowcontrolpb.RaftLogPosition,
 	tokens kvflowcontrol.Tokens,
-) {
+) time.Time {
 	if h == nil {
 		// TODO(irfansharif): See TODO around nil receiver check in Admit().
-		return
+		return ct
 	}
 
-	_ = h.deductTokensForInner(ctx, pri, pos, tokens)
+	ct, _ = h.deductTokensForInner(ctx, pri, ct, pos, tokens)
+	return ct
 }
 
 func (h *Handle) deductTokensForInner(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
+	ct time.Time,
 	pos kvflowcontrolpb.RaftLogPosition,
 	tokens kvflowcontrol.Tokens,
-) (streams []kvflowcontrol.Stream) {
+) (sequence time.Time, streams []kvflowcontrol.Stream) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.mu.closed {
 		log.Errorf(ctx, "operating on a closed handle")
-		return nil // unused return value in production code
+		return ct, nil // unused return value in production code
 	}
 
 	for _, c := range h.mu.connections {
@@ -130,7 +136,7 @@ func (h *Handle) deductTokensForInner(
 		h.mu.perStreamTokenTracker[c.Stream()].Track(ctx, pri, tokens, pos)
 		streams = append(streams, c.Stream())
 	}
-	return streams
+	return h.mu.sequencer.Sequence(ct), streams
 }
 
 // ReturnTokensUpto is part of the kvflowcontrol.Handle interface.
@@ -316,8 +322,9 @@ func (h *Handle) TestingNonBlockingAdmit(
 func (h *Handle) TestingDeductTokensForInner(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
+	ct time.Time,
 	pos kvflowcontrolpb.RaftLogPosition,
 	tokens kvflowcontrol.Tokens,
-) []kvflowcontrol.Stream {
-	return h.deductTokensForInner(ctx, pri, pos, tokens)
+) (time.Time, []kvflowcontrol.Stream) {
+	return h.deductTokensForInner(ctx, pri, ct, pos, tokens)
 }
