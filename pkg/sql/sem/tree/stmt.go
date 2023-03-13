@@ -121,6 +121,31 @@ type canModifySchema interface {
 	modifiesSchema() bool
 }
 
+// IsReadOnly returns true if the stmt cannot either modify the schema or
+// write data.
+// This function is to gate the queries allowed for pausable portals.
+// TODO(janexing): We should be more accurate about the stmt selection here.
+// Now we only allow SELECT, but is it too strict? And how to filter out
+// SELECT with data writes / schema changes?
+func IsReadOnly(stmt Statement) bool {
+	if !CanModifySchema(stmt) && !CanWriteData(stmt) {
+		switch t := stmt.(type) {
+		case *Select:
+			if t.With != nil {
+				ctes := t.With.CTEList
+				for _, cte := range ctes {
+					if !IsReadOnly(cte.Stmt) {
+						return false
+					}
+				}
+			}
+			return true
+		}
+	}
+
+	return false
+}
+
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {

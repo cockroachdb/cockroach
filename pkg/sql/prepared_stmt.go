@@ -15,12 +15,16 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // PreparedStatementOrigin is an enum representing the source of where
@@ -118,9 +122,28 @@ type preparedStatementsAccessor interface {
 	DeleteAll(ctx context.Context)
 }
 
+// PortalPausablity mark if the portal is pausable and the reason. This is
+// needed to give the correct error for usage of multiple active portals.
+type PortalPausablity int64
+
+const (
+	// PortalPausabilityNotset the default status of a portal when
+	// sql.multiple_modifications_of_table.enabled is false.
+	PortalPausabilityNotset PortalPausablity = iota
+	// PausablePortal is set when sql.multiple_modifications_of_table.enabled is
+	// set to true and the underlying statement is a read-only SELECT query with
+	// no sub-queries or post-queries.
+	PausablePortal
+	// NotPausablePortalForUnsupportedStmt is used when the cluster setting
+	// sql.multiple_modifications_of_table.enabled is set to true, while we don't
+	// support underlying statement it.
+	NotPausablePortalForUnsupportedStmt
+)
+
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
+	Name  string
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
 
@@ -131,6 +154,14 @@ type PreparedPortal struct {
 	// meaning that any additional attempts to execute it should return no
 	// rows.
 	exhausted bool
+
+	// portalPausablity is used to log the correct error message when user pause
+	// a portal.
+	// See comments for PortalPausablity for more details.
+	portalPausablity PortalPausablity
+
+	// pauseInfo is the saved info needed for a pausable portal.
+	pauseInfo *portalPauseInfo
 }
 
 // makePreparedPortal creates a new PreparedPortal.
@@ -144,6 +175,7 @@ func (ex *connExecutor) makePreparedPortal(
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
+		Name:       name,
 		Stmt:       stmt,
 		Qargs:      qargs,
 		OutFormats: outFormats,
@@ -153,7 +185,7 @@ func (ex *connExecutor) makePreparedPortal(
 
 // accountForCopy updates the state to account for the copy of the
 // PreparedPortal (p is the copy).
-func (p PreparedPortal) accountForCopy(
+func (p *PreparedPortal) accountForCopy(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) error {
 	if err := prepStmtsNamespaceMemAcc.Grow(ctx, p.size(portalName)); err != nil {
@@ -165,13 +197,90 @@ func (p PreparedPortal) accountForCopy(
 }
 
 // close closes this portal.
-func (p PreparedPortal) close(
+func (p *PreparedPortal) close(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) {
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
 }
 
-func (p PreparedPortal) size(portalName string) int64 {
+func (p *PreparedPortal) size(portalName string) int64 {
 	return int64(uintptr(len(portalName)) + unsafe.Sizeof(p))
+}
+
+func (p *PreparedPortal) isPausable() bool {
+	return p.pauseInfo != nil
+}
+
+// cleanupFuncStack stores cleanup functions for a portal. The clean-up
+// functions are added during the first-time execution of a portal. When the
+// first-time execution is finished, we mark isComplete to true.
+type cleanupFuncStack struct {
+	stack      []namedFunc
+	isComplete bool
+}
+
+func (n *cleanupFuncStack) appendFunc(f namedFunc) {
+	n.stack = append(n.stack, f)
+}
+
+func (n *cleanupFuncStack) run() {
+	for i := 0; i < len(n.stack); i++ {
+		n.stack[i].f()
+	}
+	*n = cleanupFuncStack{}
+}
+
+// namedFunc is function with name, which makes the debugging easier. It is
+// used just for clean up functions of a pausable portal.
+type namedFunc struct {
+	fName string
+	f     func()
+}
+
+// instrumentationHelperWrapper wraps the instrumentation helper.
+// We need to maintain it for a paused portal.
+type instrumentationHelperWrapper struct {
+	ih instrumentationHelper
+}
+
+// portalPauseInfo stored info that enables the pause of a portal. After pausing
+// the portal, execute any other statement, and come back to re-execute it or
+// close it.
+type portalPauseInfo struct {
+	// sp stores the tracing span of the underlying statement. It is closed when
+	// the portal finishes.
+	sp *tracing.Span
+	// outputTypes are the types of the result columns produced by the physical plan.
+	// We need this as when re-executing the portal, we are reusing the flow
+	// with the new receiver, but not re-generating the physical plan.
+	outputTypes []*types.T
+	// We need to store the flow for a portal so that when re-executing it, we
+	// continue from the previous execution. It lives along with the portal, and
+	// will be cleaned-up when the portal is closed.
+	flow flowinfra.Flow
+	// queryID stores the id of the query that this portal bound to. When we re-execute
+	// an existing portal, we should use the same query id.
+	queryID clusterunique.ID
+	// ihWrapper stores the instrumentation helper that should be reused for
+	// each execution of the portal.
+	ihWrapper *instrumentationHelperWrapper
+	// The following 3 stacks store functions to call when close the portal.
+	// They should be called in this order:
+	// flowCleanup -> execStmtCleanup -> exhaustPortal.
+	exhaustPortal   cleanupFuncStack
+	execStmtCleanup cleanupFuncStack
+	flowCleanup     cleanupFuncStack
+}
+
+// cleanupAll is to run all the cleanup layers.
+func (pm *portalPauseInfo) cleanupAll() {
+	pm.flowCleanup.run()
+	pm.execStmtCleanup.run()
+	pm.exhaustPortal.run()
+}
+
+// isQueryIDSet returns true if the query id for the portal is set.
+func (pm *portalPauseInfo) isQueryIDSet() bool {
+	return !pm.queryID.Equal(clusterunique.ID{}.Uint128)
 }
