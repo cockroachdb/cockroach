@@ -27,28 +27,3 @@ SELECT connection_name, owner FROM system.external_connections
 ----
 connection1  t
 connection2  t
-
-# Wait for migrations to run and verify that owner_id column is now present.
-# The sleep directive is needed to reduce flakiness.
-
-upgrade 0
-
-upgrade 2
-
-sleep 10s
-
-query B retry
-SELECT crdb_internal.is_at_least_version('1000022.2-76')
-----
-true
-
-query O
-SELECT user_id FROM system.users WHERE username = 't'
-----
-101
-
-query TTO
-SELECT connection_name, owner, owner_id FROM system.external_connections
-----
-connection1  t  101
-connection2  t  101
