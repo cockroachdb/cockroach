@@ -16,6 +16,10 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+func init() {
+	tenantcapabilities.DefaultCapabilities = &TenantCapabilities{}
+}
+
 // boolCapValue is a wrapper around bool that ensures that values can
 // be included in reportables.
 type boolCapValue bool

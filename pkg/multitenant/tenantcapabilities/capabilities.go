@@ -94,25 +94,38 @@ func (u Update) String() string {
 	return fmt.Sprintf("update: %v", u.Entry)
 }
 
-// AllCapabilitiesString prints all capability values. This is different from
+// DefaultCapabilities is the default state of capabilities.
+// TODO(ewall): Redesign as part of
+//
+//	https://github.com/cockroachdb/cockroach/issues/96736.
+var DefaultCapabilities TenantCapabilities
+
+// AlteredCapabilitiesString prints all altered capability values that no
+// longer match DefaultCapabilities. This is different from
 // TenantCapabilities.String which only prints non-zero value fields.
-func AllCapabilitiesString(capabilities TenantCapabilities) string {
+func AlteredCapabilitiesString(capabilities TenantCapabilities) string {
 	var builder strings.Builder
 	builder.WriteByte('{')
-	for i, capID := range CapabilityIDs {
-		if i > 0 {
-			builder.WriteByte(' ')
+	isFirst := true
+	for _, capID := range CapabilityIDs {
+		value := capabilities.Cap(capID).Get().String()
+		defaultValue := DefaultCapabilities.Cap(capID).Get().String()
+		if value != defaultValue {
+			if !isFirst {
+				builder.WriteByte(' ')
+			}
+			builder.WriteString(capID.String())
+			builder.WriteByte(':')
+			builder.WriteString(value)
+			isFirst = false
 		}
-		builder.WriteString(capID.String())
-		builder.WriteByte(':')
-		builder.WriteString(capabilities.Cap(capID).Get().String())
 	}
 	builder.WriteByte('}')
 	return builder.String()
 }
 
 func (u Entry) String() string {
-	return fmt.Sprintf("ten=%v cap=%v", u.TenantID, AllCapabilitiesString(u.TenantCapabilities))
+	return fmt.Sprintf("ten=%v altered-cap=%v", u.TenantID, AlteredCapabilitiesString(u.TenantCapabilities))
 }
 
 // CapabilityID represents a handle to a tenant capability.
