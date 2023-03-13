@@ -881,6 +881,15 @@ func (p *PlanningCtx) IsLocal() bool {
 	return p.isLocal
 }
 
+// getPortalPauseInfo returns the portal pause info if the current planner is
+// for a pausable portal. Otherwise, returns nil.
+func (p *PlanningCtx) getPortalPauseInfo() *portalPauseInfo {
+	if p.planner != nil && p.planner.portal != nil && p.planner.portal.pauseInfo != nil {
+		return p.planner.portal.pauseInfo
+	}
+	return nil
+}
+
 // getDefaultSaveFlowsFunc returns the default function used to save physical
 // plans and their diagrams. The returned function is **not** concurrency-safe.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(

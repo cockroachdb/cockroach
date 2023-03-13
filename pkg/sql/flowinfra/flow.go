@@ -88,6 +88,12 @@ type Flow interface {
 	// It needs to be called after Setup() and before Start/Run.
 	SetTxn(*kv.Txn)
 
+	// SetNewRowSyncFlowConsumer updates the Flow with the new output.
+	// This is called when we re-execute a paused portal, for which we push the
+	// data from the stored flow to the new row receiver, i.e. the flow is retained
+	// for the portal, but the receiver is renewed for each portal execution.
+	SetNewRowSyncFlowConsumer(execinfra.RowReceiver) (err error)
+
 	// Start starts the flow. Processors run asynchronously in their own
 	// goroutines. Wait() needs to be called to wait for the flow to finish.
 	// See Run() for a synchronous version.
@@ -105,8 +111,14 @@ type Flow interface {
 	// It is assumed that rowSyncFlowConsumer is set, so all errors encountered
 	// when running this flow are sent to it.
 	//
+	// noWait is set true when the flow is bound to a pausable portal. With it set,
+	// the function returns without waiting the all goroutines to finish. For a
+	// pausable portal we will persist this flow and reuse it when re-executing
+	// the portal. The flow will be cleaned when the portal is closed, rather than
+	// when each portal execution finishes.
+	//
 	// The caller needs to call f.Cleanup().
-	Run(context.Context)
+	Run(ctx context.Context, noWait bool)
 
 	// Wait waits for all the goroutines for this flow to exit. If the context gets
 	// canceled before all goroutines exit, it calls f.cancel().
@@ -242,6 +254,11 @@ func (f *FlowBase) Setup(
 func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.FlowCtx.Txn = txn
 	f.EvalCtx.Txn = txn
+}
+
+func (f *FlowBase) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) error {
+	f.rowSyncFlowConsumer = receiver
+	return nil
 }
 
 // ConcurrentTxnUse is part of the Flow interface.
@@ -467,9 +484,10 @@ func (f *FlowBase) Start(ctx context.Context) error {
 }
 
 // Run is part of the Flow interface.
-func (f *FlowBase) Run(ctx context.Context) {
-	defer f.Wait()
-
+func (f *FlowBase) Run(ctx context.Context, noWait bool) {
+	if !noWait {
+		defer f.Wait()
+	}
 	// We'll take care of the last processor in particular.
 	var headProc execinfra.Processor
 	if len(f.processors) == 0 {
