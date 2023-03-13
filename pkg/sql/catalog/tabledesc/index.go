@@ -392,15 +392,49 @@ func (w index) UseDeletePreservingEncoding() bool {
 	return w.desc.UseDeletePreservingEncoding && !w.maybeMutation.DeleteOnly()
 }
 
-// ForcePut returns true if writes to the index should only use Put (rather than
-// CPut or InitPut). This is used by:
+// ForcePut forces all writes to use Put rather than CPut or InitPut.
 //
-//   - indexes currently being built by the MVCC-compliant index backfiller, and
-//   - the temporary indexes that support that process, and
-//   - old primary indexes which are being dropped.
+// Users of this options should take great care as it
+// effectively mean unique constraints are not respected.
+//
+// Currently (2023-03-09) there are three users:
+//   - delete preserving indexes
+//   - merging indexes
+//   - dropping primary indexes
+//   - adding primary indexes with new columns (same key)
+//
+// Delete preserving encoding indexes are used only as a log of
+// index writes during backfill, thus we can blindly put values into
+// them.
+//
+// New indexes may miss updates during the backfilling process
+// that would lead to CPut failures until the missed updates
+// are merged into the index. Uniqueness for such indexes is
+// checked by the schema changer before they are brought back
+// online.
+//
+// In the case of dropping primary indexes, we always ensure that
+// there's a replacement primary index which has become public.
+// The reason we must not use cput is that the new primary index
+// may not store all the columns stored in this index.
+//
+// In the case of adding primary indexes with new columns, we don't
+// know the value of the new column when performing updates, so we can't
+// synthesize the expectation. This is okay because the uniqueness of
+// the key is being enforced by the existing primary index.
+//
+// When altering a primary key, we never simultaneously add new columns.
+// When adding a new primary index which has a new key, we always ensure that
+// the source primary index, which is the public primary index, has all
+// columns in that new primary index. In this case, it's unsafe to avoid the
+// ForcePut when that index is in WriteOnly because we need the write to be
+// upholding uniqueness. To re-iterate, when changing the primary key of a
+// table, we'll not be both adding new columns and creating the new primary
+// key at the same time; we have to materialize the new columns and make them
+// available as the public primary index on the table before proceeding to
+// populate the new primary index with the new key structure.
 func (w index) ForcePut() bool {
-	return w.Merging() || w.desc.UseDeletePreservingEncoding ||
-		w.Dropped() && w.IsUnique() && w.GetEncodingType() == descpb.PrimaryIndexEncoding
+	return w.mutationForcePutForIndexWrites
 }
 
 func (w index) CreatedAt() time.Time {

@@ -68,6 +68,11 @@ func (s TableColSet) Difference(other TableColSet) TableColSet {
 	return TableColSet{set: s.set.Difference(other.set)}
 }
 
+// Equals returns the column IDs in s are equal to the ones in other.
+func (s TableColSet) Equals(other TableColSet) bool {
+	return s.set.Equals(other.set)
+}
+
 // Ordered returns a slice with all the descpb.ColumnIDs in the set, in
 // increasing order.
 func (s TableColSet) Ordered() []descpb.ColumnID {
