@@ -13,10 +13,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -286,6 +288,67 @@ func TestOIDCStateEncodeDecode(t *testing.T) {
 
 	if string(state.Token) != testString || string(state.TokenMAC) != testString {
 		t.Fatal("state didn't match when decoded")
+	}
+}
+
+func TestOIDCClaimMatch(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		testName       string
+		claimKey       string
+		principalRegex string
+		claims         map[string]json.RawMessage
+		wantError      bool
+	}{
+		{
+			testName:       "string valued claim",
+			claimKey:       "email",
+			principalRegex: "^([^@]+)@[^@]+$",
+			claims: map[string]json.RawMessage{
+				"email": json.RawMessage(`"myfakeemail@example.com"`),
+			},
+		},
+		{
+			testName:       "string valued claim with no match",
+			claimKey:       "email",
+			principalRegex: "^([^@]+)@[^@]+$",
+			claims: map[string]json.RawMessage{
+				"email": json.RawMessage(`"bademail"`),
+			},
+			wantError: true,
+		},
+		{
+			testName:       "list valued claim",
+			claimKey:       "groups",
+			principalRegex: "^([^@]+)@[^@]+$",
+			claims: map[string]json.RawMessage{
+				"groups": json.RawMessage(
+					`["badgroupname", "myfakeemail@example.com", "anotherbadgroupname"]`,
+				),
+			},
+		},
+		{
+			testName:       "list valued claim with no matches",
+			claimKey:       "groups",
+			principalRegex: "^([^@]+)@[^@]+$",
+			claims: map[string]json.RawMessage{
+				"groups": json.RawMessage(`["badgroupname", "anotherbadgroupname"]`),
+			},
+			wantError: true,
+		},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			sqlUsername, err := extractUsernameFromClaims(
+				ctx, tc.claims, tc.claimKey, regexp.MustCompile(tc.principalRegex),
+			)
+			if !tc.wantError {
+				require.NoError(t, err)
+				require.Equal(t, "myfakeemail", sqlUsername)
+			} else {
+				require.ErrorContains(t, err, "expected one group in regexp")
+			}
+		})
 	}
 }
 
