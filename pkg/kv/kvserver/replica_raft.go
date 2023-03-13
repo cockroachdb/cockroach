@@ -324,6 +324,18 @@ func (r *Replica) evalAndPropose(
 // propose takes ownership of the supplied token; the caller should tok.Move()
 // it into this method. It will be used to untrack the request once it comes out
 // of the proposal buffer.
+//
+// Note that this method is called for "new" proposals but also by
+// `tryReproposeWithNewLeaseIndex`. This second call leaves questions on what
+// exactly the desired semantics are - some fields (MaxLeaseIndex,
+// ClosedTimestamp) will be set and this re-entrance into `propose`
+// is hard to fully understand. (The reset of `MaxLeaseIndex`	inside this
+// method is a faer-fueled but likely unneeded consequence of this).
+//
+// TODO(repl): adopt the below issue which will see each proposal passed to this
+// method exactly once:
+//
+// https://github.com/cockroachdb/cockroach/issues/98477
 func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
 ) (pErr *kvpb.Error) {
