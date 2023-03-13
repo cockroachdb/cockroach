@@ -269,6 +269,9 @@ type BindStmt struct {
 	// inferred types should reflect that).
 	// If internalArgs is specified, Args and ArgFormatCodes are ignored.
 	internalArgs []tree.Datum
+
+	// isInternal is set ture when the bind stmt is from an internal executor.
+	isInternal bool
 }
 
 // command implements the Command interface.
@@ -811,6 +814,10 @@ type RestrictedCommandResult interface {
 	// GetBulkJobId returns the id of the job for the query, if the query is
 	// IMPORT, BACKUP or RESTORE.
 	GetBulkJobId() uint64
+
+	// UnsetForPausablePortal is to set the forPausablePortal field to false for
+	// pgwire.limitedCommandResult, so that the portal becomes un-pausable.
+	UnsetForPausablePortal()
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -964,6 +971,10 @@ type streamingCommandResult struct {
 
 var _ RestrictedCommandResult = &streamingCommandResult{}
 var _ CommandResultClose = &streamingCommandResult{}
+
+// UnsetForPausablePortal is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) UnsetForPausablePortal() {
+}
 
 // SetColumns is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {

@@ -149,6 +149,7 @@ func (ex *connExecutor) makePreparedPortal(
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
+	isInternal bool,
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
