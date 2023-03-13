@@ -1136,6 +1136,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		txnEvType = txnRollback
 	}
 
+	// Close all portals, otherwise there will be leftover bytes.
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
+
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
@@ -1663,6 +1668,15 @@ func (ns prepStmtNamespace) HasPortal(s string) bool {
 	return ok
 }
 
+func (ns prepStmtNamespace) closeAllPortals(
+	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+) {
+	for name, p := range ns.portals {
+		p.close(ctx, prepStmtsNamespaceMemAcc, name)
+		delete(ns.portals, name)
+	}
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
 func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
@@ -1714,10 +1728,10 @@ func (ns *prepStmtNamespace) resetTo(
 		p.decRef(ctx)
 		delete(ns.prepStmts, name)
 	}
-	for name, p := range ns.portals {
-		p.close(ctx, prepStmtsNamespaceMemAcc, name)
-		delete(ns.portals, name)
-	}
+
+	ns.closeAllPortals(
+		ctx, prepStmtsNamespaceMemAcc,
+	)
 
 	for name, ps := range to.prepStmts {
 		ps.incRef(ctx)
@@ -1754,10 +1768,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	}
 
 	// Close all portals.
-	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
-		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
-		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
-	}
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
 
 	// Close all cursors.
 	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
@@ -1768,10 +1781,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
-		for name, p := range ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals {
-			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
-			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
-		}
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
+			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		)
 		ex.extraTxnState.savepoints.clear()
 		ex.onTxnFinish(ctx, ev)
 	case txnRestart:
@@ -1990,7 +2002,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				(tcmd.LastInBatchBeforeShowCommitTimestamp ||
 					tcmd.LastInBatch || !implicitTxnForBatch)
 			ev, payload, err = ex.execStmt(
-				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
+				ctx, tcmd.Statement, nil /* portal */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)
 
 			return err

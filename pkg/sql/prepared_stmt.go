@@ -138,7 +138,7 @@ type PreparedPortal struct {
 	// rows.
 	exhausted bool
 
-	// pauseInfo saved info needed for the "multiple active portal" mode.
+	// pauseInfo is the saved info needed for a pausable portal.
 	pauseInfo *portalPauseInfo
 }
 

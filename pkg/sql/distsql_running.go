@@ -1575,7 +1575,12 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	planner *planner,
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
-) error {
+) (err error) {
+	defer func() {
+		if err != nil && planCtx.getPortalPauseInfo() != nil {
+			planCtx.getPortalPauseInfo().flowCleanup.run()
+		}
+	}()
 	defer planner.curPlan.close(ctx)
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
@@ -1606,6 +1611,35 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, finishedSetupFn,
 		)
 	}()
+	checkFlowForPortal := func() error {
+		if planCtx.getPortalPauseInfo().flow == nil {
+			return errors.Newf("flow for portal %s cannot be found", planner.portal.Name)
+		}
+		return nil
+	}
+
+	if p := planCtx.getPortalPauseInfo(); p != nil {
+		if checkErr := checkFlowForPortal(); checkErr != nil {
+			if recv.commErr != nil {
+				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
+			} else {
+				panic(checkErr)
+			}
+		}
+		if recv.commErr != nil {
+			p.flow.Cleanup(ctx)
+		} else if !p.flowCleanup.isComplete {
+			flow := planCtx.getPortalPauseInfo().flow
+			p.flowCleanup.appendFunc(namedFunc{
+				fName: "cleanup flow", f: func() {
+					flow.GetFlowCtx().Mon.RelinquishAllOnReleaseBytes()
+					flow.Cleanup(ctx)
+				},
+			})
+			p.flowCleanup.isComplete = true
+		}
+	}
+
 	if recv.commErr != nil || recv.getError() != nil {
 		return recv.commErr
 	}
