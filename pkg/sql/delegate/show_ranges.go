@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -33,12 +34,30 @@ func checkPrivilegesForShowRanges(d *delegator, table cat.Table) error {
 	if err != nil {
 		return err
 	}
-	// User needs to either have admin access or have the correct ZONECONFIG privilege
+	// User needs to either have admin access or have the correct ZONECONFIG privilege or VIEWACTIVITY privilege.
 	if hasAdmin {
 		return nil
 	}
+	hasView := d.catalog.CheckPrivilege(d.ctx, table, privilege.VIEWACTIVITY) == nil
+	hasViewRedacted := d.catalog.CheckPrivilege(d.ctx, table, privilege.VIEWACTIVITYREDACTED) == nil
+	if hasView || hasViewRedacted {
+		return nil
+	}
+	if !hasView && !hasViewRedacted {
+		hasView, err = d.catalog.HasRoleOption(d.ctx, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return err
+		}
+		hasViewRedacted, err = d.catalog.HasRoleOption(d.ctx, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return err
+		}
+		if hasView || hasViewRedacted {
+			return nil
+		}
+	}
 	if err := d.catalog.CheckPrivilege(d.ctx, table, privilege.ZONECONFIG); err != nil {
-		return pgerror.Wrapf(err, pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can use SHOW RANGES on %s", table.Name())
+		return pgerror.Wrapf(err, pgcode.InsufficientPrivilege, "only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can use SHOW RANGES on %s", table.Name())
 	}
 	return nil
 }
