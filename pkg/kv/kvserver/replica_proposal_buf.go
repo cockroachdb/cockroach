@@ -1191,6 +1191,10 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
 		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
 	}
+	// NB: we can see finished proposals inserted here. We don't like it but
+	// it's currently possible.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/97605
 	rp.mu.proposals[p.idKey] = p
 }
 
