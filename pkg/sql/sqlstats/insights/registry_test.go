@@ -76,6 +76,7 @@ func TestRegistry(t *testing.T) {
 		)
 
 		require.Equal(t, expected[0], actual[0])
+		require.Equal(t, transaction.Status, Transaction_Status(statement.Status))
 	})
 
 	t.Run("failure detection", func(t *testing.T) {
@@ -112,6 +113,7 @@ func TestRegistry(t *testing.T) {
 
 		require.Equal(t, expected, actual)
 		require.Equal(t, transaction.LastErrorCode, statement.ErrorCode)
+		require.Equal(t, transaction.Status, Transaction_Status(statement.Status))
 	})
 
 	t.Run("disabled", func(t *testing.T) {
@@ -253,6 +255,7 @@ func TestRegistry(t *testing.T) {
 		)
 
 		require.Equal(t, expected, actual)
+		require.Equal(t, transaction.Status, Transaction_Status(statement.Status))
 	})
 
 	t.Run("txn with no stmts", func(t *testing.T) {
@@ -301,5 +304,6 @@ func TestRegistry(t *testing.T) {
 		)
 
 		require.Equal(t, expected, actual)
+		require.Equal(t, transaction.Status, Transaction_Status(statement.Status))
 	})
 }

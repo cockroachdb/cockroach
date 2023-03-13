@@ -128,6 +128,10 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 
 	var lastErrorCode string
+	// The transaction status will reflect the status of its statements; it will
+	// default to completed unless a failed statement status is found. Note that
+	// this does not take into account the "Cancelled" transaction status.
+	var lastStatus = Transaction_Completed
 	for i, s := range *statements {
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
@@ -136,6 +140,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
 				lastErrorCode = s.ErrorCode
+				lastStatus = Transaction_Status(s.Status)
 				s.Problem = Problem_FailedExecution
 			}
 
@@ -151,6 +156,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 
 	insight.Transaction.LastErrorCode = lastErrorCode
+	insight.Transaction.Status = lastStatus
 	r.sink.AddInsight(insight)
 }
 
