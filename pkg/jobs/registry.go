@@ -11,7 +11,6 @@
 package jobs
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -389,7 +388,17 @@ func createJobsInBatchWithTxn(
 	}
 	start := txn.KV().ReadTimestamp().GoTime()
 	modifiedMicros := timeutil.ToUnixMicros(start)
-	stmt, args, jobIDs, err := batchJobInsertStmt(ctx, r, s.ID(), records, modifiedMicros)
+
+	jobs := make([]*Job, len(records))
+	for i, record := range records {
+		j, err := r.newJob(ctx, *record)
+		if err != nil {
+			return nil, err
+		}
+		jobs[i] = j
+	}
+
+	stmt, args, jobIDs, err := batchJobInsertStmt(ctx, r, s.ID(), jobs, modifiedMicros)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +411,45 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
+	// Insert the job payload and details into the system.jobs_info table if the
+	// associated cluster version is active.
+	//
+	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+	// table once we are outside the compatability window for 22.2.
+	if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+		if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
+			return nil, err
+		}
+	}
+
 	return jobIDs, nil
+}
+
+func batchJobWriteToJobInfo(
+	ctx context.Context, txn isql.Txn, jobs []*Job, modifiedMicros int64,
+) error {
+	for _, j := range jobs {
+		infoStorage := j.InfoStorage(txn)
+		payload := j.Payload()
+		var payloadBytes, progressBytes []byte
+		var err error
+		if payloadBytes, err = protoutil.Marshal(&payload); err != nil {
+			return err
+		}
+		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+			return err
+		}
+		progress := j.Progress()
+		if progressBytes, err = protoutil.Marshal(&progress); err != nil {
+			return err
+		}
+		progress.ModifiedMicros = modifiedMicros
+		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // batchJobInsertStmt creates an INSERT statement and its corresponding arguments
@@ -411,7 +458,7 @@ func batchJobInsertStmt(
 	ctx context.Context,
 	r *Registry,
 	sessionID sqlliveness.SessionID,
-	records []*Record,
+	jobs []*Job,
 	modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	instanceID := r.ID()
@@ -430,26 +477,24 @@ func batchJobInsertStmt(
 		return "", nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to make timestamp for creation of job")
 	}
 
-	valueFns := map[string]func(*Record) (interface{}, error){
-		`id`:                func(rec *Record) (interface{}, error) { return rec.JobID, nil },
-		`created`:           func(rec *Record) (interface{}, error) { return created, nil },
-		`status`:            func(rec *Record) (interface{}, error) { return StatusRunning, nil },
-		`claim_session_id`:  func(rec *Record) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
-		`claim_instance_id`: func(rec *Record) (interface{}, error) { return instanceID, nil },
-		`payload`: func(rec *Record) (interface{}, error) {
-			payload, err := r.makePayload(ctx, rec)
-			if err != nil {
-				return []byte{}, err
-			}
+	valueFns := map[string]func(*Job) (interface{}, error){
+		`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
+		`created`:           func(job *Job) (interface{}, error) { return created, nil },
+		`status`:            func(job *Job) (interface{}, error) { return StatusRunning, nil },
+		`claim_session_id`:  func(job *Job) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
+		`claim_instance_id`: func(job *Job) (interface{}, error) { return instanceID, nil },
+		`payload`: func(job *Job) (interface{}, error) {
+			payload := job.Payload()
 			return marshalPanic(&payload), nil
 		},
-		`progress`: func(rec *Record) (interface{}, error) {
-			progress := r.makeProgress(rec)
+		`progress`: func(job *Job) (interface{}, error) {
+			progress := job.Progress()
 			progress.ModifiedMicros = modifiedMicros
 			return marshalPanic(&progress), nil
 		},
-		`job_type`: func(rec *Record) (interface{}, error) {
-			return (&jobspb.Payload{Details: jobspb.WrapPayloadDetails(rec.Details)}).Type().String(), nil
+		`job_type`: func(job *Job) (interface{}, error) {
+			payload := job.Payload()
+			return payload.Type().String(), nil
 		},
 	}
 
@@ -460,19 +505,19 @@ func batchJobInsertStmt(
 		numColumns -= 1
 	}
 
-	appendValues := func(rec *Record, vals *[]interface{}) (err error) {
+	appendValues := func(job *Job, vals *[]interface{}) (err error) {
 		defer func() {
 			switch r := recover(); r.(type) {
 			case nil:
 			case error:
-				err = errors.CombineErrors(err, errors.Wrapf(r.(error), "encoding job %d", rec.JobID))
+				err = errors.CombineErrors(err, errors.Wrapf(r.(error), "encoding job %d", job.ID()))
 			default:
 				panic(r)
 			}
 		}()
 		for j := 0; j < numColumns; j++ {
 			c := columns[j]
-			val, err := valueFns[c](rec)
+			val, err := valueFns[c](job)
 			if err != nil {
 				return err
 			}
@@ -480,14 +525,14 @@ func batchJobInsertStmt(
 		}
 		return nil
 	}
-	args := make([]interface{}, 0, len(records)*numColumns)
-	jobIDs := make([]jobspb.JobID, 0, len(records))
+	args := make([]interface{}, 0, len(jobs)*numColumns)
+	jobIDs := make([]jobspb.JobID, 0, len(jobs))
 	var buf strings.Builder
 	buf.WriteString(`INSERT INTO system.jobs (`)
 	buf.WriteString(strings.Join(columns[:numColumns], ", "))
 	buf.WriteString(`) VALUES `)
 	argIdx := 1
-	for i, rec := range records {
+	for i, job := range jobs {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -501,10 +546,10 @@ func batchJobInsertStmt(
 			argIdx++
 		}
 		buf.WriteString(")")
-		if err := appendValues(rec, &args); err != nil {
+		if err := appendValues(job, &args); err != nil {
 			return "", nil, nil, err
 		}
-		jobIDs = append(jobIDs, rec.JobID)
+		jobIDs = append(jobIDs, job.ID())
 	}
 	return buf.String(), args, jobIDs, nil
 }
@@ -589,7 +634,26 @@ func (r *Registry) CreateJobWithTxn(
 			override,
 			insertStmt, vals[:numCols]...,
 		)
-		return err
+		if err != nil {
+			return err
+		}
+
+		// Insert the job payload and details into the system.jobs_info table if the
+		// associated cluster version is active.
+		//
+		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+		// table once we are outside the compatability window for 22.2.
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+			infoStorage := j.InfoStorage(txn)
+			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+				return err
+			}
+			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 
 	run := r.db.Txn
@@ -661,7 +725,26 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			User:     username.NodeUserName(),
 			Database: catconstants.SystemDatabaseName,
 		}, stmt, values[:nCols]...)
-		return err
+		if err != nil {
+			return err
+		}
+
+		// Insert the job payload and details into the system.jobs_info table if the
+		// associated cluster version is active.
+		//
+		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+		// table once we are outside the compatability window for 22.2.
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+			infoStorage := j.InfoStorage(txn)
+			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+				return err
+			}
+			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 	run := r.db.Txn
 	if txn != nil {
@@ -795,120 +878,6 @@ func (r *Registry) LoadJobWithTxn(
 		return nil, err
 	}
 	return j, nil
-}
-
-// GetJobInfo fetches the latest info record for the given job and infoKey.
-func (r *Registry) GetJobInfo(
-	ctx context.Context, jobID jobspb.JobID, infoKey []byte, txn isql.Txn,
-) ([]byte, bool, error) {
-	row, err := txn.QueryRowEx(
-		ctx, "job-info-get", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 ORDER BY written DESC LIMIT 1",
-		jobID, infoKey,
-	)
-
-	if err != nil {
-		return nil, false, err
-	}
-
-	if row == nil {
-		return nil, false, nil
-	}
-
-	value, ok := row[0].(*tree.DBytes)
-	if !ok {
-		return nil, false, errors.AssertionFailedf("job info: expected value to be DBytes (was %T)", row[0])
-	}
-
-	return []byte(*value), true, nil
-}
-
-// IterateJobInfo iterates though the info records for a given job and info key
-// prefix.
-func (r *Registry) IterateJobInfo(
-	ctx context.Context,
-	jobID jobspb.JobID,
-	infoPrefix []byte,
-	fn func(infoKey []byte, value []byte) error,
-	txn isql.Txn,
-) (retErr error) {
-	// TODO(dt): verify this predicate hits the index.
-	rows, err := txn.QueryIteratorEx(
-		ctx, "job-info-iter", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`SELECT info_key, value
-		FROM system.job_info
-		WHERE job_id = $1 AND substring(info_key for $2) = $3
-		ORDER BY info_key ASC, written DESC`,
-		jobID, len(infoPrefix), infoPrefix,
-	)
-	if err != nil {
-		return err
-	}
-	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(rows)
-
-	var prevKey []byte
-	var ok bool
-	for ok, err = rows.Next(ctx); ok; ok, err = rows.Next(ctx) {
-		if err != nil {
-			return err
-		}
-		row := rows.Cur()
-
-		key, ok := row[0].(*tree.DBytes)
-		if !ok {
-			return errors.AssertionFailedf("job info: expected info_key to be DBytes (was %T)", row[0])
-		}
-		infoKey := []byte(*key)
-
-		if bytes.Equal(infoKey, prevKey) {
-			continue
-		}
-		prevKey = append(prevKey[:0], infoKey...)
-
-		value, ok := row[1].(*tree.DBytes)
-		if !ok {
-			return errors.AssertionFailedf("job info: expected value to be DBytes (was %T)", row[1])
-		}
-		if err = fn(infoKey, []byte(*value)); err != nil {
-			return err
-		}
-	}
-
-	return err
-}
-
-// WriteJobInfo writes the provided value to an info record for the provided
-// jobID and infoKey after removing any existing info records for that job and
-// infoKey using the same transaction, effectively replacing any older row with
-// a row with the new value.
-func (r *Registry) WriteJobInfo(
-	ctx context.Context, jobID jobspb.JobID, infoKey, value []byte, txn isql.Txn,
-) error {
-	// Assert we have a non-nil txn with which to delete and then write.
-	if txn == nil {
-		return errors.AssertionFailedf("a txn is required to write job info record")
-	}
-	// First clear out any older revisions of this info.
-	_, err := txn.ExecEx(
-		ctx, "job-info-write", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
-		jobID, infoKey,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Write the new info, using the same transaction.
-	_, err = txn.ExecEx(
-		ctx, "job-info-write", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
-		jobID, infoKey, value,
-	)
-	return err
 }
 
 // UpdateJobWithTxn calls the Update method on an existing job with jobID, using
