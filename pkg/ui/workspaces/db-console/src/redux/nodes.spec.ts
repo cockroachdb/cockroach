@@ -237,6 +237,7 @@ describe("selectCommissionedNodeStatuses", function () {
           data: nodeStatuses,
           inFlight: false,
           valid: true,
+          unauthorized: false,
         },
         liveness: {
           data: {
@@ -244,6 +245,7 @@ describe("selectCommissionedNodeStatuses", function () {
           },
           inFlight: false,
           valid: true,
+          unauthorized: false,
         },
       },
     };

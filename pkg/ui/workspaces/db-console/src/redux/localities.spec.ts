@@ -30,6 +30,7 @@ function makeStateWithLocalities(localities: LocalityTier[][]) {
         data: nodes,
         inFlight: false,
         valid: true,
+        unauthorized: false,
       },
       liveness: {},
     },
