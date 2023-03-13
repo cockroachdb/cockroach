@@ -3,6 +3,7 @@ echo
 (base.RaftConfig) {
  RaftTickInterval: (time.Duration) 200ms,
  RaftElectionTimeoutTicks: (int) 10,
+ RaftReproposalTimeoutTicks: (int) 15,
  RaftHeartbeatIntervalTicks: (int) 5,
  RangeLeaseRaftElectionTimeoutMultiplier: (float64) 3,
  RangeLeaseRenewalFraction: (float64) 0.5,
@@ -17,6 +18,7 @@ echo
 }
 RaftHeartbeatInterval: 1s
 RaftElectionTimeout: 2s
+RaftReproposalTimeout: 3s
 RangeLeaseDurations: active=6s renewal=3s
 RangeLeaseAcquireTimeout: 4s
 NodeLivenessDurations: active=6s renewal=3s

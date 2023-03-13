@@ -262,6 +262,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	// time in tests.
 	sc.RaftHeartbeatIntervalTicks = 1
 	sc.RaftElectionTimeoutTicks = 3
+	sc.RaftReproposalTimeoutTicks = 5
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
 	return sc
@@ -1152,8 +1153,8 @@ type ConsistencyTestingKnobs struct {
 func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
-		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
-		sc.AmbientCtx.Tracer != nil
+		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
+		sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
