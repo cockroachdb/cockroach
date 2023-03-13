@@ -2312,6 +2312,12 @@ func (r *Replica) GetLoadStatsForTesting() *load.ReplicaLoad {
 	return r.loadStats
 }
 
+// HasOutstandingLearnerSnapshotInFlightForTesting is for use only by tests to
+// gather whether there are in-flight snapshots to learner replcas.
+func (r *Replica) HasOutstandingLearnerSnapshotInFlightForTesting() bool {
+	return r.hasOutstandingLearnerSnapshotInFlight()
+}
+
 // ReadProtectedTimestampsForTesting is for use only by tests to read and update
 // the Replicas' cached protected timestamp state.
 func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err error) {
