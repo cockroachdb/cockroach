@@ -95,7 +95,7 @@ const numTxnRetryErrors = 3
 func (ex *connExecutor) execStmt(
 	ctx context.Context,
 	parserStmt parser.Statement,
-	prepared *PreparedStatement,
+	portal *PreparedPortal,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
@@ -133,8 +133,12 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, ast, res)
 
 	case stateOpen:
-		err = ex.execWithProfiling(ctx, ast, prepared, func(ctx context.Context) error {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
+		var preparedStmt *PreparedStatement
+		if portal != nil {
+			preparedStmt = portal.Stmt
+		}
+		err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
+			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, portal, pinfo, res, canAutoCommit)
 			return err
 		})
 		switch ev.(type) {
@@ -202,6 +206,26 @@ func (ex *connExecutor) execPortal(
 	pinfo *tree.PlaceholderInfo,
 	canAutoCommit bool,
 ) (ev fsm.Event, payload fsm.EventPayload, err error) {
+	defer func() {
+		if portal.isPausable() {
+			if !portal.pauseInfo.exhaustPortal.IsComplete() {
+				portal.pauseInfo.exhaustPortal.AppendFunc(NamedFunc{FName: "exhaust portal", F: func() {
+					if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+						ex.exhaustPortal(portalName)
+					}
+				}})
+				portal.pauseInfo.exhaustPortal.SetComplete()
+			}
+			// If we encountered an error when executing a pausable, clean up the retained
+			// resources.
+			if err != nil {
+				portal.pauseInfo.flowCleanup.Run()
+				portal.pauseInfo.execStmtCleanup.Run()
+				portal.pauseInfo.exhaustPortal.Run()
+			}
+		}
+	}()
+
 	switch ex.machine.CurState().(type) {
 	case stateOpen:
 		// We're about to execute the statement in an open state which
@@ -223,23 +247,37 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
-		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
-		// Portal suspension is supported via a "side" state machine
-		// (see pgwire.limitedCommandResult for details), so when
-		// execStmt returns, we know for sure that the portal has been
-		// executed to completion, thus, it is exhausted.
-		// Note that the portal is considered exhausted regardless of
-		// the fact whether an error occurred or not - if it did, we
-		// still don't want to re-execute the portal from scratch.
+		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
+		// For a non-pausable portal, it is considered exhausted regardless of the \
+		// fact whether an error occurred or not - if it did, we still don't want
+		// to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-			ex.exhaustPortal(portalName)
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && !portal.isPausable() {
+			defer ex.exhaustPortal(portalName)
 		}
 		return ev, payload, err
 
 	default:
-		return ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
+		return ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
+	}
+}
+
+func isPausablePortal(portal *PreparedPortal) bool {
+	return portal != nil && portal.isPausable()
+}
+
+// For pausable portals, we delay the clean-up until closing the portal by
+// adding the function to the execStmtCleanup.
+// Otherwise, perform the clean-up step within every execution.
+func processCleanupFunc(portal *PreparedPortal, fName string, f func()) {
+	if !isPausablePortal(portal) {
+		f()
+	} else if !portal.pauseInfo.execStmtCleanup.IsComplete() {
+		portal.pauseInfo.execStmtCleanup.AppendFunc(NamedFunc{
+			FName: fName,
+			F:     f,
+		})
 	}
 }
 
@@ -259,15 +297,35 @@ func (ex *connExecutor) execPortal(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
 	parserStmt parser.Statement,
-	prepared *PreparedStatement,
+	portal *PreparedPortal,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
-	// TODO(andrei): Consider adding the placeholders as tags too.
-	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-	defer sp.Finish()
+	defer func() {
+		// If there's any error, do the cleanup right here.
+		if (retErr != nil || payloadHasError(retPayload)) && portal != nil && portal.isPausable() {
+			portal.pauseInfo.flowCleanup.Run()
+			portal.pauseInfo.execStmtCleanup.Run()
+		}
+	}()
+
+	var sp *tracing.Span
+	if !isPausablePortal(portal) || !portal.pauseInfo.execStmtCleanup.IsComplete() {
+		ctx, sp = tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
+		// TODO(andrei): Consider adding the placeholders as tags too.
+		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
+		defer func() {
+			// For pausable portals, we need to persist the span as it shares the ctx
+			// with the underlying flow. If it got cleaned up before we clean up the
+			// flow, we will hit `span used after finished` whenever we log an event
+			// when cleaning up the flow.
+			// TODO(janexing): maybe we should have 2 sets of span -- one for flow
+			// (i.e. that covers the whole lifetime of a portal) and another for each
+			// portal execution.
+			processCleanupFunc(portal, "cleanup sp", sp.Finish)
+		}()
+	}
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
@@ -277,7 +335,17 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	var stmt Statement
-	queryID := ex.generateID()
+	var queryID clusterunique.ID
+
+	if portal != nil && portal.isPausable() {
+		if !portal.pauseInfo.isQueryIDSet() {
+			portal.pauseInfo.queryID = ex.generateID()
+		}
+		queryID = portal.pauseInfo.queryID
+	} else {
+		queryID = ex.generateID()
+	}
+
 	// Update the deadline on the transaction based on the collections.
 	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
@@ -285,25 +353,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	os := ex.machine.CurState().(stateOpen)
 
-	isExtendedProtocol := prepared != nil
+	isExtendedProtocol := portal != nil && portal.Stmt != nil
+
 	if isExtendedProtocol {
-		stmt = makeStatementFromPrepared(prepared, queryID)
+		stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
 		stmt = makeStatement(parserStmt, queryID)
 	}
-
-	ex.incrementStartedStmtCounter(ast)
-	defer func() {
-		if retErr == nil && !payloadHasError(retPayload) {
-			ex.incrementExecutedStmtCounter(ast)
-		}
-	}()
-
-	func(st *txnState) {
-		st.mu.Lock()
-		defer st.mu.Unlock()
-		st.mu.stmtCount++
-	}(&ex.state)
 
 	var queryTimeoutTicker *time.Timer
 	var txnTimeoutTicker *time.Timer
@@ -317,7 +373,35 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
-	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
+
+	incrementExecutedStmtCntFunc := func() {
+		if retErr == nil && !payloadHasError(retPayload) {
+			ex.incrementExecutedStmtCounter(ast)
+		}
+	}
+
+	addActiveQuery := func() {
+		ex.incrementStartedStmtCounter(ast)
+		func(st *txnState) {
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			st.mu.stmtCount++
+		}(&ex.state)
+		ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
+	}
+
+	// For pausable portal, the active query needs to be setup only when
+	// the portal is executed for the first time.
+	if !isPausablePortal(portal) || !portal.pauseInfo.execStmtCleanup.IsComplete() {
+		addActiveQuery()
+		defer func() {
+			processCleanupFunc(
+				portal,
+				"increment executed stmt cnt",
+				incrementExecutedStmtCntFunc,
+			)
+		}()
+	}
 
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
@@ -355,11 +439,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
-		ex.removeActiveQuery(queryID, ast)
-		cancelQuery()
-		if ex.executorType != executorTypeInternal {
-			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-		}
+		processCleanupFunc(portal, "cancel query", func() {
+			ex.removeActiveQuery(queryID, ast)
+			cancelQuery()
+			if ex.executorType != executorTypeInternal {
+				ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+			}
+		})
 
 		// If the query timed out, we intercept the error, payload, and event here
 		// for the same reasons we intercept them for canceled queries above.
@@ -480,26 +566,54 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	var needFinish bool
-	ctx, needFinish = ih.Setup(
-		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-		stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
-	)
+	// For pausable portal, the instrumentation helper needs to be setup only when
+	// the portal is executed for the first time.
+	if !isPausablePortal(portal) || portal.pauseInfo.ihWrapper == nil {
+		ctx, needFinish = ih.Setup(
+			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
+			stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
+		)
+	}
+	// For pausable portals, we need to persist the instrumentationHelper as it
+	// shares the ctx with the underlying flow. If it got cleaned up before we
+	// clean up the flow, we will hit `span used after finished` whenever we log
+	// an event when cleaning up the flow.
+	// We need this seemingly weird wrapper here because we set the planner's ih
+	// with its pointer. However, for pausable portal, we'd like to persist the
+	// ih and reuse it for all re-executions. So the planner's ih and the portal's
+	// ih should never have the same address, otherwise changing the former will
+	// change the former, and we will never be able to persist it.
+	if portal != nil && portal.isPausable() {
+		if portal.pauseInfo.ihWrapper == nil {
+			portal.pauseInfo.ihWrapper = &instrumentationHelperWrapper{
+				*ih,
+			}
+		} else {
+			p.instrumentation = portal.pauseInfo.ihWrapper.ih
+		}
+	}
 	if needFinish {
 		sql := stmt.SQL
 		defer func() {
-			retErr = ih.Finish(
-				ex.server.cfg,
-				ex.statsCollector,
-				&ex.extraTxnState.accumulatedStats,
-				ih.collectExecStats,
-				p,
-				ast,
-				sql,
-				res,
-				retPayload,
-				retErr,
-			)
+			processCleanupFunc(portal, "finish ih", func() {
+				retErr = ih.Finish(
+					ex.server.cfg,
+					ex.statsCollector,
+					&ex.extraTxnState.accumulatedStats,
+					ih.collectExecStats,
+					p,
+					ast,
+					sql,
+					res,
+					retPayload,
+					retErr,
+				)
+			})
 		}()
+	}
+
+	if portal != nil && portal.isPausable() && !portal.pauseInfo.execStmtCleanup.IsComplete() {
+		portal.pauseInfo.execStmtCleanup.SetComplete()
 	}
 
 	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() && ex.executorType != executorTypeInternal {
@@ -724,6 +838,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = stmt
+	if portal != nil && portal.isPausable() {
+		p.portal = portal
+	}
 	p.cancelChecker.Reset(ctx)
 
 	// Auto-commit is disallowed during statement execution if we previously
@@ -1118,6 +1235,8 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		return err
 	}
 
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+
 	// We need to step the transaction before committing if it has stepping
 	// enabled. If it doesn't have stepping enabled, then we just set the
 	// stepping mode back to what it was.
@@ -1206,6 +1325,9 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
+
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}

@@ -1137,6 +1137,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if closeType == normalClose {
+		// Close all portals, otherwise there will be leftover bytes.
+		ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.True}
@@ -1162,6 +1164,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
 		}
 	} else if closeType == externalTxnClose {
+		// Close all portals, otherwise there will be leftover bytes.
+		ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 		ex.state.finishExternalTxn()
 	}
 
@@ -1663,6 +1667,15 @@ func (ns prepStmtNamespace) HasPortal(s string) bool {
 	return ok
 }
 
+func (ns prepStmtNamespace) closeAllPortals(
+	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+) {
+	for name, p := range ns.portals {
+		p.close(ctx, prepStmtsNamespaceMemAcc, name)
+		delete(ns.portals, name)
+	}
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
 func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
@@ -1989,7 +2002,7 @@ func (ex *connExecutor) execCmd() error {
 				(tcmd.LastInBatchBeforeShowCommitTimestamp ||
 					tcmd.LastInBatch || !implicitTxnForBatch)
 			ev, payload, err = ex.execStmt(
-				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
+				ctx, tcmd.Statement, nil /* portal */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)
 
 			return err
