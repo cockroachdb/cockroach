@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -265,11 +266,12 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 func runPlanInsidePlan(
 	ctx context.Context, params runParams, plan *planComponents, resultWriter rowResultWriter,
 ) error {
+	execCfg := params.ExecCfg()
 	recv := MakeDistSQLReceiver(
 		ctx, resultWriter, tree.Rows,
-		params.ExecCfg().RangeDescriptorCache,
+		execCfg.RangeDescriptorCache,
 		params.p.Txn(),
-		params.ExecCfg().Clock,
+		execCfg.Clock,
 		params.p.extendedEvalCtx.Tracing,
 		params.p.ExecCfg().ContentionRegistry,
 		nil, /* testingPushCallback */
@@ -301,7 +303,7 @@ func runPlanInsidePlan(
 		// return from this method (after the main query is executed).
 		subqueryResultMemAcc := params.p.EvalContext().Mon.MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
-		if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
+		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
 			params.p,
 			params.extendedEvalCtx.copy,
@@ -309,6 +311,7 @@ func runPlanInsidePlan(
 			recv,
 			&subqueryResultMemAcc,
 			false, /* skipDistSQLDiagramGeneration */
+			atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1,
 		) {
 			return resultWriter.Err()
 		}
@@ -324,14 +327,16 @@ func runPlanInsidePlan(
 	if distributePlan.WillDistribute() {
 		distributeType = DistributionTypeAlways
 	}
-	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
-		ctx, evalCtx, &plannerCopy, params.p.txn, distributeType)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.planner.curPlan.planComponents = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
 	planCtx.stmtType = recv.stmtType
+	planCtx.mustUseLeafTxn = atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1
 
-	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv,
+	finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
+	defer cleanup()
+	execCfg.DistSQLPlanner.PlanAndRun(
+		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
 	)()
 	return resultWriter.Err()
 }

@@ -624,3 +624,44 @@ WHERE EXISTS(
      SELECT t4.i::INT8 FROM w
   )
 )
+
+# Regression test for incorrectly using the RootTxn in apply join iterations
+# when the main query is using the LeafTxn (#97989).
+statement ok
+CREATE TABLE t1 (said, smid) AS VALUES (1, 1);
+CREATE TABLE t2 (aid, said, mid, pid) AS VALUES (1, 1, 1, 1);
+CREATE TABLE t3 (mid, smid) AS VALUES (1, 1);
+CREATE TABLE t4 (pid PRIMARY KEY) AS VALUES (1);
+CREATE TABLE t5 (said, smid) AS VALUES (1, 1);
+
+statement ok
+CREATE MATERIALIZED VIEW v1 AS
+    WITH
+        cte1
+            AS (
+                SELECT
+                    aid, t4.pid
+                FROM
+                    t1
+                    INNER JOIN t2 ON t2.said = t1.said AND t2.mid = (SELECT mid FROM t3 WHERE smid = t1.smid)
+                    INNER JOIN t4 ON t4.pid = t2.pid
+                    INNER JOIN t3 ON t3.smid = t1.smid
+            ),
+        cte2
+            AS (
+                SELECT
+                    aid, t4.pid
+                FROM
+                    t5
+                    INNER JOIN t2 ON t2.said = t5.said AND t2.mid = (SELECT mid FROM t3 WHERE smid = t5.smid)
+                    INNER JOIN t4 ON t4.pid = t2.pid
+                    INNER JOIN t3 ON t3.smid = t5.smid
+            )
+    SELECT
+        aid, pid
+    FROM
+        (
+            SELECT aid, pid FROM cte1
+            UNION
+            SELECT aid, pid FROM cte2
+        );
