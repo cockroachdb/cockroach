@@ -85,6 +85,7 @@ var requireConstFmt = map[string]bool{
 
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Infof":  true,
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Fatalf": true,
+	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Eventf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Infof":    true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Warningf": true,
@@ -123,8 +124,9 @@ var requireConstFmt = map[string]bool{
 	"(google.golang.org/grpc/grpclog.Logger).Warningf": true,
 	"(google.golang.org/grpc/grpclog.Logger).Errorf":   true,
 
-	"(github.com/cockroachdb/pebble.Logger).Infof":  true,
-	"(github.com/cockroachdb/pebble.Logger).Fatalf": true,
+	"(github.com/cockroachdb/pebble.Logger).Infof":           true,
+	"(github.com/cockroachdb/pebble.Logger).Fatalf":          true,
+	"(github.com/cockroachdb/pebble.LoggerAndTracer).Eventf": true,
 
 	"(github.com/cockroachdb/circuitbreaker.Logger).Infof":  true,
 	"(github.com/cockroachdb/circuitbreaker.Logger).Debugf": true,
