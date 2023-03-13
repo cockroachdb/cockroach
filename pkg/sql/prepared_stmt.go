@@ -188,11 +188,18 @@ func (ex *connExecutor) makePreparedPortal(
 	// TODO(sql-session): address the compatibility of pausable portals and
 	// prepared_statements_cache_size.
 	// https://github.com/cockroachdb/cockroach/issues/99959
-	if ex.sessionData().MultipleActivePortalsEnabled {
+	if ex.sessionData().MultipleActivePortalsEnabled && ex.executorType != executorTypeInternal {
 		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
-		portal.pauseInfo = &portalPauseInfo{}
-		portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
-		portal.portalPausablity = PausablePortal
+		if tree.IsAllowedToPause(stmt.AST) {
+			portal.pauseInfo = &portalPauseInfo{}
+			portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
+			portal.portalPausablity = PausablePortal
+		} else {
+			telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+			// We have set the session variable multiple_active_portals_enabled  to
+			// true, but we don't support the underlying query for a pausable portal.
+			portal.portalPausablity = NotPausablePortalForUnsupportedStmt
+		}
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }
