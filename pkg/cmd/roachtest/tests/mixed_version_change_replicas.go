@@ -124,10 +124,11 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 					InitialBackoff: 100 * time.Millisecond,
 					MaxBackoff:     5 * time.Second,
 					Multiplier:     2,
-					MaxRetries:     8,
+					MaxRetries:     12,
 				}
 				var rangeErrors map[int]string
 				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+					setReplicateQueueEnabled(false)
 					if errCount := len(rangeErrors); errCount > 0 {
 						t.L().Printf("%d ranges failed, retrying", errCount)
 					}
@@ -152,6 +153,10 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 					if len(rangeErrors) == 0 {
 						break
 					}
+					// The failure may be caused by conflicts with ongoing configuration
+					// changes by the replicate queue, so we re-enable it and let it run
+					// for a bit before the next retry.
+					setReplicateQueueEnabled(true)
 				}
 
 				if len(rangeErrors) > 0 {
