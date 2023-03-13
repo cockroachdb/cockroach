@@ -664,12 +664,22 @@ type pebbleLogger struct {
 	depth int
 }
 
+var _ pebble.LoggerAndTracer = pebbleLogger{}
+
 func (l pebbleLogger) Infof(format string, args ...interface{}) {
 	log.Storage.InfofDepth(l.ctx, l.depth, format, args...)
 }
 
 func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
 	log.Storage.FatalfDepth(l.ctx, l.depth, format, args...)
+}
+
+func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interface{}) {
+	log.Eventf(ctx, format, args...)
+}
+
+func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
+	return log.HasSpanOrEvent(ctx)
 }
 
 // PebbleConfig holds all configuration parameters and knobs used in setting up
@@ -943,11 +953,17 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// `opts` will set the logger to pebble's `DefaultLogger`. In
 	// crdb, we want pebble-related logs to go to the storage channel,
 	// so we update the logger here accordingly.
-	if opts.Logger == nil || opts.Logger == pebble.DefaultLogger {
-		opts.Logger = pebbleLogger{
+	var logger pebble.Logger
+	if opts.LoggerAndTracer != nil {
+		logger = opts.LoggerAndTracer
+	} else if opts.Logger != nil && opts.Logger != pebble.DefaultLogger {
+		logger = opts.Logger
+	} else {
+		opts.LoggerAndTracer = pebbleLogger{
 			ctx:   logCtx,
 			depth: 1,
 		}
+		logger = opts.Logger
 	}
 
 	// Establish the emergency ballast if we can. If there's not sufficient
@@ -965,7 +981,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 				return nil, errors.Wrap(err, "resizing ballast")
 			}
 			if resized {
-				opts.Logger.Infof("resized ballast %s to size %s",
+				logger.Infof("resized ballast %s to size %s",
 					ballastPath, humanizeutil.IBytes(cfg.BallastSize))
 			}
 		}
@@ -987,7 +1003,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		fileRegistry:     fileRegistry,
 		fs:               opts.FS,
 		unencryptedFS:    unencryptedFS,
-		logger:           opts.Logger,
+		logger:           logger,
 		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
