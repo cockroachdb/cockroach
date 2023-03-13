@@ -441,6 +441,10 @@ func (s *SettingsWatcher) GetStorageClusterVersion() clusterversion.ClusterVersi
 	return s.mu.storageClusterVersion
 }
 
+// errVersionSettingNotFound is returned by GetClusterVersionFromStorage if the
+// 'version' setting is not present in the system.settings table.
+var errVersionSettingNotFound = errors.New("got nil value for tenant cluster version row")
+
 // GetClusterVersionFromStorage reads the cluster version from the storage via
 // the given transaction.
 func (s *SettingsWatcher) GetClusterVersionFromStorage(
@@ -453,7 +457,7 @@ func (s *SettingsWatcher) GetClusterVersionFromStorage(
 		return clusterversion.ClusterVersion{}, err
 	}
 	if row.Value == nil {
-		return clusterversion.ClusterVersion{}, errors.New("got nil value for tenant cluster version row")
+		return clusterversion.ClusterVersion{}, errVersionSettingNotFound
 	}
 	_, val, _, err := s.dec.DecodeRow(roachpb.KeyValue{Key: row.Key, Value: *row.Value}, nil /* alloc */)
 	if err != nil {

@@ -58,7 +58,7 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				d.ScanArgs(t, "admitted", &admitted)
 				d.ScanArgs(t, "write-accounted", &writeAccounted)
 				d.ScanArgs(t, "ingested-accounted", &ingestedAccounted)
-				admissionStats.admittedCount += admitted
+				admissionStats.workCount += admitted
 				admissionStats.writeAccountedBytes += writeAccounted
 				admissionStats.ingestedAccountedBytes += ingestedAccounted
 				if d.HasArg("bypassed-count") {

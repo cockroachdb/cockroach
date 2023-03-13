@@ -81,7 +81,7 @@ func (e *ElasticCPUWorkQueue) Admit(
 	if duration > MaxElasticCPUDuration {
 		duration = MaxElasticCPUDuration
 	}
-	info.requestedCount = duration.Nanoseconds()
+	info.RequestedCount = duration.Nanoseconds()
 	enabled, err := e.workQueue.Admit(ctx, info)
 	if err != nil {
 		return nil, err

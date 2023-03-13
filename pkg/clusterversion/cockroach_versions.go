@@ -473,6 +473,12 @@ const (
 	// has been backfilled.
 	V23_1ExternalConnectionsTableOwnerIDColumnBackfilled
 
+	// V23_1AllowNewSystemPrivileges is the version at which we allow the new
+	// MODIFYSQLCLUSTERSETTING abd VIEWJOB system privileges to be used.
+	// Note: After v23.1 is released, we won't need to version gate these anymore,
+	// since we've made mixed-version clusters tolerate new privileges.
+	V23_1AllowNewSystemPrivileges
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -817,6 +823,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1ExternalConnectionsTableOwnerIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 76},
+	},
+	{
+		Key:     V23_1AllowNewSystemPrivileges,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 78},
 	},
 
 	// *************************************************

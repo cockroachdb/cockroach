@@ -109,8 +109,9 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
-					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
+					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
+					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
+				) storeRequester {
 					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
 							workKind:               KVWork,
@@ -273,8 +274,8 @@ func TestStoreCoordinators(t *testing.T) {
 	opts := Options{
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
+			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs) storeRequester {
 			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
 			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
@@ -444,7 +445,7 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 	m.metrics = m.metrics[:0]
 	for _, s := range stores {
 		m.metrics = append(m.metrics, StoreMetrics{
-			StoreID: s,
+			StoreID: roachpb.StoreID(s),
 			Metrics: &metrics,
 		})
 	}

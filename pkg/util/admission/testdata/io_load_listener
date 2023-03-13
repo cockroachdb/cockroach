@@ -6,7 +6,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Even though above the threshold, the first 60 ticks don't limit the tokens.
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=21 l0-sublevels=21
@@ -76,7 +76,7 @@ tick: 59, setAvailableTokens: io-tokens=unlimited elastic-disk-bw-tokens=unlimit
 
 prep-admission-stats admitted=10000 write-bytes=40000
 ----
-{admittedCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Delta added is 100,000. The l0-bytes are the same, so compactions removed
 # 100,000 bytes. Smoothed removed by compactions is 50,000. Each admitted is
@@ -151,7 +151,7 @@ tick: 59, setAvailableTokens: io-tokens=169 elastic-disk-bw-tokens=unlimited
 
 prep-admission-stats admitted=20000 write-bytes=80000
 ----
-{admittedCount:20000 writeAccountedBytes:80000 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:20000 writeAccountedBytes:80000 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Same delta as previous but smoothing bumps up the tokens to 25,000.
 set-state l0-bytes=10000 l0-added-write=201000 l0-files=21 l0-sublevels=21
@@ -232,7 +232,7 @@ setAvailableTokens: io-tokens=365 elastic-disk-bw-tokens=unlimited
 
 prep-admission-stats admitted=30000 write-bytes=120000
 ----
-{admittedCount:30000 writeAccountedBytes:120000 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:30000 writeAccountedBytes:120000 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # l0-sublevels drops below threshold. We calculate the smoothed values, but
 # don't limit the tokens.
@@ -250,7 +250,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=1000 l0-added-ingested=0 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -262,7 +262,7 @@ tick: 0, setAvailableTokens: io-tokens=unlimited elastic-disk-bw-tokens=unlimite
 # the admitted requests.
 prep-admission-stats admitted=10 write-bytes=130000 ingested-bytes=20000
 ----
-{admittedCount:10 writeAccountedBytes:130000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:130000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # The ingested model can be fit with a multiplier of ~1.5 for the interval,
 # but since the l0-ingest-lm model had a previous multiplier of 0.75 and the
@@ -282,7 +282,7 @@ setAvailableTokens: io-tokens=417 elastic-disk-bw-tokens=unlimited
 # ingested model is decayed by a factor of 2.
 prep-admission-stats admitted=20 write-bytes=150000 ingested-bytes=20000
 ----
-{admittedCount:20 writeAccountedBytes:150000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:20 writeAccountedBytes:150000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=191000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -296,7 +296,7 @@ setAvailableTokens: io-tokens=459 elastic-disk-bw-tokens=unlimited
 # bytes to L0. We don't let unaccounted bytes become negative.
 prep-admission-stats admitted=30 write-bytes=250000 ingested-bytes=20000 ingested-into-l0=20000
 ----
-{admittedCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=211000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -312,7 +312,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----
