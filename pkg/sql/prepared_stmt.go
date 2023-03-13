@@ -174,6 +174,7 @@ func (ex *connExecutor) makePreparedPortal(
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
+	isInternal bool,
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
@@ -188,7 +189,7 @@ func (ex *connExecutor) makePreparedPortal(
 		telemetry.Inc(sqltelemetry.MultipleActivePortalCounter)
 	})
 
-	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
+	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) && !isInternal {
 		if tree.IsReadOnly(stmt.AST) {
 			portal.pauseInfo = &portalPauseInfo{queryStats: &topLevelQueryStats{}}
 			portal.portalPausablity = PausablePortal
