@@ -42,14 +42,13 @@ import (
 
 const (
 	createTable                         = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemRangeID                       = "58"
-	secondaryRangeID                    = "59"
-	secondaryWithoutCapabilityRangeID   = "61"
 	systemKey                           = "\xc1"
 	systemKeyPretty                     = "/Table/57"
 	secondaryKeyPretty                  = "/Tenant/10"
 	secondaryWithoutCapabilityKeyPretty = "/Tenant/20"
 	maxTimestamp                        = "2262-04-11 23:47:16.854776 +0000 +0000"
+	ok                                  = "ok"
+	ignore                              = "*"
 )
 
 var ctx = context.Background()
@@ -84,9 +83,12 @@ func verifyResults(t *testing.T, message string, rows *gosql.Rows, expectedResul
 		require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d\nexpected=%v\n  actual=%v", message, expectedRowResult, actualRowResult, i)
 		for j, actualColResult := range actualRowResult {
 			expectedColResult := expectedRowResult[j]
-			if expectedColResult == "" {
+			switch expectedColResult {
+			case "": // For results that should be empty.
 				require.Emptyf(t, actualColResult, "%s row=%d col=%d", message, i, j)
-			} else {
+			case ignore: // For non-deterministic results that should be non-empty.
+				require.NotEmptyf(t, actualColResult, "%s row=%d col=%d", message, i, j)
+			default: // For deterministic results that should be non-empty.
 				require.Containsf(t, actualColResult, expectedColResult, "%s row=%d col=%d", message, i, j)
 			}
 		}
@@ -415,13 +417,13 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE LEASE",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -429,13 +431,13 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE LEASE",
 			query: "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -667,13 +669,13 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE VOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -681,13 +683,13 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE VOTERS",
 			query: "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -821,13 +823,13 @@ func TestRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE NONVOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -835,13 +837,13 @@ func TestRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE NONVOTERS",
 			query: "ALTER RANGE RELOCATE NONVOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{secondaryWithoutCapabilityRangeID, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
