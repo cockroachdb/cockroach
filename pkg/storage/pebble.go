@@ -664,12 +664,22 @@ type pebbleLogger struct {
 	depth int
 }
 
+var _ pebble.LoggerAndTracer = pebbleLogger{}
+
 func (l pebbleLogger) Infof(format string, args ...interface{}) {
 	log.Storage.InfofDepth(l.ctx, l.depth, format, args...)
 }
 
 func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
 	log.Storage.FatalfDepth(l.ctx, l.depth, format, args...)
+}
+
+func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interface{}) {
+	log.Eventf(ctx, format, args...)
+}
+
+func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
+	return log.HasSpanOrEvent(ctx)
 }
 
 // PebbleConfig holds all configuration parameters and knobs used in setting up
@@ -742,7 +752,7 @@ type Pebble struct {
 	fs            vfs.FS
 	unencryptedFS vfs.FS
 	logCtx        context.Context
-	logger        pebble.Logger
+	logger        pebble.LoggerAndTracer
 	eventListener *pebble.EventListener
 	mu            struct {
 		// This mutex is the lowest in any lock ordering.
@@ -870,6 +880,9 @@ func ResolveEncryptedEnvOptions(
 
 // NewPebble creates a new Pebble instance, at the specified path.
 // Do not use directly (except in test); use Open instead.
+//
+// Direct users of NewPebble: cfs.opts.{Logger,LoggerAndTracer} must not be
+// set.
 func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if cfg.Settings == nil {
 		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")
@@ -879,6 +892,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if cfg.Opts == nil {
 		opts = DefaultPebbleOptions()
 	} else {
+		// Open also causes DefaultPebbleOptions before calling NewPebble, so we
+		// are tolerant of Logger being set to pebble.DefaultLogger.
+		if cfg.Opts.Logger != nil && cfg.Opts.Logger != pebble.DefaultLogger {
+			return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
+		}
 		// Clone the given options so that we are free to modify them.
 		opts = cfg.Opts.Clone()
 	}
@@ -939,16 +957,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		opts.FS = encryptionEnv.FS
 	}
 
-	// If no logger was passed, the previous call to `EnsureDefaults` on
-	// `opts` will set the logger to pebble's `DefaultLogger`. In
-	// crdb, we want pebble-related logs to go to the storage channel,
-	// so we update the logger here accordingly.
-	if opts.Logger == nil || opts.Logger == pebble.DefaultLogger {
-		opts.Logger = pebbleLogger{
+	opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
+	if opts.LoggerAndTracer == nil {
+		opts.LoggerAndTracer = pebbleLogger{
 			ctx:   logCtx,
 			depth: 1,
 		}
 	}
+	// Else, already have a LoggerAndTracer. This only occurs in unit tests.
 
 	// Establish the emergency ballast if we can. If there's not sufficient
 	// disk space, the ballast will be reestablished from Capacity when the
@@ -965,7 +981,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 				return nil, errors.Wrap(err, "resizing ballast")
 			}
 			if resized {
-				opts.Logger.Infof("resized ballast %s to size %s",
+				opts.LoggerAndTracer.Infof("resized ballast %s to size %s",
 					ballastPath, humanizeutil.IBytes(cfg.BallastSize))
 			}
 		}
@@ -987,7 +1003,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		fileRegistry:     fileRegistry,
 		fs:               opts.FS,
 		unencryptedFS:    unencryptedFS,
-		logger:           opts.Logger,
+		logger:           opts.LoggerAndTracer,
 		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
