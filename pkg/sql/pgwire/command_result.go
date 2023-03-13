@@ -118,6 +118,9 @@ type paramStatusUpdate struct {
 
 var _ sql.CommandResult = &commandResult{}
 
+// UnsetForPausablePortal is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) UnsetForPausablePortal() {}
+
 // Close is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
 	r.assertNotReleased()
@@ -452,6 +455,8 @@ type limitedCommandResult struct {
 	forPausablePortal bool
 }
 
+var _ sql.RestrictedCommandResult = &limitedCommandResult{}
+
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if err := r.commandResult.AddRow(ctx, row); err != nil {
@@ -479,6 +484,11 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		}
 	}
 	return nil
+}
+
+// UnsetForPausablePortal is part of the sql.RestrictedCommandResult interface.
+func (r *limitedCommandResult) UnsetForPausablePortal() {
+	r.forPausablePortal = false
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
