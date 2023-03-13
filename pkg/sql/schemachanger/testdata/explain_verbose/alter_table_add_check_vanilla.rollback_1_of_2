@@ -12,18 +12,29 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward ABSENT
+        ├── • 2 elements transitioning toward ABSENT
         │   │
-        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │       │ WRITE_ONLY → ABSENT
+        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   │   │ WRITE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   │   │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │   │         rule: "Constraint should be hidden before name"
+        │   │
+        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
-        │       │
-        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-        │             rule: "dependents removed before constraint"
+        │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │             rule: "Constraint should be hidden before name"
         │
-        └── • 3 Mutation operations
+        └── • 4 Mutation operations
+            │
+            ├── • SetConstraintName
+            │     ConstraintID: 2
+            │     Name: crdb_internal_constraint_2_name_placeholder
+            │     TableID: 104
             │
             ├── • RemoveCheckConstraint
             │     ConstraintID: 2
