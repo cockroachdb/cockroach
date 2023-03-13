@@ -189,6 +189,14 @@ func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *met
 	mr.mu.tenantRegistries[tenantID] = rec
 }
 
+// RemoveTenantRegistry removes shared-process tenant's registry.
+func (mr *MetricsRecorder) RemoveTenantRegistry(tenantID roachpb.TenantID) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	delete(mr.mu.tenantRegistries, tenantID)
+}
+
 // AddNode adds the Registry from an initialized node, along with its descriptor
 // and start time.
 func (mr *MetricsRecorder) AddNode(
