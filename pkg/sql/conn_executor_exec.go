@@ -1561,9 +1561,32 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
+
+	distSQLMode := ex.sessionData().DistSQLMode
+	if planner.pausablePortal != nil {
+		if len(planner.curPlan.subqueryPlans) == 0 &&
+			len(planner.curPlan.cascades) == 0 &&
+			len(planner.curPlan.checkPlans) == 0 {
+			// We only allow non-distributed plan for pausable portals.
+			distSQLMode = sessiondatapb.DistSQLOff
+		} else {
+			telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
+			// We don't allow sub / post queries for pausable portal. Set it back to an
+			// un-pausable (normal) portal.
+			// With pauseInfo is nil, no cleanup function will be added to the stack
+			// and all clean-up steps will be performed as for normal portals.
+			planner.pausablePortal.pauseInfo = nil
+			// We need this so that the result consumption for this portal cannot be
+			// paused either.
+			if err := res.RevokePortalPausability(); err != nil {
+				res.SetError(err)
+				return nil
+			}
+		}
+	}
 	distributePlan := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		ex.sessionData().DistSQLMode, planner.curPlan.main,
+		distSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
