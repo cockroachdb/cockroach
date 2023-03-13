@@ -1,0 +1,1106 @@
+send crdb_only
+Query {"String": "SET multiple_active_portals_enabled = true"}
+----
+
+until crdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest select_from_individual_resources
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,20)"}
+Parse {"Name": "q2", "Query": "SELECT * FROM generate_series(1,20)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest select_from_same_table
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Query {"String": "CREATE TABLE mytable (x int)"}
+Query {"String": "INSERT INTO mytable VALUES (1),(2),(3)"}
+Parse {"Name": "q1", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Parse {"Name": "q2", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+subtest end
+
+
+subtest bind_to_an_existing_active_portal
+
+send
+Parse {"Name": "q3", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q3"}
+Execute {"Portal": "p2", "MaxRows": 2}
+Sync
+----
+
+
+until keepErrMessage
+ErrorResponse
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42P03","Message":"portal \"p2\" already exists"}
+
+send
+Query {"String": "COMMIT"}
+Sync
+----
+
+# Rollback
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest not_in_explicit_transaction
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,20)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Parse {"Name": "q2", "Query": "SELECT * FROM generate_series(1,20)"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Execute {"Portal": "p2", "MaxRows": 2}
+Sync
+----
+
+# p2 doesn't exist, as it is closed when the implicit txn is committed.
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"p2\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest drop_table_when_there_are_dependent_active_portals
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Query {"String": "CREATE TABLE mytable (x int)"}
+Query {"String": "INSERT INTO mytable VALUES (1),(2),(3)"}
+Parse {"Name": "q1", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "DROP TABLE mytable"}
+----
+
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"55006"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# For cursor we have `cannot run schema change in a transaction with open DECLARE cursors`.
+# We should have something similar for portals as well.
+# https://github.com/cockroachdb/cockroach/issues/99085
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest different_portals_bind_to_the_same_statement
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,20)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest more_complicated_stmts
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN; DROP TABLE IF EXISTS ta; DROP TABLE IF EXISTS tb; CREATE TABLE ta (x int, y int); CREATE TABLE tb (x int, z int); INSERT INTO ta VALUES (1,1), (2,2), (3,3), (4,4); INSERT INTO tb VALUES (1,2), (2,3), (3,4), (4,5)"}
+Parse {"Name": "q1", "Query": "SELECT z as myz FROM ta JOIN tb ON ta.x = tb.x ORDER BY myz"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 4"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 4"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest not_supported_statements
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int)"}
+Parse {"Name": "q1", "Query": "WITH t AS (INSERT INTO t(x) VALUES (1), (2), (3) RETURNING x) SELECT * FROM t;"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until crdb_only keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int); INSERT INTO t VALUES (1), (2), (3)"}
+Parse {"Name": "q1", "Query": "UPDATE t SET x = 10 WHERE true RETURNING x;"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int)"}
+Parse {"Name": "q1", "Query": "INSERT INTO t VALUES (1), (2), (3) RETURNING x;"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+
+until crdb_only keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest query_timeout
+# https://github.com/cockroachdb/cockroach/issues/99140
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Query {"String": "SET statement_timeout='2s'"}
+Parse {"Name": "q1", "Query": "SELECT i, pg_sleep(0.5) FROM generate_series(1, 6) AS g(i)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+# The output for pg_sleep differ between cockroach and postgres:
+# https://github.com/cockroachdb/cockroach/issues/98913
+until crdb_only keepErrMessage
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"57014","Message":"query execution canceled due to statement timeout"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until noncrdb_only keepErrMessage
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"4"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"57014","Message":"canceling statement due to statement timeout"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# timeout test with another query interleaving the portal execution.
+send
+Parse {"Name": "q1", "Query": "SELECT i, pg_sleep(0.5) FROM generate_series(1, 6) AS g(i)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Query {"String": "SELECT pg_sleep(2)"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"RowDescription","Fields":[{"Name":"pg_sleep","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":16,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"ErrorResponse","Code":"57014","Message":"query execution canceled due to statement timeout"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"p1\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "RESET statement_timeout"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"RESET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+subtest cancel_query_bug
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(11,21)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"11"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# We check the status of q1, cancel it, and recheck the status.
+send crdb_only
+Query {"String": "WITH x AS (SHOW CLUSTER STATEMENTS) SELECT query, phase FROM x WHERE query = 'SELECT * FROM ROWS FROM (generate_series(11, 21))'"}
+Query {"String": "CANCEL QUERY (WITH x AS (SHOW CLUSTER STATEMENTS) SELECT query_id FROM x WHERE query = 'SELECT * FROM ROWS FROM (generate_series(11, 21))');"}
+Query {"String": "WITH x AS (SHOW CLUSTER STATEMENTS) SELECT query, phase FROM x WHERE query = 'SELECT * FROM ROWS FROM (generate_series(11, 21))'"}
+Sync
+----
+
+# TODO(janexing): the query should have been cancelled but it still shows
+# `executing` status. It should be in `cancelled` status.
+until crdb_only ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"SELECT * FROM ROWS FROM (generate_series(11, 21))"},{"text":"executing"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"CANCEL QUERIES 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"DataRow","Values":[{"text":"SELECT * FROM ROWS FROM (generate_series(11, 21))"},{"text":"executing"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# q1 has been cancelled, so portals bound to it cannot be further executed.
+send crdb_only
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only ignore=RowDescription keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"57014","Message":"query execution canceled"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest ingest_non_retriable_error
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# We force a non-retriable error here, and check that in this case we close
+# all pausable portals.
+send crdb_only
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,20)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Query {"String": "SELECT crdb_internal.force_error('','foo')"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only keepErrMessage ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"XXUUU","Message":"foo"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"p1\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest interleave_with_unpausable_portal
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN; CREATE TABLE t (x int); INSERT INTO t VALUES (1), (2), (3)"}
+Parse {"Name": "q1", "Query": "SELECT * FROM t"}
+Parse {"Name": "q2", "Query": "UPDATE t SET x = 10 RETURNING x"}
+Parse {"Name": "q3", "Query": "INSERT INTO t VALUES (5), (6), (7)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "q3"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p3", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest pausable_portals_with_virtual_tables
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN; CREATE TABLE a (id int UNIQUE, name TEXT); CREATE TABLE t1(a int primary key, b int); CREATE TABLE t2(a int primary key, b int); CREATE TABLE t3(a int primary key, b int); CREATE TABLE t4(a int primary key, b int); CREATE TABLE t5(a int primary key, b int); CREATE TABLE t6(a int primary key, b int); CREATE TABLE t7(a int primary key, b int); CREATE TABLE t8(a int primary key, b int);"}
+Parse {"Name": "q", "Query": "SELECT a.attname, format_type(a.atttypid, a.atttypmod), pg_get_expr(d.adbin, d.adrelid), a.attnotnull, a.atttypid, a.atttypmod FROM pg_attribute a LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum WHERE a.attrelid = 'a'::regclass AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum;"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "q"}
+Execute {"Portal": "p", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"id"},{"text":"bigint"},null,{"text":"f"},{"text":"20"},{"text":"-1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"name"},{"text":"text"},null,{"text":"f"},{"text":"25"},{"text":"-1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "q2", "Query": "SELECT a.attname AS column_name, NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable, pg_get_expr(ad.adbin, ad.adrelid) AS column_default FROM pg_attribute AS a LEFT JOIN pg_attrdef AS ad ON (a.attrelid = ad.adrelid) AND (a.attnum = ad.adnum) JOIN pg_type AS t ON a.atttypid = t.oid JOIN pg_class AS c ON a.attrelid = c.oid JOIN pg_namespace AS n ON c.relnamespace = n.oid WHERE ( ( (c.relkind IN ('f', 'm', 'p', 'r', 'v')) AND (c.relname ILIKE '%t%') ) AND (n.nspname NOT IN ('pg_catalog', 'pg_toast')) ) AND pg_table_is_visible(c.oid) ORDER BY 1, 2;"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p2", "MaxRows": 3}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"rowid"},{"text":"bigint"},{"text":"unique_rowid()"},{"text":"t"},{"text":"20"},{"text":"-1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p2", "MaxRows": 5}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"DataRow","Values":[{"text":"a"},{"text":"f"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"auth_name"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"auth_srid"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"b"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"coord_dimension"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"f_geometry_column"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"f_table_catalog"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"f_table_name"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"f_table_schema"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"proj4text"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"rowid"},{"text":"f"},{"text":"unique_rowid()"}]}
+{"Type":"DataRow","Values":[{"text":"rowid"},{"text":"f"},{"text":"unique_rowid()"}]}
+{"Type":"DataRow","Values":[{"text":"rowid"},{"text":"f"},{"text":"unique_rowid()"}]}
+{"Type":"DataRow","Values":[{"text":"srid"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"srid"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"srtext"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"type"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"x"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"x"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"x"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"y"},{"text":"t"},null]}
+{"Type":"DataRow","Values":[{"text":"z"},{"text":"t"},null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 28"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "q3", "Query": "WITH RECURSIVE cte(a, b) AS (SELECT 0, 0 UNION ALL SELECT a+1, b+10 FROM cte WHERE a < 5) SELECT * FROM cte;"}
+Parse {"Name": "q4", "Query": "WITH RECURSIVE cte(a, b) AS (SELECT 0, 0 UNION ALL SELECT a+1, b+10 FROM cte WHERE a < 5) SELECT * FROM cte;"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "q3"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "q4"}
+Execute {"Portal": "p3", "MaxRows": 1}
+Execute {"Portal": "p4", "MaxRows": 1}
+Execute {"Portal": "p4", "MaxRows": 1}
+Execute {"Portal": "p3", "MaxRows": 1}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"},{"text":"0"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"0"},{"text":"0"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"10"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"10"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+
+subtest close_conn_executor_without_committing
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,20)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Parse {"Name": "q2", "Query": "SELECT * FROM generate_series(8,10)"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"8"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+subtest end
