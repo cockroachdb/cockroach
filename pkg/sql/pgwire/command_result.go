@@ -118,6 +118,11 @@ type paramStatusUpdate struct {
 
 var _ sql.CommandResult = &commandResult{}
 
+// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) RevokePortalPausability() error {
+	return errors.AssertionFailedf("RevokePortalPausability is only implemented by limitedCommandResult only")
+}
+
 // Close is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
 	r.assertNotReleased()
@@ -437,6 +442,8 @@ type limitedCommandResult struct {
 	portalPausablity sql.PortalPausablity
 }
 
+var _ sql.RestrictedCommandResult = &limitedCommandResult{}
+
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if err := r.commandResult.AddRow(ctx, row); err != nil {
@@ -463,6 +470,12 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 			return r.moreResultsNeeded(ctx)
 		}
 	}
+	return nil
+}
+
+// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
+func (r *limitedCommandResult) RevokePortalPausability() error {
+	r.portalPausablity = sql.NotPausablePortalForUnsupportedStmt
 	return nil
 }
 
