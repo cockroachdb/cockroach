@@ -197,7 +197,8 @@ func (mvr *mixedVersionRestore) restoreDatabaseName(id int64, h *mixedversion.He
 
 	fromVersion := sanitizeVersionForBackup(testContext.FromVersion)
 	toVersion := sanitizeVersionForBackup(testContext.ToVersion)
-	sanitizedLabel := strings.ReplaceAll(label, " ", "-")
+	sanitizedLabel := strings.ReplaceAll(label, " ", "_")
+	sanitizedLabel = strings.ReplaceAll(sanitizedLabel, ".", "_")
 
 	return fmt.Sprintf("%d_%s-to-%s_%s%s", id, fromVersion, toVersion, sanitizedLabel, finalizing)
 }
