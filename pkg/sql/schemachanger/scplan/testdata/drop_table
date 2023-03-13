@@ -35,15 +35,12 @@ ALTER TABLE shipments ALTER COLUMN udfcol SET DEFAULT f1();
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 22 MutationType ops
+StatementPhase stage 1 of 1 with 19 MutationType ops
   transitions:
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -66,26 +63,14 @@ StatementPhase stage 1 of 1 with 22 MutationType ops
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 2
       TableID: 109
-    *scop.SetConstraintName
-      ConstraintID: 2
-      Name: crdb_internal_constraint_2_name_placeholder
-      TableID: 109
     *scop.RemoveConstraintComment
       ConstraintID: 2
       TableID: 109
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 3
       TableID: 109
-    *scop.SetConstraintName
-      ConstraintID: 3
-      Name: crdb_internal_constraint_3_name_placeholder
-      TableID: 109
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 4
-      TableID: 109
-    *scop.SetConstraintName
-      ConstraintID: 4
-      Name: crdb_internal_constraint_4_name_placeholder
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
@@ -142,12 +127,9 @@ StatementPhase stage 1 of 1 with 22 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
-    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT], ABSENT] -> PUBLIC
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], VALIDATED] -> PUBLIC
-    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT], VALIDATED] -> PUBLIC
-    [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
@@ -1259,31 +1241,31 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT]
   to:   [CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
   kind: SameStagePrecedence
-  rule: dependents removed right before simple constraint
+  rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before constraint
+  kind: SameStagePrecedence
+  rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before constraint
+  kind: SameStagePrecedence
+  rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before constraint
+  kind: SameStagePrecedence
+  rule: Constraint should be hidden before name
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1303,7 +1285,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   kind: Precedence
-  rule: constraint no longer public before dependents
+  rule: Constraint should be hidden before name
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1315,7 +1297,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   kind: Precedence
-  rule: constraint no longer public before dependents
+  rule: Constraint should be hidden before name
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1327,7 +1309,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   kind: Precedence
-  rule: constraint no longer public before dependents
+  rule: Constraint should be hidden before name
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -2687,22 +2669,16 @@ CREATE TABLE defaultdb.greeter (
 ops
 DROP TABLE defaultdb.greeter
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 115, ReferencedTypeIDs: [113 114], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintWithoutIndexName:{DescID: 115, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakePublicCheckConstraintValidated
       ConstraintID: 2
       TableID: 115
-    *scop.SetConstraintName
-      ConstraintID: 2
-      Name: crdb_internal_constraint_2_name_placeholder
-      TableID: 115
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 115, ReferencedTypeIDs: [113 114], IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> PUBLIC
-    [[ConstraintWithoutIndexName:{DescID: 115, Name: check, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}

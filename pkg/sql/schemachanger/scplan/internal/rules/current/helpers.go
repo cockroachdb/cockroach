@@ -264,6 +264,14 @@ func isConstraintDependent(e scpb.Element) bool {
 	return false
 }
 
+func isConstraintWithIndexName(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ConstraintWithoutIndexName:
+		return true
+	}
+	return false
+}
+
 func isData(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.DatabaseData:

@@ -293,6 +293,114 @@ deprules
     - descriptorIsNotBeingDropped-23.1($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: Constraint should be hidden before name
+  from: constraint-name-Node
+  kind: SameStagePrecedence
+  to: constraint-Node
+  query:
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - joinOnConstraintID($constraint-name, $constraint, $table-id, $constraint-id)
+    - toAbsent($constraint-name-Target, $constraint-Target)
+    - $constraint-name-Node[CurrentStatus] = ABSENT
+    - $constraint-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+- name: Constraint should be hidden before name
+  from: constraint-name-Node
+  kind: SameStagePrecedence
+  to: constraint-Node
+  query:
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - joinOnConstraintID($constraint-name, $constraint, $table-id, $constraint-id)
+    - transient($constraint-name-Target, $constraint-Target)
+    - $constraint-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+- name: Constraint should be hidden before name
+  from: constraint-name-Node
+  kind: SameStagePrecedence
+  to: constraint-Node
+  query:
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - joinOnConstraintID($constraint-name, $constraint, $table-id, $constraint-id)
+    - $constraint-name-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $constraint-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $constraint-Target[TargetStatus] = ABSENT
+    - $constraint-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+- name: Constraint should be hidden before name
+  from: constraint-name-Node
+  kind: SameStagePrecedence
+  to: constraint-Node
+  query:
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - joinOnConstraintID($constraint-name, $constraint, $table-id, $constraint-id)
+    - $constraint-name-Target[TargetStatus] = ABSENT
+    - $constraint-name-Node[CurrentStatus] = ABSENT
+    - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+- name: Constraint should be hidden before name
+  from: constraint-Node
+  kind: Precedence
+  to: constraint-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - joinOnConstraintID($constraint, $constraint-name, $table-id, $constraint-id)
+    - toAbsent($constraint-Target, $constraint-name-Target)
+    - $constraint-Node[CurrentStatus] = VALIDATED
+    - $constraint-name-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+- name: Constraint should be hidden before name
+  from: constraint-Node
+  kind: Precedence
+  to: constraint-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - joinOnConstraintID($constraint, $constraint-name, $table-id, $constraint-id)
+    - transient($constraint-Target, $constraint-name-Target)
+    - $constraint-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - $constraint-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+- name: Constraint should be hidden before name
+  from: constraint-Node
+  kind: Precedence
+  to: constraint-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - joinOnConstraintID($constraint, $constraint-name, $table-id, $constraint-id)
+    - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $constraint-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - $constraint-name-Target[TargetStatus] = ABSENT
+    - $constraint-name-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
+- name: Constraint should be hidden before name
+  from: constraint-Node
+  kind: Precedence
+  to: constraint-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - joinOnConstraintID($constraint, $constraint-name, $table-id, $constraint-id)
+    - $constraint-Target[TargetStatus] = ABSENT
+    - $constraint-Node[CurrentStatus] = VALIDATED
+    - $constraint-name-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $constraint-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
 - name: DEFAULT or ON UPDATE existence precedes writes to column
   from: expr-Node
   kind: Precedence
@@ -1779,7 +1887,7 @@ deprules
   kind: SameStagePrecedence
   to: complex-constraint-Node
   query:
-    - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependent[Type] = '*scpb.ConstraintComment'
     - $complex-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - joinOnConstraintID($dependent, $complex-constraint, $table-id, $constraint-id)
     - ToPublicOrTransient($dependent-Target, $complex-constraint-Target)
@@ -1793,7 +1901,7 @@ deprules
   to: dependent-Node
   query:
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
-    - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependent[Type] = '*scpb.ConstraintComment'
     - joinOnConstraintID($constraint, $dependent, $table-id, $constraint-id)
     - toAbsent($constraint-Target, $dependent-Target)
     - $constraint-Node[CurrentStatus] = VALIDATED
@@ -1806,7 +1914,7 @@ deprules
   to: dependent-Node
   query:
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
-    - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependent[Type] = '*scpb.ConstraintComment'
     - joinOnConstraintID($constraint, $dependent, $table-id, $constraint-id)
     - transient($constraint-Target, $dependent-Target)
     - $constraint-Node[CurrentStatus] = TRANSIENT_VALIDATED
@@ -1819,7 +1927,7 @@ deprules
   to: dependent-Node
   query:
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
-    - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependent[Type] = '*scpb.ConstraintComment'
     - joinOnConstraintID($constraint, $dependent, $table-id, $constraint-id)
     - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
     - $constraint-Node[CurrentStatus] = TRANSIENT_VALIDATED
@@ -1833,7 +1941,7 @@ deprules
   to: dependent-Node
   query:
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
-    - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependent[Type] = '*scpb.ConstraintComment'
     - joinOnConstraintID($constraint, $dependent, $table-id, $constraint-id)
     - $constraint-Target[TargetStatus] = ABSENT
     - $constraint-Node[CurrentStatus] = VALIDATED
@@ -2047,7 +2155,7 @@ deprules
   kind: Precedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - toAbsent($dependents-Target, $constraint-Target)
@@ -2060,7 +2168,7 @@ deprules
   kind: Precedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - transient($dependents-Target, $constraint-Target)
@@ -2073,7 +2181,7 @@ deprules
   kind: Precedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - $dependents-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -2087,7 +2195,7 @@ deprules
   kind: Precedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - $dependents-Target[TargetStatus] = ABSENT
@@ -2155,7 +2263,7 @@ deprules
   kind: SameStagePrecedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraintUnvalidated']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - toAbsent($dependents-Target, $constraint-Target)
@@ -2168,7 +2276,7 @@ deprules
   kind: SameStagePrecedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraintUnvalidated']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - transient($dependents-Target, $constraint-Target)
@@ -2181,7 +2289,7 @@ deprules
   kind: SameStagePrecedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraintUnvalidated']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - $dependents-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -2195,7 +2303,7 @@ deprules
   kind: SameStagePrecedence
   to: constraint-Node
   query:
-    - $dependents[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
+    - $dependents[Type] = '*scpb.ConstraintComment'
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraintUnvalidated']
     - joinOnConstraintID($dependents, $constraint, $table-id, $constraint-id)
     - $dependents-Target[TargetStatus] = ABSENT
@@ -3279,6 +3387,19 @@ deprules
     - $dependent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($simple-constraint, $simple-constraint-Target, $simple-constraint-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: simple constraint visible before name
+  from: simple-constraint-Node
+  kind: SameStagePrecedence
+  to: constraint-name-Node
+  query:
+    - $simple-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']
+    - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
+    - joinOnConstraintID($simple-constraint, $constraint-name, $table-id, $constraint-id)
+    - ToPublicOrTransient($simple-constraint-Target, $constraint-name-Target)
+    - $simple-constraint-Node[CurrentStatus] = WRITE_ONLY
+    - $constraint-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($simple-constraint, $simple-constraint-Target, $simple-constraint-Node)
+    - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
 - name: swapped primary index public before column
   from: index-Node
   kind: Precedence
