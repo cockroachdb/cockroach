@@ -6019,7 +6019,6 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 95057, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	opts := makeOptions()

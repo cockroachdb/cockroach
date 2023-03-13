@@ -525,7 +525,12 @@ func randAddSSTable(g *generator, rng *rand.Rand) Operation {
 	probTombstone := 0.2             // probability to write a tombstone
 	asWrites := rng.Float64() < 0.2  // IngestAsWrites
 
-	if r := rng.Float64(); r < 0.8 {
+	if true {
+		// TODO(erikgrinaker): Disable range keys for now since CheckSSTConflicts
+		// computes incorrect MVCC stats. See:
+		// https://github.com/cockroachdb/cockroach/issues/98473
+		numRangeKeys = 0
+	} else if r := rng.Float64(); r < 0.8 {
 		// 80% probability of only point keys.
 		numRangeKeys = 0
 	} else if r < 0.9 {
