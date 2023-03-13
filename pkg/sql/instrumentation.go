@@ -818,3 +818,46 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		reset,
 	)
 }
+
+// CopyTo is to make a copy of the original instrumentation helper.
+func (ih *instrumentationHelper) CopyTo(dst *instrumentationHelper) {
+	dst.outputMode = ih.outputMode
+	dst.explainFlags = ih.explainFlags
+	dst.fingerprint = ih.fingerprint
+	dst.implicitTxn = ih.implicitTxn
+	dst.codec = ih.codec
+	dst.collectBundle = ih.collectBundle
+	dst.collectExecStats = ih.collectExecStats
+	dst.isTenant = ih.isTenant
+	dst.discardRows = ih.discardRows
+	dst.diagRequestID = ih.diagRequestID
+	dst.diagRequest = ih.diagRequest
+	dst.stmtDiagnosticsRecorder = ih.stmtDiagnosticsRecorder
+	dst.withStatementTrace = ih.withStatementTrace
+	dst.sp = ih.sp
+	dst.shouldFinishSpan = ih.shouldFinishSpan
+	dst.origCtx = ih.origCtx
+	dst.evalCtx = ih.evalCtx
+	dst.queryLevelStatsWithErr = ih.queryLevelStatsWithErr
+	dst.savePlanForStats = ih.savePlanForStats
+	dst.explainPlan = ih.explainPlan
+	dst.distribution = ih.distribution
+	dst.vectorized = ih.vectorized
+	dst.containsMutation = ih.containsMutation
+	dst.traceMetadata = ih.traceMetadata
+	dst.regions = ih.regions
+	dst.planGist = ih.planGist
+	dst.costEstimate = ih.costEstimate
+	dst.indexRecs = ih.indexRecs
+	dst.maxFullScanRows = ih.maxFullScanRows
+	dst.totalScanRows = ih.totalScanRows
+	dst.totalScanRowsWithoutForecasts = ih.totalScanRowsWithoutForecasts
+	dst.outputRows = ih.outputRows
+	dst.statsAvailable = ih.statsAvailable
+	dst.nanosSinceStatsCollected = ih.nanosSinceStatsCollected
+	dst.nanosSinceStatsForecasted = ih.nanosSinceStatsForecasted
+	dst.joinTypeCounts = ih.joinTypeCounts
+	dst.joinAlgorithmCounts = ih.joinAlgorithmCounts
+	dst.scanCounts = ih.scanCounts
+	dst.indexesUsed = ih.indexesUsed
+}
