@@ -172,6 +172,7 @@ func (ex *connExecutor) makePreparedPortal(
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
+	isInternal bool,
 	outFormats []pgwirebase.FormatCode,
 ) (PreparedPortal, error) {
 	portal := PreparedPortal{
@@ -181,9 +182,15 @@ func (ex *connExecutor) makePreparedPortal(
 		OutFormats: outFormats,
 	}
 
-	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-		portal.pauseInfo = &portalPauseInfo{queryStats: &topLevelQueryStats{}}
-		portal.portalPausablity = PausablePortal
+	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) && !isInternal {
+		if tree.IsAllowedToPause(stmt.AST) {
+			portal.pauseInfo = &portalPauseInfo{queryStats: &topLevelQueryStats{}}
+			portal.portalPausablity = PausablePortal
+		} else {
+			// We have set sql.defaults.multiple_active_portals.enabled to true, but
+			// we don't support the underlying query for a pausable portal.
+			portal.portalPausablity = NotPausablePortalForUnsupportedStmt
+		}
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }

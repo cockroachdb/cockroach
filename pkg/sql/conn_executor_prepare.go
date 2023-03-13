@@ -472,7 +472,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	// Create the new PreparedPortal.
-	if err := ex.addPortal(ctx, portalName, ps, qargs, columnFormatCodes); err != nil {
+	if err := ex.addPortal(ctx, portalName, ps, qargs, bindCmd.isInternal, columnFormatCodes); err != nil {
 		return retErr(err)
 	}
 
@@ -493,6 +493,7 @@ func (ex *connExecutor) addPortal(
 	portalName string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
+	isInternal bool,
 	outFormats []pgwirebase.FormatCode,
 ) error {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
@@ -502,7 +503,7 @@ func (ex *connExecutor) addPortal(
 		panic(errors.AssertionFailedf("portal already exists as cursor: %q", portalName))
 	}
 
-	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, outFormats)
+	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, isInternal, outFormats)
 	if err != nil {
 		return err
 	}

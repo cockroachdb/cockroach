@@ -1491,9 +1491,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
+
+	distSQLMode := ex.sessionData().DistSQLMode
+	// We only allow non-distributed plan for pausable portals.
+	if planner.pausablePortal != nil {
+		distSQLMode = sessiondatapb.DistSQLOff
+	}
 	distributePlan := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		ex.sessionData().DistSQLMode, planner.curPlan.main,
+		distSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1988,6 +1994,18 @@ func (ex *connExecutor) execWithDistSQLEngine(
 				factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
 				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
 				return factoryEvalCtx
+			}
+			// We don't allow sub / post queries for pausable portal. Set it back to an
+			// un-pausable (normal) portal.
+			if planCtx.getPortalPauseInfo() != nil {
+				// With pauseInfo is nil, no cleanup function will be added to the stack
+				// and all clean-up steps will be performed as for normal portals.
+				planCtx.planner.pausablePortal.pauseInfo = nil
+				// We need this so that the result consumption for this portal cannot be
+				// paused either.
+				if err := res.RevokePortalPausability(); err != nil {
+					return recv.stats, err
+				}
 			}
 		}
 		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
