@@ -13,15 +13,18 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDataDriven runs datadriven tests against the Authorizer interface. The
@@ -52,24 +55,35 @@ import (
 // ----
 // ok
 //
-//
 // "has-tsdb-query-capability": performas a capability check to be able to
 // make TSDB queries. Example:
 //
 // has-tsdb-query-capability ten=11
 // ----
 // ok
-
+//
+// "set-bool-cluster-setting": overrides the specified boolean cluster setting
+// to the given value. Currently, only the authorizerEnabled cluster setting is
+// supported.
+//
+// set-bool-cluster-setting name=tenant_capabilities.authorizer.enabled value=false
+// ----
+// ok
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		clusterSettings := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
 		mockReader := mockReader(make(map[roachpb.TenantID]tenantcapabilities.TenantCapabilities))
-		authorizer := New(cluster.MakeTestingClusterSettings(), nil /* TestingKnobs */)
+		authorizer := New(clusterSettings, nil /* TestingKnobs */)
 		authorizer.BindReader(mockReader)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tenID := tenantcapabilitiestestutils.GetTenantID(t, d)
+			var tenID roachpb.TenantID
+			if d.HasArg("ten") {
+				tenID = tenantcapabilitiestestutils.GetTenantID(t, d)
+			}
 			switch d.Cmd {
 			case "upsert":
 				_, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
@@ -106,12 +120,31 @@ func TestDataDriven(t *testing.T) {
 					return "ok"
 				}
 				return err.Error()
+			case "set-bool-cluster-setting":
+				var settingName string
+				d.ScanArgs(t, "name", &settingName)
+				setting, ok := supportedClusterSettings[settingName]
+				if !ok {
+					t.Fatalf("cluster setting %s not supported", settingName)
+				}
+				var valStr string
+				d.ScanArgs(t, "value", &valStr)
+				val, err := strconv.ParseBool(valStr)
+				require.NoError(t, err)
+				setting.Override(ctx, &clusterSettings.SV, val)
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)
 			}
 			return "ok"
 		})
 	})
+}
+
+// supportedClusterSettings is a map, keyed by cluster setting name, of all
+// boolean cluster settings that can be altered when running datadriven tests
+// for the Authorizer.
+var supportedClusterSettings = map[string]*settings.BoolSetting{
+	authorizerEnabled.Key(): authorizerEnabled,
 }
 
 type mockReader map[roachpb.TenantID]tenantcapabilities.TenantCapabilities
@@ -136,8 +169,8 @@ func (m mockReader) GetCapabilities(
 	return cp, found
 }
 
-// GetCapabilitiesMap implements the tenantcapabilities.Reader interface.
-func (m mockReader) GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilities.TenantCapabilities {
+// GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
+func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]tenantcapabilities.TenantCapabilities {
 	return m
 }
 
