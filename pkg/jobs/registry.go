@@ -1411,8 +1411,26 @@ type JobResultsReporter interface {
 // that can be used by the other methods.
 type Constructor func(job *Job, settings *cluster.Settings) Resumer
 
-var constructors = make(map[jobspb.Type]Constructor)
-var options = make(map[jobspb.Type]registerOptions)
+// The constructors and options are protected behind a mutex because
+// the unit tests in this package register constructors/options
+// concurrently with the initialization of test servers, where jobs
+// can get created and adopted.
+var globalMu = struct {
+	syncutil.Mutex
+
+	constructors map[jobspb.Type]Constructor
+	options      map[jobspb.Type]registerOptions
+}{
+	constructors: make(map[jobspb.Type]Constructor),
+	options:      make(map[jobspb.Type]registerOptions),
+}
+
+func getRegisterOptions(typ jobspb.Type) (registerOptions, bool) {
+	globalMu.Lock()
+	defer globalMu.Unlock()
+	opts, ok := globalMu.options[typ]
+	return opts, ok
+}
 
 // RegisterConstructor registers a Resumer constructor for a certain job type.
 //
@@ -1422,7 +1440,10 @@ var options = make(map[jobspb.Type]registerOptions)
 // engineers to explicitly pass one of these options so that they will be
 // prompted to think about which is appropriate for their new job type.
 func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption) {
-	constructors[typ] = fn
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	globalMu.constructors[typ] = fn
 
 	// Apply all options to the struct.
 	var resOpts registerOptions
@@ -1433,12 +1454,16 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption
 		panic("when registering a new job type, either jobs.DisablesTenantCostControl " +
 			"or jobs.UsesTenantCostControl is required; see comments for these options to learn more")
 	}
-	options[typ] = resOpts
+	globalMu.options[typ] = resOpts
 }
 
 func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
 	payload := job.Payload()
-	fn := constructors[payload.Type()]
+	fn := func() Constructor {
+		globalMu.Lock()
+		defer globalMu.Unlock()
+		return globalMu.constructors[payload.Type()]
+	}()
 	if fn == nil {
 		return nil, errors.Errorf("no resumer is available for %s", payload.Type())
 	}

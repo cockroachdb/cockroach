@@ -282,7 +282,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(typeStr)),
 			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(typeStr)),
 		}
-		if opts, ok := options[jt]; ok && opts.metrics != nil {
+		if opts, ok := getRegisterOptions(jt); ok && opts.metrics != nil {
 			m.JobSpecificMetrics[jt] = opts.metrics
 		}
 	}
