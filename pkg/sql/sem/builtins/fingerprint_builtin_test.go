@@ -273,3 +273,24 @@ FROM
 	db.QueryRow(t, fingerprintQuery).Scan(&fingerprint4)
 	require.NotEqual(t, fingerprint1, fingerprint4)
 }
+
+func TestFingerprintStripped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
+	db.Exec(t, "CREATE TABLE test.test (k PRIMARY KEY) AS SELECT generate_series(1, 10)")
+
+	// Create the same sql rows in a different table, committed at a different timestamp.
+	db.Exec(t, "CREATE TABLE test.test2 (k PRIMARY KEY) AS SELECT generate_series(1, 10)")
+
+	strippedFingerprint := func(tableName string) int {
+		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", tableName)
+		return sqlutils.FingerprintTable(t, db, tableID)
+	}
+	require.Equal(t, strippedFingerprint("test"), strippedFingerprint("test2"))
+}

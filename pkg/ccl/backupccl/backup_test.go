@@ -1080,6 +1080,8 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 
 		sqlDB.Exec(t, incBackupQuery, queryArgs...)
 	}
+	bankTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
+	backupTableFingerprint := sqlutils.FingerprintTable(t, sqlDB, bankTableID)
 
 	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
 
@@ -1100,7 +1102,7 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 		restoreQuery = fmt.Sprintf("%s WITH kms = %s", restoreQuery, kmsURIFmtString)
 	}
 	queryArgs := append(restoreURIArgs, kmsURIArgs...)
-	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts)
+	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts, backupTableFingerprint)
 }
 
 func verifyRestoreData(
@@ -1110,6 +1112,7 @@ func verifyRestoreData(
 	restoreQuery string,
 	restoreURIArgs []interface{},
 	numAccounts int,
+	bankStrippedFingerprint int,
 ) {
 	var unused string
 	var restored struct {
@@ -1160,6 +1163,8 @@ func verifyRestoreData(
 			t.Fatal("unexpected span start at primary index")
 		}
 	}
+	restorebankID := sqlutils.QueryTableID(t, sqlDB.DB, "data", "public", "bank")
+	require.Equal(t, bankStrippedFingerprint, sqlutils.FingerprintTable(t, sqlDB, restorebankID))
 }
 
 func TestBackupRestoreSystemTables(t *testing.T) {

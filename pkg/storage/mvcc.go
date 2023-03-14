@@ -6798,6 +6798,10 @@ type MVCCExportFingerprintOptions struct {
 	// If StripValueChecksum is true, checksums are removed from
 	// the value before hashing.
 	StripValueChecksum bool
+	// If StripIndexPrefixAndTimestamp is true, the key's timestamp and index
+	// prefix are not hashed. Because the index prefix is stripped, this option
+	// should only get used in the table key space.
+	StripIndexPrefixAndTimestamp bool
 }
 
 // MVCCIsSpanEmptyOptions configures the MVCCIsSpanEmpty function.
