@@ -37,7 +37,6 @@ type mockClient struct {
 		ctx context.Context,
 		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
-		withDiff bool,
 		eventC chan<- kvcoord.RangeFeedMessage,
 	) error
 
@@ -54,11 +53,10 @@ func (m *mockClient) RangeFeed(
 	ctx context.Context,
 	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
-	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error {
-	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
+	return m.rangefeed(ctx, spans, startFrom, eventC)
 }
 
 func (m *mockClient) Scan(
@@ -166,9 +164,8 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- kvcoord.RangeFeedMessage,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, eventC chan<- kvcoord.RangeFeedMessage,
 			) error {
-				assert.False(t, withDiff) // it was not set
 				sendEvent := func(ts hlc.Timestamp) {
 					eventC <- kvcoord.RangeFeedMessage{
 						RangeFeedEvent: &kvpb.RangeFeedEvent{
@@ -270,9 +267,8 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- kvcoord.RangeFeedMessage,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, eventC chan<- kvcoord.RangeFeedMessage,
 			) error {
-				assert.True(t, withDiff)
 				eventC <- kvcoord.RangeFeedMessage{
 					RangeFeedEvent: &kvpb.RangeFeedEvent{
 						Val: &kvpb.RangeFeedValue{

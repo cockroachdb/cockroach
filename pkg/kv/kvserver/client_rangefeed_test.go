@@ -77,7 +77,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		rangefeedErrChan := make(chan error, 1)
 		ctxToCancel, cancel := context.WithCancel(ctx)
 		go func() {
-			rangefeedErrChan <- ds.RangeFeed(ctxToCancel, []roachpb.Span{descTableSpan}, startTS, false /* withDiff */, evChan)
+			rangefeedErrChan <- ds.RangeFeed(ctxToCancel, []roachpb.Span{descTableSpan}, startTS, evChan)
 		}()
 
 		// Note: 42 is a system descriptor.
@@ -137,7 +137,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		})
 		evChan := make(chan kvcoord.RangeFeedMessage)
 		require.Regexp(t, `rangefeeds require the kv\.rangefeed.enabled setting`,
-			ds.RangeFeed(ctx, []roachpb.Span{scratchSpan}, startTS, false /* withDiff */, evChan))
+			ds.RangeFeed(ctx, []roachpb.Span{scratchSpan}, startTS, evChan))
 	})
 }
 
@@ -191,7 +191,6 @@ func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 		rangefeedErrChan <- ds.RangeFeed(rangefeedCtx,
 			[]roachpb.Span{lhsRepl.Desc().RSpan().AsRawSpanWithNoLocals()},
 			start,
-			false, /* withDiff */
 			eventCh)
 	}()
 
@@ -256,7 +255,6 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 			rangefeedCtx,
 			[]roachpb.Span{desc.RSpan().AsRawSpanWithNoLocals()},
 			startTS,
-			false, /* withDiff */
 			eventCh,
 		)
 	}()
@@ -310,7 +308,7 @@ func TestRangefeedWorksOnLivenessRange(t *testing.T) {
 	eventC := make(chan kvcoord.RangeFeedMessage)
 	errC := make(chan error, 1)
 	go func() {
-		errC <- ds.RangeFeed(ctx, []roachpb.Span{keys.NodeLivenessSpan}, startTS, false /* withDiff */, eventC)
+		errC <- ds.RangeFeed(ctx, []roachpb.Span{keys.NodeLivenessSpan}, startTS, eventC)
 	}()
 
 	// Wait for a liveness update.
