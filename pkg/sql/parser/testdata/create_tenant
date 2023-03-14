@@ -15,12 +15,44 @@ CREATE TENANT "bar-with-hyphen" -- literals removed
 CREATE TENANT _ -- identifiers removed
 
 parse
+CREATE TENANT foo LIKE bar
+----
+CREATE TENANT foo LIKE bar
+CREATE TENANT (foo) LIKE (bar) -- fully parenthesized
+CREATE TENANT foo LIKE bar -- literals removed
+CREATE TENANT _ LIKE _ -- identifiers removed
+
+parse
+CREATE TENANT foo LIKE [123]
+----
+CREATE TENANT foo LIKE [123]
+CREATE TENANT (foo) LIKE [(123)] -- fully parenthesized
+CREATE TENANT foo LIKE [_] -- literals removed
+CREATE TENANT _ LIKE [123] -- identifiers removed
+
+parse
 CREATE TENANT destination FROM REPLICATION OF source ON 'pgurl'
 ----
 CREATE TENANT destination FROM REPLICATION OF source ON 'pgurl'
 CREATE TENANT (destination) FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
 CREATE TENANT destination FROM REPLICATION OF source ON '_' -- literals removed
 CREATE TENANT _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
+
+parse
+CREATE TENANT destination LIKE bar FROM REPLICATION OF source ON 'pgurl'
+----
+CREATE TENANT destination LIKE bar FROM REPLICATION OF source ON 'pgurl'
+CREATE TENANT (destination) LIKE (bar) FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
+CREATE TENANT destination LIKE bar FROM REPLICATION OF source ON '_' -- literals removed
+CREATE TENANT _ LIKE _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
+
+parse
+CREATE TENANT destination LIKE [123] FROM REPLICATION OF source ON 'pgurl'
+----
+CREATE TENANT destination LIKE [123] FROM REPLICATION OF source ON 'pgurl'
+CREATE TENANT (destination) LIKE [(123)] FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
+CREATE TENANT destination LIKE [_] FROM REPLICATION OF source ON '_' -- literals removed
+CREATE TENANT _ LIKE [123] FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
 
 parse
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl'

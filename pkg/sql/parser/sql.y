@@ -855,6 +855,9 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
     return u.val.(*tree.TenantSpec)
 }
+func (u *sqlSymUnion) likeTenantSpec() *tree.LikeTenantSpec {
+    return u.val.(*tree.LikeTenantSpec)
+}
 func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
     return u.val.(tree.CTEMaterializeClause)
 }
@@ -1168,6 +1171,8 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
+
+%type <*tree.LikeTenantSpec> opt_like_tenant
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -4351,22 +4356,39 @@ create_stmt:
 // CREATE TENANT name
 // CREATE TENANT name FROM REPLICATION OF <tenant_spec> ON <location> [ WITH OPTIONS ... ]
 create_tenant_stmt:
-  CREATE TENANT d_expr
+  CREATE TENANT d_expr opt_like_tenant
   {
     /* SKIP DOC */
-    $$.val = &tree.CreateTenant{TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()}}
+    $$.val = &tree.CreateTenant{
+      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
+      Like: $4.likeTenantSpec(),
+    }
   }
-| CREATE TENANT d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
+| CREATE TENANT d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
-      ReplicationSourceAddress: $9.expr(),
-      Options: *$10.tenantReplicationOptions(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $8.expr()},
+      ReplicationSourceAddress: $10.expr(),
+      Options: *$11.tenantReplicationOptions(),
+      Like: $4.likeTenantSpec(),
     }
   }
 | CREATE TENANT error // SHOW HELP: CREATE TENANT
+
+// opt_like_tenant defines a LIKE clause for CREATE TENANT.
+// Eventually this can grow to support INCLUDING/EXCLUDING options
+// like in CREATE TABLE.
+opt_like_tenant:
+  /* EMPTY */
+  {
+     $$.val = &tree.LikeTenantSpec{}
+  }
+| LIKE tenant_spec
+  {
+      $$.val = &tree.LikeTenantSpec{OtherTenant: $2.tenantSpec()}
+  }
 
 // Optional tenant replication options.
 opt_with_tenant_replication_options:
