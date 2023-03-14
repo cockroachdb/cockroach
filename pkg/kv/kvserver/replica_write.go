@@ -589,15 +589,18 @@ func (r *Replica) evaluate1PC(
 	resolvedLocks := make([]roachpb.LockUpdate, 0, len(etArg.LockSpans))
 	var externalLocks []roachpb.Span
 	for _, sp := range etArg.LockSpans {
-		inSpan, outSpans := kvserverbase.IntersectSpan(sp, desc)
-		externalLocks = append(externalLocks, outSpans...)
-		if inSpan != nil {
-			resolvedLocks = append(resolvedLocks, roachpb.LockUpdate{
-				Span:           *inSpan,
-				Txn:            clonedTxn.TxnMeta,
-				Status:         clonedTxn.Status,
-				IgnoredSeqNums: clonedTxn.IgnoredSeqNums,
-			})
+		if len(sp.EndKey) == 0 {
+			if kvserverbase.ContainsKey(desc, sp.Key) {
+				resolvedLocks = append(resolvedLocks, roachpb.MakeLockUpdate(clonedTxn, sp))
+			} else {
+				externalLocks = append(externalLocks, sp)
+			}
+		} else {
+			inSpan, outSpans := kvserverbase.IntersectSpan(sp, desc)
+			if inSpan != nil {
+				resolvedLocks = append(resolvedLocks, roachpb.MakeLockUpdate(clonedTxn, *inSpan))
+			}
+			externalLocks = append(externalLocks, outSpans...)
 		}
 	}
 	clonedTxn.LockSpans = externalLocks
