@@ -30,20 +30,18 @@ func TestKeyEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(1337))
 	t.Run("RegionalByRow", func(t *testing.T) {
 		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testKeyEncoder(t)
+		testKeyEncoder(t, &rbrEncoder{codec.IndexPrefix(42, 2)})
 	})
 	t.Run("RegionalByTable", func(t *testing.T) {
 		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testKeyEncoder(t)
+		testKeyEncoder(t, &rbtEncoder{codec.IndexPrefix(42, 1)})
 	})
 }
 
-func testKeyEncoder(t *testing.T) {
-	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(1337))
-	keyCodec := makeKeyCodec(codec, 42, 2)
-
+func testKeyEncoder(t *testing.T, keyCodec keyCodec) {
 	t.Run("Prefix", func(t *testing.T) {
 		prefix := keyCodec.indexPrefix()
 
@@ -79,13 +77,9 @@ func testKeyEncoder(t *testing.T) {
 		id := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
 
 		key, err := keyCodec.encode(id)
-		if systemschema.TestSupportMultiRegion() {
-			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
-			decodedID, err := keyCodec.decode(key)
-			require.NoError(t, err)
-			require.Equal(t, id, decodedID)
-		}
+		require.NoError(t, err)
+		decodedID, err := keyCodec.decode(key)
+		require.NoError(t, err)
+		require.Equal(t, id, decodedID)
 	})
 }

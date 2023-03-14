@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -963,7 +964,8 @@ func TestSQLLivenessExemption(t *testing.T) {
 	_ = r
 
 	codec := keys.MakeSQLCodec(tenantID)
-	key := codec.IndexPrefix(keys.SqllivenessID, 1)
+	indexID := uint32(systemschema.SqllivenessTable().GetPrimaryIndexID())
+	key := codec.IndexPrefix(keys.SqllivenessID, indexID)
 
 	// livenessValue returns the KV value for the one row in the
 	// system.sqlliveness table. The value contains the session expiration time

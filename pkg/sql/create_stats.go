@@ -250,6 +250,18 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
+	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes {
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
+			"creating partial statistics at extremes is not yet supported",
+		)
+	}
+
+	if n.Options.Where != nil {
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
+			"creating partial statistics with a WHERE clause is not yet supported",
+		)
+	}
+
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}

@@ -71,6 +71,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/sqlliveness",
