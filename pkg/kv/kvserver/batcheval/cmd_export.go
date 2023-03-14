@@ -196,6 +196,21 @@ func evalExport(
 			opts.FingerprintOptions = storage.MVCCExportFingerprintOptions{
 				StripTenantPrefix:  true,
 				StripValueChecksum: true,
+				StrippedVersion:    args.FingerprintOptions.Stripped,
+			}
+			if opts.FingerprintOptions.StrippedVersion && args.MVCCFilter == kvpb.MVCCFilter_All {
+				// If a key's value were updated from a to b, the xor hash without
+				// timestamps of those two mvcc values would look the same if the key
+				// were updated from b to a. In other words, the order of key value
+				// updates without timestamps does not affect the xor hash; but this
+				// order clearly presents different mvcc history, therefore, do not
+				// strip timestamps if fingerprinting all mvcc history.
+				return result.Result{}, errors.New("cannot fingerprint without mvcc timestamps and with mvcc history")
+			}
+			if opts.FingerprintOptions.StrippedVersion && !args.StartTime.IsEmpty() {
+				// Supplying a startKey only complicates results (e.g. it surfaces
+				// tombstones), given that only the latest keys are surfaced.
+				return result.Result{}, errors.New("cannot fingerprint without mvcc timestamps and with a start time")
 			}
 			var hasRangeKeys bool
 			summary, resumeInfo, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(ctx,

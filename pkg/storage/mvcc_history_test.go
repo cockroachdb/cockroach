@@ -1383,6 +1383,7 @@ func cmdExport(e *evalCtx) error {
 		FingerprintOptions: storage.MVCCExportFingerprintOptions{
 			StripTenantPrefix:  e.hasArg("stripTenantPrefix"),
 			StripValueChecksum: e.hasArg("stripValueChecksum"),
+			StrippedVersion:    e.hasArg("stripped"),
 		},
 	}
 	if e.hasArg("maxIntents") {

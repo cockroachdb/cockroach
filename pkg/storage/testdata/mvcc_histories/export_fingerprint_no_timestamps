@@ -1,0 +1,77 @@
+# Test MVCC Fingerprinting when configured to ignore timestamps
+#
+# This test ensures that when the stripTimestamp flag is applied to a fingerpint export request, the
+# timestamps in the MVCC history of a key span are ignored. To test, a simple history is
+# constructed, fingerprinted, and wiped. Then the same history is reconstructed with the timestamps
+# shifted up.
+
+# Sets up the following dataset, where x is MVCC point tombstone, o-o is MVCC
+# range tombstone, [] is intent.  We include some local timestamps, which should
+# not be export fingerprinted.
+#
+#  6
+#  5      x   o---o
+#  4  a2  b1  o------o
+#  -----------------------------------------
+#  3          o---o
+#  2  a2  x
+#  1      b1  o-------o
+#     a   b   c   d   e
+
+
+run ok
+put k=a ts=2 v=a2
+put k=a ts=4 v=a2
+put k=b ts=1 v=b1
+del k=b ts=2
+put k=b ts=4 v=b1
+del k=b ts=5
+del_range_ts k=c end=e ts=1
+del_range_ts k=c end=d ts=3
+del_range_ts k=c end=e ts=4
+del_range_ts k=c end=d ts=5
+----
+del: "b": found key true
+del: "b": found key true
+>> at end:
+rangekey: {c-d}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-e}/[4.000000000,0=/<empty> 1.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /BYTES/a2
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/4.000000000,0 -> /BYTES/b1
+data: "b"/2.000000000,0 -> /<empty>
+data: "b"/1.000000000,0 -> /BYTES/b1
+
+# test that history is equal aost 3 and 5
+run ok
+export fingerprint k=a end=e ts=5 stripped
+----
+export: data_size:8 fingerprint=true
+fingerprint: 4117139284438927868
+
+run ok
+export fingerprint k=a end=e ts=3  stripped
+----
+export: data_size:8 fingerprint=true
+fingerprint: 4117139284438927868
+
+# test that history is different at aost 1
+run ok
+export fingerprint k=a end=e ts=1 stripped
+----
+export: data_size:8 fingerprint=true
+fingerprint: 8343199592647421771
+
+# test that history is same in rangekey land -- they never get hashed
+run ok
+export fingerprint k=c end=e ts=1 stripped
+----
+export:  fingerprint=true
+fingerprint: 0
+
+run ok
+export fingerprint k=c end=e ts=5 stripped
+----
+export:  fingerprint=true
+fingerprint: 0

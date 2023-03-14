@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
@@ -77,10 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -7526,6 +7522,22 @@ expires until the statement bundle is collected`,
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "span", Typ: types.BytesArray},
+				{Name: "stripped", Typ: types.Bool},
+				// NB: The function can be called with an AOST clause that will be used
+				// as the `end_time` when issuing the ExportRequests for the purposes of
+				// fingerprinting.
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				skipTimestamp := *args[1].(*tree.DBool)
+				return fingerprint(ctx, evalCtx, args, hlc.Timestamp{}, false, bool(skipTimestamp))
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "span", Typ: types.BytesArray},
 				{Name: "start_time", Typ: types.TimestampTZ},
 				{Name: "all_revisions", Typ: types.Bool},
 				// NB: The function can be called with an AOST clause that will be used
@@ -7534,148 +7546,10 @@ expires until the statement bundle is collected`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ctx, sp := tracing.ChildSpan(ctx, "crdb_internal.fingerprint")
-				defer sp.Finish()
-
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
-					return nil, errors.Errorf("cannot use crdb_internal.fingerprint until the cluster version is at least %s",
-						clusterversion.V23_1.String())
-				}
-
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
-					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
-				}
-
-				arr := tree.MustBeDArray(args[0])
-				if arr.Len() != 2 {
-					return nil, errors.New("expected an array of two elements")
-				}
-				startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
-				endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
 				startTime := args[1].(*tree.DTimestampTZ).Time
 				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
 				allRevisions := *args[2].(*tree.DBool)
-				filter := kvpb.MVCCFilter_Latest
-				if allRevisions {
-					filter = kvpb.MVCCFilter_All
-				}
-
-				header := kvpb.Header{
-					Timestamp: evalCtx.Txn.ReadTimestamp(),
-					// We set WaitPolicy to Error, so that the export will return an error
-					// to us instead of a blocking wait if it hits any other txns.
-					//
-					// TODO(adityamaru): We might need to handle WriteIntentErrors
-					// specially in the future so as to allow the fingerprint to complete
-					// in the face of intents.
-					WaitPolicy: lock.WaitPolicy_Error,
-					// TODO(ssd): Setting this disables async sending in
-					// DistSender so it likely substantially impacts
-					// performance.
-					ReturnElasticCPUResumeSpans: true,
-				}
-				admissionHeader := kvpb.AdmissionHeader{
-					Priority:                 int32(admissionpb.BulkNormalPri),
-					CreateTime:               timeutil.Now().UnixNano(),
-					Source:                   kvpb.AdmissionHeader_FROM_SQL,
-					NoMemoryReservedAtSource: true,
-				}
-
-				todo := make(chan kvpb.RequestHeader, 1)
-				todo <- kvpb.RequestHeader{Key: startKey, EndKey: endKey}
-
-				ctxDone := ctx.Done()
-				var fingerprint uint64
-				// TODO(adityamaru): Memory monitor this slice of buffered SSTs that
-				// contain range keys across ExportRequests.
-				ssts := make([][]byte, 0)
-				for {
-					select {
-					case <-ctxDone:
-						return nil, ctx.Err()
-					case reqHeader := <-todo:
-						req := &kvpb.ExportRequest{
-							RequestHeader:     reqHeader,
-							StartTime:         startTimestamp,
-							MVCCFilter:        filter,
-							ExportFingerprint: true,
-						}
-						var rawResp kvpb.Response
-						var pErr *kvpb.Error
-						exportRequestErr := contextutil.RunWithTimeout(ctx,
-							fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: startKey, EndKey: endKey}),
-							5*time.Minute, func(ctx context.Context) error {
-								rawResp, pErr = kv.SendWrappedWithAdmission(ctx,
-									evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
-								if pErr != nil {
-									return pErr.GoError()
-								}
-								return nil
-							})
-						if exportRequestErr != nil {
-							return nil, exportRequestErr
-						}
-
-						resp := rawResp.(*kvpb.ExportResponse)
-						for _, file := range resp.Files {
-							fingerprint = fingerprint ^ file.Fingerprint
-
-							// Aggregate all the range keys that need fingerprinting once all
-							// ExportRequests have been completed.
-							if len(file.SST) != 0 {
-								ssts = append(ssts, file.SST)
-							}
-						}
-						if resp.ResumeSpan != nil {
-							if !resp.ResumeSpan.Valid() {
-								return nil, errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
-							}
-							todo <- kvpb.RequestHeaderFromSpan(*resp.ResumeSpan)
-						}
-					default:
-						// No ExportRequests left to send. We've aggregated range keys
-						// across all ExportRequests and can now fingerprint them.
-						//
-						// NB: We aggregate rangekeys across ExportRequests and then
-						// fingerprint them on the client, instead of fingerprinting them as
-						// part of the ExportRequest command evaluation, because range keys
-						// do not have a stable, discrete identity. Their fragmentation can
-						// be influenced by rangekeys outside the time interval that we are
-						// fingerprinting, or by range splits. So, we need to "defragment"
-						// all the rangekey stacks we observe such that the fragmentation is
-						// deterministic on only the data we want to fingerprint in our key
-						// and time interval.
-						//
-						// Egs:
-						//
-						// t2  				[-----)[----)
-						//
-						// t1 	[----)[-----)
-						//			a			b			c			d
-						//
-						// Assume we have two rangekeys [a, c)@t1 and [b, d)@t2. They will
-						// fragment as shown in the diagram above. If we wish to fingerprint
-						// key [a-d) in time interval (t1, t2] the fragmented rangekey
-						// [a, c)@t1 is outside our time interval and should not influence our
-						// fingerprint. The iterator in `fingerprintRangekeys` will
-						// "defragment" the rangekey stacks [b-c)@t2 and [c-d)@t2 and
-						// fingerprint them as a single rangekey with bounds [b-d)@t2.
-						rangekeyFingerprint, err := storage.FingerprintRangekeys(ctx, evalCtx.Settings,
-							storage.MVCCExportFingerprintOptions{
-								StripTenantPrefix:  true,
-								StripValueChecksum: true,
-							}, ssts)
-						if err != nil {
-							return nil, err
-						}
-						fingerprint = fingerprint ^ rangekeyFingerprint
-						return tree.NewDInt(tree.DInt(fingerprint)), nil
-					}
-				}
+				return fingerprint(ctx, evalCtx, args, startTimestamp, bool(allRevisions), false)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
