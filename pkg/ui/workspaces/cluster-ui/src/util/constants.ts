@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { duration } from "moment";
+
 export const aggregatedTsAttr = "aggregated_ts";
 export const appAttr = "app";
 export const appNamesAttr = "appNames";
@@ -43,3 +45,5 @@ export const serverToClientErrorMessageMap = new Map([
     REMOTE_DEBUGGING_ERROR_TEXT,
   ],
 ]);
+
+export const STATS_LONG_LOADING_DURATION = duration(2, "s");
