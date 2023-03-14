@@ -55,7 +55,6 @@ type DB interface {
 		ctx context.Context,
 		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
-		withDiff bool,
 		eventC chan<- kvcoord.RangeFeedMessage,
 		opts ...kvcoord.RangeFeedOption,
 	) error
@@ -299,6 +298,9 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 	if useMuxRangeFeed {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMuxRangeFeed())
 	}
+	if f.withDiff {
+		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())
+	}
 
 	for i := 0; r.Next(); i++ {
 		ts := frontier.Frontier()
@@ -309,7 +311,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
-			return f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh, rangefeedOpts...)
+			return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
 		}
 		processEventsTask := func(ctx context.Context) error {
 			return f.processEvents(ctx, frontier, eventCh)

@@ -114,6 +114,13 @@ func WithSystemTablePriority() RangeFeedOption {
 	})
 }
 
+// WithDiff turns on "diff" option for the rangefeed.
+func WithDiff() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withDiff = true
+	})
+}
+
 // A "kill switch" to disable multiplexing rangefeed if severe issues discovered with new implementation.
 var enableMuxRangeFeed = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_MULTIPLEXING_RANGEFEED", true)
 
@@ -134,7 +141,6 @@ func (ds *DistSender) RangeFeed(
 	ctx context.Context,
 	spans []roachpb.Span,
 	startAfter hlc.Timestamp, // exclusive
-	withDiff bool,
 	eventCh chan<- RangeFeedMessage,
 	opts ...RangeFeedOption,
 ) error {
@@ -145,7 +151,7 @@ func (ds *DistSender) RangeFeed(
 			StartAfter: startAfter,
 		})
 	}
-	return ds.RangeFeedSpans(ctx, timedSpans, withDiff, eventCh, opts...)
+	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
 }
 
 // SpanTimePair is a pair of span along with its starting time. The starting
@@ -161,7 +167,6 @@ type SpanTimePair struct {
 func (ds *DistSender) RangeFeedSpans(
 	ctx context.Context,
 	spans []SpanTimePair,
-	withDiff bool,
 	eventCh chan<- RangeFeedMessage,
 	opts ...RangeFeedOption,
 ) error {
@@ -178,7 +183,7 @@ func (ds *DistSender) RangeFeedSpans(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	rr := newRangeFeedRegistry(ctx, withDiff)
+	rr := newRangeFeedRegistry(ctx, cfg.withDiff)
 	ds.activeRangeFeeds.Store(rr, nil)
 	defer ds.activeRangeFeeds.Delete(rr)
 
