@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -81,7 +80,7 @@ func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 	// Make sure that the reader shuts down gracefully.
 	ctx, cancel := r.stopper.WithCancelOnQuiesce(ctx)
 	err := r.stopper.RunAsyncTask(ctx, "start-instance-reader", func(ctx context.Context) {
-		cache, err := r.storage.newInstanceCache(ctx)
+		cache, err := r.storage.newInstanceCache(ctx, r.stopper)
 		if err != nil {
 			r.setInitialScanDone(err)
 			return
@@ -146,7 +145,7 @@ func makeInstanceInfos(rows []instancerow) []sqlinstance.InstanceInfo {
 func (r *Reader) GetAllInstancesUsingTxn(
 	ctx context.Context, txn *kv.Txn,
 ) ([]sqlinstance.InstanceInfo, error) {
-	decodedRows, err := r.storage.getInstanceRows(ctx, nil /*all regions*/, txn, lock.WaitPolicy_Block)
+	decodedRows, err := r.storage.getAllInstanceRows(ctx, txn)
 	if err != nil {
 		return nil, err
 	}

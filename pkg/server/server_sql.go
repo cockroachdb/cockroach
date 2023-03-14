@@ -559,8 +559,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	cfg.sqlInstanceStorage = instancestorage.NewStorage(
 		cfg.db, codec, cfg.sqlLivenessProvider.CachedReader(), cfg.Settings,
-		cfg.clock, cfg.rangeFeedFactory,
-	)
+		cfg.clock, cfg.rangeFeedFactory, settingsWatcher)
+
 	cfg.sqlInstanceReader = instancestorage.NewReader(
 		cfg.sqlInstanceStorage, cfg.sqlLivenessProvider.CachedReader(),
 		cfg.stopper,
