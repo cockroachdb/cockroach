@@ -9,6 +9,7 @@ go_library(
         "mutex_deadlock.go",  # keep
         "mutex_sync.go",  # keep
         "mutex_sync_race.go",  # keep
+        "mutex_timed.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil",
     visibility = ["//visibility:public"],
