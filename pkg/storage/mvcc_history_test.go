@@ -1365,6 +1365,7 @@ func cmdExport(e *evalCtx) error {
 		FingerprintOptions: storage.MVCCExportFingerprintOptions{
 			StripTenantPrefix:  e.hasArg("stripTenantPrefix"),
 			StripValueChecksum: e.hasArg("stripValueChecksum"),
+			StrippedVersion:    e.hasArg("stripped"),
 		},
 	}
 	if e.hasArg("maxIntents") {
@@ -1421,7 +1422,8 @@ func cmdExport(e *evalCtx) error {
 			ssts = append(ssts, sstFile.Bytes())
 		}
 		// Fingerprint the rangekeys returned as a pebble SST.
-		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions, ssts)
+		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st,
+			opts.FingerprintOptions, ssts, key)
 		if err != nil {
 			return err
 		}

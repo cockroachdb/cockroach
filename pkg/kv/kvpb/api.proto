@@ -1688,7 +1688,13 @@ message ExportRequest {
 
   reserved 2, 5, 7, 8, 11;
 
-  // Next ID: 15
+  FingerprintOptions fingerprint_options = 15 [(gogoproto.nullable) = false];
+
+  // Next ID: 16
+}
+
+message FingerprintOptions {
+  bool stripped = 1;
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the

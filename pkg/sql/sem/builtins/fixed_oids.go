@@ -2368,6 +2368,7 @@ var builtinOidsArray = []string{
 	2394: `array_cat_agg(arg1: varbit[]) -> varbit[]`,
 	2395: `array_cat_agg(arg1: anyenum[]) -> anyenum[]`,
 	2396: `array_cat_agg(arg1: tuple[]) -> tuple[]`,
+	2397: `crdb_internal.fingerprint(span: bytes[], stripped: bool) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

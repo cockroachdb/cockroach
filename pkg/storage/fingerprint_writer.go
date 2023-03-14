@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -38,6 +39,7 @@ type fingerprintWriter struct {
 	hasher       hash.Hash64
 	timestampBuf []byte
 	options      MVCCExportFingerprintOptions
+	codec        keys.SQLCodec
 
 	sstWriter *SSTWriter
 	xorAgg    *uintXorAggregate
@@ -49,8 +51,13 @@ func makeFingerprintWriter(
 	hasher hash.Hash64,
 	cs *cluster.Settings,
 	f io.Writer,
+	startKey roachpb.Key,
 	opts MVCCExportFingerprintOptions,
-) fingerprintWriter {
+) (fingerprintWriter, error) {
+	_, tenantPrefix, err := keys.DecodeTenantPrefix(startKey)
+	if err != nil {
+		return fingerprintWriter{}, err
+	}
 	// TODO(adityamaru,dt): Once
 	// https://github.com/cockroachdb/cockroach/issues/90450 has been addressed we
 	// should write to a kvBuf instead of a Backup SST writer.
@@ -60,7 +67,8 @@ func makeFingerprintWriter(
 		hasher:    hasher,
 		xorAgg:    &uintXorAggregate{},
 		options:   opts,
-	}
+		codec:     keys.MakeSQLCodec(tenantPrefix),
+	}, nil
 }
 
 type uintXorAggregate struct {
@@ -114,13 +122,11 @@ func (f *fingerprintWriter) PutRawMVCCRangeKey(key MVCCRangeKey, bytes []byte) e
 // PutRawMVCC implements the Writer interface.
 func (f *fingerprintWriter) PutRawMVCC(key MVCCKey, value []byte) error {
 	defer f.hasher.Reset()
-
 	// Hash the key/timestamp and value of the RawMVCC.
 	if err := f.hashKey(key.Key); err != nil {
 		return err
 	}
-	f.timestampBuf = EncodeMVCCTimestampToBuf(f.timestampBuf, key.Timestamp)
-	if err := f.hash(f.timestampBuf); err != nil {
+	if err := f.hashTimestamp(key.Timestamp); err != nil {
 		return err
 	}
 	if err := f.hashValue(value); err != nil {
@@ -147,10 +153,24 @@ func (f *fingerprintWriter) PutUnversioned(key roachpb.Key, value []byte) error 
 }
 
 func (f *fingerprintWriter) hashKey(key []byte) error {
+	if f.options.StrippedVersion {
+		return f.hash(f.stripTablePrefix(key))
+	}
 	if f.options.StripTenantPrefix {
 		return f.hash(f.stripTenantPrefix(key))
 	}
 	return f.hash(key)
+}
+
+func (f *fingerprintWriter) hashTimestamp(timestamp hlc.Timestamp) error {
+	if f.options.StrippedVersion {
+		return nil
+	}
+	f.timestampBuf = EncodeMVCCTimestampToBuf(f.timestampBuf, timestamp)
+	if err := f.hash(f.timestampBuf); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (f *fingerprintWriter) hashValue(value []byte) error {
@@ -177,7 +197,15 @@ func (f *fingerprintWriter) stripValueChecksum(value []byte) []byte {
 }
 
 func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
-	remainder, _, err := keys.DecodeTenantPrefixE(key)
+	remainder, err := f.codec.StripTenantPrefix(key)
+	if err != nil {
+		return key
+	}
+	return remainder
+}
+
+func (f *fingerprintWriter) stripTablePrefix(key []byte) []byte {
+	remainder, _, err := f.codec.DecodeTablePrefix(key)
 	if err != nil {
 		return key
 	}
@@ -188,7 +216,11 @@ func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
 // contain only rangekeys, and maintains a XOR aggregate of each rangekey's
 // fingerprint.
 func FingerprintRangekeys(
-	ctx context.Context, cs *cluster.Settings, opts MVCCExportFingerprintOptions, ssts [][]byte,
+	ctx context.Context,
+	cs *cluster.Settings,
+	opts MVCCExportFingerprintOptions,
+	ssts [][]byte,
+	startKey roachpb.Key,
 ) (uint64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "storage.FingerprintRangekeys")
 	defer sp.Finish()
@@ -236,7 +268,10 @@ func FingerprintRangekeys(
 	defer iter.Close()
 
 	var destFile bytes.Buffer
-	fw := makeFingerprintWriter(ctx, fnv.New64(), cs, &destFile, opts)
+	fw, err := makeFingerprintWriter(ctx, fnv.New64(), cs, &destFile, startKey, opts)
+	if err != nil {
+		return 0, err
+	}
 	defer fw.Close()
 	fingerprintRangeKey := func(stack MVCCRangeKeyStack) (uint64, error) {
 		defer fw.hasher.Reset()
@@ -247,8 +282,7 @@ func FingerprintRangekeys(
 			return 0, err
 		}
 		for _, v := range stack.Versions {
-			fw.timestampBuf = EncodeMVCCTimestampToBuf(fw.timestampBuf, v.Timestamp)
-			if err := fw.hash(fw.timestampBuf); err != nil {
+			if err := fw.hashTimestamp(v.Timestamp); err != nil {
 				return 0, err
 			}
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)

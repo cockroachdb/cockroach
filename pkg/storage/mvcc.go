@@ -6284,7 +6284,11 @@ func MVCCExportFingerprint(
 	defer span.Finish()
 
 	hasher := fnv.New64()
-	fingerprintWriter := makeFingerprintWriter(ctx, hasher, cs, dest, opts.FingerprintOptions)
+	fingerprintWriter, err := makeFingerprintWriter(ctx, hasher, cs, dest, opts.StartKey.Key,
+		opts.FingerprintOptions)
+	if err != nil {
+		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, 0, false, err
+	}
 	defer fingerprintWriter.Close()
 
 	summary, resumeInfo, exportErr := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
@@ -6790,6 +6794,8 @@ type MVCCExportFingerprintOptions struct {
 	// If StripValueChecksum is true, checksums are removed from
 	// the value before hashing.
 	StripValueChecksum bool
+	// If StrippedVersion is true, the key's timestamp and table prefix are not hashed.
+	StrippedVersion bool
 }
 
 // MVCCIsSpanEmptyOptions configures the MVCCIsSpanEmpty function.
