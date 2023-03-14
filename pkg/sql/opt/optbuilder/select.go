@@ -528,11 +528,13 @@ func (b *Builder) buildScan(
 	// they can only be projected afterward.
 	var scanColIDs, virtualColIDs opt.ColSet
 	outScope.cols = make([]scopeColumn, len(ordinals))
+	var lastCol *cat.Column
 	for i, ord := range ordinals {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		name := col.ColName()
 		if col.IsVirtualComputed() {
+			lastCol = col
 			virtualColIDs.Add(colID)
 		} else {
 			scanColIDs.Add(colID)
@@ -707,6 +709,9 @@ func (b *Builder) buildScan(
 		// virtual columns.
 		proj := make(memo.ProjectionsExpr, 0, virtualColIDs.Len())
 		virtualColIDs.ForEach(func(col opt.ColumnID) {
+			if _, ok := tabMeta.ComputedCols[col]; !ok {
+				fmt.Printf("%v\n", lastCol.Kind())
+			}
 			item := b.factory.ConstructProjectionsItem(tabMeta.ComputedCols[col], col)
 			if !item.ScalarProps().OuterCols.SubsetOf(scanColIDs) {
 				panic(errors.AssertionFailedf("scanned virtual column depends on non-scanned column"))
