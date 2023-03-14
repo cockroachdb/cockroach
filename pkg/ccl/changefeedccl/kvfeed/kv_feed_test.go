@@ -398,7 +398,6 @@ type rawEventFeed []kvpb.RangeFeedEvent
 func (f rawEventFeed) run(
 	ctx context.Context,
 	spans []kvcoord.SpanTimePair,
-	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error {
