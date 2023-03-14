@@ -54,7 +54,7 @@ func TestDecodeCapabilities(t *testing.T) {
 	require.NoError(t, err)
 	info := mtinfopb.ProtoInfo{
 		Capabilities: tenantcapabilitiespb.TenantCapabilities{
-			CanAdminSplit: true,
+			DisableAdminSplit: true,
 		},
 	}
 	buf, err := protoutil.Marshal(&info)

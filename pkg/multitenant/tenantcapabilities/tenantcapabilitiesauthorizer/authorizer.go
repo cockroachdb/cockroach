@@ -82,21 +82,44 @@ func (a *Authorizer) HasCapabilityForBatch(
 		if requiredCap == noCapCheckNeeded {
 			continue
 		}
-		if !hasCap || requiredCap == onlySystemTenant || !found || !cp.GetBool(requiredCap) {
-			if (requiredCap == tenantcapabilities.CanAdminSplit || requiredCap == tenantcapabilities.CanAdminScatter) &&
-				a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
+		if !found {
+			switch request.Method() {
+			case kvpb.AdminSplit, kvpb.AdminScatter:
+				// Secondary tenants are allowed to run AdminSplit and AdminScatter
+				// requests by default, as they're integral to the performance of IMPORT
+				// and RESTORE. If no entry is found in the capabilities map, we
+				// fallback to this default behavior. Note that this isn't expected to
+				// be the case during normal operation, as tenants that exist should
+				// always have an entry in this map. It does help for some tests,
+				// however.
 				continue
+			default:
+				// For all other requests we conservatively return an error if no entry
+				// is to be found for the tenant.
+				return newTenantDoesNotHaveCapabilityError(requiredCap, request)
 			}
+		}
+		if !hasCap || requiredCap == onlySystemTenant || !cp.GetBool(requiredCap) {
 			// All allowable request types must be explicitly opted into the
 			// reqMethodToCap map. If a request type is missing from the map
 			// (!hasCap), we must be conservative and assume it is
 			// disallowed. This prevents accidents where someone adds a new
 			// sensitive request type in KV and forgets to add an explicit
 			// authorization rule for it here.
-			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, request)
+			//
+			// TODO(arul): This should be caught by a linter instead. Add a test that
+			// goes over all request types and ensures there's an entry in this map
+			// instead.
+			return newTenantDoesNotHaveCapabilityError(requiredCap, request)
 		}
 	}
 	return nil
+}
+
+func newTenantDoesNotHaveCapabilityError(
+	cap tenantcapabilities.CapabilityID, req kvpb.Request,
+) error {
+	return errors.Newf("client tenant does not have capability %q (%T)", cap, req)
 }
 
 var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{

@@ -67,7 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -2949,13 +2948,6 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	defer cleanupFn()
 	args := base.TestServerArgs{
 		ExternalIODir: dir,
-		Knobs: base.TestingKnobs{
-			TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
-				// TODO(arul): This can be removed once
-				// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-				AuthorizerSkipAdminSplitCapabilityChecks: true,
-			},
-		},
 	}
 
 	// Generate some testdata and back it up.
@@ -5296,13 +5288,6 @@ func TestBackupRestoreSequence(t *testing.T) {
 	defer cleanupFn()
 	args := base.TestServerArgs{
 		ExternalIODir: dir,
-		Knobs: base.TestingKnobs{
-			TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
-				// TODO(arul): This can be removed once
-				// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-				AuthorizerSkipAdminSplitCapabilityChecks: true,
-			},
-		},
 	}
 
 	backupLoc := localFoo

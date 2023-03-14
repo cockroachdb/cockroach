@@ -194,8 +194,7 @@ query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_id = 'can_admin_split'
 ----
 tenant_id  capability_id    capability_value
-1          can_admin_split  false
-5          can_admin_split  false
+1          can_admin_split  true
 
 statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split
@@ -205,7 +204,7 @@ query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_id = 'can_admin_split'
 ----
 tenant_id  capability_id    capability_value
-1          can_admin_split  false
+1          can_admin_split  true
 5          can_admin_split  true
 
 subtest end

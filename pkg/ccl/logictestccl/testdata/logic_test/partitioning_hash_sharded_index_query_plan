@@ -1,4 +1,3 @@
-# cluster-opt: can-admin-split
 # LogicTest: 5node !metamorphic-batch-sizes
 
 statement ok

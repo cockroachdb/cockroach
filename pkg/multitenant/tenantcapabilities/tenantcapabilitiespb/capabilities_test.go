@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCapabilityGetSet(t *testing.T) {
@@ -22,5 +23,7 @@ func TestCapabilityGetSet(t *testing.T) {
 		capability := capabilities.Cap(capID)
 		value := capability.Get().Unwrap()
 		capability.Set(value)
+		gotVal := capability.Get().Unwrap()
+		require.Equal(t, value, gotVal)
 	}
 }

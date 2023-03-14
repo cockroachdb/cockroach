@@ -17,10 +17,6 @@ import "github.com/cockroachdb/cockroach/pkg/base"
 type TestingKnobs struct {
 	// WatcherTestingKnobs can be used to test the tenant capabilities Watcher.
 	WatcherTestingKnobs base.ModuleTestingKnobs
-
-	// AuthorizerSkipAdminSplitCapabilityChecks, if set, skips capability checks
-	// for AdminSplit requests in the Authorizer for secondary tenants.
-	AuthorizerSkipAdminSplitCapabilityChecks bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -1,4 +1,3 @@
-# cluster-opt: can-admin-split
 
 # Tests for creating a hash sharded primary key
 statement ok
