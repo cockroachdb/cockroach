@@ -97,7 +97,7 @@ function getFormattedValue(value: number, yAxisUnits: AxisUnits): string {
 }
 
 // Tooltip legend plugin for bar charts.
-export function barTooltipPlugin(yAxis: AxisUnits): Plugin {
+export function barTooltipPlugin(yAxis: AxisUnits, timezone?: string): Plugin {
   const cursorToolTip = {
     tooltip: document.createElement("div"),
     timeStamp: document.createElement("div"),
@@ -111,7 +111,11 @@ export function barTooltipPlugin(yAxis: AxisUnits): Plugin {
     // get the current timestamp from the x axis and formatting as
     // the Tooltip header.
     const closestDataPointTimeMillis = u.data[0][u.posToIdx(left)];
-    timeStamp.textContent = FormatWithTimezone(moment(closestDataPointTimeMillis), DATE_WITH_SECONDS_FORMAT_24_TZ);
+    timeStamp.textContent = FormatWithTimezone(
+      moment(closestDataPointTimeMillis),
+      DATE_WITH_SECONDS_FORMAT_24_TZ,
+      timezone
+    );
 
     // Generating the series legend based on current state of µPlot
     generateSeriesLegend(u, seriesLegend, yAxis);

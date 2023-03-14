@@ -31,6 +31,7 @@ import {
   util,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const decommissionedNodesSortSetting = new LocalSetting<
   AdminUIState,
@@ -47,6 +48,7 @@ export interface DecommissionedNodeHistoryProps {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
   dataSource: DecommissionedNodeStatusRow[];
+  timezone?: string;
 }
 
 const sortByNodeId = (
@@ -88,7 +90,11 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
       title: "Decommissioned On",
       sorter: sortByDecommissioningDate,
       render: (_text, record) => {
-        return record.decommissionedDate.format(util.DATE_FORMAT_24_UTC);
+        return util.FormatWithTimezone(
+          record.decommissionedDate,
+          util.DATE_FORMAT_24_TZ,
+          this.props.timezone,
+        )
       },
     },
   ];
@@ -158,6 +164,7 @@ const decommissionedNodesTableData = createSelector(
 
 const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
   dataSource: decommissionedNodesTableData(state),
+  timezone: selectTimezoneSetting(state),
 });
 
 const mapDispatchToProps = {

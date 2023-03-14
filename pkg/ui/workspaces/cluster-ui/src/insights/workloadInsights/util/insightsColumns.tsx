@@ -30,7 +30,7 @@ export const insightsColumnLabels = {
   numRetries: "Retries",
   isFullScan: "Full Scan",
   contention: "Contention Time",
-  contentionStartTime: "Contention Start Time (UTC)",
+  contentionStartTime: "Contention Start Time",
   rowsProcessed: "Rows Processed",
   schemaName: "Schema Name",
   databaseName: "Database Name",

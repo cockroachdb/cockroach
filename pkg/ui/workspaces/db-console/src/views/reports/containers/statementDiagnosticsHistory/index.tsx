@@ -49,6 +49,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;
@@ -96,7 +97,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
       title: "Activated on",
       name: "activated_on",
       cell: record =>
-        moment.utc(record.requested_at).format(util.DATE_FORMAT_24_UTC),
+        util.FormatWithTimezone(moment.utc(record.requested_at), util.DATE_FORMAT_24_TZ, this.props.timezone),
       sort: record => {
         return moment.utc(record.requested_at).unix();
       },
@@ -281,6 +282,7 @@ interface MapStateToProps {
   getStatementByFingerprint: (
     fingerprint: string,
   ) => ReturnType<typeof selectStatementByFingerprint>;
+  timezone?: string;
 }
 
 interface MapDispatchToProps {
@@ -295,6 +297,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   diagnosticsReports: selectStatementDiagnosticsReports(state) || [],
   getStatementByFingerprint: (fingerprint: string) =>
     selectStatementByFingerprint(state, fingerprint),
+  timezone: selectTimezoneSetting(state),
 });
 
 const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({

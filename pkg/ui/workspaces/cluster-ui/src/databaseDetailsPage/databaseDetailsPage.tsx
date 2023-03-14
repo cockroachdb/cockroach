@@ -28,7 +28,7 @@ import {
 } from "src/sortedtable";
 import * as format from "src/util/format";
 import {
-  DATE_FORMAT,
+  DATE_FORMAT_24_TZ,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri, FormatWithTimezone,
 } from "src/util/format";
@@ -667,7 +667,7 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table =>
           !table.details.statsLastUpdated
             ? "No table statistics found"
-            : FormatWithTimezone(table.details.statsLastUpdated, DATE_FORMAT, this.props.timezone),
+            : FormatWithTimezone(table.details.statsLastUpdated, DATE_FORMAT_24_TZ, this.props.timezone),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",

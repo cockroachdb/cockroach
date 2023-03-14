@@ -24,8 +24,7 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   TimestampToMoment,
   idAttr,
-  DATE_FORMAT_24_UTC,
-  getMatchParamByName,
+  getMatchParamByName, DATE_FORMAT_24_TZ, FormatWithTimezone,
 } from "src/util";
 
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
@@ -45,6 +44,7 @@ export interface JobDetailsStateProps {
   job: JobResponse;
   jobError: Error | null;
   jobLoading: boolean;
+  timezone?: string;
 }
 
 export interface JobDetailsDispatchProps {
@@ -112,7 +112,11 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                   <h3 className={jobCx("summary--card--title", "secondary")}>
                     Next Planned Execution Time:
                   </h3>
-                  {nextRun.format(DATE_FORMAT_24_UTC)}
+                  {FormatWithTimezone(
+                    nextRun,
+                    DATE_FORMAT_24_TZ,
+                    this.props.timezone
+                  )}
                 </>
               )}
             </SummaryCard>
@@ -121,15 +125,23 @@ export class JobDetails extends React.Component<JobDetailsProps> {
             <SummaryCard className={cardCx("summary-card")}>
               <SummaryCardItem
                 label="Creation Time"
-                value={TimestampToMoment(job.created).format(
-                  DATE_FORMAT_24_UTC,
-                )}
+                value={
+                  FormatWithTimezone(
+                    TimestampToMoment(job.created),
+                    DATE_FORMAT_24_TZ,
+                    this.props.timezone
+                  )
+                }
               />
               <SummaryCardItem
                 label="Last Execution Time"
-                value={TimestampToMoment(job.last_run).format(
-                  DATE_FORMAT_24_UTC,
-                )}
+                value={
+                  FormatWithTimezone(
+                    TimestampToMoment(job.last_run),
+                    DATE_FORMAT_24_TZ,
+                    this.props.timezone
+                  )
+                }
               />
               <SummaryCardItem
                 label="Execution Count"
@@ -143,6 +155,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                     <HighwaterTimestamp
                       timestamp={job.highwater_timestamp}
                       decimalString={job.highwater_decimal}
+                      timezone={this.props.timezone}
                     />
                   }
                 />

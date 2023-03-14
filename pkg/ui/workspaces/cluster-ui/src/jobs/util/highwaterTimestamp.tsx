@@ -11,13 +11,14 @@ import { google } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import moment from "moment";
 import React from "react";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import {DATE_FORMAT_24_TZ, FormatWithTimezone} from "src/util/format";
 
 type ITimestamp = google.protobuf.ITimestamp;
 
 interface HighwaterProps {
   timestamp: ITimestamp;
   decimalString: string;
+  timezone?: string;
 }
 
 export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
@@ -39,7 +40,9 @@ export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
       <Tooltip
         placement="bottom"
         style="default"
-        content={highwaterMoment.format(DATE_FORMAT_24_UTC)}
+        content={
+          FormatWithTimezone(highwaterMoment, DATE_FORMAT_24_TZ, this.props.timezone)
+        }
       >
         {this.props.decimalString}
       </Tooltip>

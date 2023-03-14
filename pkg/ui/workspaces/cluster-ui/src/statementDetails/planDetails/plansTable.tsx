@@ -18,7 +18,6 @@ import {
   longToInt,
   TimestampToMoment,
   RenderCount,
-  DATE_FORMAT_24_UTC,
   explainPlan,
   limitText,
   Count,

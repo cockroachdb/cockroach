@@ -24,7 +24,7 @@ import ColumnsSelector, {
 } from "src/columnsSelector/columnsSelector";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { isSelectedColumn } from "src/columnsSelector/utils";
-import { DATE_FORMAT_24_UTC, syncHistory, TimestampToMoment } from "src/util";
+import {DATE_FORMAT_24_TZ, FormatWithTimezone, syncHistory, TimestampToMoment} from "src/util";
 import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
 import {
   showOptions,
@@ -57,6 +57,7 @@ export interface JobsPageStateProps {
   isDataValid: boolean;
   columns: string[];
   lastUpdated: moment.Moment | null;
+  timezone?: string;
 }
 
 export interface JobsPageDispatchProps {
@@ -242,9 +243,13 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
   };
 
   formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp): string => {
-    return `Since ${TimestampToMoment(earliestRetainedTime).format(
-      DATE_FORMAT_24_UTC,
-    )}`;
+    return `Since ${
+      FormatWithTimezone(
+        TimestampToMoment(earliestRetainedTime),
+        DATE_FORMAT_24_TZ,
+        this.props.timezone,
+      )
+    }`;
   };
 
   render(): React.ReactElement {
@@ -263,7 +268,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     const isLoading = reqInFlight && (!isDataValid || !jobs);
     const { pagination } = this.state;
     const filteredJobs = jobs?.jobs ?? [];
-    const columns = makeJobsColumns();
+    const columns = makeJobsColumns(this.props.timezone);
     // Iterate over all available columns and create list of SelectOptions with initial selection
     // values based on stored user selections in local storage and default column configs.
     // Columns that are set to alwaysShow are filtered from the list.

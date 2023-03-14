@@ -33,7 +33,6 @@ import { InsightRecommendation, InsightType } from "../../insights";
 import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 import {
   Count, DATE_FORMAT_24_TZ,
-  DATE_FORMAT_24_UTC,
   Duration,
   formatNumberForDisplay, FormatWithTimezone,
   longToInt,

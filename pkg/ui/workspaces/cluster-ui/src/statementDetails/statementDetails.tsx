@@ -784,6 +784,7 @@ export class StatementDetails extends React.Component<
                 alignedData={executionAndPlanningTimeseries}
                 uPlotOptions={executionAndPlanningOps}
                 yAxisUnits={AxisUnits.Duration}
+                timezone={this.props.timezone}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -792,6 +793,7 @@ export class StatementDetails extends React.Component<
                 alignedData={rowsProcessedTimeseries}
                 uPlotOptions={rowsProcessedOps}
                 yAxisUnits={AxisUnits.Count}
+                timezone={this.props.timezone}
               />
             </Col>
           </Row>
@@ -802,6 +804,7 @@ export class StatementDetails extends React.Component<
                 alignedData={execRetriesTimeseries}
                 uPlotOptions={execRetriesOps}
                 yAxisUnits={AxisUnits.Count}
+                timezone={this.props.timezone}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -810,6 +813,7 @@ export class StatementDetails extends React.Component<
                 alignedData={execCountTimeseries}
                 uPlotOptions={execCountOps}
                 yAxisUnits={AxisUnits.Count}
+                timezone={this.props.timezone}
               />
             </Col>
           </Row>
@@ -821,6 +825,7 @@ export class StatementDetails extends React.Component<
                 uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}
                 yAxisUnits={AxisUnits.Duration}
+                timezone={this.props.timezone}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -830,6 +835,7 @@ export class StatementDetails extends React.Component<
                 uPlotOptions={cpuOps}
                 tooltip={unavailableTooltip}
                 yAxisUnits={AxisUnits.Duration}
+                timezone={this.props.timezone}
               />
             </Col>
           </Row>

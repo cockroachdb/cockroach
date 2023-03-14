@@ -37,6 +37,7 @@ export interface SchedulesPageStateProps {
   schedules: Schedules;
   schedulesError: Error | null;
   schedulesLoading: boolean;
+  timezone?: string;
 }
 
 export interface SchedulesPageDispatchProps {
@@ -167,6 +168,7 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
               schedules={props.schedules}
               setSort={changeSortSetting}
               sort={sort}
+              timezone={props.timezone}
             />
           )}
         />

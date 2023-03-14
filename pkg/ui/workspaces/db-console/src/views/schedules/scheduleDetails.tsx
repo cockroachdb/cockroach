@@ -18,6 +18,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import { CachedDataReducerState, refreshSchedule } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const selectScheduleState = createSelector(
   [(state: AdminUIState) => state.cachedData.schedule, selectID],
@@ -37,10 +38,12 @@ const mapStateToProps = (
   const schedule = scheduleState ? scheduleState.data : null;
   const scheduleLoading = scheduleState ? scheduleState.inFlight : false;
   const scheduleError = scheduleState ? scheduleState.lastError : null;
+  const timezone = selectTimezoneSetting(state);
   return {
     schedule,
     scheduleLoading,
     scheduleError,
+    timezone,
   };
 };
 

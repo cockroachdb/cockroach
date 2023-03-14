@@ -16,7 +16,6 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import {
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration,
   FormatWithTimezone

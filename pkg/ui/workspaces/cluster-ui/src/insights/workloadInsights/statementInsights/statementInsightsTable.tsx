@@ -17,7 +17,7 @@ import {
 } from "src/sortedtable";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration, FormatWithTimezone,
   limitText,
   NO_SAMPLES_FOUND,

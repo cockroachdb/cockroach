@@ -10,7 +10,10 @@
 
 import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
+import {
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration, FormatWithTimezone
+} from "src/util";
 import { ContentionDetails, ContentionEvent, InsightExecEnum } from "../types";
 import {
   insightsTableTitles,
@@ -24,11 +27,13 @@ interface InsightDetailsTableProps {
   data: ContentionEvent[];
   execType: InsightExecEnum;
   setTimeScale?: (tw: TimeScale) => void;
+  timezone?: string;
 }
 
 export function makeInsightDetailsColumns(
   execType: InsightExecEnum,
   setTimeScale: (tw: TimeScale) => void,
+  timezone?: string,
 ): ColumnDescriptor<ContentionEvent>[] {
   return [
     {
@@ -74,8 +79,9 @@ export function makeInsightDetailsColumns(
     {
       name: "contentionStartTime",
       title: insightsTableTitles.contentionStartTime(execType),
-      cell: (item: ContentionEvent) =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      cell: (item: ContentionEvent) => item.startTime
+        ? FormatWithTimezone(item.startTime, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ, timezone)
+        : "N/A",
       sort: (item: ContentionEvent) => item.startTime.unix(),
     },
     {
@@ -114,7 +120,7 @@ export function makeInsightDetailsColumns(
 export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
-  const columns = makeInsightDetailsColumns(props.execType, props.setTimeScale);
+  const columns = makeInsightDetailsColumns(props.execType, props.setTimeScale, props.timezone);
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: false,
     columnTitle: "contention",

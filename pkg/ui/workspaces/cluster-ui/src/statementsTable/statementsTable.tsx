@@ -22,7 +22,7 @@ import {
   unset,
   DurationCheckSample, FormatWithTimezone, DATE_FORMAT_24_TZ,
 } from "src/util";
-import { DATE_FORMAT, Duration } from "src/util/format";
+import { Duration } from "src/util/format";
 import {
   countBarChart,
   bytesReadBarChart,

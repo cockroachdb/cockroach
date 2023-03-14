@@ -32,8 +32,7 @@ import {
 } from "src/summaryCard";
 import * as format from "src/util/format";
 import {
-  DATE_FORMAT, DATE_FORMAT_24_TZ,
-  DATE_FORMAT_24_UTC,
+  DATE_FORMAT_24_TZ,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
   EncodeUriName, FormatWithTimezone,

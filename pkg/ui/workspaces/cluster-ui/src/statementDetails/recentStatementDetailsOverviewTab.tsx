@@ -19,7 +19,7 @@ import {
 } from "src/recentExecutions";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { StatusIcon } from "src/recentExecutions/statusIcon";
-import {DATE_FORMAT_24_TZ, DATE_FORMAT_24_UTC, Duration, FormatWithTimezone} from "src/util";
+import {DATE_FORMAT_24_TZ, Duration, FormatWithTimezone} from "src/util";
 
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -121,6 +121,7 @@ export const RecentStatementDetailsOverviewTab = ({
           waitTime={contentionDetails.waitInsights?.waitTime}
           waitingExecutions={contentionDetails.waitingExecutions}
           blockingExecutions={contentionDetails.blockingExecutions}
+          timezone={timezone}
         />
       )}
     </>

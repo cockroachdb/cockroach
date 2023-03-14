@@ -14,7 +14,7 @@ import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { StmtInsightEvent } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
 import {
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration, FormatWithTimezone,
   limitText,
 } from "src/util";

@@ -26,10 +26,12 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 interface SettingsOwnProps {
   settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
   refreshSettings: typeof refreshSettings;
+  timezone?: string;
 }
 
 interface IterableSetting {
@@ -110,7 +112,7 @@ export class Settings extends React.Component<SettingsProps, SettingsState> {
         title: "Last Updated",
         cell: (setting: IterableSetting) =>
           setting.last_updated
-            ? setting.last_updated.format(util.DATE_FORMAT_24_UTC)
+            ? util.FormatWithTimezone(setting.last_updated, util.DATE_FORMAT_24_TZ, this.props.timezone)
             : "No overrides",
         sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
       },
@@ -174,6 +176,7 @@ export class Settings extends React.Component<SettingsProps, SettingsState> {
 const mapStateToProps = (state: AdminUIState) => ({
   // RootState contains declaration for whole state
   settings: state.cachedData.settings,
+  timezone: selectTimezoneSetting(state),
 });
 
 const mapDispatchToProps = {

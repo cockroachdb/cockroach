@@ -55,6 +55,7 @@ type WaitTimeInsightsPanelProps = {
   waitTime?: moment.Duration;
   waitingExecutions: ContendedExecution[];
   blockingExecutions: ContendedExecution[];
+  timezone?: string;
 };
 
 export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
@@ -67,6 +68,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
   waitTime,
   waitingExecutions,
   blockingExecutions,
+  timezone
 }) => {
   const showWaitTimeInsightsDetails = waitTime != null;
 
@@ -136,6 +138,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                 <ExecutionContentionTable
                   execType={execType}
                   data={blockingExecutions}
+                  timezone={timezone}
                 />
               </div>
             </Row>
@@ -152,6 +155,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                 <ExecutionContentionTable
                   execType={execType}
                   data={waitingExecutions}
+                  timezone={timezone}
                 />
               </div>
             </Row>

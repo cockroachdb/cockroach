@@ -24,6 +24,7 @@ import {
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { JobsResponseMessage } from "src/util/api";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting",
@@ -83,6 +84,7 @@ const mapStateToProps = (
   const jobs = jobsState ? jobsState.data : null;
   const jobsError = jobsState ? jobsState.lastError : null;
   const lastUpdated = jobsError ? jobsState.requestedAt : jobsState?.setAt;
+  const timezone = selectTimezoneSetting(state);
   return {
     sort,
     status,
@@ -94,6 +96,7 @@ const mapStateToProps = (
     jobsError,
     columns,
     lastUpdated,
+    timezone,
   };
 };
 

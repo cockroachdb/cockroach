@@ -25,6 +25,7 @@ import {
 } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "schedules/status_setting",
@@ -69,6 +70,7 @@ const mapStateToProps = (
   const schedules = schedulesState ? schedulesState.data : null;
   const schedulesLoading = schedulesState ? schedulesState.inFlight : false;
   const schedulesError = schedulesState ? schedulesState.lastError : null;
+  const timezone = selectTimezoneSetting(state);
   return {
     sort,
     status,
@@ -76,6 +78,7 @@ const mapStateToProps = (
     schedules,
     schedulesLoading,
     schedulesError,
+    timezone,
   };
 };
 

@@ -18,6 +18,7 @@ import { createSelector } from "reselect";
 import { KeyedCachedDataReducerState, refreshJob } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { JobResponseMessage } from "src/util/api";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const selectJobState = createSelector(
   [(state: AdminUIState) => state.cachedData?.job],
@@ -76,10 +77,12 @@ const mapStateToProps = (
   const job = selectJob(state, props);
   const jobLoading = selectJobLoading(state, props);
   const jobError = selectJobError(state, props);
+  const timezone = selectTimezoneSetting(state);
   return {
     job,
     jobLoading,
     jobError,
+    timezone,
   };
 };
 

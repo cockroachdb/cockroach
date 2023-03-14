@@ -18,7 +18,7 @@ import { EmptyTable } from "src/empty";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { dropSchedules, pauseSchedules, resumeSchedules } from "src/util/docs";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_FORMAT_24_TZ, FormatWithTimezone} from "src/util/format";
 
 import styles from "../schedules.module.scss";
 import classNames from "classnames/bind";
@@ -26,7 +26,7 @@ const cx = classNames.bind(styles);
 
 class SchedulesSortedTable extends SortedTable<Schedule> {}
 
-const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
+const schedulesTableColumns = (timezone?: string): ColumnDescriptor<Schedule>[] => [
   {
     name: "scheduleId",
     title: (
@@ -101,10 +101,10 @@ const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
         style="tableTitle"
         content={<p>Date and time the schedule will next execute.</p>}
       >
-        {"Next Execution Time (UTC)"}
+        {"Next Execution Time"}
       </Tooltip>
     ),
-    cell: schedule => schedule.nextRun?.format(DATE_FORMAT_24_UTC),
+    cell: schedule => FormatWithTimezone(schedule.nextRun, DATE_FORMAT_24_TZ, timezone),
     sort: schedule => schedule.nextRun?.valueOf(),
   },
   {
@@ -156,11 +156,11 @@ const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
         placement="bottom"
         style="tableTitle"
         content={<p>Date and time the schedule was created.</p>}
-      >
-        {"Creation Time (UTC)"}
-      </Tooltip>
+      >Creation Time</Tooltip>
     ),
-    cell: schedule => schedule.created?.format(DATE_FORMAT_24_UTC),
+    cell: schedule => schedule.created
+      ? FormatWithTimezone(schedule.created, DATE_FORMAT_24_TZ, timezone)
+      : "N/A",
     sort: schedule => schedule.created?.valueOf(),
   },
 ];
@@ -172,6 +172,7 @@ export interface ScheduleTableProps {
   pageSize?: number;
   current?: number;
   isUsedFilter: boolean;
+  timezone?: string;
 }
 
 export interface ScheduleTableState {
@@ -251,7 +252,7 @@ export class ScheduleTable extends React.Component<
           onChangeSortSetting={this.props.setSort}
           className={cx("schedules-table")}
           rowClass={schedule => cx("schedules-table__row--" + schedule.status)}
-          columns={schedulesTableColumns}
+          columns={schedulesTableColumns(this.props.timezone)}
           renderNoResult={this.renderEmptyState()}
           pagination={pagination}
         />

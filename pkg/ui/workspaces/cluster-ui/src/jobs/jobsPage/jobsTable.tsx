@@ -18,7 +18,7 @@ import {
   SortedTable,
   ISortedTablePagination,
 } from "src/sortedtable";
-import { TimestampToMoment } from "src/util";
+import {DATE_FORMAT_24_TZ, FormatWithTimezone, TimestampToMoment} from "src/util";
 import {
   cancelJob,
   jobStatus,
@@ -26,7 +26,6 @@ import {
   pauseJob,
   resumeJob,
 } from "src/util/docs";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
 
 import { HighwaterTimestamp, JobStatusCell } from "../util";
 import { JobDescriptionCell } from "./jobDescriptionCell";
@@ -52,15 +51,15 @@ export const jobsColumnLabels: any = {
   status: "Status",
   jobId: "Job ID",
   users: "User Name",
-  creationTime: "Creation Time (UTC)",
-  lastModifiedTime: "Last Modified Time (UTC)",
-  lastExecutionTime: "Last Execution Time (UTC)",
+  creationTime: "Creation Time",
+  lastModifiedTime: "Last Modified Time",
+  lastExecutionTime: "Last Execution Time",
   executionCount: "Execution Count",
   highWaterTimestamp: "High-water Timestamp",
   coordinatorID: "Coordinator Node",
 };
 
-export function makeJobsColumns(): ColumnDescriptor<Job>[] {
+export function makeJobsColumns(timezone?: string): ColumnDescriptor<Job>[] {
   return [
     {
       name: "description",
@@ -166,7 +165,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           {jobsColumnLabels.creationTime}
         </Tooltip>
       ),
-      cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
+      cell: job => FormatWithTimezone(TimestampToMoment(job?.created), DATE_FORMAT_24_TZ, timezone),
       sort: job => TimestampToMoment(job?.created).valueOf(),
       showByDefault: true,
     },
@@ -181,7 +180,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           {jobsColumnLabels.lastModifiedTime}
         </Tooltip>
       ),
-      cell: job => TimestampToMoment(job?.modified).format(DATE_FORMAT_24_UTC),
+      cell: job => FormatWithTimezone(TimestampToMoment(job?.modified), DATE_FORMAT_24_TZ, timezone),
       sort: job => TimestampToMoment(job?.modified).valueOf(),
       showByDefault: true,
     },
@@ -193,10 +192,10 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           style="tableTitle"
           content={<p>Date and time the job was last executed.</p>}
         >
-          {jobsColumnLabels.lastModifiedTime}
+          {jobsColumnLabels.lastExecutionTime}
         </Tooltip>
       ),
-      cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
+      cell: job => FormatWithTimezone(TimestampToMoment(job?.last_run), DATE_FORMAT_24_TZ, timezone),
       sort: job => TimestampToMoment(job?.last_run).valueOf(),
       showByDefault: true,
     },

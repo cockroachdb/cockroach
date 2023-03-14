@@ -32,11 +32,10 @@ import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
 import {
   calculateTotalWorkload,
-  Count,
-  DATE_FORMAT_24_UTC,
+  Count, DATE_FORMAT_24_TZ,
   EncodeDatabaseTableIndexUri,
   EncodeDatabaseTableUri,
-  EncodeDatabaseUri,
+  EncodeDatabaseUri, FormatWithTimezone,
   performanceTuningRecipes,
   unique,
   unset,
@@ -308,7 +307,7 @@ export class IndexDetailsPage extends React.Component<
     if (timestamp.isSame(minDate)) {
       return "Never";
     } else {
-      return timestamp.format(DATE_FORMAT_24_UTC);
+      return FormatWithTimezone(timestamp, DATE_FORMAT_24_TZ, this.props.timezone);
     }
   }
 

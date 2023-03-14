@@ -13,7 +13,7 @@ import { Tooltip } from "@cockroachlabs/ui-components";
 import { ExecutionType, RecentExecution } from "./types";
 import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
-import {capitalize, DATE_FORMAT, DATE_FORMAT_24_TZ, Duration, FormatWithTimezone} from "src/util";
+import {capitalize, DATE_FORMAT_24_TZ, Duration, FormatWithTimezone} from "src/util";
 import { StatusIcon } from "./statusIcon";
 
 export type ExecutionsColumn =

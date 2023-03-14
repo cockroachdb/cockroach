@@ -43,7 +43,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
   tooltip,
   uPlotOptions,
   yAxisUnits,
-  timezone = "UTC"
+  timezone = "UTC",
 }) => {
   const graphRef = useRef<HTMLDivElement>(null);
   const samplingIntervalMillis =
@@ -72,6 +72,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
       yAxisDomain,
       yAxisUnits,
       colourPalette,
+      timezone,
     );
 
     const plot = new uPlot(opts, stackedData, graphRef.current);

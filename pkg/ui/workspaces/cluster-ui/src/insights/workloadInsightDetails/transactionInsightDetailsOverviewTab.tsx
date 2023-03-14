@@ -246,6 +246,7 @@ the maximum number of statements was reached in the console.`;
                     data={blockingExecutions}
                     execType={InsightExecEnum.TRANSACTION}
                     setTimeScale={setTimeScale}
+                    timezone={timezone}
                   />
                 </div>
               </Col>

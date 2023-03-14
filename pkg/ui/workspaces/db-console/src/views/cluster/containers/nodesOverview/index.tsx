@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { connect } from "react-redux";
-import moment, { Moment } from "moment";
+import moment from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
 
@@ -56,6 +56,7 @@ import {
 } from "./tooltips";
 import { cockroach } from "src/js/protos";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting",
@@ -110,7 +111,7 @@ interface DecommissionedNodeStatusRow {
   nodeId: number;
   nodeName: string;
   status: LivenessStatus;
-  decommissionedDate: Moment;
+  decommissionedDate: moment.Moment;
 }
 
 /**
@@ -131,6 +132,7 @@ interface LiveNodeListProps extends NodeCategoryListProps {
 interface DecommissionedNodeListProps extends NodeCategoryListProps {
   dataSource: DecommissionedNodeStatusRow[];
   isCollapsible: boolean;
+  timezone?: string;
 }
 
 const getBadgeTypeByNodeStatus = (
@@ -463,7 +465,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "decommissionedSince",
       title: "decommissioned on",
       render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        record.decommissionedDate.format(util.DATE_FORMAT_24_UTC),
+        util.FormatWithTimezone(record.decommissionedDate, util.DATE_FORMAT_24_TZ, this.props.timezone),
     },
     {
       key: "status",
@@ -678,6 +680,7 @@ const DecommissionedNodesConnected = connect(
       sortSetting: decommissionedNodesSortSetting.selector(state),
       dataSource: decommissionedNodesTableDataSelector(state),
       isCollapsible: true,
+      timezone: selectTimezoneSetting(state),
     };
   },
   {

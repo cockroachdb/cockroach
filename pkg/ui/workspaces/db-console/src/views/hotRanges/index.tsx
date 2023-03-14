@@ -28,6 +28,7 @@ import {
 import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
@@ -40,6 +41,7 @@ const HotRangesPage = () => {
   const lastError = useSelector(lastErrorSelector);
   const lastSetAt = useSelector(lastSetAtSelector);
   const isLoading = useSelector(isLoadingSelector);
+  const timezone = useSelector(selectTimezoneSetting);
   const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
 
   useEffect(() => {
@@ -91,7 +93,7 @@ const HotRangesPage = () => {
             <HotRangesTable
               hotRangesList={filteredHotRanges}
               lastUpdate={
-                lastSetAt && lastSetAt?.utc().format(util.DATE_FORMAT_24_UTC)
+                lastSetAt && util.FormatWithTimezone(lastSetAt, util.DATE_FORMAT_24_TZ, timezone)
               }
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}
