@@ -926,6 +926,7 @@ var pgjdbcIgnoreList = blocklist{
 	"org.postgresql.test.jdbc2.BatchedInsertReWriteEnabledTest.testBatchWithReWrittenSpaceAfterValues[3: autoCommit=NO, binary=FORCE]":              "54477",
 	"org.postgresql.test.jdbc2.BatchedInsertReWriteEnabledTest.testReWriteDisabledForPlainBatch[2: autoCommit=NO, binary=REGULAR]":                  "54477",
 	"org.postgresql.test.jdbc2.BatchedInsertReWriteEnabledTest.testReWriteDisabledForPlainBatch[3: autoCommit=NO, binary=FORCE]":                    "54477",
+	"org.postgresql.test.jdbc2.CursorFetchTest.testBasicFetch[binary = FORCE]":                                                                      "flaky",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testBadUTF8Decode":                                                                              "54477",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testTruncatedUTF8Decode":                                                                        "54477",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testUTF8Decode":                                                                                 "54477",

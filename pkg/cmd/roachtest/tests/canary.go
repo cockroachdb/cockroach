@@ -36,18 +36,20 @@ import (
 // blocklist is a lists of known test errors and failures.
 type blocklist map[string]string
 
-// blocklistWithName contains both a blocklist of known test errors and
-// failures but also an optional ignorelist for flaky tests.
-// When the test suite is run, the results are compared to this list.
+// listWithName contains both a blocklist of known test errors and
+// failures and also an optional ignorelist for flaky tests.
+// When the test suite is run, the results are compared to this blocklist.
 // Any passed test that is not on this blocklist is reported as PASS - expected
 // Any passed test that is on this blocklist is reported as PASS - unexpected
 // Any failed test that is on this blocklist is reported as FAIL - expected
-// Any failed test that is not on blocklist list is reported as FAIL - unexpected
+// Any failed test that is not on blocklist blocklist is reported as FAIL - unexpected
 // Any test on this blocklist that is not run is reported as FAIL - not run
-// Ant test in the ignorelist is reported as SKIP if it is run
-type blocklistWithName struct {
-	blocklistname string
-	blocklist     blocklist
+// Any test in the ignorelist is reported as SKIP if it is run
+type listWithName struct {
+	blocklistName  string
+	blocklist      blocklist
+	ignorelistName string
+	ignorelist     blocklist
 }
 
 func fetchCockroachVersion(
