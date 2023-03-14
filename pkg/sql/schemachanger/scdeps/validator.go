@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
 
 // ValidateForwardIndexesFn callback function for validating forward indexes.
@@ -137,7 +138,7 @@ func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalIntern
 				return err
 			}
 			return fn(ctx, txn)
-		})
+		}, isql.WithPriority(admissionpb.BulkNormalPri))
 	})
 }
 

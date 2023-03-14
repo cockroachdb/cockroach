@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2460,7 +2461,7 @@ func (sc *SchemaChanger) txn(ctx context.Context, f func(context.Context, descs.
 		ctx context.Context, txn descs.Txn,
 	) error {
 		return f(ctx, txn)
-	})
+	}, isql.WithPriority(admissionpb.BulkNormalPri))
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
