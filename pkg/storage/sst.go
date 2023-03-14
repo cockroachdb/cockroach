@@ -473,8 +473,8 @@ func CheckSSTConflicts(
 					isIdempotent := extTombstones.Equal(sstRangeKeys.Versions)
 					if ok := allowIdempotentHelper(extRangeKeys.Versions[0].Timestamp); !ok || !isIdempotent {
 						// Idempotence is either not allowed or there's a conflict.
-						return enginepb.MVCCStats{}, errors.Errorf(
-							"ingested range key collides with an existing one: %s", sstTombstone)
+						return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
+							sstTombstone.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstRangeKeys.Bounds.Key)
 					}
 				}
 			}
@@ -813,6 +813,21 @@ func CheckSSTConflicts(
 			// We exclude !sstHasPoint above in case we were at a range key pause
 			// point that matches extKey. In that case, the below SeekGE would make
 			// no forward progress.
+			//
+			// However, seeking is not safe if we're at an ext range key; we could
+			// miss conflicts and overlaps with sst range keys in between
+			// [current SST Key, extKey.Key). Do a next and go back to the start of
+			// the loop. If we had a dedicated sst range key iterator, we could have
+			// optimized away this unconditional-next.
+			if extHasRange {
+				sstIter.NextKey()
+				sstOK, sstErr = sstIter.Valid()
+				if sstOK {
+					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+					extOK, extErr = extIter.Valid()
+				}
+				continue
+			}
 			sstIter.SeekGE(MVCCKey{Key: extKey.Key})
 			sstOK, sstErr = sstIter.Valid()
 			if sstOK {
@@ -1040,10 +1055,10 @@ func CheckSSTConflicts(
 					// ext key.
 					extIter.NextKey()
 					extOK, extErr = extIter.Valid()
-					if extOK {
+					if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 						sstIter.SeekGE(MVCCKey{Key: extIter.UnsafeKey().Key})
+						sstOK, sstErr = sstIter.Valid()
 					}
-					sstOK, sstErr = sstIter.Valid()
 					if sstOK {
 						extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 						extOK, extErr = extIter.Valid()
