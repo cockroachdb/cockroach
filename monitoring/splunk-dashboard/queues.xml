@@ -241,7 +241,7 @@ where index=$index_name$  span=10s</query>
   </row>
   <row>
     <panel>
-      <title>GC Queue</title>
+      <title>MVCC GC Queue</title>
       <chart>
         <search>
           <query>| mstats rate_sum(queue_gc_process_success) as "Successful Actions / sec",

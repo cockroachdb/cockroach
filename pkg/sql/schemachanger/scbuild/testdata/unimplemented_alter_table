@@ -61,10 +61,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i DROP DEFAULT
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD UNIQUE(i);
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ADD PRIMARY KEY (l);
 ----
 

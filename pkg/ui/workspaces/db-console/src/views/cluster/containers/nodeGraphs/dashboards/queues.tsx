@@ -14,10 +14,10 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
-import { GraphDashboardProps } from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources } = props;
+  const { nodeIDs, nodeSources, storeSources, nodeDisplayNameByID } = props;
 
   return [
     <LineGraph title="Queue Processing Failures" sources={storeSources}>
@@ -212,21 +212,6 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="GC Queue" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="actions">
-        <Metric
-          name="cr.store.queue.gc.process.success"
-          title="Successful Actions / sec"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.store.queue.gc.pending"
-          title="Pending Actions"
-          downsampleMax
-        />
-      </Axis>
-    </LineGraph>,
-
     <LineGraph title="Raft Log Queue" sources={storeSources}>
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -284,6 +269,41 @@ export default function (props: GraphDashboardProps) {
           title="Pending Actions"
           downsampleMax
         />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="MVCC GC Queue" sources={storeSources}>
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric
+          name="cr.store.queue.gc.process.success"
+          title="Successful Actions / sec"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.gc.pending"
+          title="Pending Actions"
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Protected Timestamp Records"
+      sources={nodeSources}
+      tooltip={`Number of protected timestamp records (used by backups, changefeeds, etc. to prevent MVCC GC)`}
+    >
+      <Axis units={AxisUnits.Count} label="Records">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.spanconfig.kvsubscriber.protected_record_count"
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
       </Axis>
     </LineGraph>,
   ];
