@@ -24,10 +24,12 @@ import { limitText } from "../../util";
 
 export function makeRecentTransactionsColumns(
   isTenant: boolean,
+  timezone: string,
 ): ColumnDescriptor<RecentTransaction>[] {
   const execType: ExecutionType = "transaction";
+  const cols = recentTransactionColumnsFromCommon(timezone);
   return [
-    recentTransactionColumnsFromCommon.executionID,
+    cols.executionID,
     {
       name: "mostRecentStatement",
       title: executionsTableTitles.mostRecentStatement(execType),
@@ -47,10 +49,10 @@ export function makeRecentTransactionsColumns(
       },
       sort: (item: RecentTransaction) => item.query,
     },
-    recentTransactionColumnsFromCommon.status,
-    recentTransactionColumnsFromCommon.startTime,
-    recentTransactionColumnsFromCommon.elapsedTime,
-    !isTenant ? recentTransactionColumnsFromCommon.timeSpentWaiting : null,
+    cols.status,
+    cols.startTime,
+    cols.elapsedTime,
+    !isTenant ? cols.timeSpentWaiting : null,
     {
       name: "statementCount",
       title: executionsTableTitles.statementCount(execType),
@@ -63,7 +65,7 @@ export function makeRecentTransactionsColumns(
       cell: (item: RecentTransaction) => item.retries,
       sort: (item: RecentTransaction) => item.retries,
     },
-    recentTransactionColumnsFromCommon.applicationName,
+    cols.applicationName,
   ].filter(col => col != null);
 }
 

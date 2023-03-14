@@ -46,6 +46,7 @@ type RecentStatementsSectionProps = {
   onChangeSortSetting: (sortSetting: SortSetting) => void;
   onClearFilters: () => void;
   onColumnsSelect: (columns: string[]) => void;
+  timezone?: string;
 };
 
 export const RecentStatementsSection: React.FC<
@@ -61,9 +62,10 @@ export const RecentStatementsSection: React.FC<
   onClearFilters,
   onChangeSortSetting,
   onColumnsSelect,
+  timezone,
 }) => {
   const columns = useMemo(
-    () => makeRecentStatementsColumns(isTenant),
+    () => makeRecentStatementsColumns(isTenant, timezone),
     [isTenant],
   );
 

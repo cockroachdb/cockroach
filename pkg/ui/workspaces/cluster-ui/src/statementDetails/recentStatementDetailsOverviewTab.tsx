@@ -19,7 +19,7 @@ import {
 } from "src/recentExecutions";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { StatusIcon } from "src/recentExecutions/statusIcon";
-import { DATE_FORMAT_24_UTC, Duration } from "src/util";
+import {DATE_FORMAT_24_TZ, DATE_FORMAT_24_UTC, Duration, FormatWithTimezone} from "src/util";
 
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -33,11 +33,13 @@ const cx = classNames.bind(styles);
 type Props = {
   statement?: RecentStatement;
   contentionDetails?: ExecutionContentionDetails;
+  timezone?: string;
 };
 
 export const RecentStatementDetailsOverviewTab = ({
   statement,
   contentionDetails,
+  timezone = "UTC",
 }: Props): React.ReactElement => {
   if (!statement) return null;
 
@@ -48,8 +50,8 @@ export const RecentStatementDetailsOverviewTab = ({
           <Col className="gutter-row" span={12}>
             <SummaryCard className={cx("summary-card")}>
               <SummaryCardItem
-                label="Start Time (UTC)"
-                value={statement.start.format(DATE_FORMAT_24_UTC)}
+                label={`Start Time (${timezone})`}
+                value={FormatWithTimezone(statement.start, DATE_FORMAT_24_TZ, timezone)}
               />
               <SummaryCardItem
                 label="Elapsed Time"

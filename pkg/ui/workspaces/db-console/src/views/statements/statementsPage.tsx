@@ -72,6 +72,7 @@ import {
   selectStatementsDataValid,
 } from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 type ICollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -388,6 +389,7 @@ export default withRouter(
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
+        timezone: selectTimezoneSetting(state),
       },
       activePageProps: mapStateToRecentStatementViewProps(state),
     }),

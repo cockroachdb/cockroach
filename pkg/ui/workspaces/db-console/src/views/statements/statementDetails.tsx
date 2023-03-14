@@ -53,6 +53,7 @@ import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const { generateStmtDetailsToID } = util;
 
@@ -120,6 +121,7 @@ const mapStateToProps = (
     selectStatementDetails(state, props);
   const statementFingerprint = statementDetails?.statement.metadata.query;
   return {
+    timezone: selectTimezoneSetting(state),
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
     isLoading: isLoading,

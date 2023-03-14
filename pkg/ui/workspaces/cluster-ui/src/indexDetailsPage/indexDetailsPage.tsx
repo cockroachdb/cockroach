@@ -114,6 +114,7 @@ export interface IndexDetailsPageData {
   hasAdminRole?: UIConfigState["hasAdminRole"];
   nodeRegions: { [nodeId: string]: string };
   timeScale: TimeScale;
+  timezone?: string;
 }
 
 interface IndexDetails {
@@ -650,6 +651,11 @@ export class IndexDetailsPage extends React.Component<
                           "statement",
                           isTenant,
                           hasViewActivityRedactedRole,
+                          undefined, /* search */
+                          undefined, /* activateDiagnosticsRef */
+                          undefined, /* onSelectDiagnosticsReportDropdownOption */
+                          undefined, /* onStatementClick */
+                          this.props.timezone,
                         ).filter(c => !(isTenant && c.hideIfTenant))}
                         className={stmtCx("statements-table")}
                         tableWrapperClassName={cx("table-scroll")}

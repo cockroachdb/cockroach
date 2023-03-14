@@ -28,7 +28,7 @@ import {
 import { StatusIcon } from "src/recentExecutions/statusIcon";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr, DATE_FORMAT_24_UTC } from "src/util";
+import {executionIdAttr, FormatWithTimezone, DATE_FORMAT_24_TZ} from "src/util";
 
 import styles from "../statementDetails/statementDetails.module.scss";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
@@ -40,6 +40,7 @@ export type RecentTransactionDetailsStateProps = {
   transaction: RecentTransaction;
   contentionDetails?: ExecutionContentionDetails;
   match: match;
+  timezone?: string;
 };
 
 export type RecentTransactionDetailsDispatchProps = {
@@ -50,7 +51,7 @@ const BACK_TO_RECENT_TXNS_BUTTON_LABEL = "Recent Transactions";
 const TXN_EXECUTION_ID_LABEL = "Transaction Execution ID";
 
 export const RecentTxnInsightsLabels = {
-  START_TIME: "Start Time (UTC)",
+  START_TIME: "Start Time",
   ELAPSED_TIME: "Elapsed Time",
   STATUS: "Status",
   RETRY_COUNT: "Internal Retries",
@@ -70,7 +71,7 @@ export type RecentTransactionDetailsProps = RecentTransactionDetailsStateProps &
 
 export const RecentTransactionDetails: React.FC<
   RecentTransactionDetailsProps
-> = ({ transaction, contentionDetails, match, refreshLiveWorkload }) => {
+> = ({ transaction, contentionDetails, match, refreshLiveWorkload, timezone }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
 
@@ -119,7 +120,7 @@ export const RecentTransactionDetails: React.FC<
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
                   label={RecentTxnInsightsLabels.START_TIME}
-                  value={transaction.start.format(DATE_FORMAT_24_UTC)}
+                  value={FormatWithTimezone(transaction.start, DATE_FORMAT_24_TZ, timezone)}
                 />
                 <SummaryCardItem
                   label={RecentTxnInsightsLabels.ELAPSED_TIME}

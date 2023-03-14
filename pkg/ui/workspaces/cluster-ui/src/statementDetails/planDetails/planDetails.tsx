@@ -32,10 +32,10 @@ import { CockroachCloudContext } from "../../contexts";
 import { InsightRecommendation, InsightType } from "../../insights";
 import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 import {
-  Count,
+  Count, DATE_FORMAT_24_TZ,
   DATE_FORMAT_24_UTC,
   Duration,
-  formatNumberForDisplay,
+  formatNumberForDisplay, FormatWithTimezone,
   longToInt,
   RenderCount,
   TimestampToMoment,
@@ -48,12 +48,14 @@ interface PlanDetailsProps {
   plans: PlanHashStats[];
   statementFingerprintID: string;
   hasAdminRole: boolean;
+  timezone?: string;
 }
 
 export function PlanDetails({
   plans,
   statementFingerprintID,
   hasAdminRole,
+  timezone = "UTC",
 }: PlanDetailsProps): React.ReactElement {
   const [plan, setPlan] = useState<PlanHashStats | null>(null);
   const [plansSortSetting, setPlansSortSetting] = useState<SortSetting>({
@@ -80,6 +82,7 @@ export function PlanDetails({
         sortSetting={insightsSortSetting}
         onChangeSortSetting={setInsightsSortSetting}
         hasAdminRole={hasAdminRole}
+        timezone={timezone}
       />
     );
   } else {
@@ -90,6 +93,7 @@ export function PlanDetails({
           handleDetails={handleDetails}
           sortSetting={plansSortSetting}
           onChangeSortSetting={setPlansSortSetting}
+          timezone={timezone}
         />
       </div>
     );
@@ -101,6 +105,7 @@ interface PlanTableProps {
   handleDetails: (plan: PlanHashStats) => void;
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
+  timezone?: string;
 }
 
 function PlanTable({
@@ -108,8 +113,9 @@ function PlanTable({
   handleDetails,
   sortSetting,
   onChangeSortSetting,
+  timezone,
 }: PlanTableProps): React.ReactElement {
-  const columns = makeExplainPlanColumns(handleDetails);
+  const columns = makeExplainPlanColumns(handleDetails, timezone);
   return (
     <PlansSortedTable
       columns={columns}
@@ -128,6 +134,7 @@ interface ExplainPlanProps {
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   hasAdminRole: boolean;
+  timezone?: string;
 }
 
 function ExplainPlan({
@@ -137,6 +144,7 @@ function ExplainPlan({
   sortSetting,
   onChangeSortSetting,
   hasAdminRole,
+  timezone,
 }: ExplainPlanProps): React.ReactElement {
   const explainPlan =
     `Plan Gist: ${plan.stats.plan_gists[0]} \n\n` +
@@ -163,8 +171,10 @@ function ExplainPlan({
           <SummaryCard className={cx("summary-card")}>
             <SummaryCardItem
               label="Last Execution Time"
-              value={TimestampToMoment(plan.stats.last_exec_timestamp).format(
-                DATE_FORMAT_24_UTC,
+              value={FormatWithTimezone(
+                TimestampToMoment(plan.stats.last_exec_timestamp),
+                DATE_FORMAT_24_TZ,
+                timezone,
               )}
             />
             <SummaryCardItem

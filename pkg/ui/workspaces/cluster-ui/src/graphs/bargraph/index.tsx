@@ -31,6 +31,7 @@ export type BarGraphTimeSeriesProps = {
   tooltip?: React.ReactNode;
   uPlotOptions: Partial<Options>;
   yAxisUnits: AxisUnits;
+  timezone?: string;
 };
 
 // Currently this component only supports stacked multi-series bars.
@@ -42,6 +43,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
   tooltip,
   uPlotOptions,
   yAxisUnits,
+  timezone = "UTC"
 }) => {
   const graphRef = useRef<HTMLDivElement>(null);
   const samplingIntervalMillis =
@@ -54,7 +56,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
       alignedData[0][0], // startMillis
       alignedData[0][alignedData[0].length - 1], // endMillis
       samplingIntervalMillis,
-      "UTC",
+      timezone,
     );
 
     const stackedData = stack(alignedData, () => false);

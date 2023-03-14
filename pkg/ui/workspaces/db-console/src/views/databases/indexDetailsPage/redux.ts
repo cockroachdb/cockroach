@@ -39,6 +39,7 @@ import {
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const mapStateToProps = createSelector(
@@ -53,6 +54,7 @@ export const mapStateToProps = createSelector(
   state => nodeRegionsByIDSelector(state),
   state => selectHasAdminRole(state),
   state => selectTimeScale(state),
+  state => selectTimezoneSetting(state),
   (
     database,
     table,
@@ -62,6 +64,7 @@ export const mapStateToProps = createSelector(
     nodeRegions,
     hasAdminRole,
     timeScale,
+    timezone,
   ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
@@ -106,6 +109,7 @@ export const mapStateToProps = createSelector(
         indexRecommendations,
       },
       breadcrumbItems: null,
+      timezone,
     };
   },
 );

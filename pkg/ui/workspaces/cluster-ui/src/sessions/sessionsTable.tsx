@@ -16,7 +16,7 @@ import {
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
-import { BytesWithPrecision, Count } from "src/util/format";
+import {BytesWithPrecision, Count, DATE_FORMAT_24_TZ, FormatWithTimezone} from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 
@@ -65,8 +65,8 @@ export function byteArrayToUuid(array: Uint8Array): string {
   ].join("-");
 }
 
-const SessionLink = (props: { session: ISession; onClick?: () => void }) => {
-  const { session, onClick } = props;
+const SessionLink = (props: { session: ISession; onClick?: () => void, timezone?: string }) => {
+  const { session, onClick, timezone } = props;
 
   const base = `/session`;
   const sessionID = byteArrayToUuid(session.id);
@@ -74,7 +74,7 @@ const SessionLink = (props: { session: ISession; onClick?: () => void }) => {
   return (
     <div className={cx("sessionLink")}>
       <Link onClick={onClick} to={`${base}/${encodeURIComponent(sessionID)}`}>
-        <div>{formatSessionStart(session)}</div>
+        <div>{formatSessionStart(session, timezone)}</div>
       </Link>
     </div>
   );
@@ -104,23 +104,23 @@ const StatementTableCell = (props: { session: ISession }) => {
   );
 };
 
-function formatSessionStart(session: ISession): string {
-  const formatStr = "MMM DD, YYYY [at] H:mm";
-  const start = moment.unix(Number(session.start.seconds)).utc();
-
-  return start.format(formatStr);
+function formatSessionStart(session: ISession, timezone?: string): string {
+  return FormatWithTimezone(
+    moment.unix(Number(session.start.seconds)),
+    DATE_FORMAT_24_TZ,
+    timezone,
+  );
 }
 
-function formatStatementStart(session: ISession): string {
+function formatStatementStart(session: ISession, timezone?: string): string {
   if (session.active_queries.length == 0) {
     return "N/A";
   }
-  const formatStr = "MMM DD, YYYY [at] H:mm";
-  const start = moment
-    .unix(Number(session.active_queries[0].start.seconds))
-    .utc();
-
-  return start.format(formatStr);
+  return FormatWithTimezone(
+    moment.unix(Number(session.active_queries[0].start.seconds)),
+    DATE_FORMAT_24_TZ,
+    timezone,
+  );
 }
 
 export function getStatusString(status: Status): string {
@@ -164,6 +164,7 @@ export function makeSessionsColumns(
   onSessionClick?: () => void,
   onTerminateSessionClick?: () => void,
   onTerminateStatementClick?: () => void,
+  timezone?: string,
 ): ColumnDescriptor<SessionInfo>[] {
   const columns: ColumnDescriptor<SessionInfo>[] = [
     {
@@ -171,7 +172,7 @@ export function makeSessionsColumns(
       title: statisticsTableTitles.sessionStart(statType),
       className: cx("cl-table__col-session"),
       cell: session =>
-        SessionLink({ session: session.session, onClick: onSessionClick }),
+        SessionLink({ session: session.session, onClick: onSessionClick, timezone }),
       sort: session => session.session.start.seconds,
       alwaysShow: true,
     },
@@ -214,7 +215,7 @@ export function makeSessionsColumns(
       name: "statementStartTime",
       title: statisticsTableTitles.statementStartTime(statType),
       className: cx("cl-table__col-session"),
-      cell: session => formatStatementStart(session.session),
+      cell: session => formatStatementStart(session.session, timezone),
       sort: session =>
         session.session.active_queries.length > 0
           ? session.session.active_queries[0].start.seconds

@@ -24,9 +24,13 @@ import { limitText } from "../../util";
 
 export function makeRecentStatementsColumns(
   isTenant: boolean,
+  timezone: string,
 ): ColumnDescriptor<RecentStatement>[] {
+
+  const cols = recentStatementColumnsFromCommon(timezone);
+
   return [
-    recentStatementColumnsFromCommon.executionID,
+    cols.executionID,
     {
       name: "execution",
       title: executionsTableTitles.execution("statement"),
@@ -39,11 +43,11 @@ export function makeRecentStatementsColumns(
       ),
       sort: (item: RecentStatement) => item.query,
     },
-    recentStatementColumnsFromCommon.status,
-    recentStatementColumnsFromCommon.startTime,
-    recentStatementColumnsFromCommon.elapsedTime,
-    !isTenant ? recentStatementColumnsFromCommon.timeSpentWaiting : null,
-    recentStatementColumnsFromCommon.applicationName,
+    cols.status,
+    cols.startTime,
+    cols.elapsedTime,
+    !isTenant ? cols.timeSpentWaiting : null,
+    cols.applicationName,
   ].filter(col => col != null);
 }
 

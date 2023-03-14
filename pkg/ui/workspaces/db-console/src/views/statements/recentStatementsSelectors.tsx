@@ -22,6 +22,7 @@ import {
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const selectedColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -61,6 +62,7 @@ export const mapStateToRecentStatementViewProps = (state: AdminUIState) => ({
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  timezone: selectTimezoneSetting(state),
 });
 
 export const recentStatementsViewActions = {

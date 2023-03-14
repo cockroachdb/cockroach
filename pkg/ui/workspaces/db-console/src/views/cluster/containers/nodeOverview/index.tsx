@@ -47,6 +47,7 @@ import {
   MVCCRangeValueBytesTooltip,
 } from "./tooltips";
 import { TooltipProps } from "src/components/tooltip/tooltip";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 /**
  * TableRow is a small stateless component that renders a single row in the node
@@ -92,6 +93,7 @@ interface NodeOverviewProps extends RouteComponentProps {
   // True if current status results are still valid. Needed so that this
   // component refreshes status query when it becomes invalid.
   nodesSummaryValid: boolean;
+  timezone: string;
 }
 
 /**
@@ -115,7 +117,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 
   render() {
     const { node, nodesSummary } = this.props;
-    const { Bytes, Percentage, DATE_FORMAT_24_UTC } = util;
+    const { Bytes, Percentage } = util;
     if (!node) {
       return (
         <div className="section">
@@ -306,9 +308,11 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               />
               <SummaryValue
                 title="Last Update"
-                value={util
-                  .LongToMoment(node.updated_at)
-                  .format(DATE_FORMAT_24_UTC)}
+                value={util.FormatWithTimezone(
+                  util.LongToMoment(node.updated_at),
+                  util.DATE_FORMAT_24_TZ,
+                  this.props.timezone,
+                )}
               />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue
@@ -346,6 +350,7 @@ export default withRouter(
         node: currentNode(state, ownProps),
         nodesSummary: nodesSummarySelector(state),
         nodesSummaryValid: selectNodesSummaryValid(state),
+        timezone: selectTimezoneSetting(state),
       };
     },
     {

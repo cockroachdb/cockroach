@@ -152,7 +152,6 @@ const RangeSelect = ({
     customDropdownOptionWasJustSelected ||
     (selectedIsCustom && !customBackWasJustSelected);
 
-  console.log(selected)
   const menu = (
     <>
       {

@@ -34,7 +34,7 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
-import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
+import {selectAutomaticStatsCollectionEnabled, selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const { DatabaseDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 
@@ -193,6 +193,7 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   isTenant: isTenant,
   automaticStatsCollectionEnabled: selectAutomaticStatsCollectionEnabled(state),
   showNodeRegionsColumn: selectIsMoreThanOneNode(state),
+  timezone: selectTimezoneSetting(state),
 });
 
 export const mapDispatchToProps = {

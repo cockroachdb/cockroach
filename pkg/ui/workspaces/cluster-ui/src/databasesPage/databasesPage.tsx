@@ -99,6 +99,7 @@ export interface DatabasesPageData {
   isTenant?: UIConfigState["isTenant"];
   automaticStatsCollectionEnabled?: boolean;
   showNodeRegionsColumn?: boolean;
+  timezone?: string;
 }
 
 export interface DatabasesPageDataDatabase {

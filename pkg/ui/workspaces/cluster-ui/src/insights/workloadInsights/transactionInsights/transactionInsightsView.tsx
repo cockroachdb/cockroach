@@ -70,6 +70,7 @@ export type TransactionInsightsViewStateProps = {
   dropDownSelect?: React.ReactElement;
   timeScale?: TimeScale;
   maxSizeApiReached?: boolean;
+  timezone?: string;
 };
 
 export type TransactionInsightsViewDispatchProps = {
@@ -104,6 +105,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     setTimeScale,
     dropDownSelect,
     maxSizeApiReached,
+    timezone,
   } = props;
 
   const [pagination, setPagination] = useState<ISortedTablePagination>({

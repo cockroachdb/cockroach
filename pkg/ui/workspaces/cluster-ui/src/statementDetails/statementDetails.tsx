@@ -30,12 +30,11 @@ import {
   appAttr,
   appNamesAttr,
   FixFingerprintHexValue,
-  DATE_FORMAT_24_UTC,
   intersperse,
   queryByName,
   RenderCount,
   TimestampToMoment,
-  unique,
+  unique, DATE_FORMAT_24_TZ, FormatWithTimezone,
 } from "src/util";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
@@ -156,6 +155,7 @@ export interface StatementDetailsStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   statementFingerprintInsights?: StmtInsightEvent[];
+  timezone?: string;
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -463,7 +463,7 @@ export class StatementDetails extends React.Component<
       .includes("timeout");
     const hasData =
       Number(this.props.statementDetails?.statement?.stats?.count) > 0;
-    const period = timeScaleToString(this.props.timeScale);
+    const period = timeScaleToString(this.props.timeScale, this.props.timezone);
 
     return (
       <Tabs
@@ -510,6 +510,7 @@ export class StatementDetails extends React.Component<
             options={timeScale1hMinOptions}
             currentScale={this.props.timeScale}
             setTimeScale={this.props.onTimeScaleChange}
+            timezone={this.props.timezone}
           />
         </PageConfigItem>
       </PageConfig>
@@ -578,7 +579,7 @@ export class StatementDetails extends React.Component<
 
     const lastExec =
       stats.last_exec_timestamp &&
-      TimestampToMoment(stats.last_exec_timestamp).format(DATE_FORMAT_24_UTC);
+      FormatWithTimezone(TimestampToMoment(stats.last_exec_timestamp), DATE_FORMAT_24_TZ, this.props.timezone)
 
     const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
     const unavailableTooltip = !statementSampled && (
@@ -690,6 +691,7 @@ export class StatementDetails extends React.Component<
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.props.onTimeScaleChange}
+              timezone={this.props.timezone}
             />
           </PageConfigItem>
         </PageConfig>
@@ -854,6 +856,7 @@ export class StatementDetails extends React.Component<
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
+              timezone={this.props.timezone}
             />
           </PageConfigItem>
         </PageConfig>
@@ -872,6 +875,7 @@ export class StatementDetails extends React.Component<
             statementFingerprintID={this.props.statementFingerprintID}
             plans={statement_statistics_per_plan_hash}
             hasAdminRole={this.props.hasAdminRole}
+            timezone={this.props.timezone}
           />
         </section>
       </>
@@ -900,6 +904,7 @@ export class StatementDetails extends React.Component<
           this.props.uiConfig?.showStatementDiagnosticsLink
         }
         onSortingChange={this.props.onSortingChange}
+        timezone={this.props.timezone}
       />
     );
   };

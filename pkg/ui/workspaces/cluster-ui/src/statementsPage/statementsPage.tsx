@@ -135,6 +135,7 @@ export interface StatementsPageStateProps {
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  timezone?: string;
 }
 
 export interface StatementsPageState {
@@ -528,6 +529,7 @@ export class StatementsPage extends React.Component<
       this.activateDiagnosticsRef,
       onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
+      this.props.timezone,
     )
       .filter(c => !(c.name === "regions" && regions.length < 2))
       .filter(c => !(c.name === "regionNodes" && regions.length < 2))
@@ -551,7 +553,7 @@ export class StatementsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = timeScaleToString(this.props.timeScale);
+    const period = timeScaleToString(this.props.timeScale, this.props.timezone);
 
     return (
       <div>
@@ -660,6 +662,7 @@ export class StatementsPage extends React.Component<
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
+              timezone={this.props.timezone}
             />
           </PageConfigItem>
           {hasAdminRole && (

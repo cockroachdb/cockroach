@@ -113,6 +113,7 @@ export interface TransactionDetailsStateProps {
   lastUpdated: moment.Moment | null;
   transactionInsights: TxnInsightEvent[];
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  timezone?: string;
 }
 
 export interface TransactionDetailsDispatchProps {
@@ -314,7 +315,7 @@ export class TransactionDetails extends React.Component<
     const { latestTransactionText } = this.state;
     const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;
-    const period = timeScaleToString(this.props.timeScale);
+    const period = timeScaleToString(this.props.timeScale, this.props.timezone);
 
     return (
       <div>
@@ -338,6 +339,7 @@ export class TransactionDetails extends React.Component<
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
+              timezone={this.props.timezone}
             />
           </PageConfigItem>
         </PageConfig>
@@ -598,6 +600,11 @@ export class TransactionDetails extends React.Component<
                         "transactionDetails",
                         isTenant,
                         hasViewActivityRedactedRole,
+                        undefined, /* search */
+                        undefined, /* activateDiagnosticsRef */
+                        undefined, /* onSelectDiagnosticsReportDropdownOption */
+                        undefined, /* onStatementClick */
+                        this.props.timezone,
                       ).filter(c => !(isTenant && c.hideIfTenant))}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}

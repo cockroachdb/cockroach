@@ -22,6 +22,7 @@ import {
   selectContentionDetailsForStatement,
 } from "src/selectors";
 import { selectHasAdminRole } from "src/redux/user";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 export default withRouter(
   connect<
@@ -34,6 +35,7 @@ export default withRouter(
       statement: selectRecentStatement(state, props),
       contentionDetails: selectContentionDetailsForStatement(state, props),
       hasAdminRole: selectHasAdminRole(state),
+      timezone: selectTimezoneSetting(state),
     }),
     { refreshLiveWorkload },
   )(RecentStatementDetails),

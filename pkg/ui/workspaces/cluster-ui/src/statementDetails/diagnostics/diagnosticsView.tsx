@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import moment from "moment";
+import "moment-timezone";
 import classnames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, Icon } from "@cockroachlabs/ui-components";
@@ -31,13 +31,14 @@ import {
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath, StatementDiagnosticsReport } from "../../api";
-import { DATE_FORMAT_24_UTC } from "../../util";
+import {DATE_FORMAT_24_TZ, DATE_FORMAT_24_UTC, FormatWithTimezone} from "../../util";
 
 export interface DiagnosticsViewStateProps {
   hasData: boolean;
   diagnosticsReports: StatementDiagnosticsReport[];
   showDiagnosticsViewLink?: boolean;
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+  timezone?: string;
 }
 
 export interface DiagnosticsViewDispatchProps {
@@ -119,7 +120,7 @@ export class DiagnosticsView extends React.Component<
       sorter: sortByRequestedAtField,
       defaultSortOrder: "descend",
       render: (_text, record) => {
-        return moment.utc(record.requested_at).format(DATE_FORMAT_24_UTC);
+        return FormatWithTimezone(record.requested_at, DATE_FORMAT_24_TZ, this.props.timezone)
       },
     },
     {

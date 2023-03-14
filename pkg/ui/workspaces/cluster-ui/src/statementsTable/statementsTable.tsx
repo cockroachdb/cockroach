@@ -20,7 +20,7 @@ import {
   TimestampToNumber,
   TimestampToMoment,
   unset,
-  DurationCheckSample,
+  DurationCheckSample, FormatWithTimezone, DATE_FORMAT_24_TZ,
 } from "src/util";
 import { DATE_FORMAT, Duration } from "src/util/format";
 import {
@@ -116,6 +116,7 @@ export function makeStatementsColumns(
     report: StatementDiagnosticsReport,
   ) => void,
   onStatementClick?: (statement: string) => void,
+  timezone?: string,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const defaultBarChartOptions = {
     classes: {
@@ -308,8 +309,11 @@ export function makeStatementsColumns(
     {
       name: "lastExecTimestamp",
       title: statisticsTableTitles.lastExecTimestamp(statType),
-      cell: (stmt: AggregateStatistics) =>
-        TimestampToMoment(stmt.stats.last_exec_timestamp).format(DATE_FORMAT),
+      cell: (stmt: AggregateStatistics) => FormatWithTimezone(
+        TimestampToMoment(stmt.stats.last_exec_timestamp),
+        DATE_FORMAT_24_TZ,
+        timezone
+      ),
       sort: (stmt: AggregateStatistics) =>
         TimestampToNumber(stmt.stats.last_exec_timestamp),
       showByDefault: false,

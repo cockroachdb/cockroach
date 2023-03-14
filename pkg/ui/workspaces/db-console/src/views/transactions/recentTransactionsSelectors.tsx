@@ -23,6 +23,7 @@ import {
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const transactionsColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -62,6 +63,7 @@ export const mapStateToRecentTransactionsPageProps = (state: AdminUIState) => ({
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  timezone: selectTimezoneSetting(state),
 });
 
 // This object is just for convenience so we don't need to supply dispatch to

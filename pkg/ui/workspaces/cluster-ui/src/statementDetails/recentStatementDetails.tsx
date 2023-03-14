@@ -43,6 +43,7 @@ export type RecentStatementDetailsStateProps = {
   statement: RecentStatement;
   match: match;
   hasAdminRole: boolean;
+  timezone?: string;
 };
 
 export type RecentStatementDetailsDispatchProps = {
@@ -70,6 +71,7 @@ export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
   match,
   refreshLiveWorkload,
   hasAdminRole,
+  timezone= "UTC",
 }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
@@ -159,6 +161,7 @@ export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
           <RecentStatementDetailsOverviewTab
             statement={statement}
             contentionDetails={contentionDetails}
+            timezone={timezone}
           />
         </Tabs.TabPane>
         {!isTenant && (

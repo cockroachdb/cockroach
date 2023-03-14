@@ -98,6 +98,7 @@ export interface TransactionsPageStateProps {
   search: string;
   sortSetting: SortSetting;
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  timezone?: string;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -485,6 +486,7 @@ export class TransactionsPage extends React.Component<
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
+              timezone={this.props.timezone}
             />
           </PageConfigItem>
           {hasAdminRole && (
@@ -550,7 +552,7 @@ export class TransactionsPage extends React.Component<
                 isSelectedColumn(userSelectedColumnsToShow, c),
               );
 
-              const period = timeScaleToString(this.props.timeScale);
+              const period = timeScaleToString(this.props.timeScale, this.props.timezone);
 
               return (
                 <>

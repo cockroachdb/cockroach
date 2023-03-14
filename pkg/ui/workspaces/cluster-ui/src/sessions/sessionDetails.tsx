@@ -26,7 +26,7 @@ import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import LoadingError from "../sqlActivity/errorComponent";
 
 import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
-import { Bytes, DATE_FORMAT, Count } from "src/util/format";
+import {Bytes, Count, FormatWithTimezone, DATE_FORMAT_24_TZ} from "src/util/format";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -77,6 +77,7 @@ export interface OwnProps {
   onTerminateStatementClick?: () => void;
   onStatementClick?: () => void;
   setTimeScale: (ts: TimeScale) => void;
+  timezone?: string;
 }
 
 export type SessionDetailsProps = OwnProps & RouteComponentProps;
@@ -283,7 +284,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
                   label={"Transaction Start Time"}
-                  value={start.format(DATE_FORMAT)}
+                  value={FormatWithTimezone(start, DATE_FORMAT_24_TZ, this.props.timezone)}
                 />
                 <SummaryCardItem
                   label={"Number of Statements Executed"}
@@ -339,7 +340,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
               <Col className="gutter-row" span={10}>
                 <SummaryCardItem
                   label={"Execution Start Time"}
-                  value={TimestampToMoment(stmt.start).format(DATE_FORMAT)}
+                  value={FormatWithTimezone(
+                    TimestampToMoment(stmt.start),
+                    DATE_FORMAT_24_TZ,
+                    this.props.timezone,
+                  )}
                   className={cx("details-item")}
                 />
               </Col>
@@ -364,12 +369,20 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             <SummaryCard className={cx("summary-card")}>
               <SummaryCardItem
                 label="Session Start Time"
-                value={TimestampToMoment(session.start).format(DATE_FORMAT)}
+                value={FormatWithTimezone(
+                  TimestampToMoment(session.start),
+                  DATE_FORMAT_24_TZ,
+                  this.props.timezone,
+                )}
               />
               {session.end && (
                 <SummaryCardItem
                   label={"Session End Time"}
-                  value={TimestampToMoment(session.end).format(DATE_FORMAT)}
+                  value={FormatWithTimezone(
+                    TimestampToMoment(session.end),
+                    DATE_FORMAT_24_TZ,
+                    this.props.timezone,
+                  )}
                 />
               )}
               <SummaryCardItem

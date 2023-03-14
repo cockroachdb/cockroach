@@ -91,6 +91,7 @@ export interface OwnProps {
   onFilterChange?: (value: Filters) => void;
   columns: string[];
   filters: Filters;
+  timezone?: string;
 }
 
 export interface SessionsPageState {
@@ -359,6 +360,7 @@ export class SessionsPage extends React.Component<
       this.props.onSessionClick,
       this.props.onTerminateStatementClick,
       this.props.onTerminateSessionClick,
+      this.props.timezone,
     );
 
     const isColumnSelected = (c: ColumnDescriptor<SessionInfo>) => {

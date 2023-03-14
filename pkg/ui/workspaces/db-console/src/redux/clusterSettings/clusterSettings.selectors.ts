@@ -23,7 +23,7 @@ export const selectClusterSettings = createSelector(
 export const selectTimezoneSetting = createSelector(
     selectClusterSettings,
     (settings) => {
-        return "EST"
+        return "America/New_York"
     }
 )
 

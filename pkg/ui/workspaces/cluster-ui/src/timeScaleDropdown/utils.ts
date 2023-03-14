@@ -154,18 +154,20 @@ export const findClosestTimeScale = (
     : { ...data[0], key: "Custom" };
 };
 
-export const timeScaleToString = (ts: TimeScale): string => {
+export const timeScaleToString = (ts: TimeScale, timezone: string = "UTC"): string => {
   const [start, end] = toRoundedDateRange(ts);
-  const endDayIsToday = moment.utc(end).isSame(moment.utc(), "day");
-  const startEndOnSameDay = end.isSame(start, "day");
+  const startTz = start.tz(timezone)
+  const endTz = end.tz(timezone)
+  const endDayIsToday = endTz.isSame(moment.tz(timezone), "day");
+  const startEndOnSameDay = endTz.isSame(startTz, "day");
   const omitDayFormat = endDayIsToday && startEndOnSameDay;
-  const dateStart = omitDayFormat ? "" : start.format(dateFormat);
+  const dateStart = omitDayFormat ? "" : startTz.format(dateFormat);
   const dateEnd =
-    omitDayFormat || startEndOnSameDay ? "" : end.format(dateFormat);
-  const timeStart = start.format(timeFormat);
-  const timeEnd = end.format(timeFormat);
+    omitDayFormat || startEndOnSameDay ? "" : endTz.format(dateFormat);
+  const timeStart = startTz.format(timeFormat);
+  const timeEnd = endTz.format(timeFormat);
 
-  return `${dateStart} ${timeStart} to ${dateEnd} ${timeEnd} (UTC)`;
+  return `${dateStart} ${timeStart} to ${dateEnd} ${timeEnd} (${timezone})`;
 };
 
 /**

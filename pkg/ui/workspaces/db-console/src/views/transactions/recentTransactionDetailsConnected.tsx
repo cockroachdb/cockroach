@@ -21,6 +21,7 @@ import {
   selectRecentTransaction,
   selectContentionDetailsForTransaction,
 } from "src/selectors";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const RecentTransactionDetailsConnected = withRouter(
   connect<
@@ -32,6 +33,7 @@ const RecentTransactionDetailsConnected = withRouter(
       transaction: selectRecentTransaction(state, props),
       contentionDetails: selectContentionDetailsForTransaction(state, props),
       match: props.match,
+      timezone: selectTimezoneSetting(state),
     }),
     { refreshLiveWorkload },
   )(RecentTransactionDetails),

@@ -30,6 +30,7 @@ import {
   terminateQueryAction,
   terminateSessionAction,
 } from "src/redux/sessions/sessionsSagas";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -98,6 +99,7 @@ const SessionsPageConnected = withRouter(
       sessions: selectSessions(state, props),
       sessionsError: state.cachedData.sessions.lastError,
       sortSetting: sortSettingLocalSetting.selector(state),
+      timezone: selectTimezoneSetting(state),
     }),
     {
       refreshSessions,

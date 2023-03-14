@@ -25,7 +25,7 @@ import {
   intersperse,
   EncodeUriName,
   EncodeDatabaseTableIndexUri,
-  EncodeDatabaseTableUri,
+  EncodeDatabaseTableUri, FormatWithTimezone, DATE_FORMAT_24_TZ,
 } from "../../util";
 import { Anchor } from "../../anchor";
 import classNames from "classnames/bind";
@@ -260,6 +260,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
 
 export function makeExplainPlanColumns(
   handleDetails: (plan: PlanHashStats) => void,
+  timezone?: string,
 ): ColumnDescriptor<PlanHashStats>[] {
   const duration = (v: number) => Duration(v * 1e9);
   const count = (v: number) => v.toFixed(1);
@@ -295,9 +296,7 @@ export function makeExplainPlanColumns(
       name: "lastExecTime",
       title: planDetailsTableTitles.lastExecTime(),
       cell: (item: PlanHashStats) =>
-        TimestampToMoment(item.stats.last_exec_timestamp).format(
-          DATE_FORMAT_24_UTC,
-        ),
+        FormatWithTimezone(TimestampToMoment(item.stats.last_exec_timestamp), DATE_FORMAT_24_TZ, timezone),
       sort: (item: PlanHashStats) =>
         TimestampToMoment(item.stats.last_exec_timestamp).unix(),
     },

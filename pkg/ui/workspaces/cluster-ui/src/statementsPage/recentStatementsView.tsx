@@ -60,6 +60,7 @@ export type RecentStatementsViewStateProps = {
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
+  timezone?: string;
 };
 
 export type RecentStatementsViewProps = RecentStatementsViewStateProps &
@@ -79,6 +80,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   internalAppNamePrefix,
   isTenant,
   maxSizeApiReached,
+  timezone,
 }: RecentStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -227,6 +229,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
             onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
+            timezone={timezone}
           />
           <Pagination
             pageSize={pagination.pageSize}

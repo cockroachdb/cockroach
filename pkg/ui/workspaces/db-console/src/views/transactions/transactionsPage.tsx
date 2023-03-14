@@ -48,6 +48,7 @@ import {
   selectStatementsLastUpdated,
   selectStatementsDataValid,
 } from "src/selectors/executionFingerprintsSelectors";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -161,6 +162,7 @@ const TransactionsPageConnected = withRouter(
         sortSetting: sortSettingLocalSetting.selector(state),
         statementsError: state.cachedData.statements.lastError,
         hasAdminRole: selectHasAdminRole(state),
+        timezone: selectTimezoneSetting(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),

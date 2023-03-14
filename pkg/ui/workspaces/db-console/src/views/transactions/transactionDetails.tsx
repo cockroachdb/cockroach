@@ -35,6 +35,7 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelectors";
 import { selectHasAdminRole } from "src/redux/user";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 export const selectTransaction = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
@@ -91,6 +92,7 @@ export default withRouter(
         lastUpdated: lastUpdated,
         transactionInsights: selectTxnInsightsByFingerprint(state, props),
         hasAdminRole: selectHasAdminRole(state),
+        timezone: selectTimezoneSetting(state),
       };
     },
     {
