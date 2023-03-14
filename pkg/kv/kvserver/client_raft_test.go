@@ -5230,7 +5230,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 					},
 				},
 				RaftConfig: base.RaftConfig{
-					RaftDelaySplitToSuppressSnapshotTicks: 0,
+					RaftDelaySplitToSuppressSnapshot: 0,
 					// Make the tick interval short so we don't need to wait too long for the
 					// partitioned leader to time out. Also make the
 					// RangeLeaseRaftElectionTimeout multiplier high so that system ranges
