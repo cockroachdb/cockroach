@@ -167,6 +167,7 @@ type raftSparseStatus struct {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
+	logUnstableN log.EveryN
 	// A replica's AmbientCtx includes the log tags from the parent node and
 	// store.
 	log.AmbientContext

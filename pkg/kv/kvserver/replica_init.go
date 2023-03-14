@@ -82,6 +82,7 @@ func newUninitializedReplica(
 ) *Replica {
 	uninitState := stateloader.UninitializedReplicaState(rangeID)
 	r := &Replica{
+		logUnstableN:   log.Every(time.Second),
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
 		replicaID:      replicaID,

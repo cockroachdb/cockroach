@@ -14,7 +14,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
@@ -900,8 +899,6 @@ func (b *propBuf) forwardAssignedLAILocked(v uint64) {
 func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 	return b.assignedClosedTimestamp.Forward(closedTS)
 }
-
-var logUnstableN = log.Every(time.Second)
 
 func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
 	if len(ents) == 0 {

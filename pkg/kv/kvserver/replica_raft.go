@@ -775,7 +775,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			{
 				count, bytes := raftGroup.UnstableLogStats()
 				const mb = 1 << 20
-				if bytes > 50*mb && logUnstableN.ShouldLog() {
+				if bytes > 50*mb && r.logUnstableN.ShouldLog() {
 					log.Infof(ctx, "r%d: unstable log #%d/%s", r.RangeID, count, humanizeutil.IBytes(bytes))
 				}
 			}

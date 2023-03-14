@@ -2881,7 +2881,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				fmt.Fprintf(&buf, ", ")
 			}
 		}
-		log.Infof(ctx, "recv-queues: %s", buf)
+		log.Infof(ctx, "recv-queues: %s", &buf)
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
