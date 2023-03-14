@@ -349,6 +349,14 @@ message LocalOnlySessionData {
   // EnableCreateStatsUsingExtremes, when true, allows the use of CREATE
   // STATISTICS .. USING EXTREMES.
   bool enable_create_stats_using_extremes = 95;
+  // AllowRoleMembershipsToChangeDuringTransaction, when true, means that
+  // operations which consult the role membership cache do not retain their
+  // lease on that version of the cache throughout the transaction. The
+  // consequence of this is that the transaction may not experience a singular
+  // view of role membership, and it may be able to commit after the revocation
+  // of a role membership which the transaction relied on has successfully been
+  // committed and acknowledged to the user.
+  bool allow_role_memberships_to_change_during_transaction = 96;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
