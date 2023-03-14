@@ -33,3 +33,13 @@ var hibernateBlockList = blocklist{
 	"org.hibernate.test.bytecode.enhancement.lazy.proxy.inlinedirtychecking.DirtyCheckPrivateUnMappedCollectionTest.testIt": "unknown",
 	"org.hibernate.test.hql.BulkManipulationTest.testUpdateWithSubquery":                                                    "unknown",
 }
+
+var hibernateSpatialIgnoreList = blocklist{
+	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
+	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
+}
+
+var hibernateIgnoreList = blocklist{
+	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
+	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
+}

@@ -19,23 +19,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
 // testSetupResetStep setups the testing state (e.g. create a few databases and tables)
 // and always use declarative schema changer on all nodes.
+// Queries run in this function should be idempotent.
 func testSetupResetStep(c cluster.Cluster) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		db := c.Conn(ctx, t.L(), 1)
 		setUpQuery := `
-CREATE DATABASE testdb; 
-CREATE SCHEMA testdb.testsc; 
-CREATE TABLE testdb.testsc.t (i INT PRIMARY KEY);
-CREATE TYPE testdb.testsc.typ AS ENUM ('a', 'b');
-CREATE SEQUENCE testdb.testsc.s;
-CREATE VIEW testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
+CREATE DATABASE IF NOT EXISTS testdb; 
+CREATE SCHEMA IF NOT EXISTS testdb.testsc; 
+CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
+INSERT INTO testdb.testsc.t VALUES (1, 1);
+CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL);
+INSERT INTO testdb.testsc.t2 VALUES (1, 1);
+CREATE TYPE IF NOT EXISTS testdb.testsc.typ AS ENUM ('a', 'b');
+CREATE SEQUENCE IF NOT EXISTS testdb.testsc.s;
+CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
 `
 		_, err := db.ExecContext(ctx, setUpQuery)
 		require.NoError(t, err)
@@ -62,15 +65,44 @@ func setShortGCTTLInSystemZoneConfig(c cluster.Cluster) versionStep {
 	}
 }
 
+// planAndRunSchemaChange runs a schema change stmt from a particular node.
 func planAndRunSchemaChange(
-	c cluster.Cluster, nodeToPlanSchemaChange option.NodeListOption, schemaChangeStmt string,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	node option.NodeListOption,
+	schemaChangeStmt string,
+) {
+	gatewayDB := c.Conn(ctx, t.L(), node[0])
+	defer gatewayDB.Close()
+	t.Status("Running: ", schemaChangeStmt)
+	_, err := gatewayDB.ExecContext(ctx, schemaChangeStmt)
+	require.NoError(t, err)
+}
+
+// testSchemaChangesInMixedVersionV222AndV231 tests all stmts supported in V22_2.
+// Stmts here is based on set up in testSetupResetStep.
+func testSchemaChangesInMixedVersionV222AndV231(
+	c cluster.Cluster, nodeIDs option.NodeListOption,
 ) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		gatewayDB := c.Conn(ctx, t.L(), nodeToPlanSchemaChange[0])
-		defer gatewayDB.Close()
-		t.Status("Running: ", schemaChangeStmt)
-		_, err := gatewayDB.ExecContext(ctx, schemaChangeStmt)
-		require.NoError(t, err)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `COMMENT ON DATABASE testdb IS 'this is a database comment'`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `COMMENT ON SCHEMA testdb.testsc IS 'this is a schema comment'`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `COMMENT ON TABLE testdb.testsc.t IS 'this is a table comment'`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `COMMENT ON COLUMN testdb.testsc.t.i IS 'this is a column comment'`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `COMMENT ON INDEX testdb.testsc.t@idx IS 'this is a index comment'`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `COMMENT ON CONSTRAINT check_j ON testdb.testsc.t IS 'this is a constraint comment'`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `ALTER TABLE testdb.testsc.t ADD COLUMN k INT DEFAULT 35`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `ALTER TABLE testdb.testsc.t DROP COLUMN k`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `ALTER TABLE testdb.testsc.t2 ADD PRIMARY KEY (i)`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (j)`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP SEQUENCE testdb.testsc.s`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP TYPE testdb.testsc.typ`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP VIEW testdb.testsc.v`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP TABLE testdb.testsc.t`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP TABLE testdb.testsc.t2`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP SCHEMA testdb.testsc`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP DATABASE testdb CASCADE`)
 	}
 }
 
@@ -79,25 +111,23 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// in a mixed version cluster, jobs created by the declarative schema changer
 	// are both backward and forward compatible. That is, declarative schema
 	// changer job created by nodes running newer (resp. older) binary versions
-	// be adopted and finished by nodes running older (resp. newer) binary versions.
+	// can be adopted and finished by nodes running older (resp. newer) binary versions.
 	// This test requires us to come back and change the to-be-tests stmts to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:    "declarative_schema_changer/job-compatibility-mixed-version",
+		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// Skip this roachtest until master is on 23.1
-			skip.WithIssue(t, 89345)
-
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+			predV, err := version.PredecessorVersion(*t.BuildVersion())
+			require.NoError(t, err)
+
 			allNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
 			oldNodes := c.Nodes(3, 4)
-			predV, err := version.PredecessorVersion(*t.BuildVersion())
-			require.NoError(t, err)
 
 			u := newVersionUpgradeTest(c,
 				// System setup.
@@ -114,34 +144,16 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 				//   - upgraded nodes: plan schema change and create schema changer jobs
 				//   - older nodes: adopt and execute schema changer jobs
 				testSetupResetStep(c),
-
-				// Halt job execution on upgraded nodes.
 				disableJobAdoptionStep(c, upgradedNodes),
-
-				// Run schema change stmts, chosen from those supported in `predV` version.
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP SEQUENCE testdb.testsc.s`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP TYPE testdb.testsc.typ`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP VIEW testdb.testsc.v`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP TABLE testdb.testsc.t`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP SCHEMA testdb.testsc`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP DATABASE testdb CASCADE`),
+				testSchemaChangesInMixedVersionV222AndV231(c, upgradedNodes),
 				enableJobAdoptionStep(c, upgradedNodes),
 
 				// Job forward compatibility test:
 				//   - older nodes: plan schema change and create schema changer jobs
 				//   - upgraded nodes: adopt and execute schema changer jobs
 				testSetupResetStep(c),
-
-				// Halt job execution on old nodes.
 				disableJobAdoptionStep(c, oldNodes),
-
-				// Run schema change stmts, chosen from those supported in `predV` version.
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP SEQUENCE testdb.testsc.s`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP TYPE testdb.testsc.typ`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP VIEW testdb.testsc.v`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP TABLE testdb.testsc.t`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP SCHEMA testdb.testsc`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP DATABASE testdb CASCADE`),
+				testSchemaChangesInMixedVersionV222AndV231(c, oldNodes),
 				enableJobAdoptionStep(c, oldNodes),
 			)
 			u.run(ctx, t)

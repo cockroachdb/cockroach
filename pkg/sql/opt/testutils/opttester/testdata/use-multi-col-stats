@@ -28,7 +28,9 @@ scan rides
  ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
  ├── constraint: /2/1: [/'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f' - /'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f']
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.9111111, distinct(1)=0.911111, null(1)=0, distinct(2)=0.911111, null(2)=0, distinct(1,2)=0.911111, null(1,2)=0]
+ ├── stats: [rows=0.911, distinct(1)=0.911, null(1)=0, distinct(2)=0.911, null(2)=0, distinct(1,2)=0.911, null(1,2)=0]
+ │   histogram(2)=  0  0.911
+ │                <--- 'rome'
  ├── key: ()
  └── fd: ()-->(1-10)
 
@@ -39,6 +41,8 @@ scan rides
  ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
  ├── constraint: /2/1: [/'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f' - /'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f']
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.1111112, distinct(1)=0.111111, null(1)=0, distinct(2)=0.111111, null(2)=0]
+ ├── stats: [rows=0.1100001, distinct(1)=0.11, null(1)=0, distinct(2)=0.11, null(2)=0]
+ │   histogram(2)=  0   0.11
+ │                <--- 'rome'
  ├── key: ()
  └── fd: ()-->(1-10)
