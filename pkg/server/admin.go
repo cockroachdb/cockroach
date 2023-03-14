@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,10 +108,6 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.TenantsRangesID,
 	}))
 }
-
-// apiServerMessage is the standard body for all HTTP 500 responses.
-var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "+
-	"has occurred. Please check your CockroachDB logs for more details.")
 
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
@@ -224,14 +222,30 @@ func (s *adminServer) RegisterGateway(
 // the RPC endpoint method.
 func serverError(ctx context.Context, err error) error {
 	log.ErrorfDepth(ctx, 1, "%+v", err)
-	return errAdminAPIError
+
+	// Include the PGCode in the message for easier troubleshooting
+	errCode := pgerror.GetPGCode(err).String()
+	if errCode != pgcode.Uncategorized.String() {
+		errMessage := fmt.Sprintf("%s Error Code: %s", errAPIInternalErrorString, errCode)
+		return status.Errorf(codes.Internal, errMessage)
+	}
+
+	// The error is already grpcstatus formatted error.
+	// Likely calling serverError multiple times on same error.
+	grpcCode := status.Code(err)
+	if grpcCode != codes.Unknown {
+		return err
+	}
+
+	// Fallback to generic message
+	return errAPIInternalError
 }
 
 // serverErrorf logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func serverErrorf(ctx context.Context, format string, args ...interface{}) error {
 	log.ErrorfDepth(ctx, 1, format, args...)
-	return errAdminAPIError
+	return errAPIInternalError
 }
 
 // isNotFoundError returns true if err is a table/database not found error.
