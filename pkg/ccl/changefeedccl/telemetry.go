@@ -69,8 +69,8 @@ func (ptl *periodicTelemetryLogger) recordEmittedBytes(numBytes int) {
 	ptl.sinkTelemetryData.emittedBytes.Add(int64(numBytes))
 }
 
-func (ptl *periodicTelemetryLogger) resetEmittedBytes() int {
-	return int(ptl.sinkTelemetryData.emittedBytes.Swap(0))
+func (ptl *periodicTelemetryLogger) resetEmittedBytes() int64 {
+	return ptl.sinkTelemetryData.emittedBytes.Swap(0)
 }
 
 // recordEmittedBytes implements the telemetryLogger interface.
@@ -96,7 +96,7 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 	continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
 		JobId:                        int64(ptl.job.ID()),
-		EmittedBytes:                 int32(ptl.resetEmittedBytes()),
+		EmittedBytes:                 ptl.resetEmittedBytes(),
 		LoggingInterval:              loggingInterval,
 	}
 	log.StructuredEvent(ptl.ctx, continuousTelemetryEvent)
@@ -111,7 +111,7 @@ func (ptl *periodicTelemetryLogger) close() {
 	continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
 		JobId:                        int64(ptl.job.ID()),
-		EmittedBytes:                 int32(ptl.resetEmittedBytes()),
+		EmittedBytes:                 ptl.resetEmittedBytes(),
 		LoggingInterval:              loggingInterval,
 		Closing:                      true,
 	}
