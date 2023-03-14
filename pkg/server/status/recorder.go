@@ -227,6 +227,12 @@ func (mr *MetricsRecorder) AddNode(
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)
 	reg.AddLabel("tenant", mr.tenantNameContainer)
+	reg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+	// We assume that all stores have been added to the registry
+	// prior to calling `AddNode`.
+	for _, s := range mr.mu.storeRegistries {
+		s.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+	}
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry
