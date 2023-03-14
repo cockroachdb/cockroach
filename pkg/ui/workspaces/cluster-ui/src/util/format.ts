@@ -193,11 +193,11 @@ export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
 export const DATE_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm z";
 export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
 export const DATE_WITH_SECONDS_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm:ss z";
-export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC =
+export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ =
   "MMM DD, YYYY [at] H:mm:ss:ms z";
 
 export function FormatWithTimezone(m: moment.Moment, formatString: string, timezone: string = "UTC") {
-  return m.tz(timezone).format(formatString);
+  return moment.tz(m, timezone).format(formatString);
 }
 
 export function RenderCount(yesCount: Long, totalCount: Long): string {

@@ -256,6 +256,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
             options={defaultTimeScaleOptions}
             currentScale={timeScale}
             setTimeScale={onTimeScaleChange}
+            timezone={timezone}
           />
         </PageConfigItem>
       </PageConfig>
@@ -292,6 +293,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
                   />
                 }
                 pagination={pagination}
+                timezone={timezone}
               />
             </section>
             <Pagination

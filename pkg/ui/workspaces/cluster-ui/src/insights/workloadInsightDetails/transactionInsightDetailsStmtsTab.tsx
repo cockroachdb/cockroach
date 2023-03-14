@@ -14,81 +14,87 @@ import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { StmtInsightEvent } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
 import {
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
-  Duration,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration, FormatWithTimezone,
   limitText,
 } from "src/util";
 import { Loading } from "src/loading";
 import { InsightsError } from "../insightsErrorComponent";
 
-const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
-  {
-    name: "executionID",
-    title: "Execution ID",
-    cell: (item: StmtInsightEvent) =>
-      item.insights?.length ? (
-        <Link to={`/insights/statement/${item.statementExecutionID}`}>
-          {item.statementExecutionID}
-        </Link>
-      ) : (
-        item.statementExecutionID
-      ),
-    sort: (item: StmtInsightEvent) => item.statementExecutionID,
-    alwaysShow: true,
-  },
-  {
-    name: "query",
-    title: "Statement Execution",
-    cell: (item: StmtInsightEvent) => limitText(item.query, 50),
-    sort: (item: StmtInsightEvent) => item.query,
-  },
-  {
-    name: "insights",
-    title: "Insights",
-    cell: (item: StmtInsightEvent) =>
-      item.insights?.map(i => InsightCell(i)) ?? "None",
-    sort: (item: StmtInsightEvent) =>
-      item.insights?.reduce((str, i) => (str += i.label), ""),
-  },
-  {
-    name: "startTime",
-    title: "Start Time (UTC)",
-    cell: (item: StmtInsightEvent) =>
-      item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
-    sort: (item: StmtInsightEvent) => item.startTime.unix(),
-  },
-  {
-    name: "endTime",
-    title: "End Time (UTC)",
-    cell: (item: StmtInsightEvent) =>
-      item.endTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
-    sort: (item: StmtInsightEvent) => item.endTime.unix(),
-  },
-  {
-    name: "executionTime",
-    title: "Execution Time",
-    cell: (item: StmtInsightEvent) => Duration(item.elapsedTimeMillis * 1e6),
-    sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
-  },
-  {
-    name: "waitTime",
-    title: "Time Spent Waiting",
-    cell: (item: StmtInsightEvent) =>
-      Duration((item.contentionTime?.asMilliseconds() ?? 0) * 1e6),
-    sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
-  },
-];
+const stmtColumns = (timezone?: string): ColumnDescriptor<StmtInsightEvent>[] => {
+  return [
+    {
+      name: "executionID",
+      title: "Execution ID",
+      cell: (item: StmtInsightEvent) =>
+        item.insights?.length ? (
+          <Link to={`/insights/statement/${item.statementExecutionID}`}>
+            {item.statementExecutionID}
+          </Link>
+        ) : (
+          item.statementExecutionID
+        ),
+      sort: (item: StmtInsightEvent) => item.statementExecutionID,
+      alwaysShow: true,
+    },
+    {
+      name: "query",
+      title: "Statement Execution",
+      cell: (item: StmtInsightEvent) => limitText(item.query, 50),
+      sort: (item: StmtInsightEvent) => item.query,
+    },
+    {
+      name: "insights",
+      title: "Insights",
+      cell: (item: StmtInsightEvent) =>
+        item.insights?.map(i => InsightCell(i)) ?? "None",
+      sort: (item: StmtInsightEvent) =>
+        item.insights?.reduce((str, i) => (str += i.label), ""),
+    },
+    {
+      name: "startTime",
+      title: "Start Time",
+      cell: (item: StmtInsightEvent) => item.startTime
+        ? FormatWithTimezone(item.startTime, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ, timezone)
+        : "N/A",
+      sort: (item: StmtInsightEvent) => item.startTime.unix(),
+    },
+    {
+      name: "endTime",
+      title: "End Time",
+      cell: (item: StmtInsightEvent) => item.endTime
+        ? FormatWithTimezone(item.endTime, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ, timezone)
+        : "N/A",
+      sort: (item: StmtInsightEvent) => item.endTime.unix(),
+    },
+    {
+      name: "executionTime",
+      title: "Execution Time",
+      cell: (item: StmtInsightEvent) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
+    },
+    {
+      name: "waitTime",
+      title: "Time Spent Waiting",
+      cell: (item: StmtInsightEvent) =>
+        Duration((item.contentionTime?.asMilliseconds() ?? 0) * 1e6),
+      sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
+    },
+  ]
+}
 
 type Props = {
   isLoading: boolean;
   statements: StmtInsightEvent[] | null;
   error: Error;
+  timezone?: string;
 };
 
 export const TransactionInsightsDetailsStmtsTab: React.FC<Props> = ({
   isLoading,
   error,
   statements,
+  timezone,
 }) => {
   return (
     <Loading
@@ -97,7 +103,7 @@ export const TransactionInsightsDetailsStmtsTab: React.FC<Props> = ({
       error={error}
       renderError={() => InsightsError(error?.message)}
     >
-      <SortedTable columns={stmtColumns} data={statements ?? []} />
+      <SortedTable columns={stmtColumns(timezone)} data={statements ?? []} />
     </Loading>
   );
 };

@@ -36,6 +36,7 @@ export interface TransactionInsightDetailsStateProps {
   timeScale?: TimeScale;
   hasAdminRole: boolean;
   maxSizeApiReached?: boolean;
+  timezone?: string;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
@@ -69,6 +70,7 @@ export const TransactionInsightDetails: React.FC<
   hasAdminRole,
   refreshUserSQLRoles,
   maxSizeApiReached,
+  timezone,
 }) => {
   const fetches = useRef<number>(0);
   const executionID = getMatchParamByName(match, idAttr);
@@ -158,6 +160,7 @@ export const TransactionInsightDetails: React.FC<
               setTimeScale={setTimeScale}
               hasAdminRole={hasAdminRole}
               maxApiSizeReached={maxSizeApiReached}
+              timezone={timezone}
             />
           </Tabs.TabPane>
           {(insightDetails.txnDetails?.stmtExecutionIDs?.length ||
@@ -173,6 +176,7 @@ export const TransactionInsightDetails: React.FC<
                 }
                 error={insightError?.statementsErr}
                 statements={insightDetails?.statements}
+                timezone={timezone}
               />
               {maxSizeApiReached && (
                 <InlineAlert

@@ -77,6 +77,7 @@ export type StatementInsightsViewStateProps = {
   timeScale?: TimeScale;
   maxSizeApiReached?: boolean;
   isTenant?: boolean;
+  timezone?: string;
 };
 
 export type StatementInsightsViewDispatchProps = {
@@ -112,6 +113,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   dropDownSelect,
   maxSizeApiReached,
   isTenant,
+  timezone,
 }: StatementInsightsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -207,7 +209,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
     resetPagination();
   };
 
-  const defaultColumns = makeStatementInsightsColumns(setTimeScale);
+  const defaultColumns = makeStatementInsightsColumns(setTimeScale, timezone);
 
   const onSetTimeScale = useCallback(
     (ts: TimeScale) => {
@@ -276,6 +278,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
             options={defaultTimeScaleOptions}
             currentScale={timeScale}
             setTimeScale={onSetTimeScale}
+            timezone={timezone}
           />
         </PageConfigItem>
       </PageConfig>

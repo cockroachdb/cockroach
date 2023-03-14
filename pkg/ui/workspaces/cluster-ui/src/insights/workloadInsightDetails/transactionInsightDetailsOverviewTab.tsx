@@ -17,8 +17,8 @@ import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-  Duration,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration, FormatWithTimezone,
 } from "src/util/format";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import { NO_SAMPLES_FOUND } from "src/util";
@@ -61,6 +61,7 @@ type Props = {
   errors: TxnInsightDetailsReqErrs | null;
   maxRequestsReached: boolean;
   maxApiSizeReached: boolean;
+  timezone?: string;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
@@ -71,6 +72,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   setTimeScale,
   hasAdminRole,
   maxRequestsReached,
+  timezone,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -141,14 +143,18 @@ the maximum number of statements was reached in the console.`;
                   <SummaryCard>
                     <SummaryCardItem
                       label="Start Time"
-                      value={txnDetails.startTime.format(
-                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+                      value={FormatWithTimezone(
+                        txnDetails.startTime,
+                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+                        timezone,
                       )}
                     />
                     <SummaryCardItem
                       label="End Time"
-                      value={txnDetails.endTime.format(
-                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+                      value={FormatWithTimezone(
+                        txnDetails.endTime,
+                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+                        timezone,
                       )}
                     />
                     <SummaryCardItem

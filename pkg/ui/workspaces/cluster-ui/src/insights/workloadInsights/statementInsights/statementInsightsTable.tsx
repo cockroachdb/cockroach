@@ -17,8 +17,8 @@ import {
 } from "src/sortedtable";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
-  Duration,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration, FormatWithTimezone,
   limitText,
   NO_SAMPLES_FOUND,
 } from "src/util";
@@ -47,6 +47,7 @@ interface StatementInsightsTable {
 
 export function makeStatementInsightsColumns(
   setTimeScale: (ts: TimeScale) => void,
+  timezone?: string,
 ): ColumnDescriptor<StmtInsightEvent>[] {
   const execType = InsightExecEnum.STATEMENT;
   return [
@@ -94,8 +95,9 @@ export function makeStatementInsightsColumns(
     {
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
-      cell: (item: StmtInsightEvent) =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      cell: (item: StmtInsightEvent) => item.startTime
+        ? FormatWithTimezone(item.startTime, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ, timezone)
+        : "N/A",
       sort: (item: StmtInsightEvent) => item.startTime.unix(),
       showByDefault: true,
     },

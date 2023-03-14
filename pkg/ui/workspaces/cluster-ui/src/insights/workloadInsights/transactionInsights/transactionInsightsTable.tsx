@@ -15,7 +15,12 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
+import {
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration,
+  FormatWithTimezone
+} from "src/util";
 import { InsightExecEnum, TxnInsightEvent } from "src/insights";
 import {
   InsightCell,
@@ -33,10 +38,12 @@ interface TransactionInsightsTable {
   pagination: ISortedTablePagination;
   renderNoResult?: React.ReactNode;
   setTimeScale: (ts: TimeScale) => void;
+  timezone?: string;
 }
 
 export function makeTransactionInsightsColumns(
   setTimeScale: (ts: TimeScale) => void,
+  timezone?: string,
 ): ColumnDescriptor<TxnInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
@@ -80,8 +87,9 @@ export function makeTransactionInsightsColumns(
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
       cell: item =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT) ??
-        "N/A",
+        item.startTime
+          ? FormatWithTimezone(item.startTime, DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ, timezone)
+          : "N/A",
       sort: item => item.startTime?.unix() || 0,
     },
     {
@@ -110,7 +118,7 @@ export function makeTransactionInsightsColumns(
 export const TransactionInsightsTable: React.FC<
   TransactionInsightsTable
 > = props => {
-  const columns = makeTransactionInsightsColumns(props.setTimeScale);
+  const columns = makeTransactionInsightsColumns(props.setTimeScale, props.timezone);
   return (
     <SortedTable columns={columns} className="statements-table" {...props} />
   );

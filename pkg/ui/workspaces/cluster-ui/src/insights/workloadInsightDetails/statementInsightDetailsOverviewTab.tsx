@@ -14,10 +14,10 @@ import {
   makeInsightsColumns,
 } from "src/insightsTable/insightsTable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { capitalize, Duration } from "src/util";
+import {capitalize, Duration, FormatWithTimezone} from "src/util";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util/format";
 import { StmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
@@ -48,11 +48,12 @@ export interface StatementInsightDetailsOverviewTabProps {
   insightEventDetails: StmtInsightEvent;
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
+  timezone?: string;
 }
 
 export const StatementInsightDetailsOverviewTab: React.FC<
   StatementInsightDetailsOverviewTabProps
-> = ({ insightEventDetails, setTimeScale, hasAdminRole }) => {
+> = ({ insightEventDetails, setTimeScale, hasAdminRole, timezone }) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
@@ -104,14 +105,16 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Start Time"
-              value={insightDetails.startTime.format(
-                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+              value={FormatWithTimezone(insightDetails.startTime,
+                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+                timezone
               )}
             />
             <SummaryCardItem
               label="End Time"
-              value={insightDetails.endTime.format(
-                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+              value={FormatWithTimezone(insightDetails.endTime,
+                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+                timezone
               )}
             />
             <SummaryCardItem

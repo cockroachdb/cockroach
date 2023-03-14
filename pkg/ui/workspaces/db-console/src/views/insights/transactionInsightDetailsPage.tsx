@@ -27,6 +27,7 @@ import {
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
+import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -41,6 +42,7 @@ const mapStateToProps = (
       state,
       props,
     ),
+    timezone: selectTimezoneSetting(state),
   };
 };
 

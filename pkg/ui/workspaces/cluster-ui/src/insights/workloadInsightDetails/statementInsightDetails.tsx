@@ -43,6 +43,7 @@ export interface StatementInsightDetailsStateProps {
   isTenant?: boolean;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
+  timezone?: string;
 }
 
 export interface StatementInsightDetailsDispatchProps {
@@ -78,6 +79,7 @@ export const StatementInsightDetails: React.FC<
   hasAdminRole,
   setTimeScale,
   refreshUserSQLRoles,
+  timezone,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
@@ -173,6 +175,7 @@ export const StatementInsightDetails: React.FC<
                 insightEventDetails={details}
                 setTimeScale={setTimeScale}
                 hasAdminRole={hasAdminRole}
+                timezone={timezone}
               />
             </Tabs.TabPane>
             {!isTenant && (

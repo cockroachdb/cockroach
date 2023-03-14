@@ -22,7 +22,7 @@ export const insightsColumnLabels = {
   waitingFingerprintID: "Waiting Fingerprint ID",
   query: "Execution",
   insights: "Insights",
-  startTime: "Start Time (UTC)",
+  startTime: "Start Time",
   elapsedTime: "Elapsed Time",
   applicationName: "Application Name",
   username: "User Name",
