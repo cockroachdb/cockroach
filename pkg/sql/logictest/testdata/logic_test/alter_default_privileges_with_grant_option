@@ -30,7 +30,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT SELECT ON TABLES TO testuser;
 statement ok
 CREATE TABLE t1()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -56,7 +56,7 @@ CREATE TABLE t2()
 
 user testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -64,7 +64,7 @@ test           public       t1          admin     ALL             true
 test           public       t1          root      ALL             true
 test           public       t1          testuser  SELECT          false
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t2;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -87,7 +87,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT O
 statement ok
 CREATE TABLE t3()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t3;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -108,7 +108,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR INSERT, DELETE ON TABLES FROM t
 statement ok
 CREATE TABLE t4()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t4;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -129,7 +129,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM t
 statement ok
 CREATE TABLE t5()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t5;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -150,7 +150,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser
 statement ok
 CREATE TABLE t6()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t6;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -164,7 +164,7 @@ statement ok
 CREATE TABLE t7()
 
 # since testuser created the table, it automatically has ALL PRIVILEGES ON IT
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t7;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -181,7 +181,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO testuser WITH GRANT OPTION
 statement ok
 CREATE TABLE t8()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t8;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -195,7 +195,7 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser WITH GRANT OPTION
 statement ok
 CREATE TABLE t9()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t9;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -236,7 +236,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM t
 statement ok
 CREATE TABLE t12()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t12;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -253,7 +253,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser
 statement ok
 CREATE TABLE t13()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t13
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -264,7 +264,7 @@ test           public       t13         testuser  ALL             true
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t13 TO testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t13
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -294,7 +294,7 @@ CREATE TABLE t14()
 
 # The reason testuser does not have ALL despite creating the table is that we granted "FOR ROLE root", but testuser is creating
 # the table so when testuser creates a table, it's still going off the previous alter default privs which was to revoke everything
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t14;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -323,7 +323,7 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser2 WITH GRANT OPTION
 statement ok
 CREATE TABLE t15()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t15;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -349,7 +349,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser2 WITH GRANT 
 statement ok
 CREATE TABLE t16()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t16;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -371,7 +371,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR SELECT, INSERT ON TABLES FROM t
 statement ok
 CREATE TABLE t17()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t17;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -393,7 +393,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM t
 statement ok
 CREATE TABLE t18()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t18;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -415,7 +415,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser2
 statement ok
 CREATE TABLE t19()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t19;
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -432,7 +432,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON SCHEMAS TO testuser, testuser2 
 statement ok
 CREATE SCHEMA s1
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s1
 ----
 database_name  schema_name  grantee    privilege_type  is_grantable
@@ -447,7 +447,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON SCHEMAS FROM 
 statement ok
 CREATE SCHEMA s2
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s2
 ----
 database_name  schema_name  grantee    privilege_type  is_grantable
@@ -476,7 +476,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT O
 statement ok
 CREATE TABLE s1.t1()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE s1.t1
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -504,7 +504,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON SEQUENCES FRO
 statement ok
 CREATE SEQUENCE seq1
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON seq1
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -525,7 +525,7 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TYPES FROM te
 statement ok
 CREATE TYPE type1 AS ENUM()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE type1
 ----
 database_name  schema_name  type_name  grantee    privilege_type  is_grantable
@@ -571,7 +571,7 @@ statement ok
 CREATE TABLE t20()
 
 # testuser2 will have ALL privileges because the ALTER statement made from root specifies it happens when testuser does it
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t20;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -590,7 +590,7 @@ user testuser
 statement ok
 CREATE TABLE t21()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE t21;
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable

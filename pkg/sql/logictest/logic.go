@@ -308,7 +308,9 @@ import (
 //        place of actual results.
 //
 //    Options are comma separated strings from the following:
-//      - nosort (default)
+//      - nosort: sorts neither the returned or expected rows. Skips the
+//            flakiness check that forces either rowsort, valuesort,
+//            partialsort, or an ORDER BY clause to be present
 //      - rowsort: sorts both the returned and the expected rows assuming one
 //            white-space separated word per column.
 //      - valuesort: sorts all values on all rows as one big set of
@@ -524,6 +526,7 @@ var (
 	noticeRE  = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	orderRE   = regexp.MustCompile(`(?i)ORDER\s+BY`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -891,6 +894,8 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
+	// noSort is true if the nosort option was explicitly provided in the test.
+	noSort bool
 	// expectedErr and expectedErrCode are as in logicStatement.
 
 	// if set, the results are cross-checked against previous queries with the
@@ -2719,6 +2724,7 @@ func (t *logicTest) processSubtest(
 						switch opt {
 						case "nosort":
 							query.sorter = nil
+							query.noSort = true
 
 						case "rowsort":
 							query.sorter = rowSort
@@ -3418,6 +3424,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 	defer rows.Close()
 
 	var actualResultsRaw []string
+	rowCount := 0
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
 		// returns results.
@@ -3448,6 +3455,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				if err := rows.Scan(vals...); err != nil {
 					return err
 				}
+				rowCount++
 				for i, v := range vals {
 					colT := query.colTypes[i]
 					// Ignore column - useful for non-deterministic output.
@@ -3539,6 +3547,14 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		if err := rows.Err(); err != nil {
 			return err
 		}
+	}
+
+	if rowCount > 1 && query.sorter == nil && !query.noSort && !orderRE.MatchString(query.sql) {
+		t.Fatalf("To prevent flakes in queries that return multiple rows, " +
+			"add the rowsort option, the valuesort option, the partialsort option, " +
+			"or an ORDER BY clause. If you are certain that your test will not flake " +
+			"due to a non-deterministic ordering of rows, you can add the nosort option " +
+			"to ignore this error.")
 	}
 
 	// Normalize each row in the result by mapping each run of contiguous

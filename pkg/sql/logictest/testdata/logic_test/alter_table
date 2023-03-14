@@ -18,7 +18,7 @@ ALTER TABLE t RENAME TO t.*
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
@@ -50,7 +50,7 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
-query TTBITTTBBB colnames
+query TTBITTTBBB colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
@@ -103,7 +103,7 @@ a f b    c
 2 9 1    1
 3 9 2    1
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t
 ----
 table_name  constraint_name  constraint_type  details                              validated
@@ -133,7 +133,7 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS check_a CHECK (a > 0)
 statement error CHECK
 INSERT INTO t (a) VALUES (-3)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a > 0))                      true
@@ -162,7 +162,7 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS t_f_fkey CHECK (a < 0)
 statement ok
 ALTER TABLE t ADD CHECK (a > 0)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a > 0))                      true
@@ -184,7 +184,7 @@ ALTER TABLE t VALIDATE CONSTRAINT typo
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a > 0))                      true
@@ -243,7 +243,7 @@ NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded 
 
 
 
-query TTBITTTBBB colnames
+query TTBITTTBBB colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
@@ -414,7 +414,7 @@ ALTER TABLE t DROP COLUMN g CASCADE
 statement ok
 ALTER TABLE o DROP COLUMN h
 
-query TTBITTTBBB colnames
+query TTBITTTBBB colnames,rowsort
 SHOW INDEXES FROM o
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
@@ -442,7 +442,7 @@ ALTER TABLE t ADD i INT DEFAULT 1 CHECK (i < g)
 statement error pq: validation of CHECK "i > 0:::INT8" failed on row:.* g=1.* i=0
 ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_f   CHECK        CHECK ((f > 1))      true
@@ -480,7 +480,7 @@ ALTER TABLE t ADD g INT DEFAULT 3, ADD h INT DEFAULT 2 CHECK (g = h)
 statement ok
 ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT ck CHECK (a > 0);
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_c_b  CHECK        CHECK ((c > b))      true
@@ -512,7 +512,7 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM tt
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
@@ -716,7 +716,7 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
@@ -734,7 +734,7 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
@@ -1017,7 +1017,7 @@ ALTER TABLE t ADD CONSTRAINT a_auto_not_null1 CHECK (a IS NOT NULL), ALTER COLUM
 statement error null value in column "a" violates not-null constraint
 INSERT INTO t VALUES (NULL)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  a_auto_not_null   CHECK        CHECK ((a IS NOT NULL))  true
@@ -1043,7 +1043,7 @@ ALTER TABLE t ADD CHECK (a < 100)
 statement ok
 ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a < 100))           true
@@ -1062,7 +1062,7 @@ DELETE FROM t WHERE a = 17
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a1
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK        CHECK ((a < 100))        true
@@ -1644,7 +1644,7 @@ ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1;
 statement ok
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_2 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 table_name            constraint_name             constraint_type  details                                 validated
@@ -1673,7 +1673,7 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_1
 statement ok
 ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1703,7 +1703,7 @@ ALTER TABLE unique_without_index DROP CONSTRAINT unique_b_2
 statement ok
 ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1721,7 +1721,7 @@ unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowi
 statement ok
 ALTER TABLE unique_without_index DROP COLUMN b
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -1733,7 +1733,7 @@ unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM uwi_child
 ----
 uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
@@ -1749,7 +1749,7 @@ ALTER TABLE unique_without_index DROP COLUMN d
 statement ok
 ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
 unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
@@ -2397,7 +2397,7 @@ CREATE TABLE test_serial (
 statement ok
 ALTER TABLE test_serial ADD COLUMN b SERIAL;
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -2432,7 +2432,7 @@ CREATE TABLE test_serial (
 statement ok
 ALTER TABLE test_serial ADD COLUMN b SERIAL;
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -2965,7 +2965,7 @@ DROP INDEX t_97538_2_j_key;
 
 # Ensure that only the unique index is dropped but not the FK
 # because we have replacement (the other unique without index constraint).
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
 table_name  constraint_name   constraint_type  details                                  validated
@@ -2981,7 +2981,7 @@ ALTER TABLE t_97538_2 DROP CONSTRAINT unique_j;
 
 # Similarly, ensure that only the constraint is dropped but not the FK
 # because we have replacement (the other unique index).
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
 table_name  constraint_name   constraint_type  details                                  validated
@@ -3166,7 +3166,7 @@ ALTER TABLE t_96728 ADD UNIQUE (j) NOT VALID;
 statement ok
 ALTER TABLE t_96728 ADD UNIQUE (j, k) WHERE (i > 0);
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_96728
 ----
 table_name  constraint_name  constraint_type  details                              validated
