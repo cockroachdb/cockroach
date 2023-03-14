@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -101,6 +102,9 @@ func newUninitializedReplica(
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
 		}),
 	}
+	r.raftMu.TimedMutex = syncutil.NewTimedMutex(timeutil.Now, func(ts time.Time) {
+		r.store.metrics.RaftMutexHeldLatency.RecordValue(timeutil.Since(ts).Nanoseconds())
+	})
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)

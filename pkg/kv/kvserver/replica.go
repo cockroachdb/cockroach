@@ -249,7 +249,7 @@ type Replica struct {
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
 	raftMu struct {
-		syncutil.Mutex
+		*syncutil.TimedMutex
 
 		// Note that there are two StateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
