@@ -501,7 +501,6 @@ type Replica struct {
 		// Instead, the buffer internally holds a reference to mu and will use
 		// it appropriately.
 		proposalBuf propBuf
-
 		// proposals stores the Raft in-flight commands which originated at this
 		// Replica, i.e. all commands for which propose has been called, but which
 		// have not yet applied. A proposal is "pending" until it is "finalized",

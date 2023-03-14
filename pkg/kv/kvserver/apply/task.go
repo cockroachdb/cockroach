@@ -248,30 +248,15 @@ func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
 
 	iter := t.dec.NewCommandIter()
 	for iter.Valid() {
-		err := t.applyOneBatch(ctx, iter)
-		if err != nil {
-			if errors.Is(err, ErrRemoved) {
-				// On ErrRemoved, we know that the replica has been destroyed and in
-				// particular, the Replica's proposals map has already been cleared out.
-				// But there may be unfinished proposals that are only known to the
-				// current Task (because we remove proposals we're about to apply from the
-				// map). To avoid leaking resources and/or leaving proposers hanging,
-				// finish them here. Note that it is important that we know that the
-				// proposals map is (and always will be, due to replicaGC setting the
-				// destroy status) empty at this point, since there is an invariant
-				// that all proposals in the map are unfinished, and the Task has only
-				// removed a subset[^1] of the proposals that might be finished below.
-				// But since it's empty, we can finish them all without having to
-				// check which ones are no longer in the map.
-				//
-				// NOTE: forEachCmdIter closes iter.
-				//
-				// [^1]: (*replicaDecoder).retrieveLocalProposals
-				if rejectErr := forEachCmdIter(ctx, iter, func(cmd Command, ctx context.Context) error {
-					return cmd.AckErrAndFinish(ctx, err)
-				}); rejectErr != nil {
-					return rejectErr
-				}
+		if err := t.applyOneBatch(ctx, iter); err != nil {
+			// If the batch threw an error, reject all remaining commands in the
+			// iterator to avoid leaking resources or leaving a proposer hanging.
+			//
+			// NOTE: forEachCmdIter closes iter.
+			if rejectErr := forEachCmdIter(ctx, iter, func(cmd Command, ctx context.Context) error {
+				return cmd.AckErrAndFinish(ctx, err)
+			}); rejectErr != nil {
+				return rejectErr
 			}
 			return err
 		}
