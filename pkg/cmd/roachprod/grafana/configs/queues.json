@@ -858,7 +858,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "GC Queue",
+      "title": "MVCC GC Queue",
       "tooltip": {
         "shared": true,
         "sort": 0,

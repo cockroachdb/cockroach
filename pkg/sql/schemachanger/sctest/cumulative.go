@@ -910,7 +910,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 		// If any of the statements are not supported, then skip over this
 		// file for the corpus.
 		for _, stmt := range stmts {
-			if !scbuild.CheckIfSupported(clusterversion.TestingClusterVersion, stmt.AST) {
+			if !scbuild.IsFullySupportedWithFalsePositive(stmt.AST, clusterversion.TestingClusterVersion) {
 				return
 			}
 		}
@@ -1558,7 +1558,7 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 		// If any of the statements are not supported, then skip over this
 		// file for the corpus.
 		for _, stmt := range stmts {
-			if !scbuild.CheckIfSupported(clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V22_2)}, stmt.AST) {
+			if !scbuild.IsFullySupportedWithFalsePositive(stmt.AST, clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V22_2)}) {
 				return
 			}
 		}
@@ -1710,11 +1710,15 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 				}
 				if stageChan != nil {
 					s := stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
+					// Let the test program to proceed by sending to `stageChan`
 					select {
 					case stageChan <- s:
 					case <-ctx.Done():
 						return ctx.Err()
 					}
+					// Wait on `s.resume` until the test program has taken a backup on
+					// the database. This is also where the test program injects error
+					// into the schema change to force reverting.
 					select {
 					case err := <-s.resume:
 						return err
@@ -1776,6 +1780,10 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 			// stage. At this point, we'll take a backup for each non-revertible
 			// stage and confirm that restoring them and letting the jobs run
 			// leaves the database in the right state.
+
+			// `stageChan` and `s.resume` allow this for-loop (on `i`) to be in sync
+			// with the schema change job stages. E.g. if `i=0`, then we know that
+			// the schema change is blocked right before executing the 0-th stage.
 			s := <-stageChan
 			// If there is no post-commit stages. Just consider it as done.
 			if s.p.Stages == nil {
@@ -1945,7 +1953,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 
 	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
 		for _, stmt := range stmts {
-			supported := scbuild.CheckIfSupported(testVersion, stmt.AST)
+			supported := scbuild.IsFullySupportedWithFalsePositive(stmt.AST, testVersion)
 			if !supported {
 				skip.IgnoreLint(t, "statement not supported in current release")
 			}

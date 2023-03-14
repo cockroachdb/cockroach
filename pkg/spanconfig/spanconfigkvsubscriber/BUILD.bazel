@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigstore",
