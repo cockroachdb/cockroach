@@ -2,6 +2,9 @@ setup
 CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
 CREATE SEQUENCE db.public.sq1;
+INSERT INTO db.public.tbl VALUES(-1);
+INSERT INTO db.public.tbl VALUES(-2);
+INSERT INTO db.public.tbl VALUES(-3);
 ----
 ...
 +database {0 0 db} -> 104
@@ -22,7 +25,7 @@ INSERT INTO db.public.tbl VALUES(-1);
 
 # Each insert will be injected twice per stage, plus 1 extra.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=($successfulStageCount*2)+1 FROM db.public.tbl;
+SELECT count(*)=($successfulStageCount*2)+3 FROM db.public.tbl;
 ----
 true
 
@@ -40,7 +43,7 @@ INSERT INTO db.public.tbl VALUES(-1);
 
 # Each insert will be injected twice per stage, , plus 1 extra.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=($successfulStageCount*2)+1 FROM db.public.tbl;
+SELECT count(*)=($successfulStageCount*2)+3 FROM db.public.tbl;
 ----
 true
 
