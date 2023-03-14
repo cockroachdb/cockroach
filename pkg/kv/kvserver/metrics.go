@@ -955,6 +955,15 @@ of processing.
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRaftMutexHeldLatency = metric.Metadata{
+		Name: "raft.mutex.latency",
+		Help: `Durations of critical sections for raft processing mutex.
+
+This mutex is held across I/O.
+`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRaftTimeoutCampaign = metric.Metadata{
 		Name:        "raft.timeoutcampaign",
 		Help:        "Number of Raft replicas campaigning after missed heartbeats from leader",
@@ -1916,6 +1925,7 @@ type StoreMetrics struct {
 	RaftHandleReadyLatency    metric.IHistogram
 	RaftApplyCommittedLatency metric.IHistogram
 	RaftSchedulerLatency      metric.IHistogram
+	RaftMutexHeldLatency      metric.IHistogram
 	RaftTimeoutCampaign       *metric.Counter
 
 	// Raft message metrics.
@@ -2477,6 +2487,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftSchedulerLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaRaftSchedulerLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		RaftMutexHeldLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: metaRaftMutexHeldLatency,
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
