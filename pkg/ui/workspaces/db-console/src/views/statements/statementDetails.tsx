@@ -52,7 +52,7 @@ import { getMatchParamByName, queryByName } from "src/util/query";
 import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import moment from "moment";
+import moment from "moment-timezone";
 import {selectTimezoneSetting} from "src/redux/clusterSettings";
 
 const { generateStmtDetailsToID } = util;

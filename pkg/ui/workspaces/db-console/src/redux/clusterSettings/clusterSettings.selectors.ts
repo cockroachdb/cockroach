@@ -11,7 +11,7 @@
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
-import moment from "moment";
+import moment from "moment-timezone";
 import { util } from "@cockroachlabs/cluster-ui";
 
 export const selectClusterSettings = createSelector(
@@ -23,7 +23,7 @@ export const selectClusterSettings = createSelector(
 export const selectTimezoneSetting = createSelector(
     selectClusterSettings,
     (settings) => {
-        return "America/New_York"
+        return settings["ui.display_timezone"] || "UTC";
     }
 )
 

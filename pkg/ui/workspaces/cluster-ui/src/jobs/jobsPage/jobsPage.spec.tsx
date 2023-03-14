@@ -76,8 +76,8 @@ describe("Jobs", () => {
       "Status",
       "Job ID",
       "User Name",
-      "Creation Time (UTC)",
-      "Last Execution Time (UTC)",
+      "Creation Time",
+      "Last Execution Time",
       "Execution Count",
     ];
 

@@ -81,7 +81,7 @@ import {
   TimeScale,
 } from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment";
+import moment from "moment-timezone";
 import { Action } from "redux";
 import { channel, Task, Channel } from "redux-saga";
 import {

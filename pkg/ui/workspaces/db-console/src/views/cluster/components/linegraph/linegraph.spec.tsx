@@ -13,7 +13,7 @@ import React from "react";
 import uPlot from "uplot";
 import _ from "lodash";
 
-import { fillGaps, LineGraph, LineGraphProps } from "./index";
+import { LineGraph, fillGaps, LineGraphProps } from "./index";
 import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
@@ -36,6 +36,7 @@ describe("<LineGraph>", function () {
 
   beforeEach(() => {
     mockProps = {
+      timezone: "UTC",
       title: "Test Title",
       subtitle: "Test Subtitle",
       legend: false,

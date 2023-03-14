@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React, {PropsWithChildren} from "react";
-import moment from "moment";
+import moment from "moment-timezone";
 import { createSelector } from "reselect";
 
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
@@ -63,7 +63,7 @@ interface ConnectedProps {
   timezone: string;
 }
 
-type LineGraphProps = LineGraphPropsInternal & ConnectedProps
+export type LineGraphProps = LineGraphPropsInternal & ConnectedProps
 
 
 
@@ -161,7 +161,7 @@ export function fillGaps(
 // and store its ref in a global variable.
 // Once we receive updates to props, we push new data to the
 // uPlot object.
-class LineGraph extends React.Component<LineGraphProps, {}> {
+export class LineGraph extends React.Component<LineGraphProps, {}> {
   constructor(props: LineGraphProps) {
     super(props);
     this.setNewTimeRange = this.setNewTimeRange.bind(this);

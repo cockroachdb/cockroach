@@ -11,7 +11,7 @@
 import classNames from "classnames";
 import _ from "lodash";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";

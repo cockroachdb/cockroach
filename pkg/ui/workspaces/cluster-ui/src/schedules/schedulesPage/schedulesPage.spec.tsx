@@ -57,8 +57,8 @@ describe("Schedules", () => {
       "Schedule ID",
       "Owner",
       "Recurrence",
-      "Creation Time (UTC)",
-      "Next Execution Time (UTC)",
+      "Creation Time",
+      "Next Execution Time",
       "Jobs Running",
     ];
 
