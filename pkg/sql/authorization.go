@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -492,7 +493,7 @@ func (p *planner) MemberOfWithAdminOption(
 // Requires a valid transaction to be open.
 func MemberOfWithAdminOption(
 	ctx context.Context, execCfg *ExecutorConfig, txn descs.Txn, member username.SQLUsername,
-) (map[username.SQLUsername]bool, error) {
+) (_ map[username.SQLUsername]bool, retErr error) {
 	if txn == nil {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -510,6 +511,20 @@ func MemberOfWithAdminOption(
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
 		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+	}
+	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
+		defer func() {
+			if retErr != nil {
+				return
+			}
+			txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
+				{
+					Name:    tableDesc.GetName(),
+					ID:      tableDesc.GetID(),
+					Version: tableVersion,
+				},
+			})
+		}()
 	}
 
 	// Check version and maybe clear cache while holding the mutex.
