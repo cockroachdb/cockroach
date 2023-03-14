@@ -493,7 +493,7 @@ func requireTxnForValue(t *testing.T, val testValue, intent roachpb.Intent) {
 // nonFatalLogger implements pebble.Logger by recording that a fatal log event
 // was encountered at least once. Fatal log events are downgraded to Info level.
 type nonFatalLogger struct {
-	pebble.Logger
+	pebble.LoggerAndTracer
 	t      *testing.T
 	caught atomic.Value
 }
@@ -507,9 +507,11 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Capture fatal errors by swapping out the logger.
+	// nonFatalLogger.LoggerAndTracer is nil, since the test exercises only
+	// Fatalf.
 	l := &nonFatalLogger{t: t}
 	opt := func(cfg *engineConfig) error {
-		cfg.Opts.Logger = l
+		cfg.Opts.LoggerAndTracer = l
 		return nil
 	}
 	engine := createTestPebbleEngine(opt).(*Pebble)
