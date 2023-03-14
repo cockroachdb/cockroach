@@ -30,16 +30,30 @@ import "roachpb/span_config.proto";
 message TenantCapabilities {
   option (gogoproto.equal) = true;
 
-  // CanAdminSplit if set to true, grants the tenant the ability to
+  // DisableAdminSplit, if set to true, revokes the tenants ability to
   // successfully perform `AdminSplit` requests.
-  bool can_admin_split = 1;
+  //
+  // This field uses the "disabled" verbiage, unlike the other fields on this
+  // proto. Doing so ensures the zero value translates to `AdminSplits` being
+  // allowed by default for secondary tenants. This is because splits and
+  // scatters are integral to the performance of IMPORT/RESTORE.
+  bool disable_admin_split = 1;
 
-  // CanViewNodeInfo if set to true, grants the tenant the ability
+  // DisableAdminScatter, if set to true, revokes a tenant's the ability to
+  // successfully perform `AdminScatter` requests.
+  //
+  // This field uses the "disabled" verbiage, unlike the other fields on this
+  // proto. Doing so ensures the zero value translates to `AdminScatters` being
+  // allowed by default for secondary tenants. This is because splits and
+  // scatters are integral to the performance of IMPORT/RESTORE.
+  bool disable_admin_scatter = 6;
+
+  // CanViewNodeInfo, if set to true, grants the tenant the ability
   // retrieve node-level observability data at endpoints such as `_status/nodes`
   // and in the DB Console overview page.
   bool can_view_node_info = 2;
 
-  // CanViewTSDBMetrics if set to true, grants the tenant the ability to
+  // CanViewTSDBMetrics, if set to true, grants the tenant the ability to
   // make arbitrary queries of the TSDB of the entire cluster. Currently,
   // we do not store per-tenant metrics so this will surface system metrics
   // to the tenant.
@@ -58,13 +72,11 @@ message TenantCapabilities {
   // positioned to surface errors to the user.
   SpanConfigBounds span_config_bounds = 4;
 
-  // CanAdminUnsplit if set to true, grants the tenant the ability to
+  // CanAdminUnsplit if, set to true, grants the tenant the ability to
   // successfully perform `AdminUnsplit` requests.
   bool can_admin_unsplit = 5;
 
-  // CanAdminScatter if set to true, grants the tenant the ability to
-  // successfully perform `AdminScatter` requests.
-  bool can_admin_scatter = 6;
+  // Next id: 7
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may
