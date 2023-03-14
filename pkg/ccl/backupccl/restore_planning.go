@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
@@ -1592,14 +1593,39 @@ func doRestorePlan(
 	}()
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+
+	// We support restoring a backup that was taken on a cluster that is on a
+	// version >= the earliest binary version that this binary can interoperate with.
+	minimumRestorableVersion := p.ExecCfg().Settings.Version.BinaryMinSupportedVersion()
+	if !build.IsRelease() {
+		if minimumRestorableVersion.Major < clusterversion.DevOffset {
+			return errors.AssertionFailedf("minimum restoreable version %s is less than the dev offset",
+				minimumRestorableVersion)
+		}
+		minimumRestorableVersion.Major -= clusterversion.DevOffset
+	}
 	for i := range mainBackupManifests {
-		if v := mainBackupManifests[i].ClusterVersion; v.Major != 0 {
-			// This is the "cluster" version that does not change between patches but
-			// rather just tracks migrations run. If the backup is more migrated than
-			// this cluster, then this cluster isn't ready to restore this backup.
-			if currentVersion.Less(v) {
-				return errors.Errorf("backup from version %s is newer than current version %s", v, currentVersion)
+		v := mainBackupManifests[i].ClusterVersion
+		// This is the "cluster" version that does not change between patches but
+		// rather just tracks migrations run. If the backup is more migrated than
+		// this cluster, then this cluster isn't ready to restore this backup.
+		if currentVersion.Less(v) {
+			return errors.Errorf("backup from version %s is newer than current version %s", v, currentVersion)
+		}
+
+		// If the backup is from a version earlier than the minimum restoreable
+		// version, then we do not support restoring it.
+		if v.Less(minimumRestorableVersion) {
+			if v.Major == 0 {
+				// This accounts for manifests that were generated on a version before
+				// the `ClusterVersion` field exists.
+				return errors.WithHint(errors.Newf("the backup is from a version older than our "+
+					"minimum restoreable version %s", minimumRestorableVersion),
+					"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/v22.2/restoring-backups-across-versions.html")
 			}
+			return errors.WithHint(errors.Newf("backup from version %s is older than the "+
+				"minimum restoreable version %s", v, minimumRestorableVersion),
+				"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/v22.2/restoring-backups-across-versions.html")
 		}
 	}
 
