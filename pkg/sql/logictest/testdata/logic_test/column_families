@@ -62,6 +62,15 @@ CREATE TABLE t (x DECIMAL, y DECIMAL, z INT, FAMILY (z), FAMILY (y), FAMILY (x),
 statement ok
 INSERT INTO t VALUES (1.00, 2.00, 1)
 
+# In 3node-tenant config the KV tracing is incomplete when the direct columnar
+# scans are enabled.
+
+let $directColumnarScansEnabled
+SHOW direct_columnar_scans_enabled
+
+statement ok
+SET direct_columnar_scans_enabled = false
+
 query TTI
 SET tracing=on,kv,results;
 SELECT * FROM t;
@@ -70,6 +79,9 @@ SELECT * FROM t;
 
 statement ok
 SET tracing=off
+
+statement ok
+SET direct_columnar_scans_enabled = $directColumnarScansEnabled
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE

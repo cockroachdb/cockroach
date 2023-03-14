@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -41,15 +40,15 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
-	directScansEnabledDefault,
+	true,
 )
 
-var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
-	"direct-scans-enabled",
-	// TODO(yuzefovich, 23.1): update the default to 'true' for multi-tenant
-	// setups.
-	false,
-)
+//var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
+//	"direct-scans-enabled",
+//	// TODO(yuzefovich, 23.1): update the default to 'true' for multi-tenant
+//	// setups.
+//	false,
+//)
 
 // cFetcherWrapper implements the storage.CFetcherWrapper interface. See a large
 // comment in storage/col_mvcc.go for more details.
@@ -231,16 +230,17 @@ func newCFetcherWrapper(
 	// MaxSpanRequestKeys limits of the BatchRequest), so we just have a
 	// reasonable default here.
 	const memoryLimit = execinfra.DefaultMemoryLimit
+	// Since we're using the cFetcher on the KV server side, we don't collect
+	// any statistics on it (these stats are about the SQL layer).
+	const collectStats = false
 	// We cannot reuse batches if we're not serializing the response.
 	alwaysReallocate := !mustSerialize
-	// TODO(yuzefovich, 23.1): think through estimatedRowCount (#94850) and
-	// traceKV arguments.
 	fetcher.cFetcherArgs = cFetcherArgs{
 		memoryLimit,
-		0,     /* estimatedRowCount */
-		false, /* traceKV */
-		true,  /* singleUse */
-		false, /* collectStats */
+		fetchSpec.EstimatedRowCount,
+		fetchSpec.TraceKV,
+		true, /* singleUse */
+		collectStats,
 		alwaysReallocate,
 	}
 
@@ -267,6 +267,7 @@ func newCFetcherWrapper(
 	if err = fetcher.Init(allocator, nextKVer, tableArgs); err != nil {
 		return nil, err
 	}
+	fetcher.machine.limitHint = int(fetchSpec.LimitHint)
 	// TODO(yuzefovich, 23.1): consider pooling the allocations of some objects.
 	wrapper := cFetcherWrapper{
 		fetcher:            fetcher,

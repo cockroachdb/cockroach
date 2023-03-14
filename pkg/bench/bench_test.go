@@ -15,8 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -410,35 +408,6 @@ func runBenchmarkInsertReturning(b *testing.B, db *sqlutils.SQLRunner, count int
 		db.Exec(b, buf.String())
 	}
 	b.StopTimer()
-}
-
-func BenchmarkSQL(b *testing.B) {
-	skip.UnderShort(b)
-	defer log.Scope(b).Close(b)
-	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
-			runBenchmarkDelete,
-			runBenchmarkInsert,
-			runBenchmarkInsertDistinct,
-			runBenchmarkInsertFK,
-			runBenchmarkInsertSecondaryIndex,
-			runBenchmarkInsertReturning,
-			runBenchmarkTrackChoices,
-			runBenchmarkUpdate,
-			runBenchmarkUpdateWithAssignmentCast,
-			runBenchmarkUpsert,
-		} {
-			fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
-			fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
-			b.Run(fnName, func(b *testing.B) {
-				for _, count := range []int{1, 10, 100, 1000} {
-					b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-						runFn(b, db, count)
-					})
-				}
-			})
-		}
-	})
 }
 
 // BenchmarkTracing measures the overhead of tracing and sampled statements. It also

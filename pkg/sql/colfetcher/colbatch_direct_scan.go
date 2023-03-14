@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,6 +41,10 @@ type ColBatchDirectScan struct {
 	spec        *fetchpb.IndexFetchSpec
 	resultTypes []*types.T
 	hasDatumVec bool
+
+	// cpuStopWatch tracks the CPU time spent by this ColBatchDirectScan while
+	// fulfilling KV requests *in the current goroutine*.
+	cpuStopWatch *timeutil.CPUStopWatch
 
 	deserializer            colexecutils.Deserializer
 	deserializerInitialized bool
@@ -70,7 +76,9 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	var res row.KVBatchFetcherResponse
 	var err error
 	for {
+		s.cpuStopWatch.Start()
 		res, err = s.fetcher.NextBatch(s.Ctx)
+		s.cpuStopWatch.Stop()
 		if err != nil {
 			colexecerror.InternalError(convertFetchError(s.spec, err))
 		}
@@ -140,9 +148,13 @@ func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 }
 
 // GetKVCPUTime is part of the colexecop.KVReader interface.
+//
+// Note that this KV CPU time, unlike for the ColBatchScan, includes the
+// decoding time done by the cFetcherWrapper.
 func (s *ColBatchDirectScan) GetKVCPUTime() time.Duration {
-	// TODO(yuzefovich, 23.1): implement this.
-	return 0
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cpuStopWatch.Elapsed()
 }
 
 // Release implements the execreleasable.Releasable interface.
@@ -170,6 +182,7 @@ func NewColBatchDirectScan(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
+	estimatedRowCount uint64,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchDirectScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
@@ -190,6 +203,9 @@ func NewColBatchDirectScan(
 	// issued and even after it was responded to. In theory, we (the client)
 	// should be able to modify the BatchRequest, but alas.
 	fetchSpec := spec.FetchSpec
+	fetchSpec.TraceKV = flowCtx.TraceKV
+	fetchSpec.EstimatedRowCount = estimatedRowCount
+	fetchSpec.LimitHint = uint64(base.limitHint)
 	fetcher := row.NewDirectKVBatchFetcher(
 		flowCtx.Txn,
 		bsHeader,
@@ -208,6 +224,10 @@ func NewColBatchDirectScan(
 			break
 		}
 	}
+	var cpuStopWatch *timeutil.CPUStopWatch
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		cpuStopWatch = timeutil.NewCPUStopWatch()
+	}
 	return &ColBatchDirectScan{
 		colBatchScanBase: base,
 		fetcher:          fetcher,
@@ -215,5 +235,6 @@ func NewColBatchDirectScan(
 		spec:             &fetchSpec,
 		resultTypes:      tableArgs.typs,
 		hasDatumVec:      hasDatumVec,
+		cpuStopWatch:     cpuStopWatch,
 	}, tableArgs.typs, nil
 }

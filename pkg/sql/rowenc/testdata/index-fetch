@@ -68,7 +68,10 @@ columns:
       "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 # Primary index scan, not all columns.
@@ -113,7 +116,10 @@ columns:
       "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 index-fetch
@@ -175,7 +181,10 @@ columns:
       "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 index-fetch
@@ -237,7 +246,10 @@ columns:
       "type": "family: BoolFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 16\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 # Here we should have the composite flag set for c and descending
@@ -312,7 +324,10 @@ columns:
       "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 index-fetch
@@ -392,7 +407,10 @@ columns:
       "type": "family: BoolFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 16\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 
@@ -468,7 +486,10 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 # Index b has one key per row.
@@ -533,7 +554,10 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 # Index b2 spans two families.
@@ -598,7 +622,10 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 # Index c has one key per row.
@@ -663,7 +690,10 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 # Index c2 has two keys per row.
@@ -728,7 +758,10 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 exec
@@ -801,7 +834,10 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
 
 index-fetch
@@ -881,5 +917,8 @@ columns:
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
-  ]
+  ],
+  "trace_kv": false,
+  "estimated_row_count": 0,
+  "limit_hint": 0
 }
