@@ -261,7 +261,7 @@ message ChangefeedEmittedBytes {
   int64 job_id = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
 
   // The number of bytes emitted.
-  int32 emitted_bytes = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  int64 emitted_bytes = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   // The time period in nanoseconds between emitting telemetry events of this type (per-aggregator).
   int64 logging_interval = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
