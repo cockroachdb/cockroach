@@ -15,6 +15,10 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 ----
 
 exec-sql
+SET enable_create_stats_using_extremes = true;
+----
+
+exec-sql
 CREATE DATABASE db1;
 USE db1;
 CREATE TABLE tab (a INT PRIMARY KEY, b INT);

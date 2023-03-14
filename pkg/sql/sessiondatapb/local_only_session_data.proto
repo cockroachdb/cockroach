@@ -346,6 +346,9 @@ message LocalOnlySessionData {
   // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
   // always uses histograms to calculate statistics if available.
   bool optimizer_always_use_histograms = 94;
+  // EnableCreateStatsUsingExtremes, when true, allows the use of CREATE
+  // STATISTICS .. USING EXTREMES.
+  bool enable_create_stats_using_extremes = 95;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
