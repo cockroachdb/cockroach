@@ -99,10 +99,10 @@ func (fs fakeStore) Registry() *metric.Registry {
 	return fs.registry
 }
 
-func TestMetricsRecorderTenants(t *testing.T) {
+func TestMetricsRecorderLabels(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nodeDesc := roachpb.NodeDescriptor{
-		NodeID: roachpb.NodeID(1),
+		NodeID: roachpb.NodeID(7),
 	}
 	reg1 := metric.NewRegistry()
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
@@ -118,7 +118,7 @@ func TestMetricsRecorderTenants(t *testing.T) {
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	nodeDescTenant := roachpb.NodeDescriptor{
-		NodeID: roachpb.NodeID(1),
+		NodeID: roachpb.NodeID(7),
 	}
 	regTenant := metric.NewRegistry()
 	stTenant := cluster.MakeTestingClusterSettings()
@@ -150,15 +150,15 @@ func TestMetricsRecorderTenants(t *testing.T) {
 	err = recorder.PrintAsText(buf)
 	require.NoError(t, err)
 
-	require.Contains(t, buf.String(), `some_metric{tenant="system"} 123`)
-	require.Contains(t, buf.String(), `some_metric{tenant="application"} 456`)
+	require.Contains(t, buf.String(), `some_metric{tenant="system",node_id="7"} 123`)
+	require.Contains(t, buf.String(), `some_metric{tenant="application",node_id="7"} 456`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
 	err = recorderTenant.PrintAsText(bufTenant)
 	require.NoError(t, err)
 
-	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system"} 123`)
-	require.Contains(t, bufTenant.String(), `some_metric{tenant="application"} 456`)
+	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system",node_id="7"} 123`)
+	require.Contains(t, bufTenant.String(), `some_metric{tenant="application",node_id="7"} 456`)
 
 	// Update app name in container and ensure
 	// output changes accordingly.
@@ -168,15 +168,15 @@ func TestMetricsRecorderTenants(t *testing.T) {
 	err = recorder.PrintAsText(buf)
 	require.NoError(t, err)
 
-	require.Contains(t, buf.String(), `some_metric{tenant="system"} 123`)
-	require.Contains(t, buf.String(), `some_metric{tenant="application2"} 456`)
+	require.Contains(t, buf.String(), `some_metric{tenant="system",node_id="7"} 123`)
+	require.Contains(t, buf.String(), `some_metric{tenant="application2",node_id="7"} 456`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
 	err = recorderTenant.PrintAsText(bufTenant)
 	require.NoError(t, err)
 
-	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system"} 123`)
-	require.Contains(t, bufTenant.String(), `some_metric{tenant="application2"} 456`)
+	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system",node_id="7"} 123`)
+	require.Contains(t, bufTenant.String(), `some_metric{tenant="application2",node_id="7"} 456`)
 
 }
 

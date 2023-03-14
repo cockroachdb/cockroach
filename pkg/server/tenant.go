@@ -613,7 +613,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// We can now add the node registry.
 	s.recorder.AddNode(
 		s.registry,
-		roachpb.NodeDescriptor{},
+		roachpb.NodeDescriptor{
+			NodeID: s.rpcContext.NodeID.Get(),
+		},
 		timeutil.Now().UnixNano(),
 		s.sqlServer.cfg.AdvertiseAddr,
 		s.sqlServer.cfg.HTTPAdvertiseAddr,
