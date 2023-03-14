@@ -851,6 +851,20 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{rangeKV("a", "l", 8, "")},
 			expect:     kvs{rangeKV("a", "c", 8, ""), rangeKV("c", "d", 8, ""), rangeKV("c", "d", 6, ""), rangeKV("d", "j", 8, ""), rangeKV("j", "k", 8, ""), rangeKV("j", "k", 5, ""), rangeKV("k", "l", 8, "")},
 		},
+		"DisallowConflicts correctly accounts for complex fragment cases 5": {
+			noConflict: true,
+			reqTS:      10,
+			data:       kvs{pointKV("cc", 7, ""), pointKV("cc", 6, ""), pointKV("cc", 5, "foo"), pointKV("cc", 4, ""), pointKV("cc", 3, "bar"), pointKV("cc", 2, "barfoo"), rangeKV("ab", "g", 1, "")},
+			sst:        kvs{pointKV("aa", 8, "foo"), pointKV("aaa", 8, ""), pointKV("ac", 8, "foo"), rangeKV("b", "c", 8, ""), pointKV("ca", 8, "foo"), pointKV("cb", 8, "foo"), pointKV("cc", 8, "foo"), rangeKV("d", "e", 8, ""), pointKV("e", 8, "foobar")},
+			expect:     kvs{pointKV("aa", 8, "foo"), pointKV("aaa", 8, ""), rangeKV("ab", "b", 1, ""), pointKV("ac", 8, "foo"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 1, ""), rangeKV("c", "d", 1, ""), pointKV("ca", 8, "foo"), pointKV("cb", 8, "foo"), pointKV("cc", 8, "foo"), pointKV("cc", 7, ""), pointKV("cc", 6, ""), pointKV("cc", 5, "foo"), pointKV("cc", 4, ""), pointKV("cc", 3, "bar"), pointKV("cc", 2, "barfoo"), rangeKV("d", "e", 8, ""), rangeKV("d", "e", 1, ""), rangeKV("e", "g", 1, ""), pointKV("e", 8, "foobar")},
+		},
+		"DisallowConflicts handles existing point key above existing range tombstone": {
+			noConflict: true,
+			reqTS:      10,
+			data:       kvs{pointKV("c", 7, ""), rangeKV("a", "g", 6, ""), pointKV("h", 7, "")},
+			sst:        kvs{rangeKV("b", "d", 8, ""), rangeKV("f", "j", 8, "")},
+			expect:     kvs{rangeKV("a", "b", 6, ""), rangeKV("b", "d", 8, ""), rangeKV("b", "d", 6, ""), pointKV("c", 7, ""), rangeKV("d", "f", 6, ""), rangeKV("f", "g", 8, ""), rangeKV("f", "g", 6, ""), rangeKV("g", "j", 8, ""), pointKV("h", 7, "")},
+		},
 		"DisallowConflicts accounts for point key already deleted in engine": {
 			noConflict: true,
 			reqTS:      10,
@@ -1024,7 +1038,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			noConflict: true,
 			data:       kvs{rangeKV("a", "b", 7, "")},
 			sst:        kvs{rangeKV("a", "b", 7, "")},
-			expectErr:  "ingested range key collides with an existing one",
+			expectErr:  &kvpb.WriteTooOldError{},
 		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {

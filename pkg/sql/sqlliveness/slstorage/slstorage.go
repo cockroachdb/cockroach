@@ -79,7 +79,7 @@ var CacheSize = settings.RegisterIntSetting(
 	1024)
 
 // Storage deals with reading and writing session records. It implements the
-// sqlliveness.Reader interface, and the slinstace.Writer interface.
+// sqlliveness.Storage interface, and the slinstace.Writer interface.
 type Storage struct {
 	settings        *cluster.Settings
 	settingsWatcher *settingswatcher.SettingsWatcher
@@ -110,7 +110,7 @@ type Storage struct {
 	}
 }
 
-var _ sqlliveness.Reader = &Storage{}
+var _ sqlliveness.StorageReader = &Storage{}
 
 // NewTestingStorage constructs a new storage with control for the database
 // in which the `sqlliveness` table should exist.
@@ -184,13 +184,6 @@ func (s *Storage) Start(ctx context.Context) {
 	}
 	_ = s.stopper.RunAsyncTask(ctx, "slstorage", s.deleteSessionsLoop)
 	s.mu.started = true
-}
-
-// IsAlive determines whether a given session is alive. If this method returns
-// true, the session may no longer be alive, but if it returns false, the
-// session definitely is not alive.
-func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
-	return s.isAlive(ctx, sid, sync)
 }
 
 type readType byte
@@ -580,15 +573,31 @@ func (s *Storage) Update(
 // currently known state of the session, but will trigger an asynchronous
 // refresh of the state of the session if it is not known.
 func (s *Storage) CachedReader() sqlliveness.Reader {
-	return (*cachedStorage)(s)
+	return (*cachedReader)(s)
 }
 
-// cachedStorage implements the sqlliveness.Reader interface, and the
+// BlockingReader reader returns an implementation of sqlliveness.Reader which
+// will cache results of previous reads but will synchronously block to
+// determine the status of a session which it does not know about or thinks
+// might be expired.
+func (s *Storage) BlockingReader() sqlliveness.Reader {
+	return (*blockingReader)(s)
+}
+
+type blockingReader Storage
+
+func (s *blockingReader) IsAlive(
+	ctx context.Context, sid sqlliveness.SessionID,
+) (alive bool, err error) {
+	return (*Storage)(s).isAlive(ctx, sid, sync)
+}
+
+// cachedReader implements the sqlliveness.Reader interface, and the
 // slinstace.Writer interface, but does not read from the underlying store
 // synchronously during IsAlive.
-type cachedStorage Storage
+type cachedReader Storage
 
-func (s *cachedStorage) IsAlive(
+func (s *cachedReader) IsAlive(
 	ctx context.Context, sid sqlliveness.SessionID,
 ) (alive bool, err error) {
 	return (*Storage)(s).isAlive(ctx, sid, async)
