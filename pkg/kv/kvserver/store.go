@@ -1182,7 +1182,7 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
 	maxOffset := sc.Clock.MaxOffset()
-	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
+	return 2 * (sc.RangeLeaseDuration + maxOffset).Nanoseconds()
 }
 
 // Tracer returns the tracer embedded within StoreConfig
@@ -2127,7 +2127,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		// up more often that strictly necessary, but it's more maintainable than
 		// attempting to accurately determine exactly when each iteration of a
 		// lease expires and when we should attempt to renew it as a result.
-		renewalDuration := s.cfg.RangeLeaseActiveDuration() / 5
+		renewalDuration := s.cfg.RangeLeaseDuration / 5
 		if d := s.cfg.TestingKnobs.LeaseRenewalDurationOverride; d > 0 {
 			renewalDuration = d
 		}

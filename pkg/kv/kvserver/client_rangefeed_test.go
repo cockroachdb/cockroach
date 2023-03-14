@@ -285,7 +285,7 @@ func TestRangefeedWorksOnLivenessRange(t *testing.T) {
 	// Speed up node liveness heartbeats.
 	var raftCfg base.RaftConfig
 	raftCfg.SetDefaults()
-	raftCfg.RangeLeaseRaftElectionTimeoutMultiplier = 1
+	raftCfg.RangeLeaseDuration = time.Second
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{

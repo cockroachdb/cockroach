@@ -4,7 +4,7 @@ echo
  RaftTickInterval: (time.Duration) 200ms,
  RaftElectionTimeoutTicks: (int) 10,
  RaftHeartbeatIntervalTicks: (int) 5,
- RangeLeaseRaftElectionTimeoutMultiplier: (float64) 3,
+ RangeLeaseDuration: (time.Duration) 6s,
  RangeLeaseRenewalFraction: (float64) 0.5,
  RaftLogTruncationThreshold: (int64) 16777216,
  RaftProposalQuota: (int64) 8388608,
