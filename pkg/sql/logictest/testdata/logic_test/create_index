@@ -1,5 +1,4 @@
 # LogicTest: default-configs local-mixed-22.2-23.1
-# cluster-opt: can-admin-split
 
 statement ok
 CREATE TABLE t (
