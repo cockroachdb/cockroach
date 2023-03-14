@@ -74,8 +74,7 @@ FROM
 		// The query intends to present:
 		// - first all the running jobs sorted in order of start time,
 		// - then all completed jobs sorted in order of completion time.
-		whereClause =
-			`WHERE (finished IS NULL OR finished > now() - '12h':::interval)`
+		//
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`

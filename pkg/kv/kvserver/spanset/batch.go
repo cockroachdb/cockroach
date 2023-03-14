@@ -159,11 +159,6 @@ func (i *MVCCIterator) checkAllowedValidPos(span roachpb.Span, errIfDisallowed b
 	}
 }
 
-// Key is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) Key() storage.MVCCKey {
-	return i.i.Key()
-}
-
 // Value is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Value() ([]byte, error) {
 	return i.i.Value()

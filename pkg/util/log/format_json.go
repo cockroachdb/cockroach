@@ -294,12 +294,12 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteString(`":`)
 		buf.WriteString(entry.NodeID)
 	}
-	// The entry's idPayload always returns a tenant ID,
-	// so write the tenant ID tag in any case.
-	buf.WriteString(`,"`)
-	buf.WriteString(jtags['T'].tags[tags])
-	buf.WriteString(`":`)
-	buf.WriteString(entry.TenantID())
+	if entry.TenantID() != "" {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['T'].tags[tags])
+		buf.WriteString(`":`)
+		buf.WriteString(entry.TenantID())
+	}
 	if entry.SQLInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])

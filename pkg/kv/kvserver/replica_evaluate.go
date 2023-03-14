@@ -115,8 +115,8 @@ func optimizePuts(
 		// running without the optimization?
 		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %+v", err)
 		return origReqs
-	} else if ok && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
-		iterKey = iter.Key().Key
+	} else if ok && bytes.Compare(iter.UnsafeKey().Key, maxKey) <= 0 {
+		iterKey = iter.UnsafeKey().Key.Clone()
 	}
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.

@@ -261,8 +261,6 @@ type MVCCIterator interface {
 	// keys by avoiding the need to iterate over many deleted intents.
 	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
 
-	// Key is like UnsafeKey, but returns memory now owned by the caller.
-	Key() MVCCKey
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
 	// This is a low-level and dangerous method since it will expose the
@@ -1524,7 +1522,7 @@ func iterateOnReader(
 			if err != nil {
 				return err
 			}
-			kv = MVCCKeyValue{Key: it.Key(), Value: v}
+			kv = MVCCKeyValue{Key: it.UnsafeKey().Clone(), Value: v}
 		}
 		if !it.RangeBounds().Key.Equal(rangeKeys.Bounds.Key) {
 			rangeKeys = it.RangeKeys().Clone()
@@ -1657,12 +1655,7 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 		return err
 	}
 
-	key := iter.Key()
-
-	// Key must equal UnsafeKey.
-	if u := iter.UnsafeKey(); !key.Equal(u) {
-		return errors.AssertionFailedf("Key %s does not match UnsafeKey %s", key, u)
-	}
+	key := iter.UnsafeKey().Clone()
 
 	// UnsafeRawMVCCKey must match Key.
 	if r, err := DecodeMVCCKey(iter.UnsafeRawMVCCKey()); err != nil {

@@ -256,11 +256,6 @@ func (ri *ReplicaMVCCDataIterator) Valid() (bool, error) {
 	return true, nil
 }
 
-// Key returns the current key. Only called in tests.
-func (ri *ReplicaMVCCDataIterator) Key() storage.MVCCKey {
-	return ri.it.Key()
-}
-
 // Value returns the current value. Only called in tests.
 func (ri *ReplicaMVCCDataIterator) Value() ([]byte, error) {
 	return ri.it.Value()

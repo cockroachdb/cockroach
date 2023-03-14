@@ -24,6 +24,8 @@ import { ThunkAction, ThunkDispatch } from "redux-thunk";
 import { createHashHistory } from "history";
 import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
+import { util as clusterUiUtil } from "@cockroachlabs/cluster-ui";
+const { isForbiddenRequestError } = clusterUiUtil;
 
 import { PayloadAction, WithRequest } from "src/interfaces/action";
 import { maybeClearTenantCookie } from "./cookies";
@@ -45,6 +47,7 @@ export class CachedDataReducerState<TResponseMessage> {
   requestedAt?: moment.Moment; // Timestamp when data was last requested.
   setAt?: moment.Moment; // Timestamp when this data was last updated.
   lastError?: Error; // populated with the most recent error, if the last request failed
+  unauthorized = false; // If lastError was a 403 error, we avoid refreshing.
 }
 
 // KeyedCachedDataReducerState is used to track the state of the cached data
@@ -63,6 +66,7 @@ export class PaginatedCachedDataReducerState<TResponseMessage> {
   requestedAt?: moment.Moment; // Timestamp when data was last requested.
   setAt?: moment.Moment; // Timestamp when this data was last updated.
   lastError?: Error; // populated with the most recent error, if the last request failed
+  unauthorized = false; // If lastError was a 403 error, we avoid refreshing.
 
   constructor() {
     this.data = {};
@@ -170,6 +174,9 @@ export class CachedDataReducer<
         state.inFlight = false;
         state.lastError = error.data;
         state.valid = false;
+        if (isForbiddenRequestError(error.data)) {
+          state.unauthorized = true;
+        }
         return state;
       }
       case this.INVALIDATE:
@@ -260,7 +267,9 @@ export class CachedDataReducer<
 
       if (
         state &&
-        (state.inFlight || (this.invalidationPeriod && state.valid))
+        (state.inFlight ||
+          (this.invalidationPeriod && state.valid) ||
+          state.unauthorized)
       ) {
         return;
       }
@@ -524,6 +533,9 @@ export class PaginatedCachedDataReducer<
         state.inFlight = false;
         state.lastError = error.data;
         state.valid = false;
+        if (isForbiddenRequestError(error.data)) {
+          state.unauthorized = true;
+        }
         return state;
       }
       case this.cachedDataReducer.INVALIDATE:
@@ -556,7 +568,9 @@ export class PaginatedCachedDataReducer<
         stateAccessor(getState(), req);
       if (
         state &&
-        (state.inFlight || (this.invalidationPeriod && state.valid))
+        (state.inFlight ||
+          (this.invalidationPeriod && state.valid) ||
+          state.unauthorized)
       ) {
         return;
       }

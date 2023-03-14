@@ -187,13 +187,13 @@ func runGCOld(
 			// Stop iterating if our context has expired.
 			return Info{}, err
 		}
-		iterKey := iter.Key()
+		iterKey := iter.UnsafeKey().Clone()
 		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
 			// Moving to the next key (& values).
 			processKeysAndValues()
 			expBaseKey = iterKey.Key
 			if !iterKey.IsValue() {
-				keys = []storage.MVCCKey{iter.Key()}
+				keys = []storage.MVCCKey{iter.UnsafeKey().Clone()}
 				v, err := iter.Value()
 				if err != nil {
 					return Info{}, err
@@ -212,7 +212,7 @@ func runGCOld(
 		if err != nil {
 			return Info{}, err
 		}
-		keys = append(keys, iter.Key())
+		keys = append(keys, iter.UnsafeKey().Clone())
 		vals = append(vals, v)
 	}
 	// Handle last collected set of keys/vals.

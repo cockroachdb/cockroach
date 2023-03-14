@@ -1482,13 +1482,13 @@ func collectMatchingWithMVCCIterator(
 		} else if !ok {
 			break
 		}
-		ts := iter.Key().Timestamp
+		ts := iter.UnsafeKey().Timestamp
 		if (ts.Less(end) || end == ts) && start.Less(ts) {
 			v, err := iter.Value()
 			if err != nil {
 				t.Fatal(err)
 			}
-			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: v})
+			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.UnsafeKey().Clone(), Value: v})
 		}
 		iter.Next()
 	}
