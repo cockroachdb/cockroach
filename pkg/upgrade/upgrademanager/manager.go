@@ -550,6 +550,7 @@ func (m *Manager) runMigration(
 			// The TenantDeps used here are incomplete, but enough for the "permanent
 			// upgrades" that run under this testing knob.
 			if err := upg.Run(ctx, mig.Version(), upgrade.TenantDeps{
+				KVDB:             m.deps.DB.KV(),
 				DB:               m.deps.DB,
 				Codec:            m.codec,
 				Settings:         m.settings,

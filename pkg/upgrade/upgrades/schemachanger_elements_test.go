@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +35,7 @@ import (
 
 func TestUpgradeSchemaChangerElements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 98062, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()

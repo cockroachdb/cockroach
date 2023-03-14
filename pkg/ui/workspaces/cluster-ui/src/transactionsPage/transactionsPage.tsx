@@ -36,7 +36,7 @@ import {
   filterTransactions,
 } from "./utils";
 import Long from "long";
-import { merge } from "lodash";
+import { flatMap, merge } from "lodash";
 import { unique, syncHistory } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
@@ -251,7 +251,10 @@ export class TransactionsPage extends React.Component<
       );
     }
 
-    this.props.refreshNodes();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
+
     this.props.refreshUserSQLRoles();
   }
 
@@ -293,7 +296,9 @@ export class TransactionsPage extends React.Component<
 
   componentDidUpdate(): void {
     this.updateQueryParams();
-    this.props.refreshNodes();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
@@ -425,7 +430,9 @@ export class TransactionsPage extends React.Component<
       .sort();
 
     const regions = unique(
-      nodes.map(node => nodeRegions[node.toString()]),
+      isTenant
+        ? flatMap(statements, statement => statement.stats.regions)
+        : nodes.map(node => nodeRegions[node.toString()]),
     ).sort();
 
     // We apply the search filters and app name filters prior to aggregating across Node IDs
@@ -508,7 +515,7 @@ export class TransactionsPage extends React.Component<
                   t => ({
                     stats_data: t.stats_data,
                     node_id: t.node_id,
-                    regions: generateRegion(t, statements, nodeRegions),
+                    regions: generateRegion(t, statements),
                     regionNodes: generateRegionNode(t, statements, nodeRegions),
                   }),
                 );

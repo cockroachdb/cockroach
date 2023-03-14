@@ -10,6 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+import { flatMap } from "lodash";
 import {
   ISortedTablePagination,
   SortedTable,
@@ -462,7 +463,9 @@ export class IndexDetailsPage extends React.Component<
       .map(n => Number(n))
       .sort();
     const regions = unique(
-      nodes.map(node => nodeRegions[node.toString()]),
+      isTenant
+        ? flatMap(statements, statement => statement.stats.regions)
+        : nodes.map(node => nodeRegions[node.toString()]),
     ).sort();
 
     const filteredStmts = this.filteredStatements();
