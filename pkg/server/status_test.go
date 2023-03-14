@@ -1339,20 +1339,20 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(body, []byte("sql_txn_begin_count{tenant=\"system\"} 1")) {
-		t.Errorf("expected `sql_txn_begin_count{tenant=\"system\"} 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_txn_begin_count{tenant=\"system\",node_id=\"1\"} 1")) {
+		t.Errorf("expected `sql_txn_begin_count{tenant=\"system\",node_id=\"1\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_restart_savepoint_count{tenant=\"system\"} 1")) {
-		t.Errorf("expected `sql_restart_savepoint_count{tenant=\"system\"} 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_restart_savepoint_count{tenant=\"system\",node_id=\"1\"} 1")) {
+		t.Errorf("expected `sql_restart_savepoint_count{tenant=\"system\",node_id=\"1\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_restart_savepoint_release_count{tenant=\"system\"} 1")) {
-		t.Errorf("expected `sql_restart_savepoint_release_count{tenant=\"system\"} 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_restart_savepoint_release_count{tenant=\"system\",node_id=\"1\"} 1")) {
+		t.Errorf("expected `sql_restart_savepoint_release_count{tenant=\"system\",node_id=\"1\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_txn_commit_count{tenant=\"system\"} 1")) {
-		t.Errorf("expected `sql_txn_commit_count{tenant=\"system\"} 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_txn_commit_count{tenant=\"system\",node_id=\"1\"} 1")) {
+		t.Errorf("expected `sql_txn_commit_count{tenant=\"system\",node_id=\"1\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_txn_rollback_count{tenant=\"system\"} 0")) {
-		t.Errorf("expected `sql_txn_rollback_count{tenant=\"system\"} 0`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_txn_rollback_count{tenant=\"system\",node_id=\"1\"} 0")) {
+		t.Errorf("expected `sql_txn_rollback_count{tenant=\"system\",node_id=\"1\"} 0`, got: %s", body)
 	}
 }
 
