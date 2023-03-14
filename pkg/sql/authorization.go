@@ -564,10 +564,33 @@ func MemberOfWithAdminOption(
 			InheritCancelation: false,
 		},
 		func(ctx context.Context) (interface{}, error) {
-			return resolveMemberOfWithAdminOption(
-				ctx, member, txn,
-				useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
-			)
+			// We use the modification time of system.role_members' table descriptor
+			// to ensure that we are reading from the right version of the table.
+			// Unfortunately, we cannot use the modification time of the descriptor
+			// if it's at version 1 since the permanent upgrade that adds the initial
+			// row for the system.role_members did not bump the version. However,
+			// this implies that the table is at its initial state, so it is safe
+			// to use the current transaction's read timestamp.
+			ts := tableDesc.GetModificationTime()
+			if tableDesc.GetVersion() == 1 {
+				ts = txn.KV().ReadTimestamp()
+			}
+			var m map[username.SQLUsername]bool
+			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
+				err := newTxn.KV().SetFixedTimestamp(ctx, ts)
+				if err != nil {
+					return err
+				}
+				m, err = resolveMemberOfWithAdminOption(
+					ctx, member, newTxn,
+					useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
+				)
+				if err != nil {
+					return err
+				}
+				return err
+			})
+			return m, err
 		})
 	var memberships map[username.SQLUsername]bool
 	res := future.WaitForResult(ctx)
