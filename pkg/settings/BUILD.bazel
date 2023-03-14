@@ -16,6 +16,7 @@ go_library(
         "float.go",
         "int.go",
         "masked.go",
+        "notifer.go",
         "protobuf.go",
         "registry.go",
         "setting.go",
@@ -47,6 +48,7 @@ go_test(
     srcs = [
         "encoding_test.go",
         "internal_test.go",
+        "notifier_test.go",
         "settings_test.go",
     ],
     args = ["-test.timeout=55s"],

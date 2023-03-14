@@ -107,6 +107,10 @@ func (c *common) SetOnChange(sv *Values, fn func(ctx context.Context)) {
 	sv.setOnChange(c.slot, fn)
 }
 
+func (c *common) slotIdx() slotIdx {
+	return c.slot
+}
+
 type internalSetting interface {
 	NonMaskedSetting
 
