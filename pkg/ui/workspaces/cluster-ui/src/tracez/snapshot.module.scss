@@ -59,6 +59,17 @@
   justify-content: right;
 }
 
+.metadata-icon-cell {
+  padding: 8px 4px 4px 0px;
+  margin: 0px;
+  display: flex;
+  justify-content: right;
+}
+
+.metadata-name-cell {
+  padding: 4px 0px 4px 0px; // For vertical, override default of 16px.
+}
+
 .table-cell-time {
   padding: 4px 16px; // For vertical, override default of 16px.
   display: flex;
@@ -104,6 +115,16 @@
   height: 10px;
   width: 10px;
   padding-top: 1px;
+}
+
+.icon-hollow-green {
+  fill: none;
+  height: 10px;
+  width: 10px;
+  padding-top: 2px;
+  stroke: green;
+  stroke-width: 4px;
+  clip-path: circle(4px at 5px 6px);
 }
 
 .icon-gray {

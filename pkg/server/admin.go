@@ -4197,8 +4197,18 @@ func (s *adminServer) GetTracingSnapshot(
 
 	for i, s := range spansList.Spans {
 		tags := make([]*serverpb.SpanTag, len(s.Tags))
-		for j, t := range s.Tags {
-			tags[j] = getSpanTag(t)
+		for j, tag := range s.Tags {
+			tags[j] = getSpanTag(tag)
+		}
+		childrenMetadata := make([]*serverpb.NamedOperationMetadata, len(s.ChildrenMetadata))
+
+		j := 0
+		for name, cm := range s.ChildrenMetadata {
+			childrenMetadata[j] = &serverpb.NamedOperationMetadata{
+				Name:     name,
+				Metadata: cm,
+			}
+			j++
 		}
 
 		spans[i] = &serverpb.TracingSpan{
@@ -4211,6 +4221,7 @@ func (s *adminServer) GetTracingSnapshot(
 			ProcessedTags:        tags,
 			Current:              s.Current,
 			CurrentRecordingMode: s.CurrentRecordingMode.ToProto(),
+			ChildrenMetadata:     childrenMetadata,
 		}
 	}
 
