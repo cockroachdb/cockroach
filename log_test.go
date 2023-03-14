@@ -102,7 +102,12 @@ func TestFindConflictByTerm(t *testing.T) {
 			}})
 			l := newLog(st, raftLogger)
 			l.append(tt.ents[1:]...)
-			require.Equal(t, tt.want, l.findConflictByTerm(tt.index, tt.term))
+
+			index, term := l.findConflictByTerm(tt.index, tt.term)
+			require.Equal(t, tt.want, index)
+			wantTerm, err := l.term(index)
+			wantTerm = l.zeroTermOnOutOfBounds(wantTerm, err)
+			require.Equal(t, wantTerm, term)
 		})
 	}
 }
