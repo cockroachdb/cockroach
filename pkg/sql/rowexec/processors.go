@@ -240,6 +240,15 @@ func NewProcessor(
 		}
 		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, post, outputs[0])
 	}
+	if core.CloudStorageTest != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewCloudStorageTestProcessor == nil {
+			return nil, errors.New("CloudStorageTestProcessor processor unimplemented")
+		}
+		return NewCloudStorageTestProcessor(ctx, flowCtx, processorID, *core.CloudStorageTest, post, outputs[0])
+	}
 	if core.BackupData != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
@@ -379,6 +388,9 @@ func NewProcessor(
 
 // NewReadImportDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewCloudStorageTestProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CloudStorageTestSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

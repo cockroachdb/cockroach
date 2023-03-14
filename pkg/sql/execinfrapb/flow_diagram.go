@@ -500,6 +500,11 @@ func (c *RestoreDataSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (c *CloudStorageTestSpec) summary() (string, []string) {
+	return "CloudStorageTestSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (c *SplitAndScatterSpec) summary() (string, []string) {
 	detail := fmt.Sprintf("%d chunks", len(c.Chunks))
 	return "SplitAndScatterSpec", []string{detail}
