@@ -2150,12 +2150,27 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 // CreateTenant represents a CREATE TENANT statement.
 type CreateTenant struct {
 	TenantSpec *TenantSpec
+	Like       *LikeTenantSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TENANT ")
 	ctx.FormatNode(node.TenantSpec)
+	ctx.FormatNode(node.Like)
+}
+
+// LikeTenantSpec represents a LIKE clause in CREATE TENANT.
+type LikeTenantSpec struct {
+	OtherTenant *TenantSpec
+}
+
+func (node *LikeTenantSpec) Format(ctx *FmtCtx) {
+	if node.OtherTenant == nil {
+		return
+	}
+	ctx.WriteString(" LIKE ")
+	ctx.FormatNode(node.OtherTenant)
 }
 
 // CreateTenantFromReplication represents a CREATE TENANT...FROM REPLICATION
@@ -2175,6 +2190,8 @@ type CreateTenantFromReplication struct {
 	ReplicationSourceAddress Expr
 
 	Options TenantReplicationOptions
+
+	Like *LikeTenantSpec
 }
 
 // TenantReplicationOptions  options for the CREATE TENANT FROM REPLICATION command.
@@ -2190,6 +2207,7 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	// NB: we do not anonymize the tenant name because we assume that tenant names
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)
+	ctx.FormatNode(node.Like)
 
 	if node.ReplicationSourceAddress != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")
