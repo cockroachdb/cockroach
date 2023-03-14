@@ -53,17 +53,9 @@ const (
 	defaultSQLAddr  = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
 
-	// defaultRaftTickInterval is the default resolution of the Raft timer.
-	defaultRaftTickInterval = 200 * time.Millisecond
-
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
-
-	// defaultRaftHeartbeatIntervalTicks is the default value for
-	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
-	// each heartbeat.
-	defaultRaftHeartbeatIntervalTicks = 5
 
 	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
@@ -222,6 +214,16 @@ var (
 	// https://github.com/cockroachdb/cockroach/issues/93397.
 	defaultRPCHeartbeatTimeout = 3 * NetworkTimeout
 
+	// defaultRaftTickInterval is the default resolution of the Raft timer.
+	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RAFT_TICK_INTERVAL", 500*time.Millisecond)
+
+	// defaultRaftHeartbeatIntervalTicks is the default value for
+	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
+	// each heartbeat.
+	defaultRaftHeartbeatIntervalTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_HEARTBEAT_INTERVAL_TICKS", 2)
+
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
 	// before holding an election. The actual election timeout per replica is
 	// multiplied by a random factor of 1-2, to avoid ties.
@@ -233,12 +235,12 @@ var (
 	// SystemClass, avoiding head-of-line blocking by general RPC traffic. The 1-2
 	// random factor provides an additional buffer.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 10)
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 4)
 
 	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
 	// a Raft command.
 	defaultRaftReproposalTimeoutTicks = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_REPROPOSAL_TIMEOUT_TICKS", 15)
+		"COCKROACH_RAFT_REPROPOSAL_TIMEOUT_TICKS", 6)
 
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
 	// Range's Raft log can grow to before log truncations are triggered while at
