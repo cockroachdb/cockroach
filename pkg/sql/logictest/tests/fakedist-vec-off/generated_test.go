@@ -1955,6 +1955,13 @@ func TestLogic_truncate(
 	runLogicTest(t, "truncate")
 }
 
+func TestLogic_truncate_with_concurrent_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "truncate_with_concurrent_mutation")
+}
+
 func TestLogic_tsvector(
 	t *testing.T,
 ) {
