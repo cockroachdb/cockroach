@@ -60,14 +60,31 @@ func setShortGCTTLInSystemZoneConfig(c cluster.Cluster) versionStep {
 }
 
 func planAndRunSchemaChange(
-	c cluster.Cluster, nodeToPlanSchemaChange option.NodeListOption, schemaChangeStmt string,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	node option.NodeListOption,
+	schemaChangeStmt string,
+) {
+	gatewayDB := c.Conn(ctx, t.L(), node[0])
+	defer gatewayDB.Close()
+	t.Status("Running: ", schemaChangeStmt)
+	_, err := gatewayDB.ExecContext(ctx, schemaChangeStmt)
+	require.NoError(t, err)
+}
+
+// testSchemaChangesInMixedVersionV221AndV222 tests all stmts supported in V22_1.
+// Stmts here is based on set up in testSetupResetStep.
+func testSchemaChangesInMixedVersionV221AndV222(
+	c cluster.Cluster, nodeIDs option.NodeListOption,
 ) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		gatewayDB := c.Conn(ctx, t.L(), nodeToPlanSchemaChange[0])
-		defer gatewayDB.Close()
-		t.Status("Running: ", schemaChangeStmt)
-		_, err := gatewayDB.ExecContext(ctx, schemaChangeStmt)
-		require.NoError(t, err)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP SEQUENCE testdb.testsc.s`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP TYPE testdb.testsc.typ`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP VIEW testdb.testsc.v`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP TABLE testdb.testsc.t`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP SCHEMA testdb.testsc`)
+		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP DATABASE testdb CASCADE`)
 	}
 }
 
@@ -76,11 +93,11 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// in a mixed version cluster, jobs created by the declarative schema changer
 	// are both backward and forward compatible. That is, declarative schema
 	// changer job created by nodes running newer (resp. older) binary versions
-	// be adopted and finished by nodes running older (resp. newer) binary versions.
+	// can be adopted and finished by nodes running older (resp. newer) binary versions.
 	// This test requires us to come back and change the to-be-tests stmts to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:    "declarative_schema_changer/job-compatibility-mixed-version",
+		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V221-V222",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -90,11 +107,12 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 			// An empty string means that the cockroach binary specified by flag
 			// `cockroach` will be used.
 			const mainVersion = ""
+			predV, err := PredecessorVersion(*t.BuildVersion())
+			require.NoError(t, err)
+
 			allNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
 			oldNodes := c.Nodes(3, 4)
-			predV, err := PredecessorVersion(*t.BuildVersion())
-			require.NoError(t, err)
 
 			u := newVersionUpgradeTest(c,
 				// System setup.
@@ -111,34 +129,16 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 				//   - upgraded nodes: plan schema change and create schema changer jobs
 				//   - older nodes: adopt and execute schema changer jobs
 				testSetupResetStep(c),
-
-				// Halt job execution on upgraded nodes.
 				disableJobAdoptionStep(c, upgradedNodes),
-
-				// Run schema change stmts, chosen from those supported in `predV` version.
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP SEQUENCE testdb.testsc.s`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP TYPE testdb.testsc.typ`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP VIEW testdb.testsc.v`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP TABLE testdb.testsc.t`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP SCHEMA testdb.testsc`),
-				planAndRunSchemaChange(c, upgradedNodes.RandNode(), `DROP DATABASE testdb CASCADE`),
+				testSchemaChangesInMixedVersionV221AndV222(c, upgradedNodes),
 				enableJobAdoptionStep(c, upgradedNodes),
 
 				// Job forward compatibility test:
 				//   - older nodes: plan schema change and create schema changer jobs
 				//   - upgraded nodes: adopt and execute schema changer jobs
 				testSetupResetStep(c),
-
-				// Halt job execution on old nodes.
 				disableJobAdoptionStep(c, oldNodes),
-
-				// Run schema change stmts, chosen from those supported in `predV` version.
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP SEQUENCE testdb.testsc.s`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP TYPE testdb.testsc.typ`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP VIEW testdb.testsc.v`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP TABLE testdb.testsc.t`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP SCHEMA testdb.testsc`),
-				planAndRunSchemaChange(c, oldNodes.RandNode(), `DROP DATABASE testdb CASCADE`),
+				testSchemaChangesInMixedVersionV221AndV222(c, oldNodes),
 				enableJobAdoptionStep(c, oldNodes),
 			)
 			u.run(ctx, t)
