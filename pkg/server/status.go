@@ -1557,44 +1557,6 @@ func (s *statusServer) NodesList(
 	return s.serverIterator.nodesList(ctx)
 }
 
-// Nodes returns a limited subset of the full NodesResponse.
-//
-// Its existence is a stop-gap measure to support running much of our UI code
-// on multiregion tenant clusters. Longer-term, we will need to reconsider
-// the overall architecture (e.g. store node ids in sqlstats, map node id ->
-// region at UI display time) because sql instances are far more ephemeral
-// than cluster nodes, and this Nodes endpoint is only able to answer for
-// currently-live sql instances. What I think we want is to store locality
-// information directly in the sqlstats tables, sourced from some new tracing
-// in the distsql flow.
-func (s *statusServer) Nodes(
-	ctx context.Context, req *serverpb.NodesRequest,
-) (*serverpb.NodesResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
-	ctx = s.AnnotateCtx(ctx)
-
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
-		return nil, err
-	}
-
-	instances, err := s.sqlServer.sqlInstanceReader.GetAllInstances(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var resp serverpb.NodesResponse
-	for _, instance := range instances {
-		resp.Nodes = append(resp.Nodes, statuspb.NodeStatus{
-			Desc: roachpb.NodeDescriptor{
-				NodeID:   roachpb.NodeID(instance.InstanceID),
-				Locality: instance.Locality,
-			},
-		})
-	}
-	return &resp, err
-}
-
 // Nodes returns all node statuses.
 //
 // Do not use this method inside the server code! Use

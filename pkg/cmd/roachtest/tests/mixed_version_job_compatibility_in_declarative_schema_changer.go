@@ -30,8 +30,8 @@ func testSetupResetStep(c cluster.Cluster) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		db := c.Conn(ctx, t.L(), 1)
 		setUpQuery := `
-CREATE DATABASE IF NOT EXISTS testdb; 
-CREATE SCHEMA IF NOT EXISTS testdb.testsc; 
+CREATE DATABASE IF NOT EXISTS testdb;
+CREATE SCHEMA IF NOT EXISTS testdb.testsc;
 CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
 INSERT INTO testdb.testsc.t VALUES (1, 1);
 CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL);
@@ -103,6 +103,20 @@ func testSchemaChangesInMixedVersionV222AndV231(
 		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP TABLE testdb.testsc.t2`)
 		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP SCHEMA testdb.testsc`)
 		planAndRunSchemaChange(ctx, t, c, nodeIDs.RandNode(), `DROP DATABASE testdb CASCADE`)
+	}
+}
+
+func setShortJobIntervalsStep(node int) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		runQuery := func(query string, args ...interface{}) error {
+			_, err := db.ExecContext(ctx, query, args...)
+			return err
+		}
+
+		if err := setShortJobIntervalsCommon(runQuery); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
