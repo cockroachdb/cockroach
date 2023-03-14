@@ -564,10 +564,22 @@ func MemberOfWithAdminOption(
 			InheritCancelation: false,
 		},
 		func(ctx context.Context) (interface{}, error) {
-			return resolveMemberOfWithAdminOption(
-				ctx, member, txn,
-				useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
-			)
+			var m map[username.SQLUsername]bool
+			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
+				err := newTxn.KV().SetFixedTimestamp(ctx, tableDesc.GetModificationTime())
+				if err != nil {
+					return err
+				}
+				m, err = resolveMemberOfWithAdminOption(
+					ctx, member, newTxn,
+					useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
+				)
+				if err != nil {
+					return err
+				}
+				return err
+			})
+			return m, err
 		})
 	var memberships map[username.SQLUsername]bool
 	res := future.WaitForResult(ctx)
