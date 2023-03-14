@@ -73,6 +73,7 @@ import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import moment from "moment";
+import { STATS_LONG_LOADING_DURATION } from "../util/constants";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -405,7 +406,7 @@ export class TransactionsPage extends React.Component<
     );
 
     const longLoadingMessage = (
-      <Delayed delay={moment.duration(2, "s")}>
+      <Delayed delay={STATS_LONG_LOADING_DURATION}>
         <InlineAlert
           intent="info"
           title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
