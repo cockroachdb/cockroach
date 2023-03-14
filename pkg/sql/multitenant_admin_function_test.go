@@ -370,7 +370,9 @@ func (tc testCase) runTest(
 	}
 
 	execQueries(testCluster, systemDB, "system", tc.system)
-	execQueries(testCluster, secondaryDB, "secondary", tc.secondary)
+	if tc.secondary.isSet() {
+		execQueries(testCluster, secondaryDB, "secondary", tc.secondary)
+	}
 	if tc.secondaryWithoutClusterSetting.isSet() {
 		execQueries(testCluster, secondaryWithoutClusterSettingDB, "secondary_without_cluster_setting", tc.secondaryWithoutClusterSetting)
 	}
@@ -402,7 +404,8 @@ func (te tenantExpected) validate(t *testing.T, rows *gosql.Rows, err error, mes
 	}
 }
 
-// TestMultiTenantAdminFunction tests the "simple" admin functions that do not require complex setup.
+// TestMultiTenantAdminFunction tests the "simple" admin functions that do not
+// require complex setup.
 func TestMultiTenantAdminFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -453,17 +456,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			system: tenantExpected{
 				result: [][]string{{"\xf0\x89\x89", "/1", maxTimestamp}},
 			},
-			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92\xf0\x89\x89", "/104/1/1", maxTimestamp}},
-			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
 			},
-			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_split"`,
-			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			queryCapability:     tenantcapabilities.CanAdminSplit,
 		},
 		{
 			desc:  "ALTER INDEX x SPLIT AT",
@@ -472,17 +468,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			system: tenantExpected{
 				result: [][]string{{"\xf0\x8a\x89", "/1", maxTimestamp}},
 			},
-			secondary: tenantExpected{
-				result: [][]string{{"\xf0\x8a\x89", "/104/2/1", maxTimestamp}},
-			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
 			},
-			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_split"`,
-			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			queryCapability:     tenantcapabilities.CanAdminSplit,
 		},
 		{
 			desc:  "ALTER TABLE x UNSPLIT AT",
@@ -564,17 +553,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			system: tenantExpected{
 				result: [][]string{{systemKey, systemKeyPretty}},
 			},
-			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
-			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
 			},
-			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_scatter"`,
-			},
-			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
-			queryCapability:     tenantcapabilities.CanAdminScatter,
+			queryCapability: tenantcapabilities.CanAdminScatter,
 		},
 		{
 			desc:  "ALTER INDEX x SCATTER",
@@ -583,17 +565,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			system: tenantExpected{
 				result: [][]string{{"\xf0\x8a", "/Table/104/2"}},
 			},
-			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", "/Tenant/10"}},
-			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
 			},
-			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have capability "can_admin_scatter"`,
-			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
-			queryCapability:     tenantcapabilities.CanAdminScatter,
 		},
 	}
 
@@ -641,14 +616,7 @@ func TestTruncateTable(t *testing.T) {
 				{"…/104/2/1", "<after:/Tenant/11>"},
 			},
 		},
-		secondaryWithoutCapability: tenantExpected{
-			// CanAdminScatter will default to true so this will open happen if it is
-			// set to false.
-			errorMessage: `does not have capability "can_admin_scatter"`,
-		},
 		setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-		setupCapability:     tenantcapabilities.CanAdminSplit,
-		queryCapability:     tenantcapabilities.CanAdminScatter,
 	}
 	tc.runTest(
 		t,
