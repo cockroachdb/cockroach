@@ -3173,3 +3173,37 @@ SHOW CONSTRAINTS FROM t_96728
 table_name  constraint_name  constraint_type  details                              validated
 t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
 t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
+
+# Tests for #99381 where dropping a virtual column could lead to UPDATE/DELETE
+# crashing in the optimizer. We are going to intentionally leave it in a mutated
+# state for this test.
+subtest mutation_update_delete
+
+statement ok
+CREATE TABLE t_99381 (i INT8 PRIMARY KEY, j INT8, m INT8 AS (i + j) VIRTUAL);
+INSERT INTO t_99381 VALUES (5, 1), (6, 2), (7, 2);
+SET sql_safe_updates = false;
+
+statement ok
+SET CLUSTER SETTING "jobs.debug.pausepoints" = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement error job \d+ was paused before it completed with reason: pause point \".*schemachanger.before.exec\" hit
+ALTER TABLE t_99381 DROP COLUMN m;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints='';
+
+statement ok
+DELETE FROM t_99381 WHERE i = 5;
+
+statement ok
+UPDATE t_99381 SET j = 5;
+
+query II
+SELECT * FROM t_99381;
+----
+6  5
+7  5
+
+statement ok
+RESUME JOBS (SELECT job_id FROM crdb_internal.jobs WHERE status = 'paused');

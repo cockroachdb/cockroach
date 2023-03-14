@@ -716,7 +716,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 			// Wrong kind.
 			continue
 		}
-		if !tabCol.IsComputed() {
+		if !tabCol.IsComputed() || (tabCol.IsMutation() && tabCol.IsVirtualComputed()) {
 			continue
 		}
 
