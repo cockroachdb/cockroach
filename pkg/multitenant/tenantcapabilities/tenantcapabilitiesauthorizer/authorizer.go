@@ -83,16 +83,16 @@ func (a *Authorizer) HasCapabilityForBatch(
 			continue
 		}
 		if !hasCap || requiredCap == onlySystemTenant || !found || !cp.GetBool(requiredCap) {
-			if (requiredCap == tenantcapabilities.CanAdminSplit || requiredCap == tenantcapabilities.CanAdminScatter) &&
-				a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
-				continue
-			}
 			// All allowable request types must be explicitly opted into the
 			// reqMethodToCap map. If a request type is missing from the map
 			// (!hasCap), we must be conservative and assume it is
 			// disallowed. This prevents accidents where someone adds a new
 			// sensitive request type in KV and forgets to add an explicit
 			// authorization rule for it here.
+			//
+			// TODO(arul): This should be caught by a linter instead. Add a test that
+			// goes over all request types and ensures there's an entry in this map
+			// instead.
 			return errors.Newf("client tenant does not have capability %q (%T)", requiredCap, request)
 		}
 	}

@@ -1,34 +1,79 @@
 query-sql-system
 SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_id = 'can_admin_split'
 ----
-10 tenant-10 ready none can_admin_split false
+10 tenant-10 ready none can_admin_split true
 
 exec-sql-tenant
 CREATE TABLE t(a INT)
 ----
 ok
 
+exec-sql-tenant
+CREATE INDEX idx on t(a)
+----
+ok
+
+# By default, we should be able to split.
+exec-privileged-op-tenant
+ALTER TABLE t SPLIT AT VALUES (0)
+----
+ok
+
+# ditto for the index.
+exec-privileged-op-tenant
+ALTER INDEX t@idx SPLIT AT VALUES (1)
+----
+ok
+
+
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_admin_split=false
+----
+ok
+
 exec-privileged-op-tenant
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
 pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
+# Check the index as well.
+exec-privileged-op-tenant
+ALTER INDEX t@idx SPLIT AT VALUES (1)
+----
+pq: ba: AdminSplit [/Tenant/10/Table/104/2/1,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+
+# Grant the capability without providing an explicit value.
 update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_split=true
+ALTER TENANT [10] GRANT CAPABILITY can_admin_split
 ----
 ok
 
+# Splits should work now.
 exec-privileged-op-tenant
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
 ok
 
+# Revoke the capability using REVOKE syntax.
 update-capabilities
 ALTER TENANT [10] REVOKE CAPABILITY can_admin_split
 ----
 ok
 
+# Splits should no longer work.
 exec-privileged-op-tenant
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
 pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+
+# Lastly, use the explicitly set to true syntax.
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_admin_split=true
+----
+ok
+
+# Splits should now work.
+exec-privileged-op-tenant
+ALTER TABLE t SPLIT AT VALUES (0)
+----
+ok
