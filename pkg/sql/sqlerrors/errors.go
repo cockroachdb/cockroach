@@ -344,7 +344,7 @@ func NewInvalidVolatilityError(err error) error {
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")
 
-// TxnTimeoutError is an error representing a query timeout.
+// TxnTimeoutError is an error representing a transasction timeout.
 var TxnTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to transaction timeout")
 

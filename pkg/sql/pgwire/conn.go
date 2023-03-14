@@ -598,10 +598,12 @@ func (c *conn) serveImpl(
 	// If we're draining, let the client know by piling on an AdminShutdownError
 	// and flushing the buffer.
 	if draining() {
-		// TODO(andrei): I think sending this extra error to the client if we also
-		// sent another error for the last query (like a context canceled) is a bad
-		// idea; see #22630. I think we should find a way to return the
-		// AdminShutdown error as the only result of the query.
+		// The error here is also sent with pgcode.AdminShutdown, to indicate that
+		// the connection is being closed. Clients are expected to be able to handle
+		// this even when not waiting for a query result. See the discussion at
+		// https://github.com/cockroachdb/cockroach/issues/22630.
+		// NOTE: If a query is canceled due to draining, the conn_executor already
+		// will have sent a QueryCanceled error as a response to the query.
 		log.Ops.Info(ctx, "closing existing connection while server is draining")
 		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
