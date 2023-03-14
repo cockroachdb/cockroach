@@ -26,6 +26,18 @@ export enum InsightExecEnum {
   STATEMENT = "statement",
 }
 
+export enum StatementStatus {
+  COMPLETED = "Completed",
+  FAILED = "Failed",
+}
+
+export enum TransactionStatus {
+  COMPLETED = "Completed",
+  FAILED = "Failed",
+  // Unimplemented, see https://github.com/cockroachdb/cockroach/issues/98219/.
+  CANCELLED = "Cancelled",
+}
+
 // Common fields for both txn and stmt insights.
 export type InsightEventBase = {
   application: string;
@@ -46,9 +58,11 @@ export type InsightEventBase = {
   transactionExecutionID: string;
   transactionFingerprintID: string;
   username: string;
+  errorCode: string;
 };
 
 export type TxnInsightEvent = InsightEventBase & {
+  status: TransactionStatus;
   stmtExecutionIDs: string[];
 };
 
@@ -99,6 +113,7 @@ export type StmtInsightEvent = InsightEventBase & {
   planGist: string;
   databaseName: string;
   execType?: InsightExecEnum;
+  status: StatementStatus;
 };
 
 export type Insight = {
@@ -327,6 +342,8 @@ export interface ExecutionDetails {
   statementExecutionID?: string;
   transactionExecutionID?: string;
   execType?: InsightExecEnum;
+  errorCode?: string;
+  status?: string;
 }
 
 export interface insightDetails {

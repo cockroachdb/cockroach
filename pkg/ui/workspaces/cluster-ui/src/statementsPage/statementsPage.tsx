@@ -10,7 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { isNil, merge } from "lodash";
+import { flatMap, isNil, merge } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Delayed } from "src/delayed";
@@ -352,9 +352,11 @@ export class StatementsPage extends React.Component<
     this.refreshDatabases();
 
     this.props.refreshUserSQLRoles();
-    this.props.refreshNodes();
-    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+      if (!this.props.hasViewActivityRedactedRole) {
+        this.props.refreshStatementDiagnosticsRequests();
+      }
     }
   }
 
@@ -392,9 +394,11 @@ export class StatementsPage extends React.Component<
 
   componentDidUpdate = (): void => {
     this.updateQueryParams();
-    this.props.refreshNodes();
-    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+      if (!this.props.hasViewActivityRedactedRole) {
+        this.props.refreshStatementDiagnosticsRequests();
+      }
     }
   };
 
@@ -603,6 +607,7 @@ export class StatementsPage extends React.Component<
       onDiagnosticsModalOpen,
       apps,
       databases,
+      statements,
       search,
       isTenant,
       nodeRegions,
@@ -614,7 +619,9 @@ export class StatementsPage extends React.Component<
       .sort();
 
     const regions = unique(
-      nodes.map(node => nodeRegions[node.toString()]),
+      isTenant
+        ? flatMap(statements, statement => statement.stats.regions)
+        : nodes.map(node => nodeRegions[node.toString()]),
     ).sort();
 
     const { filters, activeFilters } = this.state;

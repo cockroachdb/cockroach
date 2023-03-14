@@ -276,6 +276,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillExternalConnectionsTableOwnerIDColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"backfill the system.jobs_info table with the payload and progress of each job in the system.jobs table",
+		toCV(clusterversion.V23_1JobInfoTableIsBackfilled),
+		upgrade.NoPrecondition,
+		backfillJobInfoTable,
+	),
 }
 
 func init() {

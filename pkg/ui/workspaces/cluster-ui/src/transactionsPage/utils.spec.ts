@@ -293,9 +293,7 @@ SELECT _`,
 });
 
 describe("generateRegion", () => {
-  function transactionWithStatementFingerprintIDs(
-    ...ids: number[]
-  ): Transaction {
+  function transaction(...ids: number[]): Transaction {
     return {
       stats_data: {
         statement_fingerprint_ids: ids.map(id => Long.fromInt(id)),
@@ -303,35 +301,18 @@ describe("generateRegion", () => {
     };
   }
 
-  function statementWithFingerprintAndNodeIDs(
-    id: number,
-    ...nodeIDs: number[]
-  ): Statement {
-    return {
-      id: Long.fromInt(id),
-      stats: { nodes: nodeIDs.map(id => Long.fromInt(id)) },
-    };
+  function statement(id: number, ...regions: string[]): Statement {
+    return { id: Long.fromInt(id), stats: { regions } };
   }
 
   it("gathers up the list of regions for the transaction, sorted", () => {
     assert.deepEqual(
-      generateRegion(
-        transactionWithStatementFingerprintIDs(42),
-        [statementWithFingerprintAndNodeIDs(42, 1, 2)],
-        { "1": "gcp-us-west1", "2": "gcp-us-east1" },
-      ),
-      ["gcp-us-east1", "gcp-us-west1"],
-    );
-  });
-
-  it("skips over nodes with unknown regions", () => {
-    assert.deepEqual(
-      generateRegion(
-        transactionWithStatementFingerprintIDs(42),
-        [statementWithFingerprintAndNodeIDs(42, 1, 2)],
-        { "1": "gcp-us-west1" },
-      ),
-      ["gcp-us-west1"],
+      generateRegion(transaction(42, 43, 44), [
+        statement(42, "gcp-us-west1", "gcp-us-east1"),
+        statement(43, "gcp-us-west1"),
+        statement(44, "gcp-us-central1"),
+      ]),
+      ["gcp-us-central1", "gcp-us-east1", "gcp-us-west1"],
     );
   });
 });

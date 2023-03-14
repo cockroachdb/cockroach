@@ -109,7 +109,7 @@ func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
 
 	// First clear out any older revisions of this info.
 	_, err := i.txn.ExecEx(
-		ctx, "job-info-write", i.txn.KV(),
+		ctx, "write-job-info-delete", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
 		j.ID(), infoKey,
@@ -120,7 +120,7 @@ func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
 
 	// Write the new info, using the same transaction.
 	_, err = i.txn.ExecEx(
-		ctx, "job-info-write", i.txn.KV(),
+		ctx, "write-job-info-insert", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
 		j.ID(), infoKey, value,
@@ -205,6 +205,18 @@ const (
 	legacyPayloadKey  = "legacy_payload"
 	legacyProgressKey = "legacy_progress"
 )
+
+// GetLegacyPayloadKey returns the info_key whose value is the jobspb.Payload of
+// the job.
+func GetLegacyPayloadKey() []byte {
+	return []byte(legacyPayloadKey)
+}
+
+// GetLegacyProgressKey returns the info_key whose value is the jobspb.Progress
+// of the job.
+func GetLegacyProgressKey() []byte {
+	return []byte(legacyProgressKey)
+}
 
 // GetLegacyPayload returns the job's Payload from the system.jobs_info table.
 func (i InfoStorage) GetLegacyPayload(ctx context.Context) ([]byte, bool, error) {
