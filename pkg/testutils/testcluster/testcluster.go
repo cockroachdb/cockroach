@@ -1778,7 +1778,7 @@ func (tc *TestCluster) SplitTable(
 
 // WaitForTenantCapabilities implements TestClusterInterface.
 func (tc *TestCluster) WaitForTenantCapabilities(
-	t *testing.T, tenID roachpb.TenantID, capIDs ...tenantcapabilities.CapabilityID,
+	t *testing.T, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.CapabilityID]string,
 ) {
 	for i, ts := range tc.Servers {
 		testutils.SucceedsSoon(t, func() error {
@@ -1786,20 +1786,18 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 				return nil
 			}
 
-			if len(capIDs) > 0 {
+			if len(targetCaps) > 0 {
 				missingCapabilityError := func(capID tenantcapabilities.CapabilityID) error {
-					return errors.Newf("server=%d tenant %s does not have capability %q", i, tenID, capID)
+					return errors.Newf("server=%d tenant %s cap %q not at expected value", i, tenID, capID)
 				}
 				capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
 				if !found {
-					return missingCapabilityError(capIDs[0])
+					return errors.Newf("capabilities not ready for tenant %s", tenID)
 				}
 
-				for _, capID := range capIDs {
-					if capID.CapabilityType() != tenantcapabilities.Bool {
-						return errors.AssertionFailedf("WaitForTenantCapabilities only supports boolean capabilities")
-					}
-					if !capabilities.GetBool(capID) {
+				for capID, expectedValue := range targetCaps {
+					curVal := capabilities.Cap(capID).Get().String()
+					if curVal != expectedValue {
 						return missingCapabilityError(capID)
 					}
 				}
