@@ -1416,7 +1416,7 @@ func runSetupSplitSnapshotRace(
 			RaftConfig: base.RaftConfig{
 				// Disable the split delay mechanism, or it'll spend 10s going in circles.
 				// (We can't set it to zero as otherwise the default overrides us).
-				RaftDelaySplitToSuppressSnapshotTicks: -1,
+				RaftDelaySplitToSuppressSnapshot: -1,
 			},
 		}
 	}

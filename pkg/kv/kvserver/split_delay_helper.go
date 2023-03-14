@@ -25,7 +25,7 @@ import (
 
 type splitDelayHelperI interface {
 	RaftStatus(context.Context) (roachpb.RangeID, *raft.Status)
-	MaxTicks() int
+	MaxDelay() time.Duration
 	TickDuration() time.Duration
 	Sleep(context.Context, time.Duration)
 }
@@ -56,7 +56,7 @@ func (sdh *splitDelayHelper) Sleep(ctx context.Context, dur time.Duration) {
 	}
 }
 
-func (sdh *splitDelayHelper) MaxTicks() int {
+func (sdh *splitDelayHelper) MaxDelay() time.Duration {
 	// There is a related mechanism regarding snapshots and splits that is worth
 	// pointing out here: Incoming MsgApp (see the _ assignment below) are
 	// dropped if they are addressed to uninitialized replicas likely to become
@@ -64,13 +64,13 @@ func (sdh *splitDelayHelper) MaxTicks() int {
 	// per heartbeat interval, but sometimes there's an additional delay thanks
 	// to having to wait for a GC run. In effect, it shouldn't take more than a
 	// small number of heartbeats until the follower leaves probing status, so
-	// MaxTicks should at least match that.
+	// MaxDelay should at least match that.
 	_ = maybeDropMsgApp // guru assignment
 	// Snapshots can come up for other reasons and at the end of the day, the
 	// delay introduced here needs to make sure that the snapshot queue
 	// processes at a higher rate than splits happen, so the number of attempts
 	// will typically be much higher than what's suggested by maybeDropMsgApp.
-	return (*Replica)(sdh).store.cfg.RaftDelaySplitToSuppressSnapshotTicks
+	return (*Replica)(sdh).store.cfg.RaftDelaySplitToSuppressSnapshot
 }
 
 func (sdh *splitDelayHelper) TickDuration() time.Duration {
@@ -79,9 +79,8 @@ func (sdh *splitDelayHelper) TickDuration() time.Duration {
 }
 
 func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) string {
-	maxDelaySplitToAvoidSnapshotTicks := sdh.MaxTicks()
 	tickDur := sdh.TickDuration()
-	budget := tickDur * time.Duration(maxDelaySplitToAvoidSnapshotTicks)
+	budget := sdh.MaxDelay()
 
 	var slept time.Duration
 	var problems []string
@@ -173,13 +172,13 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 
 		lastProblems = problems
 
-		// The second factor starts out small and reaches ~0.7 approximately at i=maxDelaySplitToAvoidSnapshotTicks.
-		// In effect we loop approximately 2*maxDelaySplitToAvoidSnapshotTicks to exhaust the entire budget we have.
+		// The second factor starts out small and reaches ~0.7 approximately at i=budget/tickDur.
+		// In effect we loop approximately 2*MaxDelay to exhaust the entire budget we have.
 		// By having shorter sleeps at the beginning, we optimize for the common case in which things get fixed up
 		// quickly early on. In particular, splitting in a tight loop will usually always wait on the election of the
 		// previous split's right-hand side, which finishes within a few network latencies (which is typically much
 		// less than a full tick).
-		sleepDur := time.Duration(float64(tickDur) * (1.0 - math.Exp(-float64(i-1)/float64(maxDelaySplitToAvoidSnapshotTicks+1))))
+		sleepDur := time.Duration(float64(tickDur) * (1.0 - math.Exp(-float64(i-1)/float64(budget/tickDur+1))))
 		sdh.Sleep(ctx, sleepDur)
 		slept += sleepDur
 

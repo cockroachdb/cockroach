@@ -552,7 +552,7 @@ type RaftConfig struct {
 	// backup/restore.
 	//
 	// -1 to disable.
-	RaftDelaySplitToSuppressSnapshotTicks int
+	RaftDelaySplitToSuppressSnapshot time.Duration
 }
 
 // SetDefaults initializes unset fields.
@@ -616,17 +616,13 @@ func (cfg *RaftConfig) SetDefaults() {
 		cfg.RaftMaxInflightBytes = other
 	}
 
-	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
-		// The Raft Ticks interval defaults to 200ms, and an election is 10
-		// ticks. Add a generous amount of ticks to make sure even a backed up
-		// Raft snapshot queue is going to make progress when a (not overly
-		// concurrent) amount of splits happens.
-		// The generous amount should result in a delay sufficient to
-		// transmit at least one snapshot with the slow delay, which
-		// with default settings is max 512MB at 32MB/s, ie 16 seconds.
-		//
-		// The resulting delay configured here is 46s.
-		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 200
+	if cfg.RaftDelaySplitToSuppressSnapshot == 0 {
+		// Use a generous delay to make sure even a backed up Raft snapshot queue is
+		// going to make progress when a (not overly concurrent) amount of splits
+		// happens. The generous amount should result in a delay sufficient to
+		// transmit at least one snapshot with the slow delay, which with default
+		// settings is max 512MB at 32MB/s, ie 16 seconds.
+		cfg.RaftDelaySplitToSuppressSnapshot = 45 * time.Second
 	}
 
 	// Minor validation to ensure sane tuning.
