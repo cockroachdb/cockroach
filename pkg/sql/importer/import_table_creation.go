@@ -274,11 +274,6 @@ func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	return errors.WithStack(errRegionOperator)
 }
 
-// OptimizeSystemDatabase is part of the eval.RegionOperator interface.
-func (so *importRegionOperator) OptimizeSystemDatabase(_ context.Context) error {
-	return errors.WithStack(errRegionOperator)
-}
-
 // Implements the eval.SequenceOperators interface.
 type importSequenceOperators struct{}
 
