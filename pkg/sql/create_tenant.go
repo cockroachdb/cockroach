@@ -13,11 +13,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 type createTenantNode struct {
-	tenantSpec tenantSpec
+	tenantSpec     tenantSpec
+	likeTenantSpec tenantSpec
 }
 
 func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (planNode, error) {
@@ -25,13 +28,35 @@ func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (p
 	if err != nil {
 		return nil, err
 	}
+	var likeTenantSpec tenantSpec
+	if n.Like.OtherTenant != nil {
+		likeTenantSpec, err = p.planTenantSpec(ctx, n.Like.OtherTenant, "CREATE TENANT LIKE")
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &createTenantNode{
-		tenantSpec: tspec,
+		tenantSpec:     tspec,
+		likeTenantSpec: likeTenantSpec,
 	}, nil
 }
 
 func (n *createTenantNode) startExec(params runParams) error {
 	tid, tenantName, err := n.tenantSpec.getTenantParameters(params.ctx, params.p)
+	if err != nil {
+		return err
+	}
+
+	var tmplInfo *mtinfopb.TenantInfo
+	if n.likeTenantSpec != nil {
+		tmplInfo, err = n.likeTenantSpec.getTenantInfo(params.ctx, params.p)
+		if err != nil {
+			return errors.Wrap(err, "retrieving record for LIKE configuration template")
+		}
+	}
+	configTemplate, err := GetTenantTemplate(params.ctx,
+		params.p.ExecCfg().Settings, params.p.InternalSQLTxn(),
+		tmplInfo, 0, "")
 	if err != nil {
 		return err
 	}
@@ -44,7 +69,7 @@ func (n *createTenantNode) startExec(params runParams) error {
 		tenantID := tid.ToUint64()
 		ctcfg.ID = &tenantID
 	}
-	_, err = params.p.createTenantInternal(params.ctx, ctcfg)
+	_, err = params.p.createTenantInternal(params.ctx, ctcfg, configTemplate)
 	return err
 }
 

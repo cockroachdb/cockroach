@@ -59,7 +59,10 @@ func (p *planner) CreateTenant(
 			return tid, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 	}
-	return p.createTenantInternal(ctx, ctcfg)
+
+	configTemplate := mtinfopb.TenantInfoWithUsage{}
+
+	return p.createTenantInternal(ctx, ctcfg, &configTemplate)
 }
 
 type createTenantConfig struct {
@@ -69,7 +72,7 @@ type createTenantConfig struct {
 }
 
 func (p *planner) createTenantInternal(
-	ctx context.Context, ctcfg createTenantConfig,
+	ctx context.Context, ctcfg createTenantConfig, configTemplate *mtinfopb.TenantInfoWithUsage,
 ) (tid roachpb.TenantID, err error) {
 	var tenantID uint64
 	if ctcfg.ID != nil {
@@ -100,16 +103,17 @@ func (p *planner) createTenantInternal(
 		return tid, err
 	}
 
-	info := &mtinfopb.TenantInfoWithUsage{
-		SQLInfo: mtinfopb.SQLInfo{
-			ID: tenantID,
-			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to the READY state.
-			DataState:   mtinfopb.DataStateReady,
-			Name:        name,
-			ServiceMode: serviceMode,
-		},
-	}
+	info := configTemplate
+
+	// Override the template fields for a fresh tenant. The other
+	// template fields remain unchanged (i.e. we reuse the template's
+	// configuration).
+	info.ID = tenantID
+	info.Name = name
+	// We synchronously initialize the tenant's keyspace below, so
+	// we can skip the ADD state and go straight to the READY state.
+	info.DataState = mtinfopb.DataStateReady
+	info.ServiceMode = serviceMode
 
 	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.Descriptors())
 	if err != nil {
@@ -330,6 +334,25 @@ func CreateTenantRecord(
 		return roachpb.TenantID{}, errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
 		logcrash.ReportOrPanic(ctx, &settings.SV, "inserting tenant %+v: unexpected number of rows affected: %d", info, num)
+	}
+
+	for _, so := range info.SettingOverrides {
+		var reason interface{}
+		if so.Reason != nil {
+			reason = *so.Reason
+		}
+		if _, err := txn.ExecEx(
+			ctx, "create-tenant-setting-override", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			`INSERT INTO system.tenant_settings (
+          tenant_id, name, value, value_type, reason)
+         VALUES ($1, $2, $3, $4, $5)`,
+			tenID, so.Name, so.Value, so.ValueType, reason); err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
+				return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already has an override for setting %q",
+					tenID, so.Name)
+			}
+			return roachpb.TenantID{}, errors.Wrap(err, "inserting tenant setting overrides")
+		}
 	}
 
 	if u := info.Usage; u != nil {
