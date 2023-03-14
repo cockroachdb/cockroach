@@ -2,6 +2,9 @@
 CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
 CREATE SEQUENCE db.public.sq1;
+INSERT INTO db.public.tbl VALUES(-1);
+INSERT INTO db.public.tbl VALUES(-2);
+INSERT INTO db.public.tbl VALUES(-3);
 
 /* test */
 EXPLAIN (ddl) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42;
