@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -91,8 +92,8 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	errC   chan<- *kvpb.Error
-
+	done   *future.ErrorFuture
+	unreg  func()
 	// Internal.
 	id   int64
 	keys interval.Range
@@ -126,7 +127,8 @@ func newRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream Stream,
-	errC chan<- *kvpb.Error,
+	unregisterFn func(),
+	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:                   span,
@@ -135,7 +137,8 @@ func newRegistration(
 		withDiff:               withDiff,
 		metrics:                metrics,
 		stream:                 stream,
-		errC:                   errC,
+		done:                   done,
+		unreg:                  unregisterFn,
 		buf:                    make(chan *sharedEvent, bufferSz),
 	}
 	r.mu.Locker = &syncutil.Mutex{}
@@ -283,7 +286,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.errC <- pErr
+		r.done.Set(pErr.GoError())
 	}
 }
 
@@ -403,13 +406,15 @@ func (r registration) String() string {
 
 // registry holds a set of registrations and manages their lifecycle.
 type registry struct {
+	metrics *Metrics
 	tree    interval.Tree // *registration items
 	idAlloc int64
 }
 
-func makeRegistry() registry {
+func makeRegistry(metrics *Metrics) registry {
 	return registry{
-		tree: interval.NewTree(interval.ExclusiveOverlapper),
+		metrics: metrics,
+		tree:    interval.NewTree(interval.ExclusiveOverlapper),
 	}
 }
 
@@ -426,6 +431,7 @@ func (reg *registry) NewFilter() *Filter {
 
 // Register adds the provided registration to the registry.
 func (reg *registry) Register(r *registration) {
+	reg.metrics.RangeFeedRegistrations.Inc(1)
 	r.id = reg.nextID()
 	r.keys = r.span.AsRange()
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
@@ -481,6 +487,7 @@ func (reg *registry) PublishToOverlapping(
 // that we rely on a fact that caller is not going to post any more events
 // concurrently or after this function is called.
 func (reg *registry) Unregister(ctx context.Context, r *registration) {
+	reg.metrics.RangeFeedRegistrations.Dec(1)
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		panic(err)
 	}
@@ -496,7 +503,9 @@ func (reg *registry) Disconnect(span roachpb.Span) {
 // DisconnectWithErr disconnects all registrations that overlap the specified
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(span roachpb.Span, pErr *kvpb.Error) {
-	reg.forOverlappingRegs(span, func(_ *registration) (bool, *kvpb.Error) {
+	err := pErr.GoError()
+	reg.forOverlappingRegs(span, func(r *registration) (bool, *kvpb.Error) {
+		r.done.Set(err)
 		return true, pErr
 	})
 }

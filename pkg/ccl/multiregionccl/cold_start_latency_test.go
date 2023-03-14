@@ -47,6 +47,7 @@ import (
 func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 96334)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
 	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
