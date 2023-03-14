@@ -305,7 +305,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
 		func(replicaID roachpb.ReplicaID) bool {
 			return r.mu.lastUpdateTimes.isFollowerActiveSince(
-				ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
+				ctx, replicaID, now, r.store.cfg.RangeLeaseDuration)
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)

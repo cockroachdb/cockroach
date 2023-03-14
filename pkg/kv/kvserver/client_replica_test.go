@@ -3408,10 +3408,8 @@ func TestReplicaTombstone(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				RaftConfig: base.RaftConfig{
 					// Make the tick interval short so we don't need to wait too long for
-					// the partitioned node to time out but increase the lease timeout
-					// so expiration-based leases still work.
-					RaftTickInterval:                        time.Millisecond,
-					RangeLeaseRaftElectionTimeoutMultiplier: 10000,
+					// the partitioned node to time out.
+					RaftTickInterval: time.Millisecond,
 				},
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
@@ -3563,10 +3561,8 @@ func TestReplicaTombstone(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				RaftConfig: base.RaftConfig{
 					// Make the tick interval short so we don't need to wait too long
-					// for a heartbeat to be sent. Increase the election timeout so
-					// expiration based leases still work.
-					RaftTickInterval:                        time.Millisecond,
-					RangeLeaseRaftElectionTimeoutMultiplier: 10000,
+					// for a heartbeat to be sent.
+					RaftTickInterval: time.Millisecond,
 				},
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
@@ -4780,13 +4776,8 @@ func TestTenantID(t *testing.T) {
 	// We also configure the settings to be as robust as possible to problems
 	// during stressrace as the setup of the rpc connections seems to somehow
 	// fail sometimes when using secure connections.
-	raftConfig := base.RaftConfig{
-		// Prevent failures under stressrace.
-		RangeLeaseRaftElectionTimeoutMultiplier: 10000,
-	}
 	stickySpecTestServerArgs := base.TestServerArgs{
-		RaftConfig: raftConfig,
-		Insecure:   true,
+		Insecure: true,
 		StoreSpecs: []base.StoreSpec{
 			{
 				InMemory:               true,
@@ -4827,8 +4818,7 @@ func TestTenantID(t *testing.T) {
 		sawSnapshot := make(chan struct{}, 1)
 		blockSnapshot := make(chan struct{})
 		tc.AddAndStartServer(t, base.TestServerArgs{
-			RaftConfig: raftConfig,
-			Insecure:   true,
+			Insecure: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(

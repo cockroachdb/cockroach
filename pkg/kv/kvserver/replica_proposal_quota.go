@@ -160,7 +160,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// will stall), whereas for quiescing the downside is lower.
 
 		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
-			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseActiveDuration(),
+			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration,
 		) {
 			return
 		}
