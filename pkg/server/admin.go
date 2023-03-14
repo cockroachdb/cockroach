@@ -45,6 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -98,10 +100,6 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.TenantsRangesID,
 	}))
 }
-
-// apiServerMessage is the standard body for all HTTP 500 responses.
-var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "+
-	"has occurred. Please check your CockroachDB logs for more details.")
 
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
@@ -215,15 +213,31 @@ func (s *adminServer) RegisterGateway(
 // serverError logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func serverError(ctx context.Context, err error) error {
-	log.ErrorfDepth(ctx, 1, "%+s", err)
-	return errAdminAPIError
+	log.ErrorfDepth(ctx, 1, "%+v", err)
+
+	// Include the PGCode in the message for easier troubleshooting
+	errCode := pgerror.GetPGCode(err).String()
+	if errCode != pgcode.Uncategorized.String() {
+		errMessage := fmt.Sprintf("%s Error Code: %s", errAPIInternalErrorString, errCode)
+		return status.Errorf(codes.Internal, errMessage)
+	}
+
+	// The error is already grpcstatus formatted error.
+	// Likely calling serverError multiple times on same error.
+	grpcCode := status.Code(err)
+	if grpcCode != codes.Unknown {
+		return err
+	}
+
+	// Fallback to generic message
+	return errAPIInternalError
 }
 
 // serverErrorf logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func serverErrorf(ctx context.Context, format string, args ...interface{}) error {
 	log.ErrorfDepth(ctx, 1, format, args...)
-	return errAdminAPIError
+	return errAPIInternalError
 }
 
 // isNotFoundError returns true if err is a table/database not found error.
@@ -2997,13 +3011,13 @@ func (q *sqlQuery) QueryArguments() []interface{} {
 //
 // For example, suppose we have the following calls:
 //
-//   query.Append("SELECT * FROM foo WHERE a > $ AND a < $ ", arg1, arg2)
-//   query.Append("LIMIT $", limit)
+//	query.Append("SELECT * FROM foo WHERE a > $ AND a < $ ", arg1, arg2)
+//	query.Append("LIMIT $", limit)
 //
 // The query is rewritten into:
 //
-//   SELECT * FROM foo WHERE a > $1 AND a < $2 LIMIT $3
-//   /* $1 = arg1, $2 = arg2, $3 = limit */
+//	SELECT * FROM foo WHERE a > $1 AND a < $2 LIMIT $3
+//	/* $1 = arg1, $2 = arg2, $3 = limit */
 //
 // Note that this method does NOT return any errors. Instead, we queue up
 // errors, which can later be accessed. Returning an error here would make
