@@ -38,7 +38,7 @@ SELECT pg_sleep(5) -- we need to sleep so that the 4.8s elapses and the SELECT *
 # Notices print twice -- once during planning and once during execution.
 # There's no nice way of reducing this to once without some hacks -- so left as is.
 skipif config 3node-tenant-default-configs
-query T noticetrace
+query T noticetrace,nosort
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 ----
 NOTICE: follower reads disabled because you are running a non-CCL distribution
