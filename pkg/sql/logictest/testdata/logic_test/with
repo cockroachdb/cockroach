@@ -326,7 +326,7 @@ EXECUTE z(3)
 statement ok
 PREPARE z2(int) AS WITH foo AS (SELECT * FROM x WHERE a = $1) SELECT * FROM x2 ORDER BY a
 
-query I
+query I nosort
 EXECUTE z2(1)
 ----
 1
@@ -366,7 +366,7 @@ PREPARE z6(int) AS
       (WITH foo AS (SELECT $1 + x) SELECT * FROM foo)
     )
 
-query II
+query II rowsort
 EXECUTE z6(3)
 ----
 1 4
@@ -396,7 +396,7 @@ SELECT sum(n) FROM t
 5050
 
 # Test where initial query has duplicate columns.
-query II
+query II rowsort
 WITH RECURSIVE cte(a, b) AS (
     SELECT 0, 0
   UNION ALL
@@ -411,7 +411,7 @@ WITH RECURSIVE cte(a, b) AS (
 5  50
 
 # Test where recursive query has duplicate columns.
-query II
+query II rowsort
 WITH RECURSIVE cte(a, b) AS (
     SELECT 0, 1
   UNION ALL

@@ -847,7 +847,7 @@ SELECT '{"foo": "bar"}' - s AS a, '{"bar": "foo"}' - s AS b FROM t57165 ORDER BY
 {}              {"bar": "foo"}
 {"foo": "bar"}  {}
 
-query T
+query T nosort
 SELECT j - s FROM t57165
 ----
 {}

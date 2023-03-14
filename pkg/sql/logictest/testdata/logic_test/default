@@ -27,7 +27,7 @@ CREATE TABLE t (
   d DATE DEFAULT now()
 )
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
@@ -39,7 +39,7 @@ d            DATE       true         now()           ·                      {t_
 statement ok
 COMMENT ON COLUMN t.a IS 'a'
 
-query TTBTTTBT colnames
+query TTBTTTBT colnames,rowsort
 SHOW COLUMNS FROM t WITH COMMENT
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden  comment
@@ -122,7 +122,7 @@ UPDATE v SET a = DEFAULT
 statement ok
 UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM v
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden

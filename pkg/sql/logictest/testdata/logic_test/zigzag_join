@@ -280,7 +280,7 @@ SELECT * FROM a@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[1]} WHERE a = 3 AND b = 7
 
 # Some of the test depend on the IDs of the exact indexes. If this
 # test fails, then the tests below may also need to change.
-query TT
+query TT rowsort
 WITH indexes AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes') AS idx
     FROM system.descriptor AS d

@@ -1,11 +1,11 @@
-query TI colnames
+query TI colnames,rowsort
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS x(name, i)
 ----
 name i
 a 1
 b 2
 
-query I colnames
+query I colnames,rowsort
 SELECT ordinality FROM (VALUES ('a'), ('b')) WITH ORDINALITY
 ----
 ordinality
@@ -15,7 +15,7 @@ ordinality
 statement ok
 CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
 
-query TI
+query TI rowsort
 SELECT * FROM foo WITH ORDINALITY
 ----
 a 1
@@ -39,7 +39,7 @@ a 1 b 2
 b 2 a 1
 b 2 b 2
 
-query TI
+query TI rowsort
 SELECT * FROM (SELECT x||x FROM foo) WITH ORDINALITY
 ----
 aa 1
@@ -69,25 +69,25 @@ b 2
 statement ok
 INSERT INTO foo(x) VALUES ('c')
 
-query TI
+query TI rowsort
 SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
 b 2
 c 3
 
-query TI
+query TI rowsort
 SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
 ----
 c 3
 b 2
 
-query TI
+query TI rowsort
 SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
 b 1
 c 2
 
-query B
+query B rowsort
 SELECT ordinality = row_number() OVER () FROM foo WITH ORDINALITY
 ----
 true

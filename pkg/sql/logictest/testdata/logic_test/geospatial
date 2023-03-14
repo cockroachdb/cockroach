@@ -166,7 +166,7 @@ SELECT NULL::geometry, NULL::geography
 ----
 NULL  NULL
 
-query T
+query T nosort
 SELECT ST_AsText(p) FROM (VALUES
   (ST_Point(1, 2)),
   (ST_Point(3, 4))
@@ -175,7 +175,7 @@ SELECT ST_AsText(p) FROM (VALUES
 POINT (1 2)
 POINT (3 4)
 
-query T
+query T nosort
 SELECT ST_AsText(p) FROM (VALUES
   ('POINT(200 200)'::geography),
   ('POLYGON((200 200, 200 200, 200 200, 200 200))'::geography),
@@ -188,7 +188,7 @@ POLYGON ((-160 -20, -160 -20, -160 -20, -160 -20))
 GEOMETRYCOLLECTION (POINT (-160 -20), POLYGON ((-160 -20, -160 -20, -160 -20, -160 -20, -160 -20)))
 MULTIPOLYGON (((-160 -20, -160 -20, -160 -20, -160 -20)), ((-160 -20, -160 -20, -160 -20, -160 -20)))
 
-query T
+query T nosort
 SELECT ST_AsText(p) FROM (VALUES
   ('POINT(200 200)'::geometry),
   ('POLYGON((200 200, 200 200, 200 200, 200 200))'::geometry),
@@ -236,7 +236,7 @@ SELECT
 subtest json_test
 
 # All values here should be true.
-query BB
+query BB nosort
 SELECT
   to_json(g::geometry) = st_asgeojson(g::geometry)::jsonb,
   to_json(g::geography) = st_asgeojson(g::geography)::jsonb
@@ -260,7 +260,7 @@ true  true
 
 subtest cast_test
 
-query T
+query T nosort
 SELECT ST_AsEWKT(geom) FROM (VALUES
   ('SRID=4326;POINT(1.0 2.0)'::geometry::geometry(point, 4326)),
   ('SRID=4326;POINT(1.0 2.0)'::geometry::geometry(geometry, 4326)),
@@ -271,7 +271,7 @@ SRID=4326;POINT (1 2)
 SRID=4326;POINT (1 2)
 SRID=4326;POINT (1 2)
 
-query T
+query T nosort
 SELECT ST_AsEWKT(geog) FROM (VALUES
   ('POINT(1.0 2.0)'::geography::geography(point, 4326)),
   ('POINT(1.0 2.0)'::geometry::geography(point, 4326)),
@@ -332,7 +332,7 @@ CREATE TABLE parse_test (
 )
 
 # These values cannot be inserted into the database due to mismatching SRIDs.
-query TT
+query TT nosort
 SELECT
   ST_AsEWKT(geom),
   ST_AsEWKT(geog)
@@ -354,7 +354,7 @@ SRID=4004;POINT (1 1)  SRID=4004;POINT (1 1)
 SRID=4004;POINT (1 2)  SRID=4004;POINT (1 2)
 SRID=4004;POINT (1 2)  SRID=4004;POINT (1 2)
 
-query T
+query T nosort
 SELECT ST_AsEWKT(g) FROM ( VALUES
   (GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (GeomFromEWKT('SRID=4004;LINESTRING(-1 -1, 2 2)'))
@@ -417,7 +417,7 @@ POINT EMPTY                                         POINT EMPTY  [1 1 0 0 0 0 0 
 <Point><coordinates></coordinates></Point>
 NULL                                                NULL  NULL  NULL  NULL  NULL  NULL
 
-query TTT
+query TTT nosort
 SELECT ST_AsEWKT(g), ST_GeoHash(g), ST_GeoHash(g, 8) FROM ( VALUES
   ('POINT (0 0)'::geometry),
   ('LINESTRING(0 0, 1 0)'::geometry)
@@ -453,7 +453,7 @@ CREATE TABLE parse_test_geojson AS
     geog
   FROM parse_test
 
-query T
+query T nosort
 SELECT
   ST_AsGeoJSON(t.*)
 FROM ( VALUES
@@ -784,7 +784,7 @@ select st_asgeojson(
 ----
 {"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {}, "type": "Feature"}
 
-query TTT
+query TTT nosort
 SELECT ST_AsEWKT(g), ST_GeoHash(g), ST_GeoHash(g, 8) FROM ( VALUES
   ('POINT (0 0)'::geography),
   ('LINESTRING(0 0, 1 0)'::geography)
@@ -846,7 +846,7 @@ FROM parse_test ORDER BY id ASC
 0101000000000000000000F87F000000000000F87F  0101000020E6100000000000000000F87F000000000000F87F  0101000020E6100000000000000000F87F000000000000F87F  0020000001000010E67FF80000000000007FF8000000000000
 NULL                                        NULL                                                NULL                                                NULL
 
-query T
+query T nosort
 SELECT
   ST_AsText(g)
 FROM ( VALUES
@@ -959,7 +959,7 @@ Square (right)                            true   POLYGON ((0 0, 1 0, 1 1, 0 1, 0
 Square overlapping left and right square  true   POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           BOX(-0.1 0,1 1)         POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
 # Validity checking.
-query TBBBTTTT
+query TBBBTTTT nosort
 SELECT
   dsc,
   ST_IsValid(geom),
@@ -1041,7 +1041,7 @@ Square (left)                             false  false  true   true
 Square (right)                            false  false  true   true
 Square overlapping left and right square  false  false  true   true
 
-query BBB
+query BBB nosort
 SELECT
   ST_IsRing(geom),
   ST_IsClosed(geom),
@@ -1279,7 +1279,7 @@ Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
 Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
-query TTT
+query TTT nosort
 SELECT
   ST_AsEWKT(ST_Simplify(g, 10)),
   ST_AsEWKT(ST_Simplify(g, 10, false)),
@@ -3177,7 +3177,7 @@ SELECT ST_NPoints(ST_Buffer('SRID=4326;POINT(0 0)', 10.0))
 33
 
 # DE-9IM relations
-query B
+query B nosort
 SELECT
   ST_RelateMatch(m, pattern)
 FROM ( VALUES
@@ -3438,7 +3438,7 @@ Square (right)                            NULL  POLYGON ((0 0, 1 0, 1 1, 0 1, 0 
 Square overlapping left and right square  NULL  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))  NULL
 
 # Point specific operations
-query RR
+query RR nosort
 SELECT
   st_x(a.geom),
   st_y(a.geom)
@@ -3453,7 +3453,7 @@ FROM (VALUES
 NULL  NULL
 
 # ST_XMin, ST_XMax, ST_YMin, ST_YMax on point geometries
-query RR
+query RR nosort
 SELECT
   st_xmin(a.geom),
   st_ymin(a.geom)
@@ -3467,7 +3467,7 @@ FROM (VALUES
 33    66
 NULL  NULL
 
-query RR
+query RR nosort
 SELECT
   st_xmax(a.geom),
   st_ymax(a.geom)
@@ -3488,7 +3488,7 @@ statement error argument to st_y\(\) must have shape POINT
 SELECT st_y('LINESTRING(0.0 0.0, 1.0 1.0)')
 
 # LineString specific operations
-query TTITTTTT
+query TTITTTTT nosort
 SELECT
   ST_AsEWKT(ST_StartPoint(a.geom)),
   ST_AsEWKT(ST_EndPoint(a.geom)),
@@ -3511,7 +3511,7 @@ SRID=4326;POINT (0 0)  SRID=4326;POINT (2 2)  3     NULL  SRID=4326;POINT (0 0) 
 NULL                   NULL                   NULL  NULL  NULL                   NULL                   NULL                   NULL
 
 # Polygon specific operations
-query IIITTTT
+query IIITTTT nosort
 SELECT
   ST_NRings(a.geom),
   ST_NumInteriorRing(a.geom),
@@ -3535,7 +3535,7 @@ FROM (VALUES
 0  NULL  NULL  NULL                                       NULL  NULL                                                       NULL
 
 # ST_XMin, ST_XMax, ST_YMin, ST_YMax on polygon and linestring geometries
-query RRRR
+query RRRR nosort
 SELECT
   ST_xmin(a.geom),
   ST_xmax(a.geom),
@@ -3682,7 +3682,7 @@ SELECT ST_AsEWKT(ST_Polygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 2
 SRID=4326;POLYGON ((75 29, 77 29, 77 29, 75 29))
 
 # Multi-Geometry related operations.
-query ITTT
+query ITTT nosort
 SELECT
   ST_NumGeometries(a.geom),
   ST_AsEWKT(ST_GeometryN(a.geom, 0)),
@@ -4694,7 +4694,7 @@ Square (right)                            SRID=4326;POLYGON ((-0.00009 0, -0.000
 Square overlapping left and right square  SRID=4326;POLYGON ((-0.10009 0, -0.10009 1, -0.10009 1.00002, -0.10008 1.00003, -0.10007 1.00005, -0.10006 1.00006, -0.10005 1.00008, -0.10003 1.00008, -0.10002 1.00009, -0.1 1.00009, 1 1.00009, 1.00002 1.00009, 1.00003 1.00008, 1.00005 1.00008, 1.00006 1.00006, 1.00007 1.00005, 1.00008 1.00003, 1.00009 1.00002, 1.00009 1, 1.00009 -0, 1.00009 -0.00002, 1.00008 -0.00003, 1.00007 -0.00005, 1.00006 -0.00006, 1.00005 -0.00008, 1.00003 -0.00008, 1.00002 -0.00009, 1 -0.00009, -0.1 -0.00009, -0.10002 -0.00009, -0.10003 -0.00008, -0.10005 -0.00008, -0.10006 -0.00006, -0.10007 -0.00005, -0.10008 -0.00003, -0.10009 -0.00002, -0.10009 0))  SRID=4326;POLYGON ((-0.10009 0, -0.10009 1, -0.10006 1.00006, -0.1 1.00009, 1 1.00009, 1.00006 1.00006, 1.00009 1, 1.00009 -0, 1.00006 -0.00006, 1 -0.00009, -0.1 -0.00009, -0.10006 -0.00006, -0.10009 0))  SRID=4326;POLYGON ((-0.10009 0, -0.10009 1, -0.10008 1.00003, -0.10006 1.00006, -0.10003 1.00008, -0.1 1.00009, 1 1.00009, 1.00003 1.00008, 1.00006 1.00006, 1.00008 1.00003, 1.00009 1, 1.00009 -0, 1.00008 -0.00003, 1.00006 -0.00006, 1.00003 -0.00008, 1 -0.00009, -0.1 -0.00009, -0.10003 -0.00008, -0.10006 -0.00006, -0.10008 -0.00003, -0.10009 0))
 
 # ST_Intersection for geography
-query TT
+query TT nosort
 SELECT
   dsc,
   st_asewkt(st_intersection(a, b), 5)
@@ -5079,7 +5079,7 @@ statement error POINT EMPTY
 SELECT st_azimuth('0101000020E6100000000000000000F87F000000000000F87F':::GEOGRAPHY::GEOGRAPHY, '0101000020E6100000000000000000F03F000000000000F03F':::GEOGRAPHY::GEOGRAPHY)::FLOAT8
 
 # Test for string arguments being cast to GEOMETRY.
-query RTTTR
+query RTTTR nosort
 SELECT
   ST_Area(geom_str),
   ST_AsEWKT(geom_str),
@@ -5095,7 +5095,7 @@ FROM (VALUES
 0  LINESTRING (0 0, 1 1, 2 2)           {"type":"LineString","coordinates":[[0,0],[1,1],[2,2]]}             LINESTRING (0 0, 1 1, 2 2)           2.8284271247461903
 
 # Test for 2+ arguments string arguments which resolve and get cast to GEOMETRY.
-query BBRBB
+query BBRBB nosort
 SELECT
   ST_CoveredBy(a, b),
   ST_Covers(a, b),
@@ -5252,7 +5252,7 @@ GEOMETRYCOLLECTION (MULTILINESTRING ((126 156.25, 126 125), (101 150, 90 161), (
 
 subtest add_point_test
 
-query T
+query T nosort
 SELECT
   ST_AsText(ST_AddPoint(ls::geometry, p::geometry, i))
 FROM ( VALUES
@@ -5281,7 +5281,7 @@ LINESTRING (0 0, 1 1, 2 2, 5 5)
 
 subtest set_point_test
 
-query T
+query T nosort
 SELECT
   ST_AsText(ST_SetPoint(ls::geometry, i, p::geometry))
 FROM ( VALUES
@@ -5299,7 +5299,7 @@ LINESTRING (10 10, 1 1, 2 2, 3 3)
 
 subtest remove_point_test
 
-query T
+query T nosort
 SELECT
   ST_AsText(ST_RemovePoint(ls::geometry, i))
 FROM ( VALUES
@@ -5315,7 +5315,7 @@ LINESTRING (0 0, 2 2, 3 3)
 
 subtest remove_repeated_points_test
 
-query T
+query T nosort
 SELECT
   ST_AsText(ST_RemoveRepeatedPoints(ls::geometry, i::float))
 FROM ( VALUES
@@ -5355,7 +5355,7 @@ POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 
 
 subtest linefrommultipoint_test
 
-query T
+query T nosort
 SELECT
   ST_AsText(ST_LineFromMultiPoint(mp::geometry))
 FROM ( VALUES
@@ -5369,7 +5369,7 @@ LINESTRING (1 1, 2 2, 3 3)
 
 subtest linemerge
 
-query T
+query T nosort
 SELECT
   ST_AsText(ST_LineMerge(g::geometry))
 FROM ( VALUES
@@ -5524,7 +5524,7 @@ POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0 -0.1, 0 1, 1 
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((0 -1, 0 0, 1 0, 1 -1, 0 -1))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
 
-query TTT round-in-strings
+query TTT round-in-strings,nosort
 SELECT
   ST_AsEWKT(geom::geometry),
   ST_AsEWKT(ST_S2Covering(geom::geometry)),
@@ -5545,7 +5545,7 @@ SRID=3854;LINESTRING (56000 9000, 58000 9323)          SRID=3854;MULTIPOLYGON ((
 SRID=3857;LINESTRING (-30000 -40000, 15 15)            SRID=3857;MULTIPOLYGON (((-40724.5 -40724.5, 0 -40724.5, 0 -3.72529e-09, -40724.5 -3.72529e-09, -40724.5 -40724.5)), ((0 -3.72529e-09, 19.885 -3.72529e-09, 19.885 19.885, 0 19.885, 0 -3.72529e-09)), ((0 -4.97125, 4.97125 -4.97125, 4.97125 -3.72529e-09, 0 -3.72529e-09, 0 -4.97125)), ((0 -5.01009, 0.0388379 -5.01009, 0.0388379 -4.97125, 0 -4.97125, 0 -5.01009)))                                                                                                                                                                 SRID=3857;MULTIPOLYGON (((-2.08509e+07 -2.08509e+07, 2.08509e+07 -2.08509e+07, 2.08509e+07 2.08509e+07, -2.08509e+07 2.08509e+07, -2.08509e+07 -2.08509e+07)))
 SRID=3857;LINESTRING (-3004343200 -4002312300, 15 15)  SRID=3857;MULTIPOLYGON (((-2.08509e+07 -2.08509e+07, 0 -2.08509e+07, 0 -3.72529e-09, -2.08509e+07 -3.72529e-09, -2.08509e+07 -2.08509e+07)), ((0 -3.72529e-09, 19.885 -3.72529e-09, 19.885 19.885, 0 19.885, 0 -3.72529e-09)), ((0 -4.97125, 4.97125 -4.97125, 4.97125 -3.72529e-09, 0 -3.72529e-09, 0 -4.97125)), ((0 -7.45687, 2.48562 -7.45687, 2.48562 -4.97125, 0 -4.97125, 0 -7.45687)), ((-2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07)))  SRID=3857;MULTIPOLYGON (((-2.08509e+07 -2.08509e+07, 2.08509e+07 -2.08509e+07, 2.08509e+07 2.08509e+07, -2.08509e+07 2.08509e+07, -2.08509e+07 -2.08509e+07)), ((-2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07, -2.08509e+07 -2.08509e+07)))
 
-query TTT round-in-strings
+query TTT round-in-strings,nosort
 SELECT
   ST_AsEWKT(geog::geography),
   ST_AsEWKT(ST_S2Covering(geog::geography)),
@@ -5564,7 +5564,7 @@ SRID=4004;LINESTRING (-180 -90, 180 90)  SRID=4004;MULTIPOLYGON (((45 35.2644, 1
 
 subtest st_memsize
 
-query I
+query I nosort
 SELECT ST_MemSize(g) FROM ( VALUES
    (ST_GeomFromText('POINT EMPTY')),
    (ST_GeomFromText('POINT (0 0)')),
@@ -5585,7 +5585,7 @@ SELECT ST_MemSize(g) FROM ( VALUES
 
 subtest st_pointinsidecircle
 
-query B
+query B nosort
 SELECT ST_PointInsideCircle(point, x, y, radius) FROM ( VALUES
    ((ST_Point(1,2)),    (0.5::float), (2.0::float), (3.0::float)),
    ((ST_Point(0,0)),    (3.0::float), (3.0::float), (2.0::float)),
@@ -5618,7 +5618,7 @@ SELECT ST_PointInsideCircle(ST_GeomFromText('LINESTRING (-0.5 0.5, 0.5 0.5)'), 0
 
 subtest st_linelocatepoint
 
-query R
+query R nosort
 SELECT round(ST_LineLocatePoint(line, point)::float, 2) FROM ( VALUES
   ((ST_GeomFromText('LINESTRING (0 2, 2 0)')), (ST_Point(0, 0))),
   ((ST_GeomFromText('LINESTRING (0 0, 0 2)')), (ST_Point(1, 1))),
@@ -5776,7 +5776,7 @@ MULTILINESTRING ((0 0, 1 1), (1 1, 2.5 2.5), (1 3, 2.5 2.5), (2.5 2.5, 4 4), (4 
 statement error geometry type is unsupported. Please pass a LineString or a MultiLineString
 SELECT ST_AsText(ST_Node(ST_GeomFromText('POLYGON((1 1, 1 3, 3 3, 3 1, 1 1))')));
 
-query T
+query T nosort
 SELECT
 ST_AsEWKT(
   ST_SubDivide('SRID=4326;POLYGON((132 10,119 23,85 35,68 29,66 28,49 42,32 56,22 64,32 110,40 119,36 150,
@@ -5795,7 +5795,7 @@ SELECT ST_AsText(ST_Subdivide('POLYGON((-1 -1,-1 -0.5, -1 0, 1 0.5, 1 -1,-1 -1))
 ----
 POLYGON ((-1 -1, -1 -0.5, -1 0, 1 0.5, 1 -1, -1 -1))
 
-query T
+query T nosort
 SELECT ST_AsText(ST_Subdivide('SRID=4269;LINESTRING(0 0, 10 15, 0 0, 10 15, 10 0, 10 15)'::geometry, 5))
 ----
 LINESTRING (0 0, 5 7.5)
@@ -5829,7 +5829,7 @@ SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0, 1 1, 1 1, 0 0))'::geometry, 4,
 statement error pq: st_generatepoints\(\): seed must be greater than zero
 SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0,2 5,2.5 4,3 5,3 1,0 0))'::geometry, 5, 0))
 
-query T
+query T nosort
 SELECT t AS should_be_null FROM ( VALUES
   (ST_GeneratePoints('POLYGON ((0 0, 1 0, 1 1, 0 0))', -1)),
   (ST_GeneratePoints('POLYGON ((0 0, 1 0, 1 1, 0 0))', -2, 3)),
@@ -5859,7 +5859,7 @@ select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0,1
 statement error pq: st_linesubstring\(\): end must be greater or equal to the start
 select st_astext(st_linesubstring('POINT(0 0)'::geometry,0.5,0.4));
 
-query T
+query T nosort
 select st_astext(st_linesubstring(g,star,"end")::geometry, 1)from (VALUES
        ('LINESTRING(0 0, 0 5, 4 5, 4 2)'::geometry, 0.0, 0.3),
        ('LINESTRING(-25 -50, 100 125, 150 190, 40 60)'::geometry, 0.8, 0.9),
@@ -5878,7 +5878,7 @@ POINT (22 102)
 POINT (0 0)
 NULL
 
-query T
+query T nosort
 SELECT ST_AsEWKT(ST_ShiftLongitude(geom)) FROM ( VALUES
   ('POINT(0 0)'::geometry),
   ('POINT(-1 90)'::geometry),
@@ -5893,7 +5893,7 @@ POINT (-179 -23)
 LINESTRING (2 2, 5 -60, -160 0)
 POLYGON ((354 -10, 6 -10, 0 20, 354 -10), (3 2, 359 -1, 1 -5, 3 2))
 
-query T
+query T nosort
 SELECT ST_AsEWKT(ST_ShiftLongitude(geom)) FROM ( VALUES
   ('SRID=4326;POINT(0 0)'::geometry),
   ('SRID=4326;POINT(-1 90)'::geometry),
@@ -5930,7 +5930,7 @@ SELECT
 ----
 NULL  NULL  NULL
 
-query II
+query II nosort
 SELECT ST_LineCrossingDirection(line1, line2), ST_LineCrossingDirection(line2, line1) FROM ( VALUES
     ((ST_GeomFromText('LINESTRING(0 -20, 0 20)')), (ST_GeomFromText('LINESTRING(5 5, 5 10)'))),
     ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING(171 154,20 140,71 74,161 53)'))),
@@ -5946,7 +5946,7 @@ SELECT ST_LineCrossingDirection(line1, line2), ST_LineCrossingDirection(line2, l
 -2  2
 
 # NaN coordinates do not work with PIP.
-query BBB
+query BBB nosort
 SELECT ST_Intersects(point, polygon), ST_Within(point, polygon), ST_Contains(polygon, point)
 FROM ( VALUES
   (ST_MakePoint('NaN', 1), 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry),
@@ -5970,7 +5970,7 @@ POLYGON ((30.010000000000002 50.009999999999998, 30.010000000000002 52.009999999
 subtest st_bdpolyfromtext
 
 query TTT
-SELECT 
+SELECT
   ST_AsText(ST_BdPolyFromText('MULTILINESTRING((0 0, 10 0, 10 10, 0 10, 0 0),(1 1, 1 2, 2 2, 2 1, 1 1))', 4326)),
   ST_AsText(ST_BdPolyFromText('MULTILINESTRING((0 0, 1 0, 1 1, 0 1, 0 0))', 4326)),
   ST_AsEWKT(ST_BdPolyFromText('MULTILINESTRING((0 0, 1 0, 1 1, 0 1, 0 0))', 4326))

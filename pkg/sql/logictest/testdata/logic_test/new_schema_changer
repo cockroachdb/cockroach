@@ -874,7 +874,7 @@ CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
 statement ok
 CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,nosort
 SHOW INDEXES FROM tIndex
 ----
 table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
@@ -901,7 +901,7 @@ INSERT INTO tIndex VALUES (20000,10000)
 #statement error pgcode 23505 violates unique constraint "bar"
 #CREATE UNIQUE INDEX bar ON tIndex (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,nosort
 SHOW INDEXES FROM tIndex
 ----
 table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
@@ -939,7 +939,7 @@ CREATE INDEX b_desc ON tIndx (b DESC)
 statement ok
 CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM tIndx
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -977,7 +977,7 @@ CREATE INDEX foo ON privs (b)
 
 user root
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -992,7 +992,7 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1475,7 +1475,7 @@ statement ok
 CREATE SCHEMA sc
 
 skipif config local-mixed-22.2-23.1
-query TT
+query TT rowsort
 SHOW SCHEMAS
 ----
 crdb_internal       NULL
@@ -1490,7 +1490,7 @@ statement ok
 DROP SCHEMA sc
 
 skipif config local-mixed-22.2-23.1
-query TT
+query TT rowsort
 SHOW SCHEMAS
 ----
 crdb_internal       NULL

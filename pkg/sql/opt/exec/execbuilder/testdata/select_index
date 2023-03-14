@@ -753,7 +753,7 @@ vectorized: true
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
 # and span generation. #13882
-query TTBITTTBBBF
+query TTBITTTBBBF rowsort
 CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
 ----
 abz  abz_c_b_key  false  1  c  c  DESC  false  false  true  1

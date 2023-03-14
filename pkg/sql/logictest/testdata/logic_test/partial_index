@@ -250,7 +250,7 @@ CREATE TABLE t11 (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
 statement ok
 CREATE UNIQUE INDEX t11_b_key ON t11 (b) WHERE a > 0
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t11
 ----
 table_name  constraint_name  constraint_type  details                       validated
