@@ -1394,7 +1394,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				//    7, the rejection points it at the end of the follower's log
 				//    which is at a higher log term than the actually committed
 				//    log.
-				nextProbeIdx = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+				nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
 			}
 			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
@@ -1652,24 +1652,27 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
-
 	r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
 		r.id, r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
 
-	// Return a hint to the leader about the maximum index and term that the two
-	// logs could be divergent at. Do this by searching through the follower's log
-	// for the maximum (index, term) pair with a term <= the MsgApp's LogTerm and
-	// an index <= the MsgApp's Index. This can help skip all indexes in the
-	// follower's uncommitted tail with terms greater than the MsgApp's LogTerm.
+	// Our log does not match the leader's at index m.Index. Return a hint to the
+	// leader - a guess on the maximal (index, term) at which the logs match. Do
+	// this by searching through the follower's log for the maximum (index, term)
+	// pair with a term <= the MsgApp's LogTerm and an index <= the MsgApp's
+	// Index. This can help skip all indexes in the follower's uncommitted tail
+	// with terms greater than the MsgApp's LogTerm.
 	//
 	// See the other caller for findConflictByTerm (in stepLeader) for a much more
 	// detailed explanation of this mechanism.
+
+	// NB: m.Index >= raftLog.committed by now (see the early return above), and
+	// raftLog.lastIndex() >= raftLog.committed by invariant, so min of the two is
+	// also >= raftLog.committed. Hence, the findConflictByTerm argument is within
+	// the valid interval, which then will return a valid (index, term) pair with
+	// a non-zero term (unless the log is empty). However, it is safe to send a zero
+	// LogTerm in this response in any case, so we don't verify it here.
 	hintIndex := min(m.Index, r.raftLog.lastIndex())
-	hintIndex = r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
-	hintTerm, err := r.raftLog.term(hintIndex)
-	if err != nil {
-		panic(fmt.Sprintf("term(%d) must be valid, but got %v", hintIndex, err))
-	}
+	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
 	r.send(pb.Message{
 		To:         m.From,
 		Type:       pb.MsgAppResp,
