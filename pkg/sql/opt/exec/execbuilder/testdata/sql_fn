@@ -212,6 +212,7 @@ SELECT
   AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2),
   AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
 FROM other_table
+ORDER BY k
 ----
 1  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
 2  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
@@ -234,7 +235,7 @@ CREATE TABLE public.my_spatial_table (
 )
 
 # In a WHERE clause.
-query I
+query I rowsort
 SELECT * FROM other_table WHERE AddGeometryColumn ('my_spatial_table','geom9',4326,'GEOMETRY',2) IS NOT NULL
 ----
 1

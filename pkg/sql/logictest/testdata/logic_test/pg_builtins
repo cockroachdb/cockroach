@@ -649,7 +649,7 @@ SELECT * FROM pg_options_to_table(array[]::text[]);
 ----
 option_name  option_value
 
-query TT colnames
+query TT colnames,nosort
 SELECT * FROM pg_options_to_table(array['a', 'b=c', '=d', 'e=f=g']::text[]);
 ----
 option_name  option_value
@@ -663,7 +663,7 @@ SELECT * FROM pg_options_to_table(null)
 ----
 option_name  option_value
 
-query TT colnames
+query TT colnames,nosort
 SELECT * FROM pg_options_to_table('{a, b=c, =d, e=f=g}')
 ----
 option_name  option_value

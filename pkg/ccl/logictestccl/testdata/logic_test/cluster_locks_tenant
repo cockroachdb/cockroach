@@ -74,8 +74,9 @@ user_name   query             phase
 testuser    SELECT * FROM t   executing
 
 # looking at each transaction separately, validate the expected results in the lock table
-query TTTTTTBB colnames,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
+query TTTTTTBB colnames,rowsort,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended
+FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
@@ -87,7 +88,8 @@ test          public      t           /Table/106/1/"s"/0  Exclusive       Replic
 test          public      t           /Table/106/1/"t"/0  Exclusive       Replicated    true    false
 
 query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn2'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended
+FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn2'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
@@ -95,8 +97,9 @@ test          public      t           /Table/106/1/"b"/0  None            Replic
 # check that we can't see keys, potentially revealing PII, with VIEWACTIVITYREDACTED
 user testuser2
 
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
+query TTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended
+FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           ·                   Exclusive       Replicated    true    true

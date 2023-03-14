@@ -9,14 +9,14 @@ SELECT 1 + 2
 ----
 3
 
-query III colnames
+query III colnames,nosort
 VALUES (1, 2, 3), (4, 5, 6)
 ----
 column1 column2 column3
 1       2       3
 4       5       6
 
-query I
+query I nosort
 VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
 1
@@ -24,7 +24,7 @@ VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 3
 4
 
-query I
+query I nosort
 SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
 3
@@ -45,7 +45,7 @@ query error pgcode 42703 column "z" does not exist
 VALUES (1), (1), (2), (3) ORDER BY z
 
 # subqueries can be evaluated in VALUES
-query I
+query I nosort
 VALUES ((SELECT 1)), ((SELECT 2))
 ----
 1

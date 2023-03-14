@@ -74,7 +74,7 @@ CREATE TABLE t1(
 let $tbl_id
 SELECT id FROM system.namespace WHERE name = 't1';
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -112,7 +112,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -147,7 +147,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT NULL;
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -169,7 +169,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT NULL;
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -185,7 +185,7 @@ NULL
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -207,7 +207,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 DROP COLUMN c;
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -222,7 +222,7 @@ NULL
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -384,7 +384,7 @@ SELECT id FROM system.namespace WHERE name = 't1';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (119,1,,)
@@ -426,7 +426,7 @@ SELECT id FROM system.namespace WHERE name = 't1';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
-query T
+query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
 (120,1,,)

@@ -36,7 +36,7 @@ admin      root       true  2  1
 statement ok
 GRANT testuser1 TO testuser2
 
-query TTBTT
+query TTBTT rowsort
 SELECT * FROM system.role_members
 ----
 admin      root       true  2    1
@@ -58,7 +58,7 @@ GRANT testuser1 TO testuser3
 
 user root nodeidx=0
 
-query TTBTT
+query TTBTT rowsort
 SELECT * FROM system.role_members
 ----
 admin      root       true  2   1
@@ -68,7 +68,7 @@ testuser1  testuser3  false 101 103
 statement ok
 GRANT testuser2 TO testuser3
 
-query TTBTT
+query TTBTT rowsort
 SELECT * FROM system.role_members
 ----
 admin      root       true  2   1

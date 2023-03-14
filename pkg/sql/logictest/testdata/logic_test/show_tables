@@ -43,7 +43,7 @@ CREATE SCHEMA sc;
 CREATE TABLE sc.foo (i INT8);
 CREATE TABLE foo (i INT8);
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  foo  table  root  0  NULL

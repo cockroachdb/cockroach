@@ -2308,7 +2308,7 @@ RESET distsql_workmem
 
 # Regression test for incorrect planning in the vectorized engine for
 # concatenating a string with a string array (#85295).
-query T
+query T nosort
 SELECT ('foo'::STRING || col::STRING[])::STRING[] FROM (VALUES (ARRAY['bar':::STRING]), (ARRAY['baz':::STRING])) AS t (col);
 ----
 {foo,bar}

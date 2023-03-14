@@ -123,7 +123,7 @@ ALTER DATABASE db2 CONFIGURE ZONE USING gc.ttlseconds = 90001;
 
 # Both the dropped and the new table should eventually have span configurations
 # and they should both inherit from the database's GC TTL setting.
-query T retry
+query T retry,rowsort
 SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])

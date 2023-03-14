@@ -592,7 +592,7 @@ NULL
 ## has_schema_privilege
 
 query BB
-SELECT has_schema_privilege(12345, 'CREATE'), 
+SELECT has_schema_privilege(12345, 'CREATE'),
        has_schema_privilege(12345, 'USAGE')
 ----
 NULL  NULL
@@ -1267,7 +1267,7 @@ DROP TABLE IF EXISTS hcp_test; CREATE TABLE hcp_test (a INT8, b INT8, c INT8)
 statement ok
 ALTER TABLE hcp_test DROP COLUMN b
 
-query TI
+query TI rowsort
 SELECT attname, attnum FROM pg_attribute WHERE attrelid = 'hcp_test'::REGCLASS
 ----
 a     1

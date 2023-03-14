@@ -53,7 +53,7 @@ PREPARE right_no_cols AS OPT PLAN '
   (NoOrdering)
 )'
 
-query IT
+query IT nosort
 EXECUTE right_no_cols
 ----
 2  two
@@ -206,7 +206,7 @@ EXECUTE f
 
 # Another test of subqueries within an apply join.
 
-query I
+query I rowsort
 SELECT
 	(SELECT * FROM (VALUES ((SELECT x FROM (VALUES (1)) AS s (x)) + y)))
 FROM
@@ -404,7 +404,7 @@ WHERE t1.b IN (
 
 # Regression tests for not handling the subqueries in the "inner" plans
 # correctly (#39433).
-query I
+query I rowsort
 SELECT
   (
     SELECT

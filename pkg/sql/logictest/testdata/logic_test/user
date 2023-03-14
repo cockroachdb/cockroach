@@ -5,7 +5,7 @@ SHOW is_superuser
 ----
 on
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -16,7 +16,7 @@ testuser  ·        {}
 statement ok
 CREATE USER user1
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -88,7 +88,7 @@ statement error user "blix" does not exist
 PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -175,7 +175,7 @@ CREATE USER user5 NOLOGIN
 
 user root
 
-query TTTO
+query TTTO rowsort
 SELECT * FROM system.role_options
 ----
 testuser  CREATEROLE  NULL  100

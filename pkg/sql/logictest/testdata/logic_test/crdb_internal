@@ -11,7 +11,7 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  active_range_feeds                      table  admin  NULL  NULL
@@ -162,7 +162,7 @@ FROM crdb_internal.tables WHERE NAME = 'descriptor'
 table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
 3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
 
-query TB colnames
+query TB colnames,rowsort
 SELECT * FROM crdb_internal.pg_catalog_table_is_implemented
 ----
 name                             implemented
@@ -301,7 +301,7 @@ pg_views                         false
 statement ok
 CREATE TABLE testdb." ""\'" (i int)
 
-query T
+query T rowsort
 SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
@@ -630,7 +630,7 @@ select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$
 ----
 1000023.1
 
-query ITTT colnames
+query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
@@ -853,7 +853,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames
+query TT colnames,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -887,7 +887,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,retry
+query TT colnames,retry,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -915,7 +915,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,retry
+query TT colnames,retry,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -931,7 +931,7 @@ DROP INDEX foo@idx
 
 # Verify only the start keys of the manually split ranges because the merge queue could merge the
 # ranges [/Table/58/1/3, /Table/58/2/1) with its right neighbors.
-query T colnames,retry
+query T colnames,retry,rowsort
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty
@@ -1015,7 +1015,7 @@ CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 
 query ITTITTT
-SELECT * FROM crdb_internal.create_type_statements
+SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
 ----
 104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 104  test  public  118  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
@@ -1053,7 +1053,7 @@ statement ok
 SELECT * FROM t_53504
 
 query ITTTI colnames
-SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
+SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
 ----
 node_id  application_name     key                   statement_ids                                                  count
 1        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
@@ -1068,7 +1068,7 @@ subtest cluster_database_privileges
 statement ok
 CREATE DATABASE other_db; SET DATABASE = other_db
 
-query TTTT colnames
+query TTTT colnames,rowsort
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee  privilege_type  is_grantable
@@ -1080,7 +1080,7 @@ statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser;
 GRANT DROP ON DATABASE other_db TO testuser
 
-query TTTT colnames
+query TTTT colnames,rowsort
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -1109,7 +1109,7 @@ SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 29, 'badobj', 502, true);
 SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 404, 'badobj', 503, true);
 
 query ITTTT colnames
-SELECT * FROM "".crdb_internal.invalid_objects
+SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id
 ----
 id   database_name  schema_name  obj_name  error
 500  baddb          ·            ·         referenced descriptor not found
