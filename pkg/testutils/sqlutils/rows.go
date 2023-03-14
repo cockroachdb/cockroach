@@ -16,12 +16,20 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 )
 
 // RowsToDataDrivenOutput converts a gosql.Rows object into an appropriate
 // string for usage in data driven tests.
 func RowsToDataDrivenOutput(rows *gosql.Rows) (string, error) {
+	// We want all columns.
+	return RowsToDataDrivenOutputWithColumns(rows)
+}
+
+// RowsToDataDrivenOutputWithColumns only renders the selection of
+// column names. If the selection is empty, all columns are rendered.
+func RowsToDataDrivenOutputWithColumns(rows *gosql.Rows, colSelection ...string) (string, error) {
 	// Find out how many output columns there are.
 	cols, err := rows.Columns()
 	if err != nil {
@@ -32,7 +40,28 @@ func RowsToDataDrivenOutput(rows *gosql.Rows) (string, error) {
 	for i := range elemsI {
 		elemsI[i] = new(interface{})
 	}
-	elems := make([]string, len(cols))
+
+	// Select which columns to use.
+	var selection []int
+	for _, desiredName := range colSelection {
+		found := false
+		for colIdx, colName := range cols {
+			if colName == desiredName {
+				found = true
+				selection = append(selection, colIdx)
+				break
+			}
+		}
+		if !found {
+			return "", errors.Newf("selected column %q not found in result", desiredName)
+		}
+	}
+	if len(colSelection) == 0 {
+		for colIdx := range cols {
+			selection = append(selection, colIdx)
+		}
+	}
+	elems := make([]string, len(selection))
 
 	// Build string output of the row data.
 	var output strings.Builder
@@ -40,7 +69,9 @@ func RowsToDataDrivenOutput(rows *gosql.Rows) (string, error) {
 		if err := rows.Scan(elemsI...); err != nil {
 			return "", err
 		}
-		for i, elem := range elemsI {
+		for selIdx, colIdx := range selection {
+			elems[selIdx] = ""
+			elem := elemsI[colIdx]
 			val := *(elem.(*interface{}))
 			switch t := val.(type) {
 			case []byte:
@@ -51,10 +82,10 @@ func RowsToDataDrivenOutput(rows *gosql.Rows) (string, error) {
 				// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
 				// while printing valid strings naturally.
 				if str := string(t); utf8.ValidString(str) {
-					elems[i] = str
+					elems[selIdx] = str
 				}
 			default:
-				elems[i] = fmt.Sprintf("%v", val)
+				elems[selIdx] = fmt.Sprintf("%v", val)
 			}
 		}
 		output.WriteString(strings.Join(elems, " "))

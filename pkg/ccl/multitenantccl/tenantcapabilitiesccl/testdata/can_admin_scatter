@@ -1,79 +1,112 @@
-query-sql-system
-SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_id = 'can_admin_scatter'
+create-tenant name=with-cap
 ----
-10 tenant-10 ready none can_admin_scatter true
+ok
 
-exec-sql-tenant
+create-tenant name=without-cap
+----
+ok
+
+# List default value of the unsplit capability.
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_scatter'
+----
+-- system
+1 system ready shared can_admin_scatter true
+10 with-cap ready none can_admin_scatter true
+11 without-cap ready none can_admin_scatter true
+
+update-capabilities
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_scatter;
+ALTER TENANT 'without-cap' REVOKE CAPABILITY can_admin_scatter;
+----
+ok
+
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_scatter'
+----
+-- system
+1 system ready shared can_admin_scatter true
+10 with-cap ready none can_admin_scatter true
+11 without-cap ready none can_admin_scatter false
+
+sql statement
 CREATE TABLE t(a INT)
 ----
+-- system
+ok
+-- with-cap
+ok
+-- without-cap
 ok
 
-exec-sql-tenant
+sql statement
 CREATE INDEX idx on t(a)
 ----
+-- system
+ok
+-- with-cap
+ok
+-- without-cap
 ok
 
-# By default, we should be able to scatter.
-exec-privileged-op-tenant
+sql statement
 ALTER TABLE t SCATTER
 ----
+-- system
 ok
+-- with-cap
+ok
+-- without-cap
+ERROR: pq: ba: AdminScatter [/Tenant/11/Table/104/1,/Tenant/11/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
-# ditto for the index.
-exec-privileged-op-tenant
+sql statement
 ALTER INDEX t@idx SCATTER
 ----
+-- system
 ok
+-- with-cap
+ok
+-- without-cap
+ERROR: pq: ba: AdminScatter [/Tenant/11/Table/104/2,/Tenant/11/Table/104/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
 
 update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_scatter=false
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_scatter=false
 ----
 ok
 
-exec-privileged-op-tenant
+sql statement
 ALTER TABLE t SCATTER
 ----
-pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+-- system
+ok
+-- with-cap
+ERROR: pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+-- without-cap
+ERROR: pq: ba: AdminScatter [/Tenant/11/Table/104/1,/Tenant/11/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
-# Check the index as well.
-exec-privileged-op-tenant
+sql statement
 ALTER INDEX t@idx SCATTER
 ----
-pq: ba: AdminScatter [/Tenant/10/Table/104/2,/Tenant/10/Table/104/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+-- system
+ok
+-- with-cap
+ERROR: pq: ba: AdminScatter [/Tenant/10/Table/104/2,/Tenant/10/Table/104/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+-- without-cap
+ERROR: pq: ba: AdminScatter [/Tenant/11/Table/104/2,/Tenant/11/Table/104/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
-# Grant the capability without providing an explicit value.
+# Grant the capability with explicit syntax.
 update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_scatter
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_scatter = true
 ----
 ok
 
-# Scatters should work now.
-exec-privileged-op-tenant
+sql statement
 ALTER TABLE t SCATTER
 ----
+-- system
 ok
-
-# Revoke the capability using REVOKE syntax.
-update-capabilities
-ALTER TENANT [10] REVOKE CAPABILITY can_admin_scatter
-----
+-- with-cap
 ok
-
-# Scatters should no longer work.
-exec-privileged-op-tenant
-ALTER TABLE t SCATTER
-----
-pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
-
-# Lastly, use the explicitly set to true syntax.
-update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_scatter=true
-----
-ok
-
-# Scatters should now work.
-exec-privileged-op-tenant
-ALTER TABLE t SCATTER
-----
-ok
+-- without-cap
+ERROR: pq: ba: AdminScatter [/Tenant/11/Table/104/1,/Tenant/11/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)

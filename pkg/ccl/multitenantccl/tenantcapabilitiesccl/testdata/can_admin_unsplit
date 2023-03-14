@@ -1,34 +1,117 @@
-query-sql-system
-SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_id = 'can_admin_unsplit'
+create-tenant name=with-cap
 ----
-10 tenant-10 ready none can_admin_unsplit false
+ok
 
-exec-sql-tenant
+create-tenant name=without-cap
+----
+ok
+
+# List default value of the unsplit capability.
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_unsplit'
+----
+-- system
+1 system ready shared can_admin_unsplit false
+10 with-cap ready none can_admin_unsplit false
+11 without-cap ready none can_admin_unsplit false
+
+subtest prepare_table
+
+# Prepare a table with a couple of split points.
+sql statement
 CREATE TABLE t(a INT)
 ----
+-- system
 ok
-
-exec-privileged-op-tenant
-ALTER TABLE t UNSPLIT AT VALUES (0)
-----
-pq: could not UNSPLIT AT (0): ba: AdminUnsplit [/Tenant/10/Table/104/1/0,/Min) RPC error: grpc: client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest) [code 16/Unauthenticated]
+-- with-cap
+ok
+-- without-cap
+ok
 
 update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_unsplit=true
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_split;
+ALTER TENANT 'without-cap' GRANT CAPABILITY can_admin_split;
 ----
 ok
 
-exec-privileged-op-tenant
-ALTER TABLE t UNSPLIT AT VALUES (0)
+sql
+ALTER TABLE t SPLIT AT VALUES (0), (1), (2), (3)
 ----
-pq: could not UNSPLIT AT (0): key /Tenant/10/Table/104/1/0 is not the start of a range
+-- system
+ /0 2262-04-11 23:47:16.854776 +0000 +0000
+ /1 2262-04-11 23:47:16.854776 +0000 +0000
+ /2 2262-04-11 23:47:16.854776 +0000 +0000
+ /3 2262-04-11 23:47:16.854776 +0000 +0000
+-- with-cap
+ /104/1/0 2262-04-11 23:47:16.854776 +0000 +0000
+ /104/1/1 2262-04-11 23:47:16.854776 +0000 +0000
+ /104/1/2 2262-04-11 23:47:16.854776 +0000 +0000
+ /104/1/3 2262-04-11 23:47:16.854776 +0000 +0000
+-- without-cap
+ /104/1/0 2262-04-11 23:47:16.854776 +0000 +0000
+ /104/1/1 2262-04-11 23:47:16.854776 +0000 +0000
+ /104/1/2 2262-04-11 23:47:16.854776 +0000 +0000
+ /104/1/3 2262-04-11 23:47:16.854776 +0000 +0000
 
 update-capabilities
-ALTER TENANT [10] REVOKE CAPABILITY can_admin_unsplit
+ALTER TENANT 'with-cap' REVOKE CAPABILITY can_admin_split;
+ALTER TENANT 'without-cap' REVOKE CAPABILITY can_admin_split;
 ----
 ok
 
-exec-privileged-op-tenant
+subtest end
+
+update-capabilities
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_unsplit;
+ALTER TENANT 'without-cap' REVOKE CAPABILITY can_admin_unsplit;
+----
+ok
+
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_unsplit'
+----
+-- system
+1 system ready shared can_admin_unsplit false
+10 with-cap ready none can_admin_unsplit true
+11 without-cap ready none can_admin_unsplit false
+
+
+sql
 ALTER TABLE t UNSPLIT AT VALUES (0)
 ----
-pq: could not UNSPLIT AT (0): ba: AdminUnsplit [/Tenant/10/Table/104/1/0,/Min) RPC error: grpc: client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest) [code 16/Unauthenticated]
+-- system
+ /Table/104/1/0
+-- with-cap
+ /Tenant/10/Table/104/1/0
+-- without-cap
+ERROR: pq: could not UNSPLIT AT (0): ba: AdminUnsplit [/Tenant/11/Table/104/1/0,/Min) RPC error: grpc: client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest) [code 16/Unauthenticated]
+
+update-capabilities
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_unsplit=false
+----
+ok
+
+sql
+ALTER TABLE t UNSPLIT AT VALUES (1)
+----
+-- system
+ /Table/104/1/1
+-- with-cap
+ERROR: pq: could not UNSPLIT AT (1): ba: AdminUnsplit [/Tenant/10/Table/104/1/1,/Min) RPC error: grpc: client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest) [code 16/Unauthenticated]
+-- without-cap
+ERROR: pq: could not UNSPLIT AT (1): ba: AdminUnsplit [/Tenant/11/Table/104/1/1,/Min) RPC error: grpc: client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest) [code 16/Unauthenticated]
+
+update-capabilities
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_unsplit=true
+----
+ok
+
+sql
+ALTER TABLE t UNSPLIT AT VALUES (2)
+----
+-- system
+ /Table/104/1/2
+-- with-cap
+ /Tenant/10/Table/104/1/2
+-- without-cap
+ERROR: pq: could not UNSPLIT AT (2): ba: AdminUnsplit [/Tenant/11/Table/104/1/2,/Min) RPC error: grpc: client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest) [code 16/Unauthenticated]

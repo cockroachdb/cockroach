@@ -1,0 +1,42 @@
+## (NB: this is pending a PR to add this capability)
+# create-tenant name=with-cap
+# ----
+# ok
+
+create-tenant name=without-cap
+----
+ok
+
+# List default value of the relocate capability.
+# (NB: this is pending a PR to add this capability)
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_relocate'
+----
+-- system
+
+# Prepare a table with a couple of split points.
+sql statement
+CREATE TABLE t(a INT)
+----
+-- system
+ok
+-- without-cap
+ok
+
+sql
+ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t])
+RELOCATE LEASE TO 1
+----
+-- system
+58 /Table/57 ok
+-- without-cap
+ERROR: pq: unimplemented: operation is unsupported in multi-tenancy mode
+
+sql
+ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t])
+----
+-- system
+58 /Table/57 ok
+-- without-cap
+ERROR: pq: unimplemented: operation is unsupported in multi-tenancy mode
+
