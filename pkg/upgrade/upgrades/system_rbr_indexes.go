@@ -87,7 +87,7 @@ func cleanUpRegionalByTableIndex(
 func migrations(codec keys.SQLCodec) (result []rbrMigration) {
 	return []rbrMigration{
 		sqlLivenessMigration(codec),
-		// sqlInstanceMigration(codec),
+		sqlInstanceMigration(codec),
 		// leaseMigration(codec),
 	}
 }
@@ -101,15 +101,14 @@ func sqlLivenessMigration(codec keys.SQLCodec) rbrMigration {
 	}
 }
 
-// TODO(jeffswenson): enable this migration
-//func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
-//	descriptor := systemschema.SQLInstancesTable()
-//	return rbrMigration{
-//		tableName:       "sql_instances",
-//		keyMapper:       makeKeyMapper(codec, descriptor, 1),
-//		finalDescriptor: descriptor,
-//	}
-//}
+func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
+	descriptor := systemschema.SQLInstancesTable()
+	return rbrMigration{
+		tableName:       "sql_instances",
+		keyMapper:       makeKeyMapper(codec, descriptor, 1),
+		finalDescriptor: descriptor,
+	}
+}
 
 // TODO(jeffswenson): enable this migration
 //func leaseMigration(codec keys.SQLCodec) rbrMigration {

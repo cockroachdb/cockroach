@@ -859,9 +859,17 @@ func registerBackup(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runBackupMVCCRangeTombstones(ctx, t, c)
+			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
 		},
 	})
+}
+
+type mvccRangeTombstoneConfig struct {
+	tenantName       string
+	skipClusterSetup bool
+
+	// TODO(msbutler): delete once tenants can back up to nodelocal.
+	skipBackupRestore bool
 }
 
 // runBackupMVCCRangeTombstones tests that backup and restore works in the
@@ -882,21 +890,27 @@ func registerBackup(r registry.Registry) {
 // We then do point-in-time restores of the database at times 'initial',
 // 'canceled', 'completed', and the latest time, and compare the fingerprints to
 // the original data.
-func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+func runBackupMVCCRangeTombstones(
+	ctx context.Context, t test.Test, c cluster.Cluster, config mvccRangeTombstoneConfig,
+) {
+	if !config.skipClusterSetup {
+		c.Put(ctx, t.Cockroach(), "./cockroach")
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	}
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, option.TenantName(config.tenantName))
 
 	// Configure cluster.
 	t.Status("configuring cluster")
 	_, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`)
 	require.NoError(t, err)
-	_, err = conn.Exec(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = 't'`)
-	require.NoError(t, err)
+	if config.tenantName == "" {
+		_, err = conn.Exec(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = 't'`)
+		require.NoError(t, err)
+	}
 	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,
 revert=2'`)
 	require.NoError(t, err)
@@ -951,6 +965,9 @@ revert=2'`)
 	}
 
 	fingerprint := func(name, database, table string) (string, string, string) {
+		if config.skipBackupRestore {
+			return "", "", ""
+		}
 		var ts string
 		require.NoError(t, conn.QueryRowContext(ctx, `SELECT now()`).Scan(&ts))
 
@@ -993,10 +1010,12 @@ revert=2'`)
 
 	// Take a full backup, using a database backup in order to perform a final
 	// incremental backup after the table has been dropped.
-	t.Status("taking full backup")
 	dest := "nodelocal://1/" + destinationName(c)
-	_, err = conn.ExecContext(ctx, `BACKUP DATABASE tpch INTO $1 WITH revision_history`, dest)
-	require.NoError(t, err)
+	if !config.skipBackupRestore {
+		t.Status("taking full backup")
+		_, err = conn.ExecContext(ctx, `BACKUP DATABASE tpch INTO $1 WITH revision_history`, dest)
+		require.NoError(t, err)
+	}
 
 	// Import and cancel even-numbered files twice.
 	files = []string{
@@ -1087,42 +1106,44 @@ revert=2'`)
 	require.ErrorIs(t, err, gosql.ErrNoRows)
 
 	// Take a final incremental backup.
-	t.Status("taking incremental backup")
-	_, err = conn.ExecContext(ctx, `BACKUP DATABASE tpch INTO LATEST IN $1 WITH revision_history`,
-		dest)
-	require.NoError(t, err)
+	if !config.skipBackupRestore {
+		t.Status("taking incremental backup")
+		_, err = conn.ExecContext(ctx, `BACKUP DATABASE tpch INTO LATEST IN $1 WITH revision_history`,
+			dest)
+		require.NoError(t, err)
 
-	// Schedule a final restore of the latest backup (above).
-	restores = append(restores, restore{
-		name:           "dropped",
-		expectNoTables: true,
-	})
+		// Schedule a final restore of the latest backup (above).
+		restores = append(restores, restore{
+			name:           "dropped",
+			expectNoTables: true,
+		})
 
-	// Restore backups at specific times and verify them.
-	for _, r := range restores {
-		t.Status(fmt.Sprintf("restoring backup at time '%s'", r.name))
-		db := "restore_" + r.name
-		if r.time != "" {
-			_, err = conn.ExecContext(ctx, fmt.Sprintf(
-				`RESTORE DATABASE tpch FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH new_db_name = '%s'`,
-				dest, r.time, db))
-			require.NoError(t, err)
-		} else {
-			_, err = conn.ExecContext(ctx, fmt.Sprintf(
-				`RESTORE DATABASE tpch FROM LATEST IN '%s' WITH new_db_name = '%s'`, dest, db))
-			require.NoError(t, err)
-		}
+		// Restore backups at specific times and verify them.
+		for _, r := range restores {
+			t.Status(fmt.Sprintf("restoring backup at time '%s'", r.name))
+			db := "restore_" + r.name
+			if r.time != "" {
+				_, err = conn.ExecContext(ctx, fmt.Sprintf(
+					`RESTORE DATABASE tpch FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH new_db_name = '%s'`,
+					dest, r.time, db))
+				require.NoError(t, err)
+			} else {
+				_, err = conn.ExecContext(ctx, fmt.Sprintf(
+					`RESTORE DATABASE tpch FROM LATEST IN '%s' WITH new_db_name = '%s'`, dest, db))
+				require.NoError(t, err)
+			}
 
-		if expect := r.expectFingerprint; expect != "" {
-			_, _, fp = fingerprint(r.name, db, "orders")
-			require.Equal(t, expect, fp, "fingerprint mismatch for restore at time '%s'", r.name)
-		}
-		if r.expectNoTables {
-			var tableCount int
-			require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
-				`SELECT count(*) FROM [SHOW TABLES FROM %s]`, db)).Scan(&tableCount))
-			require.Zero(t, tableCount, "found tables in restore at time '%s'", r.name)
-			t.Status("confirmed no tables in database " + db)
+			if expect := r.expectFingerprint; expect != "" {
+				_, _, fp = fingerprint(r.name, db, "orders")
+				require.Equal(t, expect, fp, "fingerprint mismatch for restore at time '%s'", r.name)
+			}
+			if r.expectNoTables {
+				var tableCount int
+				require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW TABLES FROM %s]`, db)).Scan(&tableCount))
+				require.Zero(t, tableCount, "found tables in restore at time '%s'", r.name)
+				t.Status("confirmed no tables in database " + db)
+			}
 		}
 	}
 }
