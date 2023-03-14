@@ -31,6 +31,7 @@ import "antd/lib/switch/style";
 import Long from "long";
 import { Button } from "src/button";
 import { useHistory } from "react-router-dom";
+import { SpanMetadataTable } from "./spanMetadataTable";
 
 const cx = classNames.bind(styles);
 
@@ -60,6 +61,10 @@ const SpanStatus: React.FC<{
       .finally(() => {
         setRecordingInFlight(false);
       });
+    // Objects in hook dependencies use referential equality, not value
+    // equality. To force a hook refresh on span, explicitly mark spanID. But,
+    // having done that, there's no need to include the span, as it's purely a
+    // function of that input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nodeID,
@@ -108,8 +113,6 @@ const SpanStatus: React.FC<{
 
 export const SpanComponent: React.FC<{
   snapshot: GetTracingSnapshotResponse;
-  sort: SortSetting;
-  changeSortSetting: (_: SortSetting) => void;
   spanDetailsURL: (_: Long) => string;
   span: Span;
 
@@ -126,8 +129,6 @@ export const SpanComponent: React.FC<{
 }> = props => {
   const {
     snapshot,
-    sort,
-    changeSortSetting,
     span,
     spanDetailsURL,
     snapshotError,
@@ -139,11 +140,16 @@ export const SpanComponent: React.FC<{
   const snapshotID = snapshot?.snapshot.snapshot_id;
   const spans = snapshot?.snapshot.spans;
   const spanID = span?.span_id;
+
   const childFilteredSnapshot = useMemo(() => {
     return {
       ...snapshot?.snapshot,
       spans: spans?.filter(s => s.parent_span_id.equals(spanID)),
     };
+    // Objects in hook dependencies use referential equality, not value
+    // equality. To force a hook refresh, explicitly mark nodeID, snapshotID,
+    // and spanID. But, having done that, there's no need to include the
+    // snapshot and spans, as they're purely a function of those inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeID, snapshotID, spanID]);
 
@@ -152,11 +158,19 @@ export const SpanComponent: React.FC<{
       ...snapshot?.snapshot,
       spans: spans?.filter(s => s.span_id.equals(span.parent_span_id)),
     };
+    // Objects in hook dependencies use referential equality, not value
+    // equality. To force a hook refresh, explicitly mark nodeID, snapshotID,
+    // and spanID. But, having done that, there's no need to include the
+    // snapshot and spans, as they're purely a function of those inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeID, snapshotID, spanID]);
 
   const snapshotTime = useMemo(() => {
     return TimestampToMoment(snapshot?.snapshot.captured_at);
+    // Objects in hook dependencies use referential equality, not value
+    // equality. To force a hook refresh, explicitly mark nodeID and
+    // snapshotID. But, having done that, there's no need to include the
+    // snapshot, as it's purely a function of those inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeID, snapshotID]);
 
@@ -164,9 +178,17 @@ export const SpanComponent: React.FC<{
     () => {
       return TimestampToMoment(span?.start);
     },
+    // Objects in hook dependencies use referential equality, not value
+    // equality. To force a hook refresh, explicitly mark nodeID, snapshotID
+    // and spanID. But, having done that, there's no need to include the
+    // span, as it's purely a function of those inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [nodeID, snapshotID, spanID],
   );
+  const [childSpanSortSetting, setChildSpanSortSetting] =
+    useState<SortSetting>();
+
+  const childrenMetadata = span?.children_metadata;
 
   const history = useHistory();
   return (
@@ -187,67 +209,80 @@ export const SpanComponent: React.FC<{
           View Raw Trace
         </Button>
       </div>
-      <section className={cx("span-section", "span-snapshot-columns")}>
-        <div className={cx("span-snapshot-column")}>
-          <div className={cx("span-snapshot-key-value")}>
-            <div className={cx("span-snapshot-key")}>Snapshot Time (UTC)</div>
-            {snapshotTime.format("YYYY-MM-DD HH:mm:ss.SSS")}
-          </div>
-          <div className={cx("span-snapshot-key-value")}>
-            <div className={cx("span-snapshot-key")}>Start Time (UTC)</div>
-            {startTime.format("YYYY-MM-DD HH:mm:ss.SSS")}
-          </div>
-          <div className={cx("span-snapshot-key-value")}>
-            <div className={cx("span-snapshot-key")}>Duration</div>
-            {formatDurationHours(moment.duration(snapshotTime.diff(startTime)))}
-          </div>
-          <SpanStatus
-            span={span}
-            setTraceRecordingType={setTraceRecordingType}
-            nodeID={nodeID}
-          />
-        </div>
-        <div>
-          <div className={cx("span-snapshot-key", "span-snapshot-key-value")}>
-            Tags
-          </div>
-          {span && <TagCell span={span} defaultExpanded={true} />}
-        </div>
-      </section>
-      {parentFilteredSnapshot.spans?.length > 0 && (
-        <section className={cx("span-section")}>
-          <h3 className={commonStyles("base-heading")}>Parent Span</h3>
-          <Loading
-            loading={snapshotLoading}
-            page={"snapshots"}
-            error={snapshotError}
-            render={() => (
-              <SpanTable
-                snapshot={parentFilteredSnapshot}
-                spanDetailsURL={spanDetailsURL}
-              />
+
+      <Loading
+        loading={snapshotLoading}
+        page={"snapshots"}
+        error={snapshotError}
+        render={() => (
+          <div>
+            <section className={cx("span-section", "span-snapshot-columns")}>
+              <div className={cx("span-snapshot-column")}>
+                <div className={cx("span-snapshot-key-value")}>
+                  <div className={cx("span-snapshot-key")}>
+                    Snapshot Time (UTC)
+                  </div>
+                  {snapshotTime.format("YYYY-MM-DD HH:mm:ss.SSS")}
+                </div>
+                <div className={cx("span-snapshot-key-value")}>
+                  <div className={cx("span-snapshot-key")}>
+                    Start Time (UTC)
+                  </div>
+                  {startTime.format("YYYY-MM-DD HH:mm:ss.SSS")}
+                </div>
+                <div className={cx("span-snapshot-key-value")}>
+                  <div className={cx("span-snapshot-key")}>Duration</div>
+                  {formatDurationHours(
+                    moment.duration(snapshotTime.diff(startTime)),
+                  )}
+                </div>
+                <SpanStatus
+                  span={span}
+                  setTraceRecordingType={setTraceRecordingType}
+                  nodeID={nodeID}
+                />
+              </div>
+              <div>
+                <div
+                  className={cx("span-snapshot-key", "span-snapshot-key-value")}
+                >
+                  Tags
+                </div>
+                {span && <TagCell span={span} defaultExpanded={true} />}
+              </div>
+            </section>
+            {parentFilteredSnapshot.spans?.length > 0 && (
+              <section className={cx("span-section")}>
+                <h3 className={commonStyles("base-heading")}>Parent Span</h3>
+                <SpanTable
+                  snapshot={parentFilteredSnapshot}
+                  spanDetailsURL={spanDetailsURL}
+                />
+              </section>
             )}
-          />
-        </section>
-      )}
-      {childFilteredSnapshot.spans?.length > 0 && (
-        <section className={cx("span-section")}>
-          <h3 className={commonStyles("base-heading")}>Child Spans</h3>
-          <Loading
-            loading={snapshotLoading}
-            page={"snapshots"}
-            error={snapshotError}
-            render={() => (
-              <SpanTable
-                snapshot={childFilteredSnapshot}
-                setSort={changeSortSetting}
-                sort={sort}
-                spanDetailsURL={spanDetailsURL}
-              />
+            {childrenMetadata?.length > 0 && (
+              <section className={cx("span-section")}>
+                <h3 className={commonStyles("base-heading")}>
+                  Aggregated Child Span Metadata
+                </h3>
+
+                <SpanMetadataTable childrenMetadata={childrenMetadata} />
+              </section>
             )}
-          />
-        </section>
-      )}
+            {childFilteredSnapshot.spans?.length > 0 && (
+              <section className={cx("span-section")}>
+                <h3 className={commonStyles("base-heading")}>Child Spans</h3>
+                <SpanTable
+                  snapshot={childFilteredSnapshot}
+                  setSort={setChildSpanSortSetting}
+                  sort={childSpanSortSetting}
+                  spanDetailsURL={spanDetailsURL}
+                />
+              </section>
+            )}
+          </div>
+        )}
+      />
       <div className={cx("bottom-padding")} />
     </div>
   );

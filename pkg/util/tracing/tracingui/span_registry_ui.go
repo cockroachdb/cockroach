@@ -124,6 +124,7 @@ type processedSpan struct {
 	// CurrentRecordingMode indicates the spans's current recording mode. The
 	// field is not set if Current == false.
 	CurrentRecordingMode tracingpb.RecordingType
+	ChildrenMetadata     map[string]tracingpb.OperationMetadata
 }
 
 // ProcessedTag is a span tag that was processed and expanded by processTag.
@@ -194,12 +195,13 @@ func propagateInheritTagDownwards(
 // expanded.
 func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processedSpan {
 	p := processedSpan{
-		Operation:    s.Operation,
-		TraceID:      uint64(s.TraceID),
-		SpanID:       uint64(s.SpanID),
-		ParentSpanID: uint64(s.ParentSpanID),
-		Start:        s.StartTime,
-		GoroutineID:  s.GoroutineID,
+		Operation:        s.Operation,
+		TraceID:          uint64(s.TraceID),
+		SpanID:           uint64(s.SpanID),
+		ParentSpanID:     uint64(s.ParentSpanID),
+		Start:            s.StartTime,
+		GoroutineID:      s.GoroutineID,
+		ChildrenMetadata: s.ChildrenMetadata,
 	}
 
 	p.Tags = make([]ProcessedTag, 0)

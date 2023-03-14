@@ -26,6 +26,8 @@ export type GetTracingSnapshotRequest =
 export type GetTracingSnapshotResponse =
   cockroach.server.serverpb.GetTracingSnapshotResponse;
 
+export type NamedOperationMetadata =
+  cockroach.server.serverpb.INamedOperationMetadata;
 export type Span = cockroach.server.serverpb.ITracingSpan;
 export type Snapshot = cockroach.server.serverpb.ITracingSnapshot;
 
