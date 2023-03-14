@@ -235,9 +235,6 @@ type testCase struct {
 	setupClusterSetting *settings.BoolSetting
 	// Cluster setting required for secondary tenant query.
 	queryClusterSetting *settings.BoolSetting
-	// Used for tests that have a capability prereq
-	// (eq SPLIT AT is required for UNSPLIT AT).
-	setupCapability tenantcapabilities.CapabilityID
 	// Capability required for secondary tenant query.
 	queryCapability tenantcapabilities.CapabilityID
 }
@@ -339,7 +336,7 @@ func (tc testCase) runTest(
 		tc.setupClusterSetting,
 		tc.queryClusterSetting,
 	)
-	setCapabilities(tenantID1, tc.setupCapability, tc.queryCapability)
+	setCapabilities(tenantID1, tc.queryCapability)
 
 	tenantID2 := serverutils.TestTenantID2()
 	secondaryWithoutClusterSettingDB := createSecondaryDB(
@@ -347,7 +344,6 @@ func (tc testCase) runTest(
 		false, /* skipSQLSystemTentantCheck */
 		tc.setupClusterSetting,
 	)
-	setCapabilities(tenantID2, tc.setupCapability)
 
 	tenantID3 := serverutils.TestTenantID3()
 	secondaryWithoutCapabilityDB := createSecondaryDB(
@@ -356,7 +352,6 @@ func (tc testCase) runTest(
 		tc.setupClusterSetting,
 		tc.queryClusterSetting,
 	)
-	setCapabilities(tenantID3, tc.setupCapability)
 
 	// Wait for cluster settings to propagate async.
 	for _, fn := range waitForTenantCapabilitiesFns {
@@ -487,7 +482,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -507,7 +501,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -524,7 +517,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
@@ -544,7 +536,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: `does not have capability "can_admin_unsplit"`,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilities.CanAdminSplit,
 			queryCapability:     tenantcapabilities.CanAdminUnsplit,
 		},
 		{
