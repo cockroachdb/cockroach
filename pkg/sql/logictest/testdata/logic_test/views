@@ -74,7 +74,7 @@ x y
 2 98
 3 97
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM v7
 ----
 x y
@@ -106,7 +106,7 @@ SELECT y FROM v2
 98
 97
 
-query I
+query I rowsort
 SELECT x FROM v7
 ----
 3
@@ -117,7 +117,7 @@ SELECT x FROM v7 ORDER BY x LIMIT 1
 ----
 2
 
-query I
+query I rowsort
 SELECT y FROM v7
 ----
 97
@@ -202,7 +202,7 @@ x y
 2 98
 3 97
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM test.v7
 ----
 x y
@@ -1640,7 +1640,7 @@ DROP MATERIALIZED VIEW mv2
 statement ok
 CREATE VIEW view_with_null AS SELECT 1 AS a, null AS c
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM view_with_null
 ----
 a  INT8    true  NULL  ·  {}  false
@@ -1650,7 +1650,7 @@ c  STRING  true  NULL  ·  {}  false
 statement ok
 CREATE MATERIALIZED VIEW materialized_view_with_null AS SELECT a, NULL AS b, b AS c FROM test_view
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM materialized_view_with_null
 ----
 a      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false

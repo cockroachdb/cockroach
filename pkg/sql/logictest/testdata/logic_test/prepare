@@ -174,7 +174,7 @@ EXECUTE i(4.3::int)
 ----
 5
 
-query I colnames
+query I colnames,rowsort
 EXECUTE s
 ----
 a
@@ -247,7 +247,7 @@ ALTER TABLE f ADD COLUMN t int
 statement error cached plan must not change result type
 EXECUTE y (3, 4)
 
-query III
+query III rowsort
 SELECT * FROM f
 ----
 1 2 NULL
@@ -436,7 +436,7 @@ EXECUTE x21701a(NULL)
 statement ok
 PREPARE x21701b AS SELECT * FROM kv WHERE k IS DISTINCT FROM $1
 
-query II
+query II rowsort
 EXECUTE x21701b(NULL)
 ----
 1  1
@@ -1146,7 +1146,7 @@ PREPARE b AS OPT PLAN '
   (OrderingChoice "+str")
 )'
 
-query IT
+query IT nosort
 EXECUTE b
 ----
 5  five
@@ -1176,7 +1176,7 @@ PREPARE e AS OPT PLAN '
   (NoOrdering)
 )'
 
-query T
+query T nosort
 EXECUTE e
 ----
 select
@@ -1469,7 +1469,7 @@ statement ok
 EXECUTE args_deduce_type(1,2,3,4);
 EXECUTE args_deduce_type('1','2',3,'4');
 
-query ITI
+query ITI rowsort
 SELECT * FROM t;
 ----
 1  2  3

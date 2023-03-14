@@ -12,7 +12,7 @@ ORDER BY 1
 start_key           end_key       replicas  lease_holder
 <before:/Table/62>  <after:/Max>  {1}       1
 
-query TTT colnames
+query TTT colnames,nosort
 ALTER TABLE t SPLIT AT VALUES (1), (10)
 ----
 key            pretty  split_enforced_until

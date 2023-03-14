@@ -13,7 +13,7 @@ CREATE SCHEMA public;
 statement ok
 CREATE SCHEMA test
 
-query T colnames
+query T colnames,rowsort
 SHOW CREATE ALL SCHEMAS
 ----
 create_statement
@@ -23,7 +23,7 @@ CREATE SCHEMA test;
 statement ok
 CREATE SCHEMA test2
 
-query T colnames
+query T colnames,rowsort
 SHOW CREATE ALL SCHEMAS
 ----
 create_statement
@@ -34,7 +34,7 @@ CREATE SCHEMA test2;
 statement ok
 DROP SCHEMA test
 
-query T colnames
+query T colnames,rowsort
 SHOW CREATE ALL SCHEMAS
 ----
 create_statement

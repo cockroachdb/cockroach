@@ -35,7 +35,7 @@ INSERT INTO kv VALUES ('nil4', NULL)
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd')
 
-query T
+query T rowsort
 SELECT v || 'hello' FROM [INSERT INTO kv VALUES ('e', 'f'), ('g', '') RETURNING v]
 ----
 fhello
@@ -196,13 +196,13 @@ INSERT INTO kv5 (k, v) VALUES ('a')
 statement ok
 CREATE TABLE return (a INT DEFAULT 3, b INT)
 
-query III
+query III rowsort
 INSERT INTO return (a) VALUES (default), (8) RETURNING a, 2, a+4
 ----
 3 2 7
 8 2 12
 
-query III
+query III rowsort
 INSERT INTO return (b) VALUES (default), (8) RETURNING a, a+4, b
 ----
 3 7 NULL
@@ -248,14 +248,14 @@ INSERT INTO return VALUES (default) RETURNING *
 a b
 3 NULL
 
-query II colnames
+query II colnames,rowsort
 INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.a, b
 ----
 a b
 1 2
 3 4
 
-query II colnames
+query II colnames,rowsort
 INSERT INTO return VALUES (1, 2), (3, 4) RETURNING *
 ----
 a b
@@ -278,7 +278,7 @@ a b
 statement error pq: "return.*" cannot be aliased
 INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.* as x
 
-query III colnames
+query III colnames,rowsort
 INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.*, a + b AS c
 ----
 a  b  c
@@ -306,7 +306,7 @@ INSERT INTO return VALUES (1, 2) RETURNING x[1]
 statement ok
 CREATE VIEW kview AS VALUES ('a', 'b'), ('c', 'd')
 
-query TT
+query TT rowsort
 SELECT * FROM kview
 ----
 a b
@@ -315,7 +315,7 @@ c d
 statement error "kview" is not a table
 INSERT INTO kview VALUES ('e', 'f')
 
-query TT
+query TT rowsort
 SELECT * FROM kview
 ----
 a b
@@ -803,7 +803,7 @@ VALUES
     ('foo')
 ON CONFLICT (account_id, deletion_request_id) DO NOTHING;
 
-query TT
+query TT nosort
 SELECT account_id, deletion_request_id FROM t74795
 ----
 foo  NULL

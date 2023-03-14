@@ -495,7 +495,7 @@ CREATE INDEX ol_io ON order_line (ol_i_id, ol_o_id);
 CREATE TABLE stock (s_i_id INT8);
 INSERT INTO stock (s_i_id) VALUES (6463)
 
-query II
+query II rowsort
 SELECT
   s_i_id, ol_o_id
 FROM

@@ -17,7 +17,7 @@ INSERT INTO kv VALUES ('nil3', NULL);
 INSERT INTO kv VALUES ('nil4', NULL);
 INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd');
 
-query T
+query T rowsort
 SELECT v || 'hello' FROM [INSERT INTO kv VALUES ('e', 'f'), ('g', '') RETURNING v]
 ----
 fhello

@@ -42,7 +42,7 @@ SHOW TABLES
 public  new_kv  table  root  0  NULL
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON TABLE new_kv
 ----
 test  public  new_kv  admin  ALL  true
@@ -95,7 +95,7 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER TABLE test.t RENAME TO t2
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  new_kv  table  root  0  NULL
@@ -116,7 +116,7 @@ GRANT DROP ON test.new_kv TO testuser
 
 user testuser
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  new_kv  table  root  0  NULL

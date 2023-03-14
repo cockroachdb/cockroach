@@ -142,7 +142,7 @@ SELECT a FROM t_idx WHERE w IN (4,6)
 5
 
 # Covering lookup join.
-query II
+query II rowsort
 SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
 ----
 2   2
@@ -151,7 +151,7 @@ SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_
 10  10
 
 # Non-covering lookup join that requires a second join on the primary index.
-query IIII
+query IIII rowsort
 SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
 ----
 1  1  2   2

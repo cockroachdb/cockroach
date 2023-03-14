@@ -171,7 +171,7 @@ SELECT * FROM s WHERE d = 0
 0.000
 0.0000
 
-query R
+query R rowsort
 SELECT * FROM s WHERE d IS NAN
 ----
 NaN
@@ -182,7 +182,7 @@ SELECT * FROM s WHERE d = 'inf'::decimal
 ----
 Infinity
 
-query R
+query R rowsort
 SELECT * FROM s WHERE d = 'NaN'
 ----
 NaN
@@ -406,7 +406,7 @@ FROM (VALUES ('-infinity'), ('-infinity')) v(x)
 ----
 -Infinity  -Infinity  NaN
 
-query RRRRR
+query RRRRR rowsort
 WITH v(x) AS
   (VALUES('0'::numeric),('1'::numeric),('-1'::numeric),('4.2'::numeric),('inf'::numeric),('-inf'::numeric),('nan'::numeric))
 SELECT x1, x2,
@@ -465,7 +465,7 @@ NaN        Infinity   NaN        NaN        NaN
 NaN        -Infinity  NaN        NaN        NaN
 NaN        NaN        NaN        NaN        NaN
 
-query RRRRR
+query RRRRR rowsort
 WITH v(x) AS
   (VALUES('0'::numeric),('1'::numeric),('-1'::numeric),('4.2'::numeric),('inf'::numeric),('-inf'::numeric),('nan'::numeric))
 SELECT x1, x2,
@@ -568,7 +568,7 @@ select exp('nan'::numeric), exp('inf'::numeric), exp('-inf'::numeric)
 ----
 NaN  Infinity  0
 
-query R
+query R rowsort
 WITH v(x) AS
 (VALUES (' inf '), (' +inf '), (' -inf '), (' Infinity '), (' +inFinity '), (' -INFINITY '))
 SELECT x1::decimal
@@ -584,7 +584,7 @@ Infinity
 statement ok
 CREATE TABLE t71926(no_typmod decimal, precision decimal(5), precision_and_width decimal(5,3))
 
-query TI
+query TI rowsort
 SELECT attname, atttypmod FROM pg_attribute WHERE attrelid = 't71926'::regclass::oid AND atttypid = 'decimal'::regtype::oid
 ----
 no_typmod            -1

@@ -19,7 +19,7 @@ some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 20:16:27.658082 +0
 statement ok
 ALTER TABLE t ALTER s TYPE STRING, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMESTAMPTZ
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
 column_name  data_type    is_nullable  column_default  generation_expression  indices   is_hidden
@@ -102,7 +102,7 @@ subtest ChangeVisibleColumnType
 statement ok
 CREATE TABLE t (a INT)
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
@@ -112,7 +112,7 @@ rowid        INT8       false        unique_rowid()  ·                      {t_
 statement ok
 ALTER TABLE t ALTER a TYPE INTEGER
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
@@ -190,7 +190,7 @@ INSERT INTO t2 VALUES (1), (2), (3), (4)
 statement ok
 ALTER TABLE t2 ALTER COLUMN id TYPE STRING
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM t2
 ----
 id     STRING  true   NULL            ·  {t2_pkey}  false
@@ -210,7 +210,7 @@ INSERT INTO t3 VALUES (1,1,1), (2,2,2), (3,3,3)
 statement ok
 ALTER TABLE t3 ALTER COLUMN id2 TYPE string
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM t3
 ----
 id     INT8    true   NULL            ·  {t3_pkey}  false

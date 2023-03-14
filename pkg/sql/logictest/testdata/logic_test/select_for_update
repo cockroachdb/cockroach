@@ -189,13 +189,13 @@ statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functi
 SELECT * FROM (SELECT generate_series(1, 2)) a FOR UPDATE
 
 # Set-returning functions in the from list are allowed.
-query I
+query I nosort
 SELECT * FROM generate_series(1, 2) FOR UPDATE
 ----
 1
 2
 
-query I
+query I nosort
 SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
 ----
 1
@@ -411,7 +411,7 @@ user testuser
 statement ok
 BEGIN
 
-query II
+query II rowsort
 SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 1  1
@@ -421,7 +421,7 @@ SELECT * FROM t FOR UPDATE SKIP LOCKED
 statement ok
 UPDATE t SET v = 4 WHERE k = 3
 
-query II
+query II rowsort
 SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 1  1
@@ -431,7 +431,7 @@ SELECT * FROM t FOR UPDATE SKIP LOCKED
 # All columns are available from the secondary index on u, so no index join is
 # needed. The secondary index can produce the row where k=2 since the row is
 # only locked in the primary index.
-query II
+query II rowsort
 SELECT k, u FROM t3 WHERE u = 2 FOR UPDATE SKIP LOCKED
 ----
 2  2

@@ -356,7 +356,7 @@ subtest regression-cockroachdb/django-cockroachdb_57
 statement ok
 SET TIME ZONE 'America/Chicago'
 
-query T
+query T nosort
 WITH a(a) AS ( VALUES
   ('2010-11-06 23:59:00'::timestamptz + '24 hours'::interval), -- no offset specified
   ('2010-11-06 23:59:00'::timestamptz + '1 day'::interval),
@@ -456,7 +456,7 @@ set time zone 'UTC'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11
 ----
 1.28910594e+09
 
-query TTTTTT
+query TTTTTT nosort
 SET TIME ZONE 'Europe/Berlin'; SELECT
   age(a::timestamptz, b::timestamptz),
   age(b::timestamptz, a::timestamptz),
@@ -493,7 +493,7 @@ SET TIME ZONE 'AuStralIA/SyDNEY'; SELECT '2000-05-15 00:00:00'::timestamptz
 ----
 2000-05-15 00:00:00 +1000 AEST
 
-query T
+query T nosort
 SET TIME ZONE 'Europe/Bucharest';
 SELECT t FROM (VALUES
   ('2020-10-25 03:00+3'::TIMESTAMPTZ + '0 hour'::interval),
@@ -507,7 +507,7 @@ SELECT t FROM (VALUES
 2020-10-25 03:00:00 +0200 EET
 2020-10-25 04:00:00 +0200 EET
 
-query TT
+query TT nosort
 SET TIME ZONE 'Europe/Bucharest';
 SELECT date_trunc('day', t), date_trunc('hour', t) FROM (VALUES
   ('2020-10-25 03:00+03:00'::timestamptz),
@@ -642,7 +642,7 @@ SELECT to_char(d1, 'FMIYYY FMIYY FMIY FMI FMIW FMIDDD FMID')
 1997 997 97 7 24 164 3
 2001 1 1 1 38 265 6
 
-query T
+query T nosort
 SELECT to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff5 ff6  MS US')
    FROM (VALUES
        ('2018-11-02 12:34:56'::timestamptz),

@@ -11,7 +11,7 @@ USE d;
 # The public schema is special and has hard-coded privileges for the public role.
 # When https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
 # the public role will no longer have CREATE privilege.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA public
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
@@ -23,7 +23,7 @@ d              public       root     ALL             true
 statement ok
 CREATE SCHEMA testuser_s;
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA testuser_s;
 ----
 database_name  schema_name  grantee   privilege_type  is_grantable
@@ -40,7 +40,7 @@ CREATE SCHEMA testuser_s2;
 # Note that CREATE is still present for testuser due to our current inheritance
 # behavior.
 # TODO(richardjcai): Remove this when we remove our current inheritance logic.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA testuser_s2
 ----
 database_name  schema_name  grantee   privilege_type  is_grantable
@@ -62,7 +62,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO testuser, testuser2
 statement ok
 CREATE SCHEMA s
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s
 ----
 database_name  schema_name  grantee    privilege_type  is_grantable
@@ -77,7 +77,7 @@ ALTER DEFAULT PRIVILEGES REVOKE USAGE ON SCHEMAS FROM testuser, testuser2
 statement ok
 CREATE SCHEMA s2
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s2
 ----
 database_name  schema_name  grantee    privilege_type  is_grantable
@@ -92,7 +92,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser, testuser2
 statement ok
 CREATE SCHEMA s3
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s3
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
@@ -113,7 +113,7 @@ statement ok
 CREATE SCHEMA s4
 
 # testuser still has CREATE due to "inheriting" it from the parent database.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s4
 ----
 database_name  schema_name  grantee   privilege_type  is_grantable
@@ -140,7 +140,7 @@ statement ok
 CREATE SCHEMA s5
 
 # testuser still has CREATE due to "inheriting" it from the parent database.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s5
 ----
 database_name  schema_name  grantee   privilege_type  is_grantable
@@ -157,7 +157,7 @@ statement ok
 CREATE SCHEMA s_72322
 
 # When root creates the table, testuser and testuser2 should not get privileges.
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA s_72322
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable

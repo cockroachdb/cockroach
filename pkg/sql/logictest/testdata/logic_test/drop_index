@@ -52,7 +52,7 @@ DROP INDEX baw
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -70,7 +70,7 @@ DROP INDEX users@zap
 statement ok
 DROP INDEX IF EXISTS users@zap
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -87,7 +87,7 @@ users       users_pkey  false       3             title        title       N/A  
 statement ok
 DROP INDEX IF EXISTS users@foo, users@zap
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -124,7 +124,7 @@ DROP INDEX users@bar RESTRICT
 statement ok
 DROP INDEX users@bar CASCADE
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -152,7 +152,7 @@ CREATE INDEX baz ON users (name, title)
 statement ok
 DROP INDEX IF EXISTS users@invalid, users@baz
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -173,7 +173,7 @@ DROP INDEX users@foo
 statement ok
 DROP INDEX users@bar
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -186,7 +186,7 @@ users       users_pkey  false       3             title        title       N/A  
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  users  table  root  0  NULL
@@ -209,7 +209,7 @@ user root
 statement ok
 DROP INDEX users@foo CASCADE
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -249,7 +249,7 @@ CREATE INDEX baz ON users (name)
 statement ok
 DROP INDEX IF EXISTS baz, zap
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -402,7 +402,7 @@ statement ok
 DROP INDEX t2_96731_idx CASCADE;
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM t1_96731;
+SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
 table_name  constraint_name  constraint_type  details                                 validated
 t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
@@ -435,7 +435,7 @@ statement ok
 DROP INDEX t2_96731_idx CASCADE;
 
 query TTTTB colnames
-SHOW CONSTRAINTS FROM t1_96731;
+SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
 table_name  constraint_name  constraint_type  details                                 validated
 t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true

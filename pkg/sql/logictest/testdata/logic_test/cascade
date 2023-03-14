@@ -3631,7 +3631,7 @@ UPDATE a SET y = NULL WHERE y = 3;
 statement ok
 UPDATE a SET x = NULL, y = NULL WHERE x = 3;
 
-query II colnames
+query II colnames,rowsort
 SELECT * from c;
 ----
 x     y

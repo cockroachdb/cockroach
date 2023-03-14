@@ -128,7 +128,7 @@ $$
   DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC LIMIT 2 RETURNING v,k;
 $$ LANGUAGE SQL;
 
-query II
+query II nosort
 SELECT * FROM f_orderby1() AS foo(a INT, b INT);
 ----
 4  6
@@ -140,7 +140,7 @@ $$
   DELETE FROM unindexed ORDER BY v LIMIT 2 RETURNING k,v;
 $$ LANGUAGE SQL;
 
-query II
+query II nosort
 SELECT * FROM f_orderby2() AS foo(a INT, b INT);
 ----
 3  7
