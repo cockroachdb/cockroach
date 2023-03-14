@@ -1,5 +1,8 @@
 setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((j+1), k));
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
 ----
 ...
 +object {100 101 t} -> 104
@@ -11,18 +14,30 @@ INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
 pq: column "j" does not exist
 
 stage-exec phase=PostCommitPhase stage=:
-INSERT INTO t (i) VALUES($stageKey);
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+DELETE FROM t WHERE i=-1;
+DELETE FROM t WHERE i=$stageKey;
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES(-1);
 ----
+
+stage-exec phase=PostCommitPhase stage=:
+UPDATE t SET k=$stageKey;
+----
+pq: column "k" does not exist
 
 stage-exec phase=PostCommitPhase stage=:
 SELECT j+1, k FROM t
 ----
 pq: column "j" does not exist
 
-stage-exec phase=PostCommitPhase stage=:
-SELECT count(i) FROM t
+# Each insert will be injected twice per stage, plus 3 injected
+# at the start.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
 ----
-$successfulStageCount
+true
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
@@ -30,8 +45,18 @@ INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
 pq: column "j" does not exist
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
-INSERT INTO t (i) VALUES($stageKey);
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+DELETE FROM t WHERE i=-1;
+DELETE FROM t WHERE i=$stageKey;
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES(-1);
 ----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+UPDATE t SET k=$stageKey;
+----
+pq: column "k" does not exist
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 SELECT j+1, k FROM t
@@ -39,9 +64,14 @@ SELECT j+1, k FROM t
 pq: column "j" does not exist
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(i) FROM t
+SELECT j+1, k FROM t
 ----
-$successfulStageCount
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
+----
+true
 
 test
 ALTER TABLE t DROP COLUMN j CASCADE;
