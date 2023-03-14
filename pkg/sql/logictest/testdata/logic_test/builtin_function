@@ -101,7 +101,7 @@ SELECT upper('roacH7')
 upper
 ROACH7
 
-query T
+query T rowsort
 SELECT unaccent(str) FROM ( VALUES
    ('no_special_CHARACTERS1!'),
    ('Żółć'),
@@ -1249,7 +1249,7 @@ SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
 ----
 0 0 1 19
 
-query RRRRRRR
+query RRRRRRR rowsort
 WITH v(x) AS
   (VALUES('0'::numeric),('1'::numeric),('-1'::numeric),('4.2'::numeric),
     ('-7.777'::numeric),('9127.777'::numeric),('inf'::numeric),('-inf'::numeric),('nan'::numeric))
@@ -1664,7 +1664,7 @@ SELECT current_schemas(false)
 
 # Force the function to be evaluated at execution time and verify it doesn't
 # break when distsql is on.
-query T
+query T rowsort
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
 {pg_catalog,pg_extension,public}
@@ -2017,7 +2017,7 @@ SELECT pg_catalog.pg_typeof(sign(1:::decimal))
 ----
 numeric
 
-query T
+query T rowsort
 VALUES (pg_typeof(1:::int)),
        (pg_typeof('a':::string)),
        (pg_typeof(true)),
@@ -2038,7 +2038,7 @@ timestamp with time zone
 bytea
 bigint[]
 
-query T
+query T rowsort
 VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('bit'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
@@ -2129,7 +2129,7 @@ character varying[]
 integer
 smallint
 
-query T
+query T rowsort
 VALUES (format_type('anyelement'::regtype, NULL)),
        (format_type('bool'::regtype, NULL)),
        (format_type('bytea'::regtype, NULL)),
@@ -2415,7 +2415,7 @@ SELECT oid(-2147483649)
 query error OID out of range: 4294967296
 SELECT oid(4294967296)
 
-query T
+query T rowsort
 SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
 ----
 one
@@ -2441,7 +2441,7 @@ true false true false true false true true true
 
 # The hash functions should be stable, so verify that the following hashes
 # don't change.
-query T
+query T rowsort
 SELECT i FROM (VALUES
   (sha512(true::string)),
   (sha512(false::string)),
@@ -2983,14 +2983,14 @@ select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_interna
 
 subtest regexp_split
 
-query T
+query T nosort
 SELECT regexp_split_to_table('3aa0AAa1', 'a+')
 ----
 3
 0AA
 1
 
-query T
+query T nosort
 SELECT regexp_split_to_table('3aa0AAa1', 'a+', 'i')
 ----
 3
@@ -3071,7 +3071,7 @@ WHERE false
 statement ok
 SET timezone = 'Europe/Berlin'
 
-query T
+query T nosort
 select generate_series('2021-07-05'::timestamptz, '2021-07-06'::timestamptz, '1day'::interval)
 ----
 2021-07-05 00:00:00 +0200 CEST
@@ -3084,7 +3084,7 @@ statement ok
 set timezone = 'Europe/Bucharest';
 
 # the following two queries should provide the same output
-query T
+query T nosort
 select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from generate_series(0, 24) AS g(i);
 ----
 2020-10-25 00:00:00 +0300 EEST
@@ -3113,7 +3113,7 @@ select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from gen
 2020-10-25 22:00:00 +0200 EET
 2020-10-25 23:00:00 +0200 EET
 
-query T
+query T nosort
 select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIMESTAMPTZ, '1 hour');
 ----
 2020-10-25 00:00:00 +0300 EEST
@@ -3774,7 +3774,7 @@ SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.cre
 CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
 
 # More tests are in parse_ident_builtin_test.go.
-query T
+query T rowsort
 SELECT parse_ident(str) FROM ( VALUES
   ('a.b.c'),
   ('"YesCaps".NoCaps'),
@@ -3869,7 +3869,8 @@ SELECT ‹'yes'› IN (‹'no'›, ‹'maybe'›, ‹'yes'›)
 query T
 SELECT crdb_internal.redactable_sql_constants(e'\r')
 ----
-‹›
+‹
+›
 
 query T
 SELECT crdb_internal.redactable_sql_constants('SELECT crdb_internal.redactable_sql_constants('''')')
