@@ -83,6 +83,8 @@ import {
 import { commonStyles } from "../common";
 import moment from "moment";
 
+import { STATS_LONG_LOADING_DURATION } from "src/util/constants";
+
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -655,7 +657,7 @@ export class StatementsPage extends React.Component<
     const { filters, activeFilters } = this.state;
 
     const longLoadingMessage = (
-      <Delayed delay={moment.duration(2, "s")}>
+      <Delayed delay={STATS_LONG_LOADING_DURATION}>
         <InlineAlert
           intent="info"
           title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
