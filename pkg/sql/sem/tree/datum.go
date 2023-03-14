@@ -4059,7 +4059,7 @@ func (d *DTSVector) Min(_ CompareContext) (Datum, bool) {
 
 // Size implements the Datum interface.
 func (d *DTSVector) Size() uintptr {
-	return uintptr(len(d.TSVector.String()))
+	return uintptr(d.TSVector.StringSize())
 }
 
 // AsDTSVector attempts to retrieve a DTSVector from an Expr, returning a
