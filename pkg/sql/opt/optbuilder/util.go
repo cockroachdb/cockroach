@@ -758,6 +758,11 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	for i := 0; i < n; i++ {
 		col := tab.Column(i)
 		if shouldInclude[col.Kind()] {
+			// This behaviour matches the Builder.addComputedColsForTable, which
+			// will exclude any computed columns in mutation.
+			if col.IsVirtualComputed() && col.IsMutation() {
+				continue
+			}
 			ordinals = append(ordinals, i)
 		}
 	}
