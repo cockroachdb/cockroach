@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2844,7 +2845,47 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()
 
+	{
+		type measurement struct {
+			rangeID  roachpb.RangeID
+			numMsgs  int64
+			numBytes int64
+		}
+		var sl []measurement
+		s.raftRecvQueues.m.Range(func(key int64, value unsafe.Pointer) bool {
+			q := (*raftReceiveQueue)(value)
+			sl = append(sl, measurement{
+				rangeID:  roachpb.RangeID(key),
+				numMsgs:  int64(q.Len()),
+				numBytes: q.acc.Used(),
+			})
+			return true // continue
+		})
+		sort.Slice(sl, func(i, j int) bool {
+			if a, b := sl[i].numBytes, sl[j].numBytes; a != b {
+				return a < b
+			}
+			if a, b := sl[i].numMsgs, sl[j].numMsgs; a != b {
+				return a < b
+			}
+			return sl[i].rangeID < sl[j].rangeID
+		})
+		if len(sl) > 50 {
+			sl = sl[len(sl)-50:]
+		}
+		var buf strings.Builder
+		for i := len(sl) - 1; i >= 0; i-- {
+			el := sl[i]
+			fmt.Fprintf(&buf, "r%d: %s/#%d", el.rangeID, humanizeutil.IBytes(el.numBytes), el.numMsgs)
+			if i != 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+		}
+		log.Infof(ctx, "recv-queues: %s", buf)
+	}
+
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
 			raftLeaderCount++

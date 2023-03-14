@@ -771,6 +771,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			asyncRd := makeAsyncReady(syncRd)
 			softState = asyncRd.SoftState
 			outboundMsgs, msgStorageAppend, msgStorageApply = splitLocalStorageMsgs(asyncRd.Messages)
+
+			{
+				count, bytes := raftGroup.UnstableLogStats()
+				const mb = 1 << 20
+				if bytes > 50*mb && logUnstableN.ShouldLog() {
+					log.Infof(ctx, "r%d: unstable log #%d/%s", r.RangeID, count, humanizeutil.IBytes(bytes))
+				}
+			}
+
 		}
 		// We unquiesce if we have a Ready (= there's work to do). We also have
 		// to unquiesce if we just flushed some proposals but there isn't a
@@ -1410,18 +1419,15 @@ func (r *Replica) refreshProposalsLocked(
 		return
 	}
 
-	log.VInfof(ctx, 1,
-		"pending commands: reproposing %d (at applied index %d, lease applied index %d) %s",
-		len(reproposals), r.mu.state.RaftAppliedIndex,
-		r.mu.state.LeaseAppliedIndex, reason)
-
 	// Reproposals are those commands which we weren't able to send back to the
 	// client (since we're not sure that another copy of them could apply at
 	// the "correct" index). For reproposals, it's generally pretty unlikely
 	// that they can make it in the right place. Reproposing in order is
 	// definitely required, however.
 	sort.Sort(reproposals)
+	var numBytes int64
 	for _, p := range reproposals {
+		numBytes += int64(len(p.encodedCommand))
 		log.Eventf(p.ctx, "re-submitting command %x (MLI %d, CT %s): %s",
 			p.idKey, p.command.MaxLeaseIndex, p.command.ClosedTimestamp, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
@@ -1431,6 +1437,14 @@ func (r *Replica) refreshProposalsLocked(
 			})
 		}
 	}
+
+	if numBytes > 1024 {
+		log.Infof(ctx,
+			"pending commands: reproposed %d (%s, at applied index %d, lease applied index %d) %s",
+			len(reproposals), humanizeutil.IBytes(numBytes), r.mu.state.RaftAppliedIndex,
+			r.mu.state.LeaseAppliedIndex, reason)
+	}
+
 }
 
 func (r *Replica) poisonInflightLatches(err error) {
