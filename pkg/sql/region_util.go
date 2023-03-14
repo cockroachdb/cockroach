@@ -1998,9 +1998,15 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	currentZoneConfig *zonepb.ZoneConfig,
 	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
 ) error {
-	if currentZoneConfig == nil {
+	if currentZoneConfig == nil ||
+		// If this is the system database, and it has the configuration we inject
+		// for the system database at startup, we should treat it as though it has
+		// no zone configs set.
+		(dbDesc.GetID() == keys.SystemDatabaseID &&
+			currentZoneConfig.Equal(zonepb.DefaultSystemZoneConfigRef())) {
 		currentZoneConfig = zonepb.NewZoneConfig()
 	}
+
 	expectedZoneConfig, err := zoneConfigForMultiRegionValidator.getExpectedDatabaseZoneConfig()
 	if err != nil {
 		return err
@@ -2422,8 +2428,10 @@ func (p *planner) GetRangeDescByID(
 	return rangeDesc, nil
 }
 
-// OptimizeSystemDatabase is part of the eval.RegionOperator interface.
-func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
+// optimizeSystemDatabase configures some tables in the system data as
+// global and regional by row. The locality changes reduce how long it
+// takes a server to start up in a multi-region deployment.
+func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 	globalTables := []string{
 		"users",
 		"zones",

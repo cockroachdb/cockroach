@@ -74,8 +74,6 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 
-	tDB.Exec(t, `SELECT crdb_internal.unsafe_optimize_system_database()`)
-
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
 	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
@@ -236,11 +234,10 @@ func TestMrSystemDatabase(t *testing.T) {
 	})
 
 	t.Run("QueryByEnum", func(t *testing.T) {
-		// This is a regression test for a bug triggered by
-		// unsafe_optimize_system_database. If usnafe_optimize_system_database
-		// does not clear table statistics, this query will fail in the
-		// optimizer, because the stats will have the wrong type for the
-		// crdb_column.
+		// This is a regression test for a bug triggered by setting up the system
+		// database. If the operation to configure the does not clear table
+		// statistics, this query will fail in the optimizer, because the stats
+		// will have the wrong type for the crdb_column.
 		row := tDB.QueryRow(t, `
 			SELECT crdb_region, session_id, expiration 
 			FROM system.sqlliveness 
@@ -307,6 +304,7 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	region, _, err := slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, enum.One, region)
+	ten1SessionID := sessionID
 
 	// Ensure that the sqlliveness entry created by the second SQL server has
 	// the right region and session UUID.
@@ -318,14 +316,21 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 
 	rows := tenSQLDB2.Query(t, `SELECT crdb_region, session_id FROM system.sqlliveness`)
 	defer rows.Close()
-	livenessMap := map[string][]byte{}
+	livenessMap := map[string]string{}
 	for rows.Next() {
 		var region, ID string
 		require.NoError(t, rows.Scan(&region, &ID))
-		livenessMap[ID] = []byte(region)
+		livenessMap[ID] = region
 	}
 	require.NoError(t, rows.Err())
-	r, ok := livenessMap[sessionID]
-	require.True(t, ok)
-	require.Equal(t, r, region)
+	{
+		r, ok := livenessMap[sessionID]
+		require.True(t, ok)
+		require.Equal(t, r, "us-east3")
+	}
+	{
+		r, ok := livenessMap[ten1SessionID]
+		require.True(t, ok)
+		require.Equal(t, r, "us-east1")
+	}
 }
