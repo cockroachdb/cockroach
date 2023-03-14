@@ -424,7 +424,7 @@ func TestStatusGetFiles(t *testing.T) {
 		}
 
 		request := serverpb.GetFilesRequest{
-			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
+			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"heap*"}}
 		response, err := client.GetFiles(context.Background(), &request)
 		if err != nil {
 			t.Fatal(err)

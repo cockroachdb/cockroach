@@ -604,6 +604,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed Registrations",
+				Metrics: []string{
+					"kv.rangefeed.registrations",
+				},
+			},
+			{
 				Title: "Rangefeed Memory Allocations",
 				Metrics: []string{
 					"kv.rangefeed.budget_allocation_failed",
@@ -3380,6 +3386,18 @@ var charts = []sectionDescription{
 					"schedules.BACKUP.started",
 					"schedules.BACKUP.succeeded",
 					"schedules.BACKUP.failed",
+				},
+			},
+			{
+				Title: "PTS Counts",
+				Metrics: []string{
+					"schedules.BACKUP.protected_record_count",
+				},
+			},
+			{
+				Title: "PTS Age",
+				Metrics: []string{
+					"schedules.BACKUP.protected_age_sec",
 				},
 			},
 			{
