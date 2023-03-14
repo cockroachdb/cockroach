@@ -1779,7 +1779,7 @@ statement ok
 CREATE TABLE tDb3Ref (i INT PRIMARY KEY DEFAULT (nextval('db3.s')));
 
 query TTTTTTT
-SELECT * FROM "".crdb_internal.cross_db_references;
+SELECT * FROM "".crdb_internal.cross_db_references ORDER BY 3
 ----
 db2  public  seq   db1  public  t  sequences owning table
 db2  public  seq2  db1  public  t  sequences owning table

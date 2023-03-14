@@ -18,7 +18,7 @@ statement ok
 CREATE TYPE schema_a.enum_b AS ENUM ('hi', 'bye');
 GRANT ALL ON TYPE schema_a.enum_b TO user1
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE schema_a.enum_b, "enum_a+b", enum_a, int4
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
@@ -38,14 +38,14 @@ test           schema_a     enum_b     public   USAGE           false
 test           schema_a     enum_b     root     ALL             true
 test           schema_a     enum_b     user1    ALL             false
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int4 FOR user1
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
 test           public       enum_a     user1    USAGE           false
 test           schema_a     enum_b     user1    ALL             false
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR user1
 ----
 database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
@@ -63,7 +63,7 @@ CREATE DATABASE other;
 CREATE TYPE other.typ AS ENUM();
 GRANT ALL ON TYPE other.typ TO user1
 
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON TYPE other.typ
 ----
 other  public  typ  admin   ALL    true
@@ -97,7 +97,7 @@ CREATE TYPE owner_grant_option AS ENUM('a')
 statement ok
 GRANT USAGE ON TYPE owner_grant_option TO owner_grant_option_child
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE owner_grant_option
 ----
 database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
@@ -117,7 +117,7 @@ CREATE ROLE other_owner
 statement ok
 ALTER TYPE owner_grant_option OWNER TO other_owner
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE owner_grant_option
 ----
 database_name  schema_name  type_name           grantee                   privilege_type  is_grantable

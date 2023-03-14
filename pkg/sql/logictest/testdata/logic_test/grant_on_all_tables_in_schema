@@ -30,7 +30,7 @@ test           s            t              testuser  SELECT          false
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -42,7 +42,7 @@ test           s2           t              testuser2  SELECT          false
 statement ok
 GRANT ALL ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -54,7 +54,7 @@ test           s2           t              testuser2  ALL             false
 statement ok
 REVOKE SELECT ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -109,7 +109,7 @@ CREATE TABLE otherdb.public.tbl (a int)
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA otherdb.public TO testuser
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE otherdb.public.tbl
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable

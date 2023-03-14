@@ -30,7 +30,7 @@ CREATE DATABASE survive_zone_db PRIMARY REGION "ca-central-1" REGIONS "ap-southe
 statement ok
 ALTER DATABASE alter_survive_db SURVIVE REGION FAILURE;
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,region)
@@ -40,7 +40,7 @@ SELECT get_db_survival_goal()
 statement ok
 ALTER DATABASE alter_survive_db SURVIVE ZONE FAILURE;
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
@@ -53,7 +53,7 @@ ALTER DATABASE system PRIMARY REGION "ca-central-1";
 ALTER DATABASE system ADD REGION "ap-southeast-2";
 ALTER DATABASE system ADD REGION "us-east-1";
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
@@ -64,7 +64,7 @@ SELECT get_db_survival_goal()
 statement ok
 ALTER DATABASE alter_survive_db SURVIVE REGION FAILURE;
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,region)
@@ -75,7 +75,7 @@ SELECT get_db_survival_goal()
 statement ok
 ALTER DATABASE alter_survive_db SURVIVE ZONE FAILURE;
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
@@ -85,7 +85,7 @@ SELECT get_db_survival_goal()
 statement ok
 ALTER DATABASE system SURVIVE REGION FAILURE;
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
@@ -95,7 +95,7 @@ SELECT get_db_survival_goal()
 statement ok
 ALTER DATABASE system SURVIVE ZONE FAILURE;
 
-query T
+query T nosort
 SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)

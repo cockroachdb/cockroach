@@ -39,7 +39,7 @@ USE d;
 statement ok
 CREATE TABLE testuser_t();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON testuser_t
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -54,7 +54,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM testuser;
 statement ok
 CREATE TABLE testuser_t2();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON testuser_t2
 ----
 database_name  schema_name  table_name   grantee   privilege_type  is_grantable
@@ -73,7 +73,7 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to testuser
 statement ok
 CREATE TABLE t()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -87,14 +87,14 @@ CREATE SEQUENCE s
 statement ok
 CREATE VIEW vx AS SELECT 1
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 test           public       s           admin    ALL             true
 test           public       s           root     ALL             true
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON vx
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -108,7 +108,7 @@ ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser
 statement ok
 CREATE TABLE t2()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t2
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -118,7 +118,7 @@ test           public       t2          root     ALL             true
 statement ok
 CREATE SEQUENCE s2
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s2
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -136,7 +136,7 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser, testuser2
 statement ok
 CREATE TABLE t3()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t3
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -148,7 +148,7 @@ test           public       t3          testuser2  SELECT          false
 statement ok
 CREATE SEQUENCE s3
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s3
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -161,7 +161,7 @@ ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser, testuser2
 statement ok
 CREATE TABLE t4()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t4
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -171,7 +171,7 @@ test           public       t4          root     ALL             true
 statement ok
 CREATE SEQUENCE s4
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s4
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -201,7 +201,7 @@ CREATE TABLE t5()
 
 # testuser has ALL privileges since by default, ALL is defined as a default
 # privilege for the creator role of an object..
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t5
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -226,7 +226,7 @@ USE d;
 statement ok
 CREATE TABLE t6()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t6
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -242,7 +242,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO testuser, testuser2
 statement ok
 CREATE TABLE t7()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t7
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -257,7 +257,7 @@ ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser, testuser2
 statement ok
 CREATE TABLE t8()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t8
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -304,7 +304,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser GRANT SELECT ON TABLES TO testu
 statement ok
 CREATE TABLE t9()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t9
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -318,7 +318,7 @@ user testuser
 statement ok
 CREATE TABLE t10()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t10
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -336,7 +336,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser REVOKE SELECT ON TABLES FROM te
 statement ok
 CREATE TABLE t11()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t11
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -348,7 +348,7 @@ user testuser
 statement ok
 CREATE TABLE t12()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t12
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable

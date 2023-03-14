@@ -1,6 +1,6 @@
 # Default privileges start with an implicit set, the creator role has ALL
 # and Public has usage.
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root    ALL    true
@@ -16,7 +16,7 @@ statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM root;
 ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root  ALL  true
@@ -30,7 +30,7 @@ ALTER DEFAULT PRIVILEGES GRANT USAGE ON TYPES TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root    ALL     true
@@ -48,7 +48,7 @@ CREATE USER foo
 statement ok
 CREATE USER bar
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root    ALL     true
@@ -66,7 +66,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar, root
 ----
 bar   false  functions  bar     ALL     true
@@ -107,7 +107,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TYPES TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root    ALL     true
@@ -133,7 +133,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TYPES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SCHEMAS FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root    ALL     true
@@ -159,7 +159,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root  ALL         true
@@ -187,7 +187,7 @@ statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 root  false  functions  root  ALL         true
@@ -207,7 +207,7 @@ statement ok
 GRANT testuser TO root;
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
 testuser  false  functions  testuser  ALL         true
@@ -221,7 +221,7 @@ testuser  false  types      testuser  ALL         true
 
 # SHOW DEFAULT PRIVILEGES should show default privileges for the current role.
 user testuser
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 testuser  false  functions  testuser  ALL    true
@@ -233,7 +233,7 @@ testuser  false  types      testuser  ALL    true
 
 user root
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
 testuser  false  functions  testuser  ALL         true
@@ -248,7 +248,7 @@ testuser  false  types      testuser  ALL         true
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE root, testuser
 ----
 root      false  functions  root      ALL         true
@@ -272,7 +272,7 @@ statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
 # ForAllRoles is not a real role and thus is not the grantee for any privileges.
-query TBTTTB
+query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
 NULL  true  tables  foo     DROP        true
@@ -291,7 +291,7 @@ USE "MixedCaseDB"
 statement ok
 ALTER DEFAULT PRIVILEGES IN SCHEMA "MixedCaseSchema" GRANT SELECT ON TABLES TO foo WITH GRANT OPTION
 
-query TBTTTB colnames
+query TBTTTB colnames,rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 role  for_all_roles  object_type  grantee  privilege_type  is_grantable

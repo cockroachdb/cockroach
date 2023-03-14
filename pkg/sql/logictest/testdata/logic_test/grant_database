@@ -1,7 +1,7 @@
 statement ok
 CREATE DATABASE a
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE a
 ----
 database_name  grantee  privilege_type  is_grantable
@@ -33,7 +33,7 @@ GRANT SELECT,ALL ON DATABASE a TO readwrite
 statement error syntax error
 REVOKE SELECT,ALL ON DATABASE a FROM readwrite
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL      true
@@ -42,7 +42,7 @@ a  readwrite  ALL      true
 a  root       ALL      true
 a  test-user  ALL      true
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  readwrite  ALL  true
@@ -51,7 +51,7 @@ a  test-user  ALL  true
 statement ok
 REVOKE CONNECT ON DATABASE a FROM "test-user",readwrite
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
@@ -68,7 +68,7 @@ a  test-user  DROP        true
 a  test-user  RESTORE     true
 a  test-user  ZONECONFIG  true
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  readwrite  BACKUP      true
@@ -85,7 +85,7 @@ a  test-user  ZONECONFIG  true
 statement ok
 REVOKE CREATE ON DATABASE a FROM "test-user"
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
@@ -104,7 +104,7 @@ a  test-user  ZONECONFIG  true
 statement ok
 REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  readwrite  BACKUP      true
@@ -116,7 +116,7 @@ a  readwrite  ZONECONFIG  true
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a
 ----
 a  admin   ALL      true
@@ -145,7 +145,7 @@ CREATE TABLE b.t()
 
 # CONNECT privilege should not be inherited from DB when creating a table.
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON b.t
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -179,7 +179,7 @@ CREATE DATABASE owner_grant_option
 statement ok
 GRANT CONNECT ON DATABASE owner_grant_option TO owner_grant_option_child
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE owner_grant_option
 ----
 database_name       grantee                   privilege_type  is_grantable
@@ -199,7 +199,7 @@ CREATE ROLE other_owner
 statement ok
 ALTER DATABASE owner_grant_option OWNER TO other_owner
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE owner_grant_option
 ----
 database_name       grantee                   privilege_type  is_grantable

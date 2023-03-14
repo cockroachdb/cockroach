@@ -181,17 +181,17 @@ CREATE TABLE t1 (
 )
 
 query TT
-SHOW CREATE INDEXES FROM t1
+SELECT * FROM [SHOW CREATE INDEXES FROM t1] ORDER BY index_name
 ----
-t1_pkey     CREATE UNIQUE INDEX t1_pkey ON public.t1 (k ASC)
-t1_a_key    CREATE UNIQUE INDEX t1_a_key ON public.t1 (a ASC)
 t1_a_b_idx  CREATE INDEX t1_a_b_idx ON public.t1 (a ASC, b ASC)
+t1_a_key    CREATE UNIQUE INDEX t1_a_key ON public.t1 (a ASC)
+t1_pkey     CREATE UNIQUE INDEX t1_pkey ON public.t1 (k ASC)
 
 query TT
-SHOW CREATE SECONDARY INDEXES FROM t1
+SELECT * FROM [SHOW CREATE SECONDARY INDEXES FROM t1] ORDER BY index_name
 ----
-t1_a_key    CREATE UNIQUE INDEX t1_a_key ON public.t1 (a ASC)
 t1_a_b_idx  CREATE INDEX t1_a_b_idx ON public.t1 (a ASC, b ASC)
+t1_a_key    CREATE UNIQUE INDEX t1_a_key ON public.t1 (a ASC)
 
 statement error relation "nonexistent" does not exist
 SHOW CREATE INDEXES FROM nonexistent

@@ -4,7 +4,7 @@ SET allow_ordinal_column_references=true
 statement ok
 CREATE TABLE foo(a INT, b CHAR)
 
-query I
+query I rowsort
 INSERT INTO foo(a, b) VALUES (1,'c'), (2,'b'), (3,'a') RETURNING @1
 ----
 1
