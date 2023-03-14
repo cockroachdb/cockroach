@@ -645,6 +645,7 @@ function makeStateWithStatementsAndLastReset(
         ),
         inFlight: false,
         valid: true,
+        unauthorized: false,
       };
     }
   }

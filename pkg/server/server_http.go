@@ -224,7 +224,7 @@ func startHTTPService(
 		// to close when quiescing starts to allow that worker to shut down.
 		<-stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
-			log.Ops.Fatalf(ctx, "%v", err)
+			log.Ops.Warningf(ctx, "%v", err)
 		}
 	}
 	if err := stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {

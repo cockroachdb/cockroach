@@ -76,7 +76,7 @@ func ScanSST(
 			return err
 		}
 		if err = mvccKeyValOp(storage.MVCCKeyValue{
-			Key:   pointIter.Key(),
+			Key:   pointIter.UnsafeKey().Clone(),
 			Value: v,
 		}); err != nil {
 			return err

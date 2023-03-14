@@ -97,7 +97,7 @@ func RegisterOfflineRecoveryEvents(
 		record := loqrecoverypb.ReplicaRecoveryRecord{}
 		if err := iter.ValueProto(&record); err != nil {
 			processingErrors = errors.CombineErrors(processingErrors, errors.Wrapf(err,
-				"failed to deserialize replica recovery event at key %s", iter.Key()))
+				"failed to deserialize replica recovery event at key %s", iter.UnsafeKey()))
 			continue
 		}
 		removeEvent, err := registerEvent(ctx, record)
@@ -109,7 +109,7 @@ func RegisterOfflineRecoveryEvents(
 		if removeEvent {
 			if err := readWriter.ClearUnversioned(iter.UnsafeKey().Key); err != nil {
 				processingErrors = errors.CombineErrors(processingErrors, errors.Wrapf(
-					err, "failed to delete replica recovery record at key %s", iter.Key()))
+					err, "failed to delete replica recovery record at key %s", iter.UnsafeKey()))
 				continue
 			}
 		}

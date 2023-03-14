@@ -388,7 +388,7 @@ func EvalAddSSTable(
 		if ok, err := existingIter.Valid(); err != nil {
 			return result.Result{}, errors.Wrap(err, "error while searching for non-empty span start")
 		} else if ok {
-			reply.FollowingLikelyNonEmptySpanStart = existingIter.Key().Key
+			reply.FollowingLikelyNonEmptySpanStart = existingIter.UnsafeKey().Key.Clone()
 		}
 	}
 

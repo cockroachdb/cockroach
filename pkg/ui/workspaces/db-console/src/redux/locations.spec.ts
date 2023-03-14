@@ -52,6 +52,7 @@ function makeStateWithLocations(locationData: ILocation[]) {
         }),
         inFlight: false,
         valid: true,
+        unauthorized: false,
       },
     },
   };
@@ -64,6 +65,7 @@ describe("selectLocations", function () {
         locations: {
           inFlight: false,
           valid: false,
+          unauthorized: false,
         },
       },
     };

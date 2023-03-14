@@ -291,14 +291,23 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 
 	// Display the tags if set.
 	buf.Write(cp[ttycolor.Blue])
-	// We must always tag with tenant ID.
-	buf.WriteByte('[')
-	writeTagToBuffer(buf, tenantIDLogTagBytePrefix, []byte(entry.TenantID()))
-	if entry.payload.tags != nil {
-		buf.WriteByte(',')
-		entry.payload.tags.formatToBuffer(buf)
+	// We must always tag with tenant ID if present.
+	tID := entry.TenantID()
+	if tID != "" || entry.payload.tags != nil {
+		buf.WriteByte('[')
+		if tID != "" {
+			writeTagToBuffer(buf, tenantIDLogTagBytePrefix, []byte(entry.TenantID()))
+			if entry.payload.tags != nil {
+				buf.WriteByte(',')
+			}
+		}
+		if entry.payload.tags != nil {
+			entry.payload.tags.formatToBuffer(buf)
+		}
+		buf.WriteByte(']')
+	} else {
+		buf.WriteString("[-]")
 	}
-	buf.WriteByte(']')
 	buf.Write(cp[ttycolor.Reset])
 	buf.WriteByte(' ')
 

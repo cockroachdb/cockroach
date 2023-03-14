@@ -346,7 +346,7 @@ func (w *Watcher) handleSSTable(ctx context.Context, data []byte) error {
 		}
 
 		// Add point keys.
-		key := iter.Key()
+		key := iter.UnsafeKey().Clone()
 		rawValue, err := iter.Value()
 		if err != nil {
 			return err

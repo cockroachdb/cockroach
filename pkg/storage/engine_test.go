@@ -307,8 +307,8 @@ func TestEngineBatch(t *testing.T) {
 			if currentBatch[len(currentBatch)-1].value != nil {
 				t.Errorf("%d: batch seek invalid, err=%v", i, err)
 			}
-		} else if !iter.Key().Equal(key) {
-			t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
+		} else if !iter.UnsafeKey().Equal(key) {
+			t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.UnsafeKey())
 		} else {
 			var m enginepb.MVCCMetadata
 			if err := iter.ValueProto(&m); err != nil {
@@ -2448,7 +2448,7 @@ func scanPointKeys(t *testing.T, r Reader) []MVCCKey {
 		if !ok {
 			break
 		}
-		pointKeys = append(pointKeys, iter.Key())
+		pointKeys = append(pointKeys, iter.UnsafeKey().Clone())
 	}
 	return pointKeys
 }

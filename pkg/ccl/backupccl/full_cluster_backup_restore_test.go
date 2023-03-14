@@ -220,7 +220,7 @@ CREATE TABLE data2.foo (a int);
 		it.SeekGE(storage.MVCCKey{Key: startKey})
 		hasKey, err := it.Valid()
 		require.NoError(t, err)
-		require.False(t, hasKey, "did not expect to find a key, found %s", it.Key())
+		require.False(t, hasKey, "did not expect to find a key, found %s", it.UnsafeKey())
 	})
 
 	// Allow the restore to make progress after we've checked the pre-restore

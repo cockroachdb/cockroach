@@ -393,9 +393,9 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 			break
 		}
 
-		if bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(roachpb.KeyMin)) ||
-			bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(splitKey)) {
-			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.Key())
+		if bytes.HasPrefix([]byte(iter.UnsafeKey().Key), txnPrefix(roachpb.KeyMin)) ||
+			bytes.HasPrefix([]byte(iter.UnsafeKey().Key), txnPrefix(splitKey)) {
+			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.UnsafeKey())
 		}
 	}
 }
@@ -2776,7 +2776,6 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 func TestStoreCapacityAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 92677)
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, 2,
@@ -2800,16 +2799,6 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	key := tc.ScratchRange(t)
 	desc := tc.AddVotersOrFatal(t, key, tc.Target(1))
 	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
-	testutils.SucceedsSoon(t, func() error {
-		repl, err := s.GetReplica(desc.RangeID)
-		if err != nil {
-			return err
-		}
-		if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
-			return errors.New("s2 does not own valid lease for this range")
-		}
-		return nil
-	})
 
 	tc.IncrClockForLeaseUpgrade(t, manualClock)
 	tc.WaitForLeaseUpgrade(ctx, t, desc)
@@ -2851,6 +2840,11 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		return nil
 	})
 
+	// Bump the clock again, right before calling capacity. We know that the
+	// writes have succeeded and should be reflected in Capacity, however the
+	// MinStatsDuration will cause nothing to be returned unless the last lease
+	// transfer is at least MinStatsDuration ago.
+	manualClock.Increment(int64(replicastats.MinStatsDuration))
 	cap, err = s.Capacity(ctx, false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
@@ -2865,7 +2859,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	// NB: The writes per second may be within some error bound below the
 	// minExpected due to timing and floating point calculation. An error of
 	// 0.01 (WPS) is added to avoid flaking the test.
-	if minExpected, a := 1/float64(replicastats.MinStatsDuration/time.Second), cap.WritesPerSecond; minExpected > a+0.01 {
+	if minExpected, a := 1/(float64(2*replicastats.MinStatsDuration/time.Second)), cap.WritesPerSecond; minExpected > a+0.01 {
 		t.Errorf("expected cap.WritesPerSecond >= %f, got %f", minExpected, a)
 	}
 

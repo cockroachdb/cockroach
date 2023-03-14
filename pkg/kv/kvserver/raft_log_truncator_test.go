@@ -208,7 +208,7 @@ func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
 	fmt.Fprintf(r.buf, "log entries:")
 	printPrefixStr := ""
 	for valid {
-		key := iter.Key()
+		key := iter.UnsafeKey()
 		_, index, err := encoding.DecodeUint64Ascending(key.Key[len(prefix):])
 		require.NoError(t, err)
 		fmt.Fprintf(r.buf, "%s %d", printPrefixStr, index)

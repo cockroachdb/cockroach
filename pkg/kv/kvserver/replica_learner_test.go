@@ -1466,7 +1466,6 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 
 func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 95500, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1477,10 +1476,33 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	tc.WaitForNodeLiveness(t)
+
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(2))
+	})
+
+	{
+		// Ensure that the test starts with the expected number of learners:
+		// (n1,s1):1, (n2,s2):2 LEARNER, (n3,s3):3 LEARNER
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Len(t, desc.Replicas().LearnerDescriptors(), 2)
+	}
+
+	// Assert that initially there are no snapshots in flight to learners. This
+	// is an important precondition before testing AdminRelocateRange below, as
+	// AdminRelocateRange won't handle learners which have inflight snapshots and
+	// this test will flake.
+	testutils.SucceedsSoon(t, func() error {
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+		require.NoError(t, err)
+		if repl.HasOutstandingLearnerSnapshotInFlightForTesting() {
+			return errors.Errorf("outstanding learner snapshot in flight %s", desc)
+		}
+		return nil
 	})
 
 	check := func(voterTargets []roachpb.ReplicationTarget) {

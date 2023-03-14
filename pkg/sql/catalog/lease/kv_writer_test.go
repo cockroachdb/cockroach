@@ -157,7 +157,7 @@ func getRawHistoryKVs(
 				} else if !ok {
 					return nil
 				}
-				k := it.Key()
+				k := it.UnsafeKey().Clone()
 				suffix, _, err := codec.DecodeTablePrefix(k.Key)
 				require.NoError(t, err)
 				v, err := it.Value()
