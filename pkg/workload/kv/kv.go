@@ -598,15 +598,11 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
 		var tx pgx.Tx
-		pl := o.mcp.Get()
-		conn, err := pl.Acquire(ctx)
+		tx, err := o.mcp.Get().BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
 			return err
 		}
 
-		if tx, err = conn.Begin(ctx); err != nil {
-			return err
-		}
 		defer func() {
 			rollbackErr := tx.Rollback(ctx)
 			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {

@@ -234,7 +234,7 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 	defer cancel()
 
 	var numWarmupConns int
-	if numConns <= 0 {
+	if numConns == 0 {
 		for _, p := range m.Pools {
 			numWarmupConns += int(p.Config().MaxConns)
 		}
