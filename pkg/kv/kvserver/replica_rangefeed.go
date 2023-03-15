@@ -428,11 +428,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		}
 	}
 
-	// Set the rangefeed processor and filter reference. We know that no other
-	// registration process could have raced with ours because calling this
-	// method requires raftMu to be exclusively locked.
+	// Set the rangefeed processor and filter reference.
 	r.setRangefeedProcessor(p)
+	r.rangefeedMu.Lock()
 	r.setRangefeedFilterLocked(filter)
+	r.rangefeedMu.Unlock()
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
