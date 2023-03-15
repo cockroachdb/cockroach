@@ -50,11 +50,14 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 	// string printer called pgwireFormatStringInTuple().
 	ctx.WriteByte('(')
 	comma := ""
+	tc := d.ResolvedType().TupleContents()
 	for i, v := range d.D {
 		ctx.WriteString(comma)
-		t := v.ResolvedType()
-		if tc := d.ResolvedType().TupleContents(); i < len(tc) {
+		var t *types.T
+		if i < len(tc) {
 			t = tc[i]
+		} else {
+			t = v.ResolvedType()
 		}
 		switch dv := UnwrapDOidWrapper(v).(type) {
 		case dNull:
