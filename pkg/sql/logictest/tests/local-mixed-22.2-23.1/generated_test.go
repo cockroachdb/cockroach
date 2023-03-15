@@ -79,6 +79,13 @@ func TestLogic_alter_table(
 	runLogicTest(t, "alter_table")
 }
 
+func TestLogic_comment_on(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "comment_on")
+}
+
 func TestLogic_create_index(
 	t *testing.T,
 ) {
