@@ -3173,3 +3173,14 @@ SHOW CONSTRAINTS FROM t_96728
 table_name  constraint_name  constraint_type  details                              validated
 t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
 t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
+
+# This subtest disallows using builtin function `cluster_logical_timestamp()`
+# as the default expression when backfilling a column.
+subtest 98269
+
+statement ok
+CREATE TABLE t_98269 (i INT PRIMARY KEY);
+INSERT INTO t_98269 VALUES (0);
+
+statement error pgcode 0A000 .* cluster_logical_timestamp\(\): attempted to access nil txn in column backfill
+ALTER TABLE t_98269 ADD COLUMN j DECIMAL NOT NULL DEFAULT cluster_logical_timestamp();

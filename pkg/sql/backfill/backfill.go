@@ -25,8 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -372,6 +375,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		for j, e := range cb.updateExprs {
 			val, err := eval.Expr(ctx, cb.evalCtx, e)
 			if err != nil {
+				if errors.Is(err, colexecerror.ErrNilTxnAccessedInColBackfill) {
+					// Issue #98269; Cannot use `cluster_logical_timestamp()` as column default value.
+					return roachpb.Key{}, pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+				}
 				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
 			if j < len(cb.added) && !cb.added[j].IsNullable() && val == tree.DNull {
@@ -876,6 +883,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 			val, err := eval.Expr(ctx, ib.evalCtx, texpr)
 			if err != nil {
+				if errors.Is(err, colexecerror.ErrNilTxnAccessedInColBackfill) {
+					// Issue #98269; Cannot use `cluster_logical_timestamp()` as column default value.
+					err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+				}
 				return err
 			}
 			colIdx, ok := ib.colIdxMap.Get(colID)

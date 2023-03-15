@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -495,12 +496,15 @@ func (ec *Context) GetStmtTimestamp() time.Time {
 
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ec *Context) GetClusterTimestamp() *tree.DDecimal {
+func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
+	if ec.Txn == nil {
+		return nil, colexecerror.ErrNilTxnAccessedInColBackfill
+	}
 	ts := ec.Txn.CommitTimestamp()
 	if ts.IsEmpty() {
-		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
+		return nil, errors.AssertionFailedf("zero cluster timestamp in txn")
 	}
-	return TimestampToDecimalDatum(ts)
+	return TimestampToDecimalDatum(ts), nil
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been

@@ -24,6 +24,8 @@ import (
 
 const panicLineSubstring = "runtime/panic.go"
 
+var ErrNilTxnAccessedInColBackfill = errors.New("attempted to access nil txn in column backfill")
+
 // CatchVectorizedRuntimeError executes operation, catches a runtime error if
 // it is coming from the vectorized engine, and returns it. If an error not
 // related to the vectorized engine occurs, it is not recovered from.
