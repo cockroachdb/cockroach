@@ -112,8 +112,12 @@ const (
 	// these were implicitly derived based on the set of non-virtual columns in
 	// the table.
 	PrimaryIndexWithStoredColumnsVersion
+	// JSONCompositeColumnsVersion corresponds to the requirement that JSON
+	// columns now need to be composite in nature due to the availability of JSON
+	// key encodings.
+	JSONCompositeColumnsVersion
 	// LatestIndexDescriptorVersion corresponds to the latest encoding version.
-	LatestIndexDescriptorVersion = PrimaryIndexWithStoredColumnsVersion
+	LatestIndexDescriptorVersion = JSONCompositeColumnsVersion
 )
 
 // PGAttributeNum is a custom type for ColumnDescriptor's PGAttributeNum field.
