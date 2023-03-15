@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -1213,15 +1214,22 @@ func UpdateSSTTimestamps(
 		if fp := defaults.Levels[0].FilterPolicy; fp != nil && len(opts.Filters) == 0 {
 			opts.Filters = map[string]sstable.FilterPolicy{fp.Name(): fp}
 		}
-		if _, err := sstable.RewriteKeySuffixes(sst,
+		rewriteOpts, minTableFormat := makeSSTRewriteOptions(ctx, st)
+		_, tableFormat, err := sstable.RewriteKeySuffixesAndReturnFormat(sst,
 			opts,
 			sstOut,
-			MakeIngestionWriterOptions(ctx, st),
+			rewriteOpts,
 			EncodeMVCCTimestampSuffix(from),
 			EncodeMVCCTimestampSuffix(to),
 			concurrency,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, enginepb.MVCCStats{}, err
+		}
+		if minTableFormat > tableFormat {
+			return nil, enginepb.MVCCStats{},
+				errors.Errorf("rewrite table format %s is less than min format %s",
+					redact.SafeString(tableFormat.String()), redact.SafeString(minTableFormat.String()))
 		}
 		return sstOut.Bytes(), statsDelta, nil
 	}

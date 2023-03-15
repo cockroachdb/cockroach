@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 10
+const configIdx = 9
 
 var logicTestDir string
 var execBuildLogicTestDir string

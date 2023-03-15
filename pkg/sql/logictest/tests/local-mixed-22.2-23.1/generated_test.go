@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 18
+const configIdx = 17
 
 var logicTestDir string
 
@@ -72,11 +72,25 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_alter_primary_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key")
+}
+
 func TestLogic_alter_table(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_table")
+}
+
+func TestLogic_comment_on(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "comment_on")
 }
 
 func TestLogic_create_index(
@@ -98,6 +112,13 @@ func TestLogic_drop_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_index")
+}
+
+func TestLogic_drop_owned_by(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_owned_by")
 }
 
 func TestLogic_drop_schema(
