@@ -42,8 +42,8 @@ import (
 
 const (
 	createTable                         = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemKey                           = "\xc1"
-	systemKeyPretty                     = "/Table/57"
+	systemKey                           = "\xc3"
+	systemKeyPretty                     = "/Table/59"
 	secondaryKeyPretty                  = "/Tenant/10"
 	secondaryWithoutCapabilityKeyPretty = "/Tenant/20"
 	maxTimestamp                        = "2262-04-11 23:47:16.854776 +0000 +0000"

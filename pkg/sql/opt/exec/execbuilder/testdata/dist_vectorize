@@ -28,8 +28,9 @@ ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 
 # Verify data placement.
 query TTTI rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv WITH DETAILS]
+ORDER BY 1
 ----
-<before:/Table/57>  …/1/1                   {1}  1
+<before:/Table/59>  …/1/1                   {1}  1
 …/1/1               …/1/2                   {1}  1
 …/1/2               …/1/3                   {2}  2
 …/1/3               …/1/4                   {3}  3

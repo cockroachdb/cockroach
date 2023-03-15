@@ -50,7 +50,9 @@ public  statement_diagnostics            table     NULL  NULL
 public  statement_diagnostics_requests   table     NULL  NULL
 public  statement_statistics             table     NULL  NULL
 public  table_statistics                 table     NULL  NULL
+public  task_payloads                    table     NULL  NULL
 public  tenant_settings                  table     NULL  NULL
+public  tenant_tasks                     table     NULL  NULL
 public  tenant_usage                     table     NULL  NULL
 public  tenants                          table     NULL  NULL
 public  transaction_statistics           table     NULL  NULL
@@ -112,8 +114,28 @@ public  zones                            table     NULL  NULL
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
 query I rowsort
-SELECT id FROM system.descriptor
+SELECT id FROM system.descriptor ORDER BY 1
 ----
+1
+3
+4
+5
+6
+7
+8
+11
+12
+13
+14
+15
+19
+20
+21
+23
+24
+25
+26
+27
 28
 30
 31
@@ -124,21 +146,6 @@ SELECT id FROM system.descriptor
 36
 37
 39
-57
-100
-101
-102
-103
-104
-105
-11
-1
-3
-4
-5
-6
-7
-8
 40
 41
 42
@@ -155,22 +162,19 @@ SELECT id FROM system.descriptor
 54
 55
 56
-12
-13
-14
-15
-19
-20
-21
-23
-24
-25
-26
-27
+57
+58
+59
+100
+101
+102
+103
+104
+105
 
 onlyif config 3node-tenant-default-configs
 query I rowsort
-SELECT id FROM system.descriptor
+SELECT id FROM system.descriptor ORDER BY 1
 ----
 1
 3
@@ -612,6 +616,14 @@ system  public  table_statistics                 root    DELETE  true
 system  public  table_statistics                 root    INSERT  true
 system  public  table_statistics                 root    SELECT  true
 system  public  table_statistics                 root    UPDATE  true
+system  public  task_payloads                    admin   DELETE  true
+system  public  task_payloads                    admin   INSERT  true
+system  public  task_payloads                    admin   SELECT  true
+system  public  task_payloads                    admin   UPDATE  true
+system  public  task_payloads                    root    DELETE  true
+system  public  task_payloads                    root    INSERT  true
+system  public  task_payloads                    root    SELECT  true
+system  public  task_payloads                    root    UPDATE  true
 system  public  tenant_settings                  admin   DELETE  true
 system  public  tenant_settings                  admin   INSERT  true
 system  public  tenant_settings                  admin   SELECT  true
@@ -620,6 +632,14 @@ system  public  tenant_settings                  root    DELETE  true
 system  public  tenant_settings                  root    INSERT  true
 system  public  tenant_settings                  root    SELECT  true
 system  public  tenant_settings                  root    UPDATE  true
+system  public  tenant_tasks                     admin   DELETE  true
+system  public  tenant_tasks                     admin   INSERT  true
+system  public  tenant_tasks                     admin   SELECT  true
+system  public  tenant_tasks                     admin   UPDATE  true
+system  public  tenant_tasks                     root    DELETE  true
+system  public  tenant_tasks                     root    INSERT  true
+system  public  tenant_tasks                     root    SELECT  true
+system  public  tenant_tasks                     root    UPDATE  true
 system  public  tenant_usage                     admin   DELETE  true
 system  public  tenant_usage                     admin   INSERT  true
 system  public  tenant_usage                     admin   SELECT  true
