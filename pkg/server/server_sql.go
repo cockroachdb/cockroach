@@ -463,15 +463,20 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 	ctx context.Context,
 ) (createAnotherSession bool) {
 	if err := r.cfg.stopper.RunAsyncTask(ctx, "refresh-instance-session", func(context.Context) {
-		nodeID, _ := r.cfg.nodeIDContainer.OptionalNodeID()
-		s, err := r.cfg.sqlLivenessProvider.Session(ctx)
-		if err != nil {
-			log.Errorf(ctx, "faild to get new liveness session ID: %v", err)
-		}
-		if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
-			ctx, s.ID(), s.Expiration(), r.cfg.AdvertiseAddr, r.cfg.SQLAdvertiseAddr, r.cfg.Locality, nodeID,
-		); err != nil {
-			log.Errorf(ctx, "failed to update instance with new session ID: %v", err)
+		for ctx.Err() == nil {
+			nodeID, _ := r.cfg.nodeIDContainer.OptionalNodeID()
+			s, err := r.cfg.sqlLivenessProvider.Session(ctx)
+			if err != nil {
+				log.Warningf(ctx, "failed to get new liveness session ID: %v", err)
+				continue
+			}
+			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
+				ctx, s.ID(), s.Expiration(), r.cfg.AdvertiseAddr, r.cfg.SQLAdvertiseAddr, r.cfg.Locality, nodeID,
+			); err != nil {
+				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
+				continue
+			}
+			return
 		}
 	}); err != nil {
 		log.Errorf(ctx, "failed to run update of instance with new session ID: %v", err)
