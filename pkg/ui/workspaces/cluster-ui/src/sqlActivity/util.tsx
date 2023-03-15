@@ -10,8 +10,16 @@
 
 import { Filters, getTimeValueInSeconds } from "../queryFilter";
 import { AggregateStatistics } from "../statementsTable";
-import { containAny, unset } from "../util";
+import {
+  CollectedStatementStatistics,
+  containAny,
+  FixFingerprintHexValue,
+  flattenStatementStats,
+  unset,
+} from "../util";
 import { filterBySearchQuery } from "../statementsPage";
+import { createSelector } from "@reduxjs/toolkit";
+import { SqlStatsResponse } from "../api";
 
 export function filteredStatementsData(
   filters: Filters,
@@ -36,6 +44,10 @@ export function filteredStatementsData(
   }
   const regions = filters.regions?.length > 0 ? filters.regions.split(",") : [];
   const nodes = filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
+  const appNames = filters.app
+    ?.split(",")
+    .map(app => app.trim())
+    .filter(appName => !!appName);
 
   // Return statements filtered by the values selected on the filter and
   // the search text. A statement must match all selected filters to be
@@ -55,6 +67,10 @@ export function filteredStatementsData(
         return databases.length === 0 || databases.includes(statement.database);
       }
     })
+    .filter(
+      statement =>
+        !appNames?.length || appNames.includes(statement.applicationName),
+    )
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
@@ -89,3 +105,54 @@ export function filteredStatementsData(
       search ? filterBySearchQuery(statement, search) : true,
     );
 }
+
+export const convertRawStmtsToAggregateStatisticsMemoized = createSelector(
+  (stmts: CollectedStatementStatistics[]) => stmts,
+  (stmts): AggregateStatistics[] => {
+    if (!stmts?.length) return [];
+
+    const statements = flattenStatementStats(stmts);
+
+    return statements.map(stmt => {
+      return {
+        aggregatedFingerprintID: stmt.statement_fingerprint_id?.toString(),
+        aggregatedFingerprintHexID: FixFingerprintHexValue(
+          stmt.statement_fingerprint_id?.toString(16),
+        ),
+        label: stmt.statement,
+        summary: stmt.statement_summary,
+        aggregatedTs: stmt.aggregated_ts,
+        implicitTxn: stmt.implicit_txn,
+        fullScan: stmt.full_scan,
+        database: stmt.database,
+        applicationName: stmt.app,
+        stats: stmt.stats,
+      };
+    });
+  },
+);
+
+// getAppsFromStmtsResponseMemoized returns the array of all unique apps within the data.
+export const getAppsFromStmtsResponseMemoized = createSelector(
+  (data: SqlStatsResponse) => data,
+  data => {
+    if (!data) {
+      return [];
+    }
+
+    const apps = new Set<string>();
+    data.statements?.forEach(statement => {
+      const app = statement.key.key_data.app;
+      if (
+        data.internal_app_name_prefix &&
+        app.startsWith(data.internal_app_name_prefix)
+      ) {
+        apps.add(data.internal_app_name_prefix);
+        return;
+      }
+      apps.add(app ? app : unset);
+    });
+
+    return Array.from(apps).sort();
+  },
+);

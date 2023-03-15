@@ -23,7 +23,6 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
 import { PrintTime } from "src/views/reports/containers/range/print";
-import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
@@ -44,8 +43,6 @@ import {
   StatementsPageDispatchProps,
   StatementsPageRootProps,
   api,
-  selectStmtsAllApps,
-  selectStmtsCombiner,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -67,26 +64,12 @@ import {
   mapStateToRecentStatementViewProps,
 } from "./recentStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
-import {
-  selectStatementsLastUpdated,
-  selectStatementsDataValid,
-  selectStatementsDataInFlight,
-} from "src/selectors/executionFingerprintsSelectors";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-
-// selectStatements returns the array of AggregateStatistics to show on the
-// StatementsPage, based on if the appAttr route parameter is set.
-export const selectStatements = createSelector(
-  (state: AdminUIState) => state.cachedData.statements?.data,
-  (_state: AdminUIState, props: RouteComponentProps) => props,
-  selectDiagnosticsReportsPerStatement,
-  selectStmtsCombiner,
-);
+import { createSelectorForCachedDataField } from "src/redux/apiReducers";
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(
   (state: AdminUIState) => state.cachedData.databases,
-  (state: CachedDataReducerState<clusterUiApi.DatabasesListResponse>) => {
+  (state: CachedDataReducerState<api.DatabasesListResponse>) => {
     if (!state?.data) {
       return [];
     }
@@ -164,7 +147,7 @@ const fingerprintsPageActions = {
     };
   },
   onActivateStatementDiagnostics: (
-    insertStmtDiagnosticRequest: clusterUiApi.InsertStmtDiagnosticRequest,
+    insertStmtDiagnosticRequest: api.InsertStmtDiagnosticRequest,
   ) => {
     return (dispatch: AppDispatch) =>
       dispatch(
@@ -185,7 +168,7 @@ const fingerprintsPageActions = {
     }),
   onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
   onSelectDiagnosticsReportDropdownOption: (
-    report: clusterUiApi.StatementDiagnosticsReport,
+    report: api.StatementDiagnosticsReport,
   ) => {
     if (report.completed) {
       return trackDownloadDiagnosticsBundleAction(report.statement_fingerprint);
@@ -223,6 +206,9 @@ type DispatchProps = {
   activePageProps: RecentStatementsViewDispatchProps;
 };
 
+const selectStatements =
+  createSelectorForCachedDataField<api.SqlStatsResponse>("statements");
+
 export default withRouter(
   connect<
     StateProps,
@@ -233,26 +219,20 @@ export default withRouter(
     (state: AdminUIState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
         ...props,
-        apps: selectStmtsAllApps(state.cachedData.statements?.data),
         columns: statementColumnsLocalSetting.selectorToArray(state),
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
         filters: filtersLocalSetting.selector(state),
-        lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
-        statements: selectStatements(state, props),
-        isDataValid: selectStatementsDataValid(state),
-        isReqInFlight: selectStatementsDataInFlight(state),
-        lastUpdated: selectStatementsLastUpdated(state),
-        statementsError: state.cachedData.statements.lastError,
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
         stmtsTotalRuntimeSecs:
           state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
+        statementsResponse: selectStatements(state),
       },
       activePageProps: mapStateToRecentStatementViewProps(state),
     }),
