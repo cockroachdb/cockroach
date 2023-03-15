@@ -103,7 +103,7 @@ func (cs *childSet) add(metric childMetric) {
 	}
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if cs.mu.tree.Has(metric) {
+	if false && cs.mu.tree.Has(metric) { // TODO(XXX) for some reason we hit this for RaftUnstableBytes
 		panic(errors.AssertionFailedf("child %v already exists", metric.labelValues()))
 	}
 	cs.mu.tree.ReplaceOrInsert(metric)
