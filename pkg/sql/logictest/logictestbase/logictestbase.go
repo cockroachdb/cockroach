@@ -55,10 +55,9 @@ type TestClusterConfig struct {
 	SkipShort bool
 	// If not empty, bootstrapVersion controls what version the cluster will be
 	// bootstrapped at.
-	BootstrapVersion roachpb.Version
-	// If not empty, binaryVersion is used to set what the Server will consider
-	// to be the binary version.
-	BinaryVersion  roachpb.Version
+	BootstrapVersion clusterversion.Key
+	// DisableUpgrade prevents the cluster from automatically upgrading to the
+	// latest version.
 	DisableUpgrade bool
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
@@ -279,14 +278,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideVectorize:   "off",
 	},
 	{
-		Name:                "local-v1.1-at-v1.0-noupgrade",
-		NumNodes:            1,
-		OverrideDistSQLMode: "off",
-		BootstrapVersion:    roachpb.Version{Major: 1},
-		BinaryVersion:       roachpb.Version{Major: 1, Minor: 1},
-		DisableUpgrade:      true,
-	},
-	{
 		Name:                "fakedist",
 		NumNodes:            3,
 		UseFakeSpanResolver: true,
@@ -454,8 +445,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "local-mixed-22.2-23.1",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.ByKey(clusterversion.V22_2),
-		BinaryVersion:               clusterversion.ByKey(clusterversion.V23_1),
+		BootstrapVersion:            clusterversion.V22_2,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},

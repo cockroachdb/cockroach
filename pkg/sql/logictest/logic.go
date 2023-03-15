@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -74,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1407,11 +1405,12 @@ func (t *logicTest) newCluster(
 	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
 		ForceDiskSpill: cfg.SQLExecUseDisk,
 	}
-	if cfg.BootstrapVersion != (roachpb.Version{}) {
+	if cfg.BootstrapVersion != clusterversion.Key(0) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.BootstrapVersion
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BootstrapVersionKeyOverride = cfg.BootstrapVersion
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = clusterversion.ByKey(cfg.BootstrapVersion)
 	}
 	if cfg.DisableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -1442,35 +1441,6 @@ func (t *logicTest) newCluster(
 			nodeParams.Locality = locality
 		} else {
 			require.Lenf(t.rootT, cfg.Localities, 0, "node %d does not have a locality set", i+1)
-		}
-
-		if cfg.BinaryVersion != (roachpb.Version{}) {
-			binaryMinSupportedVersion := cfg.BinaryVersion
-			if cfg.BootstrapVersion != (roachpb.Version{}) {
-				// If we want to run a specific server version, we assume that it
-				// supports at least the bootstrap version.
-				binaryMinSupportedVersion = cfg.BootstrapVersion
-			}
-			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
-				cfg.BinaryVersion,
-				binaryMinSupportedVersion,
-				false, /* initializeVersion */
-			)
-
-			// If we're injecting fake versions, hook up logic to simulate the end
-			// version existing.
-			if len(clusterversion.ListBetween(cfg.BootstrapVersion, cfg.BinaryVersion)) == 0 {
-				mm, ok := nodeParams.Knobs.UpgradeManager.(*upgradebase.TestingKnobs)
-				if !ok {
-					mm = &upgradebase.TestingKnobs{}
-					nodeParams.Knobs.UpgradeManager = mm
-				}
-				mm.ListBetweenOverride = func(
-					from, to roachpb.Version,
-				) []roachpb.Version {
-					return []roachpb.Version{to}
-				}
-			}
 		}
 		paramsPerNode[i] = nodeParams
 	}
