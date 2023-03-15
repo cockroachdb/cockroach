@@ -2097,8 +2097,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryResultWriter := &errOnlyResultWriter{}
 	postqueryRecv.resultWriterMu.row = postqueryResultWriter
 	postqueryRecv.resultWriterMu.batch = postqueryResultWriter
-	// Postqueries cannot have "inner" plans, so we use nil finishedSetupFn.
-	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
+	defer cleanup()
+	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, finishedSetupFn)
 	return postqueryRecv.getError()
 }
 

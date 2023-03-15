@@ -42,29 +42,3 @@ SELECT * FROM crdb_internal.kv_store_status
 
 statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.kv_node_status
-
-# Cannot perform operations that issue Admin requests.
-
-statement error tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled
-ALTER TABLE kv SCATTER
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER TABLE kv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'k')
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER TABLE kv EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'k')
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT crdb_internal.check_consistency(true, '', '')
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE 1 RELOCATE LEASE TO 2
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM [SHOW RANGES FROM TABLE kv]
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE 1 RELOCATE FROM 1 TO 2
-
-statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT range_id FROM [SHOW RANGES FROM TABLE kv]

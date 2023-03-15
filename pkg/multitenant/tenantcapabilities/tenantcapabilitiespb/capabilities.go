@@ -16,6 +16,10 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+func init() {
+	tenantcapabilities.RegisterDefaultCapabilities(&TenantCapabilities{})
+}
+
 // boolCapValue is a wrapper around bool that ensures that values can
 // be included in reportables.
 type boolCapValue bool
@@ -74,6 +78,8 @@ func (t *TenantCapabilities) Cap(
 	capabilityID tenantcapabilities.CapabilityID,
 ) tenantcapabilities.Capability {
 	switch capabilityID {
+	case tenantcapabilities.CanAdminRelocateRange:
+		return boolCap{&t.CanAdminRelocateRange}
 	case tenantcapabilities.CanAdminScatter:
 		return invertedBoolCap{&t.DisableAdminScatter}
 	case tenantcapabilities.CanAdminSplit:
@@ -94,6 +100,8 @@ func (t *TenantCapabilities) Cap(
 // It is an optimization.
 func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityID) bool {
 	switch capabilityID {
+	case tenantcapabilities.CanAdminRelocateRange:
+		return t.CanAdminRelocateRange
 	case tenantcapabilities.CanAdminScatter:
 		return !t.DisableAdminScatter
 	case tenantcapabilities.CanAdminSplit:
