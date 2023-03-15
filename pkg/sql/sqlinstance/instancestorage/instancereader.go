@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -172,30 +173,76 @@ func (r *Reader) GetAllInstancesUsingTxn(
 	return makeInstanceInfos(filteredRows), nil
 }
 
-// GetInstance implements sqlinstance.AddressResolver interface.
+// GetInstance implements sqlinstance.AddressResolver interface. The function
+// first tries to find the instance (and validate that it's alive) using the
+// instance cache. If it can't be found it the cache, it performs a more
+// expensive precise check by directly querying the instances table.
 func (r *Reader) GetInstance(
 	ctx context.Context, instanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
 	if err := r.initialScanErr(); err != nil {
 		return sqlinstance.InstanceInfo{}, err
 	}
-	instance, ok := r.getCache().getInstance(instanceID)
-	if !ok {
+	getNonCached := func(instanceID base.SQLInstanceID) (sqlinstance.InstanceInfo, error) {
+		log.Infof(ctx, "getting non-cached version of SQL server %d", instanceID)
+		instances, err := r.GetAllInstancesNoCache(ctx)
+		if err != nil {
+			return sqlinstance.InstanceInfo{}, err
+		}
+		for i := range instances {
+			inst := instances[i]
+			if inst.InstanceID == instanceID {
+				return inst, nil
+			}
+		}
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
-	alive, err := r.slReader.IsAlive(ctx, instance.sessionID)
+
+	var err error
+	var instance sqlinstance.InstanceInfo
+	usedCache := true
+	instanceRow, ok := r.getCache().getInstance(instanceID)
+	var sessionID sqlliveness.SessionID
+	if !ok {
+		usedCache = false
+		instance, err = getNonCached(instanceID)
+		if err != nil {
+			return sqlinstance.InstanceInfo{}, err
+		}
+		sessionID = instance.SessionID
+	} else {
+		sessionID = instanceRow.sessionID
+	}
+	alive, err := r.slReader.IsAlive(ctx, sessionID)
 	if err != nil {
 		return sqlinstance.InstanceInfo{}, err
 	}
 	if !alive {
-		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
+		if usedCache {
+			// Try again without the cache.
+			usedCache = false
+			instance, err = getNonCached(instanceID)
+			if err != nil {
+				return sqlinstance.InstanceInfo{}, err
+			}
+			alive, err = r.slReader.IsAlive(ctx, instance.SessionID)
+			if err != nil {
+				return sqlinstance.InstanceInfo{}, err
+			}
+			if !alive {
+				return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
+			}
+		}
+	}
+	if !usedCache {
+		return instance, nil
 	}
 	instanceInfo := sqlinstance.InstanceInfo{
-		InstanceID:      instance.instanceID,
-		InstanceRPCAddr: instance.rpcAddr,
-		InstanceSQLAddr: instance.sqlAddr,
-		SessionID:       instance.sessionID,
-		Locality:        instance.locality,
+		InstanceID:      instanceRow.instanceID,
+		InstanceRPCAddr: instanceRow.rpcAddr,
+		InstanceSQLAddr: instanceRow.sqlAddr,
+		SessionID:       instanceRow.sessionID,
+		Locality:        instanceRow.locality,
 	}
 	return instanceInfo, nil
 }

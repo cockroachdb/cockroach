@@ -323,11 +323,11 @@ func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val setting
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
 			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 		} else if newVersion.LessEq(oldVersion.Version) {
-			// Nothing to do
+			// Nothing to do.
 		} else if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
 			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 		} else if newVersion != oldVersion {
-			log.Infof(ctx, "set cluster version to: %v", newVersion)
+			log.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
 		}
 		return
 	}
