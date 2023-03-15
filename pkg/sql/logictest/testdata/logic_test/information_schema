@@ -456,6 +456,7 @@ crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
 crdb_internal       statement_statistics
+crdb_internal       statement_statistics_persisted
 crdb_internal       statement_statistics_v22_1
 crdb_internal       super_regions
 crdb_internal       table_columns
@@ -465,6 +466,7 @@ crdb_internal       tables
 crdb_internal       tenant_usage_details
 crdb_internal       transaction_contention_events
 crdb_internal       transaction_statistics
+crdb_internal       transaction_statistics_persisted
 crdb_internal       zones
 information_schema  administrable_role_authorizations
 information_schema  applicable_roles
@@ -784,6 +786,7 @@ schema_changes
 session_trace
 session_variables
 statement_statistics
+statement_statistics_persisted
 statement_statistics_v22_1
 super_regions
 table_columns
@@ -793,6 +796,7 @@ tables
 tenant_usage_details
 transaction_contention_events
 transaction_statistics
+transaction_statistics_persisted
 zones
 administrable_role_authorizations
 applicable_roles
@@ -1067,6 +1071,7 @@ type_privileges
 triggers
 triggered_update_columns
 transforms
+transaction_statistics_persisted
 transaction_statistics
 transaction_contention_events
 tenant_usage_details
@@ -1151,6 +1156,7 @@ system         crdb_internal       schema_changes                         SYSTEM
 system         crdb_internal       session_trace                          SYSTEM VIEW  NO                  1
 system         crdb_internal       session_variables                      SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics                   SYSTEM VIEW  NO                  1
+system         crdb_internal       statement_statistics_persisted         SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics_v22_1             SYSTEM VIEW  NO                  1
 system         crdb_internal       super_regions                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                          SYSTEM VIEW  NO                  1
@@ -1160,6 +1166,7 @@ system         crdb_internal       tables                                 SYSTEM
 system         crdb_internal       tenant_usage_details                   SYSTEM VIEW  NO                  1
 system         crdb_internal       transaction_contention_events          SYSTEM VIEW  NO                  1
 system         crdb_internal       transaction_statistics                 SYSTEM VIEW  NO                  1
+system         crdb_internal       transaction_statistics_persisted       SYSTEM VIEW  NO                  1
 system         crdb_internal       zones                                  SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations      SYSTEM VIEW  NO                  1
 system         information_schema  applicable_roles                       SYSTEM VIEW  NO                  1
@@ -2814,6 +2821,7 @@ NULL     public   system         crdb_internal       schema_changes             
 NULL     public   system         crdb_internal       session_trace                          SELECT          NO            YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       statement_statistics_persisted         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_v22_1             SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
@@ -2823,6 +2831,7 @@ NULL     public   system         crdb_internal       tables                     
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NO            YES
+NULL     public   system         crdb_internal       transaction_statistics_persisted       SELECT          NO            YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NO            YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NO            YES
 NULL     public   system         information_schema  applicable_roles                       SELECT          NO            YES
@@ -3388,6 +3397,7 @@ NULL     public   system         crdb_internal       schema_changes             
 NULL     public   system         crdb_internal       session_trace                          SELECT          NO            YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       statement_statistics_persisted         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_v22_1             SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
@@ -3397,6 +3407,7 @@ NULL     public   system         crdb_internal       tables                     
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NO            YES
+NULL     public   system         crdb_internal       transaction_statistics_persisted       SELECT          NO            YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NO            YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NO            YES
 NULL     public   system         information_schema  applicable_roles                       SELECT          NO            YES
