@@ -10,7 +10,7 @@
 # The first table created has id 58.
 
 send crdb_only
-Parse {"Name": "s1", "Query": "SELECT $1", "ParameterOIDs": [100058]}
+Parse {"Name": "s1", "Query": "SELECT $1", "ParameterOIDs": [100080]}
 Sync
 ----
 

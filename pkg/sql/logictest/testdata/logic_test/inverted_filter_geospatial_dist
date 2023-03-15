@@ -60,9 +60,10 @@ ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
+ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/57>     …/1152921574000000000  {1}       1
+<before:/Table/59>     …/1152921574000000000  {1}       1
 …/1152921574000000000  <after:/Max>           {2}       2
 
 # Distributed.
@@ -88,9 +89,10 @@ ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
+ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/57>     …/1152921574000000000  {2}       2
+<before:/Table/59>     …/1152921574000000000  {2}       2
 …/1152921574000000000  <after:/Max>           {2}       2
 
 query I

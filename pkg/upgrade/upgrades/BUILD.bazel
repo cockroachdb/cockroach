@@ -11,6 +11,7 @@ go_library(
         "create_auto_config_runner_job.go",
         "create_index_usage_statement_statistics.go",
         "create_jobs_metrics_polling_job.go",
+        "create_task_system_tables.go",
         "database_role_settings_table_user_id_migration.go",
         "delete_descriptors_of_dropped_functions.go",
         "desc_id_sequence_for_system_tenant.go",
