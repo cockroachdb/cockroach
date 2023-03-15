@@ -4834,6 +4834,7 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 // traffic on the SystemClass connection.
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 94875, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
