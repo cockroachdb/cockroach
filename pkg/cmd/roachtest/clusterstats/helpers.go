@@ -26,6 +26,29 @@ import (
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
+// GetOneSeries accepts the output of StatCollector.CollectInterval and returns
+// either 1 or no StatSeries. 1 StatSeries will be returned if there is exactly
+// one metric label and for that label, exactly one value. If either of these
+// conditions are not met, nil is returned instead. This type of time series
+// output is common when aggregating over every label value e.g.
+// `sum(sql_query_count)`, which will return the sum of every nodes sql query
+// count.
+func GetOneSeries(taggedTimeSeries map[string]map[string]StatSeries) StatSeries {
+	if len(taggedTimeSeries) != 1 {
+		return nil
+	}
+
+	for _, tagged := range taggedTimeSeries {
+		if len(tagged) != 1 {
+			return nil
+		}
+		for _, series := range tagged {
+			return series
+		}
+	}
+	panic("Unreachable")
+}
+
 // SetupCollectorPromClient instantiates a prometheus client for the given
 // configuration. It assumes that a prometheus instance has been created for
 // the configuration already.

@@ -300,19 +300,21 @@ func setupAllocationBench(
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
 
-	return setupStatCollector(ctx, t, c, spec)
+	return setupStatCollector(ctx, t, c, c.Node(c.Spec().NodeCount), c.Range(1, spec.nodes))
 }
 
+// setupStatCollector is a helper function which installs prometheus and
+// grafana on the promNode, scraping the list of clusterNodes. Using the
+// prometheus client, the function creates and returns a new
+// clusterstats.StatCollector and cleanup function, which should be called
+// before finishing the test.
 func setupStatCollector(
-	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
+	ctx context.Context, t test.Test, c cluster.Cluster, promNode, clusterNodes option.NodeListOption,
 ) (clusterstats.StatCollector, func(context.Context)) {
-	t.Status("setting up prometheus and grafana")
-
 	// Setup the prometheus instance and client.
-	clusNodes := c.Range(1, spec.nodes)
-	promNode := c.Node(c.Spec().NodeCount)
+	t.Status("setting up prometheus and grafana")
 	cfg := (&prometheus.Config{}).
-		WithCluster(clusNodes.InstallNodes()).
+		WithCluster(clusterNodes.InstallNodes()).
 		WithPrometheusNode(promNode.InstallNodes()[0])
 
 	err := c.StartGrafana(ctx, t.L(), cfg)
