@@ -212,8 +212,11 @@ func getSink(
 		sink = knobs.WrapSink(sink, jobID)
 	}
 
-	if err := sink.Dial(); err != nil {
-		return nil, err
+	// Avoid dialing twice. For external connections we've dialed inside the recursive call.
+	if u.Scheme != changefeedbase.SinkSchemeExternalConnection {
+		if err := sink.Dial(); err != nil {
+			return nil, err
+		}
 	}
 
 	return sink, nil
