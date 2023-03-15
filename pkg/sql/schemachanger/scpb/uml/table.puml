@@ -151,6 +151,12 @@ object TableZoneConfig
 
 TableZoneConfig :  TableID
 
+object IndexZoneConfig
+
+IndexZoneConfig :  TableID
+IndexZoneConfig :  IndexID
+IndexZoneConfig :  PartitionName
+
 object TableData
 
 TableData :  TableID
@@ -405,6 +411,7 @@ Sequence <|-- TableComment
 Table <|-- RowLevelTTL
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
+Index <|-- IndexZoneConfig
 Table <|-- TableData
 View <|-- TableData
 Sequence <|-- TableData

@@ -360,6 +360,14 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 				&scpb.TableZoneConfig{
 					TableID: tbl.GetID(),
 				})
+			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
+				w.ev(scpb.Status_PUBLIC,
+					&scpb.IndexZoneConfig{
+						TableID:       tbl.GetID(),
+						IndexID:       catid.IndexID(subZoneCfg.IndexID),
+						PartitionName: subZoneCfg.PartitionName,
+					})
+			}
 		}
 	}
 	if tbl.IsPhysicalTable() {
