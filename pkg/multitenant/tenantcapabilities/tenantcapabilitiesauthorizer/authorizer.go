@@ -74,6 +74,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 		log.VInfof(ctx, 2,
 			"no capability information for tenant %s; requests that require capabilities may be denied",
 			tenID)
+		cp = tenantcapabilities.DefaultCapabilities()
 	}
 
 	for _, ru := range ba.Requests {
@@ -81,23 +82,6 @@ func (a *Authorizer) HasCapabilityForBatch(
 		requiredCap, hasCap := reqMethodToCap[request.Method()]
 		if requiredCap == noCapCheckNeeded {
 			continue
-		}
-		if !found {
-			switch request.Method() {
-			case kvpb.AdminSplit, kvpb.AdminScatter:
-				// Secondary tenants are allowed to run AdminSplit and AdminScatter
-				// requests by default, as they're integral to the performance of IMPORT
-				// and RESTORE. If no entry is found in the capabilities map, we
-				// fallback to this default behavior. Note that this isn't expected to
-				// be the case during normal operation, as tenants that exist should
-				// always have an entry in this map. It does help for some tests,
-				// however.
-				continue
-			default:
-				// For all other requests we conservatively return an error if no entry
-				// is to be found for the tenant.
-				return newTenantDoesNotHaveCapabilityError(requiredCap, request)
-			}
 		}
 		if !hasCap || requiredCap == onlySystemTenant || !cp.GetBool(requiredCap) {
 			// All allowable request types must be explicitly opted into the

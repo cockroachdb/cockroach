@@ -96,8 +96,12 @@ func (u Update) String() string {
 	return fmt.Sprintf("update: %v", u.Entry)
 }
 
-// defaultCaps is the default state of capabilities.
 var defaultCaps TenantCapabilities
+
+// DefaultCapabilities returns the default state of capabilities.
+func DefaultCapabilities() TenantCapabilities {
+	return defaultCaps
+}
 
 // RegisterDefaultCapabilities is called from the tenantcapabilitiespb package.
 func RegisterDefaultCapabilities(caps TenantCapabilities) { defaultCaps = caps }
