@@ -11,8 +11,7 @@ eexpect ":/# "
 start_test "Test that quit with a very short timeout still proceeds with hard shutdown"
 
 send "$argv quit --insecure --drain-wait=1ns\r"
-eexpect "drain did not complete successfully"
-eexpect "hard shutdown"
+eexpect "the server.shutdown.{drain,query,connection,lease_transfer}_wait cluster settings require a value of at least"
 eexpect "ok"
 eexpect ":/# "
 
