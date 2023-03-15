@@ -1049,11 +1049,6 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	var tc testContext
 	cfg := TestStoreConfig(nil)
-	// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
-	// refreshes so that our lease proposal does not risk being rejected
-	// with an AmbiguousResultError.
-	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
-	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	assert := func(actual, min, max int64) error {
@@ -7951,7 +7946,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	var tc testContext
 	cfg := TestStoreConfig(nil)
 	// Disable ticks which would interfere with the manual ticking in this test.
-	cfg.RaftTickInterval = math.MaxInt32
+	cfg.RaftTickInterval = time.Hour
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -7966,16 +7961,14 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 
 	r := tc.repl
-	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
+	reproposalTicks := tc.store.cfg.RaftReproposalTimeoutTicks
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
-		// starting with a value of 0 (modulo electionTicks). Move the replica into
-		// that state in case the replica was ticked before we grabbed
-		// processRaftMu.
+		// starting with a value of 0 modulo reproposalTicks.
 		r.mu.Lock()
 		ticks := r.mu.ticks
 		r.mu.Unlock()
-		for ; (ticks % electionTicks) != 0; ticks++ {
+		for ; (ticks % reproposalTicks) != 0; ticks++ {
 			if _, err := r.tick(ctx, nil, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -7997,9 +7990,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 	r.mu.Unlock()
 
-	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
-	// is special in that it controls how often pending commands are reproposed.
-	for i := 0; i < 2*electionTicks; i++ {
+	// We tick the replica 3*RaftReproposalTimeoutTicks.
+	for i := 0; i < 3*reproposalTicks; i++ {
 		// Add another pending command on each iteration.
 		id := fmt.Sprintf("%08d", i)
 		ba := &kvpb.BatchRequest{}
@@ -8050,11 +8042,13 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		dropProposals.Unlock()
 		r.mu.Unlock()
 
-		// Reproposals are only performed every electionTicks. We'll need
-		// to fix this test if that changes.
-		if (ticks % electionTicks) == 0 {
-			if len(reproposed) != i-1 {
-				t.Fatalf("%d: expected %d reproposed commands, but found %d", i, i-1, len(reproposed))
+		// Reproposals are only performed every reproposalTicks, and only for
+		// commands proposed at least reproposalTicks ago (inclusive). The first
+		// time, this will be 1 reproposal (the one at ticks=0 for the reproposal at
+		// ticks=reproposalTicks), then +reproposalTicks reproposals each time.
+		if (ticks % reproposalTicks) == 0 {
+			if exp := i + 2 - reproposalTicks; len(reproposed) != exp { // +1 to offset i, +1 for inclusive
+				t.Fatalf("%d: expected %d reproposed commands, but found %d", i, exp, len(reproposed))
 			}
 		} else {
 			if len(reproposed) != 0 {
