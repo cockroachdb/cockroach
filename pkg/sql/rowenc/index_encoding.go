@@ -1109,7 +1109,7 @@ func EncodePrimaryIndex(
 			}
 		}
 		sort.Sort(ByID(columnsToEncode))
-		entryValue, err = writeColumnValues(entryValue, colMap, values, columnsToEncode)
+		entryValue, err = writeColumnValues(entryValue, colMap, values, columnsToEncode, index.GetVersion())
 		if err != nil {
 			return err
 		}
@@ -1369,7 +1369,7 @@ func encodeSecondaryIndexWithFamilies(
 			value = []byte{}
 		}
 
-		value, err = writeColumnValues(value, colMap, row, storedColsInFam)
+		value, err = writeColumnValues(value, colMap, row, storedColsInFam, index.GetVersion())
 		if err != nil {
 			return []IndexEntry{}, err
 		}
@@ -1424,7 +1424,7 @@ func encodeSecondaryIndexNoFamilies(
 		value = []byte{}
 	}
 	cols := GetValueColumns(index)
-	value, err = writeColumnValues(value, colMap, row, cols)
+	value, err = writeColumnValues(value, colMap, row, cols, index.GetVersion())
 	if err != nil {
 		return IndexEntry{}, err
 	}
@@ -1458,12 +1458,19 @@ func GetValueColumns(index catalog.Index) []ValueEncodedColumn {
 // writeColumnValues writes the value encoded versions of the desired columns from the input
 // row of datums into the value byte slice.
 func writeColumnValues(
-	value []byte, colMap catalog.TableColMap, row []tree.Datum, columns []ValueEncodedColumn,
+	value []byte,
+	colMap catalog.TableColMap,
+	row []tree.Datum,
+	columns []ValueEncodedColumn,
+	version descpb.IndexDescriptorVersion,
 ) ([]byte, error) {
 	var lastColID descpb.ColumnID
 	for _, col := range columns {
 		val := findColumnValue(col.ColID, colMap, row)
 		if val == tree.DNull || (col.IsComposite && !val.(tree.CompositeDatum).IsComposite()) {
+			continue
+		}
+		if val.ResolvedType() == types.Jsonb && version < descpb.JSONCompositeColumnsVersion {
 			continue
 		}
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)

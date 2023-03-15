@@ -186,7 +186,7 @@ func (p *planner) AlterPrimaryKey(
 		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
-		Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+		Version:        descpb.JSONCompositeColumnsVersion,
 		ConstraintID:   tableDesc.GetNextConstraintID(),
 		CreatedAtNanos: p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}

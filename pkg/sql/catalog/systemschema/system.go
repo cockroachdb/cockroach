@@ -1134,7 +1134,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -1304,7 +1304,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "tenants_service_mode_idx",
@@ -1313,7 +1313,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{6},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 )
@@ -1530,7 +1530,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "jobs_created_by_type_created_by_id_idx",
@@ -1542,7 +1542,7 @@ var (
 				StoreColumnIDs:      []descpb.ColumnID{2},
 				StoreColumnNames:    []string{"status"},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "jobs_run_stats_idx",
@@ -1554,7 +1554,7 @@ var (
 				StoreColumnNames:    []string{"last_run", "num_runs", "claim_instance_id"},
 				StoreColumnIDs:      []descpb.ColumnID{11, 10, 9},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 				Predicate:           JobsRunStatsIdxPredicate,
 			},
 			descpb.IndexDescriptor{
@@ -1565,7 +1565,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{12},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -1613,7 +1613,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_createdAt_idx",
@@ -1623,7 +1623,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_revokedAt_idx",
@@ -1633,7 +1633,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{6},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_lastUsedAt_idx",
@@ -1643,7 +1643,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{7},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -1788,7 +1788,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "role_members_member_idx",
@@ -1798,7 +1798,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "role_members_role_id_idx",
@@ -1808,7 +1808,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "role_members_member_id_idx",
@@ -1818,7 +1818,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "role_members_role_id_member_id_key",
@@ -1828,7 +1828,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4, 5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -2145,7 +2145,7 @@ var (
 				KeyColumnNames:      []string{"user_id"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},
 		))
@@ -2205,7 +2205,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
@@ -2289,7 +2289,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -2466,7 +2466,7 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      descpb.JSONCompositeColumnsVersion,
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
@@ -2495,7 +2495,7 @@ var (
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
-				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:            descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:   "indexes_usage_idx",
@@ -2509,7 +2509,7 @@ var (
 				},
 				KeyColumnIDs:        []descpb.ColumnID{13},
 				KeySuffixColumnIDs:  []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 				Type:                descpb.IndexDescriptor_INVERTED,
 				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT},
 				CompositeColumnIDs:  []descpb.ColumnID{13},
@@ -2583,7 +2583,7 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      descpb.JSONCompositeColumnsVersion,
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
@@ -2608,7 +2608,7 @@ var (
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2},
 				KeySuffixColumnIDs: []descpb.ColumnID{8, 1, 3, 4},
-				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:            descpb.JSONCompositeColumnsVersion,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
@@ -2668,7 +2668,7 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
 				StoreColumnNames:    []string{"settings"},
 				StoreColumnIDs:      []descpb.ColumnID{3},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -2720,7 +2720,7 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -2860,7 +2860,7 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2},
-				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:      descpb.JSONCompositeColumnsVersion,
 			},
 		))
 
@@ -2932,7 +2932,7 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				StoreColumnNames:    []string{"privileges", "grant_options"},
 				StoreColumnIDs:      []descpb.ColumnID{3, 4},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			descpb.IndexDescriptor{
 				Name:                "privileges_path_username_key",
@@ -2943,7 +2943,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				StoreColumnNames:    []string{"privileges", "grant_options"},
 				StoreColumnIDs:      []descpb.ColumnID{3, 4},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		),
 	)
@@ -3050,7 +3050,7 @@ var (
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		),
 	)
@@ -3094,7 +3094,7 @@ var (
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		),
 	)
@@ -3135,7 +3135,7 @@ var (
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		),
 	)
