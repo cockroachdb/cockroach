@@ -111,11 +111,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
-	upgrade.NewTenantUpgrade(
+	upgrade.NewPermanentTenantUpgrade(
 		"add default SQL schema telemetry schedule",
-		toCV(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs),
-		upgrade.NoPrecondition,
+		toCV(clusterversion.Permanent_V22_2SQLSchemaTelemetryScheduledJobs),
 		ensureSQLSchemaTelemetrySchedule,
+		"add default SQL schema telemetry schedule",
 	),
 	upgrade.NewTenantUpgrade(
 		"wait for all in-flight schema changes",
