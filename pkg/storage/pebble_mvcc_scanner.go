@@ -472,6 +472,15 @@ type pebbleMVCCScanner struct {
 		// advancing the iterator at the new key. It is backed by keyBuf.
 		origKey []byte
 	}
+	// alloc holds fields embedded within the scanner struct only to reduce
+	// allocations in common cases.
+	alloc struct {
+		// Typically pebbleMVCCScanner.results points to pebbleResults.
+		// Embedding the pebbleResults within the pebbleMVCCScanner avoids an
+		// extra allocation, at the cost of higher allocated bytes when we use a
+		// different implementation of the results interface.
+		pebbleResults pebbleResults
+	}
 }
 
 type advanceFn int
