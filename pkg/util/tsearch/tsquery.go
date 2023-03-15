@@ -134,33 +134,35 @@ type tsNode struct {
 }
 
 func (n tsNode) String() string {
-	return n.infixString(0)
+	var buf strings.Builder
+	n.writeInfixString(&buf, 0)
+	return buf.String()
 }
 
-func (n tsNode) infixString(parentPrecedence int) string {
+func (n tsNode) writeInfixString(buf *strings.Builder, parentPrecedence int) {
 	if n.op == invalid {
-		return n.term.String()
+		n.term.writeString(buf)
+		return
 	}
-	var s strings.Builder
 	prec := n.op.precedence()
 	needParen := prec < parentPrecedence
 	if needParen {
-		s.WriteString("( ")
+		buf.WriteString("( ")
 	}
 	switch n.op {
 	case not:
-		fmt.Fprintf(&s, "!%s", n.l.infixString(prec))
+		buf.WriteString("!")
+		n.l.writeInfixString(buf, prec)
 	default:
-		fmt.Fprintf(&s, "%s %s %s",
-			n.l.infixString(prec),
-			tsTerm{operator: n.op, followedN: n.followedN},
-			n.r.infixString(prec),
-		)
+		n.l.writeInfixString(buf, prec)
+		buf.WriteString(" ")
+		tsTerm{operator: n.op, followedN: n.followedN}.writeString(buf)
+		buf.WriteString(" ")
+		n.r.writeInfixString(buf, prec)
 	}
 	if needParen {
-		s.WriteString(" )")
+		buf.WriteString(" )")
 	}
-	return s.String()
 }
 
 // UnambiguousString returns a string representation of this tsNode that wraps
@@ -172,7 +174,9 @@ func (n tsNode) UnambiguousString() string {
 	case not:
 		return fmt.Sprintf("!%s", n.l.UnambiguousString())
 	}
-	return fmt.Sprintf("[%s%s%s]", n.l.UnambiguousString(), tsTerm{operator: n.op, followedN: n.followedN}, n.r.UnambiguousString())
+	var buf strings.Builder
+	tsTerm{operator: n.op, followedN: n.followedN}.writeString(&buf)
+	return fmt.Sprintf("[%s%s%s]", n.l.UnambiguousString(), buf.String(), n.r.UnambiguousString())
 }
 
 // TSQuery represents a tsNode AST root. A TSQuery is a tree of text search
