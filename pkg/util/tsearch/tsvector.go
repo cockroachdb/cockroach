@@ -11,7 +11,6 @@
 package tsearch
 
 import (
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,24 +72,22 @@ const (
 	weightAny = weightA | weightB | weightC | weightD
 )
 
-func (w tsWeight) String() string {
-	var ret strings.Builder
+func (w tsWeight) writeString(buf *strings.Builder) {
 	if w&weightStar != 0 {
-		ret.WriteByte('*')
+		buf.WriteByte('*')
 	}
 	if w&weightA != 0 {
-		ret.WriteByte('A')
+		buf.WriteByte('A')
 	}
 	if w&weightB != 0 {
-		ret.WriteByte('B')
+		buf.WriteByte('B')
 	}
 	if w&weightC != 0 {
-		ret.WriteByte('C')
+		buf.WriteByte('C')
 	}
 	if w&weightD != 0 {
-		ret.WriteByte('D')
+		buf.WriteByte('D')
 	}
-	return ret.String()
 }
 
 // TSVectorPGEncoding returns the PG-compatible wire protocol encoding for a
@@ -167,28 +164,36 @@ func newLexemeTerm(lexeme string) (tsTerm, error) {
 	return tsTerm{lexeme: lexeme}, nil
 }
 
-func (t tsTerm) String() string {
+func (t tsTerm) writeString(buf *strings.Builder) {
 	if t.operator != 0 {
 		switch t.operator {
 		case and:
-			return "&"
+			buf.WriteString("&")
+			return
 		case or:
-			return "|"
+			buf.WriteString("|")
+			return
 		case not:
-			return "!"
+			buf.WriteString("!")
+			return
 		case lparen:
-			return "("
+			buf.WriteString("(")
+			return
 		case rparen:
-			return ")"
+			buf.WriteString(")")
+			return
 		case followedby:
+			buf.WriteString("<")
 			if t.followedN == 1 {
-				return "<->"
+				buf.WriteString("-")
+			} else {
+				buf.WriteString(strconv.Itoa(int(t.followedN)))
 			}
-			return fmt.Sprintf("<%d>", t.followedN)
+			buf.WriteString(">")
+			return
 		}
 	}
 
-	var buf strings.Builder
 	buf.WriteByte('\'')
 	for _, r := range t.lexeme {
 		if r == '\'' {
@@ -208,9 +213,8 @@ func (t tsTerm) String() string {
 		if pos.position > 0 {
 			buf.WriteString(strconv.Itoa(int(pos.position)))
 		}
-		buf.WriteString(pos.weight.String())
+		pos.weight.writeString(buf)
 	}
-	return buf.String()
 }
 
 func (t tsTerm) matchesWeight(targetWeight tsWeight) bool {
@@ -240,7 +244,7 @@ func (t TSVector) String() string {
 		if i > 0 {
 			buf.WriteByte(' ')
 		}
-		buf.WriteString(term.String())
+		term.writeString(&buf)
 	}
 	return buf.String()
 }
