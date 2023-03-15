@@ -330,6 +330,19 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 // By wrapping every command with a hostname check as is done here, we
 // ensure that the cached cluster information is still correct.
 func (c *SyncedCluster) validateHostnameCmd(cmd string, node Node) string {
+	// TODO(renato): remove this logic once we no longer have AWS clusters
+	// created with the default hostnames.
+	var awsNote string
+	nodeVM := c.VMs[node-1]
+	if nodeVM.Provider == aws.ProviderName {
+		awsNote = fmt.Sprintf(
+			"\nNOTE: host validation failed in AWS cluster. If you are sure this cluster still "+
+				"exists (i.e., you can see it when you run 'roachprod list'), then please run:\n\t"+
+				"roachprod fix-long-running-aws-hostnames %s",
+			c.Name,
+		)
+	}
+
 	isValidHost := fmt.Sprintf("[[ `hostname` == '%s' ]]", vm.Name(c.Name, int(node)))
 	errMsg := fmt.Sprintf("expected host to be part of %s, but is `hostname`", c.Name)
 	elseBranch := "fi"
@@ -343,10 +356,10 @@ fi
 
 	return fmt.Sprintf(`
 if ! %s; then
-    echo "%s"
+    echo "%s%s"
     exit 1
 %s
-`, isValidHost, errMsg, elseBranch)
+`, isValidHost, errMsg, awsNote, elseBranch)
 }
 
 // validateHost will run `validateHostnameCmd` on the node passed to
@@ -373,11 +386,14 @@ func (c *SyncedCluster) newSession(
 		node: node,
 		user: c.user(node),
 		host: c.Host(node),
-		cmd:  c.validateHostnameCmd(cmd, node),
+		cmd:  cmd,
 	}
 
 	for _, opt := range options {
 		opt(command)
+	}
+	if !command.hostValidationDisabled {
+		command.cmd = c.validateHostnameCmd(cmd, node)
 	}
 	return newRemoteSession(l, command)
 }
@@ -2537,6 +2553,32 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 
 	if err := c.setClusterSettings(ctx, l, node); err != nil {
 		return errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
+	}
+
+	return nil
+}
+
+// FixLongRunningAWSHostnames updates the hostname on an AWS cluster
+// that was created with the default hostname.
+//
+// TODO(renato): remove this function (and corresponding roachprod
+// command) once we no longer have clusters created with the default
+// hostnames.
+func (c *SyncedCluster) FixLongRunningAWSHostnames(ctx context.Context, l *logger.Logger) error {
+	for i, nodeVM := range c.VMs {
+		node := Node(i + 1)
+		newHostname := vm.Name(c.Name, int(node))
+		if nodeVM.Provider == aws.ProviderName {
+			l.Printf("changing hostname of VM %d", node)
+			cmd := fmt.Sprintf("sudo hostnamectl set-hostname %s", newHostname)
+			s := c.newSession(l, node, cmd, withHostValidationDisabled())
+			defer s.Close()
+			out, err := s.CombinedOutput(ctx)
+			if err != nil {
+				return fmt.Errorf("could not fix hostname for node %d: %w\n%s", node, err, string(out))
+			}
+			l.Printf("hostname successfully changed to %s", newHostname)
+		}
 	}
 
 	return nil

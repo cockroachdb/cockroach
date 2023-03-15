@@ -1811,3 +1811,19 @@ func createAttachMountVolumes(
 	}
 	return nil
 }
+
+func FixLongRunningAWSHostnames(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if err := c.FixLongRunningAWSHostnames(ctx, l); err != nil {
+		return err
+	}
+	l.Printf("Done! You are now able to use your AWS cluster normally.")
+	return nil
+}
