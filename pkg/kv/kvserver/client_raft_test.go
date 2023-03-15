@@ -5232,11 +5232,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				RaftConfig: base.RaftConfig{
 					RaftDelaySplitToSuppressSnapshotTicks: 0,
 					// Make the tick interval short so we don't need to wait too long for the
-					// partitioned leader to time out. Also make the
-					// RangeLeaseRaftElectionTimeout multiplier high so that system ranges
-					// like node liveness can actually get leases.
-					RaftTickInterval:                        10 * time.Millisecond,
-					RangeLeaseRaftElectionTimeoutMultiplier: 1000,
+					// partitioned leader to time out.
+					RaftTickInterval: 10 * time.Millisecond,
 				},
 			}
 		}
