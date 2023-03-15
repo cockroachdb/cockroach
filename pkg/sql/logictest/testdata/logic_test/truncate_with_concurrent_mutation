@@ -1,0 +1,123 @@
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '50ms';
+
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms'
+
+# Make sure that table cannot be truncated if an index is being dropped
+# concurrently.
+statement ok
+CREATE TABLE t1(a int primary key, b int);
+
+statement ok
+CREATE INDEX idx_b ON t1(b);
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement error pq: job \d+ was paused before it completed with reason: pause point
+DROP INDEX t1@idx_b;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t1" which has indexes being dropped
+TRUNCATE TABLE t1;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# Make sure that table cannot be truncated if a column using UDY is being
+# dropped concurrently.
+statement ok
+CREATE TYPE e AS ENUM ('v1', 'v2');
+CREATE TABLE t2(a int primary key, b e);
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement error pq: job \d+ was paused before it completed with reason: pause point
+ALTER TABLE t2 DROP COLUMN b;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t2" which has a column \("\w+"\) being dropped which depends on another object
+TRUNCATE TABLE t2;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# Make sure that table cannot be truncated when a constraint without index is
+# being added concurrently.
+statement ok
+CREATE TABLE t3(a INT PRIMARY KEY, b INT);
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement error pq: job \d+ was paused before it completed with reason: pause point
+ALTER TABLE t3 ADD CONSTRAINT ckb CHECK (b > 3);
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t3" which has an ongoing CHECK constraint change
+TRUNCATE TABLE t3;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# Make sure table cannot be truncated if there is concurrent primary key change.
+statement ok
+CREATE TABLE t4(a INT PRIMARY KEY, b INT NOT NULL);
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement error pq: job \d+ was paused before it completed with reason: pause point
+ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS (b);
+
+# In Declarative schema changer we don't generate a primary key swap mutation.
+# So the truncate will wait until the concurrent schema change to finish and
+# hang this test. So we need to test this only in legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pq: unimplemented: cannot perform TRUNCATE on "t4" which has an ongoing primary key change
+TRUNCATE TABLE t4;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# Make sure table cannot be truncated when there is concurrent column type
+# change.
+statement ok
+CREATE TABLE t5(a int primary key, b int);
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement ok
+SET enable_experimental_alter_column_type_general = true;
+
+statement error pq: job \d+ was paused before it completed with reason: pause point
+ALTER TABLE t5 ALTER COLUMN b TYPE STRING;
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t5" which has an ongoing column type change
+TRUNCATE TABLE t5;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# Make sure that table cannot be truncated is there is a ongoing row level TTL
+# change.
+statement ok
+CREATE TABLE t6(a int primary key, b int);
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
+
+statement error pq: job \d+ was paused before it completed with reason: pause point
+ALTER TABLE t6 SET (ttl_expire_after = '00:10:00':::INTERVAL);
+
+statement error pq: unimplemented: cannot perform TRUNCATE on "t6" which has an ongoing row level TTL change
+TRUNCATE TABLE t6;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+statement ok
+RESUME JOBS (SELECT job_id FROM crdb_internal.jobs WHERE status = 'paused');
+
+statement ok
+USE test;

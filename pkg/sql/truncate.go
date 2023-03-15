@@ -364,6 +364,11 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 				"TRUNCATE concurrent with ongoing schema change",
 				"cannot perform TRUNCATE on %q which has an ongoing column type "+
 					"change", desc.GetName())
+		} else if m.AsModifyRowLevelTTL() != nil {
+			return unimplemented.Newf(
+				"TRUNCATE concurrent with ongoing schema change",
+				"cannot perform TRUNCATE on %q which has an ongoing row level TTL "+
+					"change", desc.GetName())
 		} else {
 			return errors.AssertionFailedf("cannot perform TRUNCATE due to "+
 				"concurrent unknown mutation of type %T for mutation %d in %v", m, i, desc)
