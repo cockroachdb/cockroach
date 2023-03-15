@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateTargetTenantClusterVersion(t *testing.T) {
@@ -225,9 +226,8 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 
 			// Check to see our initial active cluster versions are what we
 			// expect.
-			if got := tenant.ClusterSettings().Version.ActiveVersion(ctx); got != test.initialClusterVersion {
-				t.Fatalf("tenant: expected active cluster version %s, got %s", test.initialClusterVersion, got)
-			}
+			got := tenant.ClusterSettings().Version.ActiveVersion(ctx)
+			require.Equal(t, got, test.initialClusterVersion)
 
 			// Do the bump.
 			tmServer := tenant.MigrationServer().(*server.TenantMigrationServer)
@@ -243,9 +243,8 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 
 			// Check to see if our post-bump active cluster versions are what we
 			// expect.
-			if got := tenant.ClusterSettings().Version.ActiveVersion(ctx); got != test.expectedClusterVersion {
-				t.Fatalf("tenant: expected active cluster version %s, got %s", test.expectedClusterVersion, got)
-			}
+			got = tenant.ClusterSettings().Version.ActiveVersion(ctx)
+			require.Equal(t, got, test.expectedClusterVersion)
 		})
 	}
 }
