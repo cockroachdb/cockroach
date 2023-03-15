@@ -703,3 +703,72 @@ func TestGenerateForcedRetryableErrorByPoisoning(t *testing.T) {
 	checkKey(t, "a", 1)
 	checkKey(t, "b", 2)
 }
+
+// TestUpdateStateOnRemoteRetryErr ensures transaction state is updated and a
+// TransactionRetryWithProtoRefreshError is correctly constructed by
+// UpdateStateOnRemoteRetryableError.
+func TestUpdateStateOnRemoteRetryableErr(t *testing.T) {
+	ctx := context.Background()
+	_, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+
+	testCases := []struct {
+		err         *kvpb.Error
+		epochBumped bool // if we expect the epoch to be bumped
+		newTxn      bool // if we expect a new transaction in the returned error; implies to an ABORT
+	}{
+		{
+			err:         kvpb.NewError(&kvpb.ReadWithinUncertaintyIntervalError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		{
+			err:         kvpb.NewError(&kvpb.TransactionAbortedError{}),
+			epochBumped: false,
+			newTxn:      true,
+		},
+		{
+			err:         kvpb.NewError(&kvpb.TransactionPushError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		{
+			err:         kvpb.NewError(&kvpb.TransactionRetryError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		{
+			err:         kvpb.NewError(&kvpb.WriteTooOldError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		// TODO(arul): IntentMissingError currently causes a fatal in
+		// PrepareTransactionForRetry. File an issue and fix this case.
+		//{
+		//	err:         kvpb.NewError(&kvpb.IntentMissingError{}),
+		//	epochBumped: true,
+		//	newTxn:      false,
+		//},
+	}
+
+	for _, tc := range testCases {
+		txn := db.NewTxn(ctx, "test")
+		pErr := tc.err
+		pErr.SetTxn(txn.Sender().TestingCloneTxn())
+		epochBefore := txn.Epoch()
+		txnIDBefore := txn.ID()
+		err := txn.UpdateStateOnRemoteRetryableErr(ctx, pErr)
+		// Ensure what we got back is a TransactionRetryWithProtoRefreshError.
+		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
+		// Ensure the same thing is stored on the TxnCoordSender as well.
+		retErr := txn.Sender().GetTxnRetryableErr(ctx)
+		require.Equal(t, retErr, err)
+		if tc.epochBumped {
+			require.Greater(t, txn.Epoch(), epochBefore)
+			require.Equal(t, retErr.TxnID, txnIDBefore) // transaction IDs should not have changed on us
+		}
+		if tc.newTxn {
+			require.NotEqual(t, retErr.Transaction.ID, txnIDBefore)
+			require.Equal(t, txn.Sender().TxnStatus(), roachpb.ABORTED)
+		}
+	}
+}
