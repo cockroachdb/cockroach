@@ -128,8 +128,8 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.Barrier:            noCapCheckNeeded,
 	kvpb.ClearRange:         noCapCheckNeeded,
 	kvpb.ConditionalPut:     noCapCheckNeeded,
-	kvpb.DeleteRange:        noCapCheckNeeded,
 	kvpb.Delete:             noCapCheckNeeded,
+	kvpb.DeleteRange:        noCapCheckNeeded,
 	kvpb.EndTxn:             noCapCheckNeeded,
 	kvpb.Export:             noCapCheckNeeded,
 	kvpb.Get:                noCapCheckNeeded,
@@ -147,8 +147,8 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.RecoverTxn:         noCapCheckNeeded,
 	kvpb.Refresh:            noCapCheckNeeded,
 	kvpb.RefreshRange:       noCapCheckNeeded,
-	kvpb.ResolveIntentRange: noCapCheckNeeded,
 	kvpb.ResolveIntent:      noCapCheckNeeded,
+	kvpb.ResolveIntentRange: noCapCheckNeeded,
 	kvpb.ReverseScan:        noCapCheckNeeded,
 	kvpb.RevertRange:        noCapCheckNeeded,
 	kvpb.Scan:               noCapCheckNeeded,
@@ -161,24 +161,22 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.AdminRelocateRange:  tenantcapabilities.CanAdminRelocateRange,
 	kvpb.AdminTransferLease:  tenantcapabilities.CanAdminRelocateRange,
 
-	// TODO(ecwall): The following should also be authorized via specific capabilities.
-	kvpb.AdminMerge: noCapCheckNeeded,
-
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
-	kvpb.TruncateLog:                   onlySystemTenant,
-	kvpb.Merge:                         onlySystemTenant,
-	kvpb.RequestLease:                  onlySystemTenant,
-	kvpb.TransferLease:                 onlySystemTenant,
-	kvpb.Probe:                         onlySystemTenant,
-	kvpb.RecomputeStats:                onlySystemTenant,
-	kvpb.ComputeChecksum:               onlySystemTenant,
-	kvpb.CheckConsistency:              onlySystemTenant,
+	kvpb.AdminMerge:                    onlySystemTenant,
 	kvpb.AdminVerifyProtectedTimestamp: onlySystemTenant,
-	kvpb.Migrate:                       onlySystemTenant,
-	kvpb.Subsume:                       onlySystemTenant,
-	kvpb.QueryResolvedTimestamp:        onlySystemTenant,
+	kvpb.CheckConsistency:              onlySystemTenant,
+	kvpb.ComputeChecksum:               onlySystemTenant,
 	kvpb.GC:                            onlySystemTenant,
+	kvpb.Merge:                         onlySystemTenant,
+	kvpb.Migrate:                       onlySystemTenant,
+	kvpb.Probe:                         onlySystemTenant,
+	kvpb.QueryResolvedTimestamp:        onlySystemTenant,
+	kvpb.RecomputeStats:                onlySystemTenant,
+	kvpb.RequestLease:                  onlySystemTenant,
+	kvpb.Subsume:                       onlySystemTenant,
+	kvpb.TransferLease:                 onlySystemTenant,
+	kvpb.TruncateLog:                   onlySystemTenant,
 }
 
 const (

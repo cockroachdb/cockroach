@@ -4484,6 +4484,95 @@ project
       └── filters
            └── case:14 IS NULL [outer=(14), constraints=(/14: [/NULL - /NULL]; tight), fd=()-->(14)]
 
+# Any with tuple comparison should use IS NOT NULL (i.e., IsTupleNotNull
+# expression) instead of IS DISTINCT FROM NULL.
+norm expect=HoistSelectSubquery
+SELECT * FROM a WHERE ((k, i) = ANY(SELECT (x, y) FROM xy WHERE x=k)) IS NULL
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 case:16
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(16), (1)-->(2-5)
+      ├── project
+      │    ├── columns: case:16 k:1!null i:2 f:3 s:4 j:5
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,16)
+      │    ├── group-by (hash)
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 scalar:13 bool_or:15
+      │    │    ├── grouping columns: k:1!null
+      │    │    ├── immutable
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-5,13,15)
+      │    │    ├── left-join-apply
+      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 "?column?":12 scalar:13 notnull:14
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-5,12-14)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: scalar:13 k:1!null i:2 f:3 s:4 j:5
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    ├── fd: (1)-->(2-5,13)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    └── fd: (1)-->(2-5)
+      │    │    │    │    └── projections
+      │    │    │    │         └── (k:1, i:2) [as=scalar:13, outer=(1,2)]
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: notnull:14!null "?column?":12
+      │    │    │    │    ├── outer: (1)
+      │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    ├── key: ()
+      │    │    │    │    ├── fd: ()-->(12,14)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: "?column?":12
+      │    │    │    │    │    ├── outer: (1)
+      │    │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    ├── fd: ()-->(12)
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: x:8!null y:9
+      │    │    │    │    │    │    ├── outer: (1)
+      │    │    │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    ├── fd: ()-->(8,9)
+      │    │    │    │    │    │    ├── scan xy
+      │    │    │    │    │    │    │    ├── columns: x:8!null y:9
+      │    │    │    │    │    │    │    ├── key: (8)
+      │    │    │    │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── (x:8, y:9) [as="?column?":12, outer=(8,9)]
+      │    │    │    │    └── projections
+      │    │    │    │         └── "?column?":12 IS NOT NULL [as=notnull:14, outer=(12)]
+      │    │    │    └── filters
+      │    │    │         └── (scalar:13 = "?column?":12) IS NOT false [outer=(12,13), immutable]
+      │    │    └── aggregations
+      │    │         ├── bool-or [as=bool_or:15, outer=(14)]
+      │    │         │    └── notnull:14
+      │    │         ├── const-agg [as=i:2, outer=(2)]
+      │    │         │    └── i:2
+      │    │         ├── const-agg [as=f:3, outer=(3)]
+      │    │         │    └── f:3
+      │    │         ├── const-agg [as=s:4, outer=(4)]
+      │    │         │    └── s:4
+      │    │         ├── const-agg [as=j:5, outer=(5)]
+      │    │         │    └── j:5
+      │    │         └── const-agg [as=scalar:13, outer=(13)]
+      │    │              └── scalar:13
+      │    └── projections
+      │         └── CASE WHEN bool_or:15 AND (scalar:13 IS NOT NULL) THEN true WHEN bool_or:15 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:16, outer=(13,15)]
+      └── filters
+           └── case:16 IS NULL [outer=(16), constraints=(/16: [/NULL - /NULL]; tight), fd=()-->(16)]
+
 # Any with uncorrelated subquery (should not be hoisted).
 norm
 SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy)) IS NULL
@@ -4923,6 +5012,67 @@ project
  │              └── notnull:13
  └── projections
       └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
+
+# Any in projection list with tuple comparison should use IS NOT NULL
+# (i.e., IsTupleNotNull expression) instead of IS DISTINCT FROM NULL.
+norm expect=HoistProjectSubquery
+SELECT (5, 50) < ANY(SELECT x, y FROM xy WHERE y=i) AS r FROM a
+----
+project
+ ├── columns: r:13
+ ├── immutable
+ ├── group-by (hash)
+ │    ├── columns: scalar:14!null bool_or:16 rownum:18!null
+ │    ├── grouping columns: rownum:18!null
+ │    ├── immutable
+ │    ├── key: (18)
+ │    ├── fd: ()-->(14), (18)-->(14,16)
+ │    ├── left-join-apply
+ │    │    ├── columns: i:2 column12:12 scalar:14!null notnull:15 rownum:18!null
+ │    │    ├── immutable
+ │    │    ├── fd: ()-->(14), (18)-->(2)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: i:2 scalar:14!null rownum:18!null
+ │    │    │    ├── key: (18)
+ │    │    │    ├── fd: ()-->(14), (18)-->(2,14)
+ │    │    │    └── project
+ │    │    │         ├── columns: scalar:14!null i:2
+ │    │    │         ├── fd: ()-->(14)
+ │    │    │         ├── scan a
+ │    │    │         │    └── columns: i:2
+ │    │    │         └── projections
+ │    │    │              └── (5, 50) [as=scalar:14]
+ │    │    ├── project
+ │    │    │    ├── columns: notnull:15!null column12:12!null
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── fd: (12)-->(15)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column12:12!null
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: x:8!null y:9!null
+ │    │    │    │    │    ├── outer: (2)
+ │    │    │    │    │    ├── key: (8)
+ │    │    │    │    │    ├── fd: ()-->(9)
+ │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    │    │    ├── key: (8)
+ │    │    │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    │    │    └── projections
+ │    │    │    │         └── (x:8, y:9) [as=column12:12, outer=(8,9)]
+ │    │    │    └── projections
+ │    │    │         └── column12:12 IS NOT NULL [as=notnull:15, outer=(12)]
+ │    │    └── filters
+ │    │         └── (scalar:14 < column12:12) IS NOT false [outer=(12,14), immutable]
+ │    └── aggregations
+ │         ├── bool-or [as=bool_or:16, outer=(15)]
+ │         │    └── notnull:15
+ │         └── const-agg [as=scalar:14, outer=(14)]
+ │              └── scalar:14
+ └── projections
+      └── CASE WHEN bool_or:16 AND (scalar:14 IS NOT NULL) THEN true WHEN bool_or:16 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:13, outer=(14,16)]
 
 # Correlated subquery nested in uncorrelated subquery.
 norm expect=HoistProjectSubquery
