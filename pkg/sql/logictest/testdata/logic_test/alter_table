@@ -2828,3 +2828,14 @@ CREATE TABLE public.t_twocol (
   CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0 (id, a)
 )
+
+# This subtest disallows using builtin function `cluster_logical_timestamp()`
+# as the default expression when backfilling a column.
+subtest 98269
+
+statement ok
+CREATE TABLE t_98269 (i INT PRIMARY KEY);
+INSERT INTO t_98269 VALUES (0);
+
+statement error pgcode 0A000 .* cluster_logical_timestamp\(\): nil txn in cluster context
+ALTER TABLE t_98269 ADD COLUMN j DECIMAL NOT NULL DEFAULT cluster_logical_timestamp();
