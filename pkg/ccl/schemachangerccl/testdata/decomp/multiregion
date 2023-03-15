@@ -706,6 +706,21 @@ ElementState:
 - TableZoneConfig:
     tableId: 108
   Status: PUBLIC
+- IndexZoneConfig:
+    indexId: 1
+    partitionName: us-east1
+    tableId: 108
+  Status: PUBLIC
+- IndexZoneConfig:
+    indexId: 1
+    partitionName: us-east2
+    tableId: 108
+  Status: PUBLIC
+- IndexZoneConfig:
+    indexId: 1
+    partitionName: us-east3
+    tableId: 108
+  Status: PUBLIC
 - TableData:
     databaseId: 104
     tableId: 108
