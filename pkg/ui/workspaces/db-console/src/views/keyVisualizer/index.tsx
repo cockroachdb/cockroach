@@ -158,7 +158,10 @@ class KeyVisualizerContainer extends React.Component<
     const { samples, yOffsetsForKey, hottestBucket, keys } =
       buildKeyVisualizerProps(this.state, this.props.timeScale);
 
-    if (samples.length === 0 || Object.keys(keys).length === 0) {
+     if (
+        this.state.response.samples.length === 0 ||
+        Object.keys(this.state.response.pretty_key_for_uuid).length === 0
+      ) {
       return <div>Waiting for samples...</div>;
     }
 
