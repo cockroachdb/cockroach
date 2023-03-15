@@ -773,7 +773,7 @@ columns:
         "is_non_nullable": false
       },
       "direction": 0,
-      "is_composite": false,
+      "is_composite": true,
       "is_inverted": true
     },
     {
@@ -847,7 +847,7 @@ columns:
         "is_non_nullable": false
       },
       "direction": 0,
-      "is_composite": false,
+      "is_composite": true,
       "is_inverted": true
     },
     {

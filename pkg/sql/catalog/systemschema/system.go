@@ -2678,6 +2678,7 @@ var (
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				Type:                descpb.IndexDescriptor_INVERTED,
 				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT},
+				CompositeColumnIDs:  []descpb.ColumnID{13},
 			},
 			descpb.IndexDescriptor{
 				Name:   "execution_count_idx",

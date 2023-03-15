@@ -740,7 +740,7 @@ project
  ├── columns: k:1!null i:2 s:3 j:4 v:5 x:6
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
+ ├── fd: (1)-->(2-4,6), (3)-->(5)
  ├── select
  │    ├── columns: k:1!null i:2 s:3 j:4
  │    ├── immutable
@@ -769,7 +769,7 @@ project
  ├── columns: k:1!null i:2 s:3 j:4 v:5 x:6
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
+ ├── fd: (1)-->(2-4,6), (3)-->(5)
  ├── select
  │    ├── columns: k:1!null i:2 s:3 j:4
  │    ├── immutable
@@ -835,12 +835,12 @@ semi-join (hash)
  ├── columns: k:1!null i:2 s:3 j:4 v:5 x:6
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
+ ├── fd: (1)-->(2-4,6), (3)-->(5)
  ├── project
  │    ├── columns: v:5 x:6 k:1!null i:2 s:3 j:4
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
+ │    ├── fd: (1)-->(2-4,6), (3)-->(5)
  │    ├── scan virt
  │    │    ├── columns: k:1!null i:2 s:3 j:4
  │    │    ├── computed column expressions

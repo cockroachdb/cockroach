@@ -73,14 +73,6 @@ CREATE INVERTED INDEX ON c (foo DESC)
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error column foo of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
-CREATE TABLE d (
-  id INT PRIMARY KEY,
-  foo JSONB,
-  bar JSONB,
-  INVERTED INDEX (foo, bar)
-)
-
 statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
@@ -1834,8 +1826,6 @@ SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
 [[2]]
 [[1], [2]]
 
-statement error pq: index element j->'some_key' of type jsonb is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
-CREATE TABLE t2 (j JSON, INDEX ((j->'some_key')))
 
 statement ok
 CREATE TABLE table_desc_inverted_index (
