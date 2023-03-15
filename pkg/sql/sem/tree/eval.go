@@ -79,6 +79,9 @@ var (
 	// ErrShiftArgOutOfRange is reported when a shift argument is out of range.
 	ErrShiftArgOutOfRange = pgerror.New(pgcode.InvalidParameterValue, "shift argument out of range")
 
+	// ErrNilTxnInClusterContext is reported when eval context has nil Txn.
+	ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
+
 	big10E6  = apd.NewBigInt(1e6)
 	big10E10 = apd.NewBigInt(1e10)
 )
@@ -3895,12 +3898,15 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
+func (ctx *EvalContext) GetClusterTimestamp() (*DDecimal, error) {
+	if ctx.Txn == nil {
+		return nil, ErrNilTxnInClusterContext
+	}
 	ts := ctx.Txn.CommitTimestamp()
 	if ts.IsEmpty() {
-		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
+		return nil, errors.AssertionFailedf("zero cluster timestamp in txn")
 	}
-	return TimestampToDecimalDatum(ts)
+	return TimestampToDecimalDatum(ts), nil
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been
