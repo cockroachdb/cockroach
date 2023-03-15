@@ -1,0 +1,247 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (x JSONB PRIMARY KEY)
+
+# Testing range scans on forward indexes.
+
+query T
+EXPLAIN SELECT x FROM t WHERE x = 'null'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'null' - /'null']
+
+query T
+EXPLAIN SELECT x FROM t WHERE x = '"a"'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'"a"' - /'"a"']
+
+query T
+EXPLAIN SELECT x FROM t WHERE x = '1'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'1' - /'1']
+
+query T
+EXPLAIN SELECT x FROM t WHERE x = 'false'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'false' - /'false']
+
+query T
+EXPLAIN SELECT x FROM t WHERE x = 'true'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'true' - /'true']
+
+query T
+EXPLAIN SELECT x from t WHERE x = '[1, 2, 3]'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'[1, 2, 3]' - /'[1, 2, 3]']
+
+
+query T
+EXPLAIN SELECT x from t WHERE x = '{"a": [1, 2, 3], "b": [1, 2]}'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'{"a": [1, 2, 3], "b": [1, 2]}' - /'{"a": [1, 2, 3], "b": [1, 2]}']
+
+
+query T
+EXPLAIN SELECT x FROM t WHERE x < '1'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [ - /'1')
+
+query T
+EXPLAIN SELECT x FROM t WHERE x < '"ABCD"'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [ - /'"ABCD"')
+
+query T
+EXPLAIN SELECT x FROM t WHERE x < '[1, 2, 3]'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [ - /'[1, 2, 3]')
+
+query T
+EXPLAIN SELECT x FROM t WHERE x <= '[]'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [ - /'[]']
+
+query T
+EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: (/'{"a": "b"}' - ]
+
+query T
+EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: (/'{"a": "b"}' - ]
+
+query T
+EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB AND x < '[1, 2, 3]'::JSONB ORDER BY x
+----
+distribution: local
+vectorized: true
+·
+• norows
+
+query T
+EXPLAIN SELECT x FROM t WHERE x <= '{"a": "b"}'::JSONB AND x >= '[1, 2, 3]'::JSONB ORDER BY x
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/'[1, 2, 3]' - /'{"a": "b"}']
+
+query T
+EXPLAIN SELECT x FROM t WHERE x <= '"a"'::JSONB OR x >= 'null'::JSONB ORDER BY x;
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (x <= '"a"') OR (x >= 'null')
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# Multicolumn index, including JSONB
+
+statement ok
+CREATE TABLE s (x INT, y JSONB, z INT, INDEX i (x, y, z))
+
+
+query T
+EXPLAIN SELECT x, y, z FROM s WHERE x = 2 AND y < '[1, 2, 3]'::JSONB AND z = 100 ORDER BY y
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: z = 100
+│
+└── • scan
+      missing stats
+      table: s@i
+      spans: (/2/NULL - /2/'[1, 2, 3]')
+
+query T
+EXPLAIN SELECT x, y, z FROM s WHERE y >= '"a"'::JSONB ORDER BY y
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +y
+│
+└── • filter
+    │ filter: y >= '"a"'
+    │
+    └── • scan
+          missing stats
+          table: s@s_pkey
+          spans: FULL SCAN
+
+# Ensuring that the presence of composite values results in
+# encoding in the valueside as well for a given K/V pair.
+statement ok
+CREATE TABLE composite (j JSONB PRIMARY KEY)
+
+query T kvtrace
+INSERT INTO composite VALUES ('1.00'::JSONB), ('2'::JSONB), ('3.0'::JSONB), ('"a"'::JSONB)
+----
+CPut /Table/108/1/"G*\x02\x00\x00\x88" -> /TUPLE/
+CPut /Table/108/1/"G*\x04\x00\x00\x88" -> /TUPLE/
+CPut /Table/108/1/"G*\x06\x00\x00\x88" -> /TUPLE/
+CPut /Table/108/1/"F\x12a\x00\x01\x00\x88" -> /TUPLE/
+
+query T kvtrace
+SELECT j FROM composite where j = '1.00'::JSONB
+----
+Scan /Table/108/1/"G*\x02\x00\x00\x88"
+
+query T
+SELECT j FROM composite ORDER BY j;
+----
+"a"
+1.00
+2
+3.0

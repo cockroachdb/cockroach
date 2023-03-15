@@ -544,17 +544,16 @@ project
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
  │    ├── immutable
- │    ├── fd: (1)-->(2,3), (6)-->(7), (2)==(7), (7)==(2)
+ │    ├── fd: (1)-->(2,3), (2)==(7), (7)==(2)
  │    ├── inner-join (lookup idtable@secondary_id)
  │    │    ├── columns: primary_id:1!null idtable.secondary_id:2!null value:6!null column7:7!null
  │    │    ├── key columns: [7] = [2]
  │    │    ├── immutable
- │    │    ├── fd: (6)-->(7), (1)-->(2), (2)==(7), (7)==(2)
+ │    │    ├── fd: (1)-->(2), (2)==(7), (7)==(2)
  │    │    ├── project
  │    │    │    ├── columns: column7:7 value:6!null
  │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── immutable
- │    │    │    ├── fd: (6)-->(7)
  │    │    │    ├── values
  │    │    │    │    ├── columns: value:6!null
  │    │    │    │    ├── cardinality: [2 - 2]
