@@ -822,7 +822,6 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
         "//pkg/util/httputil",

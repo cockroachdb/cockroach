@@ -12,6 +12,7 @@ package tenantcapabilitiestestutils
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -89,4 +90,31 @@ func GetTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	tID, err := roachpb.TenantIDFromString(tenantID)
 	require.NoError(t, err)
 	return tID
+}
+
+// AlteredCapabilitiesString prints all altered capability values that no
+// longer match DefaultCapabilities. This is different from
+// TenantCapabilities.String which only prints non-zero value fields.
+func AlteredCapabilitiesString(capabilities tenantcapabilities.TenantCapabilities) string {
+	defaultCapabilities := tenantcapabilities.DefaultCapabilities()
+	var builder strings.Builder
+	builder.WriteByte('{')
+	space := ""
+	for _, capID := range tenantcapabilities.CapabilityIDs {
+		value := capabilities.Cap(capID).Get().String()
+		defaultValue := defaultCapabilities.Cap(capID).Get().String()
+		if value != defaultValue {
+			builder.WriteString(space)
+			builder.WriteString(capID.String())
+			builder.WriteByte(':')
+			builder.WriteString(value)
+			space = " "
+		}
+	}
+	// All capabilities have default values.
+	if space == "" {
+		builder.WriteString("default")
+	}
+	builder.WriteByte('}')
+	return builder.String()
 }

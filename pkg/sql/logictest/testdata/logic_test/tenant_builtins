@@ -40,17 +40,23 @@ SELECT crdb_internal.create_tenant('tenant-number-eleven')
 ----
 2
 
-query IBTIIT colnames
-SELECT id, active, name, data_state, service_mode,
-       crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBTIITT colnames
+SELECT
+  id,
+  active,
+  name,
+  data_state,
+  service_mode,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState') AS deprecated_data_state,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') AS dropped_name
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
-1   true    system                1           2             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-5   true    tenant-5              1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  deprecated_data_state  dropped_name
+1   true    system                1           2             READY                  ·
+2   true    tenant-number-eleven  1           0             READY                  ·
+5   true    tenant-5              1           0             READY                  ·
+10  true    tenant-number-ten     1           0             READY                  ·
 
 # Check we can add a name where none existed before.
 statement ok
@@ -111,17 +117,23 @@ SELECT crdb_internal.gc_tenant(5)
 statement ok
 DROP TENANT [5]
 
-query IBTIIT colnames
-SELECT id, active, name, data_state, service_mode,
-       crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBTIITT colnames
+SELECT
+  id,
+  active,
+  name,
+  data_state,
+  service_mode,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState') AS deprecated_data_state,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') AS dropped_name
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
-1   true    system                1           2             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-5   false   NULL                  2           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "my-new-tenant-name", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  deprecated_data_state  dropped_name
+1   true    system                1           2             READY                  ·
+2   true    tenant-number-eleven  1           0             READY                  ·
+5   false   NULL                  2           0             DROP                   my-new-tenant-name
+10  true    tenant-number-ten     1           0             READY                  ·
 
 
 # Try to recreate an existing tenant.
@@ -222,16 +234,22 @@ succeeded
 statement error pgcode 42704 tenant "5" does not exist
 DROP TENANT [5]
 
-query IBTIIT colnames
-SELECT id, active, name, data_state, service_mode,
-       crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
+query IBTIITT colnames
+SELECT
+  id,
+  active,
+  name,
+  data_state,
+  service_mode,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState') AS deprecated_data_state,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') AS dropped_name
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
-1   true    system                1           2             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminUnsplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false, "disableAdminScatter": false, "disableAdminSplit": false, "spanConfigBounds": null}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  deprecated_data_state  dropped_name
+1   true    system                1           2             READY                  ·
+2   true    tenant-number-eleven  1           0             READY                  ·
+10  true    tenant-number-ten     1           0             READY                  ·
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)

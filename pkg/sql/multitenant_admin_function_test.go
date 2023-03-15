@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -42,13 +41,14 @@ import (
 )
 
 const (
-	createTable        = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemRangeID      = "58"
-	secondaryRangeID   = "59"
-	systemKey          = "\xc1"
-	systemKeyPretty    = "/Table/57"
-	secondaryKeyPretty = "/Tenant/10"
-	maxTimestamp       = "2262-04-11 23:47:16.854776 +0000 +0000"
+	createTable                         = "CREATE TABLE t(i int PRIMARY KEY);"
+	systemKey                           = "\xc1"
+	systemKeyPretty                     = "/Table/57"
+	secondaryKeyPretty                  = "/Tenant/10"
+	secondaryWithoutCapabilityKeyPretty = "/Tenant/20"
+	maxTimestamp                        = "2262-04-11 23:47:16.854776 +0000 +0000"
+	ok                                  = "ok"
+	ignore                              = "*"
 )
 
 var ctx = context.Background()
@@ -80,12 +80,15 @@ func verifyResults(t *testing.T, message string, rows *gosql.Rows, expectedResul
 	require.Equalf(t, len(expectedResults), len(actualResults), message)
 	for i, actualRowResult := range actualResults {
 		expectedRowResult := expectedResults[i]
-		require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d", message, i)
+		require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d\nexpected=%v\n  actual=%v", message, expectedRowResult, actualRowResult, i)
 		for j, actualColResult := range actualRowResult {
 			expectedColResult := expectedRowResult[j]
-			if expectedColResult == "" {
+			switch expectedColResult {
+			case "": // For results that should be empty.
 				require.Emptyf(t, actualColResult, "%s row=%d col=%d", message, i, j)
-			} else {
+			case ignore: // For non-deterministic results that should be non-empty.
+				require.NotEmptyf(t, actualColResult, "%s row=%d col=%d", message, i, j)
+			default: // For deterministic results that should be non-empty.
 				require.Containsf(t, actualColResult, expectedColResult, "%s row=%d col=%d", message, i, j)
 			}
 		}
@@ -280,7 +283,6 @@ func (tc testCase) runTest(
 	var secondaryTenants []serverutils.TestTenantInterface
 	createSecondaryDB := func(
 		tenantID roachpb.TenantID,
-		skipSQLSystemTentantCheck bool,
 		clusterSettings ...*settings.BoolSetting,
 	) *gosql.DB {
 		testingClusterSettings := cluster.MakeTestingClusterSettings()
@@ -293,11 +295,6 @@ func (tc testCase) runTest(
 		tenant, db := serverutils.StartTenant(
 			t, testServer, base.TestTenantArgs{
 				Settings: testingClusterSettings,
-				TestingKnobs: base.TestingKnobs{
-					TenantTestingKnobs: &sql.TenantTestingKnobs{
-						SkipSQLSystemTentantCheck: skipSQLSystemTentantCheck,
-					},
-				},
 				TenantID: tenantID,
 			},
 		)
@@ -339,7 +336,6 @@ func (tc testCase) runTest(
 	tenantID1 := serverutils.TestTenantID()
 	secondaryDB := createSecondaryDB(
 		tenantID1,
-		true, /* skipSQLSystemTentantCheck */
 		tc.setupClusterSetting,
 		tc.queryClusterSetting,
 	)
@@ -348,7 +344,6 @@ func (tc testCase) runTest(
 	tenantID2 := serverutils.TestTenantID2()
 	secondaryWithoutClusterSettingDB := createSecondaryDB(
 		tenantID2,
-		false, /* skipSQLSystemTentantCheck */
 		tc.setupClusterSetting,
 	)
 	setCapabilities(tenantID2, tc.setupCapability)
@@ -356,7 +351,6 @@ func (tc testCase) runTest(
 	tenantID3 := serverutils.TestTenantID3()
 	secondaryWithoutCapabilityDB := createSecondaryDB(
 		tenantID3,
-		false, /* skipSQLSystemTentantCheck */
 		tc.setupClusterSetting,
 		tc.queryClusterSetting,
 	)
@@ -423,27 +417,29 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE LEASE",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 		{
 			desc:  "ALTER RANGE RELOCATE LEASE",
 			query: "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 		{
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
@@ -455,8 +451,9 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `client tenant does not have capability "can_admin_relocate_range"`,
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 		{
 			desc:  "ALTER TABLE x SPLIT AT",
@@ -672,27 +669,29 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE VOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 		{
 			desc:  "ALTER RANGE RELOCATE VOTERS",
 			query: "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 	}
 
@@ -761,8 +760,9 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `client tenant does not have capability "can_admin_relocate_range"`,
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 	}
 
@@ -823,27 +823,29 @@ func TestRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE NONVOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 		{
 			desc:  "ALTER RANGE RELOCATE NONVOTERS",
 			query: "ALTER RANGE RELOCATE NONVOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+				result: [][]string{{ignore, systemKeyPretty, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
+				result: [][]string{{ignore, secondaryKeyPretty, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 	}
 
@@ -907,8 +909,9 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+				errorMessage: `client tenant does not have capability "can_admin_relocate_range"`,
 			},
+			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
 	}
 
