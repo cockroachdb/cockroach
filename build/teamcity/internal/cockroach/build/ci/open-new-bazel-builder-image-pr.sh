@@ -32,11 +32,19 @@ git_ssh clone "ssh://git@github.com/cockroachdb/cockroach.git" "$WORKDIR/cockroa
 
 # Push commit to fork.
 git checkout -b "$BRANCH"
-echo -n "$VERSION" > build/.bazelbuilderversion
-git commit -a -m "ci: update bazel builder image
+if [[ $VERSION == *"-fips:"* ]]; then
+  echo -n "$VERSION" > build/.bazelbuilderversion-fips
+  git commit -a -m "ci: update bazel builder image
 
 Release note: None
 Epic: None"
+else
+  echo -n "$VERSION" > build/.bazelbuilderversion
+  git commit -a -m "ci: update bazel builder image
+
+Release note: None
+Epic: None"
+fi
 git_ssh push "ssh://git@github.com/cockroach-teamcity/cockroach.git" $BRANCH
 
 # Create PR.
