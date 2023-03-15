@@ -55,6 +55,63 @@ func TestFindConflict(t *testing.T) {
 	}
 }
 
+func TestFindConflictByTerm(t *testing.T) {
+	ents := func(fromIndex uint64, terms []uint64) []pb.Entry {
+		e := make([]pb.Entry, 0, len(terms))
+		for i, term := range terms {
+			e = append(e, pb.Entry{Term: term, Index: fromIndex + uint64(i)})
+		}
+		return e
+	}
+	for _, tt := range []struct {
+		ents  []pb.Entry // ents[0] contains the (index, term) of the snapshot
+		index uint64
+		term  uint64
+		want  uint64
+	}{
+		// Log starts from index 1.
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 100, term: 2, want: 100}, // ErrUnavailable
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 5, term: 6, want: 5},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 5, term: 5, want: 5},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 5, term: 4, want: 2},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 5, term: 2, want: 2},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 5, term: 1, want: 0},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 1, term: 2, want: 1},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 1, term: 1, want: 0},
+		{ents: ents(0, []uint64{0, 2, 2, 5, 5, 5}), index: 0, term: 0, want: 0},
+		// Log with compacted entries.
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 30, term: 3, want: 30}, // ErrUnavailable
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 14, term: 9, want: 14},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 14, term: 4, want: 14},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 14, term: 3, want: 12},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 14, term: 2, want: 9},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 11, term: 5, want: 11},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 10, term: 5, want: 10},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 10, term: 3, want: 10},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 10, term: 2, want: 9},
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 9, term: 2, want: 9}, // ErrCompacted
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 4, term: 2, want: 4}, // ErrCompacted
+		{ents: ents(10, []uint64{3, 3, 3, 4, 4, 4}), index: 0, term: 0, want: 0}, // ErrCompacted
+	} {
+		t.Run("", func(t *testing.T) {
+			st := NewMemoryStorage()
+			require.NotEmpty(t, tt.ents)
+			st.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
+				Index: tt.ents[0].Index,
+				Term:  tt.ents[0].Term,
+			}})
+			l := newLog(st, raftLogger)
+			l.append(tt.ents[1:]...)
+
+			index, term := l.findConflictByTerm(tt.index, tt.term)
+			require.Equal(t, tt.want, index)
+			wantTerm, err := l.term(index)
+			wantTerm = l.zeroTermOnOutOfBounds(wantTerm, err)
+			require.Equal(t, wantTerm, term)
+		})
+	}
+}
+
 func TestIsUpToDate(t *testing.T) {
 	previousEnts := []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}
 	raftLog := newLog(NewMemoryStorage(), raftLogger)
