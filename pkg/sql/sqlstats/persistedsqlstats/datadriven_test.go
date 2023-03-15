@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -104,10 +106,13 @@ func TestSQLStatsDataDriven(t *testing.T) {
 		case "exec-sql":
 			stmts := strings.Split(d.Input, "\n")
 			for i := range stmts {
-				_, err := sqlConn.Exec(stmts[i])
-				if err != nil {
-					t.Errorf("failed to execute stmt %s due to %s", stmts[i], err.Error())
-				}
+				testutils.SucceedsSoon(t, func() error {
+					_, exSqlErr := sqlConn.Exec(stmts[i])
+					if exSqlErr != nil {
+						return errors.NewAssertionErrorWithWrappedErrf(exSqlErr, "failed to execute stmt %s", stmts[i])
+					}
+					return nil
+				})
 			}
 		case "observe-sql":
 			actual := observer.QueryStr(t, d.Input)
