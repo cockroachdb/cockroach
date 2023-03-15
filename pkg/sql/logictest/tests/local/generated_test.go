@@ -1157,6 +1157,13 @@ func TestLogic_json_builtins(
 	runLogicTest(t, "json_builtins")
 }
 
+func TestLogic_json_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "json_index")
+}
+
 func TestLogic_kv_builtin_functions(
 	t *testing.T,
 ) {

@@ -1578,6 +1578,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
 		makeLtFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLtFn(types.VarBit, types.VarBit, volatility.Leakproof),
+		makeLtFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1634,6 +1635,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
 		makeLeFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLeFn(types.VarBit, types.VarBit, volatility.Leakproof),
+		makeLeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp, volatility.Immutable),

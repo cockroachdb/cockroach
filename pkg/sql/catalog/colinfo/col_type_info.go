@@ -146,7 +146,7 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
-	case types.ArrayFamily, types.StringFamily:
+	case types.JsonFamily, types.ArrayFamily, types.StringFamily:
 		return true
 	}
 	return ColumnTypeIsOnlyInvertedIndexable(t)
@@ -162,7 +162,6 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 		t = t.ArrayContents()
 	}
 	switch t.Family() {
-	case types.JsonFamily:
 	case types.GeographyFamily:
 	case types.GeometryFamily:
 	case types.TSVectorFamily:
@@ -183,7 +182,7 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		default:
 			return MustBeValueEncoded(semanticType.ArrayContents())
 		}
-	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+	case types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
 		return true
 	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
