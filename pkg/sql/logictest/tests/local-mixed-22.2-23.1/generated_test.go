@@ -100,6 +100,13 @@ func TestLogic_drop_index(
 	runLogicTest(t, "drop_index")
 }
 
+func TestLogic_drop_owned_by(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_owned_by")
+}
+
 func TestLogic_drop_schema(
 	t *testing.T,
 ) {
