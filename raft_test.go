@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	pb "go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -4492,6 +4494,7 @@ func TestFastLogRejection(t *testing.T) {
 	tests := []struct {
 		leaderLog       []pb.Entry // Logs on the leader
 		followerLog     []pb.Entry // Logs on the follower
+		followerCompact uint64     // Index at which the follower log is compacted.
 		rejectHintTerm  uint64     // Expected term included in rejected MsgAppResp.
 		rejectHintIndex uint64     // Expected index included in rejected MsgAppResp.
 		nextAppendTerm  uint64     // Expected term when leader appends after rejected.
@@ -4696,79 +4699,90 @@ func TestFastLogRejection(t *testing.T) {
 				{Term: 4, Index: 7},
 				{Term: 4, Index: 8},
 			},
-			nextAppendTerm:  2,
-			nextAppendIndex: 1,
 			rejectHintTerm:  2,
 			rejectHintIndex: 1,
+			nextAppendTerm:  2,
+			nextAppendIndex: 1,
+		},
+		// A case when a stale MsgApp from leader arrives after the corresponding
+		// log index got compacted.
+		// A stale (type=MsgApp,index=3,logTerm=3,entries=[(term=3,index=4)]) is
+		// delivered to a follower who has already compacted beyond log index 3. The
+		// MsgAppResp rejection will return same index=3, with logTerm=0. The leader
+		// will rollback by one entry, and send MsgApp with index=2,logTerm=1.
+		{
+			leaderLog: []pb.Entry{
+				{Term: 1, Index: 1},
+				{Term: 1, Index: 2},
+				{Term: 3, Index: 3},
+			},
+			followerLog: []pb.Entry{
+				{Term: 1, Index: 1},
+				{Term: 1, Index: 2},
+				{Term: 3, Index: 3},
+				{Term: 3, Index: 4},
+				{Term: 3, Index: 5}, // <- this entry and below are compacted
+			},
+			followerCompact: 5,
+			rejectHintTerm:  0,
+			rejectHintIndex: 3,
+			nextAppendTerm:  1,
+			nextAppendIndex: 2,
 		},
 	}
 
-	for i, test := range tests {
+	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			s1 := NewMemoryStorage()
 			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
 			s1.Append(test.leaderLog)
+			last := test.leaderLog[len(test.leaderLog)-1]
+			s1.SetHardState(pb.HardState{
+				Term:   last.Term - 1,
+				Commit: last.Index,
+			})
+			n1 := newTestRaft(1, 10, 1, s1)
+			n1.becomeCandidate() // bumps Term to last.Term
+			n1.becomeLeader()
+
 			s2 := NewMemoryStorage()
 			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
 			s2.Append(test.followerLog)
-
-			n1 := newTestRaft(1, 10, 1, s1)
+			s2.SetHardState(pb.HardState{
+				Term:   last.Term,
+				Vote:   1,
+				Commit: 0,
+			})
 			n2 := newTestRaft(2, 10, 1, s2)
+			if test.followerCompact != 0 {
+				s2.Compact(test.followerCompact)
+				// NB: the state of n2 after this compaction isn't realistic because the
+				// commit index is still at 0. We do this to exercise a "doesn't happen"
+				// edge case behaviour, in case it still does happen in some other way.
+			}
 
-			n1.becomeCandidate()
-			n1.becomeLeader()
-
-			n2.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHeartbeat})
-
+			require.NoError(t, n2.Step(pb.Message{From: 1, To: 2, Type: pb.MsgHeartbeat}))
 			msgs := n2.readMessages()
-			if len(msgs) != 1 {
-				t.Errorf("can't read 1 message from peer 2")
-			}
-			if msgs[0].Type != pb.MsgHeartbeatResp {
-				t.Errorf("can't read heartbeat response from peer 2")
-			}
-			if n1.Step(msgs[0]) != nil {
-				t.Errorf("peer 1 step heartbeat response fail")
-			}
+			require.Len(t, msgs, 1, "can't read 1 message from peer 2")
+			require.Equal(t, pb.MsgHeartbeatResp, msgs[0].Type)
 
+			require.NoError(t, n1.Step(msgs[0]))
 			msgs = n1.readMessages()
-			if len(msgs) != 1 {
-				t.Errorf("can't read 1 message from peer 1")
-			}
-			if msgs[0].Type != pb.MsgApp {
-				t.Errorf("can't read append from peer 1")
-			}
+			require.Len(t, msgs, 1, "can't read 1 message from peer 1")
+			require.Equal(t, pb.MsgApp, msgs[0].Type)
 
-			if n2.Step(msgs[0]) != nil {
-				t.Errorf("peer 2 step append fail")
-			}
+			require.NoError(t, n2.Step(msgs[0]), "peer 2 step append fail")
 			msgs = n2.readMessages()
-			if len(msgs) != 1 {
-				t.Errorf("can't read 1 message from peer 2")
-			}
-			if msgs[0].Type != pb.MsgAppResp {
-				t.Errorf("can't read append response from peer 2")
-			}
-			if !msgs[0].Reject {
-				t.Errorf("expected rejected append response from peer 2")
-			}
-			if msgs[0].LogTerm != test.rejectHintTerm {
-				t.Fatalf("#%d expected hint log term = %d, but got %d", i, test.rejectHintTerm, msgs[0].LogTerm)
-			}
-			if msgs[0].RejectHint != test.rejectHintIndex {
-				t.Fatalf("#%d expected hint index = %d, but got %d", i, test.rejectHintIndex, msgs[0].RejectHint)
-			}
+			require.Len(t, msgs, 1, "can't read 1 message from peer 2")
+			require.Equal(t, pb.MsgAppResp, msgs[0].Type)
+			require.True(t, msgs[0].Reject, "expected rejected append response from peer 2")
+			require.Equal(t, test.rejectHintTerm, msgs[0].LogTerm, "hint log term mismatch")
+			require.Equal(t, test.rejectHintIndex, msgs[0].RejectHint, "hint log index mismatch")
 
-			if n1.Step(msgs[0]) != nil {
-				t.Errorf("peer 1 step append fail")
-			}
+			require.NoError(t, n1.Step(msgs[0]), "peer 1 step append fail")
 			msgs = n1.readMessages()
-			if msgs[0].LogTerm != test.nextAppendTerm {
-				t.Fatalf("#%d expected log term = %d, but got %d", i, test.nextAppendTerm, msgs[0].LogTerm)
-			}
-			if msgs[0].Index != test.nextAppendIndex {
-				t.Fatalf("#%d expected index = %d, but got %d", i, test.nextAppendIndex, msgs[0].Index)
-			}
+			require.Equal(t, test.nextAppendTerm, msgs[0].LogTerm)
+			require.Equal(t, test.nextAppendIndex, msgs[0].Index)
 		})
 	}
 }
