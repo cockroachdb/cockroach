@@ -169,6 +169,16 @@ func (f *rowBasedFlow) setupProcessors(
 			outputs = append(outputs, output)
 		}
 	}
+	if f.IsLocal() && len(processors) == 1 {
+		// If we have a fully local plan and managed to fuse all processors
+		// together, then we won't have any concurrency. In such a scenario, we
+		// can unwrap the output to remove copyingRowReceiver. This way we'll
+		// avoid redundant row copies.
+		// TODO(yuzefovich): we could probably do this in more cases.
+		if crr, ok := outputs[0].(*copyingRowReceiver); ok {
+			outputs[0] = crr.RowReceiver
+		}
+	}
 	f.SetProcessors(processors, outputs)
 	return nil
 }
