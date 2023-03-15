@@ -421,10 +421,11 @@ func mvccScanToCols(
 	opts MVCCScanOptions,
 	st *cluster.Settings,
 ) (MVCCScanResult, error) {
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	adapter := mvccScanFetchAdapter{machine: onNextKVSeek}
 	adapter.results.maxKeysPerRow = indexFetchSpec.MaxKeysPerRow
 	adapter.results.maxFamilyID = uint32(indexFetchSpec.MaxFamilyID)
-	ok, mvccScanner, res, err := mvccScanInit(iter, key, endKey, timestamp, opts, &adapter.results)
+	ok, res, err := mvccScanInit(mvccScanner, iter, key, endKey, timestamp, opts, &adapter.results)
 	if !ok {
 		return res, err
 	}

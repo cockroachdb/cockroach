@@ -472,6 +472,15 @@ type pebbleMVCCScanner struct {
 		// advancing the iterator at the new key. It is backed by keyBuf.
 		origKey []byte
 	}
+	// alloc holds fields embedded within the scanner struct only to reduce
+	// allocations in common cases.
+	alloc struct {
+		// Typically pebbleMVCCScanner.results points to pebbleResults.
+		// Embedding the pebbleResults within the pebbleMVCCScanner avoids an
+		// extra allocation, at the cost of higher allocated bytes when we use a
+		// different implementation of the results interface.
+		pebbleResults pebbleResults
+	}
 }
 
 type advanceFn int
@@ -515,6 +524,9 @@ func (p *pebbleMVCCScanner) release() {
 	// Discard most memory references before placing in pool.
 	*p = pebbleMVCCScanner{
 		keyBuf: p.keyBuf,
+		// NB: This clears p.alloc.pebbleResults too, which should be maintained
+		// to avoid delaying GC of contained byte slices and avoid accidental
+		// misuse.
 	}
 	pebbleMVCCScannerPool.Put(p)
 }
