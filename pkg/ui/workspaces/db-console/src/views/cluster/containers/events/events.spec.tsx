@@ -35,13 +35,11 @@ function makeEventBox(
   );
 }
 
-function makeEvent(event: clusterUiApi.EventColumns) {
+function makeEvent(event: clusterUiApi.EventRow) {
   return mount(<EventRow event={event}></EventRow>);
 }
 
-const createEventWithEventType = (
-  eventType: string,
-): clusterUiApi.EventColumns => {
+const createEventWithEventType = (eventType: string): clusterUiApi.EventRow => {
   return {
     eventType: eventType,
     timestamp: "2016-01-25T10:10:10.555555",
@@ -65,7 +63,7 @@ describe("<EventBox>", function () {
 describe("<EventRow>", function () {
   describe("attach", function () {
     it("correctly renders a known event", function () {
-      const e: clusterUiApi.EventColumns =
+      const e: clusterUiApi.EventRow =
         createEventWithEventType("create_database");
       const provider = makeEvent(e);
 
@@ -79,7 +77,7 @@ describe("<EventRow>", function () {
     });
 
     it("correctly renders an unknown event", function () {
-      const e: clusterUiApi.EventColumns = createEventWithEventType("unknown");
+      const e: clusterUiApi.EventRow = createEventWithEventType("unknown");
       const provider = makeEvent(e);
 
       expect(
@@ -93,8 +91,7 @@ describe("<EventRow>", function () {
 describe("getEventInfo", function () {
   it("covers every currently known event", function () {
     _.each(allEvents, eventType => {
-      const event: clusterUiApi.EventColumns =
-        createEventWithEventType(eventType);
+      const event: clusterUiApi.EventRow = createEventWithEventType(eventType);
       const eventContent = shallow(
         getEventInfo(event).content as React.ReactElement<any>,
       );

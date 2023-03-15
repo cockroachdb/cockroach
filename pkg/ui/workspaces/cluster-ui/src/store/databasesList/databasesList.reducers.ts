@@ -10,20 +10,21 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DatabasesListResponse } from "src/api";
-import { DOMAIN_NAME } from "../utils";
-
-import { SqlExecutionRequest } from "../../api/sqlApi";
+import { DOMAIN_NAME, noopReducer } from "../utils";
 
 export type DatabasesListState = {
   data: DatabasesListResponse;
+  // Captures thrown errors.
   lastError: Error;
   valid: boolean;
+  inFlight: boolean;
 };
 
 const initialState: DatabasesListState = {
   data: null,
   lastError: null,
-  valid: true,
+  valid: false,
+  inFlight: false,
 };
 
 const databasesListSlice = createSlice({
@@ -33,14 +34,17 @@ const databasesListSlice = createSlice({
     received: (state, action: PayloadAction<DatabasesListResponse>) => {
       state.data = action.payload;
       state.valid = true;
+      state.inFlight = false;
       state.lastError = null;
     },
     failed: (state, action: PayloadAction<Error>) => {
+      state.data = null;
       state.valid = false;
+      state.inFlight = false;
       state.lastError = action.payload;
     },
-    refresh: (_, _action: PayloadAction<SqlExecutionRequest>) => {},
-    request: (_, _action: PayloadAction<SqlExecutionRequest>) => {},
+    refresh: noopReducer,
+    request: noopReducer,
   },
 });
 

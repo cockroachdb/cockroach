@@ -13,12 +13,12 @@ import {
   LARGE_RESULT_SIZE,
   SqlExecutionErrorMessage,
   SqlExecutionRequest,
-  sqlResultsAreEmpty,
+  sqlResultsAreEmpty, txnResultIsEmpty,
 } from "./sqlApi";
 import { withTimeout } from "./util";
 import moment from "moment";
 
-export type DatabasesColumns = {
+export type DatabasesRow = {
   database_name: string;
 };
 
@@ -46,18 +46,9 @@ export function getDatabasesList(
   timeout?: moment.Duration,
 ): Promise<DatabasesListResponse> {
   return withTimeout(
-    executeInternalSql<DatabasesColumns>(databasesRequest),
+    executeInternalSql<DatabasesRow>(databasesRequest),
     timeout,
   ).then(result => {
-    // If there is an error and there are no result throw error.
-    const noTxnResultsExist = result?.execution?.txn_results?.length === 0;
-    if (
-      result.error &&
-      (noTxnResultsExist || result.execution.txn_results[0].rows.length === 0)
-    ) {
-      throw result.error;
-    }
-
     if (sqlResultsAreEmpty(result)) {
       return { databases: [], error: result.error };
     }

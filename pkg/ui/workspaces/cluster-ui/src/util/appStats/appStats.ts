@@ -392,6 +392,8 @@ export const generateStmtDetailsToID = (
   return generatedID;
 };
 
+// NOTE: We encode the db and table name so we can combine them as a string.
+// TODO(maxlang): there's probably a nicer way to do this
 export const generateTableID = (db: string, table: string): string => {
   return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
 };

@@ -10,6 +10,7 @@
 
 import moment from "moment";
 
+export const ADMIN_API_PREFIX = "_admin/v1";
 export const PROMISE_TIMEOUT = moment.duration(30, "s"); // seconds
 
 // withTimeout wraps a promise in a timeout (cribbed from db-console).

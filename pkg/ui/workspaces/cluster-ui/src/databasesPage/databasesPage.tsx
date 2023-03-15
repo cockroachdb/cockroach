@@ -272,7 +272,7 @@ export class DatabasesPage extends React.Component<
     if (
       !this.props.loaded &&
       !this.props.loading &&
-      this.props.lastError === undefined
+      !this.props.lastError
     ) {
       return this.props.refreshDatabases();
     }
@@ -304,7 +304,7 @@ export class DatabasesPage extends React.Component<
     }
 
     filteredDbs.forEach(database => {
-      if (database.lastError !== undefined) {
+      if (database.lastError) {
         lastDetailsError = database.lastError;
       }
 
@@ -565,10 +565,11 @@ export class DatabasesPage extends React.Component<
           database,
           database.nodesByRegionString || "None",
         ),
+      // TODO(thomas): it isn't clear from the component that this string
+      // is redacted to only regions when isTenant is true
       sort: database => database.nodesByRegionString,
       className: cx("databases-table__col-node-regions"),
       name: "nodeRegions",
-      hideIfTenant: true,
     },
     {
       title: (

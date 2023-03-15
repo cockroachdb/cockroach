@@ -44,6 +44,7 @@ export type SqlTxnResult<RowType> = {
   rows_affected: number;
   columns?: SqlResultColumn[];
   rows?: RowType[];
+  // This is actually a SqlExecutionErrorMessage.
   error?: Error;
 };
 
@@ -57,7 +58,8 @@ export type SqlExecutionErrorMessage = {
   message: string;
   code: string;
   severity: string;
-  source: { file: string; line: number; function: string };
+  // source can be null when we encounter a parsing error
+  source?: { file: string; line: number; function: string };
 };
 
 export type SqlApiResponse<ResultType> = {

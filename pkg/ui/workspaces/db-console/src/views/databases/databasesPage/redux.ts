@@ -15,7 +15,10 @@ import {
   DatabasesPageDataDatabase,
   defaultFilters,
   Filters,
+  util,
 } from "@cockroachlabs/cluster-ui";
+
+const { combineLoadingErrors, getNodesByRegionString } = util;
 
 import {
   refreshDatabases,
@@ -28,7 +31,6 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { combineLoadingErrors, getNodesByRegionString } from "../utils";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 
 const selectLoading = createSelector(
@@ -62,7 +64,7 @@ const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
 );
 
 const searchLocalSetting = new LocalSetting(
-  "search/DatabsesPage",
+  "search/DatabasesPage",
   (state: AdminUIState) => state.localSettings,
   null,
 );

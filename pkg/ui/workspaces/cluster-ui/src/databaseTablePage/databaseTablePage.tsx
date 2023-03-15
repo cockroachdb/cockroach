@@ -143,7 +143,7 @@ export interface DatabaseTablePageIndexStats {
   lastReset: Moment;
 }
 
-interface IndexStat {
+export interface IndexStat {
   indexName: string;
   totalReads: number;
   lastUsed: Moment;

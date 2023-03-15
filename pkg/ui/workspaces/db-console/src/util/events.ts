@@ -14,7 +14,7 @@ import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 /**
  * getEventDescription returns a short summary of an event.
  */
-export function getEventDescription(e: clusterUiApi.EventColumns): string {
+export function getEventDescription(e: clusterUiApi.EventRow): string {
   const info: EventInfo = e.info ? JSON.parse(e.info) : {};
   let privs = "";
   let comment = "";

@@ -17,6 +17,24 @@ import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
+import { ViewMode } from "../../databaseDetailsPage";
+import {
+  defaultJobShowSetting,
+  defaultJobsSortSetting,
+  defaultStmtsTxnsSortSetting,
+  defaultSortSettingActiveExecutions,
+  defaultSessionsSortSetting,
+  defaultSortSettingInsights,
+  defaultSortSettingSchemaInsights,
+  defaultDatabasesSortSetting,
+  defaultFiltersActiveExecutions,
+  defaultFiltersInsights,
+  defaultFiltersSchemaInsights,
+  defaultJobTypeSetting,
+  defaultJobStatusSetting,
+  defaultDatabaseDetailsTableSortSetting,
+  defaultDatabaseDetailsGrantSortSetting, defaultDatabaseDetailsViewMode
+} from "./defaults";
 
 type SortSetting = {
   ascending: boolean;
@@ -29,6 +47,11 @@ export enum LocalStorageKeys {
   STMT_FINGERPRINTS_SORT = "sort/StatementsPage",
   TXN_FINGERPRINTS_LIMIT = "limit/TransactionsPage",
   TXN_FINGERPRINTS_SORT = "sort/TransactionsPage",
+  DB_DETAILS_TABLES_PAGE_SORT = "sortSetting/DatabasesDetailsTablesPage",
+  DB_DETAILS_TABLES_PAGE_FILTERS = "filters/DatabasesDetailsTablesPage",
+  DB_DETAILS_TABLES_PAGE_SEARCH = "search/DatabasesDetailsTablesPage",
+  DB_DETAILS_GRANTS_PAGE_SORT = "sortSetting/DatabasesDetailsGrantsPage",
+  DB_DETAILS_VIEW_MODE = "viewMode/DatabasesDetailsPage",
 }
 
 export type LocalStorageState = {
@@ -53,11 +76,12 @@ export type LocalStorageState = {
   "sortSetting/JobsPage": SortSetting;
   "sortSetting/InsightsPage": SortSetting;
   "sortSetting/SchemaInsightsPage": SortSetting;
+  "sortSetting/DatabasesPage": SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
-  "filters/DatabasesPage": string;
+  "filters/DatabasesPage": Filters;
   "filters/SessionsPage": Filters;
   "filters/InsightsPage": WorkloadInsightEventFilters;
   "filters/SchemaInsightsPage": Filters;
@@ -67,6 +91,11 @@ export type LocalStorageState = {
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]: SortSetting;
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]: Filters;
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]: string;
+  [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]: SortSetting;
+  [LocalStorageKeys.DB_DETAILS_VIEW_MODE]: ViewMode;
 };
 
 type Payload = {
@@ -77,57 +106,6 @@ type Payload = {
 type TypedPayload<T> = {
   value: T;
 };
-
-const defaultSortSetting: SortSetting = {
-  ascending: false,
-  columnTitle: "executionCount",
-};
-
-const defaultSortSettingActiveExecutions: SortSetting = {
-  ascending: false,
-  columnTitle: "startTime",
-};
-
-const defaultSortSettingInsights: SortSetting = {
-  ascending: false,
-  columnTitle: "startTime",
-};
-
-const defaultSortSettingSchemaInsights: SortSetting = {
-  ascending: false,
-  columnTitle: "insights",
-};
-
-const defaultFiltersActiveExecutions = {
-  app: "",
-  executionStatus: "",
-};
-
-const defaultFiltersInsights = {
-  app: "",
-  workloadInsightType: "",
-};
-
-const defaultFiltersSchemaInsights = {
-  database: "",
-  schemaInsightType: "",
-};
-
-const defaultSessionsSortSetting: SortSetting = {
-  ascending: false,
-  columnTitle: "statementAge",
-};
-
-const defaultJobsSortSetting: SortSetting = {
-  ascending: false,
-  columnTitle: "lastExecutionTime",
-};
-
-const defaultJobStatusSetting = "";
-
-const defaultJobShowSetting = "0";
-
-const defaultJobTypeSetting = 0;
 
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
@@ -181,10 +159,10 @@ const initialState: LocalStorageState = {
     defaultJobsSortSetting,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
-    defaultSortSetting,
+    defaultStmtsTxnsSortSetting,
   "sortSetting/TransactionsPage":
     JSON.parse(localStorage.getItem("sortSetting/TransactionsPage")) ||
-    defaultSortSetting,
+    defaultStmtsTxnsSortSetting,
   "sortSetting/SessionsPage":
     JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
     defaultSessionsSortSetting,
@@ -194,6 +172,15 @@ const initialState: LocalStorageState = {
   "sortSetting/SchemaInsightsPage":
     JSON.parse(localStorage.getItem("sortSetting/SchemaInsightsPage")) ||
     defaultSortSettingSchemaInsights,
+  "sortSetting/DatabasesPage":
+    JSON.parse(localStorage.getItem("sortSetting/DatabasesPage")) ||
+    defaultDatabasesSortSetting,
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT)) ||
+    defaultDatabaseDetailsTableSortSetting,
+  [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]:
+  JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT)) ||
+    defaultDatabaseDetailsGrantSortSetting,
   "filters/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
     defaultFiltersActiveExecutions,
@@ -207,8 +194,7 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("filters/TransactionsPage")) ||
     defaultFilters,
   "filters/DatabasesPage":
-    JSON.parse(localStorage.getItem("filters/DatabasessPage")) ||
-    defaultFilters,
+    JSON.parse(localStorage.getItem("filters/DatabasesPage")) || defaultFilters,
   "filters/SessionsPage":
     JSON.parse(localStorage.getItem("filters/SessionsPage")) || defaultFilters,
   "filters/InsightsPage":
@@ -217,18 +203,25 @@ const initialState: LocalStorageState = {
   "filters/SchemaInsightsPage":
     JSON.parse(localStorage.getItem("filters/SchemaInsightsPage")) ||
     defaultFiltersSchemaInsights,
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS)) || defaultFilters,
   "search/StatementsPage":
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":
     JSON.parse(localStorage.getItem("search/TransactionsPage")) || null,
   "search/DatabasesPage":
     JSON.parse(localStorage.getItem("search/DatabasesPage")) || null,
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH)) || null,
   "typeSetting/JobsPage":
     JSON.parse(localStorage.getItem("typeSetting/JobsPage")) ||
     defaultJobTypeSetting,
   "statusSetting/JobsPage":
     JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
     defaultJobStatusSetting,
+  [LocalStorageKeys.DB_DETAILS_VIEW_MODE]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_VIEW_MODE)) ||
+    defaultDatabaseDetailsViewMode,
 };
 
 const localStorageSlice = createSlice({

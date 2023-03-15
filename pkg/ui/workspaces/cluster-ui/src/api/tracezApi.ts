@@ -11,6 +11,7 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
 import Long from "long";
+import {ADMIN_API_PREFIX} from "./util";
 export type ListTracingSnapshotsRequest =
   cockroach.server.serverpb.ListTracingSnapshotsRequest;
 export type ListTracingSnapshotsResponse =
@@ -40,15 +41,13 @@ export type SetTraceRecordingTypeResponse =
   cockroach.server.serverpb.SetTraceRecordingTypeResponse;
 export type RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
 
-const API_PREFIX = "_admin/v1";
-
 export function listTracingSnapshots(
   nodeID: string,
 ): Promise<ListTracingSnapshotsResponse> {
   // Note that the server is clever enough to ignore proxy requests to node "local."
   return fetchData(
     cockroach.server.serverpb.ListTracingSnapshotsResponse,
-    `${API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
+    `${ADMIN_API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
     null,
     null,
   );
@@ -60,7 +59,7 @@ export function takeTracingSnapshot(
   const req = new TakeTracingSnapshotRequest();
   return fetchData(
     cockroach.server.serverpb.TakeTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
+    `${ADMIN_API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
     cockroach.server.serverpb.TakeTracingSnapshotRequest,
     req as any,
   );
@@ -74,7 +73,7 @@ export function getTracingSnapshot(req: {
 }): Promise<GetTracingSnapshotResponse> {
   return fetchData(
     cockroach.server.serverpb.GetTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots/${req.snapshotID}?remote_node_id=${req.nodeID}`,
+    `${ADMIN_API_PREFIX}/trace_snapshots/${req.snapshotID}?remote_node_id=${req.nodeID}`,
     null,
     null,
   );
@@ -93,7 +92,7 @@ export function getRawTrace(req: {
   });
   return fetchData(
     cockroach.server.serverpb.GetTraceResponse,
-    `${API_PREFIX}/traces?remote_node_id=${req.nodeID}`,
+    `${ADMIN_API_PREFIX}/traces?remote_node_id=${req.nodeID}`,
     cockroach.server.serverpb.GetTraceRequest,
     rpcReq as any,
   );
@@ -111,7 +110,7 @@ export function setTraceRecordingType(
   return fetchData(
     cockroach.server.serverpb.SetTraceRecordingTypeResponse,
     // TODO(davidh): Consider making this endpoint just POST to `/traces/{trace_ID}`
-    `${API_PREFIX}/settracerecordingtype?remote_node_id=${nodeID}`,
+    `${ADMIN_API_PREFIX}/settracerecordingtype?remote_node_id=${nodeID}`,
     cockroach.server.serverpb.SetTraceRecordingTypeRequest,
     req as any,
   );

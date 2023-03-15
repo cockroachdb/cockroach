@@ -17,9 +17,10 @@ import {
   RecommendationType as RecType,
 } from "@cockroachlabs/cluster-ui";
 
+const { getNodesByRegionString, normalizePrivileges, generateTableID } = util;
+
 import { cockroach } from "src/js/protos";
 import {
-  generateTableID,
   refreshTableDetails,
   refreshNodes,
   refreshIndexStats,
@@ -35,10 +36,8 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
-import { normalizePrivileges } from "../utils";
 
 const { TableIndexStatsRequest } = cockroach.server.serverpb;
 
@@ -124,22 +123,11 @@ export const mapStateToProps = createSelector(
       },
     );
 
-    const userToPrivileges = new Map<string, string[]>();
-
-    details?.data?.results.grantsResp.grants.forEach(grant => {
-      if (!userToPrivileges.has(grant.user)) {
-        userToPrivileges.set(grant.user, []);
-      }
-      userToPrivileges.set(
-        grant.user,
-        userToPrivileges.get(grant.user).concat(grant.privileges),
-      );
-    });
-
-    const grants = Array.from(userToPrivileges).map(([name, value]) => ({
-      user: name,
-      privileges: normalizePrivileges(value.sort()),
-    }));
+    const grants =
+      details?.data?.results.grantsResp.grants.map(grant => ({
+        user: grant.user,
+        privileges: normalizePrivileges(grant.privileges),
+      })) || [];
 
     const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
 

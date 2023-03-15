@@ -23,7 +23,7 @@ import moment from "moment";
 // defaultEventsNumLimit is the default number of events to be returned.
 export const defaultEventsNumLimit = 1000;
 
-export type EventColumns = {
+export type EventRow = {
   timestamp: string;
   eventType: string;
   reportingID: string;
@@ -37,7 +37,7 @@ export type NonRedactedEventsRequest = {
   offset?: number;
 };
 
-export type EventsResponse = EventColumns[];
+export type EventsResponse = EventRow[];
 
 export const baseEventsQuery = `SELECT timestamp, "eventType", "reportingID", info, "uniqueID" FROM system.eventlog`;
 
@@ -94,18 +94,18 @@ export function getNonRedactedEvents(
 ): Promise<SqlApiResponse<EventsResponse>> {
   const eventsRequest: SqlExecutionRequest = buildEventsSQLRequest(req);
   return withTimeout(
-    executeInternalSql<EventColumns>(eventsRequest),
+    executeInternalSql<EventRow>(eventsRequest),
     timeout,
   ).then(result => {
     if (sqlResultsAreEmpty(result)) {
-      return formatApiResult<EventColumns[]>(
+      return formatApiResult<EventRow[]>(
         [],
         result.error,
         "retrieving events information",
       );
     }
 
-    return formatApiResult<EventColumns[]>(
+    return formatApiResult<EventRow[]>(
       result.execution.txn_results[0].rows,
       result.error,
       "retrieving events information",

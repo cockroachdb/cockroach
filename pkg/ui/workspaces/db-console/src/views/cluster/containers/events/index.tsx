@@ -53,10 +53,10 @@ export interface SimplifiedEvent {
 class EventSortedTable extends SortedTable<SimplifiedEvent> {}
 
 export interface EventRowProps {
-  event: clusterUiApi.EventColumns;
+  event: clusterUiApi.EventRow;
 }
 
-export function getEventInfo(e: clusterUiApi.EventColumns): SimplifiedEvent {
+export function getEventInfo(e: clusterUiApi.EventRow): SimplifiedEvent {
   return {
     fromNowString: moment(e.timestamp)
       .format(util.DATE_FORMAT_24_UTC)
@@ -111,7 +111,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
           <tbody>
             {_.map(
               _.take(events, EVENT_BOX_NUM_EVENTS),
-              (e: clusterUiApi.EventColumns, i: number) => {
+              (e: clusterUiApi.EventRow, i: number) => {
                 return <EventRow event={e} key={i} />;
               },
             )}
