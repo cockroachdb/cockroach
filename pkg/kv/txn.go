@@ -1251,10 +1251,9 @@ func (txn *Txn) GetLeafTxnInputState(ctx context.Context) *roachpb.LeafTxnInputS
 
 // GetLeafTxnInputStateOrRejectClient is like GetLeafTxnInputState
 // except, if the transaction is already aborted or otherwise in state
-// that cannot make progress, it returns an error. If the transaction
-// is aborted, the error will be a retryable one, and the transaction
-// will have been prepared for another transaction attempt (so, on
-// retryable errors, it acts like Send()).
+// that cannot make progress, it returns an error. If the transaction aborted
+// the error returned will be a retryable one; as such, the caller is
+// responsible for handling the error before another attempt.
 func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	ctx context.Context,
 ) (*roachpb.LeafTxnInputState, error) {
@@ -1267,10 +1266,6 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
-		var retryErr *kvpb.TransactionRetryWithProtoRefreshError
-		if errors.As(err, &retryErr) {
-			txn.handleRetryableErrLocked(ctx, retryErr)
-		}
 		return nil, err
 	}
 	return tfs, nil
@@ -1339,7 +1334,6 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *kvpb.
 	}
 
 	pErr = txn.mu.sender.UpdateStateOnRemoteRetryableErr(ctx, pErr)
-	txn.replaceRootSenderIfTxnAbortedLocked(ctx, pErr.GetDetail().(*kvpb.TransactionRetryWithProtoRefreshError), origTxnID)
 
 	return pErr.GoError()
 }

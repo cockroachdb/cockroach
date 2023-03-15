@@ -640,6 +640,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 }
 
 const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
+const executingParallelAndSerialChecks = "executing %d checks concurrently and %d checks serially"
 
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
@@ -1582,6 +1583,10 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		return recv.commErr
 	}
 
+	if fn := evalCtx.ExecCfg.DistSQLRunTestingKnobs.RunBeforeCascadesAndChecks; fn != nil {
+		fn(planner.Txn().ID())
+	}
+
 	dsp.PlanAndRunCascadesAndChecks(
 		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
 	)
@@ -2212,7 +2217,9 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 		numParallelChecks--
 	}
 
-	log.VEventf(ctx, 2, "executing %d checks concurrently and %d checks serially", numParallelChecks, len(checkPlans)-numParallelChecks)
+	log.VEventf(
+		ctx, 2, executingParallelAndSerialChecks, numParallelChecks, len(checkPlans)-numParallelChecks,
+	)
 
 	// Set up a wait group so that the main (current) goroutine can block until
 	// all concurrent checks return. We cannot short-circuit if one of the
