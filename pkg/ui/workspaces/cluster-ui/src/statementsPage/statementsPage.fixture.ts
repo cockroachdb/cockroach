@@ -299,6 +299,8 @@ export const mockStmt = (
   };
 };
 
+// TODO (convert this)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const statementsDefault = [
   mockStmt({
     aggregatedFingerprintID: "1253500548539870016",
@@ -547,7 +549,13 @@ const statementsDefault = [
 
 const statementsPagePropsFixture: StatementsPageProps = {
   stmtsTotalRuntimeSecs: 100,
-  statements: statementsDefault,
+  statementsResponse: {
+    data: null,
+    lastUpdated,
+    valid: true,
+    error: null,
+    inFlight: false,
+  },
   history,
   location: {
     pathname: "/statements",
@@ -583,12 +591,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
     regions: "",
     nodes: "",
   },
-  lastUpdated,
-  isDataValid: true,
-  isReqInFlight: false,
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
-  statementsError: null,
   limit: DEFAULT_STATS_REQ_OPTIONS.limit,
   reqSortSetting: DEFAULT_STATS_REQ_OPTIONS.sortStmt,
   timeScale: {
@@ -598,7 +602,6 @@ const statementsPagePropsFixture: StatementsPageProps = {
     key: "Custom",
   },
   apps: ["$ internal", "movr", "$ cockroach demo"],
-  lastReset: "2020-04-13 07:22:23",
   columns: null,
   isTenant: false,
   hasViewActivityRedactedRole: false,
@@ -625,11 +628,18 @@ const statementsPagePropsFixture: StatementsPageProps = {
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {
   ...statementsPagePropsFixture,
-  statementsError: new RequestError(
-    "request_error",
-    403,
-    "this operation requires admin privilege",
-  ),
+
+  statementsResponse: {
+    data: null,
+    lastUpdated,
+    valid: true,
+    error: new RequestError(
+      "request_error",
+      403,
+      "this operation requires admin privilege",
+    ),
+    inFlight: false,
+  },
 };
 
 export default statementsPagePropsFixture;
