@@ -23,7 +23,11 @@ import Severity = cockroach.util.log.Severity;
 import {
   buildSQLApiDatabasesResponse,
   buildSQLApiEventsResponse,
+  stubSqlApiCall,
 } from "src/util/fakeApi";
+
+const { ZoneConfig } = cockroach.config.zonepb;
+const { ZoneConfigurationLevel } = cockroach.server.serverpb;
 
 describe("rest api", function () {
   describe("databases request", function () {
@@ -108,62 +112,129 @@ describe("rest api", function () {
 
   describe("database details request", function () {
     const dbName = "test";
+    const mockOldDate = new Date(2023, 2, 3);
+    const mockZoneConfig = new ZoneConfig({
+      inherited_constraints: true,
+      inherited_lease_preferences: true,
+      null_voter_constraints_is_empty: true,
+      global_reads: true,
+      gc: {
+        ttl_seconds: 100,
+      },
+    });
+    const mockZoneConfigBytes = ZoneConfig.encode(mockZoneConfig).finish();
+    const mockZoneConfigHexString = Array.from(mockZoneConfigBytes)
+      .map(x => x.toString(16).padStart(2, "0"))
+      .join("");
 
     afterEach(fetchMock.restore);
 
     it("correctly requests info about a specific database", function () {
       // Mock out the fetch query
-      fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}`,
-        method: "GET",
-        response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
-          const encodedResponse =
-            protos.cockroach.server.serverpb.DatabaseDetailsResponse.encode({
-              table_names: ["table1", "table2"],
-              grants: [
-                { user: "root", privileges: ["ALL"] },
-                { user: "other", privileges: [] },
-              ],
-            }).finish();
-          return {
-            body: encodedResponse,
-          };
-        },
-      });
+      stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+        clusterUiApi.createDatabaseDetailsReq(dbName),
+        [
+          // Database ID query
+          { rows: [{ database_id: "1" }] },
+          // Database grants query
+          {
+            rows: [
+              {
+                user: "admin",
+                privileges: ["ALL"],
+              },
+              {
+                user: "public",
+                privileges: ["CONNECT"],
+              },
+            ],
+          },
+          // Database tables query
+          {
+            rows: [{ table_schema: "public", table_name: "table1" }],
+          },
+          // Database replicas and regions query
+          {
+            rows: [
+              {
+                replicas: [1, 2, 3],
+                regions: ["gcp-europe-west1", "gcp-europe-west2"],
+              },
+            ],
+          },
+          // Database index usage statistics query
+          {
+            rows: [
+              {
+                last_read: mockOldDate.toISOString(),
+                created_at: mockOldDate.toISOString(),
+                unused_threshold: "1m",
+              },
+            ],
+          },
+          // Database zone config query
+          {
+            rows: [
+              {
+                zone_config_hex_string: mockZoneConfigHexString,
+              },
+            ],
+          },
+          {
+            rows: [
+              {
+                approximate_disk_bytes: 100,
+                live_bytes: 200,
+                total_bytes: 300,
+                range_count: 400,
+              },
+            ],
+          },
+        ],
+        1,
+      );
 
-      return api
-        .getDatabaseDetails(
-          new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
-            database: dbName,
-          }),
-        )
-        .then(result => {
-          expect(
-            fetchMock.calls(`${api.API_PREFIX}/databases/${dbName}`).length,
-          ).toBe(1);
-          expect(result.table_names.length).toBe(2);
-          expect(result.grants.length).toBe(2);
-        });
+      return clusterUiApi.getDatabaseDetails(dbName).then(result => {
+        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(result.results.id_resp.database_id).toEqual("1");
+        expect(result.results.tables_resp.tables.length).toBe(1);
+        expect(result.results.grants_resp.grants.length).toBe(2);
+        expect(result.results.stats.index_stats.num_index_recommendations).toBe(
+          1,
+        );
+        expect(result.results.zone_config_resp.zone_config).toEqual(
+          mockZoneConfig,
+        );
+        expect(result.results.zone_config_resp.zone_config_level).toBe(
+          ZoneConfigurationLevel.DATABASE,
+        );
+        expect(result.results.stats.pebble_data.approximate_disk_bytes).toBe(
+          100,
+        );
+        expect(result.results.stats.ranges_data.live_bytes).toBe(200);
+        expect(result.results.stats.ranges_data.total_bytes).toBe(300);
+        expect(result.results.stats.ranges_data.range_count).toBe(400);
+      });
     });
 
     it("correctly handles an error", function (done) {
       // Mock out the fetch query, but return a 500 status code
+      const req = clusterUiApi.createDatabaseDetailsReq(dbName);
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}`,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...req,
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+            database: req.database || clusterUiApi.FALLBACK_DB,
+          });
           return { throws: new Error() };
         },
       });
 
-      api
-        .getDatabaseDetails(
-          new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
-            database: dbName,
-          }),
-        )
+      clusterUiApi
+        .getDatabaseDetails(dbName)
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -175,22 +246,22 @@ describe("rest api", function () {
 
     it("correctly times out", function (done) {
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
+      const req = clusterUiApi.createDatabaseDetailsReq(dbName);
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}`,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...req,
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+            database: req.database || clusterUiApi.FALLBACK_DB,
+          });
           return new Promise<any>(() => {});
         },
       });
 
-      api
-        .getDatabaseDetails(
-          new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
-            database: dbName,
-          }),
-          moment.duration(0),
-        )
+      clusterUiApi
+        .getDatabaseDetails(dbName, moment.duration(0))
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -311,7 +382,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest({}),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-            database: "system",
+            database: clusterUiApi.FALLBACK_DB,
           });
           return {
             body: JSON.stringify(
@@ -346,7 +417,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest(req),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-            database: "system",
+            database: clusterUiApi.FALLBACK_DB,
           });
           return {
             body: JSON.stringify(
@@ -379,7 +450,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest({}),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-            database: "system",
+            database: clusterUiApi.FALLBACK_DB,
           });
           return { throws: new Error() };
         },
@@ -405,7 +476,7 @@ describe("rest api", function () {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
             ...clusterUiApi.buildEventsSQLRequest({}),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-            database: "system",
+            database: clusterUiApi.FALLBACK_DB,
           });
           return new Promise<any>(() => {});
         },

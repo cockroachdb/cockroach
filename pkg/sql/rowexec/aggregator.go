@@ -95,7 +95,6 @@ func (ag *aggregatorBase) init(
 	spec *execinfrapb.AggregatorSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 	trailingMetaCallback func() []execinfrapb.ProducerMetadata,
 ) error {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "aggregator-mem")
@@ -149,7 +148,7 @@ func (ag *aggregatorBase) init(
 	}
 
 	return ag.ProcessorBase.Init(
-		ctx, self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
+		ctx, self, post, ag.outputTypes, flowCtx, processorID, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,
@@ -258,15 +257,14 @@ func newAggregator(
 	spec *execinfrapb.AggregatorSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	if spec.IsRowCount() {
-		return newCountAggregator(ctx, flowCtx, processorID, input, post, output)
+		return newCountAggregator(ctx, flowCtx, processorID, input, post)
 	}
 	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
-		return newOrderedAggregator(ctx, flowCtx, processorID, spec, input, post, output)
+		return newOrderedAggregator(ctx, flowCtx, processorID, spec, input, post)
 	}
-	return newHashAggregator(ctx, flowCtx, processorID, spec, input, post, output)
+	return newHashAggregator(ctx, flowCtx, processorID, spec, input, post)
 }
 
 func newHashAggregator(
@@ -276,7 +274,6 @@ func newHashAggregator(
 	spec *execinfrapb.AggregatorSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*hashAggregator, error) {
 	ag := &hashAggregator{
 		buckets:                 make(map[string]aggregateFuncs),
@@ -291,7 +288,6 @@ func newHashAggregator(
 		spec,
 		input,
 		post,
-		output,
 		func() []execinfrapb.ProducerMetadata {
 			ag.close()
 			return nil
@@ -314,7 +310,6 @@ func newOrderedAggregator(
 	spec *execinfrapb.AggregatorSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*orderedAggregator, error) {
 	ag := &orderedAggregator{}
 
@@ -326,7 +321,6 @@ func newOrderedAggregator(
 		spec,
 		input,
 		post,
-		output,
 		func() []execinfrapb.ProducerMetadata {
 			ag.close()
 			return nil

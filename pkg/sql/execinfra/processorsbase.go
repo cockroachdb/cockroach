@@ -47,7 +47,7 @@ type Processor interface {
 	MustBeStreaming() bool
 
 	// Run is the main loop of the processor.
-	Run(context.Context)
+	Run(context.Context, RowReceiver)
 }
 
 // DoesNotUseTxn is an interface implemented by some processors to mark that
@@ -310,7 +310,6 @@ type ProcessorConstructor func(
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	inputs []RowSource,
-	outputs []RowReceiver,
 	localProcessors []LocalProcessor,
 ) (Processor, error)
 
@@ -338,11 +337,6 @@ type ProcessorBaseNoHelper struct {
 	self RowSource
 
 	ProcessorID int32
-
-	// Output is the consumer of the rows produced by this ProcessorBase. If
-	// Output is nil, one can invoke ProcessRow to obtain the post-processed row
-	// directly.
-	Output RowReceiver
 
 	FlowCtx *FlowCtx
 
@@ -725,12 +719,12 @@ func (pb *ProcessorBase) OutputTypes() []*types.T {
 }
 
 // Run is part of the Processor interface.
-func (pb *ProcessorBaseNoHelper) Run(ctx context.Context) {
-	if pb.Output == nil {
-		panic("processor output is not set for emitting rows")
+func (pb *ProcessorBaseNoHelper) Run(ctx context.Context, output RowReceiver) {
+	if output == nil {
+		panic("processor output is not provided for emitting rows")
 	}
 	pb.self.Start(ctx)
-	Run(pb.ctx, pb.self, pb.Output)
+	Run(pb.ctx, pb.self, output)
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions
@@ -757,12 +751,11 @@ func (pb *ProcessorBase) Init(
 	coreOutputTypes []*types.T,
 	flowCtx *FlowCtx,
 	processorID int32,
-	output RowReceiver,
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, memMonitor, opts,
 	)
 }
 
@@ -778,13 +771,10 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	flowCtx *FlowCtx,
 	evalCtx *eval.Context,
 	processorID int32,
-	output RowReceiver,
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
-	pb.ProcessorBaseNoHelper.Init(
-		self, flowCtx, evalCtx, processorID, output, opts,
-	)
+	pb.ProcessorBaseNoHelper.Init(self, flowCtx, evalCtx, processorID, opts)
 	pb.MemMonitor = memMonitor
 
 	// Hydrate all types used in the processor.
@@ -800,18 +790,12 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 
 // Init initializes the ProcessorBaseNoHelper.
 func (pb *ProcessorBaseNoHelper) Init(
-	self RowSource,
-	flowCtx *FlowCtx,
-	evalCtx *eval.Context,
-	processorID int32,
-	output RowReceiver,
-	opts ProcStateOpts,
+	self RowSource, flowCtx *FlowCtx, evalCtx *eval.Context, processorID int32, opts ProcStateOpts,
 ) {
 	pb.self = self
 	pb.FlowCtx = flowCtx
 	pb.EvalCtx = evalCtx
 	pb.ProcessorID = processorID
-	pb.Output = output
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	if opts.InputsToDrain != nil {
 		// Only initialize this if non-nil, because we cache the slice of inputs
@@ -966,13 +950,13 @@ func NewLimitedMonitorNoFlowCtx(
 	return NewLimitedMonitor(ctx, parent, flowCtx, name)
 }
 
-// LocalProcessor is a RowSourcedProcessor that needs to be initialized with
-// its post processing spec and output row receiver. Most processors can accept
-// these objects at creation time.
+// LocalProcessor is a RowSourcedProcessor that needs to be initialized with its
+// processorID and post-processing spec. Most processors can accept these
+// objects at creation time.
 type LocalProcessor interface {
 	RowSourcedProcessor
-	// InitWithOutput initializes this processor.
-	InitWithOutput(ctx context.Context, flowCtx *FlowCtx, processorID int32, post *execinfrapb.PostProcessSpec, output RowReceiver) error
+	// Init initializes this processor.
+	Init(ctx context.Context, flowCtx *FlowCtx, processorID int32, post *execinfrapb.PostProcessSpec) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
