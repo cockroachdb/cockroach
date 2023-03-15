@@ -314,7 +314,7 @@ var _ colexecop.ClosableOperator = &castIdentityOp{}
 var identityOrder []int
 
 func init() {
-	identityOrder = make([]int, coldata.BatchSize())
+	identityOrder = make([]int, coldata.MaxBatchSize)
 	for i := range identityOrder {
 		identityOrder[i] = i
 	}

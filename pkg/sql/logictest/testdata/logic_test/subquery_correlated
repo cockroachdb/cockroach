@@ -1303,3 +1303,32 @@ WHERE key IN (
 3  2
 4  1
 4  3
+
+# Regression test for #98691.
+statement ok
+CREATE TABLE t98691 (
+  a INT,
+  b INT
+)
+
+statement ok
+INSERT INTO t98691 VALUES (1, 10)
+
+query B
+SELECT (NULL, NULL) = ANY (
+  SELECT a, b FROM t98691 WHERE a > i
+) FROM (VALUES (0), (0)) v(i)
+----
+NULL
+NULL
+
+statement ok
+INSERT INTO t98691 VALUES (NULL, NULL)
+
+query B
+SELECT (2, 20) = ANY (
+  SELECT a, b FROM t98691 WHERE a > i OR a IS NULL
+) FROM (VALUES (0), (0)) v(i)
+----
+NULL
+NULL
