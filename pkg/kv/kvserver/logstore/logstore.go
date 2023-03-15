@@ -119,7 +119,7 @@ type SyncCallback interface {
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
 	// Use an unindexed batch because we don't need to read our writes, and
 	// it is more efficient.
-	return eng.NewUnindexedBatch(false /* writeOnly */)
+	return eng.NewUnindexedBatch()
 }
 
 // StoreEntries persists newly appended Raft log Entries to the log storage,

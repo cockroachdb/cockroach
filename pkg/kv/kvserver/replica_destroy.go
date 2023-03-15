@@ -111,7 +111,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	startTime := timeutil.Now()
 
 	ms := r.GetMVCCStats()
-	batch := r.store.TODOEngine().NewUnindexedBatch(true /* writeOnly */)
+	batch := r.store.TODOEngine().NewWriteBatch()
 	defer batch.Close()
 	desc := r.Desc()
 	inited := desc.IsInitialized()
