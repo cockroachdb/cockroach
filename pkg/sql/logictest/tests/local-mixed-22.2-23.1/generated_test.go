@@ -72,6 +72,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_alter_primary_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key")
+}
+
 func TestLogic_alter_table(
 	t *testing.T,
 ) {
