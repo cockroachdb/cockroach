@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // SQLRunner is a helper for issuing SQL statements; it supports multiple
@@ -277,9 +277,10 @@ func (h StmtHandle) QueryRowTx(ctx context.Context, tx pgx.Tx, args ...interface
 // beginning of the slice. It is based on
 // https://github.com/golang/go/wiki/SliceTricks.
 func prependQuerySimpleProtocol(args []interface{}) []interface{} {
-	args = append(args, pgx.QuerySimpleProtocol(true))
+	simpleQuery := []pgx.QueryExecMode{pgx.QueryExecModeSimpleProtocol}
+	args = append(args, simpleQuery)
 	copy(args[1:], args)
-	args[0] = pgx.QuerySimpleProtocol(true)
+	args[0] = simpleQuery
 	return args
 }
 
