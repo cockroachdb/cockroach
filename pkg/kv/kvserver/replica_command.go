@@ -3111,8 +3111,8 @@ func (r *Replica) followerSendSnapshot(
 		Strategy:            kvserverpb.SnapshotRequest_KV_BATCH,
 		Type:                req.Type,
 	}
-	newBatchFn := func() storage.Batch {
-		return r.store.TODOEngine().NewUnindexedBatch(true /* writeOnly */)
+	newBatchFn := func() storage.WriteBatch {
+		return r.store.TODOEngine().NewWriteBatch()
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)

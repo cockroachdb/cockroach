@@ -149,7 +149,7 @@ type kvBatchSnapshotStrategy struct {
 	// Limiter for sending KV batches. Only used on the sender side.
 	limiter *rate.Limiter
 	// Only used on the sender side.
-	newBatch func() storage.Batch
+	newWriteBatch func() storage.WriteBatch
 
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk. Only used on the receiver side.
@@ -535,7 +535,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	// Iterate over all keys (point keys and range keys) and stream out batches of
 	// key-values.
-	var b storage.Batch
+	var b storage.WriteBatch
 	defer func() {
 		if b != nil {
 			b.Close()
@@ -572,7 +572,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 					kvs++
 					if b == nil {
-						b = kvSS.newBatch()
+						b = kvSS.newWriteBatch()
 					}
 					key, err := iter.UnsafeEngineKey()
 					if err != nil {
@@ -599,7 +599,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					for _, rkv := range iter.EngineRangeKeys() {
 						rangeKVs++
 						if b == nil {
-							b = kvSS.newBatch()
+							b = kvSS.newWriteBatch()
 						}
 						err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 						if err != nil {
@@ -635,7 +635,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 	ctx context.Context,
 	stream outgoingSnapshotStream,
-	batch storage.Batch,
+	batch storage.WriteBatch,
 	timerTag *snapshotTimingTag,
 ) error {
 	timerTag.start("rateLimit")
@@ -1468,7 +1468,7 @@ func SendEmptySnapshot(
 		noopStorePool{},
 		header,
 		&outgoingSnap,
-		eng.NewBatch,
+		eng.NewWriteBatch,
 		func() {},
 		nil, /* recordBytesSent */
 	)
@@ -1488,7 +1488,7 @@ func sendSnapshot(
 	storePool SnapshotStorePool,
 	header kvserverpb.SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
-	newBatch func() storage.Batch,
+	newWriteBatch func() storage.WriteBatch,
 	sent func(),
 	recordBytesSent snapshotRecordMetrics,
 ) error {
@@ -1555,10 +1555,10 @@ func sendSnapshot(
 	switch header.Strategy {
 	case kvserverpb.SnapshotRequest_KV_BATCH:
 		ss = &kvBatchSnapshotStrategy{
-			batchSize: batchSize,
-			limiter:   limiter,
-			newBatch:  newBatch,
-			st:        st,
+			batchSize:     batchSize,
+			limiter:       limiter,
+			newWriteBatch: newWriteBatch,
+			st:            st,
 		}
 	default:
 		log.Fatalf(ctx, "unknown snapshot strategy: %s", header.Strategy)

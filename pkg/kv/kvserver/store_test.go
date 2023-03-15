@@ -3008,7 +3008,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
 	}
-	newBatch := e.NewBatch
+	newBatch := e.NewWriteBatch
 
 	// Test that a failed Recv() causes a fail throttle
 	{

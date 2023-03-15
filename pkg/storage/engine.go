@@ -894,21 +894,21 @@ type Engine interface {
 	// NewUnindexedBatch returns a new instance of a batched engine which wraps
 	// this engine. It is unindexed, in that writes to the batch are not
 	// visible to reads until after it commits. The batch accumulates all
-	// mutations and applies them atomically on a call to Commit(). Read
-	// operations return an error, unless writeOnly is set to false.
+	// mutations and applies them atomically on a call to Commit().
 	//
-	// When writeOnly is false, reads will be satisfied by reading from the
-	// underlying engine, i.e., the caller does not see its own writes. This
-	// setting should be used only when the caller is certain that this
-	// optimization is correct, and beneficial. There are subtleties here -- see
-	// the discussion on https://github.com/cockroachdb/cockroach/pull/57661 for
-	// more details.
+	// Reads will be satisfied by reading from the underlying engine, i.e., the
+	// caller does not see its own writes. This setting should be used only when
+	// the caller is certain that this optimization is correct, and beneficial.
+	// There are subtleties here -- see the discussion on
+	// https://github.com/cockroachdb/cockroach/pull/57661 for more details.
 	//
-	// TODO(sumeer): We should separate the writeOnly=true case into a
-	// separate method, that returns a WriteBatch interface. Even better would
-	// be not having an option to pass writeOnly=false, and have the caller
-	// explicitly work with a separate WriteBatch and Reader.
-	NewUnindexedBatch(writeOnly bool) Batch
+	// TODO(sumeer,jackson): Remove this method and force the caller to operate
+	// explicitly with a separate WriteBatch and Reader.
+	NewUnindexedBatch() Batch
+	// NewWriteBatch returns a new write batch that will commit to the
+	// underlying Engine. The batch accumulates all mutations and applies them
+	// atomically on a call to Commit().
+	NewWriteBatch() WriteBatch
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
@@ -975,6 +975,14 @@ type Batch interface {
 	// iterator has to be repositioned using a seek operation, after the
 	// mutations were done.
 	ReadWriter
+	WriteBatch
+}
+
+// WriteBatch is the interface for write batch specific operations.
+type WriteBatch interface {
+	Writer
+	// Close closes the batch, freeing up any outstanding resources.
+	Close()
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.

@@ -61,13 +61,13 @@ func appender(s string) []byte {
 	return mustMarshal(v)
 }
 
-func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch) error) {
+func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b WriteBatch) error) {
 	e := NewDefaultInMemForTesting()
 	defer e.Close()
 
-	var b Batch
+	var b WriteBatch
 	if writeOnly {
-		b = e.NewUnindexedBatch(true /* writeOnly */)
+		b = e.NewWriteBatch()
 	} else {
 		b = e.NewBatch()
 	}
@@ -107,9 +107,9 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 		{Key: mvccKey("c"), Value: appender("foobar")},
 		{Key: mvccKey("e"), Value: []byte{}},
 	}
-	if !writeOnly {
+	if r, ok := b.(Reader); !writeOnly && ok {
 		// Scan values from batch directly.
-		kvs, err = Scan(b, localMax, roachpb.KeyMax, 0)
+		kvs, err = Scan(r, localMax, roachpb.KeyMax, 0)
 		require.NoError(t, err)
 		require.Equal(t, expValues, kvs)
 	}
@@ -126,7 +126,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
+	testBatchBasics(t, false /* writeOnly */, func(e Engine, b WriteBatch) error {
 		return b.Commit(false /* sync */)
 	})
 }
@@ -248,7 +248,7 @@ func TestReadOnlyBasics(t *testing.T) {
 func TestBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
+	testBatchBasics(t, false /* writeOnly */, func(e Engine, b WriteBatch) error {
 		repr := b.Repr()
 
 		r, err := NewPebbleBatchReader(repr)
@@ -296,7 +296,7 @@ func TestBatchRepr(t *testing.T) {
 func TestWriteBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testBatchBasics(t, true /* writeOnly */, func(e Engine, b Batch) error {
+	testBatchBasics(t, true /* writeOnly */, func(e Engine, b WriteBatch) error {
 		return b.Commit(false /* sync */)
 	})
 }
@@ -661,7 +661,7 @@ func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b := e.NewUnindexedBatch(false /* writeOnly */)
+	b := e.NewUnindexedBatch()
 	defer b.Close()
 	if err := b.PutUnversioned(mvccKey("b").Key, []byte("c")); err != nil {
 		t.Fatal(err)
@@ -682,37 +682,6 @@ func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 	require.Equal(t, []byte("b"), mvccGetRaw(t, b, mvccKey("b")))
 	require.NoError(t, b.Commit(true))
 	require.Equal(t, []byte("c"), mvccGetRaw(t, e, mvccKey("b")))
-}
-
-func TestUnindexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	e := NewDefaultInMemForTesting()
-	defer e.Close()
-
-	batch := e.NewUnindexedBatch(true /* writeOnly */)
-	defer batch.Close()
-
-	// The various Reader methods on the batch should panic.
-	a := mvccKey("a")
-	b := mvccKey("b")
-	testCases := []func(){
-		func() { _ = batch.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil) },
-		func() { _ = batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
-	}
-	for i, f := range testCases {
-		func() {
-			defer func(i int) {
-				if r := recover(); r == nil {
-					t.Fatalf("%d: test did not panic", i)
-				} else if r != "write-only batch" {
-					t.Fatalf("%d: unexpected panic: %v", i, r)
-				}
-			}(i)
-			f()
-		}()
-	}
 }
 
 func TestBatchIteration(t *testing.T) {
@@ -823,7 +792,7 @@ func TestBatchCombine(t *testing.T) {
 				}
 				k := fmt.Sprint(v)
 
-				b := e.NewUnindexedBatch(true /* writeOnly */)
+				b := e.NewWriteBatch()
 				if err := b.PutUnversioned(mvccKey(k).Key, []byte(k)); err != nil {
 					errs <- errors.Wrap(err, "put failed")
 					return
