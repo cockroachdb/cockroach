@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -125,9 +126,9 @@ func registerImportTPCC(r registry.Registry) {
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx)
-		dul := NewDiskUsageLogger(t, c)
+		dul := roachtestutil.NewDiskUsageLogger(t, c)
 		m.Go(dul.Runner)
-		hc := NewHealthChecker(t, c, c.All())
+		hc := roachtestutil.NewHealthChecker(t, c, c.All())
 		m.Go(hc.Runner)
 
 		tick, perfBuf := initBulkJobPerfArtifacts(testName, timeout)
@@ -244,9 +245,9 @@ func registerImportTPCH(r registry.Registry) {
 					t.Fatal(err)
 				}
 				m := c.NewMonitor(ctx)
-				dul := NewDiskUsageLogger(t, c)
+				dul := roachtestutil.NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
-				hc := NewHealthChecker(t, c, c.All())
+				hc := roachtestutil.NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
 				// TODO(peter): This currently causes the test to fail because we see a

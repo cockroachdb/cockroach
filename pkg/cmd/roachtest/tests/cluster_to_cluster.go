@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -87,38 +87,6 @@ func sumOverLabel(stats map[string]map[string]clusterstats.StatPoint, label stri
 		mean += stat.Value
 	}
 	return mean
-}
-
-// DiskUsageTracker can grab the disk usage of the provided cluster.
-//
-// TODO(msbutler): deprecate this, once restore roachtests also use prom setup.
-type DiskUsageTracker struct {
-	c cluster.Cluster
-	l *logger.Logger
-}
-
-// GetDiskUsage sums the disk usage for the given nodes in megabytes.
-func (du *DiskUsageTracker) GetDiskUsage(ctx context.Context, nodes option.NodeListOption) int {
-	var usage int
-	for _, n := range nodes {
-		cur, err := getDiskUsageInBytes(ctx, du.c, du.l, n)
-		if err != nil {
-			du.l.Printf("Unable to get disk usage for node %d", n)
-			return 0
-		}
-		usage += cur
-	}
-	return usage / 1e6
-}
-
-func NewDiskUsageTracker(
-	c cluster.Cluster, parentLogger *logger.Logger,
-) (*DiskUsageTracker, error) {
-	diskLogger, err := parentLogger.ChildLogger("disk-usage", logger.QuietStdout)
-	if err != nil {
-		return nil, err
-	}
-	return &DiskUsageTracker{c: c, l: diskLogger}, nil
 }
 
 type metricSnapshot struct {
@@ -644,7 +612,7 @@ func registerClusterToCluster(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				sp.setupC2C(ctx, t, c)
 				m := c.NewMonitor(ctx, sp.setup.src.nodes.Merge(sp.setup.dst.nodes))
-				hc := NewHealthChecker(t, c, sp.setup.src.nodes.Merge(sp.setup.dst.nodes))
+				hc := roachtestutil.NewHealthChecker(t, c, sp.setup.src.nodes.Merge(sp.setup.dst.nodes))
 
 				m.Go(func(ctx context.Context) error {
 					require.NoError(t, hc.Runner(ctx))
