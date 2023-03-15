@@ -313,12 +313,12 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			spec := setInputOffsets(t, testCase.spec.getConverterSpec(), testCase.inputOffsets)
 			post := execinfrapb.PostProcessSpec{}
 
-			processor, err := newReadImportDataProcessor(ctx, flowCtx, 0, *spec, &post, &errorReportingRowReceiver{t})
+			processor, err := newReadImportDataProcessor(ctx, flowCtx, 0, *spec, &post)
 			if err != nil {
 				t.Fatalf("Could not create data processor: %v", err)
 			}
 
-			processor.Run(ctx)
+			processor.Run(ctx, &errorReportingRowReceiver{t})
 		})
 	}
 }
@@ -607,9 +607,9 @@ func setImportReaderParallelism(parallelism int32) func() {
 	rowexec.NewReadImportDataProcessor = func(
 		ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32,
 		spec execinfrapb.ReadImportDataSpec, post *execinfrapb.PostProcessSpec,
-		output execinfra.RowReceiver) (execinfra.Processor, error) {
+	) (execinfra.Processor, error) {
 		spec.ReaderParallelism = parallelism
-		return factory(ctx, flowCtx, processorID, spec, post, output)
+		return factory(ctx, flowCtx, processorID, spec, post)
 	}
 
 	return func() {

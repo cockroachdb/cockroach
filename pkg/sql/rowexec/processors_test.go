@@ -330,7 +330,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(10, 1))
-		noop, err := newNoopProcessor(ctx, flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
+		noop, err := newNoopProcessor(ctx, flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -826,7 +826,7 @@ func TestFlowConcurrentTxnUse(t *testing.T) {
 			&samplerProcessor{
 				input: &tableReader{},
 			},
-		})
+		}, nil /* outputs */)
 		require.False(t, flow.ConcurrentTxnUse(), "expected no concurrent txn use because there is only one goroutine")
 	})
 	t.Run("TestMultipleGoroutinesWithNoConcurrentTxnUse", func(t *testing.T) {
@@ -841,7 +841,7 @@ func TestFlowConcurrentTxnUse(t *testing.T) {
 			&sampleAggregator{
 				input: &execinfra.RowChannel{},
 			},
-		})
+		}, nil /* outputs */)
 		require.False(t, flow.ConcurrentTxnUse(), "expected no concurrent txn use because the tableReader should be the only txn user")
 	})
 	t.Run("TestMultipleGoroutinesWithConcurrentTxnUse", func(t *testing.T) {
@@ -855,7 +855,7 @@ func TestFlowConcurrentTxnUse(t *testing.T) {
 			&samplerProcessor{
 				input: &tableReader{},
 			},
-		})
+		}, nil /* outputs */)
 		require.True(t, flow.ConcurrentTxnUse(), "expected concurrent txn use given that there are two tableReaders each in a separate goroutine")
 	})
 }
@@ -866,20 +866,18 @@ func TestFlowConcurrentTxnUse(t *testing.T) {
 // responsibility to set up all the necessary infrastructure. This method is
 // intended to be used by "reader" processors - those that read data from disk.
 func testReaderProcessorDrain(
-	ctx context.Context,
-	t *testing.T,
-	processorConstructor func(out execinfra.RowReceiver) (execinfra.Processor, error),
+	ctx context.Context, t *testing.T, processorConstructor func() (execinfra.Processor, error),
 ) {
 	// ConsumerClosed verifies that when a processor's consumer is closed, the
 	// processor finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
-		p, err := processorConstructor(out)
+		p, err := processorConstructor()
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(ctx)
+		p.Run(ctx, out)
 	})
 
 	// ConsumerDone verifies that the producer drains properly by checking that
@@ -888,11 +886,11 @@ func testReaderProcessorDrain(
 	t.Run("ConsumerDone", func(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerDone()
-		p, err := processorConstructor(out)
+		p, err := processorConstructor()
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(ctx)
+		p.Run(ctx, out)
 		var traceSeen, txnFinalStateSeen bool
 		for {
 			row, meta := out.Next()

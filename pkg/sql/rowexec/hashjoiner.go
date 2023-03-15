@@ -108,7 +108,6 @@ func newHashJoiner(
 	leftSource execinfra.RowSource,
 	rightSource execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
 		leftSource:   leftSource,
@@ -131,7 +130,6 @@ func newHashJoiner(
 		spec.OnExpr,
 		false, /* outputContinuationColumn */
 		post,
-		output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{h.leftSource, h.rightSource},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

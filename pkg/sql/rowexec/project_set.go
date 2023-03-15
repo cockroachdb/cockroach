@@ -80,7 +80,6 @@ func newProjectSetProcessor(
 	spec *execinfrapb.ProjectSetSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*projectSetProcessor, error) {
 	outputTypes := append(input.OutputTypes(), spec.GeneratedColumns...)
 	ps := &projectSetProcessor{
@@ -99,7 +98,6 @@ func newProjectSetProcessor(
 		outputTypes,
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ps.input},

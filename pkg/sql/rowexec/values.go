@@ -47,7 +47,6 @@ func newValuesProcessor(
 	processorID int32,
 	spec *execinfrapb.ValuesCoreSpec,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*valuesProcessor, error) {
 	if len(spec.Columns) > 0 && uint64(len(spec.RawBytes)) != spec.NumRows {
 		return nil, errors.AssertionFailedf(
@@ -65,7 +64,7 @@ func newValuesProcessor(
 		v.typs[i] = spec.Columns[i].Type
 	}
 	if err := v.Init(
-		ctx, v, post, v.typs, flowCtx, processorID, output, nil /* memMonitor */, execinfra.ProcStateOpts{},
+		ctx, v, post, v.typs, flowCtx, processorID, nil /* memMonitor */, execinfra.ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}

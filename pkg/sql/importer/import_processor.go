@@ -124,7 +124,6 @@ type readImportDataProcessor struct {
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ReadImportDataSpec
-	output  execinfra.RowReceiver
 
 	cancel context.CancelFunc
 	wg     ctxgroup.Group
@@ -147,15 +146,13 @@ func newReadImportDataProcessor(
 	processorID int32,
 	spec execinfrapb.ReadImportDataSpec,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	idp := &readImportDataProcessor{
 		flowCtx: flowCtx,
 		spec:    spec,
-		output:  output,
 		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,

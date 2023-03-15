@@ -117,8 +117,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	}
 
 	proc, err := rowexec.NewProcessor(
-		ctx, flowCtx, 0, &args.pspec.Core, &args.pspec.Post,
-		inputsProc, []execinfra.RowReceiver{nil}, nil,
+		ctx, flowCtx, 0, &args.pspec.Core, &args.pspec.Post, inputsProc, nil,
 	)
 	if err != nil {
 		return err

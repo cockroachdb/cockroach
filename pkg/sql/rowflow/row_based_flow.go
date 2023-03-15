@@ -83,12 +83,13 @@ func (f *rowBasedFlow) setupProcessors(
 	ctx context.Context, spec *execinfrapb.FlowSpec, inputSyncs [][]execinfra.RowSource,
 ) error {
 	processors := make([]execinfra.Processor, 0, len(spec.Processors))
+	outputs := make([]execinfra.RowReceiver, 0, len(spec.Processors))
 
 	// Populate processors: see which processors need their own goroutine and
 	// which are fused with their consumer.
 	for i := range spec.Processors {
 		pspec := &spec.Processors[i]
-		p, err := f.makeProcessor(ctx, pspec, inputSyncs[i])
+		p, output, err := f.makeProcessor(ctx, pspec, inputSyncs[i])
 		if err != nil {
 			return err
 		}
@@ -165,9 +166,10 @@ func (f *rowBasedFlow) setupProcessors(
 		}
 		if !fuse() {
 			processors = append(processors, p)
+			outputs = append(outputs, output)
 		}
 	}
-	f.SetProcessors(processors)
+	f.SetProcessors(processors, outputs)
 	return nil
 }
 
@@ -202,9 +204,9 @@ func findProcByOutputStreamID(
 
 func (f *rowBasedFlow) makeProcessor(
 	ctx context.Context, ps *execinfrapb.ProcessorSpec, inputs []execinfra.RowSource,
-) (execinfra.Processor, error) {
+) (execinfra.Processor, execinfra.RowReceiver, error) {
 	if len(ps.Output) != 1 {
-		return nil, errors.Errorf("only single-output processors supported")
+		return nil, nil, errors.Errorf("only single-output processors supported")
 	}
 	var output execinfra.RowReceiver
 	spec := &ps.Output[0]
@@ -212,17 +214,17 @@ func (f *rowBasedFlow) makeProcessor(
 		// There is no entity that corresponds to a pass-through router - we just
 		// use its output stream directly.
 		if len(spec.Streams) != 1 {
-			return nil, errors.Errorf("expected one stream for passthrough router")
+			return nil, nil, errors.Errorf("expected one stream for passthrough router")
 		}
 		var err error
 		output, err = f.setupOutboundStream(spec.Streams[0])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else {
 		r, err := f.setupRouter(spec)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		output = r
 		f.AddStartable(r)
@@ -237,7 +239,6 @@ func (f *rowBasedFlow) makeProcessor(
 
 	output = &copyingRowReceiver{RowReceiver: output}
 
-	outputs := []execinfra.RowReceiver{output}
 	proc, err := rowexec.NewProcessor(
 		ctx,
 		&f.FlowCtx,
@@ -245,11 +246,10 @@ func (f *rowBasedFlow) makeProcessor(
 		&ps.Core,
 		&ps.Post,
 		inputs,
-		outputs,
 		f.GetLocalProcessors(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Initialize any routers (the setupRouter case above) and outboxes.
@@ -261,7 +261,7 @@ func (f *rowBasedFlow) makeProcessor(
 	case *flowinfra.Outbox:
 		o.Init(types)
 	}
-	return proc, nil
+	return proc, output, nil
 }
 
 // setupInputSyncs populates a slice of input syncs, one for each Processor in

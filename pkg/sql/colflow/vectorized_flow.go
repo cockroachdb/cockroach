@@ -299,7 +299,7 @@ func (f *vectorizedFlow) Run(ctx context.Context) {
 
 	defer f.Wait()
 
-	if err := f.StartInternal(ctx, nil /* processors */); err != nil {
+	if err := f.StartInternal(ctx, nil /* processors */, nil /* outputs */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.GetRowSyncFlowConsumer().ProducerDone()
 		return
@@ -509,7 +509,7 @@ type flowCreatorHelper interface {
 	accumulateAsyncComponent(runFn)
 	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
 	// done on the gateway node.
-	addFlowCoordinator(coordinator *FlowCoordinator)
+	addFlowCoordinator(coordinator *FlowCoordinator, output execinfra.RowReceiver)
 	// getCtxDone returns done channel of the context of this flow.
 	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
@@ -1121,7 +1121,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 				flowCtx,
 				pspec.ProcessorID,
 				input,
-				s.rowReceiver,
 				s.getCancelFlowFn(),
 			)
 			// The flow coordinator is a root of its operator chain.
@@ -1129,7 +1128,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// NOTE: we don't append f to s.releasables because addFlowCoordinator
 			// adds the FlowCoordinator to FlowBase.processors, which ensures that
 			// it is later released in FlowBase.Cleanup.
-			s.addFlowCoordinator(f)
+			s.addFlowCoordinator(f, s.rowReceiver)
 		}
 
 	default:
@@ -1306,6 +1305,7 @@ func (s vectorizedInboundStreamHandler) Timeout(err error) {
 type vectorizedFlowCreatorHelper struct {
 	f          *flowinfra.FlowBase
 	processors [1]execinfra.Processor
+	outputs    [1]execinfra.RowReceiver
 }
 
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
@@ -1338,9 +1338,12 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 		}))
 }
 
-func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
+func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(
+	f *FlowCoordinator, output execinfra.RowReceiver,
+) {
 	r.processors[0] = f
-	r.f.SetProcessors(r.processors[:])
+	r.outputs[0] = output
+	r.f.SetProcessors(r.processors[:], r.outputs[:])
 }
 
 func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
@@ -1380,7 +1383,7 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
+func (r *noopFlowCreatorHelper) addFlowCoordinator(*FlowCoordinator, execinfra.RowReceiver) {}
 
 func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return nil

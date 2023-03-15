@@ -163,12 +163,12 @@ func runSampleAggregator(
 			Sketches:      sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
-			context.Background(), &flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{}, outputs[i],
+			context.Background(), &flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{},
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(context.Background())
+		p.Run(context.Background(), outputs[i])
 	}
 	// Randomly interleave the output rows from the samplers into a single buffer.
 	samplerResults := distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -197,12 +197,12 @@ func runSampleAggregator(
 	}
 
 	agg, err := newSampleAggregator(
-		context.Background(), &flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{}, finalOut,
+		context.Background(), &flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agg.Run(context.Background())
+	agg.Run(context.Background(), finalOut)
 	// Make sure there was no error.
 	finalOut.GetRowsNoMeta(t)
 	r := sqlutils.MakeSQLRunner(sqlDB)

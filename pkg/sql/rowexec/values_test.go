@@ -52,11 +52,11 @@ func TestValuesProcessor(t *testing.T) {
 					Mon:     evalCtx.TestingMon,
 				}
 
-				v, err := newValuesProcessor(context.Background(), &flowCtx, 0 /* processorID */, &spec, &execinfrapb.PostProcessSpec{}, out)
+				v, err := newValuesProcessor(context.Background(), &flowCtx, 0 /* processorID */, &spec, &execinfrapb.PostProcessSpec{})
 				if err != nil {
 					t.Fatal(err)
 				}
-				v.Run(context.Background())
+				v.Run(context.Background(), out)
 				if !out.ProducerClosed() {
 					t.Fatalf("output RowReceiver not closed")
 				}
@@ -125,11 +125,11 @@ func BenchmarkValuesProcessor(b *testing.B) {
 				b.SetBytes(int64(8 * numRows * numCols))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					v, err := newValuesProcessor(ctx, &flowCtx, 0 /* processorID */, &spec, &post, &output)
+					v, err := newValuesProcessor(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
 					if err != nil {
 						b.Fatal(err)
 					}
-					v.Run(ctx)
+					v.Run(ctx, &output)
 				}
 			})
 		}

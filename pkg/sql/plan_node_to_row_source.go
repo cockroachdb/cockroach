@@ -103,13 +103,12 @@ func (p *planNodeToRowSource) MustBeStreaming() bool {
 	}
 }
 
-// InitWithOutput implements the LocalProcessor interface.
-func (p *planNodeToRowSource) InitWithOutput(
+// Init implements the execinfra.LocalProcessor interface.
+func (p *planNodeToRowSource) Init(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) error {
 	if err := p.InitWithEvalCtx(
 		ctx,
@@ -123,7 +122,6 @@ func (p *planNodeToRowSource) InitWithOutput(
 		// params.
 		p.params.EvalContext(),
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// Input to drain is added in SetInput.
