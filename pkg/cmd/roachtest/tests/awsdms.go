@@ -111,7 +111,12 @@ func awsdmsVerString(v *version.Version) string {
 	if v.PreRelease() != "" {
 		ret += "-" + v.PreRelease()
 	}
-	return strings.ReplaceAll(ret, ".", "-")
+	ret = strings.ReplaceAll(ret, ".", "-")
+	const maxSize = 24
+	if len(ret) > maxSize {
+		ret = ret[:maxSize]
+	}
+	return ret
 }
 
 func awsdmsRoachtestRDSClusterName(v *version.Version) string {
@@ -612,7 +617,7 @@ func setupRDSCluster(
 		rdsGroup, err := rdsCli.CreateDBClusterParameterGroup(
 			ctx,
 			&rds.CreateDBClusterParameterGroupInput{
-				DBParameterGroupFamily:      proto.String("aurora-postgresql13"),
+				DBParameterGroupFamily:      proto.String("aurora-postgresql14"),
 				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup(t.BuildVersion())),
 				Description:                 proto.String("roachtest awsdms parameter groups"),
 			},
