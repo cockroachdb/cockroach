@@ -484,6 +484,10 @@ const (
 	// progress of each job in the system.jobs table.
 	V23_1JobInfoTableIsBackfilled
 
+	// V23_1EnableFlushableIngest upgrades the Pebble format major version to
+	// FormatFlushableIngest, which enables use of flushable ingestion.
+	V23_1EnableFlushableIngest
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -836,6 +840,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1JobInfoTableIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 80},
+	},
+	{
+		Key:     V23_1EnableFlushableIngest,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 82},
 	},
 
 	// *************************************************
