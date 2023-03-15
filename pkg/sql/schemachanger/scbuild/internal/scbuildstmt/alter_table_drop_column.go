@@ -32,7 +32,8 @@ import (
 func alterTableDropColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, n *tree.AlterTableDropColumn,
 ) {
-	fallBackIfZoneConfigExists(b, n, tbl.TableID)
+	fallBackIfSubZoneConfigExists(b, n, tbl.TableID)
+	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
 	checkRegionalByRowColumnConflict(b, tbl, n)
 	col, elts, done := resolveColumnForDropColumn(b, tn, tbl, n)

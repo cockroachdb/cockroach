@@ -1723,6 +1723,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
@@ -6200,6 +6201,7 @@ func TestRetriableErrorDuringRollback(t *testing.T) {
 		defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 INSERT INTO t.test VALUES (1, 2), (2, 2);

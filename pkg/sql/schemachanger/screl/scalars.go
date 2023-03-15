@@ -125,7 +125,8 @@ func MinElementVersion(el scpb.Element) clusterversion.Key {
 		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression:
 		return clusterversion.V23_1
 	case *scpb.ColumnNotNull, *scpb.CheckConstraintUnvalidated,
-		*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.ForeignKeyConstraintUnvalidated:
+		*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.ForeignKeyConstraintUnvalidated,
+		*scpb.IndexZoneConfig:
 		return clusterversion.V23_1
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
