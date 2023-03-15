@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -194,6 +195,203 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	}
 	if tracing.FindMsgInRecording(getRecAndFinish(), clientRejectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", clientRejectedMsg)
+	}
+}
+
+// TestDistSQLRunningParallelFKChecksAfterAbort simulates a SQL transaction
+// that writes two rows required to validate a FK check and then proceeds to
+// write a third row that would actually trigger this check. The transaction is
+// aborted after the third row is written but before the FK check is performed.
+// We assert that this construction doesn't throw a FK violation; instead, the
+// transaction should be able to retry.
+// This test serves as a regression test for the hazard identified in
+// https://github.com/cockroachdb/cockroach/issues/97141.
+func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	mu := struct {
+		syncutil.Mutex
+		abortTxn func(uuid uuid.UUID)
+	}{}
+
+	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				RunBeforeCascadesAndChecks: func(txnID uuid.UUID) {
+					mu.Lock()
+					defer mu.Unlock()
+					if mu.abortTxn != nil {
+						mu.abortTxn(txnID)
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Set up schemas for the test. We want a construction that results in 2 FK
+	// checks, of which 1 is done in parallel.
+	sqlDB.Exec(t, "create database test")
+	sqlDB.Exec(t, "create table test.parent1(a INT PRIMARY KEY)")
+	sqlDB.Exec(t, "create table test.parent2(b INT PRIMARY KEY)")
+	sqlDB.Exec(
+		t,
+		"create table test.child(a INT, b INT, FOREIGN KEY (a) REFERENCES test.parent1(a), FOREIGN KEY (b) REFERENCES test.parent2(b))",
+	)
+	key := roachpb.Key("a")
+
+	setupQueries := []string{
+		"insert into test.parent1 VALUES(1)",
+		"insert into test.parent2 VALUES(2)",
+	}
+	query := "insert into test.child VALUES(1, 2)"
+
+	createPlannerAndRunQuery := func(ctx context.Context, txn *kv.Txn, query string) error {
+		execCfg := s.ExecutorConfig().(ExecutorConfig)
+		// Plan the statement.
+		internalPlanner, cleanup := NewInternalPlanner(
+			"test",
+			txn,
+			username.RootUserName(),
+			&MemoryMetrics{},
+			&execCfg,
+			sessiondatapb.SessionData{},
+		)
+		defer cleanup()
+		p := internalPlanner.(*planner)
+		stmt, err := parser.ParseOne(query)
+		require.NoError(t, err)
+
+		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+			return nil
+		})
+		recv := MakeDistSQLReceiver(
+			ctx,
+			rw,
+			stmt.AST.StatementReturnType(),
+			execCfg.RangeDescriptorCache,
+			txn,
+			execCfg.Clock,
+			p.ExtendedEvalContext().Tracing,
+		)
+
+		p.stmt = makeStatement(stmt, clusterunique.ID{})
+		if err := p.makeOptimizerPlan(ctx); err != nil {
+			t.Fatal(err)
+		}
+		defer p.curPlan.close(ctx)
+
+		evalCtx := p.ExtendedEvalContext()
+		// We need distribute = true so that executing the plan involves marshaling
+		// the root txn meta to leaf txns.
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, txn, DistributionTypeNone)
+		planCtx.stmtType = recv.stmtType
+
+		evalCtxFactory := func(bool) *extendedEvalContext {
+			factoryEvalCtx := extendedEvalContext{Tracing: evalCtx.Tracing}
+			//factoryEvalCtx.Context = evalCtx.Context
+			return &factoryEvalCtx
+		}
+		err = execCfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+		if err != nil {
+			return err
+		}
+		return rw.Err()
+	}
+
+	push := func(ctx context.Context, key roachpb.Key) error {
+		// Conflicting transaction that pushes another transaction.
+		conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		// We need to explicitly set a high priority for the push to happen.
+		if err := conflictTxn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+			return err
+		}
+		// Push through a Put, as opposed to a Get, so that the pushee gets aborted.
+		if err := conflictTxn.Put(ctx, key, "pusher was here"); err != nil {
+			return err
+		}
+		err := conflictTxn.Commit(ctx)
+		require.NoError(t, err)
+		t.Log(conflictTxn.Rollback(ctx))
+		return err
+	}
+
+	// Make a db with a short heartbeat interval, so that the aborted txn finds
+	// out quickly.
+	ambient := s.AmbientCtx()
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			// Short heartbeat interval.
+			HeartbeatInterval: time.Millisecond,
+			Settings:          s.ClusterSettings(),
+			Clock:             s.Clock(),
+			Stopper:           s.Stopper(),
+		},
+		s.DistSenderI().(*kvcoord.DistSender),
+	)
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+
+	iter := 0
+	// We'll trace to make sure the test isn't fooling itself.
+	tr := s.TracerI().(*tracing.Tracer)
+	runningCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test")
+	defer getRecAndFinish()
+	err := shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
+		iter++
+
+		// set up the test.
+		for _, query := range setupQueries {
+			err := createPlannerAndRunQuery(ctx, txn, query)
+			require.NoError(t, err)
+		}
+
+		if iter == 1 {
+			// On the first iteration, abort the txn by setting the abortTxn function.
+			mu.Lock()
+			mu.abortTxn = func(txnID uuid.UUID) {
+				if txnID != txn.ID() {
+					return // not our txn
+				}
+				if err := txn.Put(ctx, key, "val"); err != nil {
+					t.Fatal(err)
+				}
+				if err := push(ctx, key); err != nil {
+					t.Fatal(err)
+				}
+				// Now wait until the heartbeat loop notices that the transaction is aborted.
+				testutils.SucceedsSoon(t, func() error {
+					if txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
+						return fmt.Errorf("txn heartbeat loop running")
+					}
+					return nil
+				})
+			}
+			mu.Unlock()
+			defer func() {
+				// clear the abortTxn function before returning.
+				mu.Lock()
+				mu.abortTxn = nil
+				mu.Unlock()
+			}()
+		}
+
+		// Execute the FK checks.
+		return createPlannerAndRunQuery(ctx, txn, query)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, iter, 2)
+	if tracing.FindMsgInRecording(getRecAndFinish(), clientRejectedMsg) == -1 {
+		t.Fatalf("didn't find expected message in trace: %s", clientRejectedMsg)
+	}
+	concurrentFKChecksLogMessage := fmt.Sprintf(executingParallelAndSerialChecks, 1, 1)
+	if tracing.FindMsgInRecording(getRecAndFinish(), concurrentFKChecksLogMessage) == -1 {
+		t.Fatalf("didn't find expected message in trace: %s", concurrentFKChecksLogMessage)
 	}
 }
 
