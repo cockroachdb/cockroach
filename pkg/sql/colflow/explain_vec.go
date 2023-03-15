@@ -54,7 +54,7 @@ func convertToVecTree(
 	// execinfra.BatchReceiver, so we always pass in a fakeBatchReceiver to the
 	// creator.
 	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
+		nil /* flowBase */, newNoopFlowCreatorHelper(), nil /* componentCreator */, false, false,
 		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		flowCtx.Cfg.VecFDSemaphore, flowCtx.NewTypeResolver(flowCtx.Txn),
 		admission.WorkInfo{},
