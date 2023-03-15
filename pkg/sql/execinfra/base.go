@@ -309,7 +309,7 @@ func DrainAndClose(
 	ctx context.Context,
 	dst RowReceiver,
 	cause error,
-	pushTrailingMeta func(context.Context),
+	pushTrailingMeta func(context.Context, RowReceiver),
 	srcs ...RowSource,
 ) {
 	if cause != nil {
@@ -329,7 +329,7 @@ func DrainAndClose(
 		DrainAndForwardMetadata(ctx, srcs[0], dst)
 		wg.Wait()
 	}
-	pushTrailingMeta(ctx)
+	pushTrailingMeta(ctx, dst)
 	dst.ProducerDone()
 }
 

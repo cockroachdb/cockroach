@@ -51,7 +51,6 @@ func newNoopProcessor(
 	processorID int32,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*noopProcessor, error) {
 	n := noopPool.Get().(*noopProcessor)
 	n.input = input
@@ -62,7 +61,6 @@ func newNoopProcessor(
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		// We append input to inputs to drain below in order to reuse the same
 		// underlying slice from the pooled noopProcessor.

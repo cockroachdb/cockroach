@@ -192,7 +192,6 @@ type splitAndScatterProcessor struct {
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.SplitAndScatterSpec
-	output  execinfra.RowReceiver
 
 	scatterer splitAndScatterer
 	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
@@ -213,7 +212,6 @@ func newSplitAndScatterProcessor(
 	processorID int32,
 	spec execinfrapb.SplitAndScatterSpec,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 
 	numEntries := 0
@@ -236,13 +234,12 @@ func newSplitAndScatterProcessor(
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
 		spec:      spec,
-		output:    output,
 		scatterer: scatterer,
 		// Large enough so that it never blocks.
 		doneScatterCh:     make(chan entryNode, numEntries),
 		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
 	}
-	if err := ssp.Init(ctx, ssp, post, splitAndScatterOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := ssp.Init(ctx, ssp, post, splitAndScatterOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: nil, // there are no inputs to drain
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

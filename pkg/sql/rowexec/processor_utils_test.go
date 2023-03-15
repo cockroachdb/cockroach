@@ -161,7 +161,6 @@ func (p *ProcessorTest) RunTestCases(
 			&tc.ProcessorCore,
 			&tc.Post,
 			inputs,
-			[]execinfra.RowReceiver{output},
 			nil, /* localProcessors */
 		)
 		if err != nil {
@@ -173,7 +172,7 @@ func (p *ProcessorTest) RunTestCases(
 			p.config.BeforeTestCase(processor, inputs, output)
 		}
 
-		processor.Run(ctx)
+		processor.Run(ctx, output)
 
 		if p.config.AfterTestCase != nil {
 			p.config.AfterTestCase(processor, inputs, output)

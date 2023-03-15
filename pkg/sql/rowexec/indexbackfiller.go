@@ -51,8 +51,6 @@ type indexBackfiller struct {
 
 	flowCtx *execinfra.FlowCtx
 
-	output execinfra.RowReceiver
-
 	filter backfill.MutationFilter
 }
 
@@ -69,12 +67,7 @@ var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
 )
 
 func newIndexBackfiller(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	processorID int32,
-	spec execinfrapb.BackfillerSpec,
-	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.BackfillerSpec,
 ) (*indexBackfiller, error) {
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
@@ -82,7 +75,6 @@ func newIndexBackfiller(
 		desc:    flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:    spec,
 		flowCtx: flowCtx,
-		output:  output,
 		filter:  backfill.IndexMutationFilter,
 	}
 
@@ -340,21 +332,21 @@ func (ib *indexBackfiller) runBackfill(
 	return nil
 }
 
-func (ib *indexBackfiller) Run(ctx context.Context) {
+func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver) {
 	opName := "indexBackfillerProcessor"
 	ctx = logtags.AddTag(ctx, "job", ib.spec.JobID)
 	ctx = logtags.AddTag(ctx, opName, int(ib.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
 	defer span.Finish()
-	defer ib.output.ProducerDone()
-	defer execinfra.SendTraceData(ctx, ib.output)
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, output)
 	defer ib.Close(ctx)
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	semaCtx := tree.MakeSemaContext()
 	if err := ib.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
-		ib.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}
 
@@ -372,11 +364,11 @@ func (ib *indexBackfiller) Run(ctx context.Context) {
 		if p.CompletedSpans != nil {
 			log.VEventf(ctx, 2, "sending coordinator completed spans: %+v", p.CompletedSpans)
 		}
-		ib.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
+		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
 	if err != nil {
-		ib.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}
 }

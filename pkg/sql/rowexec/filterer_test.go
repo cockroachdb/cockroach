@@ -90,12 +90,12 @@ func TestFilterer(t *testing.T) {
 				Filter: execinfrapb.Expression{Expr: c.filter},
 			}
 
-			d, err := newFiltererProcessor(context.Background(), &flowCtx, 0 /* processorID */, &spec, in, &c.post, out)
+			d, err := newFiltererProcessor(context.Background(), &flowCtx, 0 /* processorID */, &spec, in, &c.post)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			d.Run(context.Background())
+			d.Run(context.Background(), out)
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -148,11 +148,11 @@ func BenchmarkFilterer(b *testing.B) {
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := newFiltererProcessor(ctx, flowCtx, 0 /* processorID */, &spec, input, post, disposer)
+				d, err := newFiltererProcessor(ctx, flowCtx, 0 /* processorID */, &spec, input, post)
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(context.Background())
+				d.Run(context.Background(), disposer)
 				input.Reset()
 			}
 		})

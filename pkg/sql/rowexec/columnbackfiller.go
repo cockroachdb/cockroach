@@ -60,8 +60,6 @@ func newColumnBackfiller(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
-	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
 	columnBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"column-backfill-mon")
@@ -72,7 +70,6 @@ func newColumnBackfiller(
 			filter:      backfill.ColumnMutationFilter,
 			flowCtx:     flowCtx,
 			processorID: processorID,
-			output:      output,
 			spec:        spec,
 		},
 	}

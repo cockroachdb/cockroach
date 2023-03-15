@@ -42,7 +42,6 @@ func newHashGroupJoiner(
 	leftSource execinfra.RowSource,
 	rightSource execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*hashGroupJoiner, error) {
 	hjPost := execinfrapb.PostProcessSpec{}
 	if len(spec.JoinOutputColumns) > 0 {
@@ -57,10 +56,6 @@ func newHashGroupJoiner(
 		leftSource,
 		rightSource,
 		&hjPost,
-		// This hash joiner will be fused with the hash aggregator (i.e. will
-		// run in the same goroutine), and the hash aggregator will pull rows as
-		// needed, so the output here won't be used.
-		nil, /* output */
 	)
 	if err != nil {
 		return nil, err
@@ -73,7 +68,6 @@ func newHashGroupJoiner(
 		&spec.AggregatorSpec,
 		hj,
 		post,
-		output,
 	)
 	if err != nil {
 		return nil, err

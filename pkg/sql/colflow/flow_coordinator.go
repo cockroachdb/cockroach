@@ -59,7 +59,6 @@ func NewFlowCoordinator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
-	output execinfra.RowReceiver,
 	cancelFlow context.CancelFunc,
 ) *FlowCoordinator {
 	f := flowCoordinatorPool.Get().(*FlowCoordinator)
@@ -73,7 +72,6 @@ func NewFlowCoordinator(
 		// context from being mutated.
 		flowCtx.NewEvalCtx(),
 		processorID,
-		output,
 		execinfra.ProcStateOpts{
 			// We append input to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled FlowCoordinator.

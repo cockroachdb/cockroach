@@ -119,12 +119,12 @@ func TestOrdinality(t *testing.T) {
 				Mon:     evalCtx.TestingMon,
 			}
 
-			d, err := newOrdinalityProcessor(context.Background(), &flowCtx, 0 /* processorID */, &os, in, &execinfrapb.PostProcessSpec{}, out)
+			d, err := newOrdinalityProcessor(context.Background(), &flowCtx, 0 /* processorID */, &os, in, &execinfrapb.PostProcessSpec{})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			d.Run(context.Background())
+			d.Run(context.Background(), out)
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -175,11 +175,11 @@ func BenchmarkOrdinality(b *testing.B) {
 		b.SetBytes(int64(8 * numRows * numCols))
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				o, err := newOrdinalityProcessor(ctx, flowCtx, 0 /* processorID */, spec, input, post, &rowDisposer{})
+				o, err := newOrdinalityProcessor(ctx, flowCtx, 0 /* processorID */, spec, input, post)
 				if err != nil {
 					b.Fatal(err)
 				}
-				o.Run(ctx)
+				o.Run(ctx, &rowDisposer{})
 				input.Reset()
 			}
 		})

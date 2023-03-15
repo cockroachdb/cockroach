@@ -48,7 +48,6 @@ func (jb *joinerBase) init(
 	onExpr execinfrapb.Expression,
 	outputContinuationColumn bool,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 	opts execinfra.ProcStateOpts,
 ) error {
 	jb.joinType = jType
@@ -85,7 +84,7 @@ func (jb *joinerBase) init(
 	}
 
 	if err := jb.ProcessorBase.Init(
-		ctx, self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
+		ctx, self, post, outputTypes, flowCtx, processorID, nil /* memMonitor */, opts,
 	); err != nil {
 		return err
 	}

@@ -179,10 +179,9 @@ func newCloudCheckProcessor(
 	processorID int32,
 	spec execinfrapb.CloudStorageTestSpec,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	p := &proc{spec: spec}
-	if err := p.Init(ctx, p, post, flowTypes, flowCtx, processorID, output, nil /* memMonitor */, execinfra.ProcStateOpts{}); err != nil {
+	if err := p.Init(ctx, p, post, flowTypes, flowCtx, processorID, nil /* memMonitor */, execinfra.ProcStateOpts{}); err != nil {
 		return nil, err
 	}
 	return p, nil

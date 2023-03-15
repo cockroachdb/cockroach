@@ -160,7 +160,6 @@ func newColumnarizer(
 		// from being mutated.
 		flowCtx.NewEvalCtx(),
 		processorID,
-		nil, /* output */
 		execinfra.ProcStateOpts{
 			// We append input to inputs to drain below in order to reuse the same
 			// underlying slice from the pooled columnarizer.

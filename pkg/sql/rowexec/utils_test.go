@@ -63,7 +63,7 @@ func runProcessorTest(
 
 	p, err := NewProcessor(
 		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
-		[]execinfra.RowSource{in}, []execinfra.RowReceiver{out}, []execinfra.LocalProcessor{})
+		[]execinfra.RowSource{in}, []execinfra.LocalProcessor{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func runProcessorTest(
 		pt.SetBatchSizeBytes(2 * int64(inputRows[0].Size()))
 	}
 
-	p.Run(context.Background())
+	p.Run(context.Background(), out)
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}

@@ -86,8 +86,6 @@ type IndexBackfillMerger struct {
 
 	evalCtx *eval.Context
 
-	output execinfra.RowReceiver
-
 	mon            *mon.BytesMonitor
 	muBoundAccount muBoundAccount
 }
@@ -105,13 +103,13 @@ func (ibm *IndexBackfillMerger) MustBeStreaming() bool {
 const indexBackfillMergeProgressReportInterval = 10 * time.Second
 
 // Run runs the processor.
-func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
+func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowReceiver) {
 	opName := "IndexBackfillMerger"
 	ctx = logtags.AddTag(ctx, opName, int(ibm.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
 	defer span.Finish()
-	defer ibm.output.ProducerDone()
-	defer execinfra.SendTraceData(ctx, ibm.output)
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, output)
 
 	mu := struct {
 		syncutil.Mutex
@@ -142,12 +140,12 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 		if p.CompletedSpans != nil {
 			log.VEventf(ctx, 2, "sending coordinator completed spans: %+v", p.CompletedSpans)
 		}
-		ibm.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
+		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
 	semaCtx := tree.MakeSemaContext()
 	if err := ibm.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ibm.flowCtx.NewEvalCtx()); err != nil {
-		ibm.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}
 
@@ -231,7 +229,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 			pushProgress()
 		case err = <-workersDoneCh:
 			if err != nil {
-				ibm.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+				output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 			}
 			return
 		}
@@ -499,10 +497,7 @@ func (ibm *IndexBackfillMerger) shrinkBoundAccount(ctx context.Context, shrinkBy
 
 // NewIndexBackfillMerger creates a new IndexBackfillMerger.
 func NewIndexBackfillMerger(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	spec execinfrapb.IndexBackfillMergerSpec,
-	output execinfra.RowReceiver,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.IndexBackfillMergerSpec,
 ) (*IndexBackfillMerger, error) {
 	mergerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfiller-merger-mon")
@@ -512,7 +507,6 @@ func NewIndexBackfillMerger(
 		desc:    tabledesc.NewUnsafeImmutable(&spec.Table),
 		flowCtx: flowCtx,
 		evalCtx: flowCtx.NewEvalCtx(),
-		output:  output,
 		mon:     mergerMon,
 	}
 

@@ -105,7 +105,6 @@ func newWindower(
 	spec *execinfrapb.WindowerSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*windower, error) {
 	w := &windower{
 		input: input,
@@ -174,7 +173,6 @@ func newWindower(
 		flowCtx,
 		evalCtx,
 		processorID,
-		output,
 		limitedMon,
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{w.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
