@@ -107,6 +107,7 @@ func (p *planNodeToRowSource) MustBeStreaming() bool {
 func (p *planNodeToRowSource) InitWithOutput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) error {
@@ -121,7 +122,7 @@ func (p *planNodeToRowSource) InitWithOutput(
 		// newPlanNodeToRowSource, so we can just use the eval context from the
 		// params.
 		p.params.EvalContext(),
-		0, /* processorID */
+		processorID,
 		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
