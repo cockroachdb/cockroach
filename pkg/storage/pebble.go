@@ -2028,6 +2028,9 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	var formatVers pebble.FormatMajorVersion
 	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnableFlushableIngest)):
+		formatVers = pebble.FormatFlushableIngest
+
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnsurePebbleFormatSSTableValueBlocks)):
 		formatVers = pebble.FormatSSTableValueBlocks
 
