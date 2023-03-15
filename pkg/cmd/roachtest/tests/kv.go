@@ -79,6 +79,24 @@ func registerKV(r registry.Registry) {
 			return opts.splits
 		}
 	}
+	computeConcurrency := func(opts kvOptions) int {
+		// Scale the workload concurrency with the number of nodes in the cluster to
+		// account for system capacity, then scale inversely with the batch size to
+		// account for the cost of each operation.
+		// TODO(nvanbenschoten): should we also scale the workload concurrency with
+		// the number of CPUs on each node? Probably, but doing so will disrupt
+		// regression tracking.
+		concPerNode := 64
+		if opts.concMultiplier != 0 {
+			concPerNode = opts.concMultiplier
+		}
+		conc := concPerNode * opts.nodes
+		const batchOpsPerConc = 2
+		if opts.batchSize >= batchOpsPerConc {
+			conc /= opts.batchSize / batchOpsPerConc
+		}
+		return conc
+	}
 	runKV := func(ctx context.Context, t test.Test, c cluster.Cluster, opts kvOptions) {
 		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -111,12 +129,7 @@ func registerKV(r registry.Registry) {
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			concurrencyMultiplier := 64
-			if opts.concMultiplier != 0 {
-				concurrencyMultiplier = opts.concMultiplier
-			}
-			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
-
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
 				opts.duration = 30 * time.Minute
