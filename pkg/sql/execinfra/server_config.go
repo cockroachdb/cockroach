@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -298,6 +299,11 @@ type TestingKnobs struct {
 	// when responding to SetupFlow RPCs, after the flow is set up but before it
 	// is started.
 	SetupFlowCb func(context.Context, base.SQLInstanceID, *execinfrapb.SetupFlowRequest) error
+
+	// RunBeforeCascadeAndChecks is run before any cascade or check queries are
+	// run. The associated transaction ID of the statement performing the cascade
+	// or check query is passed in as an argument.
+	RunBeforeCascadesAndChecks func(txnID uuid.UUID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

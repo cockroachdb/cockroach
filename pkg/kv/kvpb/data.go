@@ -102,6 +102,13 @@ func PrepareTransactionForRetry(
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
 		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
+	case *IntentMissingError:
+		// IntentMissingErrors are not expected to be handled at this level;
+		// We instead expect the txnPipeliner to transform them into a
+		// TransactionRetryErrors(RETRY_ASYNC_WRITE_FAILURE) error.
+		log.Fatalf(
+			ctx, "unexpected intent missing error (%T); should be transformed into retry error", pErr.GetDetail(),
+		)
 	default:
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
