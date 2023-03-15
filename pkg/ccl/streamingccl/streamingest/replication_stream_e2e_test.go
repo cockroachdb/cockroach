@@ -62,13 +62,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
-	c.CompareResult("SELECT * FROM d.t1")
-	c.CompareResult("SELECT * FROM d.t2")
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 
@@ -87,16 +81,18 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	require.Regexp(t, "ingestion job failed .* but is being paused",
 		replicationtestutils.RunningStatus(t, c.DestSysSQL, ingestionJobID))
 
+	ts := c.DestCluster.Server(0).Clock().Now()
+	afterPauseFingerprint := replicationtestutils.FingerprintTenantAtTimestampNoHistory(t, c.DestSysSQL, c.Args.DestTenantID.ToUint64(), ts.AsOfSystemTime())
 	// Make dest cluster to ingest KV events faster.
 	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
 		`stream_replication.min_checkpoint_frequency`: `'100ms'`,
 	})...)
+
 	c.SrcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
 
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
-	require.Equal(t, [][]string{{"0"}},
-		c.DestTenantSQL.QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
+	c.RequireDestinationFingerprintAtTimestamp(afterPauseFingerprint, ts.AsOfSystemTime())
 
 	// After resumed, the ingestion job paused on failure again.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
@@ -123,14 +119,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
-
-	c.CompareResult("SELECT * FROM d.t1")
-	c.CompareResult("SELECT * FROM d.t2")
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Pause ingestion.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
@@ -156,7 +145,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	// Confirm that dest tenant has received the new change after resumption.
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-	c.CompareResult("SELECT * FROM d.t2")
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 }
 
 func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
@@ -207,15 +196,8 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 
 	// Check dest has caught up the previous updates.
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
-
-	c.CompareResult("SELECT * FROM d.t1")
-	c.CompareResult("SELECT * FROM d.t2")
+	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime())
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Ingestion happened one more time after resuming the ingestion job.
 	require.Equal(t, 3, ingestionStarts)
@@ -293,11 +275,6 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 		return nil
 	})
 
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
-
 	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	// Clear out the map to ignore the initial client starts
@@ -309,22 +286,20 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.WaitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
 	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime())
+	cutoverFingerprint := c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Clients should never be started prior to a checkpointed timestamp
 	for _, clientStartTime := range lastClientStart {
 		require.Less(t, checkpointMinTime.UnixNano(), clientStartTime.GoTime().UnixNano())
 	}
 
-	c.CompareResult("SELECT * FROM d.t1")
-	c.CompareResult("SELECT * FROM d.t2")
-	c.CompareResult("SELECT * FROM d.x")
 	// After cutover, changes to source won't be streamed into destination cluster.
 	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
 	})
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
-	require.Equal(t, [][]string{{"2"}}, c.DestTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
+	c.RequireDestinationFingerprintAtTimestamp(cutoverFingerprint, c.DestSysServer.Clock().Now().AsOfSystemTime())
 }
 
 func TestTenantStreamingCancelIngestion(t *testing.T) {
@@ -344,20 +319,12 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 
 		srcTime := c.SrcCluster.Server(0).Clock().Now()
 		c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-
-		cleanUpTenant := c.CreateDestTenantSQL(ctx)
-		c.CompareResult("SELECT * FROM d.t1")
-		c.CompareResult("SELECT * FROM d.t2")
+		c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 		if cancelAfterPaused {
 			c.DestSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
 			jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 		}
-
-		// Close all tenant SQL sessions before we cancel the job so that
-		// we don't have any process still writing to 'sqlliveness' table after
-		// the tenant key range is cleared.
-		require.NoError(t, cleanUpTenant())
 
 		c.DestSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", ingestionJobID))
 		jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -612,14 +579,7 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 
 	srcTime := c.SrcSysServer.Clock().Now()
 	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-
-	cleanUpTenant := c.CreateDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanUpTenant())
-	}()
-
-	c.CompareResult("SELECT * FROM d.t1")
-	c.CompareResult("SELECT * FROM d.t2")
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Introduce a DeleteRange on t1 and t2.
 	checkDelRangeOnTable := func(table string, embeddedInSST bool) {
@@ -649,12 +609,11 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 			require.NoError(t, c.SrcSysServer.DB().DelRangeUsingTombstone(ctx,
 				tableSpan.Key, tableSpan.Key.Next().Next()))
 		}
-		c.WaitUntilHighWatermark(c.SrcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
-		c.CompareResult(fmt.Sprintf("SELECT * FROM d.%s", table))
+		srcTimeAfterDelRange := c.SrcSysServer.Clock().Now()
+		c.WaitUntilHighWatermark(srcTimeAfterDelRange, jobspb.JobID(ingestionJobID))
 
-		// Point-in-time query, check if the DeleteRange is MVCC-compatible.
-		c.CompareResult(fmt.Sprintf("SELECT * FROM d.%s AS OF SYSTEM TIME %d",
-			table, srcTimeBeforeDelRange.WallTime))
+		c.RequireFingerprintMatchAtTimestamp(srcTimeAfterDelRange.AsOfSystemTime())
+		c.RequireFingerprintMatchAtTimestamp(srcTimeBeforeDelRange.AsOfSystemTime())
 	}
 
 	// Test on two tables to check if the range keys sst batcher
@@ -715,16 +674,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime())
-
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
-
-	c.CompareResult("SELECT * FROM d.t1")
-	c.CompareResult("SELECT * FROM d.t2")
-	c.CompareResult("SELECT * FROM d.x")
-	c.CompareResult("SELECT * FROM d.scattered ORDER BY key")
+	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
 	require.Greater(t, len(clientAddresses), 1)
