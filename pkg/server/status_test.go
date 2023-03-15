@@ -1027,6 +1027,7 @@ func TestMetricsMetadata(t *testing.T) {
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 98619, "flaky test")
+	skip.WithIssue(t, 98619, "flaky test")
 	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
