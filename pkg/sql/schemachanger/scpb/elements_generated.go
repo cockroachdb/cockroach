@@ -1164,6 +1164,37 @@ func FindIndexPartitioning(b ElementStatusIterator) (current Status, target Targ
 	return current, target, element
 }
 
+func (e IndexZoneConfig) element() {}
+
+// ForEachIndexZoneConfig iterates over elements of type IndexZoneConfig.
+func ForEachIndexZoneConfig(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexZoneConfig),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*IndexZoneConfig); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindIndexZoneConfig finds the first element of type IndexZoneConfig.
+func FindIndexZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexZoneConfig) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*IndexZoneConfig); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e Namespace) element() {}
 
 // ForEachNamespace iterates over elements of type Namespace.

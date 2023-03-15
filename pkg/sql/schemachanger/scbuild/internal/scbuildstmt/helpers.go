@@ -776,14 +776,16 @@ func makeSwapIndexSpec(
 	return in, temp
 }
 
-// fallBackIfZoneConfigExists determines if the table has regional by row
-// properties and throws an unimplemented error.
-func fallBackIfZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.DescID) {
+// fallBackIfSubZoneConfigExists determines if the table has a subzone
+// config. Normally this logic is used to limit index related operations,
+// since dropping indexes will need to remove entries of sub zones from
+// the zone config.
+func fallBackIfSubZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.DescID) {
 	{
 		tableElts := b.QueryByID(id)
-		if _, _, elem := scpb.FindTableZoneConfig(tableElts); elem != nil {
+		if _, _, elem := scpb.FindIndexZoneConfig(tableElts); elem != nil {
 			panic(scerrors.NotImplementedErrorf(n,
-				"regional by row partitioning is not supported"))
+				"sub zone configs are not supported"))
 		}
 	}
 }

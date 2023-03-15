@@ -27,22 +27,6 @@ ALTER INDEX defaultdb.foo_index_zone_cfg@idx CONFIGURE ZONE USING gc.ttlseconds=
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD COLUMN j INT
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo ADD PRIMARY KEY (i, n)
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo DROP COLUMN k
-----
-
-unimplemented
-DROP INDEX defaultdb.foo@idx
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo_index_zone_cfg ADD COLUMN j INT
 ----
 

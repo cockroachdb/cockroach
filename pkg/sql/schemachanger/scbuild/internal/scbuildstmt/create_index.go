@@ -50,10 +50,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IsExistenceOptional: false,
 		RequiredPrivilege:   privilege.CREATE,
 	})
-	// We don't support handling zone config related properties for tables, so
-	// throw an unsupported error.
+	// We don't support handling zone config related properties for tables required
+	// for regional by row tables.
 	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
-		fallBackIfZoneConfigExists(b, n, tbl.TableID)
+		fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	}
 	_, _, partitioning := scpb.FindTablePartitioning(relationElements)
 	if partitioning != nil && n.PartitionByIndex != nil &&
