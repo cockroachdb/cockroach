@@ -87,7 +87,6 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		DiskMonitor: testDiskMonitor,
 	}
 
-	out := &distsqlutils.RowBuffer{}
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
@@ -251,7 +250,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				spec.InitialScanTimestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			}
 			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
-			proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, 0 /* processorID */, spec, &post, out)
+			proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, 0 /* processorID */, spec, &post)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
 			if !ok {
@@ -303,8 +302,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			frontierPost := execinfrapb.PostProcessSpec{}
 			frontierOut := distsqlutils.RowBuffer{}
 			frontierProc, err := newStreamIngestionFrontierProcessor(
-				ctx, &flowCtx, 0, /* processorID*/
-				frontierSpec, sip, &frontierPost, &frontierOut,
+				ctx, &flowCtx, 0 /* processorID*/, frontierSpec, sip, &frontierPost,
 			)
 			require.NoError(t, err)
 			fp, ok := frontierProc.(*streamIngestionFrontier)
@@ -344,7 +342,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				}
 			})
 
-			fp.Run(ctxWithCancel)
+			fp.Run(ctxWithCancel, &frontierOut)
 
 			if !frontierOut.ProducerClosed() {
 				t.Fatal("producer for StreamFrontierProcessor not closed")

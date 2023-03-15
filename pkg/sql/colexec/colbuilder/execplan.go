@@ -550,8 +550,7 @@ func (r opResult) createAndWrapRowSource(
 			// here because when wrapping the processor, the materializer will
 			// be its output, and it will be set up in wrapRowSources.
 			proc, err := args.ProcessorConstructor(
-				ctx, flowCtx, processorID, core, post, inputs,
-				[]execinfra.RowReceiver{nil} /* outputs */, args.LocalProcessors,
+				ctx, flowCtx, processorID, core, post, inputs, args.LocalProcessors,
 			)
 			if err != nil {
 				return nil, err

@@ -60,7 +60,6 @@ func newMergeJoiner(
 	leftSource execinfra.RowSource,
 	rightSource execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*mergeJoiner, error) {
 	m := &mergeJoiner{
 		leftSource:        leftSource,
@@ -76,8 +75,7 @@ func newMergeJoiner(
 
 	if err := m.joinerBase.init(
 		ctx, m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
-		spec.Type, spec.OnExpr, false, /* outputContinuationColumn */
-		post, output,
+		spec.Type, spec.OnExpr, false /* outputContinuationColumn */, post,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{leftSource, rightSource},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

@@ -42,7 +42,6 @@ func newOrdinalityProcessor(
 	spec *execinfrapb.OrdinalitySpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	o := &ordinalityProcessor{input: input, curCnt: 1}
 
@@ -56,7 +55,6 @@ func newOrdinalityProcessor(
 		colTypes,
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{o.input},

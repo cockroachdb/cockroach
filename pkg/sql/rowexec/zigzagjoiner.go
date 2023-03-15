@@ -279,7 +279,6 @@ func newZigzagJoiner(
 	spec *execinfrapb.ZigzagJoinerSpec,
 	fixedValues []rowenc.EncDatumRow,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
 	if len(spec.Sides) != 2 {
 		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(spec.Sides))
@@ -315,7 +314,6 @@ func newZigzagJoiner(
 		spec.OnExpr,
 		false, /* outputContinuationColumn */
 		post,
-		output,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				// We need to generate metadata before closing the processor

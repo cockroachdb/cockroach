@@ -100,3 +100,41 @@ export function normalizePrivileges(raw: string[]): string[] {
     privilege => privilegePrecedence[privilege] || 100,
   );
 }
+
+export function combineLoadingErrors(
+  detailsErr: Error,
+  isMaxSizeError: boolean,
+  dbList: string,
+): Error {
+  if (dbList && detailsErr) {
+    return new GetDatabaseInfoError(
+      `Failed to load all databases and database details. Partial results are shown. Debug info: ${dbList}, details error: ${detailsErr}`,
+    );
+  }
+
+  if (dbList) {
+    return new GetDatabaseInfoError(
+      `Failed to load all databases. Partial results are shown. Debug info: ${dbList}`,
+    );
+  }
+
+  if (detailsErr) {
+    return detailsErr;
+  }
+
+  if (isMaxSizeError) {
+    return new GetDatabaseInfoError(
+      `Failed to load all databases and database details. Partial results are shown. Debug info: Max size limit reached fetching database details`,
+    );
+  }
+
+  return null;
+}
+
+export class GetDatabaseInfoError extends Error {
+  constructor(message: string) {
+    super(message);
+
+    this.name = this.constructor.name;
+  }
+}

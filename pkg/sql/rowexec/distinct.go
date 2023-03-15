@@ -79,7 +79,6 @@ func newDistinct(
 	spec *execinfrapb.DistinctSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
 		return nil, errors.AssertionFailedf("0 distinct columns specified for distinct processor")
@@ -118,7 +117,7 @@ func newDistinct(
 	}
 
 	if err := d.Init(
-		ctx, d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
+		ctx, d, post, d.types, flowCtx, processorID, memMonitor, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{d.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

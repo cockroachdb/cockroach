@@ -711,12 +711,12 @@ func TestMergeProcessor(t *testing.T) {
 			Spans:            []roachpb.Span{sp},
 			SpanIdx:          []int32{0},
 			MergeTimestamp:   kvDB.Clock().Now(),
-		}, &output)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		im.Run(ctx)
+		im.Run(ctx, &output)
 		if output.err != nil {
 			t.Fatal(output.err)
 		}

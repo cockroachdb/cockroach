@@ -69,7 +69,6 @@ type backfiller struct {
 	filter backfill.MutationFilter
 
 	spec        execinfrapb.BackfillerSpec
-	output      execinfra.RowReceiver
 	out         execinfra.ProcOutputHelper
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
@@ -87,15 +86,15 @@ func (*backfiller) MustBeStreaming() bool {
 }
 
 // Run is part of the execinfra.Processor interface.
-func (b *backfiller) Run(ctx context.Context) {
+func (b *backfiller) Run(ctx context.Context, output execinfra.RowReceiver) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
 	defer span.Finish()
 	meta := b.doRun(ctx)
-	execinfra.SendTraceData(ctx, b.output)
-	if emitHelper(ctx, b.output, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
-		b.output.ProducerDone()
+	execinfra.SendTraceData(ctx, output)
+	if emitHelper(ctx, output, &b.out, nil /* row */, meta, func(context.Context, execinfra.RowReceiver) {}) {
+		output.ProducerDone()
 	}
 }
 

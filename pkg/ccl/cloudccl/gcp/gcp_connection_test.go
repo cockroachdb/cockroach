@@ -313,14 +313,15 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
 
-	disallowedCreateExternalConnection := func(externalConnectionName, uri string) {
+	disallowedCreateExternalConnection := func(t *testing.T, externalConnectionName, uri string) {
+		t.Log(uri)
 		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED|does not have storage.objects.create access)",
 			fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
 	}
-	createExternalConnection := func(externalConnectionName, uri string) {
+	createExternalConnection := func(t *testing.T, externalConnectionName, uri string) {
 		sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
 	}
-	backupAndRestoreFromExternalConnection := func(backupExternalConnectionName string) {
+	backupAndRestoreFromExternalConnection := func(t *testing.T, backupExternalConnectionName string) {
 		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
 		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE foo INTO '%s'`, backupURI))
 		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE foo FROM LATEST IN '%s' WITH new_db_name = bar`, backupURI))
@@ -348,7 +349,7 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		disallowedURI := fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, disallowedECName,
 			gcp.CredentialsParam, url.QueryEscape(encoded))
-		disallowedCreateExternalConnection(disallowedECName, disallowedURI)
+		disallowedCreateExternalConnection(t, disallowedECName, disallowedURI)
 
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
 			limitedBucket,
@@ -359,8 +360,8 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 			assumedAccount, gcp.CredentialsParam,
 			url.QueryEscape(encoded),
 		)
-		createExternalConnection(ecName, uri)
-		backupAndRestoreFromExternalConnection(ecName)
+		createExternalConnection(t, ecName, uri)
+		backupAndRestoreFromExternalConnection(t, ecName)
 	})
 
 	t.Run("ec-assume-role-implicit", func(t *testing.T) {
@@ -371,7 +372,7 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 		disallowedECName := "ec-assume-role-implicit-disallowed"
 		disallowedURI := fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, disallowedECName,
 			cloud.AuthParam, cloud.AuthParamImplicit)
-		disallowedCreateExternalConnection(disallowedECName, disallowedURI)
+		disallowedCreateExternalConnection(t, disallowedECName, disallowedURI)
 
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
 			limitedBucket,
@@ -381,8 +382,8 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 			gcp.AssumeRoleParam,
 			assumedAccount,
 		)
-		createExternalConnection(ecName, uri)
-		backupAndRestoreFromExternalConnection(ecName)
+		createExternalConnection(t, ecName, uri)
+		backupAndRestoreFromExternalConnection(t, ecName)
 	})
 
 	t.Run("ec-assume-role-chaining", func(t *testing.T) {
@@ -419,7 +420,7 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 					disallowedECName := fmt.Sprintf("ec-assume-role-checking-%d", i)
 					disallowedBackupURI := fmt.Sprintf("gs://%s/%s?%s", limitedBucket,
 						disallowedECName, q.Encode())
-					disallowedCreateExternalConnection(disallowedECName, disallowedBackupURI)
+					disallowedCreateExternalConnection(t, disallowedECName, disallowedBackupURI)
 				}
 
 				// Finally, check that the chain of roles can be used to access the storage.
@@ -430,8 +431,8 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 					ecName,
 					q.Encode(),
 				)
-				createExternalConnection(ecName, uri)
-				backupAndRestoreFromExternalConnection(ecName)
+				createExternalConnection(t, ecName, uri)
+				backupAndRestoreFromExternalConnection(t, ecName)
 			})
 		}
 	})

@@ -94,7 +94,6 @@ func newStreamIngestionFrontierProcessor(
 	spec execinfrapb.StreamIngestionFrontierSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	frontier, err := span.MakeFrontierAt(spec.HighWaterAtStart, spec.TrackedSpans...)
 	if err != nil {
@@ -134,7 +133,6 @@ func newStreamIngestionFrontierProcessor(
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{sf.input},

@@ -49,7 +49,6 @@ type generativeSplitAndScatterProcessor struct {
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.GenerativeSplitAndScatterSpec
-	output  execinfra.RowReceiver
 
 	// chunkSplitAndScatterers contain the splitAndScatterers for the group of
 	// split and scatter workers that's responsible for splitting and scattering
@@ -80,7 +79,6 @@ func newGenerativeSplitAndScatterProcessor(
 	processorID int32,
 	spec execinfrapb.GenerativeSplitAndScatterSpec,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	db := flowCtx.Cfg.DB
 	numChunkSplitAndScatterWorkers := int(spec.NumNodes)
@@ -124,14 +122,13 @@ func newGenerativeSplitAndScatterProcessor(
 	ssp := &generativeSplitAndScatterProcessor{
 		flowCtx:                      flowCtx,
 		spec:                         spec,
-		output:                       output,
 		chunkSplitAndScatterers:      chunkSplitAndScatterers,
 		chunkEntrySplitAndScatterers: chunkEntrySplitAndScatterers,
 		// Large enough so that it never blocks.
 		doneScatterCh:     make(chan entryNode, spec.NumEntries),
 		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
 	}
-	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: nil, // there are no inputs to drain
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

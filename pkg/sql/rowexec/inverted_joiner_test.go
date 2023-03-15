@@ -708,12 +708,11 @@ func TestInvertedJoiner(t *testing.T) {
 					c.datumsToExpr,
 					in,
 					&post,
-					out,
 				)
 				require.NoError(t, err)
 				// Small batch size to exercise multiple batches.
 				ij.(*invertedJoiner).SetBatchSize(2)
-				ij.Run(ctx)
+				ij.Run(ctx, out)
 				require.True(t, in.Done)
 				require.True(t, out.ProducerClosed())
 
@@ -789,7 +788,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		DiskMonitor: diskMonitor,
 	}
 
-	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
+	testReaderProcessorDrain(ctx, t, func() (execinfra.Processor, error) {
 		var fetchSpec fetchpb.IndexFetchSpec
 		if err := rowenc.InitIndexFetchSpec(
 			&fetchSpec,
@@ -811,7 +810,6 @@ func TestInvertedJoinerDrain(t *testing.T) {
 			arrayIntersectionExpr{t: t},
 			distsqlutils.NewRowBuffer(types.TwoIntCols, nil /* rows */, distsqlutils.RowBufferArgs{}),
 			&execinfrapb.PostProcessSpec{},
-			out,
 		)
 	})
 }

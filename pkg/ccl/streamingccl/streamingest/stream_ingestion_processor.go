@@ -128,7 +128,6 @@ type streamIngestionProcessor struct {
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionDataSpec
-	output  execinfra.RowReceiver
 	rekeyer *backupccl.KeyRewriter
 	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
 	rewriteToDiffKey bool
@@ -225,7 +224,6 @@ func newStreamIngestionDataProcessor(
 	processorID int32,
 	spec execinfrapb.StreamIngestionDataSpec,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
@@ -251,7 +249,6 @@ func newStreamIngestionDataProcessor(
 	sip := &streamIngestionProcessor{
 		flowCtx:           flowCtx,
 		spec:              spec,
-		output:            output,
 		curKVBatch:        make([]storage.MVCCKeyValue, 0),
 		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
@@ -264,7 +261,7 @@ func newStreamIngestionDataProcessor(
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
-	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

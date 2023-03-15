@@ -49,7 +49,6 @@ func (s *sorterBase) init(
 	processorName redact.RedactableString,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 	ordering colinfo.ColumnOrdering,
 	matchLen uint32,
 	opts execinfra.ProcStateOpts,
@@ -63,7 +62,7 @@ func (s *sorterBase) init(
 	// The processor will overflow to disk if this limit is not enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, redact.Sprintf("%s-limited", processorName))
 	if err := s.ProcessorBase.Init(
-		ctx, self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
+		ctx, self, post, input.OutputTypes(), flowCtx, processorID, memMonitor, opts,
 	); err != nil {
 		memMonitor.Stop(ctx)
 		return err
@@ -148,7 +147,6 @@ func newSorter(
 	spec *execinfrapb.SorterSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 
 	// Choose the optimal processor.
@@ -158,13 +156,13 @@ func newSorter(
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			return newSortAllProcessor(ctx, flowCtx, processorID, spec, input, post, output)
+			return newSortAllProcessor(ctx, flowCtx, processorID, spec, input, post)
 		}
 		// No specified ordering match length but specified limit; we can optimize
 		// our sort procedure by maintaining a max-heap populated with only the
 		// smallest k rows seen. It has a worst-case time complexity of
 		// O(n*log(k)) and a worst-case space complexity of O(k).
-		return newSortTopKProcessor(ctx, flowCtx, processorID, spec, input, post, output, uint64(spec.Limit))
+		return newSortTopKProcessor(ctx, flowCtx, processorID, spec, input, post, uint64(spec.Limit))
 	}
 	// Ordering match length is specified. We will be able to use existing
 	// ordering in order to avoid loading all the rows into memory. If we're
@@ -173,7 +171,7 @@ func newSorter(
 	// chunk and then output.
 	// TODO(irfansharif): Add optimization for case where both ordering match
 	// length and limit is specified.
-	return newSortChunksProcessor(ctx, flowCtx, processorID, spec, input, post, output)
+	return newSortChunksProcessor(ctx, flowCtx, processorID, spec, input, post)
 }
 
 // sortAllProcessor reads in all values into the wrapped rows and
@@ -197,11 +195,10 @@ func newSortAllProcessor(
 	spec *execinfrapb.SorterSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	out execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	proc := &sortAllProcessor{}
 	if err := proc.sorterBase.init(
-		ctx, proc, flowCtx, processorID, sortAllProcName, input, post, out,
+		ctx, proc, flowCtx, processorID, sortAllProcName, input, post,
 		execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
@@ -303,7 +300,6 @@ func newSortTopKProcessor(
 	spec *execinfrapb.SorterSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	out execinfra.RowReceiver,
 	k uint64,
 ) (execinfra.Processor, error) {
 	if k == 0 {
@@ -313,7 +309,7 @@ func newSortTopKProcessor(
 	ordering := execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
-		ctx, proc, flowCtx, processorID, sortTopKProcName, input, post, out,
+		ctx, proc, flowCtx, processorID, sortTopKProcName, input, post,
 		ordering, spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
@@ -406,13 +402,12 @@ func newSortChunksProcessor(
 	spec *execinfrapb.SorterSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	out execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ordering := execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering)
 
 	proc := &sortChunksProcessor{}
 	if err := proc.sorterBase.init(
-		ctx, proc, flowCtx, processorID, sortChunksProcName, input, post, out, ordering, spec.OrderingMatchLen,
+		ctx, proc, flowCtx, processorID, sortChunksProcName, input, post, ordering, spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

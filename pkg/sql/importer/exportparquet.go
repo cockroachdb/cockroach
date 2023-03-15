@@ -694,14 +694,12 @@ func newParquetWriterProcessor(
 	processorID int32,
 	spec execinfrapb.ExportSpec,
 	input execinfra.RowSource,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	c := &parquetWriterProcessor{
 		flowCtx:     flowCtx,
 		processorID: processorID,
 		spec:        spec,
 		input:       input,
-		output:      output,
 	}
 	semaCtx := tree.MakeSemaContext()
 	if err := c.out.Init(ctx, &execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
@@ -716,7 +714,6 @@ type parquetWriterProcessor struct {
 	spec        execinfrapb.ExportSpec
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
-	output      execinfra.RowReceiver
 }
 
 var _ execinfra.Processor = &parquetWriterProcessor{}
@@ -735,7 +732,7 @@ func (sp *parquetWriterProcessor) MustBeStreaming() bool {
 	return false
 }
 
-func (sp *parquetWriterProcessor) Run(ctx context.Context) {
+func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowReceiver) {
 	ctx, span := tracing.ChildSpan(ctx, "parquetWriter")
 	defer span.Finish()
 
@@ -745,7 +742,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 	err := func() error {
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
-		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
+		input := execinfra.MakeNoMetadataRowSource(sp.input, output)
 		alloc := &tree.DatumAlloc{}
 
 		exporter, err := newParquetExporter(sp.spec, typs)
@@ -848,7 +845,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 				),
 			}
 
-			cs, err := sp.out.EmitRow(ctx, res, sp.output)
+			cs, err := sp.out.EmitRow(ctx, res, output)
 			if err != nil {
 				return err
 			}
@@ -867,7 +864,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
-		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+		ctx, output, err, func(context.Context, execinfra.RowReceiver) {} /* pushTrailingMeta */, sp.input)
 }
 
 func init() {

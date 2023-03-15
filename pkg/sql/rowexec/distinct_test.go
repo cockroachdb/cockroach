@@ -281,12 +281,12 @@ func TestDistinct(t *testing.T) {
 				Mon:     evalCtx.TestingMon,
 			}
 
-			d, err := newDistinct(context.Background(), &flowCtx, 0 /* processorID */, &ds, in, &execinfrapb.PostProcessSpec{}, out)
+			d, err := newDistinct(context.Background(), &flowCtx, 0 /* processorID */, &ds, in, &execinfrapb.PostProcessSpec{})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			d.Run(context.Background())
+			d.Run(context.Background(), out)
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -343,11 +343,11 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := newDistinct(ctx, flowCtx, 0 /* processorID */, spec, input, post, &rowDisposer{})
+				d, err := newDistinct(ctx, flowCtx, 0 /* processorID */, spec, input, post)
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(context.Background())
+				d.Run(context.Background(), &rowDisposer{})
 				input.Reset()
 			}
 		})

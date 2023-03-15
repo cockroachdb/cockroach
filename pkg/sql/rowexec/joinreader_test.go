@@ -1156,7 +1156,6 @@ func TestJoinReader(t *testing.T) {
 								},
 								in,
 								&post,
-								out,
 								lookupJoinReaderType,
 							)
 							if err != nil {
@@ -1169,7 +1168,7 @@ func TestJoinReader(t *testing.T) {
 							}
 							// Else, use the default.
 
-							jr.Run(ctx)
+							jr.Run(ctx, out)
 
 							if !in.Done {
 								t.Fatal("joinReader didn't consume all the rows")
@@ -1326,13 +1325,12 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			Projection:    true,
 			OutputColumns: []uint32{2},
 		},
-		out,
 		lookupJoinReaderType,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	jr.Run(ctx)
+	jr.Run(ctx, out)
 
 	count := 0
 	for {
@@ -1415,7 +1413,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
+	testReaderProcessorDrain(ctx, t, func() (execinfra.Processor, error) {
 		return newJoinReader(
 			ctx,
 			&flowCtx,
@@ -1423,7 +1421,6 @@ func TestJoinReaderDrain(t *testing.T) {
 			&execinfrapb.JoinReaderSpec{FetchSpec: fetchSpec},
 			distsqlutils.NewRowBuffer(types.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{}),
 			&execinfrapb.PostProcessSpec{},
-			out,
 			lookupJoinReaderType,
 		)
 	})
@@ -1444,12 +1441,12 @@ func TestJoinReaderDrain(t *testing.T) {
 		jr, err := newJoinReader(
 			ctx, &flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{
 				FetchSpec: fetchSpec,
-			}, in, &execinfrapb.PostProcessSpec{},
-			out, lookupJoinReaderType)
+			}, in, &execinfrapb.PostProcessSpec{}, lookupJoinReaderType,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx)
+		jr.Run(ctx, out)
 		row, meta := out.Next()
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(types.OneIntCol))
@@ -1861,12 +1858,12 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 								for i := 0; i < b.N; i++ {
 									flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 									jr, err := newJoinReader(
-										ctx, &flowCtx, 0 /* processorID */, &spec, input, &execinfrapb.PostProcessSpec{}, &output, lookupJoinReaderType,
+										ctx, &flowCtx, 0 /* processorID */, &spec, input, &execinfrapb.PostProcessSpec{}, lookupJoinReaderType,
 									)
 									if err != nil {
 										b.Fatal(err)
 									}
-									jr.Run(ctx)
+									jr.Run(ctx, &output)
 									if !spilled && jr.(*joinReader).Spilled() {
 										spilled = true
 									}
@@ -2070,11 +2067,11 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				jr, err := newJoinReader(ctx, &flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
+				jr, err := newJoinReader(ctx, &flowCtx, 0 /* processorID */, &spec, input, &post, lookupJoinReaderType)
 				if err != nil {
 					b.Fatal(err)
 				}
-				jr.Run(ctx)
+				jr.Run(ctx, &output)
 
 				if output.NumRowsDisposed() != numLookupRows {
 					b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), numLookupRows)

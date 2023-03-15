@@ -247,7 +247,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			require.NoError(t, err)
 
 			post := execinfrapb.PostProcessSpec{}
-			proc, err := newSplitAndScatterProcessor(ctx, &flowCtx, 0 /* processorID */, c.procSpec, &post, out)
+			proc, err := newSplitAndScatterProcessor(ctx, &flowCtx, 0 /* processorID */, c.procSpec, &post)
 			require.NoError(t, err)
 			ssp, ok := proc.(*splitAndScatterProcessor)
 			if !ok {
@@ -257,7 +257,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			// Inject a mock scatterer.
 			ssp.scatterer = &mockScatterer{numNodes: c.numNodes}
 
-			ssp.Run(context.Background())
+			ssp.Run(context.Background(), out)
 			wg.Wait()
 
 			// Ensure that all the outputs are properly closed.
