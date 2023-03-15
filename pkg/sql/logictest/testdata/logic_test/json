@@ -3,7 +3,8 @@
 query TT
 SELECT '1'::JSONB, '2'::JSON
 ----
-1 2
+1  2
+
 
 query T
 SELECT pg_typeof(JSON '1')
@@ -179,10 +180,10 @@ SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
 {"a": "b"}
 
-statement error pgcode 0A000 can't order by column type jsonb.*\nHINT.*\n.*35706
+statement ok
 SELECT bar FROM foo ORDER BY bar
 
-statement error pgcode 0A000 column k is of type jsonb and thus is not indexable
+statement ok
 CREATE TABLE pk (k JSON PRIMARY KEY)
 
 query T rowsort
@@ -942,3 +943,504 @@ query T
 SELECT j FROM json_subscript_test WHERE j['other_field'] = '2' ORDER BY id
 ----
 {"other_field": 2}
+
+
+# Add JSON columns as primary index.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB PRIMARY KEY)
+
+# Adding JSON primitive types
+statement ok
+INSERT INTO t VALUES
+  ('"a"'::JSONB),
+  ('"b"'::JSONB),
+  ('"aa"'::JSONB),
+  ('"abcdefghi"'::JSONB),
+  ('100'::JSONB),
+  ('1'::JSONB),
+  ('{"a": "b"}')
+
+# Ensuring the ordering is intact due
+# to the creation of an index
+query T
+SELECT x FROM t ORDER BY x
+----
+"a"
+"aa"
+"abcdefghi"
+"b"
+1
+100
+{"a": "b"}
+
+
+# Test that unique indexes reject bad inserts
+statement error pq: duplicate key value violates unique constraint "t_pkey"
+INSERT INTO t VALUES
+  ('"a"'::JSONB)
+
+query T
+SELECT x FROM t ORDER BY x
+----
+"a"
+"aa"
+"abcdefghi"
+"b"
+1
+100
+{"a": "b"}
+
+# Use the index for point lookups.
+query T
+SELECT x FROM t WHERE x = '"a"'::JSONB
+----
+"a"
+
+query T
+SELECT x FROM t WHERE x = '"aa"'::JSONB
+----
+"aa"
+
+query T
+SELECT x FROM t WHERE x = '100'::JSONB
+----
+100
+
+query T
+SELECT x FROM t WHERE x = '12'::JSONB
+----
+
+query T
+SELECT x FROM t WHERE x = '{"a": "b"}'::JSONB
+----
+{"a": "b"}
+
+# Using the index for bounded scans.
+query T
+SELECT x FROM t WHERE x > '1'::JSONB ORDER BY x
+----
+100
+{"a": "b"}
+
+query T
+SELECT x FROM t WHERE x < '1'::JSONB ORDER BY x
+----
+"a"
+"aa"
+"abcdefghi"
+"b"
+
+
+query T
+SELECT x FROM t WHERE x > '1'::JSONB OR x < '1'::JSONB ORDER BY x
+----
+"a"
+"aa"
+"abcdefghi"
+"b"
+100
+{"a": "b"}
+
+query T
+SELECT x FROM t WHERE x > '1'::JSONB AND x < '1'::JSONB ORDER BY x
+----
+
+# Trying to order by in a descending fashion
+query T
+SELECT x FROM t WHERE x > '1'::JSONB OR x < '1'::JSONB ORDER BY x DESC
+----
+{"a": "b"}
+100
+"b"
+"abcdefghi"
+"aa"
+"a"
+
+# Adding more primitive JSON values
+statement ok
+INSERT INTO t VALUES
+  ('true'::JSONB),
+  ('false'::JSONB),
+  ('null'::JSONB),
+  ('"aaaaaaayouube"'::JSONB),
+  ('"testing spaces"'::JSONB),
+  ('"Testing Punctuation?!."'::JSONB)
+
+query T
+SELECT x FROM t ORDER BY x
+----
+null
+"Testing Punctuation?!."
+"a"
+"aa"
+"aaaaaaayouube"
+"abcdefghi"
+"b"
+"testing spaces"
+1
+100
+false
+true
+{"a": "b"}
+
+query T
+SELECT x FROM t WHERE x > 'true'::JSONB ORDER BY x
+----
+{"a": "b"}
+
+query T
+SELECT x FROM t WHERE x < 'false'::JSONB ORDER BY x
+----
+null
+"Testing Punctuation?!."
+"a"
+"aa"
+"aaaaaaayouube"
+"abcdefghi"
+"b"
+"testing spaces"
+1
+100
+
+# Testing JSON Arrays
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES
+  ('[]'::JSONB),
+  ('[null]'::JSONB),
+  ('[1]'::JSONB),
+  ('[null, null, false, true, "a", 1]'::JSONB),
+  ('[{"a":"b"}]'::JSONB),
+  ('[{"a":"b", "c": [1, 2, 3, 4, 5]}]'::JSONB)
+
+query T
+SELECT x FROM t ORDER BY x
+----
+[]
+[null]
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[null, null, false, true, "a", 1]
+
+query T
+SELECT x FROM t where x = '[1]'::JSONB ORDER BY x
+----
+[1]
+
+query T
+SELECT x FROM t where x >= '[1]'::JSONB ORDER BY x
+----
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[null, null, false, true, "a", 1]
+
+query T
+SELECT x FROM t where x <= '[1]'::JSONB ORDER BY x
+----
+[]
+[null]
+[1]
+
+query T
+SELECT x FROM t where x >= '[1]' AND x <= '{"a": "b"}' ORDER BY x
+----
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[null, null, false, true, "a", 1]
+
+# Nested JSON Arrays
+statement ok
+INSERT INTO t VALUES
+  ('[1, [2, 3]]'::JSONB),
+  ('[1, [2, [3, [4]]]]'::JSONB)
+
+query T
+SELECT x FROM t WHERE x = '[1, [2, 3]]'::JSONB ORDER BY x
+----
+[1, [2, 3]]
+
+query T
+SELECT x FROM t WHERE x = '[1, [2, [3, [4]]]]'::JSONB ORDER BY x
+----
+[1, [2, [3, [4]]]]
+
+# Testing the ordering again
+query T
+SELECT x FROM t ORDER BY x
+----
+[]
+[null]
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[1, [2, 3]]
+[1, [2, [3, [4]]]]
+[null, null, false, true, "a", 1]
+
+# Testing the scans with nested arrays
+query T
+SELECT x FROM t WHERE x < '[1, [2, [3, [4]]]]'::JSONB ORDER BY X
+----
+[]
+[null]
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[1, [2, 3]]
+
+# Testing JSON Objects
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES
+  ('{}'::JSONB),
+  ('{"a": 1}'::JSONB),
+  ('{"a": "sh", "b": 1}'::JSONB),
+  ('{"a": ["1"]}'::JSONB),
+  ('{"a": [{"b":"c"}]}'::JSONB),
+  ('{"c": true, "d": null, "newkey": "newvalue"}'::JSONB),
+  ('{"e": {"f": {"g": 1}}, "f": [1, 2, 3]}'::JSONB),
+  ('{ "aa": 1, "c": 1}'::JSONB),
+  ('{"b": 1, "d": 1}'::JSONB)
+
+# Testing the ordering again
+query T
+SELECT x FROM t ORDER BY x
+----
+{}
+{"a": 1}
+{"a": ["1"]}
+{"a": [{"b": "c"}]}
+{"a": "sh", "b": 1}
+{"aa": 1, "c": 1}
+{"b": 1, "d": 1}
+{"e": {"f": {"g": 1}}, "f": [1, 2, 3]}
+{"c": true, "d": null, "newkey": "newvalue"}
+
+query T
+SELECT x FROM t WHERE x >= '{}'::JSONB ORDER BY x;
+----
+{}
+{"a": 1}
+{"a": ["1"]}
+{"a": [{"b": "c"}]}
+{"a": "sh", "b": 1}
+{"aa": 1, "c": 1}
+{"b": 1, "d": 1}
+{"e": {"f": {"g": 1}}, "f": [1, 2, 3]}
+{"c": true, "d": null, "newkey": "newvalue"}
+
+query T
+SELECT x FROM t WHERE x < '{}'::JSONB ORDER BY x;
+----
+
+query T
+SELECT x FROM t WHERE x = '{"e": {"f": {"g": 1}}, "f": [1, 2, 3]}'::JSONB ORDER BY x;
+----
+{"e": {"f": {"g": 1}}, "f": [1, 2, 3]}
+
+# Ensure that we can order by JSONS without any indexes
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x JSONB);
+INSERT INTO t VALUES
+  ('{}'::JSONB),
+  ('[]'::JSONB),
+  ('true'::JSONB),
+  ('false'::JSONB),
+  ('null'::JSONB),
+  ('"crdb"'::JSONB),
+  ('[1, 2, 3]'::JSONB),
+  ('1'::JSONB),
+  ('{"a": "b", "c": "d"}'::JSONB)
+
+
+query T
+SELECT x FROM t ORDER BY x
+----
+null
+"crdb"
+1
+false
+true
+[]
+[1, 2, 3]
+{}
+{"a": "b", "c": "d"}
+
+query T
+SELECT x FROM t ORDER BY x DESC
+----
+{"a": "b", "c": "d"}
+{}
+[1, 2, 3]
+[]
+true
+false
+1
+"crdb"
+null
+
+# Test to show JSON Null is different from NULL
+query T
+SELECT x FROM t WHERE x IS NOT NULL ORDER BY x
+----
+null
+"crdb"
+1
+false
+true
+[]
+[1, 2, 3]
+{}
+{"a": "b", "c": "d"}
+
+
+# Test JSONS of composite types without an index.
+statement ok
+CREATE TABLE tjson(x JSONB);
+INSERT INTO tjson VALUES
+  ('1.250'::JSONB),
+  ('1.0'::JSONB),
+  ('1.000'::JSONB),
+  ('1.111111'::JSONB),
+  ('10'::JSONB),
+  ('[1, 2.0, 1.21, 1.00]'::JSONB),
+  ('{"a": [1, 1.1], "b": 1.0000, "c": 10.0}'::JSONB)
+
+# Ensure these are round tripped correctly.
+query T
+SELECT x FROM tjson ORDER BY x, rowid
+----
+1.0
+1.000
+1.111111
+1.250
+10
+[1, 2.0, 1.21, 1.00]
+{"a": [1, 1.1], "b": 1.0000, "c": 10.0}
+
+# Test JSONS of composite types with an index.
+statement ok
+CREATE TABLE y(x JSONB PRIMARY KEY);
+INSERT INTO y VALUES
+  ('1.00'::JSONB),
+  ('1.250'::JSONB),
+  ('10'::JSONB),
+  ('[1, 2.0, 1.21, 1.00]'::JSONB),
+  ('{"a": [1, 1.1], "b": 1.0000, "c": 10.0}'::JSONB)
+
+# Ensure these are round tripped correctly.
+query T
+SELECT x FROM y ORDER BY x
+----
+1.00
+1.250
+10
+[1, 2.0, 1.21, 1.00]
+{"a": [1, 1.1], "b": 1.0000, "c": 10.0}
+
+# Test that unique indexes reject bad inserts for composite types
+statement error pq: duplicate key value violates unique constraint "y_pkey"
+INSERT INTO y VALUES
+  ('1.0000'::JSONB)
+
+# Testing with the descending designation.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x JSONB)
+
+statement ok
+CREATE INDEX i ON t(x DESC)
+
+statement ok
+INSERT INTO t VALUES
+  ('{}'::JSONB),
+  ('[]'::JSONB),
+  ('true'::JSONB),
+  ('false'::JSONB),
+  ('null'::JSONB),
+  ('"crdb"'::JSONB),
+  ('[1, 2, 3]'::JSONB),
+  ('1'::JSONB),
+  ('{"a": "b", "c": "d"}'::JSONB),
+  ('[null]'::JSONB),
+  ('[1]'::JSONB),
+  ('[null, null, false, true, "a", 1]'::JSONB),
+  ('[{"a":"b"}]'::JSONB),
+  ('[{"a":"b", "c": [1, 2, 3, 4, 5]}]'::JSONB)
+
+query T
+SELECT x FROM t ORDER BY x;
+----
+null
+"crdb"
+1
+false
+true
+[]
+[null]
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[1, 2, 3]
+[null, null, false, true, "a", 1]
+{}
+{"a": "b", "c": "d"}
+
+
+# Testing different joins on indexed JSONS
+statement ok
+DROP TABLE IF EXISTS t1, t2 CASCADE;
+CREATE TABLE t1 (x JSONB PRIMARY KEY);
+CREATE TABLE t2 (x JSONB PRIMARY KEY);
+INSERT INTO t1 VALUES
+  ('[1, [2, 3]]'::JSONB),
+  ('[1, [2, [3, [4]]]]'::JSONB);
+INSERT INTO t2 VALUES
+  ('[1, [2, 3]]'::JSONB),
+  ('{}'::JSONB),
+  ('[1, [2, 4]]'::JSONB)
+
+query T rowsort
+SELECT t1.x FROM t1 INNER HASH JOIN t2 ON t1.x = t2.x
+----
+[1, [2, 3]]
+
+query T rowsort
+SELECT t1.x FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
+----
+[1, [2, 3]]
+
+query T rowsort
+SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
+----
+[1, [2, 3]]
+
+# Test that we can group by JSONS
+query T
+SELECT x FROM t GROUP BY x ORDER BY x;
+----
+null
+"crdb"
+1
+false
+true
+[]
+[null]
+[1]
+[{"a": "b"}]
+[{"a": "b", "c": [1, 2, 3, 4, 5]}]
+[1, 2, 3]
+[null, null, false, true, "a", 1]
+{}
+{"a": "b", "c": "d"}

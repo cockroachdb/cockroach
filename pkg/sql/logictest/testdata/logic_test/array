@@ -1428,6 +1428,7 @@ SELECT x FROM t WHERE x < ARRAY[1, 4, 3] ORDER BY x
 {1}
 {1,NULL,10}
 
+
 query T
 SELECT x FROM t WHERE x > ARRAY [1, NULL] ORDER BY x DESC
 ----

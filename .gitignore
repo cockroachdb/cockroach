@@ -56,5 +56,7 @@ build/Railroad.jar
 pkg/roachprod/vm/aws/embedded.go
 pkg/security/securitytest/embedded.go
 
+pkg/sql/logictest/testdata/logic_test/__test
+.idea/
 # Temporary directories during gomock generate
 **/gomock_reflect_*

@@ -1491,6 +1491,13 @@ func makeIsFn(a, b *types.T, v volatility.V) *CmpOp {
 	return makeCmpOpOverload(treecmp.IsNotDistinctFrom, a, b, true, v)
 }
 
+//func makeGtFn(a, b *types.T, v volatility.V) *CmpOp {
+//	return makeCmpOpOverload(treecmp.GT, a, b, false, v)
+//}
+//func makeGeFn(a, b *types.T, v volatility.V) *CmpOp {
+//	return makeCmpOpOverload(treecmp.GE, a, b, false, v)
+//}
+
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 	treecmp.EQ: {overloads: []*CmpOp{
@@ -1578,6 +1585,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
 		makeLtFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLtFn(types.VarBit, types.VarBit, volatility.Leakproof),
+		makeLtFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1634,6 +1642,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
 		makeLeFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLeFn(types.VarBit, types.VarBit, volatility.Leakproof),
+		makeLeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1663,7 +1672,15 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			Volatility: volatility.Immutable,
 		},
 	}},
-
+	//
+	//treecmp.GT: {overloads: []*CmpOp{
+	//	// Single-type comparisons.
+	//	makeGeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
+	//}},
+	//treecmp.GE: {overloads: []*CmpOp{
+	//	// Single-type comparisons.
+	//	makeGeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
+	//}},
 	treecmp.IsNotDistinctFrom: {overloads: []*CmpOp{
 		{
 			LeftType:  types.Unknown,

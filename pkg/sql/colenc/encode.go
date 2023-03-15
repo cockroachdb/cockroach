@@ -704,6 +704,9 @@ func isComposite(vec coldata.Vec, row int) bool {
 	case types.DecimalFamily:
 		d := tree.DDecimal{Decimal: vec.Decimal()[row]}
 		return d.IsComposite()
+	case types.JsonFamily:
+		j := tree.DJSON{JSON: vec.JSON().Get(row)}
+		return j.IsComposite()
 	default:
 		d := vec.Datum().Get(row)
 		if cdatum, ok := d.(tree.CompositeDatum); ok {
