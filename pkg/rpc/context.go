@@ -180,11 +180,13 @@ type ClientInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamClientInterceptor
 }
 
-type VersionCompatError struct{}
+type versionCompatError struct{}
 
-func (v *VersionCompatError) Error() string {
+func (versionCompatError) Error() string {
 	return "version compatibility check failed on ping response"
 }
+
+var VersionCompatError = versionCompatError{}
 
 // NewServerEx is like NewServer, but also returns the interceptors that have
 // been registered with gRPC for the server. These interceptors can be used
@@ -2469,7 +2471,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 			err = checkVersion(ctx, rpcCtx.Settings.Version, response.ServerVersion)
 			if err != nil {
-				err := errors.Mark(err, &VersionCompatError{})
+				err := errors.Mark(err, VersionCompatError)
 				return err
 			}
 
