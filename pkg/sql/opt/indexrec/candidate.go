@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -223,7 +224,10 @@ func (ics indexCandidateSet) addOrderingIndex(ordering opt.Ordering) {
 func (ics *indexCandidateSet) addJoinIndexes(expr memo.FiltersExpr) {
 	outerCols := expr.OuterCols().ToList()
 	for _, col := range outerCols {
-		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) {
+		// TODO (Shivam): Index recommendations should not only allow JSON columns
+		// to be part of inverted indexes since they are also forward indexable.
+		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) &&
+			ics.md.ColumnMeta(col).Type.Family() != types.JsonFamily {
 			ics.addSingleColumnIndex(col, false /* desc */, ics.joinCandidates)
 		} else {
 			ics.addSingleColumnIndex(col, false /* desc */, ics.invertedCandidates)
@@ -309,7 +313,10 @@ func (ics *indexCandidateSet) addVariableExprIndex(
 	switch expr := expr.(type) {
 	case *memo.VariableExpr:
 		col := expr.Col
-		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) {
+		// TODO (Shivam): Index recommendations should not only allow JSON columns
+		// to be part of inverted indexes since they are also forward indexable.
+		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) &&
+			ics.md.ColumnMeta(col).Type.Family() != types.JsonFamily {
 			ics.addSingleColumnIndex(col, false /* desc */, indexCandidates)
 		} else {
 			ics.addSingleColumnIndex(col, false /* desc */, ics.invertedCandidates)
@@ -339,7 +346,10 @@ func (ics *indexCandidateSet) addMultiColumnIndex(
 		index := make([]cat.IndexColumn, 0, len(tableToCols[currTable]))
 		for _, colSlice := range tableToCols[currTable] {
 			indexCol := colSlice[0]
-			if colinfo.ColumnTypeIsIndexable(indexCol.Column.DatumType()) {
+			// TODO (Shivam): Index recommendations should not only allow JSON columns
+			// to be part of inverted indexes since they are also forward indexable.
+			if indexCol.Column.DatumType().Family() != types.JsonFamily &&
+				colinfo.ColumnTypeIsIndexable(indexCol.Column.DatumType()) {
 				index = append(index, indexCol)
 			}
 		}
