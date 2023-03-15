@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -26,7 +27,8 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 	if err != nil {
 		return nil, err
 	}
-	if err := checkPrivilegesForShowRanges(d, idx.Table()); err != nil {
+	// Basic requirement is SELECT privileges
+	if err = d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
 		return nil, err
 	}
 	if idx.Table().IsVirtualTable() {
