@@ -161,11 +161,9 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
 	kvpb.AdminRelocateRange:  tenantcapabilities.CanAdminRelocateRange,
 	kvpb.AdminTransferLease:  tenantcapabilities.CanAdminRelocateRange,
 
-	// TODO(ecwall): The following should also be authorized via specific capabilities.
-	kvpb.AdminMerge: noCapCheckNeeded,
-
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
+	kvpb.AdminMerge:                    onlySystemTenant,
 	kvpb.AdminVerifyProtectedTimestamp: onlySystemTenant,
 	kvpb.CheckConsistency:              onlySystemTenant,
 	kvpb.ComputeChecksum:               onlySystemTenant,
