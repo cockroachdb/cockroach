@@ -18,17 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,8 +37,6 @@ import (
 
 func TestSchemaTelemetrySchedule(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
 
 	// We want to ensure that the migration will succeed when run again.
 	// To ensure that it will, we inject a failure when trying to mark
@@ -75,10 +70,7 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 		args.Knobs.SchemaTelemetry = &sql.SchemaTelemetryTestingKnobs{
 			AOSTDuration: &aostDuration,
 		}
-		args.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs - 1),
-		}
+
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -93,26 +85,19 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 		qJob := fmt.Sprintf(`SELECT %s()`,
 			builtinconstants.CreateSchemaTelemetryJobBuiltinName)
 
-		// Check that there is no schema telemetry schedule and that creating schema
-		// telemetry jobs is not possible.
-		tdb.CheckQueryResults(t, qExists, [][]string{})
-		tdb.ExpectErr(t, schematelemetrycontroller.ErrVersionGate.Error(), qJob)
+		clusterID := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).NodeInfo.
+			LogicalClusterID()
 
-		// Upgrade the cluster.
-		tdb.Exec(t, `SET CLUSTER SETTING version = $1`,
-			clusterversion.ByKey(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs).String())
-
-		// Check that the schedule now exists and that jobs can be created.
+		// Check that the schedule exists and that jobs can be created.
 		tdb.Exec(t, qJob)
-		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"@weekly", "1"}})
+		exp := schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@weekly")
+		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
 
 		// Check that the schedule can have its recurrence altered.
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '* * * * *'`,
 			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"* * * * *", "1"}})
-		clusterID := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).NodeInfo.
-			LogicalClusterID()
-		exp := schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@daily")
+		exp = schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@daily")
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '@daily'`,
 			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
