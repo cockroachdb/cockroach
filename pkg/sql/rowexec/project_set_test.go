@@ -172,12 +172,12 @@ func BenchmarkProjectSet(b *testing.B) {
 				p, err := NewProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
 					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},
-					[]execinfra.RowSource{in}, []execinfra.RowReceiver{out}, []execinfra.LocalProcessor{})
+					[]execinfra.RowSource{in}, []execinfra.LocalProcessor{})
 				if err != nil {
 					b.Fatal(err)
 				}
 
-				p.Run(context.Background())
+				p.Run(context.Background(), out)
 			}
 		})
 	}

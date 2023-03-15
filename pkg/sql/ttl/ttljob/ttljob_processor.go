@@ -349,11 +349,7 @@ func (t *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 }
 
 func newTTLProcessor(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	processorID int32,
-	spec execinfrapb.TTLSpec,
-	output execinfra.RowReceiver,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, spec execinfrapb.TTLSpec,
 ) (execinfra.Processor, error) {
 	ttlProcessor := &ttlProcessor{
 		ttlSpec: spec,
@@ -365,7 +361,6 @@ func newTTLProcessor(
 		[]*types.T{},
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{},
 	); err != nil {

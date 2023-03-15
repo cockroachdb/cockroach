@@ -42,7 +42,6 @@ func newFiltererProcessor(
 	spec *execinfrapb.FiltererSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*filtererProcessor, error) {
 	f := &filtererProcessor{input: input}
 	types := input.OutputTypes()
@@ -53,7 +52,6 @@ func newFiltererProcessor(
 		types,
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{f.input}},
 	); err != nil {

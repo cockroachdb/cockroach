@@ -175,6 +175,8 @@ type FlowBase struct {
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
 	processors []execinfra.Processor
+	// outputs contains an output for each execinfra.Processor in processors.
+	outputs []execinfra.RowReceiver
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []Startable
@@ -362,10 +364,20 @@ func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
 	return f.ctxCancel
 }
 
-// SetProcessors overrides the current f.processors with the provided
-// processors. This is used to set up the vectorized flow.
-func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
+// SetProcessorsAndOutputs overrides the current f.processors and f.outputs with
+// the provided slices.
+func (f *FlowBase) SetProcessorsAndOutputs(
+	processors []execinfra.Processor, outputs []execinfra.RowReceiver,
+) error {
+	if len(processors) != len(outputs) {
+		return errors.AssertionFailedf(
+			"processors and outputs don't match: %d processors, %d outputs",
+			len(processors), len(outputs),
+		)
+	}
 	f.processors = processors
+	f.outputs = outputs
+	return nil
 }
 
 // AddRemoteStream adds a remote stream to this flow.
@@ -398,7 +410,9 @@ func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
 // StartInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to rowSyncFlowConsumer if
 // set.
-func (f *FlowBase) StartInternal(ctx context.Context, processors []execinfra.Processor) error {
+func (f *FlowBase) StartInternal(
+	ctx context.Context, processors []execinfra.Processor, outputs []execinfra.RowReceiver,
+) error {
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
@@ -444,7 +458,7 @@ func (f *FlowBase) StartInternal(ctx context.Context, processors []execinfra.Pro
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
-			processors[i].Run(ctx)
+			processors[i].Run(ctx, outputs[i])
 			f.waitGroup.Done()
 		}(i)
 	}
@@ -463,31 +477,32 @@ func (f *FlowBase) IsLocal() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context) error {
-	return f.StartInternal(ctx, f.processors)
+	return f.StartInternal(ctx, f.processors, f.outputs)
 }
 
 // Run is part of the Flow interface.
 func (f *FlowBase) Run(ctx context.Context) {
 	defer f.Wait()
 
-	// We'll take care of the last processor in particular.
-	var headProc execinfra.Processor
 	if len(f.processors) == 0 {
 		f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.AssertionFailedf("no processors in flow")})
 		f.rowSyncFlowConsumer.ProducerDone()
 		return
 	}
-	headProc = f.processors[len(f.processors)-1]
+	// We'll take care of the last processor in particular.
+	headProc := f.processors[len(f.processors)-1]
+	headOutput := f.outputs[len(f.outputs)-1]
 	otherProcs := f.processors[:len(f.processors)-1]
+	otherOutputs := f.outputs[:len(f.outputs)-1]
 
 	var err error
-	if err = f.StartInternal(ctx, otherProcs); err != nil {
+	if err = f.StartInternal(ctx, otherProcs, otherOutputs); err != nil {
 		f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.rowSyncFlowConsumer.ProducerDone()
 		return
 	}
 	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
-	headProc.Run(ctx)
+	headProc.Run(ctx, headOutput)
 }
 
 // Wait is part of the Flow interface.

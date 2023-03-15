@@ -729,12 +729,12 @@ func TestMergeJoiner(t *testing.T) {
 			}
 
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			m, err := newMergeJoiner(context.Background(), &flowCtx, 0 /* processorID */, &ms, leftInput, rightInput, &post, out)
+			m, err := newMergeJoiner(context.Background(), &flowCtx, 0 /* processorID */, &ms, leftInput, rightInput, &post)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			m.Run(context.Background())
+			m.Run(context.Background(), out)
 
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
@@ -835,12 +835,12 @@ func TestConsumerClosed(t *testing.T) {
 				Mon:     evalCtx.TestingMon,
 			}
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
-			m, err := newMergeJoiner(context.Background(), &flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
+			m, err := newMergeJoiner(context.Background(), &flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			m.Run(context.Background())
+			m.Run(context.Background(), out)
 
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
@@ -885,11 +885,11 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				m, err := newMergeJoiner(ctx, flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, disposer)
+				m, err := newMergeJoiner(ctx, flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post)
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(context.Background())
+				m.Run(context.Background(), disposer)
 				leftInput.Reset()
 				rightInput.Reset()
 			}
@@ -904,11 +904,11 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				m, err := newMergeJoiner(ctx, flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, disposer)
+				m, err := newMergeJoiner(ctx, flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post)
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(context.Background())
+				m.Run(context.Background(), disposer)
 				leftInput.Reset()
 				rightInput.Reset()
 			}
@@ -924,11 +924,11 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				m, err := newMergeJoiner(ctx, flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, disposer)
+				m, err := newMergeJoiner(ctx, flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post)
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(context.Background())
+				m.Run(context.Background(), disposer)
 				leftInput.Reset()
 				rightInput.Reset()
 			}

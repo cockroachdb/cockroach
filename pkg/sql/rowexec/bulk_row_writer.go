@@ -42,7 +42,6 @@ type bulkRowWriter struct {
 	tableDesc      catalog.TableDescriptor
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
-	output         execinfra.RowReceiver
 	summary        kvpb.BulkOpSummary
 }
 
@@ -55,7 +54,6 @@ func newBulkRowWriterProcessor(
 	processorID int32,
 	spec execinfrapb.BulkRowWriterSpec,
 	input execinfra.RowSource,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	c := &bulkRowWriter{
 		flowCtx:        flowCtx,
@@ -64,10 +62,9 @@ func newBulkRowWriterProcessor(
 		tableDesc:      flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:           spec,
 		input:          input,
-		output:         output,
 	}
 	if err := c.Init(
-		ctx, c, &execinfrapb.PostProcessSpec{}, CTASPlanResultTypes, flowCtx, processorID, output,
+		ctx, c, &execinfrapb.PostProcessSpec{}, CTASPlanResultTypes, flowCtx, processorID,
 		nil /* memMonitor */, execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{input}},
 	); err != nil {
 		return nil, err

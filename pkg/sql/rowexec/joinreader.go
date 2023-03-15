@@ -281,7 +281,6 @@ func newJoinReader(
 	spec *execinfrapb.JoinReaderSpec,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 	readerType joinReaderType,
 ) (execinfra.RowSourcedProcessor, error) {
 	if spec.OutputGroupContinuationForLeftRow && !spec.MaintainOrdering {
@@ -409,7 +408,6 @@ func newJoinReader(
 		spec.OnExpr,
 		spec.OutputGroupContinuationForLeftRow,
 		post,
-		output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{jr.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

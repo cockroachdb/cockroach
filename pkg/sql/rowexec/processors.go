@@ -50,7 +50,7 @@ func emitHelper(
 	procOutputHelper *execinfra.ProcOutputHelper,
 	row rowenc.EncDatumRow,
 	meta *execinfrapb.ProducerMetadata,
-	pushTrailingMeta func(context.Context),
+	pushTrailingMeta func(context.Context, execinfra.RowReceiver),
 	inputs ...execinfra.RowSource,
 ) bool {
 	if output == nil {
@@ -95,14 +95,9 @@ func emitHelper(
 	}
 }
 
-func checkNumInOut(
-	inputs []execinfra.RowSource, outputs []execinfra.RowReceiver, numIn, numOut int,
-) error {
+func checkNumIn(inputs []execinfra.RowSource, numIn int) error {
 	if len(inputs) != numIn {
 		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
-	}
-	if len(outputs) != numOut {
-		return errors.Errorf("expected %d output(s), got %d", numOut, len(outputs))
 	}
 	return nil
 }
@@ -116,213 +111,212 @@ func NewProcessor(
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	inputs []execinfra.RowSource,
-	outputs []execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
 ) (execinfra.Processor, error) {
 	if core.Noop != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newNoopProcessor(ctx, flowCtx, processorID, inputs[0], post, outputs[0])
+		return newNoopProcessor(ctx, flowCtx, processorID, inputs[0], post)
 	}
 	if core.Values != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return newValuesProcessor(ctx, flowCtx, processorID, core.Values, post, outputs[0])
+		return newValuesProcessor(ctx, flowCtx, processorID, core.Values, post)
 	}
 	if core.TableReader != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return newTableReader(ctx, flowCtx, processorID, core.TableReader, post, outputs[0])
+		return newTableReader(ctx, flowCtx, processorID, core.TableReader, post)
 	}
 	if core.Filterer != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newFiltererProcessor(ctx, flowCtx, processorID, core.Filterer, inputs[0], post, outputs[0])
+		return newFiltererProcessor(ctx, flowCtx, processorID, core.Filterer, inputs[0], post)
 	}
 	if core.JoinReader != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
 		if core.JoinReader.IsIndexJoin() {
 			return newJoinReader(
-				ctx, flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0], indexJoinReaderType,
+				ctx, flowCtx, processorID, core.JoinReader, inputs[0], post, indexJoinReaderType,
 			)
 		}
-		return newJoinReader(ctx, flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0], lookupJoinReaderType)
+		return newJoinReader(ctx, flowCtx, processorID, core.JoinReader, inputs[0], post, lookupJoinReaderType)
 	}
 	if core.Sorter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newSorter(ctx, flowCtx, processorID, core.Sorter, inputs[0], post, outputs[0])
+		return newSorter(ctx, flowCtx, processorID, core.Sorter, inputs[0], post)
 	}
 	if core.Distinct != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newDistinct(ctx, flowCtx, processorID, core.Distinct, inputs[0], post, outputs[0])
+		return newDistinct(ctx, flowCtx, processorID, core.Distinct, inputs[0], post)
 	}
 	if core.Ordinality != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newOrdinalityProcessor(ctx, flowCtx, processorID, core.Ordinality, inputs[0], post, outputs[0])
+		return newOrdinalityProcessor(ctx, flowCtx, processorID, core.Ordinality, inputs[0], post)
 	}
 	if core.Aggregator != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newAggregator(ctx, flowCtx, processorID, core.Aggregator, inputs[0], post, outputs[0])
+		return newAggregator(ctx, flowCtx, processorID, core.Aggregator, inputs[0], post)
 	}
 	if core.MergeJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+		if err := checkNumIn(inputs, 2); err != nil {
 			return nil, err
 		}
 		return newMergeJoiner(
-			ctx, flowCtx, processorID, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
+			ctx, flowCtx, processorID, core.MergeJoiner, inputs[0], inputs[1], post,
 		)
 	}
 	if core.ZigzagJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		return newZigzagJoiner(
-			ctx, flowCtx, processorID, core.ZigzagJoiner, nil, post, outputs[0],
+			ctx, flowCtx, processorID, core.ZigzagJoiner, nil, post,
 		)
 	}
 	if core.HashJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+		if err := checkNumIn(inputs, 2); err != nil {
 			return nil, err
 		}
 		return newHashJoiner(
-			ctx, flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post, outputs[0],
+			ctx, flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post,
 		)
 	}
 	if core.InvertedJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
 		return newInvertedJoiner(
-			ctx, flowCtx, processorID, core.InvertedJoiner, nil, inputs[0], post, outputs[0],
+			ctx, flowCtx, processorID, core.InvertedJoiner, nil, inputs[0], post,
 		)
 	}
 	if core.Backfiller != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		switch core.Backfiller.Type {
 		case execinfrapb.BackfillerSpec_Index:
-			return newIndexBackfiller(ctx, flowCtx, processorID, *core.Backfiller, post, outputs[0])
+			return newIndexBackfiller(ctx, flowCtx, *core.Backfiller)
 		case execinfrapb.BackfillerSpec_Column:
-			return newColumnBackfiller(ctx, flowCtx, processorID, *core.Backfiller, post, outputs[0])
+			return newColumnBackfiller(ctx, flowCtx, processorID, *core.Backfiller)
 		}
 	}
 	if core.Sampler != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newSamplerProcessor(ctx, flowCtx, processorID, core.Sampler, inputs[0], post, outputs[0])
+		return newSamplerProcessor(ctx, flowCtx, processorID, core.Sampler, inputs[0], post)
 	}
 	if core.SampleAggregator != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newSampleAggregator(ctx, flowCtx, processorID, core.SampleAggregator, inputs[0], post, outputs[0])
+		return newSampleAggregator(ctx, flowCtx, processorID, core.SampleAggregator, inputs[0], post)
 	}
 	if core.ReadImport != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewReadImportDataProcessor == nil {
 			return nil, errors.New("ReadImportData processor unimplemented")
 		}
-		return NewReadImportDataProcessor(ctx, flowCtx, processorID, *core.ReadImport, post, outputs[0])
+		return NewReadImportDataProcessor(ctx, flowCtx, processorID, *core.ReadImport, post)
 	}
 	if core.CloudStorageTest != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewCloudStorageTestProcessor == nil {
 			return nil, errors.New("CloudStorageTestProcessor processor unimplemented")
 		}
-		return NewCloudStorageTestProcessor(ctx, flowCtx, processorID, *core.CloudStorageTest, post, outputs[0])
+		return NewCloudStorageTestProcessor(ctx, flowCtx, processorID, *core.CloudStorageTest, post)
 	}
 	if core.BackupData != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewBackupDataProcessor == nil {
 			return nil, errors.New("BackupData processor unimplemented")
 		}
-		return NewBackupDataProcessor(ctx, flowCtx, processorID, *core.BackupData, post, outputs[0])
+		return NewBackupDataProcessor(ctx, flowCtx, processorID, *core.BackupData, post)
 	}
 	if core.SplitAndScatter != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewSplitAndScatterProcessor == nil {
 			return nil, errors.New("SplitAndScatter processor unimplemented")
 		}
-		return NewSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.SplitAndScatter, post, outputs[0])
+		return NewSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.SplitAndScatter, post)
 	}
 	if core.RestoreData != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
 		if NewRestoreDataProcessor == nil {
 			return nil, errors.New("RestoreData processor unimplemented")
 		}
-		return NewRestoreDataProcessor(ctx, flowCtx, processorID, *core.RestoreData, post, inputs[0], outputs[0])
+		return NewRestoreDataProcessor(ctx, flowCtx, processorID, *core.RestoreData, post, inputs[0])
 	}
 	if core.StreamIngestionData != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewStreamIngestionDataProcessor == nil {
 			return nil, errors.New("StreamIngestionData processor unimplemented")
 		}
-		return NewStreamIngestionDataProcessor(ctx, flowCtx, processorID, *core.StreamIngestionData, post, outputs[0])
+		return NewStreamIngestionDataProcessor(ctx, flowCtx, processorID, *core.StreamIngestionData, post)
 	}
 	if core.Exporter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
 
 		if core.Exporter.Format.Format == roachpb.IOFileFormat_Parquet {
-			return NewParquetWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, inputs[0], outputs[0])
+			return NewParquetWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, inputs[0])
 		}
-		return NewCSVWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, inputs[0], outputs[0])
+		return NewCSVWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, inputs[0])
 	}
 
 	if core.BulkRowWriter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newBulkRowWriterProcessor(ctx, flowCtx, processorID, *core.BulkRowWriter, inputs[0], outputs[0])
+		return newBulkRowWriterProcessor(ctx, flowCtx, processorID, *core.BulkRowWriter, inputs[0])
 	}
 	if core.ProjectSet != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newProjectSetProcessor(ctx, flowCtx, processorID, core.ProjectSet, inputs[0], post, outputs[0])
+		return newProjectSetProcessor(ctx, flowCtx, processorID, core.ProjectSet, inputs[0], post)
 	}
 	if core.Windower != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newWindower(ctx, flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
+		return newWindower(ctx, flowCtx, processorID, core.Windower, inputs[0], post)
 	}
 	if core.LocalPlanNode != nil {
 		numInputs := int(core.LocalPlanNode.NumInputs)
-		if err := checkNumInOut(inputs, outputs, numInputs, 1); err != nil {
+		if err := checkNumIn(inputs, numInputs); err != nil {
 			return nil, err
 		}
 		processor := localProcessors[core.LocalPlanNode.RowSourceIdx]
-		if err := processor.InitWithOutput(ctx, flowCtx, processorID, post, outputs[0]); err != nil {
+		if err := processor.Init(ctx, flowCtx, processorID, post); err != nil {
 			return nil, err
 		}
 		if numInputs == 1 {
@@ -335,103 +329,103 @@ func NewProcessor(
 		return processor, nil
 	}
 	if core.ChangeAggregator != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewChangeAggregatorProcessor == nil {
 			return nil, errors.New("ChangeAggregator processor unimplemented")
 		}
-		return NewChangeAggregatorProcessor(ctx, flowCtx, processorID, *core.ChangeAggregator, post, outputs[0])
+		return NewChangeAggregatorProcessor(ctx, flowCtx, processorID, *core.ChangeAggregator, post)
 	}
 	if core.ChangeFrontier != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
 		if NewChangeFrontierProcessor == nil {
 			return nil, errors.New("ChangeFrontier processor unimplemented")
 		}
-		return NewChangeFrontierProcessor(ctx, flowCtx, processorID, *core.ChangeFrontier, inputs[0], post, outputs[0])
+		return NewChangeFrontierProcessor(ctx, flowCtx, processorID, *core.ChangeFrontier, inputs[0], post)
 	}
 	if core.InvertedFilterer != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		return newInvertedFilterer(ctx, flowCtx, processorID, core.InvertedFilterer, inputs[0], post, outputs[0])
+		return newInvertedFilterer(ctx, flowCtx, processorID, core.InvertedFilterer, inputs[0], post)
 	}
 	if core.StreamIngestionFrontier != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
 		if NewStreamIngestionFrontierProcessor == nil {
 			return nil, errors.New("StreamIngestionFrontier processor unimplemented")
 		}
-		return NewStreamIngestionFrontierProcessor(ctx, flowCtx, processorID, *core.StreamIngestionFrontier, inputs[0], post, outputs[0])
+		return NewStreamIngestionFrontierProcessor(ctx, flowCtx, processorID, *core.StreamIngestionFrontier, inputs[0], post)
 	}
 	if core.IndexBackfillMerger != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return backfill.NewIndexBackfillMerger(ctx, flowCtx, *core.IndexBackfillMerger, outputs[0])
+		return backfill.NewIndexBackfillMerger(ctx, flowCtx, *core.IndexBackfillMerger)
 	}
 	if core.Ttl != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl, outputs[0])
+		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl)
 	}
 	if core.HashGroupJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+		if err := checkNumIn(inputs, 2); err != nil {
 			return nil, err
 		}
-		return newHashGroupJoiner(ctx, flowCtx, processorID, core.HashGroupJoiner, inputs[0], inputs[1], post, outputs[0])
+		return newHashGroupJoiner(ctx, flowCtx, processorID, core.HashGroupJoiner, inputs[0], inputs[1], post)
 	}
 	if core.GenerativeSplitAndScatter != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		if NewGenerativeSplitAndScatterProcessor == nil {
 			return nil, errors.New("GenerativeSplitAndScatter processor unimplemented")
 		}
-		return NewGenerativeSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.GenerativeSplitAndScatter, post, outputs[0])
+		return NewGenerativeSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.GenerativeSplitAndScatter, post)
 	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
 // NewReadImportDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewReadImportDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewReadImportDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewCloudStorageTestProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CloudStorageTestSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CloudStorageTestSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewBackupDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewBackupDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.SplitAndScatterSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.SplitAndScatterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewRestoreDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewRestoreDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RestoreDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewRestoreDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RestoreDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
 
 // NewStreamIngestionDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewStreamIngestionDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewStreamIngestionDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewCSVWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewCSVWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, execinfra.RowSource) (execinfra.Processor, error)
 
 // NewParquetWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewParquetWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewParquetWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, execinfra.RowSource) (execinfra.Processor, error)
 
 // NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewChangeAggregatorProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewChangeAggregatorProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewChangeFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewChangeFrontierProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewChangeFrontierProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewStreamIngestionFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewStreamIngestionFrontierProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.StreamIngestionFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewStreamIngestionFrontierProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.StreamIngestionFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewTTLProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.TTLSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.TTLSpec) (execinfra.Processor, error)
 
 // NewGenerativeSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)

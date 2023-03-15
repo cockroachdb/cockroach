@@ -170,7 +170,6 @@ func newInvertedJoiner(
 	datumsToInvertedExpr invertedexpr.DatumsToInvertedExpr,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	switch spec.Type {
 	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.LeftSemiJoin, descpb.LeftAntiJoin:
@@ -235,7 +234,7 @@ func newInvertedJoiner(
 	}
 
 	if err := ij.ProcessorBase.Init(
-		ctx, ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		ctx, ij, post, outputColTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

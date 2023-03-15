@@ -70,7 +70,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	ctx, _, err := base.Setup(ctx, nil, flowinfra.FuseAggressively)
 	require.NoError(t, err)
 
-	base.SetProcessors([]execinfra.Processor{mat})
+	require.NoError(t, base.SetProcessorsAndOutputs([]execinfra.Processor{mat}, []execinfra.RowReceiver{nil}))
 	// This test specifically verifies that a flow doesn't get stuck in Wait for
 	// asynchronous components that haven't been signaled to exit. To simulate
 	// this we just create a mock startable.

@@ -41,7 +41,6 @@ func newCountAggregator(
 	processorID int32,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
 ) (*countAggregator, error) {
 	ag := &countAggregator{}
 	ag.input = input
@@ -58,7 +57,6 @@ func newCountAggregator(
 		[]*types.T{types.Int},
 		flowCtx,
 		processorID,
-		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ag.input},

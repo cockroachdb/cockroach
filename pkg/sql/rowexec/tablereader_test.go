@@ -147,7 +147,7 @@ func TestTableReader(t *testing.T) {
 					buf = &distsqlutils.RowBuffer{}
 					out = buf
 				}
-				tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &ts, &c.post, out)
+				tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &ts, &c.post)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -157,7 +157,7 @@ func TestTableReader(t *testing.T) {
 					tr.Start(ctx)
 					results = tr
 				} else {
-					tr.Run(ctx)
+					tr.Run(ctx, out)
 					if !buf.ProducerClosed() {
 						t.Fatalf("output RowReceiver not closed")
 					}
@@ -248,7 +248,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 			buf = &distsqlutils.RowBuffer{}
 			out = buf
 		}
-		tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post, out)
+		tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -258,7 +258,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 			tr.Start(ctx)
 			results = tr
 		} else {
-			tr.Run(ctx)
+			tr.Run(ctx, out)
 			if !buf.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -347,8 +347,8 @@ func TestTableReaderDrain(t *testing.T) {
 	}
 	post := execinfrapb.PostProcessSpec{}
 
-	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
-		return newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post, out)
+	testReaderProcessorDrain(ctx, t, func() (execinfra.Processor, error) {
+		return newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
 	})
 }
 
@@ -407,7 +407,7 @@ func TestLimitScans(t *testing.T) {
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.CollectStats = true
 
-	tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
+	tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func BenchmarkTableReader(b *testing.B) {
 				// txnKVFetcher reuses the passed-in slice and destructively
 				// modifies it.
 				spec.Spans = []roachpb.Span{span}
-				tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
+				tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
 				if err != nil {
 					b.Fatal(err)
 				}

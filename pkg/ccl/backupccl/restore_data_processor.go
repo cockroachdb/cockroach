@@ -51,7 +51,6 @@ type restoreDataProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.RestoreDataSpec
 	input   execinfra.RowSource
-	output  execinfra.RowReceiver
 
 	// numWorkers is the number of workers this processor should use. Initialized
 	// at processor creation based on the cluster setting. If the cluster setting
@@ -132,7 +131,6 @@ func newRestoreDataProcessor(
 	spec execinfrapb.RestoreDataSpec,
 	post *execinfrapb.PostProcessSpec,
 	input execinfra.RowSource,
-	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	sv := &flowCtx.Cfg.Settings.SV
 
@@ -140,13 +138,12 @@ func newRestoreDataProcessor(
 		flowCtx:    flowCtx,
 		input:      input,
 		spec:       spec,
-		output:     output,
 		progCh:     make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
 	}
 
-	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
