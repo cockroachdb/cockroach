@@ -83,6 +83,14 @@ const (
 	ReadFromFollower = kvpb.INCONSISTENT
 	// ReadFromLeaseholder is the RangeLookupConsistency used to read from the
 	// leaseholder.
+	// TODO(baptist): This may be incorrect. An uncommitted read may not see the
+	// updated value. Revisit if this should be a CONSISTENT read against the
+	// leaseholder. READ_UNCOMMITTED does not guarantee a more up-to-date view
+	// than INCONSISTENT, it only guarantees that the read is on the leaseholder,
+	// but may not include writes that have been appended to Raft, but not yet
+	// applied. In the case of certain disk issues, the leaseholders disk may be
+	// significantly behind. An alternative would be to change READ_UNCOMMITTED to
+	// acquire latches. See #98862.
 	ReadFromLeaseholder = kvpb.READ_UNCOMMITTED
 )
 
