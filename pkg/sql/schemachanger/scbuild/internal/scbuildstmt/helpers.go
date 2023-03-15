@@ -781,7 +781,7 @@ func makeSwapIndexSpec(
 func fallBackIfZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.DescID) {
 	{
 		tableElts := b.QueryByID(id)
-		if _, _, elem := scpb.FindTableZoneConfig(tableElts); elem != nil {
+		if _, _, elem := scpb.FindIndexZoneConfig(tableElts); elem != nil {
 			panic(scerrors.NotImplementedErrorf(n,
 				"regional by row partitioning is not supported"))
 		}
