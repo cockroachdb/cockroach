@@ -56,6 +56,9 @@ func (s TableColSet) ForEach(f func(col descpb.ColumnID)) {
 	s.set.ForEach(func(i int) { f(descpb.ColumnID(i)) })
 }
 
+// Copy returns a copy of s which can be modified independently.
+func (s TableColSet) Copy() TableColSet { return TableColSet{set: s.set.Copy()} }
+
 // SubsetOf returns true if s is a subset of other.
 func (s TableColSet) SubsetOf(other TableColSet) bool {
 	return s.set.SubsetOf(other.set)
