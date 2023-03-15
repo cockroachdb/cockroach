@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -306,6 +307,11 @@ type TestingKnobs struct {
 	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
 	// in ProcessorBase.StartInternal if the tracing is enabled.
 	ProcessorNoTracingSpan bool
+
+	// RunBeforeCascadeAndChecks is run before any cascade or check queries are
+	// run. The associated transaction ID of the statement performing the cascade
+	// or check query is passed in as an argument.
+	RunBeforeCascadesAndChecks func(txnID uuid.UUID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
