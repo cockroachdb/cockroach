@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spf13/pflag"
 )
 
@@ -598,7 +598,13 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
 		var tx pgx.Tx
-		if tx, err = o.mcp.Get().Begin(ctx); err != nil {
+		pl := o.mcp.Get()
+		conn, err := pl.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+
+		if tx, err = conn.Begin(ctx); err != nil {
 			return err
 		}
 		defer func() {

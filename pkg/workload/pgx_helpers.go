@@ -14,11 +14,14 @@ import (
 	"context"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
+	"github.com/marusama/semaphore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -48,16 +51,34 @@ type MultiConnPoolCfg struct {
 	// If 0, there is no per-pool maximum (other than the total maximum number of
 	// connections which still applies).
 	MaxConnsPerPool int
+
+	// WarmupConns specifies the number of connections to prewarm when
+	// initializing a MultiConnPool.  A value of 0 automatically initialize the
+	// max number of connections per pool.  A value less than 0 skips the
+	// connection warmup phase.
+	WarmupConns int
+
+	// MaxConnLifetime specifies the max age of individual connections in
+	// connection pools.  If 0, a default value of 5 minutes is used.
+	MaxConnLifetime time.Duration
+
+	// MaxConnLifetimeJitter shortens the max age of a connection by a random
+	// duration less than the specified jitter.  If 0, a default value of 30
+	// seconds is used.
+	MaxConnLifetimeJitter time.Duration
+
+	// LogLevel specifies the log level (default: warn)
+	LogLevel tracelog.LogLevel
 }
 
 // pgxLogger implements the pgx.Logger interface.
 type pgxLogger struct{}
 
-var _ pgx.Logger = pgxLogger{}
+var _ tracelog.Logger = pgxLogger{}
 
 // Log implements the pgx.Logger interface.
 func (p pgxLogger) Log(
-	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+	ctx context.Context, level tracelog.LogLevel, msg string, data map[string]interface{},
 ) {
 	if ctx.Err() != nil {
 		// Don't log anything from pgx if the context was canceled by the workload
@@ -76,7 +97,7 @@ func (p pgxLogger) Log(
 			return
 		}
 	}
-	log.Infof(ctx, "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
+	log.VInfof(ctx, log.Level(level), "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
 }
 
 // NewMultiConnPool creates a new MultiConnPool.
@@ -92,27 +113,36 @@ func NewMultiConnPool(
 	m := &MultiConnPool{}
 	m.mu.preparedStatements = map[string]string{}
 
+	logLevel := tracelog.LogLevelWarn
+	if cfg.LogLevel != 0 {
+		logLevel = cfg.LogLevel
+	}
+	maxConnLifetime := 5 * time.Minute
+	if cfg.MaxConnLifetime > 0 {
+		maxConnLifetime = cfg.MaxConnLifetime
+	}
+	maxConnLifetimeJitter := 30 * time.Second
+	if cfg.MaxConnLifetimeJitter > 0 {
+		maxConnLifetimeJitter = cfg.MaxConnLifetimeJitter
+	}
+
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
 	if maxConnsPerPool == 0 {
 		maxConnsPerPool = cfg.MaxTotalConnections
 	}
 
-	var warmupConns [][]*pgxpool.Conn
 	for i := range urls {
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
-			connCfg, err := pgxpool.ParseConfig(urls[i])
+			poolCfg, err := pgxpool.ParseConfig(urls[i])
 			if err != nil {
 				return nil, err
 			}
-			// Disable the automatic prepared statement cache. We've seen a lot of
-			// churn in this cache since workloads create many of different queries.
-			connCfg.ConnConfig.BuildStatementCache = nil
-			connCfg.ConnConfig.LogLevel = pgx.LogLevelWarn
-			connCfg.ConnConfig.Logger = pgxLogger{}
-			connCfg.MaxConns = int32(numConns)
-			connCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+			poolCfg.MaxConnLifetime = maxConnLifetime
+			poolCfg.MaxConnLifetimeJitter = maxConnLifetimeJitter
+			poolCfg.MaxConns = int32(numConns)
+			poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
 				m.mu.RLock()
 				defer m.mu.RUnlock()
 				for name, sql := range m.mu.preparedStatements {
@@ -126,50 +156,28 @@ func NewMultiConnPool(
 				}
 				return true
 			}
-			p, err := pgxpool.ConnectConfig(ctx, connCfg)
+
+			// Disable the automatic prepared statement cache. We've seen a lot of
+			// churn in this cache since workloads create many of different queries.
+			connCfg := poolCfg.ConnConfig
+			connCfg.DefaultQueryExecMode = pgx.QueryExecModeDescribeExec
+			connCfg.StatementCacheCapacity = 0
+			connCfg.DescriptionCacheCapacity = 0
+			connCfg.Tracer = &tracelog.TraceLog{
+				Logger:   &pgxLogger{},
+				LogLevel: logLevel,
+			}
+			p, err := pgxpool.NewWithConfig(ctx, poolCfg)
 			if err != nil {
 				return nil, err
 			}
 
-			warmupConns = append(warmupConns, make([]*pgxpool.Conn, numConns))
 			m.Pools = append(m.Pools, p)
 		}
 	}
 
-	// "Warm up" the pools so we don't have to establish connections later (which
-	// would affect the observed latencies of the first requests, especially when
-	// prepared statements are used). We do this by
-	// acquiring connections (in parallel), then releasing them back to the
-	// pool.
-	var g errgroup.Group
-	// Limit concurrent connection establishment. Allowing this to run
-	// at maximum parallelism would trigger syn flood protection on the
-	// host, which combined with any packet loss could cause Acquire to
-	// return an error and fail the whole function. The value 100 is
-	// chosen because it is less than the default value for SOMAXCONN
-	// (128).
-	sem := make(chan struct{}, 100)
-	for i, p := range m.Pools {
-		p := p
-		conns := warmupConns[i]
-		for j := range conns {
-			j := j
-			sem <- struct{}{}
-			g.Go(func() error {
-				var err error
-				conns[j], err = p.Acquire(ctx)
-				<-sem
-				return err
-			})
-		}
-	}
-	if err := g.Wait(); err != nil {
+	if err := m.WarmupConns(ctx, cfg.WarmupConns); err != nil {
 		return nil, err
-	}
-	for i := range m.Pools {
-		for _, c := range warmupConns[i] {
-			c.Release()
-		}
 	}
 
 	return m, nil
@@ -198,6 +206,75 @@ func (m *MultiConnPool) Close() {
 	for _, p := range m.Pools {
 		p.Close()
 	}
+}
+
+// WarmupConns warms up numConns connections across all pools contained within
+// MultiConnPool.  The max number of connections are warmed up if numConns is
+// set to 0.
+func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
+	if numConns < 0 {
+		return nil
+	}
+
+	// "Warm up" the pools so we don't have to establish connections later (which
+	// would affect the observed latencies of the first requests, especially when
+	// prepared statements are used). We do this by
+	// acquiring connections (in parallel), then releasing them back to the
+	// pool.
+	var g errgroup.Group
+	// Limit concurrent connection establishment. Allowing this to run
+	// at maximum parallelism would trigger syn flood protection on the
+	// host, which combined with any packet loss could cause Acquire to
+	// return an error and fail the whole function. The value 100 is
+	// chosen because it is less than the default value for SOMAXCONN
+	// (128).
+	sem := semaphore.New(100)
+
+	warmupCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var numWarmupConns int
+	if numConns <= 0 {
+		for _, p := range m.Pools {
+			numWarmupConns += int(p.Config().MaxConns)
+		}
+	} else {
+		numWarmupConns = numConns
+	}
+
+	warmupConns := make(chan struct{}, numWarmupConns)
+
+	for _, p := range m.Pools {
+		p := p
+		for j := 0; j < int(p.Config().MaxConns); j++ {
+			g.Go(func() error {
+				if err := sem.Acquire(warmupCtx, 1); err != nil {
+					warmupConns <- struct{}{}
+					return err
+				}
+				conn, err := p.Acquire(warmupCtx)
+				if err != nil {
+					sem.Release(1)
+					warmupConns <- struct{}{}
+					return err
+				}
+				sem.Release(1)
+				warmupConns <- struct{}{}
+				<-warmupCtx.Done()
+				conn.Release()
+				return err
+			})
+		}
+	}
+	for i := 0; i < numWarmupConns; i++ {
+		<-warmupConns
+	}
+	cancel()
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // distribute returns a slice of <num> integers that add up to <total> and are
