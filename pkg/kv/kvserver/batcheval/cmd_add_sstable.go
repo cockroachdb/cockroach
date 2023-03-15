@@ -77,8 +77,7 @@ var AddSSTableRewriteConcurrency = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.sst_rewrite_concurrency.per_call",
 	"concurrency to use when rewriting sstable timestamps by block, or 0 to use a loop",
-	// TODO(radu): temporarily disabled because of #97076.
-	0, // int64(util.ConstantWithMetamorphicTestRange("addsst-rewrite-concurrency", 4, 0, 16)),
+	int64(util.ConstantWithMetamorphicTestRange("addsst-rewrite-concurrency", 4, 0, 16)),
 	settings.NonNegativeInt,
 )
 

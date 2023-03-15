@@ -75,6 +75,17 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	return opts
 }
 
+// makeSSTRewriteOptions should be used instead of MakeIngestionWriterOptions
+// when we are going to rewrite ssts. It additionally returns the minimum
+// table format that we accept, since sst rewriting will often preserve the
+// input table format.
+func makeSSTRewriteOptions(
+	ctx context.Context, cs *cluster.Settings,
+) (opts sstable.WriterOptions, minTableFormat sstable.TableFormat) {
+	// v22.2 clusters use sstable.TableFormatPebblev2.
+	return MakeIngestionWriterOptions(ctx, cs), sstable.TableFormatPebblev2
+}
+
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
 // are typically only ever iterated in their entirety.
 func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
