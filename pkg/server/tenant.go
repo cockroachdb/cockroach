@@ -617,8 +617,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// If there's a higher-level recorder, we link our metrics registry to it.
 	if s.sqlCfg.NodeMetricsRecorder != nil {
 		s.sqlCfg.NodeMetricsRecorder.AddTenantRegistry(s.sqlCfg.TenantID, s.registry)
-		// TODO(aadityasondhi): Unlink the tenant registry if the tenant is stopped.
-		// See #97889.
+		s.stopper.AddCloser(stop.CloserFn(func() {
+			s.sqlCfg.NodeMetricsRecorder.RemoveTenantRegistry(s.sqlCfg.TenantID)
+		}))
 	} else {
 		// Export statistics to graphite, if enabled by configuration. We only do
 		// this if there isn't a higher-level recorder; if there is, that one takes

@@ -147,7 +147,7 @@ func (n *Notifier) run(_ context.Context) {
 	systemConfigUpdateCh, _ := n.provider.RegisterSystemConfigChannel()
 	var haveNotified syncutil.AtomicBool
 	versionSettingChanged := make(chan struct{}, 1)
-	versionBeingWaited := clusterversion.ByKey(clusterversion.TODODelete_V22_2UseDelRangeInGCJob)
+	versionBeingWaited := clusterversion.ByKey(clusterversion.V23_1_UseDelRangeInGCJob)
 	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
 		if !haveNotified.Get() &&
 			versionBeingWaited.LessEq(newVersion.Version) &&
