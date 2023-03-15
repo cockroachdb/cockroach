@@ -173,17 +173,16 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-database_role_settings
-ev̅entlog
-namespace
-prote"cted_ts"_records
-replication_critical_localitieS
-se
-ttings
+comments.
+databa&se_role_settings
+pr"otected__ts_records
+protected_ts%v_meta
+rangelog
+replication_sTats
+scheduled_jobs
+settings
 sql_instances
-statement_statist😍ics
-ui
-zon es
+tena'nts
 
 # Again, the column names are randomized.
 query TTT
@@ -192,26 +191,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-database_role_settings      database_id       oid
-database_role_settings      "role\\u6CFA_id"  oid
-database_role_settings      "role_nam*e"      text
-database_role_settings      rowid             bigint
-database_role_settings      "settings"       ARRAY
-ev̅entlog                   """uniqueID"      bytea
-ev̅entlog                   "eventType"       text
-ev̅entlog                   info              text
-ev̅entlog                   "reporti%55ngID"  bigint
-ev̅entlog                   rowid             bigint
-ev̅entlog                   "targetID"        bigint
-ev̅entlog                   "timestamp"       timestamp without time zone
-namespace                   "name "           text
-namespace                   "parent%42ID"     bigint
-namespace                   "parentSchemaID"  bigint
-namespace                   rowid             bigint
-namespace                   😁id               bigint
-"prote""cted_ts""_records"  "Id"              uuid
-"prote""cted_ts""_records"  meta              bytea
-"prote""cted_ts""_records"  meta_type         text
+"comments."                comment         text
+"comments."                object_id       bigint
+"comments."                rowid           bigint
+"comments."                sub_id          bigint
+"comments."                type            bigint
+"databa&se_role_settings"  datab̹ase_id    oid
+"databa&se_role_settings"  "role_name"    text
+"databa&se_role_settings"  role_id         oid
+"databa&se_role_settings"  rowid           bigint
+"databa&se_role_settings"  "se ttings"     ARRAY
+"pr""otected__ts_records"  "Id\f"          uuid
+"pr""otected__ts_records"  "me\rta"        bytea
+"pr""otected__ts_records"  "meta_t""ype"   text
+"pr""otected__ts_records"  num_spans       bigint
+"pr""otected__ts_records"  rowid           bigint
+"pr""otected__ts_records"  "ta.rget"       bytea
+"pr""otected__ts_records"  "ts&"           numeric
+"pr""otected__ts_records"  "veri%7dfi͟ed"  boolean
+"pr""otected__ts_records"  😲spans          bytea
+"protected_ts%v_meta"      " num_span/s"   bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -229,15 +228,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  jobs
-"d%qbt1"  public  join_tokens
-"d%qbt1"  public  "te naNt_settings"
-"d%qbt2"  public  "join_t\\uC6F5okens"
-"d%qbt2"  public  "privIleges"
-"d%qbt2"  public  tenants
-dbt3      public  na😔mespace
-dbt3      public  "rEports_meta"
-dbt3      public  role_members
+"d%qbt1"  public  "sc%phe                      duled\n_jobs"
+"d%qbt1"  public  table_statistics
+"d%qbt1"  public  web_sessions
+"d%qbt2"  public  lease
+"d%qbt2"  public  "r*o)le_i d_seq"
+"d%qbt2"  public  "statement_bund le_chunks"
+dbt3      public  "joi-n_tokens %q"
+dbt3      public  "r%qepor\\U0008E540ts_meTa"
+dbt3      public  "span_stats_unique_keys  "
 
 
 statement ok

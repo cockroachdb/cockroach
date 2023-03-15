@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-109 keys:
+113 keys:
  /System/"desc-idgen"
  /Table/3/1/1/2/1
  /Table/3/1/3/2/1
@@ -49,6 +49,8 @@ initial-keys tenant=system
  /Table/3/1/55/2/1
  /Table/3/1/56/2/1
  /Table/3/1/57/2/1
+ /Table/3/1/58/2/1
+ /Table/3/1/59/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/16/2/1
@@ -101,7 +103,9 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"statement_diagnostics_requests"/4/1
  /NamespaceTable/30/1/1/29/"statement_statistics"/4/1
  /NamespaceTable/30/1/1/29/"table_statistics"/4/1
+ /NamespaceTable/30/1/1/29/"task_payloads"/4/1
  /NamespaceTable/30/1/1/29/"tenant_settings"/4/1
+ /NamespaceTable/30/1/1/29/"tenant_tasks"/4/1
  /NamespaceTable/30/1/1/29/"tenant_usage"/4/1
  /NamespaceTable/30/1/1/29/"tenants"/4/1
  /NamespaceTable/30/1/1/29/"transaction_statistics"/4/1
@@ -110,7 +114,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
  /Table/48/1/0/0
-52 splits:
+54 splits:
  /Table/3
  /Table/4
  /Table/5
@@ -163,6 +167,8 @@ initial-keys tenant=system
  /Table/55
  /Table/56
  /Table/57
+ /Table/58
+ /Table/59
 
 initial-keys tenant=5
 ----
