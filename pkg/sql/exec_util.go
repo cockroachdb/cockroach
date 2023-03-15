@@ -583,7 +583,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	settings.TenantWritable,
 	VectorizeClusterSettingName,
 	"default vectorize mode",
-	"on",
+	"off",
 	map[int64]string{
 		int64(sessiondatapb.VectorizeUnset):              "on",
 		int64(sessiondatapb.VectorizeOn):                 "on",
