@@ -236,7 +236,7 @@ type TestClusterInterface interface {
 	// tenant capabilities for the specified tenant ID.
 	// Only boolean capabilities are currently supported as we wait for the
 	// specified capabilities to have a "true" value.
-	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, ...tenantcapabilities.CapabilityID)
+	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, map[tenantcapabilities.CapabilityID]string)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.

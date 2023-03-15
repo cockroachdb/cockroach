@@ -1,0 +1,79 @@
+query-sql-system
+SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_id = 'can_admin_scatter'
+----
+10 tenant-10 ready none can_admin_scatter true
+
+exec-sql-tenant
+CREATE TABLE t(a INT)
+----
+ok
+
+exec-sql-tenant
+CREATE INDEX idx on t(a)
+----
+ok
+
+# By default, we should be able to scatter.
+exec-privileged-op-tenant
+ALTER TABLE t SCATTER
+----
+ok
+
+# ditto for the index.
+exec-privileged-op-tenant
+ALTER INDEX t@idx SCATTER
+----
+ok
+
+
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_admin_scatter=false
+----
+ok
+
+exec-privileged-op-tenant
+ALTER TABLE t SCATTER
+----
+pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+# Check the index as well.
+exec-privileged-op-tenant
+ALTER INDEX t@idx SCATTER
+----
+pq: ba: AdminScatter [/Tenant/10/Table/104/2,/Tenant/10/Table/104/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+# Grant the capability without providing an explicit value.
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_admin_scatter
+----
+ok
+
+# Scatters should work now.
+exec-privileged-op-tenant
+ALTER TABLE t SCATTER
+----
+ok
+
+# Revoke the capability using REVOKE syntax.
+update-capabilities
+ALTER TENANT [10] REVOKE CAPABILITY can_admin_scatter
+----
+ok
+
+# Scatters should no longer work.
+exec-privileged-op-tenant
+ALTER TABLE t SCATTER
+----
+pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+# Lastly, use the explicitly set to true syntax.
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_admin_scatter=true
+----
+ok
+
+# Scatters should now work.
+exec-privileged-op-tenant
+ALTER TABLE t SCATTER
+----
+ok

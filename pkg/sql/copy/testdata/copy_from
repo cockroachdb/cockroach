@@ -146,6 +146,11 @@ COPY t3 FROM STDIN
 ----
 ERROR: failed to satisfy CHECK constraint (i > 0:::INT8) (SQLSTATE 23514)
 
+copy-from
+COPY t3 FROM STDIN
+1
+----
+1
 
 # Foreign key checks happen
 exec-ddl
@@ -510,3 +515,148 @@ COPY tab_child FROM STDIN
 'tower'	'former'	'mainly'	'point'	'class'	'idea'
 ----
 ERROR: insert on table "tab_child" violates foreign key constraint "tab_child_col5_col6_fkey" (SQLSTATE 23503)
+
+exec-ddl
+CREATE TABLE tabnn (i INT NOT NULL)
+----
+
+copy-from-error
+COPY tabnn FROM STDIN
+\N
+----
+ERROR: null value in column "i" violates not-null constraint (SQLSTATE 23502)
+
+exec-ddl
+CREATE TABLE tinet (i INET CHECK (i < b), b INET)
+----
+
+# Put to rest concerns about Datum types on both sides of check constraint expr.
+copy-from-error
+COPY tinet FROM STDIN
+192.168.100.128/25	0.0.0.0/0
+----
+ERROR: failed to satisfy CHECK constraint (i < b) (SQLSTATE 23514)
+
+# Put to rest concerns about Datum types on both sides of check constraint expr.
+copy-from
+COPY tinet FROM STDIN
+0.0.0.0/0	192.168.100.128/25
+----
+1
+
+exec-ddl
+CREATE TABLE tpartial (i INT PRIMARY KEY, index(i) WHERE i > 0)
+----
+
+copy-from-kvtrace
+COPY tpartial FROM STDIN
+-1
+0
+1
+----
+CPut /Table/<>/1/-1/0 -> /TUPLE/
+CPut /Table/<>/1/0/0 -> /TUPLE/
+CPut /Table/<>/1/1/0 -> /TUPLE/
+InitPut /Table/<>/2/1/0 -> /BYTES/
+
+exec-ddl
+CREATE TABLE tpartial2 (i INT PRIMARY KEY, b INT, index(b) WHERE i > 0, FAMILY (i), FAMILY (b))
+----
+
+# Unfortunately we have to do the inserts 1 row at a time because the row inserter does it
+# that way and the vector inserter  doesn't.
+copy-from-kvtrace
+COPY tpartial2 FROM STDIN
+-1	-2
+----
+CPut /Table/<>/1/-1/0 -> /TUPLE/
+CPut /Table/<>/1/-1/1/1 -> /INT/-2
+
+copy-from-kvtrace
+COPY tpartial2 FROM STDIN
+0	0
+----
+CPut /Table/<>/1/0/0 -> /TUPLE/
+CPut /Table/<>/1/0/1/1 -> /INT/0
+
+copy-from-kvtrace
+COPY tpartial2 FROM STDIN
+1	2
+----
+CPut /Table/<>/1/1/0 -> /TUPLE/
+CPut /Table/<>/1/1/1/1 -> /INT/2
+InitPut /Table/<>/2/2/1/0 -> /BYTES/
+
+exec-ddl
+CREATE TYPE testenum AS ENUM('cat','dog','bear');
+CREATE TABLE tenum (i INT PRIMARY KEY,c1 testenum)
+----
+
+copy-from
+COPY tenum FROM STDIN
+0	cat
+1	dog
+2	bear
+----
+3
+
+copy-from-kvtrace
+COPY tenum FROM STDIN
+0	cat
+1	dog
+2	bear
+----
+CPut /Table/<>/1/0/0 -> /TUPLE/2:2:Bytes/@
+CPut /Table/<>/1/1/0 -> /TUPLE/2:2:Bytes/0x80
+CPut /Table/<>/1/2/0 -> /TUPLE/2:2:Bytes/0xc0
+
+exec-ddl
+CREATE TABLE tenum2 (i INT PRIMARY KEY, c1 testenum, INDEX(c1))
+----
+
+copy-from
+COPY tenum2 FROM STDIN
+0	cat
+----
+1
+
+copy-from-kvtrace
+COPY tenum2 FROM STDIN
+0	cat
+----
+CPut /Table/<>/1/0/0 -> /TUPLE/2:2:Bytes/@
+InitPut /Table/<>/2/"@"/0/0 -> /BYTES/
+
+exec-ddl
+CREATE TABLE tenum3 (i INT PRIMARY KEY, c1 testenum, UNIQUE INDEX(c1))
+----
+
+copy-from
+COPY tenum3 FROM STDIN
+0	cat
+----
+1
+
+copy-from-kvtrace
+COPY tenum3 FROM STDIN
+0	cat
+----
+CPut /Table/<>/1/0/0 -> /TUPLE/2:2:Bytes/@
+InitPut /Table/<>/2/"@"/0 -> /BYTES/0x88
+
+exec-ddl
+CREATE TYPE comp AS (a INT, b INT);
+CREATE TABLE tcomp (i INT PRIMARY KEY, c comp)
+----
+
+copy-from
+COPY tcomp FROM STDIN
+0	(1, 2)
+----
+1
+
+copy-from-kvtrace
+COPY tcomp FROM STDIN
+0	(1, 2)
+----
+CPut /Table/<>/1/0/0 -> /TUPLE/

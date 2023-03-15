@@ -162,16 +162,14 @@ type TenantCapabilities interface {
 const (
 	_ CapabilityID = iota
 
-	// CanAdminScatter describes the ability of a tenant to perform manual
-	// KV scatter requests. These operations need a capability
-	// because excessive KV range scatter can overwhelm the storage
-	// cluster.
+	// CanAdminScatter describes the ability of a tenant to scatter ranges using
+	// an AdminScatter request. By default, secondary tenants are allowed to
+	// scatter as doing so is integral to the performance of IMPORT/RESTORE.
 	CanAdminScatter // can_admin_scatter
 
-	// CanAdminSplit describes the ability of a tenant to perform manual
-	// KV range split requests. These operations need a capability
-	// because excessive KV range splits can overwhelm the storage
-	// cluster.
+	// CanAdminSplit describes the ability of a tenant to perform KV requests to
+	// split ranges. By default, secondary tenants are allowed to perform splits
+	// as doing so is integral to performance of IMPORT/RESTORE.
 	CanAdminSplit // can_admin_split
 
 	// CanAdminUnsplit describes the ability of a tenant to perform manual

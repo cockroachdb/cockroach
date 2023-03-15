@@ -47,15 +47,37 @@ func (b boolCap) Set(val interface{}) {
 	*b.cap = bval
 }
 
-// For implements the tenantcapabilities.TenantCapabilities interface.
+// invertedBoolCap is an accessor struct for boolean capabilities that are
+// stored as "disabled" in the underlying proto. Layers above this package
+// interact are oblivious to this detail.
+type invertedBoolCap struct {
+	cap *bool
+}
+
+// Get implements the tenantcapabilities.Capability interface.
+func (i invertedBoolCap) Get() tenantcapabilities.Value {
+	val := *i.cap
+	return boolCapValue(!val) // inverted
+}
+
+// Set implements the tenantcapabilities.Capability interface.
+func (i invertedBoolCap) Set(val interface{}) {
+	bval, ok := val.(bool)
+	if !ok {
+		panic(errors.AssertionFailedf("invalid value type: %T", val))
+	}
+	*i.cap = !bval
+}
+
+// Cap implements the tenantcapabilities.TenantCapabilities interface.
 func (t *TenantCapabilities) Cap(
 	capabilityID tenantcapabilities.CapabilityID,
 ) tenantcapabilities.Capability {
 	switch capabilityID {
 	case tenantcapabilities.CanAdminScatter:
-		return boolCap{&t.CanAdminScatter}
+		return invertedBoolCap{&t.DisableAdminScatter}
 	case tenantcapabilities.CanAdminSplit:
-		return boolCap{&t.CanAdminSplit}
+		return invertedBoolCap{&t.DisableAdminSplit}
 	case tenantcapabilities.CanAdminUnsplit:
 		return boolCap{&t.CanAdminUnsplit}
 	case tenantcapabilities.CanViewNodeInfo:
@@ -68,13 +90,14 @@ func (t *TenantCapabilities) Cap(
 	}
 }
 
-// GetBool implements the tenantcapabilities.TenantCapabilities interface. It is an optimization.
+// GetBool implements the tenantcapabilities.TenantCapabilities interface.
+// It is an optimization.
 func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityID) bool {
 	switch capabilityID {
 	case tenantcapabilities.CanAdminScatter:
-		return t.CanAdminScatter
+		return !t.DisableAdminScatter
 	case tenantcapabilities.CanAdminSplit:
-		return t.CanAdminSplit
+		return !t.DisableAdminSplit
 	case tenantcapabilities.CanAdminUnsplit:
 		return t.CanAdminUnsplit
 	case tenantcapabilities.CanViewNodeInfo:

@@ -17,7 +17,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -247,8 +246,7 @@ type cFetcher struct {
 	bytesRead           int64
 	batchRequestsIssued int64
 	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
-	// requests *in the current goroutine*. It should only be accessed through
-	// getKVCPUTime().
+	// requests *in the current goroutine*.
 	cpuStopWatch *timeutil.CPUStopWatch
 
 	// machine contains fields that get updated during the run of the fetcher.
@@ -1359,12 +1357,6 @@ func (cf *cFetcher) getBytesRead() int64 {
 		return cf.fetcher.GetBytesRead()
 	}
 	return cf.bytesRead
-}
-
-// getKVCPUTime returns the amount of CPU time spent in the current goroutine
-// while fulfilling KV requests.
-func (cf *cFetcher) getKVCPUTime() time.Duration {
-	return cf.cpuStopWatch.Elapsed()
 }
 
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
