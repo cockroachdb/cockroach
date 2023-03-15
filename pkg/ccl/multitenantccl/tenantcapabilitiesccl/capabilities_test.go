@@ -13,18 +13,20 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -48,16 +50,18 @@ import (
 //
 // The syntax is as follows:
 //
-// query-sql-system: runs a query against the system tenant.
+// create-tenant name=<name>: create a tenant with the specified name
 //
-// exec-sql-tenant: executes a query against a secondary tenant (with ID 10).
-//
-// exec-privileged-op-tenant: executes a privileged operation (one that requires
-// capabilities) as a secondary tenant.
-//
-// update-capabilities: expects a SQL statement that updates capabilities for a
-// tenant. Following statements are guaranteed to see the effects of the
+// update-capabilities: expects a SQL statement that updates capabilities.
+// Following statements are guaranteed to see the effects of the
 // update.
+//
+// sql [ statement | cols=(selection...) ] [ only=<tenantname> ]:
+// Execute a SQL query across all tenants defined so far, or, if 'only'
+// is specified, on the tenant specified by 'only'.
+// If 'statement' is specified, only the status (ok/ERROR) is displayed.
+// Otherwise, the query results are displayed, optionally filtered down
+// to the list of columns specified in 'cols'.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
@@ -88,7 +92,8 @@ func TestDataDriven(t *testing.T) {
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
-		systemSQLDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		systemDB := tc.ServerConn(0)
+		systemSQLDB := sqlutils.MakeSQLRunner(systemDB)
 
 		// Create a tenant; we also want to allow test writers to issue
 		// ALTER TABLE ... SPLIT statements, so configure the settings as such.
@@ -101,30 +106,61 @@ func TestDataDriven(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
 		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &settings.SV, true)
 		sql.SecondaryTenantScatterEnabled.Override(ctx, &settings.SV, true)
-		tenantArgs := base.TestTenantArgs{
-			TenantID: serverutils.TestTenantID(),
-			Settings: settings,
-		}
-		testTenantInterface, err := tc.Server(0).StartTenant(ctx, tenantArgs)
-		require.NoError(t, err)
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, testTenantInterface.SQLAddr(), "Tenant", url.User(username.RootUser))
-		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
+		availableSecondaryTenantIDs := security.EmbeddedTenantIDs()
+		numSecondaryTenantsDefined := 0
+		tenantDBs := map[string]*gosql.DB{
+			"system": systemDB,
+		}
+		tenantNames := []string{"system"}
+
+		var closers []func()
 		defer func() {
-			require.NoError(t, tenantSQLDB.Close())
-			defer cleanupPGUrl()
+			for _, fn := range closers {
+				fn()
+			}
 		}()
-		require.NoError(t, err)
+		createTenant := func(tenantName string) {
+			if numSecondaryTenantsDefined > len(availableSecondaryTenantIDs) {
+				t.Fatalf("not enough predefined test tenant IDs")
+			}
+			tenantID := availableSecondaryTenantIDs[numSecondaryTenantsDefined]
+			numSecondaryTenantsDefined++
+			tenantNames = append(tenantNames, tenantName)
+			tenantArgs := base.TestTenantArgs{
+				TenantID:   roachpb.MustMakeTenantID(tenantID),
+				TenantName: roachpb.TenantName(tenantName),
+				Settings:   settings,
+			}
+			testTenantInterface, err := tc.Server(0).StartTenant(ctx, tenantArgs)
+			require.NoError(t, err)
+
+			pgURL, cleanupPGUrl := sqlutils.PGUrl(t, testTenantInterface.SQLAddr(), "Tenant"+tenantName, url.User(username.RootUser))
+			tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
+			closers = append(closers, func() {
+				require.NoError(t, tenantSQLDB.Close())
+				defer cleanupPGUrl()
+			})
+			require.NoError(t, err)
+			tenantDBs[tenantName] = tenantSQLDB
+		}
 
 		lastUpdateTS := tc.Server(0).Clock().Now() // ensure watcher isn't starting out empty
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-
 			switch d.Cmd {
+			case "create-tenant":
+				if !d.HasArg("name") {
+					t.Fatalf("%s: missing name argument", d.Pos)
+				}
+				var name string
+				d.ScanArgs(t, "name", &name)
+				createTenant(name)
+
 			case "update-capabilities":
 				systemSQLDB.Exec(t, d.Input)
 				lastUpdateTS = tc.Server(0).Clock().Now()
 
-			case "exec-privileged-op-tenant":
+			case "sql":
 				testutils.SucceedsSoon(t, func() error {
 					mu.Lock()
 					defer mu.Unlock()
@@ -136,22 +172,47 @@ func TestDataDriven(t *testing.T) {
 					return errors.Newf("frontier timestamp (%s) lagging last update (%s)",
 						mu.lastFrontierTS.String(), lastUpdateTS.String())
 				})
-				_, err := tenantSQLDB.Exec(d.Input)
-				if err != nil {
-					return err.Error()
+
+				targetNames := tenantNames
+				if d.HasArg("only") {
+					var name string
+					d.ScanArgs(t, "only", &name)
+					targetNames = []string{name}
+				}
+				var colSelection []string
+				for _, arg := range d.CmdArgs {
+					if arg.Key == "cols" {
+						colSelection = arg.Vals
+					}
+				}
+				justStatementStatus := d.HasArg("statement")
+				if justStatementStatus && len(colSelection) > 0 {
+					t.Fatalf("%s: cannot specify both cols and statement", d.Pos)
 				}
 
-			case "exec-sql-tenant":
-				_, err := tenantSQLDB.Exec(d.Input)
-				if err != nil {
-					return err.Error()
+				var buf strings.Builder
+				for _, tenantName := range targetNames {
+					db := tenantDBs[tenantName]
+					if len(targetNames) > 0 {
+						fmt.Fprintln(&buf, "--", tenantName)
+					}
+					r, err := db.QueryContext(context.Background(), d.Input)
+					if err != nil {
+						fmt.Fprintf(&buf, "ERROR: %v\n", err)
+					} else {
+						output, err := sqlutils.RowsToDataDrivenOutputWithColumns(r, colSelection...)
+						if err != nil {
+							fmt.Fprintf(&buf, "ROWS ERROR: %v\n", err)
+						} else {
+							if justStatementStatus {
+								fmt.Fprintln(&buf, "ok")
+							} else {
+								buf.WriteString(output)
+							}
+						}
+					}
 				}
-
-			case "query-sql-system":
-				rows := systemSQLDB.Query(t, d.Input)
-				output, err := sqlutils.RowsToDataDrivenOutput(rows)
-				require.NoError(t, err)
-				return output
+				return buf.String()
 
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)

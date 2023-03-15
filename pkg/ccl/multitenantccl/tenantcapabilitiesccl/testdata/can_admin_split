@@ -1,79 +1,131 @@
-query-sql-system
-SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_id = 'can_admin_split'
+create-tenant name=with-cap
 ----
-10 tenant-10 ready none can_admin_split true
+ok
 
-exec-sql-tenant
+create-tenant name=without-cap
+----
+ok
+
+# List default value of capability.
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_split'
+----
+-- system
+1 system ready shared can_admin_split true
+10 with-cap ready none can_admin_split true
+11 without-cap ready none can_admin_split true
+
+update-capabilities
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_split;
+ALTER TENANT 'without-cap' REVOKE CAPABILITY can_admin_split;
+----
+ok
+
+sql only=system
+SELECT * FROM [SHOW TENANTS WITH CAPABILITIES] WHERE capability_id = 'can_admin_split'
+----
+-- system
+1 system ready shared can_admin_split true
+10 with-cap ready none can_admin_split true
+11 without-cap ready none can_admin_split false
+
+
+sql statement
 CREATE TABLE t(a INT)
 ----
+-- system
+ok
+-- with-cap
+ok
+-- without-cap
 ok
 
-exec-sql-tenant
+sql statement
 CREATE INDEX idx on t(a)
 ----
+-- system
+ok
+-- with-cap
+ok
+-- without-cap
 ok
 
-# By default, we should be able to split.
-exec-privileged-op-tenant
+sql
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
-ok
+-- system
+ /0 2262-04-11 23:47:16.854776 +0000 +0000
+-- with-cap
+ /104/1/0 2262-04-11 23:47:16.854776 +0000 +0000
+-- without-cap
+ERROR: pq: ba: AdminSplit [/Tenant/11/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
-# ditto for the index.
-exec-privileged-op-tenant
+sql
 ALTER INDEX t@idx SPLIT AT VALUES (1)
 ----
-ok
+-- system
+ /1 2262-04-11 23:47:16.854776 +0000 +0000
+-- with-cap
+ /104/2/1 2262-04-11 23:47:16.854776 +0000 +0000
+-- without-cap
+ERROR: pq: ba: AdminSplit [/Tenant/11/Table/104/2/1,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
-
+# Revoke the capability using explicit syntax
 update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_split=false
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_split=false
 ----
 ok
 
-exec-privileged-op-tenant
+# Splits should no longer work on neither secondary tenant.
+sql
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
-pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
-
-# Check the index as well.
-exec-privileged-op-tenant
-ALTER INDEX t@idx SPLIT AT VALUES (1)
-----
-pq: ba: AdminSplit [/Tenant/10/Table/104/2/1,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
-
-# Grant the capability without providing an explicit value.
-update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_split
-----
-ok
-
-# Splits should work now.
-exec-privileged-op-tenant
-ALTER TABLE t SPLIT AT VALUES (0)
-----
-ok
-
-# Revoke the capability using REVOKE syntax.
-update-capabilities
-ALTER TENANT [10] REVOKE CAPABILITY can_admin_split
-----
-ok
-
-# Splits should no longer work.
-exec-privileged-op-tenant
-ALTER TABLE t SPLIT AT VALUES (0)
-----
-pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+-- system
+ /0 2262-04-11 23:47:16.854776 +0000 +0000
+-- with-cap
+ERROR: pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+-- without-cap
+ERROR: pq: ba: AdminSplit [/Tenant/11/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
 # Lastly, use the explicitly set to true syntax.
 update-capabilities
-ALTER TENANT [10] GRANT CAPABILITY can_admin_split=true
+ALTER TENANT 'with-cap' GRANT CAPABILITY can_admin_split=true
 ----
 ok
 
-# Splits should now work.
-exec-privileged-op-tenant
+# Splits should now work on the privileged tenant.
+sql
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
+-- system
+ /0 2262-04-11 23:47:16.854776 +0000 +0000
+-- with-cap
+ /104/1/0 2262-04-11 23:47:16.854776 +0000 +0000
+-- without-cap
+ERROR: pq: ba: AdminSplit [/Tenant/11/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+
+subtest truncate
+
+sql statement
+TRUNCATE TABLE t
+----
+-- system
 ok
+-- with-cap
+ok
+-- without-cap
+ok
+
+sql
+SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX t@primary]
+----
+-- system
+<before:/Table/104/2/1> …/0
+…/0 …/<IndexMax>
+-- with-cap
+<before:/Tenant/10/Table/104/2/1> …/104/4/0
+…/104/4/0 <after:/Tenant/10/Table/104/5/1>
+-- without-cap
+…/TableMin <after:/Tenant/12>
+
+subtest end
