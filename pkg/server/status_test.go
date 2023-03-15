@@ -1915,7 +1915,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
 
-	verifyStmts := func(path string, expectedStmts []string, t *testing.T) {
+	verifyStmts := func(path string, expectedStmts []string, hasTxns bool, t *testing.T) {
 		// Hit query endpoint.
 		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
 			t.Fatal(err)
@@ -1923,6 +1923,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 		// See if the statements returned are what we executed.
 		var statementsInResponse []string
+		expectedTxnFingerprints := map[roachpb.TransactionFingerprintID]struct{}{}
 		for _, respStatement := range resp.Statements {
 			if respStatement.Key.KeyData.Failed {
 				// We ignore failed statements here as the INSERT statement can fail and
@@ -1939,6 +1940,11 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 			}
 
 			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+			expectedTxnFingerprints[respStatement.Key.KeyData.TransactionFingerprintID] = struct{}{}
+		}
+
+		for _, respTxn := range resp.Transactions {
+			delete(expectedTxnFingerprints, respTxn.StatsData.TransactionFingerprintID)
 		}
 
 		sort.Strings(expectedStmts)
@@ -1947,6 +1953,11 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		if !reflect.DeepEqual(expectedStmts, statementsInResponse) {
 			t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s\n path: %s",
 				expectedStmts, statementsInResponse, pretty.Sprint(resp), path)
+		}
+		if hasTxns {
+			assert.Empty(t, expectedTxnFingerprints)
+		} else {
+			assert.Empty(t, resp.Transactions)
 		}
 	}
 
@@ -1966,14 +1977,14 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 		// Test with no query params.
-		verifyStmts("combinedstmts", expectedStatements, t)
+		verifyStmts("combinedstmts", expectedStatements, true, t)
 		// Test with end = 1 min after aggregatedTs; should give the same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, t)
+		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, true, t)
 		// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
 		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs),
-			expectedStatements, t)
+			expectedStatements, true, t)
 		// Test with start = 1 min after aggregatedTs; should give no results
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, t)
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, true, t)
 	})
 
 	t.Run("fetch_mode=combined, VIEWACTIVITYREDACTED", func(t *testing.T) {
@@ -1983,13 +1994,40 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
 
 		// Test with no query params.
-		verifyStmts("combinedstmts", expectedStatements, t)
+		verifyStmts("combinedstmts", expectedStatements, true, t)
 		// Test with end = 1 min after aggregatedTs; should give the same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, t)
+		verifyStmts(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements, true, t)
 		// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements, t)
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements, true, t)
 		// Test with start = 1 min after aggregatedTs; should give no results
-		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, t)
+		verifyStmts(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil, true, t)
+	})
+
+	t.Run("fetch_mode=StmtsOnly", func(t *testing.T) {
+		verifyStmts("combinedstmts?fetch_mode.stats_type=0", expectedStatements, false, t)
+	})
+
+	t.Run("fetch_mode=TxnsOnly with limit", func(t *testing.T) {
+		// Verify that we only return stmts for the txns in the response.
+		// We'll add a limit in a later commit to help verify this behaviour.
+		if err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts?fetch_mode.stats_type=1&limit=2",
+			&resp, false); err != nil {
+			t.Fatal(err)
+		}
+
+		assert.Equal(t, 2, len(resp.Transactions))
+		stmtFingerprintIDs := map[roachpb.StmtFingerprintID]struct{}{}
+		for _, txn := range resp.Transactions {
+			for _, stmtFingerprint := range txn.StatsData.StatementFingerprintIDs {
+				stmtFingerprintIDs[stmtFingerprint] = struct{}{}
+			}
+		}
+
+		for _, stmt := range resp.Statements {
+			if _, ok := stmtFingerprintIDs[stmt.ID]; !ok {
+				t.Fatalf("unexpected stmt; stmt unrelated to a txn int he response: %s", stmt.Key.KeyData.Query)
+			}
+		}
 	})
 }
 
@@ -2000,6 +2038,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	skip.UnderStressRace(t, "expensive tests")
 
 	ctx := context.Background()
+
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
