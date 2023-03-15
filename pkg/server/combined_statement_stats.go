@@ -267,7 +267,7 @@ SELECT
     max(aggregated_ts) as aggregated_ts,
     metadata,
     crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-FROM crdb_internal.statement_statistics %s
+FROM crdb_internal.statement_statistics_persisted %s
 GROUP BY
     fingerprint_id,
     transaction_fingerprint_id,
@@ -370,7 +370,7 @@ SELECT
     fingerprint_id,
     metadata,
     crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-FROM crdb_internal.transaction_statistics %s
+FROM crdb_internal.transaction_statistics_persisted %s
 GROUP BY
     app_name,
     fingerprint_id,
