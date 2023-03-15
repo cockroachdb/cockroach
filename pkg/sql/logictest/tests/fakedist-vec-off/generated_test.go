@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 5
+const configIdx = 4
 
 var logicTestDir string
 
@@ -399,6 +399,13 @@ func TestLogic_collatedstring_uniqueindex2(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_uniqueindex2")
+}
+
+func TestLogic_comment_on(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "comment_on")
 }
 
 func TestLogic_composite_types(

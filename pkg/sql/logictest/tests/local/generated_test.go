@@ -415,6 +415,13 @@ func TestLogic_column_families(
 	runLogicTest(t, "column_families")
 }
 
+func TestLogic_comment_on(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "comment_on")
+}
+
 func TestLogic_composite_types(
 	t *testing.T,
 ) {

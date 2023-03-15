@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 9
+const configIdx = 8
 
 var logicTestDir string
 var cclLogicTestDir string
@@ -435,6 +435,13 @@ func TestTenantLogic_column_families(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "column_families")
+}
+
+func TestTenantLogic_comment_on(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "comment_on")
 }
 
 func TestTenantLogic_composite_types(
