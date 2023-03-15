@@ -12,6 +12,7 @@ package spanstatsconsumer
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings"
@@ -73,17 +74,38 @@ func (s *SpanStatsConsumer) GetSamples(ctx context.Context) error {
 		return err
 	}
 
-	maxBuckets := keyvissettings.MaxBuckets.Get(&s.settings.SV)
-	for i, sample := range samplesRes.Samples {
-		samplesRes.Samples[i].SpanStats = downsample(sample.SpanStats, int(maxBuckets))
-	}
-
 	if err := keyvisstorage.WriteSamples(ctx, s.ie, samplesRes.Samples); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(
 			err, "write samples failed"))
 	}
 
 	return nil
+}
+
+// maybeAggregateBoundaries aggregates boundaries if len(boundaries) <= max.
+func maybeAggregateBoundaries(boundaries []roachpb.Span, max int) []roachpb.Span {
+	if len(boundaries) <= max {
+		return boundaries
+	}
+
+	// combineFactor is factor that boundaries length is reduced by. For example,
+	// if len(boundaries) == 1000, and max == 100, combineFactor == 10.
+	// if len(boundaries) == 1001, and max == 100, combineFactor == 11.
+	combineFactor := int(math.Ceil(float64(len(boundaries)) / float64(max)))
+	combinedLength := int(math.Ceil(float64(len(boundaries)) / float64(combineFactor)))
+	combined := make([]roachpb.Span, combinedLength)
+
+	// Iterate through boundaries, incrementing by combineFactor.
+	for i := 0; i < combinedLength; i++ {
+		startSpan := boundaries[i*combineFactor]
+		endIndex := i*combineFactor + combineFactor - 1
+		if endIndex >= len(boundaries) {
+			combined[i] = startSpan
+		} else {
+			combined[i] = startSpan.Combine(boundaries[endIndex])
+		}
+	}
+	return combined
 }
 
 // decideBoundaries decides the key spans that we want statistics
@@ -116,13 +138,14 @@ func (s *SpanStatsConsumer) decideBoundaries(ctx context.Context) ([]roachpb.Spa
 		s.ri.Next(ctx)
 	}
 
-	return boundaries, nil
+	maxBuckets := keyvissettings.MaxBuckets.Get(&s.settings.SV)
+	return maybeAggregateBoundaries(boundaries, int(maxBuckets)), nil
 }
 
 // DeleteExpiredSamples deletes historical samples older than 2 weeks.
 func (s *SpanStatsConsumer) DeleteExpiredSamples(ctx context.Context) error {
-	twoWeeksAgo := timeutil.Now().AddDate(0, 0, -14)
-	if err := keyvisstorage.DeleteSamplesBeforeTime(ctx, s.ie, twoWeeksAgo); err != nil {
+	oneWeekAgo := timeutil.Now().AddDate(0, 0, -7)
+	if err := keyvisstorage.DeleteSamplesBeforeTime(ctx, s.ie, oneWeekAgo); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(
 			err, "delete expired samples failed"))
 	}
