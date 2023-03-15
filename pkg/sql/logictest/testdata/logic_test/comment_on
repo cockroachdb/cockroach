@@ -1,0 +1,258 @@
+# LogicTest: default-configs local-mixed-22.2-23.1
+statement ok
+CREATE DATABASE db
+
+statement ok
+COMMENT ON DATABASE db IS 'A'
+
+query TTTTTTT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+db             root   NULL            NULL              {}       NULL           A
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
+
+statement ok
+COMMENT ON DATABASE db IS 'AAA'
+
+query TTTTTTT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+db             root   NULL            NULL              {}       NULL           AAA
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
+
+statement ok
+COMMENT ON DATABASE db IS NULL;
+
+query TTTTTTT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+db             root   NULL            NULL              {}       NULL           NULL
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
+
+statement ok
+CREATE SCHEMA sc
+
+statement ok
+COMMENT ON SCHEMA sc IS 'SC'
+
+query T
+SELECT COMMENT FROM system.comments WHERE type = 4;
+----
+SC
+
+statement ok
+COMMENT ON SCHEMA sc IS 'SC AGAIN'
+
+query T
+SELECT COMMENT FROM system.comments WHERE type = 4;
+----
+SC AGAIN
+
+statement ok
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  CONSTRAINT ckb CHECK (b > 1),
+  INDEX idxb (b),
+  FAMILY fam_0_b_a (a, b)
+);
+
+statement ok
+COMMENT ON TABLE t IS 'table t';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON TABLE public.t IS 'table t'
+
+statement ok
+COMMENT ON TABLE t IS 'table t AGAIN';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON TABLE public.t IS 'table t AGAIN'
+
+statement ok
+COMMENT ON TABLE t IS NULL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+)
+
+statement ok
+COMMENT ON COLUMN t.b IS 'column b';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON COLUMN public.t.b IS 'column b'
+
+statement ok
+COMMENT ON COLUMN t.b IS 'column b AGAIN';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON COLUMN public.t.b IS 'column b AGAIN'
+
+statement ok
+COMMENT ON COLUMN t.b IS NULL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+)
+
+statement ok
+COMMENT ON INDEX t@idxb IS 'index b';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON INDEX public.t@idxb IS 'index b'
+
+statement ok
+COMMENT ON INDEX t@idxb IS 'index b AGAIN';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON INDEX public.t@idxb IS 'index b AGAIN'
+
+statement ok
+COMMENT ON INDEX t@idxb IS NULL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+)
+
+statement ok
+COMMENT ON CONSTRAINT ckb ON t IS 'cst b';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b'
+
+statement ok
+COMMENT ON CONSTRAINT ckb ON t IS 'cst b AGAIN';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN'
+
+statement ok
+COMMENT ON CONSTRAINT ckb ON t IS NULL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+)
