@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -96,11 +95,6 @@ func backupRestoreTestSetupWithParams(
 		}
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
-	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
-		// TODO(arul): This can be removed once
-		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-		AuthorizerSkipAdminSplitCapabilityChecks: true,
-	}
 
 	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap:        true,
@@ -154,13 +148,6 @@ func backupRestoreTestSetup(
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DisableDefaultTestTenant: true,
-				Knobs: base.TestingKnobs{
-					TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
-						// TODO(arul): This can be removed once
-						// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-						AuthorizerSkipAdminSplitCapabilityChecks: true,
-					},
-				},
 			}})
 }
 
@@ -173,11 +160,6 @@ func backupRestoreTestSetupEmpty(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
 	// TODO (msbutler): this should be disabled by callers of this function
 	params.ServerArgs.DisableDefaultTestTenant = true
-	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
-		// TODO(arul): This can be removed once
-		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-		AuthorizerSkipAdminSplitCapabilityChecks: true,
-	}
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
@@ -205,11 +187,6 @@ func backupRestoreTestSetupEmptyWithParams(
 		}
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
-	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
-		// TODO(arul): This can be removed once
-		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-		AuthorizerSkipAdminSplitCapabilityChecks: true,
-	}
 
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
@@ -234,11 +211,6 @@ func createEmptyCluster(
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		SmallEngineBlocks: smallEngineBlocks,
-	}
-	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
-		// TODO(arul): This can be removed once
-		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
-		AuthorizerSkipAdminSplitCapabilityChecks: true,
 	}
 	tc := testcluster.StartTestCluster(t, clusterSize, params)
 

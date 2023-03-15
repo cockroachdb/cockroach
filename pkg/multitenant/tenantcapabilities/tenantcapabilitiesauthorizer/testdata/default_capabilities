@@ -1,0 +1,71 @@
+# Ensure if no capabilities have been set for the tenant, i.e the default
+# capabilities exist, requests issued correctly conform to default checks. This
+# entails allowing splits/scatters through but disallowing other requests.
+
+# Initialize an entry for this tenant with default values.
+upsert ten=10
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminSplit, Scan, ConditionalPut)
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
+----
+ok
+
+# However, Unsplit requests aren't allowed.
+has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
+----
+client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest)
+
+# However, if there was no unsplit in the batch, the batch should be allowed to
+# go through.
+has-capability-for-batch ten=10 cmds=(Scan, ConditionalPut)
+----
+ok
+
+# Querying tsdb metrics isn't allowed either.
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
+
+# and node status queries.
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+# Update the capability state to give tenant 10 the capability to run unsplits.
+upsert ten=10 can_admin_unsplit=true
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
+----
+ok
+
+# Remove the capability for the tenant entirely.
+delete ten=10
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
+----
+client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest)
+
+# Tenants are allowed to perform splits if no entry exists for them in the
+# Authorizer.
+has-capability-for-batch ten=10 cmds=(AdminSplit, Scan, ConditionalPut)
+----
+ok
+
+# ditto for scatters.
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
+----
+ok
+
+# However, a batch with both unsplit and split should return an appropriate error.
+has-capability-for-batch ten=10 cmds=(AdminSplit, AdminUnsplit, Scan, ConditionalPut)
+----
+client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest)
