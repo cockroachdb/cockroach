@@ -1156,8 +1156,9 @@ func mvccGetWithValueHeader(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	var results pebbleResults
-	mvccScanner.init(opts.Txn, opts.Uncertainty, &results)
+	results := &mvccScanner.alloc.pebbleResults
+	*results = pebbleResults{}
+	mvccScanner.init(opts.Txn, opts.Uncertainty, results)
 	mvccScanner.get(ctx)
 
 	// If we're tracking the ScanStats, include the stats from this Get.
@@ -3665,32 +3666,31 @@ func recordIteratorStats(iter MVCCIterator, scanStats *kvpb.ScanStats) {
 // If ok=false is returned, then the returned result and the error are the
 // result of the scan.
 func mvccScanInit(
+	mvccScanner *pebbleMVCCScanner,
 	iter MVCCIterator,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 	results results,
-) (ok bool, _ *pebbleMVCCScanner, _ MVCCScanResult, _ error) {
+) (ok bool, _ MVCCScanResult, _ error) {
 	if len(endKey) == 0 {
-		return false, nil, MVCCScanResult{}, emptyKeyError()
+		return false, MVCCScanResult{}, emptyKeyError()
 	}
 	if err := opts.validate(); err != nil {
-		return false, nil, MVCCScanResult{}, err
+		return false, MVCCScanResult{}, err
 	}
 	if opts.MaxKeys < 0 {
-		return false, nil, MVCCScanResult{
+		return false, MVCCScanResult{
 			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
 			ResumeReason: kvpb.RESUME_KEY_LIMIT,
 		}, nil
 	}
 	if opts.TargetBytes < 0 {
-		return false, nil, MVCCScanResult{
+		return false, MVCCScanResult{
 			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 		}, nil
 	}
-
-	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
@@ -3710,10 +3710,11 @@ func mvccScanInit(
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
 		keyBuf:           mvccScanner.keyBuf,
+		alloc:            mvccScanner.alloc,
 	}
 
 	mvccScanner.init(opts.Txn, opts.Uncertainty, results)
-	return true /* ok */, mvccScanner, MVCCScanResult{}, nil
+	return true /* ok */, MVCCScanResult{}, nil
 }
 
 func mvccScanToBytes(
@@ -3723,12 +3724,14 @@ func mvccScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	var results pebbleResults
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	results := &mvccScanner.alloc.pebbleResults
+	*results = pebbleResults{}
 	if opts.WholeRowsOfSize > 1 {
 		results.lastOffsetsEnabled = true
 		results.lastOffsets = make([]int, opts.WholeRowsOfSize)
 	}
-	ok, mvccScanner, res, err := mvccScanInit(iter, key, endKey, timestamp, opts, &results)
+	ok, res, err := mvccScanInit(mvccScanner, iter, key, endKey, timestamp, opts, results)
 	if !ok {
 		return res, err
 	}
