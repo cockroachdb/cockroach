@@ -71,6 +71,15 @@ func TestEncodeDecode(t *testing.T) {
 		genEncodingDirection(),
 	))
 
+	// Run the property on JSON values specifically.
+	properties.Property("roundtrip-json", prop.ForAll(
+		roundtripDatum,
+		genJSONType().
+			SuchThat(hasKeyEncoding).
+			FlatMap(genDatumWithType, reflect.TypeOf((*tree.Datum)(nil)).Elem()),
+		genEncodingDirection(),
+	))
+
 	generateAndCompareDatums := func(datums []tree.Datum, dir encoding.Direction) string {
 		d1 := datums[0]
 		d2 := datums[1]
@@ -149,6 +158,28 @@ func TestEncodeDecode(t *testing.T) {
 		genEncodingDirection(),
 	))
 
+	properties.Property("order-preserving-json", prop.ForAll(
+		generateAndCompareDatums,
+		// For each column type, generate two datums of that type.
+		genJSONType().
+			SuchThat(hasKeyEncoding).
+			FlatMap(
+				func(t interface{}) gopter.Gen {
+					colTyp := t.(*types.T)
+					return gopter.CombineGens(
+						genDatumWithType(colTyp),
+						genDatumWithType(colTyp))
+				}, reflect.TypeOf([]interface{}{})).
+			Map(func(datums []interface{}) []tree.Datum {
+				ret := make([]tree.Datum, len(datums))
+				for i, d := range datums {
+					ret[i] = d.(tree.Datum)
+				}
+				return ret
+			}),
+		genEncodingDirection(),
+	))
+
 	properties.TestingRun(t)
 }
 
@@ -202,6 +233,13 @@ func TestDecodeOutOfRangeTimestamp(t *testing.T) {
 func genColumnType() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
 		columnType := randgen.RandColumnType(genParams.Rng)
+		return gopter.NewGenResult(columnType, gopter.NoShrinker)
+	}
+}
+
+func genJSONType() gopter.Gen {
+	return func(genParams *gopter.GenParameters) *gopter.GenResult {
+		columnType := types.Json
 		return gopter.NewGenResult(columnType, gopter.NoShrinker)
 	}
 }
