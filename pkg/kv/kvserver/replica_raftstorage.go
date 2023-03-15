@@ -84,8 +84,14 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+	ents, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+	var n int64
+	for _, e := range ents {
+		n += int64(e.Size())
+	}
+	r.store.metrics.RaftStorageReadBytes.Inc(n)
+	return ents, err
 }
 
 // raftEntriesLocked requires that r.mu is held for writing.

@@ -13,6 +13,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -82,6 +83,7 @@ func newUninitializedReplica(
 ) *Replica {
 	uninitState := stateloader.UninitializedReplicaState(rangeID)
 	r := &Replica{
+		unstableBytes:  store.metrics.RaftUnstableLogBytes.AddChild(fmt.Sprint(rangeID)),
 		logUnstableN:   log.Every(time.Second),
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,

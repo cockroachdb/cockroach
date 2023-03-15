@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -167,7 +168,8 @@ type raftSparseStatus struct {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	logUnstableN log.EveryN
+	logUnstableN  log.EveryN
+	unstableBytes *aggmetric.Gauge
 	// A replica's AmbientCtx includes the log tags from the parent node and
 	// store.
 	log.AmbientContext

@@ -157,6 +157,9 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
 	}
+	// TODO(XXX): NB hav to check if this is racy. Good enough for testing either way.
+	r.unstableBytes.Update(0)
+	r.unstableBytes.Unlink()
 	return nil
 }
 

@@ -836,6 +836,18 @@ or the delegate being too busy to send.
 	}
 
 	// Raft processing metrics.
+	metaRaftStorageReadBytes = metric.Metadata{
+		Name:        "raft.storage.read_bytes",
+		Help:        "Counter of bytes read from pebble for raft log entries",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftUnstableLogBytes = metric.Metadata{
+		Name:        "raft.unstable_bytes",
+		Help:        "Bytes in entries queued in memory inside of RawNode's unstable log",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaRaftTicks = metric.Metadata{
 		Name:        "raft.ticks",
 		Help:        "Number of Raft ticks queued",
@@ -1915,6 +1927,8 @@ type StoreMetrics struct {
 	DelegateSnapshotFailures  *metric.Counter
 
 	// Raft processing metrics.
+	RaftUnstableLogBytes      *aggmetric.AggGauge
+	RaftStorageReadBytes      *metric.Counter
 	RaftTicks                 *metric.Counter
 	RaftQuotaPoolPercentUsed  metric.IHistogram
 	RaftWorkingDurationNanos  *metric.Counter
@@ -2449,7 +2463,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DelegateSnapshotFailures:                     metric.NewCounter(metaDelegateSnapshotFailures),
 
 		// Raft processing metrics.
-		RaftTicks: metric.NewCounter(metaRaftTicks),
+		RaftStorageReadBytes: metric.NewCounter(metaRaftStorageReadBytes),
+		RaftUnstableLogBytes: aggmetric.NewGauge(metaRaftUnstableLogBytes, "range_id"),
+		RaftTicks:            metric.NewCounter(metaRaftTicks),
 		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRaftQuotaPoolPercentUsed,
 			Duration: histogramWindow,

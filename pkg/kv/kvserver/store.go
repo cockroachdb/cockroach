@@ -2852,12 +2852,15 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			numBytes int64
 		}
 		var sl []measurement
+		var totalBytes int64
 		s.raftRecvQueues.m.Range(func(key int64, value unsafe.Pointer) bool {
 			q := (*raftReceiveQueue)(value)
+			b := q.acc.Used()
+			totalBytes += b
 			sl = append(sl, measurement{
 				rangeID:  roachpb.RangeID(key),
 				numMsgs:  int64(q.Len()),
-				numBytes: q.acc.Used(),
+				numBytes: b,
 			})
 			return true // continue
 		})
@@ -2881,7 +2884,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				fmt.Fprintf(&buf, ", ")
 			}
 		}
-		log.Infof(ctx, "recv-queues: %s", &buf)
+		log.Infof(ctx, "recv-queues: total %s, details: %s", humanizeutil.IBytes(totalBytes), &buf)
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {

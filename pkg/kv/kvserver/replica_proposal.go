@@ -549,7 +549,7 @@ func addSSTablePreApply(
 		}
 	}()
 
-	eng.PreIngestDelay(ctx)
+	eng.PreIngestDelay(ctx) // TODO(XXX) shouldn't this not be here?
 	tEndDelayed = timeutil.Now()
 
 	ingestPath := path + ".ingested"
@@ -570,6 +570,8 @@ func addSSTablePreApply(
 	}
 
 	log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
+
+	// TODO(tbg): we're not going to be hitting the below pretty much ever.
 
 	// TODO(tschottdorf): remove this once sideloaded storage guarantees its
 	// existence.
