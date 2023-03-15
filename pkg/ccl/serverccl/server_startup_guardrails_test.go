@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // TestServerStartupGuardrails ensures that a SQL server will fail to start if
@@ -99,10 +100,12 @@ func TestServerStartupGuardrails(t *testing.T) {
 		// to succeed for all test cases but server creation is expected to succeed
 		// only if tenantBinaryVersion is at least equal to the version corresponding
 		// to TenantLogicalVersionKey.
+		stopper := stop.NewStopper()
 		tenantServer, err := s.StartTenant(context.Background(),
 			base.TestTenantArgs{
 				Settings: tenantSettings,
 				TenantID: serverutils.TestTenantID(),
+				Stopper:  stopper,
 				TestingKnobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						BinaryVersionOverride:          test.tenantBinaryVersion,
@@ -118,6 +121,9 @@ func TestServerStartupGuardrails(t *testing.T) {
 		// Only attempt to stop the tenant if it was started successfully.
 		if err == nil {
 			tenantServer.Stopper().Stop(context.Background())
+		} else {
+			// Test - stop the failed SQL server using a custom stopper
+			stopper.Stop(context.Background())
 		}
 		s.Stopper().Stop(context.Background())
 	}

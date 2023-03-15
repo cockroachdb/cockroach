@@ -164,7 +164,7 @@ func NewTenantCluster(cfg TenantClusterConfig) *TenantCluster {
 
 // NumNodesOrTenantPods is part of the upgrade.Cluster interface.
 func (t *TenantCluster) NumNodesOrServers(ctx context.Context) (int, error) {
-	// Get the list of all SQL pods running
+	// Get the list of all SQL instances running.
 	instances, err := t.InstanceReader.GetAllInstances(ctx)
 	if err != nil {
 		return 0, err
@@ -174,19 +174,19 @@ func (t *TenantCluster) NumNodesOrServers(ctx context.Context) (int, error) {
 
 // BumpClusterVersionOpName serves as a tag for tenant cluster version
 // in-memory bump operations. Every time we bump a tenant's cluster version,
-// we send out a gRPC to each of the tenant's sql servers
+// we send out a gRPC to each of the tenant's SQL servers
 // (via ForEveryNodeOrServer), to have them remotely bump their in-memory
 // version as well. In the first of these such bumps for a migration (the first
-// "fence"), we also cache the list of sql servers that we contacted, and
+// "fence"), we also cache the list of SQL servers that we contacted, and
 // validate after persisting the fence version to the settings table, that
-// no new sql servers have joined. If new sql servers have joined in the
+// no new SQL servers have joined. If new SQL servers have joined in the
 // interim, we must revalidate that their binary versions are sufficiently
 // up-to-date to continue with the upgrade process. Once the bump value is
-// persisted to disk, no new sql servers will be permitted to start with
+// persisted to disk, no new SQL servers will be permitted to start with
 // binary versions that are less than the tenant's min binary version.
 //
 // This tag is used in the interlock to identify when we're bumping a cluster
-// version and therefore, when we must cache the set of sql servers contacted.
+// version and therefore, when we must cache the set of SQL servers contacted.
 const BumpClusterVersionOpName = "bump-cluster-version"
 
 // ForEveryNodeOrServer is part of the upgrade.Cluster interface.
@@ -194,9 +194,11 @@ const BumpClusterVersionOpName = "bump-cluster-version"
 func (t *TenantCluster) ForEveryNodeOrServer(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
-	// Get the list of all SQL pods running. Do this using the transactional,
-	// function as transactional protection is required by the tenant upgrade
-	// interlock.
+	// Get the list of all SQL instances running. We must do this using the
+	// "NoCache" method, as the upgrade interlock requires a consistent view of
+	// the currently running SQL instances to avoid RPC failures when attempting
+	// to contact SQL instances which are no longer alive, and to ensure that
+	// it's communicating with all currently alive instances.
 	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
 	if err != nil {
 		return err
@@ -229,7 +231,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			conn, err := t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
 			if err != nil {
 				if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
-					if errors.Is(err, (*rpc.VersionCompatError)(nil)) {
+					if errors.Is(err, rpc.VersionCompatError) {
 						return errors.WithHint(errors.Newf("upgrade failed due to active SQL servers with incompatible binary version(s)"),
 							"upgrade the binary versions of all SQL servers before re-attempting the tenant upgrade")
 					} else {
@@ -257,7 +259,8 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 // server list is consistent. This does not preclude new SQL servers from
 // starting after we've declared "stability", but there are other checks in the
 // tenant upgrade interlock which prevent those new SQL servers from starting if
-// they're at an incompatible binary version.
+// they're at an incompatible binary version (at the time of writing, in
+// SQLServer.preStart).
 func (t *TenantCluster) UntilClusterStable(ctx context.Context, fn func() error) error {
 	retryOpts := retry.Options{
 		InitialBackoff: 1 * time.Second,
@@ -288,14 +291,14 @@ func (t *TenantCluster) UntilClusterStable(ctx context.Context, fn func() error)
 		}
 		if len(instances) != len(curInstances) {
 			log.Infof(ctx,
-				"number of sql servers has changed (pre: %d, post: %d), retrying",
+				"number of SQL servers has changed (pre: %d, post: %d), retrying",
 				len(instances), len(curInstances))
 		} else {
-			log.Infof(ctx, "different set of sql servers running (pre: %v, post: %v), retrying", instances, curInstances)
+			log.Infof(ctx, "different set of SQL servers running (pre: %v, post: %v), retrying", instances, curInstances)
 		}
 		instances = curInstances
 	}
-	return errors.Newf("unable to observe a stable set of sql servers after maximum iterations")
+	return errors.Newf("unable to observe a stable set of SQL servers after maximum iterations")
 }
 
 // IterateRangeDescriptors is part of the upgrade.Cluster interface.
@@ -304,6 +307,14 @@ func (t *TenantCluster) IterateRangeDescriptors(
 ) error {
 	return errors.AssertionFailedf("non-system tenants cannot iterate ranges")
 }
+
+type inconsistentSQLServersError struct{}
+
+func (inconsistentSQLServersError) Error() string {
+	return "new SQL servers added during migration: migration must be retried"
+}
+
+var InconsistentSQLServersError = inconsistentSQLServersError{}
 
 func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context) error {
 	if len(t.instancesAtBump) == 0 {
@@ -317,7 +328,7 @@ func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context) er
 		return err
 	}
 	if !reflect.DeepEqual(instances, t.instancesAtBump) {
-		return errors.Newf("new SQL servers added during migration: migration must be retried")
+		return InconsistentSQLServersError
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ package kvtenantccl_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
@@ -399,7 +401,10 @@ func TestTenantUpgradeFailure(t *testing.T) {
 // is too low.
 func TestTenantUpgradeInterlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 97076, "flaky test")
+	// Times out under stress race
+	skip.UnderStressRace(t)
+	// Test takes 30s to run
+	skip.UnderShort(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -418,8 +423,8 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 
 	type interlockTestConfig struct {
 		name          string
-		expUpgradeErr [numConfigs]string // empty if expecting a nil error
-		expStartupErr [numConfigs]string // empty if expecting a nil error
+		expUpgradeErr [numConfigs][]string // empty if expecting a nil error
+		expStartupErr [numConfigs]string   // empty if expecting a nil error
 		pausePoint    upgradebase.PausePoint
 	}
 
@@ -430,9 +435,10 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 			// first transaction.
 			name:       "pause after first check for instances",
 			pausePoint: upgradebase.AfterFirstCheckForInstances,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{"pq: upgrade failed due to active SQL servers with incompatible binary version",
+					fmt.Sprintf("sql server 2 is running a binary version %s which is less than the attempted upgrade version", clusterversion.TestingBinaryMinSupportedVersion.String())},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -442,9 +448,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		{
 			name:       "pause after fence RPC",
 			pausePoint: upgradebase.AfterFenceRPC,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{"pq: upgrade failed due to active SQL servers with incompatible binary version"},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -454,16 +460,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		{
 			name:       "pause after fence write to settings table",
 			pausePoint: upgradebase.AfterFenceWriteToSettingsTable,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				// TODO(ajstorm): It's not ideal that we're failing both the
-				//  startup _and_ the upgrade here and in the tests below. This
-				//  is caused by the fact that when the server startup fails, we
-				//  don't immediately remove the instance from the sql_instances
-				//  table. We may want to fix this so that the upgrade will
-				//  succeed on the first attempt (or at least on a subsequent
-				//  attempt, if utilize SucceedsSoon).
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{""},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -473,9 +472,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		{
 			name:       "pause after second check of instances",
 			pausePoint: upgradebase.AfterSecondCheckForInstances,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{""},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -485,9 +484,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		{
 			name:       "pause after migration",
 			pausePoint: upgradebase.AfterMigration,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{""},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -497,9 +496,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		{
 			name:       "pause after version bump RPC",
 			pausePoint: upgradebase.AfterVersionBumpRPC,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{""},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -509,9 +508,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		{
 			name:       "pause after write to settings table",
 			pausePoint: upgradebase.AfterVersionWriteToSettingsTable,
-			expUpgradeErr: [numConfigs]string{
-				"",
-				"pq: upgrade failed due to active SQL servers with incompatible binary version",
+			expUpgradeErr: [numConfigs][]string{
+				{""},
+				{""},
 			},
 			expStartupErr: [numConfigs]string{
 				"",
@@ -533,15 +532,62 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		bv := clusterversion.TestingBinaryVersion
 		msv := clusterversion.TestingBinaryMinSupportedVersion
 
-		expectingUpgradeToFail := test.expUpgradeErr[variant] != ""
+		// If there are any non-empty errors expected on the upgrade, then we're
+		// expecting it to fail.
+		expectingUpgradeToFail := test.expUpgradeErr[variant][0] != ""
 		finalUpgradeVersion := clusterversion.TestingBinaryVersion
 		if expectingUpgradeToFail {
 			finalUpgradeVersion = msv
 		}
 
+		disableBackgroundTasks := func(s *cluster.Settings) {
+			// This test makes use of inter-SQL server gRPCs, some of which are
+			// going between SQL pods of incompatible version numbers. In cases
+			// where a gRPC handshake detects an invalid versioned SQL server,
+			// it will fail, and also trip the gRPC breaker. This will then
+			// cause the test to fail with a "breaker open" error, instead of
+			// the error we're expecting. As a result, we disable everything
+			// that could run gRPCs in the background to ensure that the upgrade
+			// gRPCs detect the first version mismatch error.
+			stats.AutomaticStatisticsClusterMode.Override(ctx, &s.SV, false)
+			stats.UseStatisticsOnSystemTables.Override(ctx, &s.SV, false)
+			stats.AutomaticStatisticsOnSystemTables.Override(ctx, &s.SV, false)
+			sql.DistSQLClusterExecMode.Override(ctx, &s.SV, int64(sessiondatapb.DistSQLOff))
+		}
+
+		reduceLeaseDurationAndReclaimLoopInterval := func(s *cluster.Settings) {
+			// In cases where the other SQL server fails, it may go down holding
+			// a descriptor lease. In that case, we want to decrease the lease
+			// duration so that we can reclaim the lease faster than the default
+			// (5 minutes). This allows the test to complete faster.
+			lease.LeaseDuration.Override(ctx, &s.SV, 2000*time.Millisecond)
+			lease.LeaseRenewalDuration.Override(ctx, &s.SV, 0)
+			// Also in the failure case, we need the SQL instance (stored in
+			// the system.sql_instances table) for the failed SQL server to
+			// be removed as quickly as possible. This is because a failed
+			// instance in that table can cause RPC attempts to that server
+			// to fail. The changes below in the other server setup will
+			// ensure that the failed SQL server expires quickly. Here we
+			// need to also ensure that it will be reclaimed quickly.
+			instancestorage.ReclaimLoopInterval.Override(ctx, &s.SV, 1000*time.Millisecond)
+		}
+
+		reduceDefaultTTLAndHeartBeat := func(s *cluster.Settings) {
+			// In the case where a SQL server is expected to fail, we need the
+			// SQL instance (stored in the system.sql_instances table) for the
+			// failed SQL server to be removed as quickly as possible. This is
+			// because a failed instance in that table can cause RPC attempts to
+			// that server to fail. To accomplish this, we decrease the default
+			// TTL and heartbeat for the sessions so that they expire and are
+			// cleaned up faster.
+			slinstance.DefaultTTL.Override(ctx, &s.SV, 250*time.Millisecond)
+			slinstance.DefaultHeartBeat.Override(ctx, &s.SV, 50*time.Millisecond)
+		}
+
 		// Initialize the version to the BinaryMinSupportedVersion so that
 		// we can perform upgrades.
 		settings := cluster.MakeTestingClusterSettingsWithVersions(bv, msv, false /* initializeVersion */)
+		disableBackgroundTasks(settings)
 		require.NoError(t, clusterversion.Initialize(ctx, msv, &settings.SV))
 
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -551,6 +597,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 				DisableDefaultTestTenant: true,
 				Settings:                 settings,
 				Knobs: base.TestingKnobs{
+					SpanConfig: &spanconfig.TestingKnobs{
+						ManagerDisableJobCreation: true,
+					},
 					Server: &server.TestingKnobs{
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
 						// Initialize to the minimum supported version
@@ -574,22 +623,15 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 
 		mkTenant := func(t *testing.T, id roachpb.TenantID, bv roachpb.Version, minBv roachpb.Version) (tenantDB *gosql.DB, cleanup func()) {
 			settings := cluster.MakeTestingClusterSettingsWithVersions(bv, minBv, false /* initializeVersion */)
+			disableBackgroundTasks(settings)
+			if test.expStartupErr[variant] != "" {
+				reduceLeaseDurationAndReclaimLoopInterval(settings)
+			}
 			require.NoError(t, clusterversion.Initialize(ctx, minBv, &settings.SV))
-			// Disable distsql and auto stats so that we don't have
-			// interference from background jobs trying to initiate gRPC
-			// connections. New gRPC connections cause problems with
-			// this test because they could detect the down-level sql
-			// server and then trip the gRPC breaker. This will then
-			// cause the test to fail with a "breaker open" error,
-			// instead of the error we're expecting.
-			sql.DistSQLClusterExecMode.Override(ctx, &settings.SV, int64(sessiondatapb.DistSQLOff))
-			stats.AutomaticStatisticsClusterMode.Override(ctx, &settings.SV, false)
 			tenantArgs := base.TestTenantArgs{
 				TenantID: id,
 				TestingKnobs: base.TestingKnobs{
-					SpanConfig: &spanconfig.TestingKnobs{
-						ManagerDisableJobCreation: true,
-					},
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 					UpgradeManager: &upgradebase.TestingKnobs{
 						InterlockPausePoint:               test.pausePoint,
 						InterlockResumeChannel:            &resumeChannel,
@@ -632,6 +674,7 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 		// will complete the upgrade.
 		go func() {
 			release := func() {
+				log.Infof(ctx, "upgrade completed, resuming post-upgrade work")
 				completedChannel <- struct{}{}
 			}
 			defer release()
@@ -641,9 +684,33 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 			// under the covers. See https://go.dev/doc/go1.16#vet-testing-T for
 			// more details.
 			if expectingUpgradeToFail {
+				getPossibleUpgradeErrorsString := func(variant interlockTestVariant) string {
+					possibleErrorsString := ""
+					for i := range test.expUpgradeErr[variant] {
+						expErrString := test.expUpgradeErr[variant][i]
+						if i > 0 {
+							possibleErrorsString += " OR "
+						}
+						possibleErrorsString += `"` + expErrString + `"`
+					}
+					return possibleErrorsString
+				}
 				_, err := tenant.Exec("SET CLUSTER SETTING version = $1", bv.String())
-				if !strings.Contains(err.Error(), test.expUpgradeErr[variant]) {
-					t.Errorf("expected %s, got: %s", test.expUpgradeErr[variant], err.Error())
+				if err == nil {
+					t.Errorf("expected %s, got: success", getPossibleUpgradeErrorsString(variant))
+				} else {
+					foundExpErr := false
+					expErrString := ""
+					for i := range test.expUpgradeErr[variant] {
+						expErrString = test.expUpgradeErr[variant][i]
+						if strings.Contains(err.Error(), expErrString) {
+							foundExpErr = true
+							break
+						}
+					}
+					if !foundExpErr {
+						t.Errorf("expected %s, got: %s", getPossibleUpgradeErrorsString(variant), err.Error())
+					}
 				}
 			} else {
 				_, err := tenant.Exec("SET CLUSTER SETTING version = $1", bv.String())
@@ -653,7 +720,6 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 			}
 		}()
 
-		// Create a separate SQL server to startup
 		// Wait until the upgrader reaches the pause point before
 		// starting.
 		<-reachedChannel
@@ -676,49 +742,65 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 			otherMsv.Major = msv.Major - 1
 		}
 		otherServerSettings := cluster.MakeTestingClusterSettingsWithVersions(otherBv, otherMsv, false /* initializeVersion */)
+		disableBackgroundTasks(otherServerSettings)
+		if test.expStartupErr[variant] != "" {
+			reduceLeaseDurationAndReclaimLoopInterval(otherServerSettings)
+			reduceDefaultTTLAndHeartBeat(otherServerSettings)
+		}
 		require.NoError(t, clusterversion.Initialize(ctx, otherMsv, &otherServerSettings.SV))
-		// Disable distsql and auto stats as noted above.
-		sql.DistSQLClusterExecMode.Override(ctx, &otherServerSettings.SV, int64(sessiondatapb.DistSQLOff))
-		stats.AutomaticStatisticsClusterMode.Override(ctx, &otherServerSettings.SV, false)
+		otherServerStopper := stop.NewStopper()
 		otherServer, otherServerStartError := tc.Server(0).StartTenant(ctx,
 			base.TestTenantArgs{
+				Stopper:  otherServerStopper,
 				TenantID: tenantID,
 				Settings: otherServerSettings,
 			})
 
-		if test.expStartupErr[variant] != "" {
-			require.ErrorContains(t, otherServerStartError, test.expStartupErr[variant])
-
-			// Make sure that the failed SQL instance is gone before proceeding.
-			// We need to wait here because if we don't, the upgrade may hit
-			// errors because it's trying to bump the cluster version for a SQL
-			// instance which doesn't exist (i.e. it's already been shut down
-			// but the sql_instances table is stale). These errors will not
-			// match the expected upgrade error specified in the test, and the
-			// test will fail.
-			hostClusterRunner.CheckQueryResultsRetry(t,
-				"SELECT count(*) FROM SYSTEM.SQL_INSTANCES WHERE SESSION_ID IS NOT NULL", [][]string{{"1"}})
+		var otherTenantRunner *sqlutils.SQLRunner
+		expectingStartupToFail := test.expStartupErr[variant] != ""
+		numTenantsStr := "1"
+		if expectingStartupToFail {
+			otherServerStopper.Stop(ctx)
+		} else if otherServerStartError == nil {
+			defer otherServer.Stopper().Stop(ctx)
+			otherTenant, otherCleanup := connectToTenant(t, otherServer.SQLAddr())
+			defer otherCleanup()
+			otherTenantRunner = sqlutils.MakeSQLRunner(otherTenant)
+			numTenantsStr = "2"
 		}
+
+		// Based on the success or failure of the "other" SQL server startup,
+		// we'll either have 1 or 2 SQL servers running at this point. Confirm
+		// that we're in the desired state by querying the sql_instances table
+		// directly. We do this before we continue to ensure that the upgrade
+		// doesn't encounter any stale SQL instances.
+		initialTenantRunner.CheckQueryResultsRetry(t,
+			"SELECT count(*) FROM SYSTEM.SQL_INSTANCES WHERE SESSION_ID IS NOT NULL", [][]string{{numTenantsStr}})
 
 		// With tenant started, resume the upgrade and wait for it to
 		// complete.
 		resumeChannel <- struct{}{}
 		<-completedChannel
+		log.Infof(ctx, "continuing after upgrade completed")
+
+		// Now that we've resumed the upgrade, process any errors. We must do
+		// that after the upgrade completes because any unexpected errors above
+		// will cause the test to FailNow, thus bringing down the cluster and
+		// the tenant, which could cause the upgrade to hang if it's not resumed
+		// first.
+		if expectingStartupToFail {
+			require.ErrorContains(t, otherServerStartError, test.expStartupErr[variant])
+		} else {
+			require.NoError(t, otherServerStartError)
+		}
 
 		// Handle errors and any subsequent processing once the upgrade
 		// is completed.
 		if test.expStartupErr[variant] == "" {
-			require.NoError(t, otherServerStartError)
-			defer otherServer.Stopper().Stop(ctx)
-
-			otherTenant, cleanup := connectToTenant(t, otherServer.SQLAddr())
-			defer cleanup()
-			otherTenantRunner := sqlutils.MakeSQLRunner(otherTenant)
-
 			// Validate that the version is as expected, and that the
 			// second sql pod still works.
 			otherTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-			otherTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
+			otherTenantRunner.CheckQueryResultsRetry(t, "SHOW CLUSTER SETTING version",
 				[][]string{{finalUpgradeVersion.String()}})
 		}
 	}

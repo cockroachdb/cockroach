@@ -47,12 +47,12 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 //
 // Sketch of the test:
 //
-//   - Storage{Binary: Prev, Cluster: Prev}: Start host cluster.
+//   - Storage{Binary: Prev, Cluster: Prev}: Start storage cluster.
 //   - Storage{Binary: Prev, Cluster: Prev}: Run create_tenant(11).
 //   - Tenant11a{Binary: Prev, Cluster: Prev}: Start tenant pod 11a and 11b, and verify that they work.
 //   - Storage{Binary: Prev, Cluster: Prev}: Set preserve downgrade option.
 //   - Storage{Binary: Prev, Cluster: Prev}: Run create_tenant(12).
-//   - Storage{Binary: Cur, Cluster: Prev}: Upgrade host cluster (don't finalize).
+//   - Storage{Binary: Cur, Cluster: Prev}: Upgrade storage cluster (don't finalize).
 //   - Tenant11a{Binary: Prev, Cluster: Prev}: Verify tenant pod 11a still works.
 //   - Tenant12{Binary: Prev, Cluster: Prev}: Start tenant 12 and verify it works.
 //   - Storage{Binary: Cur, Cluster: Prev}: Run create_tenant(13).
@@ -208,14 +208,14 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	t.Status("intentionally leaving the second tenant 11 server on the old binary")
 
 	// Note that here we'd like to validate that the tenant 11 servers can still
-	// query the host cluster. The problem however, is that due to #88927, they
-	// can't because they're at different binary versions. Once #88927 is fixed,
-	// we should add checks in here that we're able to query from tenant 11
-	// servers.
+	// query the storage cluster. The problem however, is that due to #88927,
+	// they can't because they're at different binary versions. Once #88927 is
+	// fixed, we should add checks in here that we're able to query from tenant
+	// 11 servers.
 
 	t.Status("attempting to upgrade tenant 11 before storage cluster is finalized and expecting a failure")
 	expectErr(t, tenant11a.pgURL,
-		fmt.Sprintf("pq: preventing tenant upgrade from running as the host cluster has not yet been upgraded: host cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
+		fmt.Sprintf("pq: preventing tenant upgrade from running as the storage cluster has not yet been upgraded: storage cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
 	t.Status("finalizing the system tenant upgrade")

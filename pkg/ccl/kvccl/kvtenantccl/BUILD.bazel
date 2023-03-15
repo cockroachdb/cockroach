@@ -85,6 +85,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness/slinstance",
