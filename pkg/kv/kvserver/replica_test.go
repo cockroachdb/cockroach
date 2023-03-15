@@ -6954,70 +6954,80 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	}
 }
 
-func TestIntentIntersect(t *testing.T) {
+func TestIntersectSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	iPt := roachpb.Span{
+	spPt := roachpb.Span{
 		Key:    roachpb.Key("asd"),
 		EndKey: nil,
 	}
-	iRn := roachpb.Span{
+	spRn := roachpb.Span{
 		Key:    roachpb.Key("c"),
 		EndKey: roachpb.Key("x"),
 	}
 
 	suffix := roachpb.RKey("abcd")
-	iLc := roachpb.Span{
+	spLc := roachpb.Span{
 		Key:    keys.MakeRangeKey(roachpb.RKey("c"), suffix, nil),
 		EndKey: keys.MakeRangeKey(roachpb.RKey("x"), suffix, nil),
 	}
-	kl1 := string(iLc.Key)
-	kl2 := string(iLc.EndKey)
+	kl1 := string(spLc.Key)
+	kl2 := string(spLc.EndKey)
 
-	for i, tc := range []struct {
-		intent   roachpb.Span
+	for _, tc := range []struct {
+		span     roachpb.Span
 		from, to string
 		exp      []string
 	}{
-		{intent: iPt, from: "", to: "z", exp: []string{"", "", "asd", ""}},
+		{span: spRn, from: "", to: "a", exp: []string{"", "", "c", "x"}},
+		{span: spRn, from: "", to: "c", exp: []string{"", "", "c", "x"}},
+		{span: spRn, from: "a", to: "z", exp: []string{"c", "x"}},
+		{span: spRn, from: "c", to: "d", exp: []string{"c", "d", "d", "x"}},
+		{span: spRn, from: "c", to: "x", exp: []string{"c", "x"}},
+		{span: spRn, from: "d", to: "x", exp: []string{"d", "x", "c", "d"}},
+		{span: spRn, from: "d", to: "w", exp: []string{"d", "w", "c", "d", "w", "x"}},
+		{span: spRn, from: "c", to: "w", exp: []string{"c", "w", "w", "x"}},
+		{span: spRn, from: "w", to: "x", exp: []string{"w", "x", "c", "w"}},
+		{span: spRn, from: "x", to: "z", exp: []string{"", "", "c", "x"}},
+		{span: spRn, from: "y", to: "z", exp: []string{"", "", "c", "x"}},
 
-		{intent: iRn, from: "", to: "a", exp: []string{"", "", "c", "x"}},
-		{intent: iRn, from: "", to: "c", exp: []string{"", "", "c", "x"}},
-		{intent: iRn, from: "a", to: "z", exp: []string{"c", "x"}},
-		{intent: iRn, from: "c", to: "d", exp: []string{"c", "d", "d", "x"}},
-		{intent: iRn, from: "c", to: "x", exp: []string{"c", "x"}},
-		{intent: iRn, from: "d", to: "x", exp: []string{"d", "x", "c", "d"}},
-		{intent: iRn, from: "d", to: "w", exp: []string{"d", "w", "c", "d", "w", "x"}},
-		{intent: iRn, from: "c", to: "w", exp: []string{"c", "w", "w", "x"}},
-		{intent: iRn, from: "w", to: "x", exp: []string{"w", "x", "c", "w"}},
-		{intent: iRn, from: "x", to: "z", exp: []string{"", "", "c", "x"}},
-		{intent: iRn, from: "y", to: "z", exp: []string{"", "", "c", "x"}},
-
-		// A local intent range always comes back in one piece, either inside
+		// A local span range always comes back in one piece, either inside
 		// or outside of the Range.
-		{intent: iLc, from: "a", to: "b", exp: []string{"", "", kl1, kl2}},
-		{intent: iLc, from: "d", to: "z", exp: []string{"", "", kl1, kl2}},
-		{intent: iLc, from: "f", to: "g", exp: []string{"", "", kl1, kl2}},
-		{intent: iLc, from: "c", to: "x", exp: []string{kl1, kl2}},
-		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
+		{span: spLc, from: "a", to: "b", exp: []string{"", "", kl1, kl2}},
+		{span: spLc, from: "d", to: "z", exp: []string{"", "", kl1, kl2}},
+		{span: spLc, from: "f", to: "g", exp: []string{"", "", kl1, kl2}},
+		{span: spLc, from: "c", to: "x", exp: []string{kl1, kl2}},
+		{span: spLc, from: "a", to: "z", exp: []string{kl1, kl2}},
 	} {
-		var all []string
-		in, out := kvserverbase.IntersectSpan(tc.intent, &roachpb.RangeDescriptor{
+		desc := &roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(tc.from),
 			EndKey:   roachpb.RKey(tc.to),
+		}
+		name := fmt.Sprintf("span=%v,desc=%v", tc.span, desc.RSpan())
+		t.Run(name, func(t *testing.T) {
+			var all []string
+			in, out := kvserverbase.IntersectSpan(tc.span, desc)
+			if in != nil {
+				all = append(all, string(in.Key), string(in.EndKey))
+			} else {
+				all = append(all, "", "")
+			}
+			for _, o := range out {
+				all = append(all, string(o.Key), string(o.EndKey))
+			}
+			require.Equal(t, tc.exp, all)
 		})
-		if in != nil {
-			all = append(all, string(in.Key), string(in.EndKey))
-		} else {
-			all = append(all, "", "")
-		}
-		for _, o := range out {
-			all = append(all, string(o.Key), string(o.EndKey))
-		}
-		if !reflect.DeepEqual(all, tc.exp) {
-			t.Errorf("%d: wanted %v, got %v", i, tc.exp, all)
-		}
 	}
+
+	t.Run("point", func(t *testing.T) {
+		desc := &roachpb.RangeDescriptor{
+			StartKey: roachpb.RKey("a"),
+			EndKey:   roachpb.RKey("z"),
+		}
+		require.Panics(t, func() {
+			_, _ = kvserverbase.IntersectSpan(spPt, desc)
+		})
+	})
 }
 
 // TestBatchErrorWithIndex tests that when an individual entry in a
@@ -11250,6 +11260,84 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
+}
+
+// TestReplicaAsyncIntentResolutionOn1PC runs a transaction that acquires one or
+// more unreplicated locks and then performs a one-phase commit. It tests that
+// async resolution is performed for any unreplicated lock that is external to
+// the range that the transaction is anchored on, but not for any unreplicated
+// lock that is local to that range.
+func TestReplicaAsyncIntentResolutionOn1PC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "external", func(t *testing.T, external bool) {
+		// Intercept async intent resolution for the test's transaction.
+		var storeKnobs StoreTestingKnobs
+		var txnIDAtomic atomic.Value
+		txnIDAtomic.Store(uuid.Nil)
+		resIntentC := make(chan *kvpb.ResolveIntentRequest)
+		storeKnobs.TestingRequestFilter = func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			for _, req := range ba.Requests {
+				riReq := req.GetResolveIntent()
+				if riReq != nil && riReq.IntentTxn.ID == txnIDAtomic.Load().(uuid.UUID) {
+					resIntentC <- riReq
+				}
+			}
+			return nil
+		}
+
+		ctx := context.Background()
+		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{Store: &storeKnobs}})
+		defer s.Stopper().Stop(ctx)
+
+		// Perform a range split between key A and B.
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+		_, _, err := s.SplitRange(keyB)
+		require.NoError(t, err)
+
+		// Write a value to a key A and B.
+		_, err = kvDB.Inc(ctx, keyA, 1)
+		require.Nil(t, err)
+		_, err = kvDB.Inc(ctx, keyB, 1)
+		require.Nil(t, err)
+
+		// Create a new transaction.
+		txn := kvDB.NewTxn(ctx, "test")
+		txnIDAtomic.Store(txn.ID())
+
+		// Perform one or more "for update" gets. This should acquire unreplicated,
+		// exclusive locks on the keys.
+		b := txn.NewBatch()
+		b.GetForUpdate(keyA)
+		if external {
+			b.GetForUpdate(keyB)
+		}
+		err = txn.Run(ctx, b)
+		require.NoError(t, err)
+
+		// Update the locked value and commit in a single batch. This should hit the
+		// one-phase commit fast-path and then release the "for update" lock(s).
+		b = txn.NewBatch()
+		b.Inc(keyA, 1)
+		err = txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+
+		// If an external lock was acquired, we should see its resolution.
+		if external {
+			riReq := <-resIntentC
+			require.Equal(t, keyB, riReq.Key)
+		}
+
+		// After that, we should see no other intent resolution request for this
+		// transaction.
+		select {
+		case riReq := <-resIntentC:
+			t.Fatalf("unexpected intent resolution request: %v", riReq)
+		case <-time.After(10 * time.Millisecond):
+		}
+	})
 }
 
 // TestReplicaQueryLocks tests QueryLocks in a number of scenarios while locks are
