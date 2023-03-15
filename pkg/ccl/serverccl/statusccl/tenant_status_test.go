@@ -343,11 +343,9 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &serverpb.StatementsRequest{}
-	combinedStatsRequest := &serverpb.CombinedStatementsStatsRequest{}
 	var tenantStats *serverpb.StatementsResponse
-	var tenantCombinedStats *serverpb.StatementsResponse
 
-	// Populate `tenantStats` and `tenantCombinedStats`. The tenant server
+	// Populate `tenantStats`. The tenant server
 	// `Statements` and `CombinedStatements` methods are backed by the
 	// sqlinstance system which uses a cache populated through rangefeed
 	// for keeping track of SQL pod data. We use `SucceedsSoon` to eliminate
@@ -362,21 +360,12 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 			return errors.New("tenant statements are unexpectedly empty")
 		}
 
-		tenantCombinedStats, err = tenantStatusServer.CombinedStatementStats(ctx, combinedStatsRequest)
-		if tenantCombinedStats == nil || len(tenantCombinedStats.Statements) == 0 {
-			return errors.New("tenant combined statements are unexpectedly empty")
-		}
 		return nil
 	})
 
 	path := "/_status/statements"
 	var nonTenantStats serverpb.StatementsResponse
 	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantStats)
-	require.NoError(t, err)
-
-	path = "/_status/combinedstmts"
-	var nonTenantCombinedStats serverpb.StatementsResponse
-	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantCombinedStats)
 	require.NoError(t, err)
 
 	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse) {
@@ -414,13 +403,11 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	// First we verify that we have expected stats from tenants.
 	t.Run("tenant-stats", func(t *testing.T) {
 		checkStatements(t, testCaseTenant, tenantStats)
-		checkStatements(t, testCaseTenant, tenantCombinedStats)
 	})
 
 	// Now we verify the non tenant stats are what we expected.
 	t.Run("non-tenant-stats", func(t *testing.T) {
 		checkStatements(t, testCaseNonTenant, &nonTenantStats)
-		checkStatements(t, testCaseNonTenant, &nonTenantCombinedStats)
 	})
 
 	// Now we verify that tenant and non-tenant have no visibility into each other's stats.
@@ -437,17 +424,6 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 			}
 		}
 
-		for _, tenantStmt := range tenantCombinedStats.Statements {
-			for _, nonTenantStmt := range nonTenantCombinedStats.Statements {
-				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
-			}
-		}
-
-		for _, tenantTxn := range tenantCombinedStats.Transactions {
-			for _, nonTenantTxn := range nonTenantCombinedStats.Transactions {
-				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
-			}
-		}
 	})
 }
 
@@ -463,43 +439,46 @@ func testResetSQLStatsRPCForTenant(
 	testCluster := testHelper.TestCluster()
 	controlCluster := testHelper.ControlCluster()
 
-	// Disable automatic flush to ensure tests are deterministic.
+	// Set automatic flush to some long duration we'll never hit to
+	// ensure tests are deterministic.
 	testCluster.TenantConn(0 /* idx */).
-		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
+		Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
 	controlCluster.TenantConn(0 /* idx */).
-		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
+		Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
 
 	defer func() {
 		// Cleanup
 		testCluster.TenantConn(0 /* idx */).
-			Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
+			Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '10m'")
 		controlCluster.TenantConn(0 /* idx */).
-			Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
+			Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '10m'")
 
 	}()
 
 	for _, flushed := range []bool{false, true} {
+		testTenant := testCluster.Tenant(serverccl.RandomServer)
+		testTenantConn := testTenant.GetTenantConn()
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			// Clears the SQL Stats at the end of each test via builtin.
 			defer func() {
-				testCluster.TenantConn(serverccl.RandomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				testTenantConn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
 				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
 			}()
 
 			for _, stmt := range stmts {
-				testCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
+				testTenantConn.Exec(t, stmt)
 				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
 			}
 
 			if flushed {
-				testCluster.TenantSQLStats(serverccl.RandomServer).Flush(ctx)
+				testTenant.TenantSQLStats().Flush(ctx)
 				controlCluster.TenantSQLStats(serverccl.RandomServer).Flush(ctx)
 			}
 
-			status := testCluster.TenantStatusSrv(serverccl.RandomServer)
+			status := testTenant.TenantStatusSrv()
 
 			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
+				Combined: flushed,
 			})
 			require.NoError(t, err)
 
@@ -513,7 +492,7 @@ func testResetSQLStatsRPCForTenant(
 			require.NoError(t, err)
 
 			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
+				Combined: flushed,
 			})
 			require.NoError(t, err)
 
@@ -538,7 +517,7 @@ func testResetSQLStatsRPCForTenant(
 			// Ensures that sql stats reset is isolated by tenant boundary.
 			statsFromControlCluster, err :=
 				controlCluster.TenantStatusSrv(serverccl.RandomServer).Statements(ctx, &serverpb.StatementsRequest{
-					Combined: true,
+					Combined: flushed,
 				})
 			require.NoError(t, err)
 
