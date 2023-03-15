@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that EvalContext.GetClusterTimestamp() gets its timestamp from the
@@ -76,7 +77,8 @@ func TestClusterTimestampConversion(t *testing.T) {
 			),
 		}
 
-		dec := ctx.GetClusterTimestamp()
+		dec, err := ctx.GetClusterTimestamp()
+		require.NoError(t, err)
 		final := dec.Text('f')
 		if final != d.expected {
 			t.Errorf("expected %s, but found %s", d.expected, final)
