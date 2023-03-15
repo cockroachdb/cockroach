@@ -99,7 +99,10 @@ func (p *planNodeToRowSource) MustBeStreaming() bool {
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	flowCtx *execinfra.FlowCtx, post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+	output execinfra.RowReceiver,
 ) error {
 	if err := p.InitWithEvalCtx(
 		p,
@@ -111,7 +114,7 @@ func (p *planNodeToRowSource) InitWithOutput(
 		// newPlanNodeToRowSource, so we can just use the eval context from the
 		// params.
 		p.params.EvalContext(),
-		0, /* processorID */
+		processorID,
 		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
