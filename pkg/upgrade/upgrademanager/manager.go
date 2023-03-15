@@ -315,14 +315,26 @@ func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
 	return nil
 }
 
-func (m *Manager) postToPauseChannelAndWaitForResume() {
-	*m.knobs.InterlockReachedPausePointChannel <- struct{}{}
-	<-*m.knobs.InterlockResumeChannel
-
+func (m *Manager) postToPauseChannelAndWaitForResume(ctx context.Context) {
+	log.Infof(ctx, "pausing at pause point %d", m.knobs.InterlockPausePoint)
 	// To handle the case where the pause point is hit on every migration (which
 	// is the common case), reset the interlock pause point when woken up so
 	// that we won't sleep again.
 	m.knobs.InterlockPausePoint = upgradebase.NoPause
+
+	// Post to the pause point channel.
+	select {
+	case *m.knobs.InterlockReachedPausePointChannel <- struct{}{}:
+	case <-m.deps.Stopper.ShouldQuiesce():
+		return
+	}
+
+	// Wait on the resume channel.
+	select {
+	case <-*m.knobs.InterlockResumeChannel:
+	case <-m.deps.Stopper.ShouldQuiesce():
+		return
+	}
 }
 
 func (m *Manager) Migrate(
@@ -382,7 +394,7 @@ func (m *Manager) Migrate(
 			return err
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterFirstCheckForInstances {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 	}
 
@@ -493,7 +505,7 @@ func (m *Manager) Migrate(
 			return err
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterFenceRPC {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
 		// In the case where we're upgrading secondary tenants there's an extra
@@ -526,7 +538,7 @@ func (m *Manager) Migrate(
 			mustPersistFenceVersion = false
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterFenceWriteToSettingsTable {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
 		// Now sanity check that we'll actually be able to perform the real
@@ -535,7 +547,7 @@ func (m *Manager) Migrate(
 			return err
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterSecondCheckForInstances {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
 		if exists {
@@ -545,7 +557,7 @@ func (m *Manager) Migrate(
 		}
 
 		if m.knobs.InterlockPausePoint == upgradebase.AfterMigration {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
 		// Finally, bump the real version cluster-wide.
@@ -554,7 +566,7 @@ func (m *Manager) Migrate(
 			return err
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterVersionBumpRPC {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
 		// Updates the version info inside the tenant or host cluster's
@@ -564,7 +576,7 @@ func (m *Manager) Migrate(
 			return err
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterVersionWriteToSettingsTable {
-			m.postToPauseChannelAndWaitForResume()
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 	}
 
