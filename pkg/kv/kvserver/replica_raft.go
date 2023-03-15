@@ -188,6 +188,8 @@ func (r *Replica) evalAndPropose(
 	// If the request requested that Raft consensus be performed asynchronously,
 	// return a proposal result immediately on the proposal's done channel.
 	// The channel's capacity will be large enough to accommodate this.
+	maybeFinishSpan := func() {}
+	defer func() { maybeFinishSpan() }() // NB: late binding is important
 	if ba.AsyncConsensus {
 		if ets := proposal.Local.DetachEndTxns(false /* alwaysOnly */); len(ets) != 0 {
 			// Disallow async consensus for commands with EndTxnIntents because
@@ -200,6 +202,12 @@ func (r *Replica) evalAndPropose(
 		// Fork the proposal's context span so that the proposal's context
 		// can outlive the original proposer's context.
 		proposal.ctx, proposal.sp = tracing.ForkSpan(ctx, "async consensus")
+		if proposal.sp != nil {
+			// We can't leak this span if we fail to hand the proposal to the
+			// replication layer, so finish it later in this method if we are to
+			// return with an error. (On success, we'll reset this to a noop).
+			maybeFinishSpan = proposal.sp.Finish
+		}
 
 		// Signal the proposal's response channel immediately.
 		reply := *proposal.Local.Reply
@@ -292,6 +300,9 @@ func (r *Replica) evalAndPropose(
 	if pErr != nil {
 		return nil, nil, "", nil, pErr
 	}
+	// We've successfully handed the proposal to the replication layer, so this
+	// method should not finish the trace span if we forked one off above.
+	maybeFinishSpan = func() {}
 	// Abandoning a proposal unbinds its context so that the proposal's client
 	// is free to terminate execution. However, it does nothing to try to
 	// prevent the command from succeeding. In particular, endCmds will still be
