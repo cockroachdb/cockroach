@@ -1,5 +1,5 @@
 query-sql-system
-SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_id = 'can_admin_unsplit'
+SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_name = 'can_admin_unsplit'
 ----
 10 tenant-10 ready none can_admin_unsplit false
 

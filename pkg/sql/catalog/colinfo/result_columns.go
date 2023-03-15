@@ -298,7 +298,7 @@ var TenantColumnsWithReplication = ResultColumns{
 // TenantColumnsWithCapabilities is appended to TenantColumns for
 // SHOW TENANT ... WITH CAPABILITIES queries.
 var TenantColumnsWithCapabilities = ResultColumns{
-	{Name: "capability_id", Typ: types.String},
+	{Name: "capability_name", Typ: types.String},
 	{Name: "capability_value", Typ: types.String},
 }
 

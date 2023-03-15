@@ -908,7 +908,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	"crdb_internal.node_tenant_capabilities_cache": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"tenant_id",
-			"capability_id",
+			"capability_name",
 			"capability_value",
 		},
 	},
