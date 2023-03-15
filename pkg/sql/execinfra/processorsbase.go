@@ -967,7 +967,7 @@ func NewLimitedMonitorNoFlowCtx(
 type LocalProcessor interface {
 	RowSourcedProcessor
 	// InitWithOutput initializes this processor.
-	InitWithOutput(flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
+	InitWithOutput(flowCtx *FlowCtx, processorID int32, post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
