@@ -961,6 +961,9 @@ func restoreTypeCheck(
 			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			tree.Exprs(restoreStmt.Options.IncrementalStorage),
 		),
+		exprutil.Bools{
+			restoreStmt.Options.IncludeAllSecondaryTenants,
+		},
 		exprutil.Strings{
 			restoreStmt.Subdir,
 			restoreStmt.Options.EncryptionPassphrase,
@@ -1112,6 +1115,19 @@ func restorePlanHook(
 		}
 	}
 
+	// IncludeAllSecondaryTenants exists only for
+	// forward-compatibility with v23.1 for users who want all
+	// tenants.
+	if restoreStmt.Options.IncludeAllSecondaryTenants != nil {
+		includeAllSecondaryTenants, err := exprEval.Bool(ctx, restoreStmt.Options.IncludeAllSecondaryTenants)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		if !includeAllSecondaryTenants {
+			return nil, nil, nil, false, errors.Errorf("include_all_secondary_tenants=false is not supported")
+		}
+	}
+
 	var newTenantID *roachpb.TenantID
 	if restoreStmt.Options.AsTenant != nil {
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.TenantID.IsSet() {
@@ -1170,7 +1186,6 @@ func restorePlanHook(
 		// explicitly passed incremental backups, so we'll have to look for any in
 		// <prefix>/<subdir>. len(incFrom)>1 implies the incremental backups are
 		// locality aware.
-
 		return doRestorePlan(
 			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, intoDB,
 			newDBName, newTenantID, endTime, resultsCh, subdir,

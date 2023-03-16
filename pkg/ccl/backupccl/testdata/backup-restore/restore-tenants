@@ -25,6 +25,16 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
 ----
 
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_with_tenants_explicitly' WITH include_all_secondary_tenants
+----
+
+exec-sql expect-error-regex=(include_all_secondary_tenants=false is not supported)
+BACKUP INTO 'nodelocal://1/shouldnotwork' WITH include_all_secondary_tenants=false
+----
+regex matches error
+
+
 exec-sql expect-error-regex=(tenant 5 is not active)
 BACKUP TENANT 5 INTO 'nodelocal://1/tenant5'
 ----
@@ -48,6 +58,11 @@ SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', in
 5 false {"id": "5", "state": "DROP"}
 6 true {"id": "6", "state": "ACTIVE"}
 
+exec-sql expect-error-regex=(tenant 6 already exists)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
+----
+regex matches error
+
 exec-sql
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
 ----
@@ -58,3 +73,8 @@ SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', in
 5 false {"id": "5", "state": "DROP"}
 6 true {"id": "6", "state": "ACTIVE"}
 7 true {"id": "7", "state": "ACTIVE"}
+
+exec-sql expect-error-regex=(include_all_secondary_tenants=false is not supported)
+RESTORE FROM LATEST IN 'nodelocal://1/cluster' WITH include_all_secondary_tenants=false
+----
+regex matches error

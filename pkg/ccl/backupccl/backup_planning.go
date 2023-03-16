@@ -525,6 +525,7 @@ func backupTypeCheck(
 		},
 		exprutil.Bools{
 			backupStmt.Options.CaptureRevisionHistory,
+			backupStmt.Options.IncludeAllSecondaryTenants,
 		}); err != nil {
 		return false, nil, err
 	}
@@ -594,6 +595,21 @@ func backupPlanHook(
 		)
 		if err != nil {
 			return nil, nil, nil, false, err
+		}
+	}
+
+	// IncludeAllSecondaryTenants exists only for
+	// forward-compatibility with v23.1 for users who want all
+	// tenants.
+	if backupStmt.Options.IncludeAllSecondaryTenants != nil {
+		includeAllSecondaryTenants, err := exprEval.Bool(
+			ctx, backupStmt.Options.IncludeAllSecondaryTenants,
+		)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		if !includeAllSecondaryTenants {
+			return nil, nil, nil, false, errors.Errorf("include_all_secondary_tenants=false is not supported")
 		}
 	}
 
