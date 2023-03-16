@@ -880,13 +880,13 @@ func (r *testRunner) runTest(
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else if s.Skip != "" {
-			if teamCity {
-				// Unfortunately if we have both `##teamcity[testIgnored ...]` and `##teamcity[testStarted ...]`
-				// TeamCity will show there being 2 tests of the same name, both ignored. Furthermore, if we also have a
-				// `##teamcity[testFinished ...], it will again show 2 tests, but one ignored and one successful.
-				shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
-					s.Name, teamCityEscape(s.Skip))
-			}
+			//if teamCity {
+			//	// Unfortunately if we have both `##teamcity[testIgnored ...]` and `##teamcity[testStarted ...]`
+			//	// TeamCity will show there being 2 tests of the same name, both ignored. Furthermore, if we also have a
+			//	// `##teamcity[testFinished ...], it will again show 2 tests, but one ignored and one successful.
+			//	shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
+			//		s.Name, teamCityEscape(s.Skip))
+			//}
 			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, durationStr, s.Skip)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
