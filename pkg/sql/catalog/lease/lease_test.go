@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -42,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -253,6 +253,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.InternalDB,
 			cfgCpy.Clock,
 			cfgCpy.Settings,
+			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
@@ -3262,12 +3263,9 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 				return kvpb.NewError(errors.WithAssertionFailure(err))
 			}
 			var a tree.DatumAlloc
-			if systemschema.TestSupportMultiRegion() {
-				var err error
-				_, in, err = keyside.Decode(&a, types.Bytes, in, encoding.Ascending)
-				if !assert.NoError(t, err) {
-					return kvpb.NewError(err)
-				}
+			_, in, err = keyside.Decode(&a, types.Bytes, in, encoding.Ascending)
+			if !assert.NoError(t, err) {
+				return kvpb.NewError(err)
 			}
 			id, _, err := keyside.Decode(
 				&a, types.Int, in, encoding.Ascending,

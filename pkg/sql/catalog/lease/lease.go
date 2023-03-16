@@ -21,11 +21,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -33,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -691,6 +692,7 @@ const (
 type Manager struct {
 	rangeFeedFactory *rangefeed.Factory
 	storage          storage
+	settings         *cluster.Settings
 	mu               struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
@@ -728,6 +730,7 @@ func NewLeaseManager(
 	db isql.DB,
 	clock *hlc.Clock,
 	settings *cluster.Settings,
+	settingsWatcher *settingswatcher.SettingsWatcher,
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
@@ -736,7 +739,7 @@ func NewLeaseManager(
 	lm := &Manager{
 		storage: storage{
 			nodeIDContainer: nodeIDContainer,
-			writer:          newKVWriter(codec, db.KV(), keys.LeaseTableID),
+			writer:          newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher),
 			db:              db,
 			clock:           clock,
 			settings:        settings,
@@ -751,6 +754,7 @@ func NewLeaseManager(
 				Unit:        metric.Unit_COUNT,
 			}),
 		},
+		settings:         settings,
 		rangeFeedFactory: rangeFeedFactory,
 		testingKnobs:     testingKnobs,
 		names:            makeNameCache(),
@@ -1337,16 +1341,16 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 
 		// Read orphaned leases.
 		const (
-			queryWithMR = `
+			queryWithRegion = `
 SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `
-			queryWithoutMR = `
+			queryWithoutRegion = `
 SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `
 		)
-		query := queryWithoutMR
-		if systemschema.TestSupportMultiRegion() {
-			query = queryWithMR
+		query := queryWithRegion
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+			query = queryWithoutRegion
 		}
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
 		var rows []tree.Datums
