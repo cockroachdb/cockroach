@@ -41,7 +41,13 @@ func makeRunControlTestCases(t *testing.T) ([]runControlTestCase, func()) {
 	t.Helper()
 	testCases := make([]runControlTestCase, 2)
 	tc := serverutils.StartNewTestCluster(
-		t, 2 /* numNodes */, base.TestClusterArgs{ReplicationMode: base.ReplicationManual},
+		t, 2 /* numNodes */, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Disable the implicit default test tenant so that we can start our own.
+				DisableDefaultTestTenant: true,
+			},
+			ReplicationMode: base.ReplicationManual,
+		},
 	)
 	testCases[0].name = "SystemTenant"
 	testCases[0].conn1 = tc.ServerConn(0).Conn
