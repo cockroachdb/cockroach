@@ -16,20 +16,16 @@ import {
   DatabaseDetailsPageData,
   defaultFilters,
   Filters,
-  util,
   ViewMode,
 } from "@cockroachlabs/cluster-ui";
 
-import { cockroach } from "src/js/protos";
 import {
   generateTableID,
   refreshDatabaseDetails,
   refreshTableDetails,
-  refreshTableStats,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr } from "src/util/constants";
-import { FixLong } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
 import {
   nodeRegionsByIDSelector,
@@ -40,8 +36,6 @@ import {
   getNodesByRegionString,
   normalizePrivileges,
 } from "../utils";
-
-const { TableDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 
 function normalizeRoles(raw: string[]): string[] {
   const rolePrecedence: Record<string, number> = {
@@ -97,7 +91,6 @@ export const mapStateToProps = createSelector(
 
   state => state.cachedData.databaseDetails,
   state => state.cachedData.tableDetails,
-  state => state.cachedData.tableStats,
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
   state => viewModeLocalSetting.selector(state),
@@ -110,7 +103,6 @@ export const mapStateToProps = createSelector(
     database,
     databaseDetails,
     tableDetails,
-    tableStats,
     nodeRegions,
     showNodeRegionsColumn,
     viewMode,
@@ -141,51 +133,48 @@ export const mapStateToProps = createSelector(
         databaseDetails[database]?.data?.results.tables_resp.tables,
         table => {
           const tableId = generateTableID(database, table);
-
           const details = tableDetails[tableId];
-          const stats = tableStats[tableId];
 
-          const roles = normalizeRoles(_.map(details?.data?.grants, "user"));
-          const grants = normalizePrivileges(
-            _.flatMap(details?.data?.grants, "privileges"),
+          const roles = normalizeRoles(
+            _.map(details?.data?.results.grants_resp.grants, "user"),
           );
-          const nodes = stats?.data?.node_ids || [];
+          const grants = normalizePrivileges(
+            _.flatMap(details?.data?.results.grants_resp.grants, "privileges"),
+          );
+          const nodes = details?.data?.results.stats.ranges_data.node_ids || [];
           const numIndexes = _.uniq(
-            _.map(details?.data?.indexes, index => index.name),
+            details?.data?.results.schema_details.indexes,
           ).length;
           return {
             name: table,
+            loading: !!details?.inFlight,
+            loaded: !!details?.valid,
+            lastError: details?.lastError,
             details: {
-              loading: !!details?.inFlight,
-              loaded: !!details?.valid,
-              lastError: details?.lastError,
-              columnCount: details?.data?.columns?.length || 0,
+              columnCount:
+                details?.data?.results.schema_details.columns?.length || 0,
               indexCount: numIndexes,
               userCount: roles.length,
               roles: roles,
               grants: grants,
-              statsLastUpdated: details?.data?.stats_last_created_at
-                ? util.TimestampToMoment(details?.data?.stats_last_created_at)
-                : null,
+              statsLastUpdated:
+                details?.data?.results.heuristics_details
+                  .stats_last_created_at || null,
               hasIndexRecommendations:
-                details?.data?.has_index_recommendations || false,
-              totalBytes: FixLong(
-                details?.data?.data_total_bytes || 0,
-              ).toNumber(),
-              liveBytes: FixLong(
-                details?.data?.data_live_bytes || 0,
-              ).toNumber(),
-              livePercentage: details?.data?.data_live_percentage || 0,
-            },
-            stats: {
-              loading: !!stats?.inFlight,
-              loaded: !!stats?.valid,
-              lastError: stats?.lastError,
-              replicationSizeInBytes: FixLong(
-                stats?.data?.approximate_disk_bytes || 0,
-              ).toNumber(),
+                details?.data?.results.stats.index_stats
+                  .has_index_recommendations || false,
+              totalBytes:
+                details?.data?.results.stats.ranges_data.total_bytes || 0,
+              liveBytes:
+                details?.data?.results.stats.ranges_data.live_bytes || 0,
+              livePercentage:
+                details?.data?.results.stats.ranges_data.live_percentage || 0,
+              replicationSizeInBytes:
+                details?.data?.results.stats.pebble_data
+                  .approximate_disk_bytes || 0,
               nodes: nodes,
-              rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
+              rangeCount:
+                details?.data?.results.stats.ranges_data.range_count || 0,
               nodesByRegionString: getNodesByRegionString(
                 nodes,
                 nodeRegions,
@@ -202,10 +191,10 @@ export const mapStateToProps = createSelector(
 export const mapDispatchToProps = {
   refreshDatabaseDetails,
   refreshTableDetails: (database: string, table: string) => {
-    return refreshTableDetails(new TableDetailsRequest({ database, table }));
-  },
-  refreshTableStats: (database: string, table: string) => {
-    return refreshTableStats(new TableStatsRequest({ database, table }));
+    return refreshTableDetails({
+      database,
+      table,
+    });
   },
   onViewModeChange: (viewMode: ViewMode) => viewModeLocalSetting.set(viewMode),
   onSortingTablesChange: (columnName: string, ascending: boolean) =>
