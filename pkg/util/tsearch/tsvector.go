@@ -11,11 +11,12 @@
 package tsearch
 
 import (
-	"fmt"
+	"math/bits"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -73,24 +74,31 @@ const (
 	weightAny = weightA | weightB | weightC | weightD
 )
 
-func (w tsWeight) String() string {
-	var ret strings.Builder
+// NB: must be kept in sync with stringSize().
+func (w tsWeight) writeString(buf *strings.Builder) {
 	if w&weightStar != 0 {
-		ret.WriteByte('*')
+		buf.WriteByte('*')
 	}
 	if w&weightA != 0 {
-		ret.WriteByte('A')
+		buf.WriteByte('A')
 	}
 	if w&weightB != 0 {
-		ret.WriteByte('B')
+		buf.WriteByte('B')
 	}
 	if w&weightC != 0 {
-		ret.WriteByte('C')
+		buf.WriteByte('C')
 	}
 	if w&weightD != 0 {
-		ret.WriteByte('D')
+		buf.WriteByte('D')
 	}
-	return ret.String()
+}
+
+// stringSize returns the length of the string that corresponds to this
+// tsWeight.
+// NB: must be kept in sync with writeString().
+func (w tsWeight) stringSize() int {
+	// Count the number of bits set in the lowest 5 bits.
+	return bits.OnesCount8(uint8(w & 31))
 }
 
 // TSVectorPGEncoding returns the PG-compatible wire protocol encoding for a
@@ -167,28 +175,37 @@ func newLexemeTerm(lexeme string) (tsTerm, error) {
 	return tsTerm{lexeme: lexeme}, nil
 }
 
-func (t tsTerm) String() string {
+// NB: must be kept in sync with stringSize().
+func (t tsTerm) writeString(buf *strings.Builder) {
 	if t.operator != 0 {
 		switch t.operator {
 		case and:
-			return "&"
+			buf.WriteString("&")
+			return
 		case or:
-			return "|"
+			buf.WriteString("|")
+			return
 		case not:
-			return "!"
+			buf.WriteString("!")
+			return
 		case lparen:
-			return "("
+			buf.WriteString("(")
+			return
 		case rparen:
-			return ")"
+			buf.WriteString(")")
+			return
 		case followedby:
+			buf.WriteString("<")
 			if t.followedN == 1 {
-				return "<->"
+				buf.WriteString("-")
+			} else {
+				buf.WriteString(strconv.Itoa(int(t.followedN)))
 			}
-			return fmt.Sprintf("<%d>", t.followedN)
+			buf.WriteString(">")
+			return
 		}
 	}
 
-	var buf strings.Builder
 	buf.WriteByte('\'')
 	for _, r := range t.lexeme {
 		if r == '\'' {
@@ -208,9 +225,48 @@ func (t tsTerm) String() string {
 		if pos.position > 0 {
 			buf.WriteString(strconv.Itoa(int(pos.position)))
 		}
-		buf.WriteString(pos.weight.String())
+		pos.weight.writeString(buf)
 	}
-	return buf.String()
+}
+
+// stringSize returns the length of the string representation of this tsTerm.
+// NB: must be kept in sync with writeString().
+func (t tsTerm) stringSize() int {
+	if t.operator != 0 {
+		switch t.operator {
+		case and, or, not, lparen, rparen:
+			return 1
+		case followedby:
+			if t.followedN == 1 {
+				return 3 // '<->'
+			}
+			return 2 + len(strconv.Itoa(int(t.followedN))) // fmt.Sprintf("<%d>", t.followedN)
+		}
+	}
+	size := 1 // '\''
+	for _, r := range t.lexeme {
+		if r == '\'' {
+			// Single quotes are escaped as double single quotes inside of a
+			// TSVector.
+			size += 2
+		} else {
+			// Compare as uint32 to correctly handle negative runes.
+			if uint32(r) < utf8.RuneSelf {
+				size++
+			} else {
+				size += utf8.RuneLen(r)
+			}
+		}
+	}
+	size++                   // '\''
+	size += len(t.positions) // ':' or ',' for each position
+	for _, pos := range t.positions {
+		if pos.position > 0 {
+			size += len(strconv.Itoa(int(pos.position)))
+		}
+		size += pos.weight.stringSize()
+	}
+	return size
 }
 
 func (t tsTerm) matchesWeight(targetWeight tsWeight) bool {
@@ -240,9 +296,22 @@ func (t TSVector) String() string {
 		if i > 0 {
 			buf.WriteByte(' ')
 		}
-		buf.WriteString(term.String())
+		term.writeString(&buf)
 	}
 	return buf.String()
+}
+
+// StringSize returns the length of the string that would have been returned on
+// String() call, without actually constructing that string.
+func (t TSVector) StringSize() int {
+	var size int
+	if len(t) > 0 {
+		size = len(t) - 1 // space
+	}
+	for _, term := range t {
+		size += term.stringSize()
+	}
+	return size
 }
 
 // ParseTSVector produces a TSVector from an input string. The input will be

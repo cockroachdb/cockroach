@@ -187,3 +187,34 @@ func TestParseTSRandom(t *testing.T) {
 		assert.Equal(t, v, v2)
 	}
 }
+
+func TestTSVectorStringSize(t *testing.T) {
+	r, _ := randutil.NewTestRand()
+	for i := 0; i < 1000; i++ {
+		v := RandomTSVector(r)
+		require.Equal(t, len(v.String()), v.StringSize())
+	}
+}
+
+func BenchmarkTSVector(b *testing.B) {
+	r, _ := randutil.NewTestRand()
+	tsVectors := make([]TSVector, 10000)
+	for i := range tsVectors {
+		tsVectors[i] = RandomTSVector(r)
+	}
+	b.ResetTimer()
+	b.Run("String", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, v := range tsVectors {
+				_ = v.String()
+			}
+		}
+	})
+	b.Run("StringSize", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, v := range tsVectors {
+				_ = v.StringSize()
+			}
+		}
+	})
+}
