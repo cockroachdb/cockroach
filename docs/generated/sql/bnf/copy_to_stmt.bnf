@@ -1,0 +1,6 @@
+copy_to_stmt ::=
+	delete_stmt
+	| insert_stmt
+	| select_stmt
+	| update_stmt
+	| upsert_stmt

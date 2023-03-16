@@ -380,3 +380,11 @@ COPY (SELECT * FROM t) TO STDOUT (HEADER, OIDS)
                                               ^
 HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/41608/
+
+error
+COPY (EXPLAIN SELECT * FROM t) TO STDOUT
+----
+at or near "explain": syntax error
+DETAIL: source SQL:
+COPY (EXPLAIN SELECT * FROM t) TO STDOUT
+      ^
