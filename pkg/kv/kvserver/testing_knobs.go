@@ -471,6 +471,9 @@ type StoreTestingKnobs struct {
 	// DisableMergeWaitForReplicasInit skips the waitForReplicasInit calls
 	// during merges. Useful for testContext tests that want to use merges.
 	DisableMergeWaitForReplicasInit bool
+
+	// RangeLeaseAcquireTimeoutOverride overrides RaftConfig.RangeLeaseAcquireTimeout().
+	RangeLeaseAcquireTimeoutOverride time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
