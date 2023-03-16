@@ -9,7 +9,12 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { fetchData } from "src/api";
+import {
+  fetchData,
+  sqlApiErrorMessage,
+  executeSql,
+  sqlResultsAreEmpty,
+} from "src/api";
 import {
   FixFingerprintHexValue,
   HexStringToInt64String,
@@ -19,6 +24,7 @@ import {
 } from "src/util";
 import Long from "long";
 import { AggregateStatistics } from "../statementsTable";
+import { ExecutionType } from "src/recentExecutions";
 const STATEMENTS_PATH = "/_status/combinedstmts";
 const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
 
