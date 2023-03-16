@@ -251,6 +251,7 @@ const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
 const lastUpdated = moment("Sep 15 2021 01:30:00 GMT");
 
 const statementsPagePropsFixture: StatementsPageProps = {
+  stmtsTotalRuntimeSecs: 100,
   history,
   location: {
     pathname: "/statements",

@@ -99,14 +99,115 @@ func getCombinedStatementStats(
 		return nil, serverError(ctx, err)
 	}
 
+	stmtsRunTime, txnsRunTime, err := getTotalRuntimeSecs(ctx, req, ie, testingKnobs)
+
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
 	response := &serverpb.StatementsResponse{
 		Statements:            statements,
 		Transactions:          transactions,
 		LastReset:             statsProvider.GetLastReset(),
 		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+		StmtsTotalRuntimeSecs: stmtsRunTime,
+		TxnsTotalRuntimeSecs:  txnsRunTime,
 	}
 
 	return response, nil
+}
+
+func getTotalRuntimeSecs(
+	ctx context.Context,
+	req *serverpb.CombinedStatementsStatsRequest,
+	ie *sql.InternalExecutor,
+	testingKnobs *sqlstats.TestingKnobs,
+) (stmtsRuntime float32, txnsRuntime float32, err error) {
+	var buffer strings.Builder
+	buffer.WriteString(testingKnobs.GetAOSTClause())
+	var args []interface{}
+	startTime := getTimeFromSeconds(req.Start)
+	endTime := getTimeFromSeconds(req.End)
+
+	buffer.WriteString(" WHERE true")
+
+	if startTime != nil {
+		args = append(args, *startTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts >= $%d", len(args)))
+	}
+
+	if endTime != nil {
+		args = append(args, *endTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)))
+	}
+
+	whereClause := buffer.String()
+
+	queryWithPlaceholders := `
+SELECT
+COALESCE(
+  sum(
+    (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+    (statistics-> 'statistics' ->> 'cnt')::FLOAT
+  )
+, 0)
+FROM crdb_internal.%s_statistics_persisted
+%s
+`
+
+	getRuntime := func(table string) (float32, error) {
+		it, err := ie.QueryIteratorEx(
+			ctx,
+			fmt.Sprintf(`%s-total-runtime`, table),
+			nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryWithPlaceholders, table, whereClause),
+			args...)
+
+		if err != nil {
+			return 0, err
+		}
+
+		defer func() {
+			closeErr := it.Close()
+			if closeErr != nil {
+				err = errors.CombineErrors(err, closeErr)
+			}
+		}()
+
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return 0, err
+		}
+
+		if !ok {
+			return 0, errors.New("expected one row but got none")
+		}
+
+		var row tree.Datums
+		if row = it.Cur(); row == nil {
+			return 0, errors.New("unexpected null row")
+		}
+
+		return float32(tree.MustBeDFloat(row[0])), nil
+
+	}
+
+	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		stmtsRuntime, err = getRuntime("statement")
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
+		txnsRuntime, err = getRuntime("transaction")
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	return stmtsRuntime, txnsRuntime, err
 }
 
 // Common stmt and txn columns to sort on.
@@ -114,6 +215,8 @@ const (
 	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
 	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
 	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
+	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
 )
 
 func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
@@ -137,6 +240,8 @@ func getTxnColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 		return sortExecCountDesc
 	case serverpb.StatsSortOptions_CONTENTION_TIME:
 		return sortContentionTimeDesc
+	case serverpb.StatsSortOptions_PCT_RUNTIME:
+		return sortPCTRuntimeDesc
 	default:
 		return sortSvcLatDesc
 	}

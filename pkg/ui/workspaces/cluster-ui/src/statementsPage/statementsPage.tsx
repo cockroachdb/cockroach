@@ -33,13 +33,7 @@ import {
   updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 
-import {
-  calculateTotalWorkload,
-  containAny,
-  syncHistory,
-  unique,
-  unset,
-} from "src/util";
+import { containAny, syncHistory, unique, unset } from "src/util";
 import {
   AggregateStatistics,
   makeStatementsColumns,
@@ -154,6 +148,7 @@ export interface StatementsPageStateProps {
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  stmtsTotalRuntimeSecs: number;
 }
 
 export interface StatementsPageState {
@@ -581,7 +576,6 @@ export class StatementsPage extends React.Component<
     } = this.props;
     const statements = this.props.statements ?? [];
     const data = this.filteredStatementsData();
-    const totalWorkload = calculateTotalWorkload(statements);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     // If the cluster is a tenant cluster we don't show info
@@ -594,7 +588,7 @@ export class StatementsPage extends React.Component<
     const columns = makeStatementsColumns(
       statements,
       filters.app.split(","),
-      totalWorkload,
+      this.props.stmtsTotalRuntimeSecs,
       nodeRegions,
       "statement",
       isTenant,

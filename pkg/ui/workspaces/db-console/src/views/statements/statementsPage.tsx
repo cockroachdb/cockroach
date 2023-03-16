@@ -400,6 +400,8 @@ export default withRouter(
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
+        stmtsTotalRuntimeSecs:
+          state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
       },
       activePageProps: mapStateToActiveStatementViewProps(state),
     }),
