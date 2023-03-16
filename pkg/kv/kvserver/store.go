@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -2191,123 +2190,99 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 // startRangefeedUpdater periodically informs all the replicas with rangefeeds
 // about closed timestamp updates.
 func (s *Store) startRangefeedUpdater(ctx context.Context) {
-	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx,
-		stop.TaskOpts{
-			TaskName: "closedts-rangefeed-updater",
-			SpanOpt:  stop.SterileRootSpan,
-		}, func(ctx context.Context) {
-			st := s.cfg.Settings
-			confCh := make(chan struct{}, 1)
-			confChanged := func(ctx context.Context) {
-				select {
-				case confCh <- struct{}{}:
-				default:
-				}
+	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "closedts-rangefeed-updater",
+		SpanOpt:  stop.SterileRootSpan,
+	}, func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		// The replicas with an active rangefeed. Updated periodically below. Reuse
+		// the rangeIDs slice across runs to minimize allocation.
+		var rangeIDs roachpb.RangeIDSlice
+		updateRangeIDs := func() roachpb.RangeIDSlice {
+			rangeIDs = rangeIDs[:0]
+			s.rangefeedReplicas.Lock()
+			for rangeID := range s.rangefeedReplicas.m {
+				rangeIDs = append(rangeIDs, rangeID)
 			}
-			closedts.SideTransportCloseInterval.SetOnChange(&st.SV, confChanged)
-			RangeFeedRefreshInterval.SetOnChange(&st.SV, confChanged)
+			s.rangefeedReplicas.Unlock()
+			// Sort the range IDs so that we notify them in the same order on each
+			// iteration. With the pacing below, this helps to ensure a consistent
+			// closed timestamp lag for each range. The closedts-rangefeed-updater
+			// refresh loop operates independently of incoming closed timestamp
+			// updates, so this does not favor some replicas over others.
+			sort.Sort(&rangeIDs)
+			return rangeIDs
+		}
 
-			// refreshInterval defines the interval between closed timestamp
-			// notification delivery for a given range.
-			getRefreshInterval := func() time.Duration {
-				refresh := RangeFeedRefreshInterval.Get(&st.SV)
-				if refresh != 0 {
-					return refresh
-				}
-				return closedts.SideTransportCloseInterval.Get(&st.SV)
+		conf := newRangeFeedUpdaterConf(s.cfg.Settings)
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+
+		// Repeatedly handle the closed timestamp update for each range ID.
+		//
+		// The refreshInterval defines the target interval between delivering closed
+		// timestamp updates for a single range. This is the target time in which a
+		// single pass should complete. The smearInterval defines the target
+		// interval between wake-ups of this loop.
+		//
+		// We smear the work across the refresh interval to avoid waking up all the
+		// replicas' rangefeed processor and registration goroutines in a short
+		// burst. Doing so without pacing can have a severe impact on goroutine
+		// scheduling latency which impacts foreground latency, as tens of thousands
+		// of goroutines can be marked as runnable in a short period of time.
+		//
+		// Pacing works as follows:
+		// - We spread closed timestamp notifications to replicas across the refresh
+		//   interval (default 200ms).
+		// - We smear across replicas at the granularity of smearInterval (e.g. 1ms)
+		//   to avoid putting this goroutine to sleep for excessively short periods
+		//   of time.
+		// - We prioritize staying within the target refresh interval. So if there
+		//   are delays in processing, the work goes with no sleeps.
+		for {
+			// Configuration may have changed between runs, load it unconditionally.
+			refreshInterval, smearInterval, err := conf.wait(ctx)
+			if err != nil { // context canceled
+				return
 			}
 
-			// smearInterval defines the interval between closed timestamp
-			// notification delivery to batches of ranges. See below for an
-			// explanation.
-			const smearInterval = 1 * time.Millisecond
-			smearLimiter := rate.NewLimiter(rate.Every(smearInterval), 1)
-
-			// sleepTimer is used to wait out the refreshInterval when a small
-			// number of rangefeeds are active.
-			sleepTimer := timeutil.NewTimer()
-			defer sleepTimer.Stop()
-
-			var replIDs roachpb.RangeIDSlice
-			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-			defer cancel()
-			for {
-				if ctx.Err() != nil {
-					return
+			work := updateRangeIDs()
+			sched := newRangeFeedUpdaterSched(timeutil.Now(), refreshInterval, smearInterval, len(work))
+			for confChanged := false; !confChanged; {
+				// The last iteration may return 0 items to do, but it's fine - we need
+				// to wait until targetTime before looping around.
+				todo, targetTime := sched.next()
+				for _, id := range work[:todo] {
+					if r := s.GetReplicaIfExists(id); r != nil {
+						r.handleClosedTimestampUpdate(ctx, r.GetCurrentClosedTimestamp(ctx))
+					}
 				}
-				// Notify each replica with an active rangefeed to check for an
-				// updated closed timestamp.
-				s.rangefeedReplicas.Lock()
-				replIDs = replIDs[:0]
-				for replID := range s.rangefeedReplicas.m {
-					replIDs = append(replIDs, replID)
-				}
-				s.rangefeedReplicas.Unlock()
-				// Sort the range IDs so that we notify in the same order on each
-				// iteration. With the pacing below, this helps to ensure a consistent
-				// closed timestamp lag for each range. The closedts-rangefeed-updater
-				// refresh loop operates independently of incoming closed timestamp
-				// updates, so this does not favor some replicas over others.
-				sort.Sort(&replIDs)
-				// We smear these notifications across the refresh interval to avoid
-				// waking up all the replicas' rangefeed processor and registration
-				// goroutines in a short burst. Doing so without pacing can have a
-				// severe impact on goroutine scheduling latency which impacts
-				// foreground latency, as tens of thousands of goroutines can be
-				// marked as runnable in a short period of time.
-				//
-				// Pacing works as follows:
-				// - We spread closed timestamp notifications to replicas across the
-				//   refresh interval (default 200ms).
-				// - We smear across replicas at the granularity of smearInterval (1ms)
-				//   to avoid putting this goroutine to sleep for excessively short
-				//   periods of time.
-				// - To do so, we compute the number of times this goroutine should
-				//   sleep (smearIntervals).
-				// - We then compute the number of replicas that should be notified
-				//   each time this goroutine runs (smearBatchSize).
-				refreshInterval := getRefreshInterval()
-				if refreshInterval == 0 {
+				work = work[todo:]
+
+				now := timeutil.Now()
+				if now.Before(targetTime) {
+					timer.Reset(targetTime.Sub(now))
 					select {
-					case <-confCh:
-						// Loop around to use the updated refresh interval.
-						continue
+					case t := <-timer.C:
+						timer.Read = true
+						now = t
+					case <-conf.changed: // be responsive to config changes
+						confChanged = true
 					case <-ctx.Done():
 						return
 					}
 				}
-				smearIntervals := int((refreshInterval + smearInterval - 1) / smearInterval)
-				smearBatchSize := (len(replIDs) + smearIntervals - 1) / smearIntervals
-				for i, replID := range replIDs {
-					if i%smearBatchSize == 0 {
-						if err := smearLimiter.Wait(ctx); err != nil {
-							if ctx.Err() != nil {
-								return
-							}
-							log.Warningf(ctx, "error pacing closed timestamp notification: %v", err)
-						}
-					}
-					r := s.GetReplicaIfExists(replID)
-					if r == nil {
-						continue
-					}
-					r.handleClosedTimestampUpdate(ctx, r.GetCurrentClosedTimestamp(ctx))
-				}
-				// If we have fewer than smearIntervals replicas, sleep out the remainder
-				// of the refresh interval.
-				sleepIntervals := smearIntervals - len(replIDs)
-				if sleepIntervals > 0 {
-					sleepDur := time.Duration(sleepIntervals) * smearInterval
-					sleepTimer.Reset(sleepDur)
-					select {
-					case <-sleepTimer.C:
-						sleepTimer.Read = true
-					case <-ctx.Done():
-						return
-					}
+				sched.tick(now)
+				if len(work) == 0 {
+					// NB: we have waited until at least refreshInterval has passed, so
+					// it's safe to loop around.
+					break
 				}
 			}
-		})
+		}
+	})
 }
 
 func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
