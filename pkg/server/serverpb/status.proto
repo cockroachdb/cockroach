@@ -1613,6 +1613,10 @@ message StatementsResponse {
   // Transactions is transaction-level statistics for the collection of
   // statements in this response.
   repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
+
+  float stmts_total_runtime_secs = 6;
+
+  float txns_total_runtime_secs = 7;
 }
 
 enum StatsSortOptions {
@@ -1621,6 +1625,7 @@ enum StatsSortOptions {
   EXECUTION_COUNT = 2;
   P99_STMTS_ONLY = 3;
   CONTENTION_TIME = 4;
+  PCT_RUNTIME = 5;
 }
 message CombinedStatementsStatsRequest {
   enum StatsType {

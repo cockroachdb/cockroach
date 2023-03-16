@@ -112,6 +112,8 @@ export const ConnectedStatementsPage = withRouter(
         totalFingerprints: selectTotalFingerprints(state),
         limit: selectStmtsPageLimit(state),
         reqSortSetting: selectStmtsPageReqSort(state),
+        stmtsTotalRuntimeSecs:
+          state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
       },
       activePageProps: mapStateToRecentStatementsPageProps(state),
     }),

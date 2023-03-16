@@ -546,6 +546,7 @@ const statementsDefault = [
 ];
 
 const statementsPagePropsFixture: StatementsPageProps = {
+  stmtsTotalRuntimeSecs: 100,
   statements: statementsDefault,
   history,
   location: {
