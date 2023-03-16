@@ -793,6 +793,12 @@ func (sc *SchemaChanger) validateConstraints(
 				resolver := descs.NewDistSQLTypeResolver(collection, txn.KV())
 				semaCtx := tree.MakeSemaContext()
 				semaCtx.TypeResolver = &resolver
+				semaCtx.NameResolver = NewSkippingCacheSchemaResolver(
+					txn.Descriptors(),
+					sessiondata.NewStack(NewFakeSessionData(&sc.settings.SV, "validate constraint")),
+					txn.KV(),
+					nil, /* authAccessor */
+				)
 				semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(collection, txn.KV())
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.

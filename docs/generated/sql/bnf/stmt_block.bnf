@@ -792,7 +792,7 @@ show_constraints_stmt ::=
 	| 'SHOW' 'CONSTRAINTS' 'FROM' table_name with_comment
 
 show_create_stmt ::=
-	'SHOW' 'CREATE' table_name
+	'SHOW' 'CREATE' table_name opt_show_create_format_options
 	| 'SHOW' 'CREATE' 'ALL' 'SCHEMAS'
 	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
 	| 'SHOW' 'CREATE' 'ALL' 'TYPES'
@@ -1303,6 +1303,7 @@ unreserved_keyword ::=
 	| 'REASSIGN'
 	| 'RECURRING'
 	| 'RECURSIVE'
+	| 'REDACT'
 	| 'REF'
 	| 'REFRESH'
 	| 'REGION'
@@ -1934,6 +1935,9 @@ show_backup_connection_options_list ::=
 with_comment ::=
 	'WITH' 'COMMENT'
 	| 
+
+opt_show_create_format_options ::=
+	'WITH' 'REDACT'
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' var_name
@@ -3840,6 +3844,7 @@ bare_label_keywords ::=
 	| 'REASSIGN'
 	| 'RECURRING'
 	| 'RECURSIVE'
+	| 'REDACT'
 	| 'REF'
 	| 'REFERENCES'
 	| 'REFRESH'

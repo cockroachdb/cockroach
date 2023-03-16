@@ -85,6 +85,7 @@ func FormatColumnForDisplay(
 	col catalog.Column,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
+	redactableValues bool,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	name := col.GetName()
@@ -98,6 +99,10 @@ func FormatColumnForDisplay(
 		f.WriteString(" NULL")
 	} else {
 		f.WriteString(" NOT NULL")
+	}
+	fmtFlags := tree.FmtParsable
+	if redactableValues {
+		fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
 	}
 	if col.HasDefault() {
 		if col.IsGeneratedAsIdentity() {
@@ -114,7 +119,7 @@ func FormatColumnForDisplay(
 
 		} else {
 			f.WriteString(" DEFAULT ")
-			defExpr, err := FormatExprForDisplay(ctx, tbl, col.GetDefaultExpr(), semaCtx, sessionData, tree.FmtParsable)
+			defExpr, err := FormatExprForDisplay(ctx, tbl, col.GetDefaultExpr(), semaCtx, sessionData, fmtFlags)
 			if err != nil {
 				return "", err
 			}
@@ -123,7 +128,7 @@ func FormatColumnForDisplay(
 	}
 	if col.HasOnUpdate() {
 		f.WriteString(" ON UPDATE ")
-		onUpdateExpr, err := FormatExprForDisplay(ctx, tbl, col.GetOnUpdateExpr(), semaCtx, sessionData, tree.FmtParsable)
+		onUpdateExpr, err := FormatExprForDisplay(ctx, tbl, col.GetOnUpdateExpr(), semaCtx, sessionData, fmtFlags)
 		if err != nil {
 			return "", err
 		}
@@ -131,7 +136,7 @@ func FormatColumnForDisplay(
 	}
 	if col.IsComputed() {
 		f.WriteString(" AS (")
-		compExpr, err := FormatExprForDisplay(ctx, tbl, col.GetComputeExpr(), semaCtx, sessionData, tree.FmtParsable)
+		compExpr, err := FormatExprForDisplay(ctx, tbl, col.GetComputeExpr(), semaCtx, sessionData, fmtFlags)
 		if err != nil {
 			return "", err
 		}
