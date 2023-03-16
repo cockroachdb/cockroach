@@ -123,6 +123,8 @@ export const transaction = {
 };
 
 export const transactionDetailsData: StatementsResponse = {
+  stmts_total_runtime_secs: 1,
+  txns_total_runtime_secs: 1,
   statements: [
     {
       key: {

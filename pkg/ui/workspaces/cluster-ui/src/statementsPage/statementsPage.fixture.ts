@@ -250,6 +250,7 @@ const aggregationInterval = 3600; // 1 hour
 const lastUpdated = moment("Sep 15 2021 01:30:00 GMT");
 
 const statementsPagePropsFixture: StatementsPageProps = {
+  stmtsTotalRuntimeSecs: 100,
   history,
   location: {
     pathname: "/statements",

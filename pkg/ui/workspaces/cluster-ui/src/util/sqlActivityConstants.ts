@@ -26,6 +26,8 @@ export function getSortLabel(sort: SqlStatsSortType): string {
       return "Execution Count";
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "Contention Time";
+    case SqlStatsSortOptions.PCT_RUNTIME:
+      return "% Of All Run Time";
     default:
       return "";
   }
@@ -39,7 +41,7 @@ export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions).map(
 );
 
 export const txnRequestSortOptions = stmtRequestSortOptions.filter(
-  option => true,
+  option => option.value !== SqlStatsSortOptions.PCT_RUNTIME,
 );
 
 export const STATS_LONG_LOADING_DURATION = duration(2, "s");
