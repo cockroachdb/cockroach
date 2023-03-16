@@ -41,10 +41,9 @@ describe("SQLStats sagas", () => {
     spy.mockRestore();
   });
 
-  const payload = new cockroach.server.serverpb.StatementsRequest({
+  const payload = new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(1596816675),
     end: Long.fromNumber(1596820675),
-    combined: true,
   });
   const sqlStatsResponse = new cockroach.server.serverpb.StatementsResponse({
     statements: [
@@ -82,6 +81,7 @@ describe("SQLStats sagas", () => {
           lastError: null,
           valid: true,
           lastUpdated,
+          inFlight: false,
         })
         .run();
     });
@@ -97,6 +97,7 @@ describe("SQLStats sagas", () => {
           lastError: error,
           valid: false,
           lastUpdated,
+          inFlight: false,
         })
         .run();
     });
@@ -107,23 +108,24 @@ describe("SQLStats sagas", () => {
       new cockroach.server.serverpb.ResetSQLStatsResponse();
 
     it("successfully resets SQL stats", () => {
-      return expectSaga(resetSQLStatsSaga, payload)
+      return expectSaga(resetSQLStatsSaga)
         .provide([[matchers.call.fn(resetSQLStats), resetSQLStatsResponse]])
         .put(sqlDetailsStatsActions.invalidateAll())
-        .put(actions.refresh())
+        .put(actions.invalidated())
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
           data: null,
           lastError: null,
           valid: false,
           lastUpdated: null,
+          inFlight: false,
         })
         .run();
     });
 
     it("returns error on failed reset", () => {
       const err = new Error("failed to reset");
-      return expectSaga(resetSQLStatsSaga, payload)
+      return expectSaga(resetSQLStatsSaga)
         .provide([[matchers.call.fn(resetSQLStats), throwError(err)]])
         .put(actions.failed(err))
         .withReducer(reducer)
@@ -132,6 +134,7 @@ describe("SQLStats sagas", () => {
           lastError: err,
           valid: false,
           lastUpdated,
+          inFlight: false,
         })
         .run();
     });

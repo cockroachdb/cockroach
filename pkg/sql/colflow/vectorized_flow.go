@@ -1326,14 +1326,10 @@ func (r *vectorizedFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.Strea
 func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 	r.f.AddStartable(
 		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
-			if wg != nil {
-				wg.Add(1)
-			}
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				run(ctx, flowCtxCancel)
-				if wg != nil {
-					wg.Done()
-				}
 			}()
 		}))
 }

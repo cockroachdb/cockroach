@@ -212,7 +212,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	// Register a flow with a very low timeout. After it times out, we'll attempt
 	// to connect a stream, but it'll be too late.
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
-	f1 := &FlowBase{}
+	f1 := &FlowBase{ctxCancel: func() {}}
 	streamID1 := execinfrapb.StreamID(1)
 	consumer := &distsqlutils.RowBuffer{}
 	wg := &sync.WaitGroup{}
@@ -370,7 +370,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	ctx := context.Background()
 	reg := NewFlowRegistry()
 
-	flow := &FlowBase{}
+	flow := &FlowBase{ctxCancel: func() {}}
 	id := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	registerFlow := func(t *testing.T, id execinfrapb.FlowID) {
 		t.Helper()
@@ -653,5 +653,128 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	_, meta = left.Next()
 	if !errors.Is(meta.Err, cancelchecker.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
+	}
+}
+
+// delayedErrorServerStream is a light wrapper around the server stream that
+// allows to block (on delayCh) Send() calls which always result in the
+// provided error.
+type delayedErrorServerStream struct {
+	execinfrapb.DistSQL_FlowStreamServer
+	// rpcCalledCh is sent on in the very beginning of every Send() call.
+	rpcCalledCh chan<- struct{}
+	delayCh     <-chan struct{}
+	err         error
+}
+
+func (s *delayedErrorServerStream) Send(*execinfrapb.ConsumerSignal) error {
+	s.rpcCalledCh <- struct{}{}
+	<-s.delayCh
+	return s.err
+}
+
+// TestErrorOnSlowHandshake is a regression test for #94113. In particular, it
+// verifies that the flow infra is shut down correctly when the inbound stream
+// times out while the handshake message is being sent to the producer and later
+// results in an error.
+//
+// Here is a more detailed sequence of events:
+//   - the flow, which has a single inbound stream, is registered with the flow
+//     registry; the flow is given some timeout (2s in the test) for that
+//     inbound stream to arrive
+//   - the inbound stream arrives, finds the flow in the registry and sends a
+//     handshake message
+//   - for whatever reason this "handshake" RPC is slow (in the test it is
+//     blocked, but in production it could be due to overloaded node), so the
+//     inbound stream timeout is reached
+//   - that timeout "cancels" the single pending flow; this cancellation results
+//     in the flow being marked as "canceled" and the wait group being
+//     decremented (as well as calling Timeout() on the receiver)
+//   - after the flow cancellation is performed, the "handshake" RPC results in
+//     an error which results in flow being properly canceled (by calling
+//     FlowBase.ctxCancel).
+//
+// Before #94113 was fixed, the flow would be incorrectly marked as "connected"
+// before the "handshake" RPC was issued, so the inbound stream timeout would
+// not actually call Timeout() on the receiver and the wait group would never be
+// decremented. Also, the flow wouldn't be properly canceled either, so this
+// setup could result in a deadlock.
+func TestErrorOnSlowHandshake(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	reg := NewFlowRegistry()
+	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+	streamID := execinfrapb.StreamID(1)
+	cancelCh := make(chan struct{})
+	f := &FlowBase{ctxCancel: func() {
+		cancelCh <- struct{}{}
+	}}
+
+	serverStream, _ /* clientStream */, cleanup := createDummyStream(t)
+	defer cleanup()
+
+	rpcCalledCh, delayCh := make(chan struct{}), make(chan struct{})
+	serverStream = &delayedErrorServerStream{
+		DistSQL_FlowStreamServer: serverStream,
+		rpcCalledCh:              rpcCalledCh,
+		delayCh:                  delayCh,
+		err:                      errors.New("dummy error"),
+	}
+
+	var wg sync.WaitGroup
+	streamInfo := &InboundStreamInfo{
+		receiver: RowInboundStreamHandler{&distsqlutils.RowBuffer{}, nil /* types */},
+		onFinish: wg.Done,
+	}
+	wg.Add(1)
+	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
+		streamID: streamInfo,
+	}
+	inboundStreamTimeout := 2 * time.Second
+	if err := reg.RegisterFlow(
+		context.Background(), flowID, f, inboundStreams, inboundStreamTimeout,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		if _, _, _, err := reg.ConnectInboundStream(
+			// timeout here doesn't matter since the flow is already present in
+			// the registry.
+			context.Background(), flowID, streamID, serverStream, 0, /* timeout */
+		); err != nil {
+			errCh <- err
+		}
+	}()
+
+	// Wait for the concurrent goroutine to issue the first RPC (which is a
+	// handshake).
+	<-rpcCalledCh
+	// Wait out the inbound stream timeout.
+	time.Sleep(inboundStreamTimeout + time.Second)
+	// At this point we expect the inbound stream is canceled by
+	// flowEntry.streamTimer, so we can unblock the handshake RPC. (Note that
+	// we added an extra second to the sleep above in order to make it more
+	// likely that the timer fired.)
+	delayCh <- struct{}{}
+
+	// Make sure that the wait group is properly decremented (this must have
+	// been done by flowEntry.streamTimer too).
+	wg.Wait()
+	// Since the RPC resulted in an error, we expect that the flow is canceled.
+	<-cancelCh
+	err := <-errCh
+	if err == nil {
+		t.Fatal("expected ConnectInboundStream to result in an error")
+	}
+	if !testutils.IsError(err, "came too late") && !testutils.IsError(err, "dummy error") {
+		// Generally speaking, we expect the "came too late" error which
+		// indicates that the inbound stream was canceled while performing the
+		// RPC. However, under stress it might be possible for the injected
+		// error to be returned. This is acceptable since the main goal of the
+		// test is to ensure that no deadlocks happen, and we don't care that
+		// much about which particular error was returned.
+		t.Fatalf("unexpected error from ConnectInboundStream: %v", err)
 	}
 }

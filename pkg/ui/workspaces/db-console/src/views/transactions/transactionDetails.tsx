@@ -43,9 +43,10 @@ export const selectTransaction = createSelector(
     const transactions = transactionState.data?.transactions;
     if (!transactions) {
       return {
-        isLoading: true,
+        isLoading: transactionState.inFlight,
         transaction: null,
         lastUpdated: null,
+        isValid: transactionState.valid,
       };
     }
     const txnFingerprintId = getMatchParamByName(
@@ -59,9 +60,10 @@ export const selectTransaction = createSelector(
         txnFingerprintId,
     )[0];
     return {
-      isLoading: false,
+      isLoading: transactionState.inFlight,
       transaction: transaction,
       lastUpdated: transactionState?.setAt?.utc(),
+      isValid: transactionState.valid,
     };
   },
 );
@@ -72,10 +74,8 @@ export default withRouter(
       state: AdminUIState,
       props: TransactionDetailsProps,
     ): TransactionDetailsStateProps => {
-      const { isLoading, transaction, lastUpdated } = selectTransaction(
-        state,
-        props,
-      );
+      const { isLoading, transaction, lastUpdated, isValid } =
+        selectTransaction(state, props);
       return {
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
@@ -91,6 +91,7 @@ export default withRouter(
         lastUpdated: lastUpdated,
         transactionInsights: selectTxnInsightsByFingerprint(state, props),
         hasAdminRole: selectHasAdminRole(state),
+        isDataValid: isValid,
       };
     },
     {

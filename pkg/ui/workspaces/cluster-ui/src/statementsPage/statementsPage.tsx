@@ -10,7 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { flatMap, isNil, merge } from "lodash";
+import { flatMap, merge } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Delayed } from "src/delayed";
@@ -78,11 +78,10 @@ import {
   StatementDiagnosticsReport,
 } from "../api";
 import { filteredStatementsData } from "../sqlActivity/util";
+import { STATS_LONG_LOADING_DURATION } from "../util/constants";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
-
-const POLLING_INTERVAL_MILLIS = 300000;
 
 // Most of the props are supposed to be provided as connected props
 // from redux store.
@@ -95,7 +94,7 @@ export interface StatementsPageDispatchProps {
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
-  resetSQLStats: (req: StatementsRequest) => void;
+  resetSQLStats: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
     insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
@@ -120,6 +119,7 @@ export interface StatementsPageDispatchProps {
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
   isDataValid: boolean;
+  isReqInFlight: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   statementsError: Error | null;
@@ -141,19 +141,15 @@ export interface StatementsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
-  startRequest?: Date;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function stmtsRequestFromTimeScale(
-  ts: TimeScale,
-): cockroach.server.serverpb.StatementsRequest {
+function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
   const [start, end] = toRoundedDateRange(ts);
-  return new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -187,7 +183,6 @@ export class StatementsPage extends React.Component<
   StatementsPageState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
-  refreshDataTimeout: NodeJS.Timeout;
 
   constructor(props: StatementsPageProps) {
     super(props);
@@ -196,19 +191,10 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
-      startRequest: new Date(),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
-
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    }
   }
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
@@ -267,10 +253,6 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.refreshStatements(ts);
-    this.setState({
-      startRequest: new Date(),
-    });
   };
 
   resetPagination = (): void => {
@@ -284,29 +266,9 @@ export class StatementsPage extends React.Component<
     });
   };
 
-  clearRefreshDataTimeout(): void {
-    if (this.refreshDataTimeout != null) {
-      clearTimeout(this.refreshDataTimeout);
-    }
-  }
-
-  resetPolling(ts: TimeScale): void {
-    this.clearRefreshDataTimeout();
-    if (ts.key !== "Custom") {
-      this.refreshDataTimeout = setTimeout(
-        this.refreshStatements,
-        POLLING_INTERVAL_MILLIS, // 5 minutes
-        ts,
-      );
-    }
-  }
-
-  refreshStatements = (ts?: TimeScale): void => {
-    const time = ts ?? this.props.timeScale;
-    const req = stmtsRequestFromTimeScale(time);
+  refreshStatements = (): void => {
+    const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.refreshStatements(req);
-
-    this.resetPolling(time);
   };
 
   refreshDatabases = (): void => {
@@ -314,42 +276,24 @@ export class StatementsPage extends React.Component<
   };
 
   resetSQLStats = (): void => {
-    const req = stmtsRequestFromTimeScale(this.props.timeScale);
-    this.props.resetSQLStats(req);
-    this.setState({
-      startRequest: new Date(),
-    });
+    this.props.resetSQLStats();
   };
 
   componentDidMount(): void {
-    this.setState({
-      startRequest: new Date(),
-    });
-
-    // For the first data fetch for this page, we refresh immediately if:
-    // - Last updated is null (no statements fetched previously)
-    // - The data is not valid (time scale may have changed on other pages)
-    // - The time range selected is a moving window and the last udpated time
-    // is >= 5 minutes.
-    // Otherwise, we schedule a refresh at 5 mins from the lastUpdated time if
-    // the time range selected is a moving window (i.e. not custom).
-    const now = moment();
-    let nextRefresh = null;
-    if (this.props.lastUpdated == null || !this.props.isDataValid) {
-      nextRefresh = now;
-    } else if (this.props.timeScale.key !== "Custom") {
-      nextRefresh = this.props.lastUpdated
-        .clone()
-        .add(POLLING_INTERVAL_MILLIS, "milliseconds");
-    }
-    if (nextRefresh) {
-      this.refreshDataTimeout = setTimeout(
-        this.refreshStatements,
-        Math.max(0, nextRefresh.diff(now, "milliseconds")),
-      );
-    }
-
     this.refreshDatabases();
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.changeTimeScale(ts);
+    } else if (
+      !this.props.isDataValid ||
+      !this.props.lastUpdated ||
+      !this.props.statements
+    ) {
+      this.refreshStatements();
+    }
 
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
@@ -392,7 +336,7 @@ export class StatementsPage extends React.Component<
     );
   }
 
-  componentDidUpdate = (): void => {
+  componentDidUpdate = (prevProps: StatementsPageProps): void => {
     this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
@@ -400,11 +344,17 @@ export class StatementsPage extends React.Component<
         this.props.refreshStatementDiagnosticsRequests();
       }
     }
+
+    if (
+      prevProps.timeScale !== this.props.timeScale ||
+      (prevProps.isDataValid && !this.props.isDataValid)
+    ) {
+      this.refreshStatements();
+    }
   };
 
   componentWillUnmount(): void {
     this.props.dismissAlertMessage();
-    this.clearRefreshDataTimeout();
   }
 
   onChangePage = (current: number): void => {
@@ -493,7 +443,6 @@ export class StatementsPage extends React.Component<
   renderStatements = (regions: string[]): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
-      statements,
       onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
       columns: userSelectedColumnsToShow,
@@ -504,6 +453,7 @@ export class StatementsPage extends React.Component<
       sortSetting,
       search,
     } = this.props;
+    const statements = this.props.statements ?? [];
     const data = filteredStatementsData(
       filters,
       search,
@@ -626,15 +576,14 @@ export class StatementsPage extends React.Component<
 
     const { filters, activeFilters } = this.state;
 
-    const longLoadingMessage = isNil(this.props.statements) &&
-      isNil(getValidErrorsList(this.props.statementsError)) && (
-        <Delayed delay={moment.duration(2, "s")}>
-          <InlineAlert
-            intent="info"
-            title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
-          />
-        </Delayed>
-      );
+    const longLoadingMessage = (
+      <Delayed delay={STATS_LONG_LOADING_DURATION}>
+        <InlineAlert
+          intent="info"
+          title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+        />
+      </Delayed>
+    );
 
     return (
       <div className={cx("root")}>
@@ -684,7 +633,7 @@ export class StatementsPage extends React.Component<
         </PageConfig>
         <div className={cx("table-area")}>
           <Loading
-            loading={isNil(this.props.statements)}
+            loading={this.props.isReqInFlight}
             page={"statements"}
             error={this.props.statementsError}
             render={() => this.renderStatements(regions)}
@@ -697,7 +646,9 @@ export class StatementsPage extends React.Component<
               })
             }
           />
-          {longLoadingMessage}
+          {this.props.isReqInFlight &&
+            getValidErrorsList(this.props.statementsError) == null &&
+            longLoadingMessage}
           <ActivateStatementDiagnosticsModal
             ref={this.activateDiagnosticsRef}
             activate={onActivateStatementDiagnostics}

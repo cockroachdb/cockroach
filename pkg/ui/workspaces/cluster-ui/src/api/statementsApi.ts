@@ -19,10 +19,11 @@ import {
 } from "src/util";
 import Long from "long";
 import { AggregateStatistics } from "../statementsTable";
-const STATEMENTS_PATH = "/_status/statements";
+const STATEMENTS_PATH = "/_status/combinedstmts";
 const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
 
-export type StatementsRequest = cockroach.server.serverpb.StatementsRequest;
+export type StatementsRequest =
+  cockroach.server.serverpb.CombinedStatementsStatsRequest;
 export type StatementDetailsRequest =
   cockroach.server.serverpb.StatementDetailsRequest;
 export type StatementDetailsResponse =
@@ -42,7 +43,6 @@ export const getCombinedStatements = (
   const queryStr = propsToQueryString({
     start: req.start.toInt(),
     end: req.end.toInt(),
-    combined: req.combined,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,

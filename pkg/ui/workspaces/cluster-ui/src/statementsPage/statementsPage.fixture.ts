@@ -583,6 +583,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   },
   lastUpdated,
   isDataValid: true,
+  isReqInFlight: false,
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
   statementsError: null,

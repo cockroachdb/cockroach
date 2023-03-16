@@ -47,6 +47,7 @@ import { selectTimeScale } from "src/redux/timeScale";
 import {
   selectStatementsLastUpdated,
   selectStatementsDataValid,
+  selectStatementsDataInFlight,
 } from "src/selectors/executionFingerprintsSelectors";
 
 // selectStatements returns the array of AggregateStatistics to show on the
@@ -151,6 +152,7 @@ const TransactionsPageConnected = withRouter(
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
         isDataValid: selectStatementsDataValid(state),
+        isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
