@@ -165,6 +165,7 @@ func (dsp *DistSQLPlanner) Exec(
 func (dsp *DistSQLPlanner) ExecLocalAll(
 	ctx context.Context, execCfg ExecutorConfig, p *planner, res RestrictedCommandResult,
 ) error {
+	defer p.curPlan.close(ctx)
 	recv := MakeDistSQLReceiver(
 		ctx,
 		res,

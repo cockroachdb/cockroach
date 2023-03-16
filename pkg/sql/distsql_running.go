@@ -1541,6 +1541,8 @@ func getFinishedSetupFn(planner *planner) (finishedSetupFn func(flowinfra.Flow),
 // PlanAndRunAll combines running the main query, subqueries and cascades/checks.
 // If an error is returned, the connection needs to stop processing queries.
 // Query execution errors stored in recv; they are not returned.
+// NB: the plan (in planner.curPlan) is not closed, so it is the caller's
+// responsibility to do so.
 func (dsp *DistSQLPlanner) PlanAndRunAll(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -1549,7 +1551,6 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 ) error {
-	defer planner.curPlan.close(ctx)
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
