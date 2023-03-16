@@ -74,6 +74,10 @@ type Authorizer interface {
 	// HasTSDBQueryCapability returns an error if a tenant, referenced by its ID,
 	// is not allowed to query the TSDB for metrics.
 	HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error
+
+	// IsExemptFromRateLimiting returns true of the tenant should
+	// not be subject to rate limiting.
+	IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool
 }
 
 // Entry ties together a tenantID with its capabilities.
@@ -188,6 +192,11 @@ const (
 	// cluster.
 	CanViewTSDBMetrics // can_view_tsdb_metrics
 
+	// ExemptFromRateLimiting describes the ability of a tenant to
+	// make requests without being subject to the KV-side tenant
+	// rate limiter.
+	ExemptFromRateLimiting // exempt_from_rate_limiting
+
 	// TenantSpanConfigBounds contains the bounds for the tenant's
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
@@ -231,7 +240,9 @@ func (c CapabilityID) CapabilityType() Type {
 		CanAdminSplit,
 		CanAdminUnsplit,
 		CanViewNodeInfo,
-		CanViewTSDBMetrics:
+		CanViewTSDBMetrics,
+		ExemptFromRateLimiting:
+
 		return Bool
 
 	default:
