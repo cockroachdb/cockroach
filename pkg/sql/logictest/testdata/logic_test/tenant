@@ -112,14 +112,14 @@ SELECT * FROM [SHOW TENANTS] WHERE id = 4
 id  name   data_state  service_mode
 4   three  ready       none
 
+query ITTTT colnames
+SELECT id, name, data_state, service_mode, source_tenant_name FROM [SHOW TENANTS WITH REPLICATION STATUS] WHERE id = 4
+----
+id  name   data_state  service_mode  source_tenant_name
+4   three  ready       none          NULL
+
 statement error tenant "seven" does not exist
 SHOW TENANT seven
-
-statement error pq: tenant "tenant-one" does not have an active replication job
-SHOW TENANT "tenant-one" WITH REPLICATION STATUS
-
-statement error pq: tenant "two" does not have an active replication job
-SHOW TENANT two WITH REPLICATION STATUS
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
 # ID.
