@@ -255,15 +255,18 @@ func runMultiTenantFairness(
 		i := i
 		pgurl := tenants[i].secureURL()
 		m1.Go(func(ctx context.Context) error {
-			// TODO(irfansharif): Occasionally we see SQL Liveness errors of the
-			// form:
+			// TODO(irfansharif): Occasionally we see SQL liveness errors of the
+			// following form. See #78691, #97448.
 			//
 			// 	ERROR: liveness session expired 571.043163ms before transaction
 			//
-			// Why do these errors occur? Do we want to give sql liveness
-			// session goroutines higher priority? Is this test using too high a
-			// concurrency? Why do we even need this data load step -- why not
-			// just run the workload generator right away?
+			// Why do these errors occur? We started using high-pri for tenant
+			// sql liveness work as of #98785, so this TODO might be stale. If
+			// it persists, consider extending the default lease duration from
+			// 40s to something higher, or retrying internally if the sql
+			// session gets renewed shortly (within some jitter). We don't want
+			// to --tolerate-errors here and below because we'd see total
+			// throughput collapse.
 			cmd := fmt.Sprintf(
 				"./cockroach workload run kv '%s' --secure --min-block-bytes %d --max-block-bytes %d "+
 					"--batch %d --max-ops %d --concurrency=25",
