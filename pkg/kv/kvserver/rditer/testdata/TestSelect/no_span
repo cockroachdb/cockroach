@@ -6,5 +6,4 @@ Select({ReplicatedBySpan:/Min ReplicatedByRangeID:false UnreplicatedByRangeID:tr
 Select({ReplicatedBySpan:/Min ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
 Select({ReplicatedBySpan:/Min ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
-  /Local/RangeID/123/{r""-s""}
-  /Local/RangeID/123/{u""-v""}
+  /Local/RangeID/12{3""-4""}

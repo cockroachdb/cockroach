@@ -104,6 +104,14 @@ func makeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor)
 	}
 }
 
+func makeRangeIDSpan(rangeID roachpb.RangeID) roachpb.Span {
+	prefix := keys.MakeRangeIDPrefix(rangeID)
+	return roachpb.Span{
+		Key:    prefix,
+		EndKey: prefix.PrefixEnd(),
+	}
+}
+
 func makeRangeIDReplicatedSpan(rangeID roachpb.RangeID) roachpb.Span {
 	prefix := keys.MakeRangeIDReplicatedPrefix(rangeID)
 	return roachpb.Span{

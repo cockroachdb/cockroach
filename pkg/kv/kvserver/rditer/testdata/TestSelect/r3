@@ -18,8 +18,7 @@ Select({ReplicatedBySpan:{a-/Max} ReplicatedByRangeID:true UnreplicatedByRangeID
   /Local/Lock/Intent{"a"-/Max}
   {a-/Max}
 Select({ReplicatedBySpan:{a-/Max} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
-  /Local/RangeID/123/{r""-s""}
-  /Local/RangeID/123/{u""-v""}
+  /Local/RangeID/12{3""-4""}
   /Local/Range{"a"-/Max}
   /Local/Lock/Intent/Local/Range{"a"-/Max}
   /Local/Lock/Intent{"a"-/Max}

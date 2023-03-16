@@ -41,11 +41,11 @@ type SelectOpts struct {
 func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 	var sl []roachpb.Span
 
-	if opts.ReplicatedByRangeID {
+	if opts.ReplicatedByRangeID && opts.UnreplicatedByRangeID {
+		sl = append(sl, makeRangeIDSpan(rangeID))
+	} else if opts.ReplicatedByRangeID {
 		sl = append(sl, makeRangeIDReplicatedSpan(rangeID))
-	}
-
-	if opts.UnreplicatedByRangeID {
+	} else if opts.UnreplicatedByRangeID {
 		sl = append(sl, makeRangeIDUnreplicatedSpan(rangeID))
 	}
 

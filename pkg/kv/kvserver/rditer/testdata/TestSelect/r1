@@ -18,8 +18,7 @@ Select({ReplicatedBySpan:{/Min-c} ReplicatedByRangeID:true UnreplicatedByRangeID
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
 Select({ReplicatedBySpan:{/Min-c} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
-  /Local/RangeID/123/{r""-s""}
-  /Local/RangeID/123/{u""-v""}
+  /Local/RangeID/12{3""-4""}
   /Local/Range{/Min-"c"}
   /Local/Lock/Intent/Local/Range{/Min-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
