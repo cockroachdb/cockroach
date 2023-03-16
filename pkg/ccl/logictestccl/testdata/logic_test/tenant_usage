@@ -26,6 +26,12 @@ DROP TENANT [5]
 query error tenant "5" is not active
 SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)
 
+statement ok
+CREATE TENANT 'apptenant'
+
+statement ok
+SELECT crdb_internal.update_tenant_resource_limits('apptenant', 1000, 100, 0, now(), 0)
+
 user testuser
 
 statement error only users with the admin role are allowed to update tenant resource limits
