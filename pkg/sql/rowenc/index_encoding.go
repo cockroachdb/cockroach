@@ -1109,7 +1109,7 @@ func EncodePrimaryIndex(
 			}
 		}
 		sort.Sort(ByID(columnsToEncode))
-		entryValue, err = writeColumnValues(entryValue, colMap, values, columnsToEncode, index.GetVersion())
+		entryValue, err = writeColumnValues(entryValue, colMap, values, columnsToEncode)
 		if err != nil {
 			return err
 		}
@@ -1369,7 +1369,7 @@ func encodeSecondaryIndexWithFamilies(
 			value = []byte{}
 		}
 
-		value, err = writeColumnValues(value, colMap, row, storedColsInFam, index.GetVersion())
+		value, err = writeColumnValues(value, colMap, row, storedColsInFam)
 		if err != nil {
 			return []IndexEntry{}, err
 		}
@@ -1424,7 +1424,7 @@ func encodeSecondaryIndexNoFamilies(
 		value = []byte{}
 	}
 	cols := GetValueColumns(index)
-	value, err = writeColumnValues(value, colMap, row, cols, index.GetVersion())
+	value, err = writeColumnValues(value, colMap, row, cols)
 	if err != nil {
 		return IndexEntry{}, err
 	}
@@ -1446,7 +1446,7 @@ func GetValueColumns(index catalog.Index) []ValueEncodedColumn {
 		id := index.GetCompositeColumnID(i)
 		// Inverted indexes on a composite type (i.e. an array of composite types)
 		// should not add the indexed column to the value.
-		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.GetKeyColumnID(0) {
+		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.InvertedColumnID() {
 			continue
 		}
 		cols = append(cols, ValueEncodedColumn{ColID: id, IsComposite: true})
@@ -1458,19 +1458,12 @@ func GetValueColumns(index catalog.Index) []ValueEncodedColumn {
 // writeColumnValues writes the value encoded versions of the desired columns from the input
 // row of datums into the value byte slice.
 func writeColumnValues(
-	value []byte,
-	colMap catalog.TableColMap,
-	row []tree.Datum,
-	columns []ValueEncodedColumn,
-	version descpb.IndexDescriptorVersion,
+	value []byte, colMap catalog.TableColMap, row []tree.Datum, columns []ValueEncodedColumn,
 ) ([]byte, error) {
 	var lastColID descpb.ColumnID
 	for _, col := range columns {
 		val := findColumnValue(col.ColID, colMap, row)
 		if val == tree.DNull || (col.IsComposite && !val.(tree.CompositeDatum).IsComposite()) {
-			continue
-		}
-		if val.ResolvedType() == types.Jsonb && version < descpb.JSONCompositeColumnsVersion {
 			continue
 		}
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)
