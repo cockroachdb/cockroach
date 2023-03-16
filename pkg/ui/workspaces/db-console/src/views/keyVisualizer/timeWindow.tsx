@@ -50,11 +50,6 @@ export const KeyVisualizerTimeWindow = () => {
       windowValid: moment.duration(15, "minutes"),
       sampleSize: moment.duration(1, "minutes"),
     },
-    "Past 2 Weeks": {
-      windowSize: moment.duration(14, "days"),
-      windowValid: moment.duration(15, "minutes"),
-      sampleSize: moment.duration(1, "minutes"),
-    },
   };
 
   return (

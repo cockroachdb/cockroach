@@ -924,6 +924,7 @@ message RecoveryCollectReplicaInfoResponse {
     roachpb.RangeDescriptor range_descriptor = 1;
     cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo replica_info = 2;
     RecoveryCollectReplicaRestartNodeStream node_stream_restarted = 3;
+    cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ClusterMetadata metadata = 4;
   }
 }
 
@@ -941,9 +942,14 @@ message RecoveryStagePlanRequest {
   // If all nodes is true, then receiver should act as a coordinator and perform
   // a fan-out to stage plan on all nodes of the cluster.
   bool all_nodes = 2;
-  // Force plan tells receiver to ignore any plan already staged on the node if it
+  // ForcePlan tells receiver to ignore any plan already staged on the node if it
   // is present and replace it with new plan (including empty one).
   bool force_plan = 3;
+  // ForceLocalInternalVersion tells server to update internal component of plan
+  // version to the one of active cluster version. This option needs to be set
+  // if target cluster is stuck in recovery where only part of nodes were
+  // successfully migrated.
+  bool force_local_internal_version = 4;
 }
 
 message RecoveryStagePlanResponse {

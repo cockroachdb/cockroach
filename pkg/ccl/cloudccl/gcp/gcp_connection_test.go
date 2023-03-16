@@ -314,8 +314,8 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
 
 	disallowedCreateExternalConnection := func(t *testing.T, externalConnectionName, uri string) {
-		t.Log(uri)
-		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED|does not have storage.objects.create access)",
+		// TODO(dt): remove `code 0/OK`. See https://github.com/cockroachdb/cockroach/issues/98733.
+		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED|does not have storage.objects.create access)|code 0/OK",
 			fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
 	}
 	createExternalConnection := func(t *testing.T, externalConnectionName, uri string) {

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -73,7 +74,7 @@ func TestReplicaCollection(t *testing.T) {
 	// Collect and assert replica metadata. For expectMeta case we sometimes have
 	// meta and sometimes doesn't depending on which node holds the lease.
 	// We just ignore descriptor counts if we are not expecting meta.
-	assertReplicas := func(liveNodes int, expectMeta bool) {
+	assertReplicas := func(liveNodes int, expectRangeMeta bool) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
@@ -84,7 +85,7 @@ func TestReplicaCollection(t *testing.T) {
 		cnt := getInfoCounters(replicas)
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
-		if expectMeta {
+		if expectRangeMeta {
 			require.Equal(t, totalRanges, cnt.descriptors,
 				"number of collected descriptors from metadata")
 		}
@@ -92,10 +93,13 @@ func TestReplicaCollection(t *testing.T) {
 		// Check stats counters as well.
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
-		if expectMeta {
+		if expectRangeMeta {
 			require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
+		require.Equal(t, replicas.Version,
+			clusterversion.ByKey(clusterversion.BinaryVersionKey),
+			"replica info version must match current binary version")
 	}
 
 	tc.StopServer(0)
@@ -289,6 +293,36 @@ func TestStageRecoveryPlans(t *testing.T) {
 	require.Equal(t, &plan.PlanID, statuses[1].PendingPlanID, "incorrect plan id on node 1")
 	require.Nil(t, statuses[2].PendingPlanID, "unexpected plan id on node 2")
 	require.Equal(t, &plan.PlanID, statuses[3].PendingPlanID, "incorrect plan id on node 3")
+}
+
+func TestStageBadVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc, reg, _, lReg := prepTestCluster(t, 1)
+	defer lReg.Close()
+	defer reg.CloseAllStickyInMemEngines()
+	defer tc.Stopper().Stop(ctx)
+
+	adm, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err, "failed to get admin client")
+
+	sk := tc.ScratchRange(t)
+	plan := makeTestRecoveryPlan(ctx, t, adm)
+	plan.Updates = []loqrecoverypb.ReplicaUpdate{
+		createRecoveryForRange(t, tc, sk, 1),
+	}
+	plan.Version = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	plan.Version.Major -= 1
+
+	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	require.Error(t, err, "shouldn't stage plan with old version")
+
+	plan.Version.Major += 2
+	_, err = adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	require.Error(t, err, "shouldn't stage plan with future version")
 }
 
 func TestStageConflictingPlans(t *testing.T) {
@@ -619,6 +653,50 @@ func TestRetrieveApplyStatus(t *testing.T) {
 	require.Equal(t, len(planDetails.UpdatedNodes), applied, "number of applied plans")
 }
 
+func TestRejectBadVersionApplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc, reg, pss, lReg := prepTestCluster(t, 3)
+	defer lReg.Close()
+	defer reg.CloseAllStickyInMemEngines()
+	defer tc.Stopper().Stop(ctx)
+
+	adm, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err, "failed to get admin client")
+
+	var replicas loqrecoverypb.ClusterReplicaInfo
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		return err
+	})
+	plan, _, err := loqrecovery.PlanReplicas(ctx, replicas, nil, nil, uuid.DefaultGenerator)
+	require.NoError(t, err, "failed to create a plan")
+	// Lower plan version below compatible one to trigger
+	plan.Version.Major = 19
+
+	tc.StopServer(1)
+	require.NoError(t, pss[1].SavePlan(plan), "failed to inject plan into storage")
+	lReg.ReopenOrFail(t, 1)
+	require.NoError(t, tc.RestartServer(1), "failed to restart server")
+
+	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	require.NoError(t, err, "failed to run recovery verify")
+	found := false
+	for _, s := range r.Statuses {
+		if s.NodeID == 2 {
+			require.NotNil(t, s.AppliedPlanID)
+			require.Equal(t, plan.PlanID, *s.AppliedPlanID)
+			require.Contains(t, s.Error, "failed to check cluster version against storage")
+			found = true
+		}
+	}
+	require.True(t, found, "restarted node not found in verify status")
+}
+
 func prepTestCluster(
 	t *testing.T, nodes int,
 ) (
@@ -680,7 +758,7 @@ func createRecoveryForRange(
 	rngD, err := tc.LookupRange(key)
 	require.NoError(t, err, "can't find range for key %s", key)
 	replD, ok := rngD.GetReplicaDescriptor(roachpb.StoreID(storeID))
-	require.True(t, ok, "expecting scratch replica on node 3")
+	require.True(t, ok, "expecting scratch replica on store %d", storeID)
 	replD.ReplicaID += 10
 	return loqrecoverypb.ReplicaUpdate{
 		RangeID:       rngD.RangeID,
@@ -700,5 +778,6 @@ func makeTestRecoveryPlan(
 	return loqrecoverypb.ReplicaUpdatePlan{
 		PlanID:    uuid.MakeV4(),
 		ClusterID: cr.ClusterID,
+		Version:   clusterversion.ByKey(clusterversion.BinaryVersionKey),
 	}
 }
