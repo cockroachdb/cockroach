@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
@@ -941,7 +941,7 @@ type Engine interface {
 	// be invoked while holding mutexes).
 	RegisterFlushCompletedCallback(cb func())
 	// Filesystem functionality.
-	fs.FS
+	vfs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used. If spans is not empty, the checkpoint excludes

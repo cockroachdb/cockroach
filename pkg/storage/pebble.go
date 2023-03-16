@@ -19,7 +19,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -712,6 +711,8 @@ type EncryptionStatsHandler interface {
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
+	vfs.FS
+
 	atomic struct {
 		// compactionConcurrency is the current compaction concurrency set on
 		// the Pebble store. The compactionConcurrency option in the Pebble
@@ -749,7 +750,6 @@ type Pebble struct {
 	sharedBytesWritten   int64
 
 	// Relevant options copied over from pebble.Options.
-	fs            vfs.FS
 	unencryptedFS vfs.FS
 	logCtx        context.Context
 	logger        pebble.LoggerAndTracer
@@ -990,6 +990,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, encryptionEnv != nil /* encryptionEnabled */)
 
 	p = &Pebble{
+		FS:               opts.FS,
 		readOnly:         opts.ReadOnly,
 		path:             cfg.Dir,
 		auxDir:           auxDir,
@@ -1001,7 +1002,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		settings:         cfg.Settings,
 		encryption:       encryptionEnv,
 		fileRegistry:     fileRegistry,
-		fs:               opts.FS,
 		unencryptedFS:    unencryptedFS,
 		logger:           opts.LoggerAndTracer,
 		logCtx:           logCtx,
@@ -1790,7 +1790,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 		}
 		stats.ActiveKeyFiles++
 
-		filename := p.fs.PathBase(filePath)
+		filename := p.FS.PathBase(filePath)
 		numStr := strings.TrimSuffix(filename, ".sst")
 		if len(numStr) == len(filename) {
 			continue // not a sstable
@@ -1882,68 +1882,7 @@ func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Unlock()
 }
 
-// Remove implements the FS interface.
-func (p *Pebble) Remove(filename string) error {
-	return p.fs.Remove(filename)
-}
-
-// RemoveAll implements the Engine interface.
-func (p *Pebble) RemoveAll(dir string) error {
-	return p.fs.RemoveAll(dir)
-}
-
-// Link implements the FS interface.
-func (p *Pebble) Link(oldname, newname string) error {
-	return p.fs.Link(oldname, newname)
-}
-
-var _ fs.FS = &Pebble{}
-
-// Create implements the FS interface.
-func (p *Pebble) Create(name string) (fs.File, error) {
-	return p.fs.Create(name)
-}
-
-// CreateWithSync implements the FS interface.
-func (p *Pebble) CreateWithSync(name string, bytesPerSync int) (fs.File, error) {
-	f, err := p.fs.Create(name)
-	if err != nil {
-		return nil, err
-	}
-	return vfs.NewSyncingFile(f, vfs.SyncingFileOptions{BytesPerSync: bytesPerSync}), nil
-}
-
-// Open implements the FS interface.
-func (p *Pebble) Open(name string) (fs.File, error) {
-	return p.fs.Open(name)
-}
-
-// OpenDir implements the FS interface.
-func (p *Pebble) OpenDir(name string) (fs.File, error) {
-	return p.fs.OpenDir(name)
-}
-
-// Rename implements the FS interface.
-func (p *Pebble) Rename(oldname, newname string) error {
-	return p.fs.Rename(oldname, newname)
-}
-
-// MkdirAll implements the FS interface.
-func (p *Pebble) MkdirAll(name string) error {
-	return p.fs.MkdirAll(name, 0755)
-}
-
-// List implements the FS interface.
-func (p *Pebble) List(name string) ([]string, error) {
-	dirents, err := p.fs.List(name)
-	sort.Strings(dirents)
-	return dirents, err
-}
-
-// Stat implements the FS interface.
-func (p *Pebble) Stat(name string) (os.FileInfo, error) {
-	return p.fs.Stat(name)
-}
+var _ vfs.FS = &Pebble{}
 
 func checkpointSpansNote(spans []roachpb.Span) []byte {
 	note := "CRDB spans:\n"
@@ -1977,7 +1916,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
 		if err := fs.SafeWriteToFile(
-			p.fs, dir, p.fs.PathJoin(dir, "checkpoint.txt"),
+			p.FS, dir, p.FS.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 		); err != nil {
 			return err

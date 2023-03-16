@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -3069,7 +3070,7 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 // the provided key spans. If spans is empty, it includes the entire store.
 func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	checkpointBase := s.checkpointsDir()
-	_ = s.TODOEngine().MkdirAll(checkpointBase)
+	_ = s.TODOEngine().MkdirAll(checkpointBase, os.ModePerm)
 	checkpointDir := filepath.Join(checkpointBase, tag)
 	if err := s.TODOEngine().CreateCheckpoint(checkpointDir, spans); err != nil {
 		return "", err
