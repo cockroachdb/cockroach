@@ -267,7 +267,6 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	skip.WithIssue(t, 77410, "disabled because of stress / intermittent failures")
 	serverParams, _ := tests.CreateTestServerParams()
 	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
 		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
