@@ -1721,7 +1721,6 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 94951)
 	ctx := context.Background()
 	var activateSnapshotTestingKnob int64
 	blockSnapshot := make(chan struct{})
