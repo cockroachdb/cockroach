@@ -459,10 +459,11 @@ func (f *jobFeed) Resume() error {
 
 // Details implements FeedJob interface.
 func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
+	stmt := `
+SELECT payload FROM "".crdb_internal.system_jobs WHERE id = $1
+`
 	var payloadBytes []byte
-	if err := f.db.QueryRow(
-		`SELECT payload FROM system.jobs WHERE id=$1`, f.jobID,
-	).Scan(&payloadBytes); err != nil {
+	if err := f.db.QueryRow(stmt, f.jobID).Scan(&payloadBytes); err != nil {
 		return nil, errors.Wrapf(err, "Details for job %d", f.jobID)
 	}
 	var payload jobspb.Payload

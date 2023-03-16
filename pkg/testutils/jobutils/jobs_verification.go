@@ -75,9 +75,10 @@ func waitForJobToHaveStatus(
 	testutils.SucceedsWithin(t, func() error {
 		var status string
 		var payloadBytes []byte
-		db.QueryRow(
-			t, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&status, &payloadBytes)
+		query := `
+SELECT status, payload FROM "".crdb_internal.system_jobs WHERE id = $1
+`
+		db.QueryRow(t, query, jobID).Scan(&status, &payloadBytes)
 		if jobs.Status(status) == jobs.StatusFailed {
 			if expectedStatus == jobs.StatusFailed {
 				return nil
@@ -266,8 +267,11 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *j
 // GetJobPayload loads the Payload message associated with the job.
 func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Payload {
 	ret := &jobspb.Payload{}
+	query := `
+SELECT payload FROM "".crdb_internal.system_jobs WHERE id = $1
+`
 	var buf []byte
-	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
+	db.QueryRow(t, query, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
 		t.Fatal(err)
 	}

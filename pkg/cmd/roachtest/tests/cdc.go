@@ -2255,12 +2255,13 @@ func (c *changefeedInfo) GetError() string           { return c.status }
 var _ jobInfo = (*changefeedInfo)(nil)
 
 func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
+	stmt := `
+SELECT status, payload, progress FROM "".crdb_internal.system_jobs WHERE id = $1
+`
 	var status string
 	var payloadBytes []byte
 	var progressBytes []byte
-	if err := db.QueryRow(
-		`SELECT status, payload, progress FROM system.jobs WHERE id = $1`, jobID,
-	).Scan(&status, &payloadBytes, &progressBytes); err != nil {
+	if err := db.QueryRow(stmt, jobID).Scan(&status, &payloadBytes, &progressBytes); err != nil {
 		return nil, err
 	}
 	var payload jobspb.Payload

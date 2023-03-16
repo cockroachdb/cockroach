@@ -224,6 +224,9 @@ func processSchedulePTSRecord(
 	if jobs.HasScheduledJobNotFoundError(err) {
 		return nil // nolint:returnerrcheck -- schedule maybe deleted when we run; just keep going.
 	}
+	if err != nil {
+		return err
+	}
 	ex, err := jobs.GetScheduledJobExecutor(sj.ExecutorType())
 	if err != nil {
 		return err

@@ -1948,6 +1948,8 @@ func TestShowJobs(t *testing.T) {
 				`INSERT INTO system.jobs (id, status, created, payload, progress, claim_session_id, claim_instance_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 				in.id, in.status, in.created, inPayload, inProgress, session.ID().UnsafeBytes(), instanceID,
 			)
+			sqlDB.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, in.id, jobs.GetLegacyPayloadKey(), inPayload)
+			sqlDB.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, in.id, jobs.GetLegacyProgressKey(), inProgress)
 
 			var out row
 			var maybeFractionCompleted *float32
@@ -1996,7 +1998,13 @@ func TestShowAutomaticJobs(t *testing.T) {
 	params.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap: true,
 	}
+	params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{
+		DisableAdoptions: true,
+	}
+	params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{DontUseJobs: true}
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	ctx := context.Background()
+	r := s.JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.Background())
 
@@ -2025,21 +2033,25 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 
 	for _, in := range rows {
+		// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+		// row struct directly.
 		rawPayload := &jobspb.Payload{
 			UsernameProto: username.RootUserName().EncodeProto(),
 			Details:       jobspb.WrapPayloadDetails(in.details),
 		}
-		// system.jobs is part proper SQL columns, part protobuf, so we can't use the
-		// row struct directly.
-		inPayload, err := protoutil.Marshal(rawPayload)
-		if err != nil {
-			t.Fatal(err)
+		// progress is set to a placeholder value.
+		progress := &jobspb.Progress{
+			Details: jobspb.WrapProgressDetails(jobspb.ImportProgress{}),
 		}
 
-		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload, job_type) VALUES ($1, $2, $3, $4)`,
-			in.id, in.status, inPayload, rawPayload.Type().String(),
-		)
+		rec := jobs.Record{
+			JobID:    in.id,
+			Username: username.TestUserName(),
+			Details:  rawPayload.UnwrapDetails(),
+			Progress: progress.UnwrapDetails(),
+		}
+		_, err := r.CreateJobWithTxn(ctx, rec, in.id, nil /* txn */)
+		require.NoError(t, err)
 	}
 
 	var out row
@@ -2086,15 +2098,44 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 }
 
+func createJob(
+	ctx context.Context,
+	t *testing.T,
+	r *jobs.Registry,
+	id jobspb.JobID,
+	payloadBytes, progressBytes []byte,
+) {
+	var payload jobspb.Payload
+	var progress jobspb.Progress
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	record := jobs.Record{
+		JobID:    id,
+		Username: username.TestUserName(),
+		Details:  payload.UnwrapDetails(),
+		Progress: progress.UnwrapDetails(),
+	}
+
+	_, err := r.CreateJobWithTxn(ctx, record, id, nil /* txn */)
+	require.NoError(t, err)
+}
+
 func TestShowJobsWithError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
+		DontUseJobs:                       true,
+		SkipJobMetricsPollingJobBootstrap: true,
+	}
+	params.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
+		SkipJobBootstrap: true,
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	// Ensure there is at least one row in system.jobs.
+	// Ensure there is at least one row in system.job_info.
 	if _, err := sqlDB.Exec(`CREATE TABLE foo(x INT);`); err != nil {
 		t.Fatal(err)
 	}
@@ -2103,51 +2144,74 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	// Get the id of the ADD COLUMN job to use later.
 	var jobID jobspb.JobID
-	if err := sqlDB.QueryRow(`SELECT id FROM system.jobs ORDER BY id DESC LIMIT 1`).Scan(&jobID); err != nil {
+	var payload, progress []byte
+	if err := sqlDB.QueryRow(`
+SELECT id, payload, progress FROM "".crdb_internal.system_jobs ORDER BY id DESC LIMIT 1
+`).Scan(&jobID, &payload, &progress); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create 3 rows from the valid row, one of which is corrupted.
+	createJob(context.Background(), t, s.JobRegistry().(*jobs.Registry), jobID+1, payload, progress)
+
+	// Create the second row with a corrupted progress field.
 	if _, err := sqlDB.Exec(`
-     -- Create a corrupted payload field from the most recent row.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, payload, progress FROM system.jobs WHERE id = $1;
+	INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`
-	  -- Create a corrupted progress field.
-	  INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
+	  -- Create a payload field from the most recent row.
+	  INSERT INTO system.job_info(job_id, info_key, value) SELECT job_id+2, info_key, value FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload'::BYTES;
 	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+		  -- Create a corrupted progress field.
+		  INSERT INTO system.job_info(job_id, info_key, value) SELECT job_id+2, info_key, '\xaaaa'::BYTES FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_progress'::BYTES;
+		`, jobID); err != nil {
 		t.Fatal(err)
 	}
 
+	// Test what happens with a NULL progress field (which is a valid value).
 	if _, err := sqlDB.Exec(`
-	  -- Test what happens with a NULL progress field (which is a valid value).
-	  INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs WHERE id = $1;
+	INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+	  -- Create a payload field from the most recent row.
+	  INSERT INTO system.job_info(job_id, info_key, value) SELECT job_id+4, info_key, value FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload'::BYTES;
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+		  INSERT INTO system.job_info(job_id, info_key, value) SELECT job_id+4, info_key, NULL::BYTES FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_progress'::BYTES;
+		`, jobID); err != nil {
 		t.Fatal(err)
 	}
 
 	// Extract the last 3 rows from the query.
 	rows, err := sqlDB.Query(`
   WITH a AS (SELECT job_id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 3)
-  SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY job_id ASC`)
+  SELECT job_id, ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY job_id ASC`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 
 	var desc, frac, errStr string
+	var readID int64
 
 	// Valid row.
 	rowNum := 0
 	if !rows.Next() {
 		t.Fatalf("%d too few rows", rowNum)
 	}
-	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+	if err := rows.Scan(&readID, &desc, &frac, &errStr); err != nil {
 		t.Fatalf("%d: %v", rowNum, err)
 	}
-	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	t.Logf("row %d: %d %q %q %v", rowNum, readID, desc, errStr, frac)
 	if desc == "NULL" || errStr != "" || frac[0] == '-' {
 		t.Fatalf("%d: invalid row", rowNum)
 	}
@@ -2157,10 +2221,10 @@ func TestShowJobsWithError(t *testing.T) {
 	if !rows.Next() {
 		t.Fatalf("%d: too few rows", rowNum)
 	}
-	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+	if err := rows.Scan(&readID, &desc, &frac, &errStr); err != nil {
 		t.Fatalf("%d: %v", rowNum, err)
 	}
-	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	t.Logf("row %d: %d %q %q %v", rowNum, readID, desc, errStr, frac)
 	if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
 		t.Fatalf("%d: invalid row", rowNum)
 	}
@@ -2170,10 +2234,10 @@ func TestShowJobsWithError(t *testing.T) {
 	if !rows.Next() {
 		t.Fatalf("%d too few rows", rowNum)
 	}
-	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+	if err := rows.Scan(&readID, &desc, &frac, &errStr); err != nil {
 		t.Fatalf("%d: %v", rowNum, err)
 	}
-	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	t.Logf("row %d: %d %q %q %v", rowNum, readID, desc, errStr, frac)
 	if desc == "NULL" || errStr != "" || frac[0] != '-' {
 		t.Fatalf("%d: invalid row", rowNum)
 	}
