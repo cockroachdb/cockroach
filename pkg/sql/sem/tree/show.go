@@ -21,6 +21,7 @@ package tree
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/errors"
@@ -221,6 +222,7 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&o.DecryptionKMSURI)
 	}
 	if o.DebugMetadataSST {
+		maybeAddSep()
 		ctx.WriteString("debug_dump_metadata_sst")
 	}
 
@@ -1107,12 +1109,16 @@ func (node *ShowTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TENANT ")
 	ctx.FormatNode(node.TenantSpec)
 
+	withs := []string{}
 	if node.WithReplication {
-		ctx.WriteString(" WITH REPLICATION STATUS")
+		withs = append(withs, "REPLICATION STATUS")
 	}
-
 	if node.WithCapabilities {
-		ctx.WriteString(" WITH CAPABILITIES")
+		withs = append(withs, "CAPABILITIES")
+	}
+	if len(withs) > 0 {
+		ctx.WriteString(" WITH ")
+		ctx.WriteString(strings.Join(withs, ", "))
 	}
 }
 
