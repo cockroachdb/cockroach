@@ -16,16 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 // NewTempEngine creates a new engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
 func NewTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
-) (diskmap.Factory, fs.FS, error) {
+) (diskmap.Factory, vfs.FS, error) {
 	return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
 }
 
@@ -58,13 +58,13 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 // when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
-) (diskmap.Factory, fs.FS, error) {
+) (diskmap.Factory, vfs.FS, error) {
 	return newPebbleTempEngine(ctx, tempStorage, storeSpec)
 }
 
 func newPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
-) (*pebbleTempEngine, fs.FS, error) {
+) (*pebbleTempEngine, vfs.FS, error) {
 	var loc Location
 	var cacheSize int64 = 128 << 20 // 128 MiB, arbitrary, but not "too big"
 	if tempStorage.InMemory {

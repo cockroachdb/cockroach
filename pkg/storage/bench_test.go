@@ -1927,7 +1927,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			return cmp < 0
 		})
 		sstFileName := fmt.Sprintf("tmp-ingest-%d", i)
-		sstFile, err := eng.fs.Create(sstFileName)
+		sstFile, err := eng.Create(sstFileName)
 		require.NoError(b, err)
 		// No improvement with v3 since the multiple versions are in different
 		// files.

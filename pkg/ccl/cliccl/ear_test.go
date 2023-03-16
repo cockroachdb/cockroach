@@ -14,6 +14,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -56,6 +57,7 @@ func TestDecrypt(t *testing.T) {
 	// Find a manifest file to check.
 	files, err := p.List(dir)
 	require.NoError(t, err)
+	sort.Strings(files)
 	var manifestPath string
 	for _, basename := range files {
 		if strings.HasPrefix(basename, "MANIFEST-") {
