@@ -31,6 +31,8 @@ export function getSortLabel(sort: SqlStatsSortType): string {
       return "P99";
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "Contention Time";
+    case SqlStatsSortOptions.PCT_RUNTIME:
+      return "% All Run Time";
     default:
       return "";
   }
@@ -44,7 +46,9 @@ export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions).map(
 );
 
 export const txnRequestSortOptions = stmtRequestSortOptions.filter(
-  option => option.value !== SqlStatsSortOptions.P99_STMTS_ONLY,
+  option =>
+    option.value !== SqlStatsSortOptions.P99_STMTS_ONLY &&
+    option.value !== SqlStatsSortOptions.PCT_RUNTIME,
 );
 
 export type StatsRequestParams = {
