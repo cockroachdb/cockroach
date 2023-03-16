@@ -52,7 +52,6 @@ func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 	switch typ.Family() {
 	case types.FloatFamily,
 		types.DecimalFamily,
-		types.JsonFamily,
 		types.CollatedStringFamily:
 		return true
 	case types.ArrayFamily:
@@ -76,6 +75,7 @@ func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 		types.UuidFamily,
 		types.INetFamily,
 		types.TimeFamily,
+		types.JsonFamily,
 		types.TimeTZFamily,
 		types.BitFamily,
 		types.GeometryFamily,
