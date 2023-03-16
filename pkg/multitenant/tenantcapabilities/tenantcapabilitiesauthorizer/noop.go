@@ -50,3 +50,8 @@ func (n *NoopAuthorizer) HasNodeStatusCapability(
 func (n *NoopAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	return nil
 }
+
+// IsExemptFromRateLimiting implements the tenantcapabilities.Authorizer interface
+func (n *NoopAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
+	return false
+}

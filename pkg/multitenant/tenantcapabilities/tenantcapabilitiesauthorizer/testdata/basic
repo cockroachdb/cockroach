@@ -124,3 +124,15 @@ ok
 has-tsdb-query-capability ten=11
 ----
 client tenant does not have capability to query timeseries data
+
+upsert ten=11 exempt_from_rate_limiting=true
+----
+ok
+
+is-exempt-from-rate-limiting ten=11
+----
+true
+
+is-exempt-from-rate-limiting ten=10
+----
+false

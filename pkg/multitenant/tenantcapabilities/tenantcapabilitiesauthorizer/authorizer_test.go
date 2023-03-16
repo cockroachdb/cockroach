@@ -132,6 +132,8 @@ func TestDataDriven(t *testing.T) {
 				val, err := strconv.ParseBool(valStr)
 				require.NoError(t, err)
 				setting.Override(ctx, &clusterSettings.SV, val)
+			case "is-exempt-from-rate-limiting":
+				return fmt.Sprintf("%t", authorizer.IsExemptFromRateLimiting(context.Background(), tenID))
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)
 			}
