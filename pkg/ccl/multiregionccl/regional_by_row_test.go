@@ -639,7 +639,7 @@ CREATE TABLE regional_by_row (
 			payload,
 			false
 		) AS job
-		FROM system.jobs
+		FROM "".crdb_internal.system_jobs
 		)
     SELECT count(*)
     FROM jobs
@@ -659,7 +659,7 @@ CREATE TABLE regional_by_row (
 			payload,
 			false
 		) AS job
-		FROM system.jobs
+		FROM "".crdb_internal.system_jobs
 		)
     SELECT status, job->'schemaChangeGC' as details
     FROM jobs

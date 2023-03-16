@@ -20,6 +20,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -471,7 +472,7 @@ func (sp *replicationTestSpec) stopReplicationStream(ingestionJob int, cutoverTi
 	err := retry.ForDuration(time.Minute*5, func() error {
 		var status string
 		var payloadBytes []byte
-		sp.setup.dst.sysSQL.QueryRow(sp.t, `SELECT status, payload FROM system.jobs WHERE id = $1`,
+		sp.setup.dst.sysSQL.QueryRow(sp.t, `SELECT status, payload FROM crdb_internal.jobs WHERE job_id = $1`,
 			ingestionJob).Scan(&status, &payloadBytes)
 		if jobs.Status(status) == jobs.StatusFailed {
 			payload := &jobspb.Payload{}
@@ -722,32 +723,28 @@ func (c *streamIngesitonJobInfo) GetError() string           { return c.status }
 var _ jobInfo = (*streamIngesitonJobInfo)(nil)
 
 func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
-	var status string
-	var payloadBytes []byte
-	var progressBytes []byte
+	var status, errMsg string
+	var decimalHighWater *apd.Decimal
+	var finished hlc.Timestamp
 	if err := db.QueryRow(
-		`SELECT status, payload, progress FROM system.jobs WHERE id = $1`, jobID,
-	).Scan(&status, &payloadBytes, &progressBytes); err != nil {
-		return nil, err
-	}
-	var payload jobspb.Payload
-	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
-		return nil, err
-	}
-	var progress jobspb.Progress
-	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+		`SELECT status, high_water_timestamp, error, finished FROM crdb_internal.jobs WHERE job_id = $1`, jobID,
+	).Scan(&status, &decimalHighWater, &errMsg, &finished); err != nil {
 		return nil, err
 	}
 	var highwaterTime time.Time
-	highwater := progress.GetHighWater()
-	if highwater != nil {
-		highwaterTime = highwater.GoTime()
+	if decimalHighWater != nil {
+		var err error
+		highwaterTimeHLC, err := hlc.DecimalToHLC(decimalHighWater)
+		if err != nil {
+			return nil, err
+		}
+		highwaterTime = highwaterTimeHLC.GoTime()
 	}
 	return &streamIngesitonJobInfo{
 		status:        status,
-		errMsg:        payload.Error,
+		errMsg:        errMsg,
 		highwaterTime: highwaterTime,
-		finishedTime:  time.UnixMicro(payload.FinishedMicros),
+		finishedTime:  time.UnixMicro(finished.GoTime().UnixMicro()),
 	}, nil
 }
 
