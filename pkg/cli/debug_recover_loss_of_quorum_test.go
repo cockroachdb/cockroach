@@ -444,29 +444,31 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// cluster using loss of quorum recovery. To do that, we will terminate
 	// two nodes and run recovery on remaining one. Restarting node should
 	// bring it back to healthy (but underreplicated) state.
+	// Note that we inject reusable listeners into all nodes to prevent tests
+	// running in parallel from taking over ports of stopped nodes and responding
+	// to gateway node with errors.
 	// TODO(oleg): Make test run with 7 nodes to exercise cases where multiple
 	// replicas survive. Current startup and allocator behaviour would make
 	// this test flaky.
+	sa := make(map[int]base.TestServerArgs)
+	for i := 0; i < 3; i++ {
+		sa[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: storeReg,
+				},
+			},
+			Listener: listenerReg.GetOrFail(t, i),
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory: true,
+				},
+			},
+		}
+	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ReusableListeners: true,
-		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{InMemory: true},
-			},
-		},
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						StickyEngineRegistry: storeReg,
-					},
-				},
-				Listener: listenerReg.GetOrFail(t, 0),
-				StoreSpecs: []base.StoreSpec{
-					{InMemory: true, StickyInMemoryEngineID: "1"},
-				},
-			},
-		},
+		ServerArgsPerNode: sa,
 	})
 	tc.Start(t)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -529,7 +531,8 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	require.NoError(t, err, "failed to run apply plan")
 	// Check that there were at least one mention of replica being promoted.
 	require.Contains(t, out, "updating replica", "no replica updates were recorded")
-	require.Contains(t, out, fmt.Sprintf("Plan staged. To complete recovery restart nodes n%d.", node1ID),
+	require.Contains(t, out,
+		fmt.Sprintf("Plan staged. To complete recovery restart nodes n%d.", node1ID),
 		"apply plan failed to stage on expected nodes")
 
 	// Verify plan is staged on nodes
@@ -557,7 +560,8 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	ac, err := tc.GetAdminClient(ctx, t, 0)
 	require.NoError(t, err, "failed to get admin client")
 	testutils.SucceedsSoon(t, func() error {
-		dr, err := ac.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: []roachpb.NodeID{2, 3}})
+		dr, err := ac.DecommissionStatus(ctx,
+			&serverpb.DecommissionStatusRequest{NodeIDs: []roachpb.NodeID{2, 3}})
 		if err != nil {
 			return err
 		}
