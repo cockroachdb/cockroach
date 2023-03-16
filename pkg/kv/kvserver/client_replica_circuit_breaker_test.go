@@ -302,7 +302,6 @@ func TestReplicaCircuitBreaker_Leaseholder_QuorumLoss(t *testing.T) {
 // leases have lots of special casing internally, this is easy to get wrong.
 func TestReplicaCircuitBreaker_Follower_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 76781, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := setupCircuitBreakerTest(t)
 	defer tc.Stopper().Stop(context.Background())
@@ -734,6 +733,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 			pErr := kvpb.NewErrorf("test prevents lease acquisition by n2")
 			return 0, pErr
 		},
+		RangeLeaseAcquireTimeoutOverride: testutils.DefaultSucceedsSoonDuration,
 	}
 	// In some tests we'll restart servers, which means that we will be waiting
 	// for raft elections. Speed this up by campaigning aggressively. This also
@@ -846,7 +846,22 @@ func (cbt *circuitBreakerTest) ExpireAllLeasesAndN1LivenessRecord(
 		self, ok := lv.Self()
 		require.True(t, ok)
 
-		cbt.ManualClock.Forward(self.Expiration.WallTime)
+		ts := hlc.Timestamp{WallTime: self.Expiration.WallTime}
+		require.NoError(t, srv.Stores().VisitStores(func(s *kvserver.Store) error {
+			s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+				lease, next := replica.GetLease()
+				if lease.Expiration != nil {
+					ts.Forward(*lease.Expiration)
+				}
+				if next.Expiration != nil {
+					ts.Forward(*next.Expiration)
+				}
+				return true // more
+			})
+			return nil
+		}))
+
+		cbt.ManualClock.Forward(ts.WallTime)
 		if idx == n1 {
 			// Invalidate n1's liveness record, to make sure that ranges on n1 need
 			// to acquire a new lease (vs waiting for a heartbeat to the liveness
