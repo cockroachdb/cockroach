@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 	"github.com/robfig/cron/v3"
 )
 
@@ -44,6 +45,7 @@ type scheduledJobRecord struct {
 	ScheduleDetails jobspb.ScheduleDetails    `col:"schedule_details"`
 	ExecutorType    string                    `col:"executor_type"`
 	ExecutionArgs   jobspb.ExecutionArguments `col:"execution_args"`
+	OwnerID         oid.Oid                   `col:"owner_id"`
 }
 
 // InvalidScheduleID is a constant indicating the schedule ID is not valid.
@@ -278,6 +280,18 @@ func (j *ScheduledJob) SetExecutionDetails(executor string, args jobspb.Executio
 	j.rec.ExecutorType = executor
 	j.rec.ExecutionArgs = args
 	j.markDirty("executor_type", "execution_args")
+}
+
+// OwnerID returns the schedule's owner ID.
+func (j *ScheduledJob) OwnerID() oid.Oid {
+	return j.rec.OwnerID
+}
+
+// TODO(yang): Use this wherever SetOwner is used.
+// SetOwnerID updates the schedule's owner ID.
+func (j *ScheduledJob) SetOwnerID(id oid.Oid) {
+	j.rec.OwnerID = id
+	j.markDirty("owner_id")
 }
 
 // ClearDirty clears the dirty map making this object appear as if it was just loaded.
@@ -575,6 +589,11 @@ func (j *ScheduledJob) marshalChanges() ([]string, []interface{}, error) {
 			arg = tree.NewDString(j.rec.ExecutorType)
 		case `execution_args`:
 			arg, err = marshalProto(&j.rec.ExecutionArgs)
+		case `owner_id`:
+			if j.rec.OwnerID == 0 {
+				continue
+			}
+			arg = tree.NewDOid(j.rec.OwnerID)
 		default:
 			return nil, nil, errors.Newf("cannot marshal column %q", col)
 		}

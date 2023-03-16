@@ -462,6 +462,7 @@ CREATE TABLE system.scheduled_jobs (
     schedule_details BYTES,
     executor_type    STRING NOT NULL,
     execution_args   BYTES NOT NULL,
+    owner_id         OID,
 
     CONSTRAINT "primary" PRIMARY KEY (schedule_id),
     INDEX "next_run_idx" (next_run),
@@ -469,7 +470,8 @@ CREATE TABLE system.scheduled_jobs (
  	 FAMILY sched (schedule_id, next_run, schedule_state),
  	 FAMILY other (
        schedule_name, created, owner, schedule_expr, 
-       schedule_details, executor_type, execution_args 
+       schedule_details, executor_type, execution_args,
+       owner_id
     )
 )`
 
@@ -2271,6 +2273,7 @@ var (
 				{Name: "schedule_details", ID: 8, Type: types.Bytes, Nullable: true},
 				{Name: "executor_type", ID: 9, Type: types.String, Nullable: false},
 				{Name: "execution_args", ID: 10, Type: types.Bytes, Nullable: false},
+				{Name: "owner_id", ID: 11, Type: types.Oid, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2285,8 +2288,9 @@ var (
 					ColumnNames: []string{
 						"schedule_name", "created", "owner", "schedule_expr",
 						"schedule_details", "executor_type", "execution_args",
+						"owner_id",
 					},
-					ColumnIDs: []descpb.ColumnID{2, 3, 4, 7, 8, 9, 10},
+					ColumnIDs: []descpb.ColumnID{2, 3, 4, 7, 8, 9, 10, 11},
 				},
 			},
 			pk("schedule_id"),
