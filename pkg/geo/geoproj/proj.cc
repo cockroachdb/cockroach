@@ -40,6 +40,7 @@ CR_PROJ_Status CR_PROJ_Transform(char* fromSpec, char* toSpec, long point_count,
   auto toPJ = pj_init_plus_ctx(ctx, toSpec);
   if (toPJ == nullptr) {
     err = CR_PROJ_ErrorFromErrorCode(pj_ctx_get_errno(ctx));
+    pj_free(fromPJ);
     pj_ctx_free(ctx);
     return err;
   }
@@ -54,6 +55,8 @@ CR_PROJ_Status CR_PROJ_Transform(char* fromSpec, char* toSpec, long point_count,
   int errCode = pj_ctx_get_errno(ctx);
   if (errCode != 0) {
     err = CR_PROJ_ErrorFromErrorCode(errCode);
+    pj_free(toPJ);
+    pj_free(fromPJ);
     pj_ctx_free(ctx);
     return err;
   }
@@ -65,6 +68,8 @@ CR_PROJ_Status CR_PROJ_Transform(char* fromSpec, char* toSpec, long point_count,
       y[i] = y[i] * RAD_TO_DEG;
     }
   }
+  pj_free(toPJ);
+  pj_free(fromPJ);
   pj_ctx_free(ctx);
   return err;
 }
@@ -83,6 +88,7 @@ CR_PROJ_Status CR_PROJ_GetProjMetadata(char* spec, int* retIsLatLng, double* ret
   *retIsLatLng = pj_is_latlong(pj);
   pj_get_spheroid_defn(pj, retMajorAxis, retEccentricitySquared);
 
+  pj_free(pj);
   pj_ctx_free(ctx);
   return err;
 }
