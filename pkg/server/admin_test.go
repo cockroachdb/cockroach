@@ -2206,6 +2206,10 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	firstServer := testCluster.Server(0)
 	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 
+	// TODO(irfansharif): The data-distribution page and underyling APIs don't
+	// know how to deal with coalesced ranges. See #97942.
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = false`)
+
 	// Create some tables.
 	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
 	sqlDB.Exec(t, `CREATE TABLE roachblog.posts (id INT PRIMARY KEY, title text, body text)`)
