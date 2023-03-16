@@ -113,6 +113,9 @@ func getColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 		return `(statistics -> 'statistics' -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
 	case serverpb.StatsSortOptions_EXECUTION_COUNT:
 		return `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
+	case serverpb.StatsSortOptions_PCT_RUNTIME:
+		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT  *
+             (statistics -> 'statistics' ->> 'cnt')::FLOAT DESC`
 	default:
 		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
 	}
