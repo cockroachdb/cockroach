@@ -592,6 +592,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 			"ran out of replicas worth transferring and load %s is still above desired threshold %s; will check again soon",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
+		return
 	}
 
 	// We successfully rebalanced below or equal to the max threshold,
@@ -623,9 +624,6 @@ func (sr *StoreRebalancer) RebalanceRanges(
 	)
 
 	if candidateReplica == nil {
-		log.KvDistribution.Infof(ctx,
-			"ran out of replicas worth transferring and load %s is still above desired threshold %s; will check again soon",
-			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		return NoRebalanceTarget, candidateReplica, voterTargets, nonVoterTargets
 	}
 
