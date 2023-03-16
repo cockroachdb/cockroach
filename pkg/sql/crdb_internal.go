@@ -7650,7 +7650,7 @@ var crdbInternalShowTenantCapabilitiesCache = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
   tenant_id        INT,
-  capability_id    STRING,
+  capability_name  STRING,
   capability_value STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
