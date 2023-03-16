@@ -714,7 +714,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		// Don't bother moving leases whose load is below some small fraction of the
 		// store's load. It's just unnecessary churn with no benefit to move leases
 		// responsible for, for example, 1 load unit on a store with 5000 load units.
-		const minLoadFraction = .001
+		const minLoadFraction = .005
 		if candidateReplica.RangeUsageInfo().TransferImpact().Dim(rctx.loadDimension) <
 			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
 			log.KvDistribution.VEventf(ctx, 3, "r%d's %s load is too little to matter relative to s%d's %s total load",
@@ -836,7 +836,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// Don't bother moving ranges whose load is below some small fraction of the
 		// store's load. It's just unnecessary churn with no benefit to move ranges
 		// responsible for, for example, 1 load unit on a store with 5000 load units.
-		const minLoadFraction = .001
+		const minLoadFraction = .02
 		if candidateReplica.RangeUsageInfo().Load().Dim(rctx.loadDimension) <
 			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
 			log.KvDistribution.VEventf(
