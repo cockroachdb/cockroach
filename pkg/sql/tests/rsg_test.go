@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -764,7 +763,9 @@ func testRandomSyntax(
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
-		skip.IgnoreLint(t, "enable with '-rsg <duration>'")
+		// This test is useful, run it for 30s to facilitate catching new parser
+		// issues at CI time.
+		*flagRSGTime = 30 * time.Second
 	}
 	ctx := context.Background()
 	defer ccl.TestingEnableEnterprise()()
