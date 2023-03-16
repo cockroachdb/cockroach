@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1125,6 +1126,33 @@ func (sl StoreList) ExcludeInvalid(constraints []roachpb.ConstraintsConjunction)
 		}
 	}
 	return MakeStoreList(filteredDescs)
+}
+
+// ExcludeNonPreferred takes a store list and returns only the stores which
+// are preferred as leaseholders. If no stores match any of the preferences,
+// the original store list is returned. It maintains the original order of the
+// passed in store list.
+func (sl StoreList) ExcludeNonPreferred(preferences []roachpb.LeasePreference) StoreList {
+	// Go one preference at a time. As soon as we've found stores that match a
+	// preference, we don't need to look at the later preferences, because
+	// they're meant to be ordered by priority.
+	var filteredDescs []roachpb.StoreDescriptor
+	for _, preference := range preferences {
+		for _, store := range sl.Stores {
+			if constraint.ConjunctionsCheck(store, preference.Constraints) {
+				filteredDescs = append(filteredDescs, store)
+			}
+		}
+		if len(filteredDescs) > 0 {
+			return MakeStoreList(filteredDescs)
+		}
+	}
+
+	// If there were no preferences matched, returns the original store list.
+	// This will happen when:
+	// (1) There are no preferences given
+	// (2) There are preferences given but no stores in the storelist match them.
+	return MakeStoreList(sl.Stores)
 }
 
 // LoadMeans returns the mean for each load dimension tracked in the storelist.

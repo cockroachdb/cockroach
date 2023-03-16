@@ -2224,6 +2224,13 @@ func (a *Allocator) TransferLeaseTarget(
 	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
+	// Bail early if there is no store descriptor for the current leaseholder.
+	// This indicates that gossip hasn't propogated the descriptor yet.
+	source, ok := storePool.GetStoreDescriptor(leaseRepl.StoreID())
+	if !ok {
+		return roachpb.ReplicaDescriptor{}
+	}
+
 	excludeLeaseRepl := opts.ExcludeLeaseRepl
 	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) ||
 		a.leaseholderShouldMoveDueToIOOverload(ctx, storePool, existing, leaseRepl.StoreID(), a.IOOverloadOptions()) {
@@ -2238,12 +2245,8 @@ func (a *Allocator) TransferLeaseTarget(
 	sl, _, _ := storePool.GetStoreList(storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
+	sl = sl.ExcludeNonPreferred(conf.LeasePreferences)
 	candidateLeasesMean := sl.CandidateLeases.Mean
-
-	source, ok := storePool.GetStoreDescriptor(leaseRepl.StoreID())
-	if !ok {
-		return roachpb.ReplicaDescriptor{}
-	}
 
 	validTargets := a.ValidLeaseTargets(ctx, storePool, conf, existing, leaseRepl, opts)
 
@@ -2336,17 +2339,37 @@ func (a *Allocator) TransferLeaseTarget(
 		return candidates[a.randGen.Intn(len(candidates))]
 
 	case allocator.LoadConvergence:
-		leaseReplLoad := usageInfo.TransferImpact()
+		// Create the list of candidates using the valid target list, excluding the
+		// existing leaseholder if it is a valid target.
 		candidates := make([]roachpb.StoreID, 0, len(validTargets)-1)
 		for _, repl := range validTargets {
 			if repl.StoreID != leaseRepl.StoreID() {
 				candidates = append(candidates, repl.StoreID)
 			}
 		}
+		// When comparing against the mean load, we want to include every store
+		// that could potentially hold a lease for the range, regardless of whether
+		// the store has a voting replica or not currently. The original store list
+		// is filtered to only those stores which are valid and most preferable for
+		// the lease. We add the current leaseholder store, if it was removed as
+		// earlier. It is guaranteed that every valid target is already in the
+		// store list.
+		domainStores := sl.Stores
+		leaseReplInDomain := false
+		for _, store := range domainStores {
+			if store.StoreID == leaseRepl.StoreID() {
+				leaseReplInDomain = true
+				break
+			}
+		}
+		if !leaseReplInDomain {
+			domainStores = append(domainStores, *storeDescMap[leaseRepl.StoreID()])
+		}
+		domainSL := storepool.MakeStoreList(domainStores)
 
-		// When the goal is to further QPS convergence across stores, we ensure that
+		// When the goal is to further load convergence across stores, we ensure that
 		// any lease transfer decision we make *reduces the delta between the store
-		// serving the highest QPS and the store serving the lowest QPS* among our
+		// serving the highest load and the store serving the lowest load* among our
 		// list of candidates.
 		//
 		// NB: We're assuming that the lease transfer will move all of the
@@ -2354,11 +2377,11 @@ func (a *Allocator) TransferLeaseTarget(
 		// be true in all cases (some percentage of the leaseholder's traffic could
 		// be follower read traffic). See
 		// https://github.com/cockroachdb/cockroach/issues/75630.
+		leaseReplLoad := usageInfo.TransferImpact()
 		bestStore, noRebalanceReason := bestStoreToMinimizeLoadDelta(
-			leaseReplLoad,
 			leaseRepl.StoreID(),
 			candidates,
-			storeDescMap,
+			domainSL,
 			&LoadScorerOptions{
 				IOOverloadOptions:            a.IOOverloadOptions(),
 				DiskOptions:                  a.DiskOptions(),
@@ -2429,7 +2452,7 @@ func (a *Allocator) TransferLeaseTarget(
 
 // getCandidateWithMinLoad returns the StoreID that belongs to the store
 // serving the lowest load among all the `candidates` stores, given a single
-// dimension of load e.g. QPS.
+// dimension of load e.g. QPS or CPU..
 func getCandidateWithMinLoad(
 	storeLoadMap map[roachpb.StoreID]load.Load,
 	candidates []roachpb.StoreID,
@@ -2450,9 +2473,9 @@ func getCandidateWithMinLoad(
 	return bestCandidate
 }
 
-// getLoadDelta returns the difference between the store serving the highest QPS
-// and the store serving the lowest QPS, among the set of stores in the
-// `domain`.
+// getLoadDelta returns the difference between the store serving the highest
+// load and the store serving the lowest load in the dimension given, among the
+// set of stores in the `domain`.
 func getLoadDelta(
 	storeLoadMap map[roachpb.StoreID]load.Load, domain []roachpb.StoreID, dimension load.Dimension,
 ) float64 {
