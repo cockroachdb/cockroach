@@ -117,6 +117,17 @@ const (
 	RebalanceTargetFound
 )
 
+const (
+	// minLeaseLoadFraction is the minimum fraction of the local store's load a
+	// lease must contribute, in order to consider it worthwhile rebalancing when
+	// overfull.
+	minLeaseLoadFraction = 0.005
+	// minReplicaLoadFraction is the minimum fraction of the local store's load a
+	// replica (lease included) must contribute, in order to consider it
+	// worthwhile rebalancing when overfull.
+	minReplicaLoadFraction = 0.02
+)
+
 // StoreRebalancer is responsible for examining how the associated store's load
 // compares to the load on other stores in the cluster and transferring leases
 // or replicas away if the local store is overloaded.
@@ -716,9 +727,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		// Don't bother moving leases whose load is below some small fraction of the
 		// store's load. It's just unnecessary churn with no benefit to move leases
 		// responsible for, for example, 1 load unit on a store with 5000 load units.
-		const minLoadFraction = .001
 		if candidateReplica.RangeUsageInfo().TransferImpact().Dim(rctx.loadDimension) <
-			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
+			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLeaseLoadFraction {
 			log.KvDistribution.VEventf(ctx, 3, "r%d's %s load is too little to matter relative to s%d's %s total load",
 				candidateReplica.GetRangeID(), candidateReplica.RangeUsageInfo().TransferImpact(),
 				rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load())
@@ -838,9 +848,8 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// Don't bother moving ranges whose load is below some small fraction of the
 		// store's load. It's just unnecessary churn with no benefit to move ranges
 		// responsible for, for example, 1 load unit on a store with 5000 load units.
-		const minLoadFraction = .001
 		if candidateReplica.RangeUsageInfo().Load().Dim(rctx.loadDimension) <
-			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
+			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minReplicaLoadFraction {
 			log.KvDistribution.VEventf(
 				ctx,
 				5,
