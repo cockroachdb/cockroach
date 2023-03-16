@@ -42,6 +42,7 @@ type jsonEncoder struct {
 	buf             bytes.Buffer
 	versionEncoder  func(ed *cdcevent.EventDescriptor) *versionEncoder
 	envelopeEncoder func(evCtx eventContext, updated, prev cdcevent.Row) (json.JSON, error)
+	customKeyColumn string
 }
 
 var _ Encoder = &jsonEncoder{}
@@ -59,6 +60,7 @@ func makeJSONEncoder(opts changefeedbase.EncodingOptions) (*jsonEncoder, error) 
 		envelopeType:       opts.Envelope,
 		updatedField:       opts.UpdatedTimestamps,
 		mvccTimestampField: opts.MVCCTimestamps,
+		customKeyColumn:    opts.CustomKeyColumn,
 		// In the bare envelope we don't output diff directly, it's incorporated into the
 		// projection as desired.
 		beforeField:  opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
@@ -106,8 +108,17 @@ type versionEncoder struct {
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, error) {
-	j, err := e.versionEncoder(row.EventDescriptor).encodeKeyRaw(row)
+func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) (enc []byte, err error) {
+	var keys cdcevent.Iterator
+	if e.customKeyColumn == "" {
+		keys = row.ForEachKeyColumn()
+	} else {
+		keys, err = row.DatumNamed(e.customKeyColumn)
+		if err != nil {
+			return nil, err
+		}
+	}
+	j, err := e.versionEncoder(row.EventDescriptor).encodeKeyRaw(keys)
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +127,9 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, er
 	return e.buf.Bytes(), nil
 }
 
-func (e *versionEncoder) encodeKeyRaw(row cdcevent.Row) (json.JSON, error) {
+func (e *versionEncoder) encodeKeyRaw(it cdcevent.Iterator) (json.JSON, error) {
 	kb := json.NewArrayBuilder(1)
-	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
 		if err != nil {
 			return err
@@ -135,7 +146,7 @@ func (e *versionEncoder) encodeKeyRaw(row cdcevent.Row) (json.JSON, error) {
 func (e *versionEncoder) encodeKeyInValue(
 	updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
 ) error {
-	keyEntries, err := e.encodeKeyRaw(updated)
+	keyEntries, err := e.encodeKeyRaw(updated.ForEachKeyColumn())
 	if err != nil {
 		return err
 	}
