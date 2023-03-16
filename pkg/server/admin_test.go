@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -3247,6 +3249,22 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestServerError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	pgError := pgerror.New(pgcode.OutOfMemory, "TestServerError.OutOfMemory")
+	err := serverError(ctx, pgError)
+	require.Equal(t, "rpc error: code = Internal desc = An internal server error has occurred. Please check your CockroachDB logs for more details. Error Code: 53200", err.Error())
+
+	err = serverError(ctx, err)
+	require.Equal(t, "rpc error: code = Internal desc = An internal server error has occurred. Please check your CockroachDB logs for more details. Error Code: 53200", err.Error())
+
+	err = fmt.Errorf("random error that is not pgerror or grpcstatus")
+	err = serverError(ctx, err)
+	require.Equal(t, "rpc error: code = Internal desc = An internal server error has occurred. Please check your CockroachDB logs for more details.", err.Error())
 }
 
 func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
