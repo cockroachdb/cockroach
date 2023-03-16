@@ -78,7 +78,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] requesting tenant ranges: creating error output: debug/tenant_ranges.err.txt... done
 [cluster] requesting CPU profiles
 [cluster] profiles generated
-[cluster] profile for node 1... writing binary output: debug//nodes/1/cpu.pprof... done
+[cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
 [node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
 [node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
