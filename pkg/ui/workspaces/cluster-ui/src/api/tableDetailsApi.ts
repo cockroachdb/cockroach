@@ -86,7 +86,7 @@ type TableIdRow = {
 const getTableId: TableDetailsQuery<TableIdRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -114,7 +114,7 @@ type TableCreateStatementRow = { statement: string };
 const getTableCreateStatement: TableDetailsQuery<TableCreateStatementRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -152,7 +152,7 @@ type TableGrantsRow = {
 const getTableGrants: TableDetailsQuery<TableGrantsRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -187,17 +187,17 @@ type TableSchemaDetailsRow = {
 const getTableSchemaDetails: TableDetailsQuery<TableSchemaDetailsRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
       sql: Format(
         `WITH 
-     columns AS (SELECT column_name FROM [SHOW COLUMNS FROM %1]),
-     indexes AS (SELECT index_name FROM [SHOW INDEX FROM %1])
+     columns AS (SELECT array_agg(distinct(column_name)) as unique_columns FROM [SHOW COLUMNS FROM %1]),
+     indexes AS (SELECT array_agg(distinct(index_name)) as unique_indexes FROM [SHOW INDEX FROM %1])
         SELECT 
-            distinct(column_name) as columns, 
-            distinct(index_name) as indexes 
+            unique_columns as columns, 
+            unique_indexes as indexes 
         FROM columns CROSS JOIN indexes`,
         [escFullTableName],
       ),
@@ -228,7 +228,7 @@ type TableZoneConfigStatementRow = { raw_config_sql: string };
 const getTableZoneConfigStmt: TableDetailsQuery<TableZoneConfigStatementRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -258,7 +258,7 @@ type TableZoneConfigRow = {
 const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -294,6 +294,12 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
         hexString = row.table_zone_config_hex_string;
         configLevel = ZoneConfigurationLevel.TABLE;
       }
+
+      // No zone configuration, return.
+      if (hexString === "") {
+        return;
+      }
+
       // Try to decode the zone config bytes response.
       try {
         // Parse the bytes from the hex string.
@@ -326,7 +332,7 @@ type TableHeuristicDetailsRow = {
 const getTableHeuristicsDetails: TableDetailsQuery<TableHeuristicDetailsRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -381,7 +387,7 @@ type TableSpanStatsRow = {
 const getTableSpanStats: TableDetailsQuery<TableSpanStatsRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -417,7 +423,7 @@ const getTableSpanStats: TableDetailsQuery<TableSpanStatsRow> = {
       resp.stats.ranges_data.live_percentage = row.live_percentage;
     } else {
       txn_result.error = new Error(
-        "getTableSpanStats: unexpected number of rows (expected 1)",
+        `getTableSpanStats: unexpected number of rows (expected 1, got ${txn_result.rows.length})`,
       );
     }
     if (txn_result.error) {
@@ -433,7 +439,7 @@ type TableReplicasRow = {
 const getTableReplicas: TableDetailsQuery<TableReplicasRow> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
@@ -479,7 +485,7 @@ type TableIndexUsageStats = SqlApiQueryResponse<{
 const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
   createStmt: (dbName, tableName) => {
     const escFullTableName = Join(
-      [new Identifier(dbName).SQLString(), tableName],
+      [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {

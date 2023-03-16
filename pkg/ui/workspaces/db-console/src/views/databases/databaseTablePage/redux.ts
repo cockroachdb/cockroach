@@ -21,7 +21,6 @@ import { cockroach } from "src/js/protos";
 import {
   generateTableID,
   refreshTableDetails,
-  refreshTableStats,
   refreshNodes,
   refreshIndexStats,
   refreshSettings,
@@ -30,7 +29,7 @@ import {
 import { selectHasAdminRole } from "src/redux/user";
 import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
-import { FixLong, longToInt } from "src/util/fixLong";
+import { longToInt } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
 import {
   nodeRegionsByIDSelector,
@@ -41,8 +40,7 @@ import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 import { normalizePrivileges } from "../utils";
 
-const { TableDetailsRequest, TableStatsRequest, TableIndexStatsRequest } =
-  cockroach.server.serverpb;
+const { TableIndexStatsRequest } = cockroach.server.serverpb;
 
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
@@ -56,7 +54,6 @@ export const mapStateToProps = createSelector(
     getMatchParamByName(props.match, tableNameAttr),
 
   state => state.cachedData.tableDetails,
-  state => state.cachedData.tableStats,
   state => state.cachedData.indexStats,
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
@@ -67,7 +64,6 @@ export const mapStateToProps = createSelector(
     database,
     table,
     tableDetails,
-    tableStats,
     indexUsageStats,
     nodeRegions,
     showNodeRegionsSection,
@@ -76,7 +72,6 @@ export const mapStateToProps = createSelector(
     hasAdminRole,
   ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
-    const stats = tableStats[generateTableID(database, table)];
     const indexStats = indexUsageStats[generateTableID(database, table)];
     const lastReset = util.TimestampToMoment(indexStats?.data?.last_reset);
     const indexStatsData = _.flatMap(
@@ -131,7 +126,7 @@ export const mapStateToProps = createSelector(
 
     const userToPrivileges = new Map<string, string[]>();
 
-    details?.data?.grants.forEach(grant => {
+    details?.data?.results.grants_resp.grants.forEach(grant => {
       if (!userToPrivileges.has(grant.user)) {
         userToPrivileges.set(grant.user, []);
       }
@@ -146,7 +141,7 @@ export const mapStateToProps = createSelector(
       privileges: normalizePrivileges(value.sort()),
     }));
 
-    const nodes = stats?.data?.node_ids || [];
+    const nodes = details?.data?.results.stats.ranges_data.node_ids || [];
 
     return {
       databaseName: database,
@@ -155,34 +150,31 @@ export const mapStateToProps = createSelector(
         loading: !!details?.inFlight,
         loaded: !!details?.valid,
         lastError: details?.lastError,
-        createStatement: details?.data?.create_table_statement || "",
-        replicaCount: details?.data?.zone_config?.num_replicas || 0,
-        indexNames: _.uniq(_.map(details?.data?.indexes, index => index.name)),
+        createStatement:
+          details?.data?.results.create_stmt_resp.statement || "",
+        replicaCount:
+          details?.data?.results.stats.ranges_data.replica_count || 0,
+        indexNames: _.uniq(details?.data?.results.schema_details.indexes),
         grants: grants,
-        statsLastUpdated: details?.data?.stats_last_created_at
-          ? util.TimestampToMoment(details?.data?.stats_last_created_at)
-          : null,
-        totalBytes: FixLong(details?.data?.data_total_bytes || 0).toNumber(),
-        liveBytes: FixLong(details?.data?.data_live_bytes || 0).toNumber(),
-        livePercentage: details?.data?.data_live_percentage || 0,
-      },
-      showNodeRegionsSection,
-      automaticStatsCollectionEnabled,
-      hasAdminRole,
-      stats: {
-        loading: !!stats?.inFlight,
-        loaded: !!stats?.valid,
-        lastError: stats?.lastError,
-        sizeInBytes: FixLong(
-          stats?.data?.approximate_disk_bytes || 0,
-        ).toNumber(),
-        rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
+        statsLastUpdated:
+          details?.data?.results.heuristics_details.stats_last_created_at ||
+          null,
+        totalBytes: details?.data?.results.stats.ranges_data.total_bytes || 0,
+        liveBytes: details?.data?.results.stats.ranges_data.live_bytes || 0,
+        livePercentage:
+          details?.data?.results.stats.ranges_data.live_percentage || 0,
+        sizeInBytes:
+          details?.data?.results.stats.pebble_data.approximate_disk_bytes || 0,
+        rangeCount: details?.data?.results.stats.ranges_data.range_count || 0,
         nodesByRegionString: getNodesByRegionString(
           nodes,
           nodeRegions,
           isTenant,
         ),
       },
+      showNodeRegionsSection,
+      automaticStatsCollectionEnabled,
+      hasAdminRole,
       indexStats: {
         loading: !!indexStats?.inFlight,
         loaded: !!indexStats?.valid,
@@ -196,11 +188,10 @@ export const mapStateToProps = createSelector(
 
 export const mapDispatchToProps = {
   refreshTableDetails: (database: string, table: string) => {
-    return refreshTableDetails(new TableDetailsRequest({ database, table }));
-  },
-
-  refreshTableStats: (database: string, table: string) => {
-    return refreshTableStats(new TableStatsRequest({ database, table }));
+    return refreshTableDetails({
+      database,
+      table,
+    });
   },
   refreshIndexStats: (database: string, table: string) => {
     return refreshIndexStats(new TableIndexStatsRequest({ database, table }));
