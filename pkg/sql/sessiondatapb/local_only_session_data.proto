@@ -219,6 +219,8 @@ message LocalOnlySessionData {
   // AvoidBuffering indicates that the returned data should not be
   // buffered by conn executor.  This is currently used by replication primitives
   // to ensure the data is flushed to the consumer immediately.
+  //
+  // Does not apply to the InternalExecutor.
   bool avoid_buffering = 59;
   // CheckFunctionBodies indicates whether functions are validated during
   // creation.

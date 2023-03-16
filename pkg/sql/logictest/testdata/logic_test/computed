@@ -20,6 +20,17 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                        CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
                      )
 
+query TT
+SHOW CREATE TABLE with_no_column_refs WITH REDACT
+----
+with_no_column_refs  CREATE TABLE public.with_no_column_refs (
+                       a INT8 NULL,
+                       b INT8 NULL,
+                       c INT8 NULL AS (‹×›:::INT8) STORED,
+                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                       CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
+                     )
+
 statement ok
 CREATE TABLE extra_parens (
   a INT,
@@ -783,6 +794,17 @@ x  CREATE TABLE public.x (
      b INT8 NULL AS (a * 2:::INT8) STORED,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      c INT8 NOT NULL AS (a + 4:::INT8) STORED,
+     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+   )
+
+query TT
+SHOW CREATE TABLE x WITH REDACT
+----
+x  CREATE TABLE public.x (
+     a INT8 NULL,
+     b INT8 NULL AS (a * ‹×›:::INT8) STORED,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     c INT8 NOT NULL AS (a + ‹×›:::INT8) STORED,
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    )
 

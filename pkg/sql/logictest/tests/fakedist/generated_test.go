@@ -1724,6 +1724,13 @@ func TestLogic_show_create_all_types(
 	runLogicTest(t, "show_create_all_types")
 }
 
+func TestLogic_show_create_redact(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_create_redact")
+}
+
 func TestLogic_show_default_privileges(
 	t *testing.T,
 ) {

@@ -55,6 +55,9 @@ type ShowCreateDisplayOptions struct {
 	// to read any table data from the backup (nor is there a guarantee that the
 	// system.comments table is included in the backup at all).
 	IgnoreComments bool
+	// RedactableValues causes all constants, literals, and other user-provided
+	// values to be surrounded with redaction markers.
+	RedactableValues bool
 }
 
 // ShowCreateTable returns a valid SQL representation of the CREATE
@@ -78,7 +81,11 @@ func ShowCreateTable(
 
 	a := &tree.DatumAlloc{}
 
-	f := p.ExtendedEvalContext().FmtCtx(tree.FmtSimple)
+	fmtFlags := tree.FmtSimple
+	if displayOptions.RedactableValues {
+		fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+	}
+	f := p.ExtendedEvalContext().FmtCtx(fmtFlags)
 	f.WriteString("CREATE ")
 	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
@@ -94,6 +101,7 @@ func ShowCreateTable(
 		f.WriteString("\n\t")
 		colstr, err := schemaexpr.FormatColumnForDisplay(
 			ctx, desc, col, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(),
+			displayOptions.RedactableValues,
 		)
 		if err != nil {
 			return "", err
@@ -142,7 +150,8 @@ func ShowCreateTable(
 		// Build the PARTITION BY clause.
 		var partitionBuf bytes.Buffer
 		if err := ShowCreatePartitioning(
-			a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
+			a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1, /* indent */
+			0 /* colOffset */, displayOptions.RedactableValues,
 		); err != nil {
 			return "", err
 		}
@@ -154,7 +163,7 @@ func ShowCreateTable(
 			&descpb.AnonymousTable,
 			idx,
 			partitionBuf.String(),
-			tree.FmtSimple,
+			fmtFlags,
 			p.RunParams(ctx).p.SemaCtx(),
 			p.RunParams(ctx).p.SessionData(),
 			catformat.IndexDisplayDefOnly,
@@ -172,7 +181,8 @@ func ShowCreateTable(
 	}
 
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(), &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(),
+		&f.Buffer, 0 /* indent */, 0 /* colOffset */, displayOptions.RedactableValues,
 	); err != nil {
 		return "", err
 	}
@@ -227,7 +237,10 @@ func (p *planner) ShowCreate(
 
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))
 	if desc.IsView() {
-		return ShowCreateView(ctx, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(), &tn, desc)
+		return ShowCreateView(
+			ctx, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(), &tn, desc,
+			displayOptions.RedactableValues,
+		)
 	}
 	if desc.IsSequence() {
 		return ShowCreateSequence(ctx, &tn, desc)

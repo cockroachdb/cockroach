@@ -706,6 +706,18 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	)
 }
 
+// applyInternalExecutorSessionExceptions overrides values from
+// the session data that may have been set from a user-session but
+// which don't make sense to use in the InternalExecutor.
+func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
+	// Even if session queries are told to error on non-home region accesses,
+	// internal queries spawned from the same context should never do so.
+	sd.LocalOnlySessionData.EnforceHomeRegion = false
+	// DisableBuffering is not supported by the InternalExecutor
+	// which uses streamingCommandResults.
+	sd.LocalOnlySessionData.AvoidBuffering = false
+}
+
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
 	if !o.User.Undefined() {
@@ -779,12 +791,11 @@ func (ie *InternalExecutor) execInternal(
 	if ie.sessionDataStack != nil {
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
-		// Even if session queries are told to error on non-home region accesses,
-		// internal queries spawned from the same context should never do so.
-		sd.LocalOnlySessionData.EnforceHomeRegion = false
 	} else {
 		sd = newSessionData(SessionArgs{})
 	}
+
+	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
 	sd.Internal = true
 	if sd.User().Undefined() {

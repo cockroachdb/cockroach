@@ -158,6 +158,13 @@ func indexForDisplay(
 		predFmtFlag := tree.FmtParsable
 		if f.HasFlags(tree.FmtPGCatalog) {
 			predFmtFlag = tree.FmtPGCatalog
+		} else {
+			if f.HasFlags(tree.FmtMarkRedactionNode) {
+				predFmtFlag |= tree.FmtMarkRedactionNode
+			}
+			if f.HasFlags(tree.FmtOmitNameRedaction) {
+				predFmtFlag |= tree.FmtOmitNameRedaction
+			}
 		}
 		pred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, semaCtx, sessionData, predFmtFlag)
 		if err != nil {
@@ -197,6 +204,13 @@ func FormatIndexElements(
 	elemFmtFlag := tree.FmtParsable
 	if f.HasFlags(tree.FmtPGCatalog) {
 		elemFmtFlag = tree.FmtPGCatalog
+	} else {
+		if f.HasFlags(tree.FmtMarkRedactionNode) {
+			elemFmtFlag |= tree.FmtMarkRedactionNode
+		}
+		if f.HasFlags(tree.FmtOmitNameRedaction) {
+			elemFmtFlag |= tree.FmtOmitNameRedaction
+		}
 	}
 
 	startIdx := index.ExplicitColumnStartIdx()

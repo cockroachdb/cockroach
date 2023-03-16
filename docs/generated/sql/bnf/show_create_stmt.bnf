@@ -1,5 +1,5 @@
 show_create_stmt ::=
-	'SHOW' 'CREATE' object_name
+	'SHOW' 'CREATE' object_name opt_show_create_format_options
 	| 'SHOW' 'CREATE' 'ALL' 'SCHEMAS'
 	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
 	| 'SHOW' 'CREATE' 'ALL' 'TYPES'

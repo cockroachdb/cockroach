@@ -228,6 +228,22 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT named_constraint CHECK (z = 1:::INT8)
     )
 
+query TT
+SHOW CREATE TABLE t7 WITH REDACT
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > ‹×›:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > ‹×›:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > ‹×›:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = ‹×›:::INT8),
+      CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
+    )
+
 # Check that table references are dequalified in their stored representation.
 
 statement error no data source matches prefix: different_table
@@ -393,3 +409,14 @@ INSERT INTO t67100b VALUES (1)
 
 statement error failed to satisfy CHECK constraint \(true AND \(0:::INT8 > 1:::INT8\)\)
 UPSERT INTO t67100b VALUES (1)
+
+subtest regression_91697
+
+statement ok
+CREATE TABLE t_91697(a OID);
+
+statement ok
+ALTER TABLE t_91697 ADD CHECK (a < 123);
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a < 'public.t67100a'::REGCLASS\)
+INSERT INTO t_91697 VALUES (321);
