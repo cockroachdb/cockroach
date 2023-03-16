@@ -1199,6 +1199,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %type <tree.Statement> preparable_stmt
 %type <tree.Statement> explainable_stmt
 %type <tree.Statement> row_source_extension_stmt
+%type <tree.Statement> copy_to_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
@@ -3963,7 +3964,7 @@ copy_stmt:
   {
     return unimplementedWithIssue(sqllex, 97181)
   }
-| COPY '(' preparable_stmt ')' TO STDOUT opt_with_copy_options
+| COPY '(' copy_to_stmt ')' TO STDOUT opt_with_copy_options
    {
      /* FORCE DOC */
      $$.val = &tree.CopyTo{
@@ -3971,7 +3972,7 @@ copy_stmt:
         Options: *$7.copyOptions(),
      }
    }
-| COPY '(' preparable_stmt ')' TO error
+| COPY '(' copy_to_stmt ')' TO error
    {
      return unimplementedWithIssue(sqllex, 96590)
    }
@@ -5625,6 +5626,16 @@ row_source_extension_stmt:
     $$.val = $1.slct()
   }
 | show_stmt         // help texts in sub-rule
+| update_stmt       // EXTEND WITH HELP: UPDATE
+| upsert_stmt       // EXTEND WITH HELP: UPSERT
+
+copy_to_stmt:
+  delete_stmt       // EXTEND WITH HELP: DELETE
+| insert_stmt       // EXTEND WITH HELP: INSERT
+| select_stmt       // help texts in sub-rule
+  {
+    $$.val = $1.slct()
+  }
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
 
