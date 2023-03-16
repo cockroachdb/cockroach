@@ -124,10 +124,6 @@ func (n *showTenantNode) getTenantValues(
 	// Tenant status + replication status fields.
 	jobId := tenantInfo.TenantReplicationJobID
 	if jobId == 0 {
-		// No replication job, this is a non-replicating tenant.
-		if n.withReplication {
-			return nil, errors.Newf("tenant %q does not have an active replication job", tenantInfo.Name)
-		}
 		values.dataState = values.tenantInfo.DataState.String()
 	} else {
 		switch values.tenantInfo.DataState {
@@ -215,13 +211,14 @@ func (n *showTenantNode) Values() tree.Datums {
 		// This is a 'SHOW TENANT name WITH REPLICATION STATUS' command.
 		sourceTenantName := tree.DNull
 		sourceClusterUri := tree.DNull
-		replicationJobId := tree.NewDInt(tree.DInt(tenantInfo.TenantReplicationJobID))
+		replicationJobId := tree.DNull
 		replicatedTimestamp := tree.DNull
 		retainedTimestamp := tree.DNull
 		cutoverTimestamp := tree.DNull
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
+			replicationJobId = tree.NewDInt(tree.DInt(tenantInfo.TenantReplicationJobID))
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
 			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.StreamAddress)
 			if replicationInfo.ReplicationLagInfo != nil {
