@@ -106,7 +106,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
                 "partitioning": {},
                 "predicate": "i = _:::INT8",
                 "sharded": {},
-                "version": 3
+                "version": 5
             }
         ],
         "modificationTime": {},
@@ -144,7 +144,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
                 "j"
             ],
             "unique": true,
-            "version": 4
+            "version": 5
         },
         "privileges": {
             "ownerProto": "root",

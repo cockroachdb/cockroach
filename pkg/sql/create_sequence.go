@@ -290,7 +290,7 @@ func NewSequenceTableDesc(
 		KeyColumnNames:      []string{tabledesc.SequenceColumnName},
 		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 		EncodingType:        catenumpb.PrimaryIndexEncoding,
-		Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+		Version:             descpb.JSONCompositeColumnsVersion,
 		CreatedAtNanos:      creationTime.WallTime,
 	})
 	desc.Families = []descpb.ColumnFamilyDescriptor{
