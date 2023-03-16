@@ -110,6 +110,15 @@ func (r Row) ForEachUDTColumn() Iterator {
 	return iter{r: r, cols: r.udtCols}
 }
 
+// DatumNamed returns the datum with the specified column name, in the form of an Iterator.
+func (r Row) DatumNamed(n string) (Iterator, error) {
+	idx, ok := r.EventDescriptor.colsByName[n]
+	if !ok {
+		return nil, errors.Errorf("No column with name %s in this row", n)
+	}
+	return iter{r: r, cols: []int{idx}}, nil
+}
+
 // DatumAt returns Datum at specified position.
 func (r Row) DatumAt(at int) (tree.Datum, error) {
 	if at >= len(r.cols) {
@@ -236,10 +245,11 @@ type EventDescriptor struct {
 	cols []ResultColumn
 
 	// Precomputed index lists into cols.
-	keyCols   []int // Primary key columns.
-	valueCols []int // All column family columns.
-	udtCols   []int // Columns containing UDTs.
-	allCols   []int // Contains all the columns
+	keyCols    []int          // Primary key columns.
+	valueCols  []int          // All column family columns.
+	udtCols    []int          // Columns containing UDTs.
+	allCols    []int          // Contains all the columns
+	colsByName map[string]int // All columns, map[col.GetName()]idx in cols
 }
 
 // NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
@@ -260,7 +270,8 @@ func NewEventDescriptor(
 			HasOtherFamilies: desc.NumFamilies() > 1,
 			SchemaTS:         schemaTS,
 		},
-		td: desc,
+		td:         desc,
+		colsByName: make(map[string]int),
 	}
 
 	// addColumn is a helper to add a column to this descriptor.
@@ -278,6 +289,7 @@ func NewEventDescriptor(
 
 		colIdx := len(sd.cols)
 		sd.cols = append(sd.cols, resultColumn)
+		sd.colsByName[col.GetName()] = colIdx
 
 		if col.GetType().UserDefined() {
 			sd.udtCols = append(sd.udtCols, colIdx)

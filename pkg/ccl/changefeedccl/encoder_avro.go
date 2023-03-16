@@ -37,6 +37,7 @@ type confluentAvroEncoder struct {
 	virtualColumnVisibility   changefeedbase.VirtualColumnVisibility
 	targets                   changefeedbase.Targets
 	envelopeType              changefeedbase.EnvelopeType
+	customKeyColumn           string
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -88,6 +89,7 @@ func newConfluentAvroEncoder(
 
 	e.updatedField = opts.UpdatedTimestamps
 	e.beforeField = opts.Diff
+	e.customKeyColumn = opts.CustomKeyColumn
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -154,9 +156,20 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		if err != nil {
 			return nil, err
 		}
-		registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
-		if err != nil {
-			return nil, err
+		if e.customKeyColumn == "" {
+			registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			it, err := row.DatumNamed(e.customKeyColumn)
+			if err != nil {
+				return nil, err
+			}
+			registered.schema, err = newSchemaForRow(it, SQLNameToAvroName(tableName), e.schemaPrefix)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// NB: This uses the kafka name escaper because it has to match the name
@@ -175,6 +188,13 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
+	if e.customKeyColumn != "" {
+		it, err := row.DatumNamed(e.customKeyColumn)
+		if err != nil {
+			return nil, err
+		}
+		return registered.schema.BinaryFromRow(header, it)
+	}
 	return registered.schema.BinaryFromRow(header, row.ForEachKeyColumn())
 }
 

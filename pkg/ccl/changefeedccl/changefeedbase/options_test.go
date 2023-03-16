@@ -39,6 +39,7 @@ func TestOptionsValidations(t *testing.T) {
 		// Verify that the returned error uses the syntax initial_scan='yes' instead of initial_scan_only. See #97008.
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
+		{map[string]string{"key_column": "b"}, false, "requires the unordered option"},
 		{map[string]string{"diff": "", "format": "parquet"}, true, ""},
 	}
 
