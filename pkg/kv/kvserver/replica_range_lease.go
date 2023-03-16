@@ -1166,6 +1166,13 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 	return l, pErr.GoError()
 }
 
+func (s *Store) rangeLeaseAcquireTimeout() time.Duration {
+	if d := s.cfg.TestingKnobs.RangeLeaseAcquireTimeoutOverride; d != 0 {
+		return d
+	}
+	return s.cfg.RangeLeaseAcquireTimeout()
+}
+
 // redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
@@ -1174,7 +1181,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 ) (status kvserverpb.LeaseStatus, pErr *kvpb.Error) {
 	// Does not use RunWithTimeout(), because we do not want to mask the
 	// NotLeaseHolderError on context cancellation.
-	ctx, cancel := context.WithTimeout(ctx, r.store.cfg.RangeLeaseAcquireTimeout()) // nolint:context
+	ctx, cancel := context.WithTimeout(ctx, r.store.rangeLeaseAcquireTimeout()) // nolint:context
 	defer cancel()
 
 	// Try fast-path.
