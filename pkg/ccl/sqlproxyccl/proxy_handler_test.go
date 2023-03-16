@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
@@ -59,6 +59,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"gopkg.in/yaml.v3"
 )
 
 // To ensure tenant startup code is included.
@@ -687,8 +688,8 @@ func TestDenylistUpdate(t *testing.T) {
 	denyList, err := os.CreateTemp("", "*_denylist.yml")
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(denyList.Name()) }()
-	dlf := denylist.File{Seq: 0}
-	bytes, err := dlf.Serialize()
+	dlf := acl.DenylistFile{Seq: 0}
+	bytes, err := yaml.Marshal(&dlf)
 	require.NoError(t, err)
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
@@ -761,14 +762,14 @@ func TestDenylistUpdate(t *testing.T) {
 
 	// Once connection has been established, attempt to update denylist.
 	dlf.Seq++
-	dlf.Denylist = []*denylist.DenyEntry{
+	dlf.Denylist = []*acl.DenyEntry{
 		{
-			Entity:     denylist.DenyEntity{Type: denylist.IPAddrType, Item: "127.0.0.1"},
+			Entity:     acl.DenyEntity{Type: acl.IPAddrType, Item: "127.0.0.1"},
 			Expiration: timeutil.Now().Add(time.Minute),
 			Reason:     "test-denied",
 		},
 	}
-	bytes, err = dlf.Serialize()
+	bytes, err = yaml.Marshal(&dlf)
 	require.NoError(t, err)
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
@@ -64,6 +64,8 @@ const (
 
 // ProxyOptions is the information needed to construct a new proxyHandler.
 type ProxyOptions struct {
+	// Allowlist file to limit access to IP addresses and tenant ids.
+	Allowlist string
 	// Denylist file to limit access to IP addresses and tenant ids.
 	Denylist string
 	// ListenAddr is the listen address for incoming connections.
@@ -139,8 +141,8 @@ type proxyHandler struct {
 	// which clients connect.
 	incomingCert certmgr.Cert
 
-	// denyListWatcher provides access control.
-	denyListWatcher *denylist.Watcher
+	// aclWatcher provides access control.
+	aclWatcher *acl.Watcher
 
 	// throttleService will do throttling of incoming connection requests.
 	throttleService throttler.Service
@@ -191,12 +193,15 @@ func newProxyHandler(
 		return nil, err
 	}
 
-	// If denylist functionality is requested, create the denylist service.
-	if options.Denylist != "" {
-		handler.denyListWatcher = denylist.WatcherFromFile(ctx, options.Denylist,
-			denylist.WithPollingInterval(options.PollConfigInterval))
-	} else {
-		handler.denyListWatcher = denylist.NilWatcher()
+	handler.aclWatcher, err = acl.NewWatcher(
+		ctx,
+		acl.WithPollingInterval(options.PollConfigInterval),
+		acl.WithAllowListFile(options.Allowlist),
+		acl.WithDenyListFile(options.Denylist),
+		acl.WithErrorCount(proxyMetrics.AccessControlFileErrorCount),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	handler.throttleService = throttler.NewLocalService(
@@ -361,12 +366,11 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	}
 
 	errConnection := make(chan error, 1)
-
-	removeListener, err := handler.denyListWatcher.ListenForDenied(
-		denylist.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
+	removeListener, err := handler.aclWatcher.ListenForDenied(
+		acl.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
 		func(err error) {
 			err = withCode(errors.Wrap(err,
-				"connection added to deny list"), codeExpiredClientConnection)
+				"connection blocked by access control list"), codeExpiredClientConnection)
 			select {
 			case errConnection <- err: /* error reported */
 			default: /* the channel already contains an error */
@@ -374,7 +378,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		},
 	)
 	if err != nil {
-		log.Errorf(ctx, "connection matched denylist: %v", err)
+		log.Errorf(ctx, "connection blocked by access control list: %v", err)
 		err = withCode(errors.New(
 			"connection refused"), codeProxyRefusedConnection)
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
@@ -489,7 +493,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	case err := <-f.errCh: // From forwarder.
 		handler.metrics.updateForError(err)
 		return err
-	case err := <-errConnection: // From denyListWatcher.
+	case err := <-errConnection: // From aclWatcher.
 		handler.metrics.updateForError(err)
 		return err
 	case <-handler.stopper.ShouldQuiesce():
