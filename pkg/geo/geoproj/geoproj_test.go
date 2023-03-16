@@ -14,11 +14,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProject(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testCases := []struct {
 		desc string
 
