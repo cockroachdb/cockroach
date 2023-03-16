@@ -558,6 +558,34 @@ func (j jsonString) tryDecode() (JSON, error) { return j, nil }
 func (j jsonArray) tryDecode() (JSON, error)  { return j, nil }
 func (j jsonObject) tryDecode() (JSON, error) { return j, nil }
 
+func (j jsonNull) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonString) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonFalse) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonTrue) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonObject) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonArray) AsArray() ([]JSON, bool) {
+	return j, true
+}
+
+func (j jsonNumber) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
 func cmpJSONTypes(a Type, b Type) int {
 	if b > a {
 		return -1

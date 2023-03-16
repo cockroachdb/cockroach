@@ -458,6 +458,17 @@ func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 	return nil, nil
 }
 
+func (j *jsonEncoded) AsArray() ([]JSON, bool) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsArray()
+	}
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, false
+	}
+	return decoded.AsArray()
+}
+
 // shallowDecode decodes only the keys of an object, and doesn't decode any
 // elements of an array. It can be used to save a decode-encode cycle for
 // certain operations (say, key deletion).

@@ -3612,11 +3612,6 @@ func NewDJSON(j json.JSON) *DJSON {
 	return &DJSON{j}
 }
 
-// NewDJSON is a helper routine to create a DJSON initialized from its argument.
-func NewDJSON(j json.JSON) *DJSON {
-	return &DJSON{j}
-}
-
 // DJSON implements the CompositeDatum interface
 func (d *DJSON) IsComposite() bool {
 	switch d.JSON.Type() {
