@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -350,8 +349,6 @@ func TestRangeFeedMock(t *testing.T) {
 func TestBackoffOnRangefeedFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 97725, "flaky test")
-
 	ctx, cancel := context.WithCancel(context.Background())
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -365,10 +362,10 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 
 	// Make sure rangefeed is retried even after 3 failures, then succeed and cancel context
 	// (which signals the rangefeed to shut down gracefully).
-	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(3).
 		Return(errors.New("rangefeed failed"))
-	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- kvcoord.RangeFeedMessage, ...kvcoord.RangeFeedOption) {
 			cancel()
 		}).
