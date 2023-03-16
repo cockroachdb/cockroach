@@ -4334,38 +4334,6 @@ func (s *adminServer) SetTraceRecordingType(
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil
 }
 
-func (s *adminServer) RecoveryCollectReplicaInfo(
-	request *serverpb.RecoveryCollectReplicaInfoRequest,
-	server serverpb.Admin_RecoveryCollectReplicaInfoServer,
-) error {
-	return errors.AssertionFailedf("To be implemented by #93040")
-}
-
-func (s *adminServer) RecoveryCollectLocalReplicaInfo(
-	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
-	server serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
-) error {
-	return errors.AssertionFailedf("To be implemented by #93040")
-}
-
-func (s *adminServer) RecoveryStagePlan(
-	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
-) (*serverpb.RecoveryStagePlanResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93044")
-}
-
-func (s *adminServer) RecoveryNodeStatus(
-	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
-) (*serverpb.RecoveryNodeStatusResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93043")
-}
-
-func (s *adminServer) RecoveryVerify(
-	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
-) (*serverpb.RecoveryVerifyResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93043")
-}
-
 // ListTenants returns a list of tenants that are served
 // by shared-process services in this server.
 func (s *systemAdminServer) ListTenants(
