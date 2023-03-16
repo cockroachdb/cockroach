@@ -13,6 +13,7 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -75,7 +76,7 @@ func NewDiskSideloadStorage(
 }
 
 func (ss *DiskSideloadStorage) createDir() error {
-	err := ss.eng.MkdirAll(ss.dir)
+	err := ss.eng.MkdirAll(ss.dir, os.ModePerm)
 	ss.dirCreated = ss.dirCreated || err == nil
 	return err
 }

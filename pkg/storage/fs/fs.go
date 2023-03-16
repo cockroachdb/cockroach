@@ -12,66 +12,23 @@ package fs
 
 import (
 	"io"
-	"os"
+
+	"github.com/cockroachdb/pebble/vfs"
 )
 
-// File and FS are a partial attempt at offering the Pebble vfs.FS interface. Given the constraints
-// of the RocksDB Env interface we've chosen to only include what is easy to implement. Additionally,
-// it does not try to subsume all the file related functionality already in the Engine interface.
-// It seems preferable to do a final cleanup only when the implementation can simply use Pebble's
-// implementation of vfs.FS. At that point the following interface will become a superset of vfs.FS.
-type File interface {
-	io.ReadWriteCloser
-	io.ReaderAt
-	Sync() error
-}
-
-// FS provides a filesystem interface.
-type FS interface {
-	// Create creates the named file for writing, removing the file at
-	// the provided path if one already exists.
-	Create(name string) (File, error)
-
-	// CreateWithSync is similar to Create, but the file is periodically
-	// synced whenever more than bytesPerSync bytes accumulate. This syncing
-	// does not provide any persistency guarantees, but can prevent latency
-	// spikes.
-	CreateWithSync(name string, bytesPerSync int) (File, error)
-
-	// Link creates newname as a hard link to the oldname file.
-	Link(oldname, newname string) error
-
-	// Open opens the named file for reading.
-	Open(name string) (File, error)
-
-	// OpenDir opens the named directory for syncing.
-	OpenDir(name string) (File, error)
-
-	// Remove removes the named file. If the file with given name doesn't
-	// exist, return an error that returns true from oserror.IsNotExist().
-	Remove(name string) error
-
-	// Rename renames a file. It overwrites the file at newname if one exists,
-	// the same as os.Rename.
-	Rename(oldname, newname string) error
-
-	// MkdirAll creates the named dir and its parents. Does nothing if the
-	// directory already exists.
-	MkdirAll(name string) error
-
-	// RemoveAll deletes the path and any children it contains.
-	RemoveAll(dir string) error
-
-	// List returns a listing of the given directory. The names returned are
-	// relative to the directory.
-	List(name string) ([]string, error)
-
-	// Stat returns a FileInfo describing the named file.
-	Stat(name string) (os.FileInfo, error)
+// CreateWithSync creates a file wrapped with logic to periodically sync
+// whenever more than bytesPerSync bytes accumulate. This syncing does not
+// provide any persistency guarantees, but can prevent latency spikes.
+func CreateWithSync(fs vfs.FS, name string, bytesPerSync int) (vfs.File, error) {
+	f, err := fs.Create(name)
+	if err != nil {
+		return nil, err
+	}
+	return vfs.NewSyncingFile(f, vfs.SyncingFileOptions{BytesPerSync: bytesPerSync}), nil
 }
 
 // WriteFile writes data to a file named by filename.
-func WriteFile(fs FS, filename string, data []byte) error {
+func WriteFile(fs vfs.FS, filename string, data []byte) error {
 	f, err := fs.Create(filename)
 	if err != nil {
 		return err
@@ -84,7 +41,7 @@ func WriteFile(fs FS, filename string, data []byte) error {
 }
 
 // ReadFile reads data from a file named by filename.
-func ReadFile(fs FS, filename string) ([]byte, error) {
+func ReadFile(fs vfs.FS, filename string) ([]byte, error) {
 	file, err := fs.Open(filename)
 	if err != nil {
 		return nil, err
