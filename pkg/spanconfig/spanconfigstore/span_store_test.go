@@ -234,6 +234,7 @@ func TestRandomized(t *testing.T) {
 		// span and asserts on all the properties above.
 		querySpan := getRandomSpan()
 		splitKeys := store.TestingSplitKeys(t,
+			ctx,
 			roachpb.RKey(querySpan.Key),
 			roachpb.RKey(querySpan.EndKey),
 		)
