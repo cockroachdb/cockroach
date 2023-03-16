@@ -34,14 +34,13 @@ import (
 // in that it behaves the exactly the same as a non-partial secondary index.
 //
 // NOTE: This does not generate index joins for non-covering indexes (except in
-//
-//	case of ForceIndex). Index joins are usually only introduced "one level
-//	up", when the Scan operator is wrapped by an operator that constrains
-//	or limits scan output in some way (e.g. Select, Limit, InnerJoin).
-//	Index joins are only lower cost when their input does not include all
-//	rows from the table. See GenerateConstrainedScans,
-//	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
-//	index joins are introduced into the memo.
+// case of ForceIndex). Index joins are usually only introduced "one level up",
+// when the Scan operator is wrapped by an operator that constrains or limits
+// scan output in some way (e.g. Select, Limit, InnerJoin). Index joins are only
+// lower cost when their input does not include all rows from the table. See
+// GenerateConstrainedScans, GenerateLimitedScans, and
+// GenerateLimitedGroupByScans for cases where index joins are introduced into
+// the memo.
 func (c *CustomFuncs) GenerateIndexScans(
 	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
 ) {
