@@ -2450,28 +2450,13 @@ func getCandidateWithMinLoad(
 	return bestCandidate
 }
 
-// getLoadDelta returns the difference between the store serving the highest QPS
-// and the store serving the lowest QPS, among the set of stores in the
-// `domain`.
+// getLoadDelta returns the difference between the store serving the highest
+// load and the store serving the lowest load in the dimension given, among the
+// set of stores in the `domain`.
 func getLoadDelta(
 	storeLoadMap map[roachpb.StoreID]load.Load, domain []roachpb.StoreID, dimension load.Dimension,
 ) float64 {
-	maxCandidateLoad := float64(0)
-	minCandidateLoad := math.MaxFloat64
-	for _, cand := range domain {
-		candidateLoad, ok := storeLoadMap[cand]
-		if !ok {
-			continue
-		}
-		candidateLoadDim := candidateLoad.Dim(dimension)
-		if maxCandidateLoad < candidateLoadDim {
-			maxCandidateLoad = candidateLoadDim
-		}
-		if minCandidateLoad > candidateLoadDim {
-			minCandidateLoad = candidateLoadDim
-		}
-	}
-	return maxCandidateLoad - minCandidateLoad
+	return loadDomainElementWiseDelta(makeLoadDomain(storeLoadMap, domain)).Dim(dimension)
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms

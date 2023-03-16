@@ -1395,8 +1395,8 @@ func bestStoreToMinimizeLoadDelta(
 	// load delta.
 	domain := append(candidates, existing)
 	storeDescs := make([]roachpb.StoreDescriptor, 0, len(domain))
-	for _, desc := range storeDescMap {
-		storeDescs = append(storeDescs, *desc)
+	for _, domainStore := range domain {
+		storeDescs = append(storeDescs, *storeDescMap[domainStore])
 	}
 	domainStoreList := storepool.MakeStoreList(storeDescs)
 
@@ -1411,15 +1411,15 @@ func bestStoreToMinimizeLoadDelta(
 		return 0, noBetterCandidate
 	}
 
-	// NB: The store's load and the replica's QPS aren't captured at the same
-	// time, so they may be mutually inconsistent. Thus, it is possible for
-	// the store's load captured here to be lower than the replica's load. So we
+	// NB: The store's load and the replica's load aren't captured at the same
+	// time, so they may be mutually inconsistent. Thus, it is possible for the
+	// store's load captured here to be lower than the replica's load. So we
 	// defensively use the `math.Max` here.
 	existingLoadIgnoringRepl := load.Max(load.Sub(existingLoad, replLoadValue), load.Vector{})
 
 	// Only proceed if the QPS difference between `existing` and
 	// `bestCandidate` (not accounting for the replica under consideration) is
-	// higher than `minQPSDifferenceForTransfers`.
+	// higher than `MinRequiredRebalanceLoadDiff`.
 	diffIgnoringRepl := load.Sub(existingLoadIgnoringRepl, bestCandLoad)
 
 	if load.Greater(options.MinRequiredRebalanceLoadDiff, diffIgnoringRepl, dimension) {
@@ -1440,7 +1440,6 @@ func bestStoreToMinimizeLoadDelta(
 		return 0, existingNotOverfull
 	}
 
-	// converge values
 	currentLoadDelta := getLoadDelta(storeLoadMap, domain, dimension)
 	// Simulate the coldest candidate's QPS after it receives a lease/replica for
 	// the range.
@@ -1449,15 +1448,32 @@ func bestStoreToMinimizeLoadDelta(
 	// away.
 	storeLoadMap[existing] = existingLoadIgnoringRepl
 
-	// NB: We proceed with a lease transfer / rebalance even if `currentQPSDelta`
+	// NB: We proceed with a lease transfer / rebalance even if `currentLoadDelta`
 	// is exactly equal to `newLoadDelta`. Consider the following example:
-	// perReplicaQPS: 10qps
-	// existingQPS: 100qps
-	// candidates: [100qps, 0qps, 0qps]
+	//
+	//   replLoadValue: 10 existingLoad: 100
+	//   domain: [100, 100, 0, 0]
+	//
+	// After transferring the replLoadValue from existingLoad to one of the
+	// stores in the domain with 0 load, the domain will be [100,90,10,0]. An
+	// improvement of -0 load delta.
 	//
 	// In such (perhaps unrealistic) scenarios, rebalancing from the existing
 	// store to the coldest store is not going to reduce the delta between all
 	// these stores, but it is still a desirable action to take.
+	//
+	// A much more common example is where there is a unique minimum or maximum
+	// element. In such cases, it is guaranteed that moving replLoadValue from
+	// the existing store, to the minimum store will result in a smaller load
+	// delta. Consider the following example (the resulting state from the
+	// example above):
+	//
+	//    replLoadValue: 10 existingLoad: 90
+	//    domain: [100,90,10,0]
+	//
+	// After transferring the replLoadValue from existingLoad to the store with 0
+	// load, the domain will be [100,90,10,10] and delta=90; an improvement of
+	// -10 load delta.
 	newLoadDelta := getLoadDelta(storeLoadMap, domain, dimension)
 	if currentLoadDelta < newLoadDelta {
 		panic(
@@ -1471,6 +1487,38 @@ func bestStoreToMinimizeLoadDelta(
 	}
 
 	return bestCandidate, shouldRebalance
+}
+
+func makeLoadDomain(
+	storeLoadMap map[roachpb.StoreID]load.Load, domain []roachpb.StoreID,
+) []load.Load {
+	// There may be some entries missing from the storeLoadMap, in which case we
+	// can't always assume that the length of the resulting loadDomain will be
+	// equal to the length of the domain.
+	loadDomain := make([]load.Load, 0, len(domain))
+	for _, storeID := range domain {
+		if storeLoad, ok := storeLoadMap[storeID]; ok {
+			loadDomain = append(loadDomain, storeLoad)
+		}
+	}
+	return loadDomain
+}
+
+// loadDomainElementWiseDelta returns the max-min element wise value for each dimension.
+// Only values in the same dimension are compared. For example, given the load
+// domain:
+//
+//	[20,10, 0]
+//	[10,20,30]
+//
+// This function will return the range of the load domain which is [10,10 30].
+func loadDomainElementWiseDelta(loadDomain []load.Load) load.Load {
+	minLoad, maxLoad := WithAllDims(0), WithAllDims(math.MaxFloat64)
+	for _, loadPoint := range loadDomain {
+		minLoad = load.Min(minLoad, loadPoint)
+		maxLoad = load.Max(minLoad, loadPoint)
+	}
+	return load.Sub(maxLoad, minLoad)
 }
 
 // getRebalanceTargetToMinimizeDelta returns the best store (from the set of
