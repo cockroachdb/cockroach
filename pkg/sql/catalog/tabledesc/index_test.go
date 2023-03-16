@@ -259,7 +259,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
 		require.False(t, idx.HasOldStoredColumns(),
 			errMsgFmt, "HasOldStoredColumns", idx.GetName())
-		require.Equalf(t, 1, idx.NumCompositeColumns(),
+		require.Equalf(t, 0, idx.NumCompositeColumns(),
 			errMsgFmt, "NumCompositeColumns", idx.GetName())
 	}
 

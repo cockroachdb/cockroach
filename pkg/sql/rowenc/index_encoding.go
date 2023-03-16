@@ -1446,7 +1446,7 @@ func GetValueColumns(index catalog.Index) []ValueEncodedColumn {
 		id := index.GetCompositeColumnID(i)
 		// Inverted indexes on a composite type (i.e. an array of composite types)
 		// should not add the indexed column to the value.
-		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.InvertedColumnID() {
+		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.GetKeyColumnID(0) {
 			continue
 		}
 		cols = append(cols, ValueEncodedColumn{ColID: id, IsComposite: true})
