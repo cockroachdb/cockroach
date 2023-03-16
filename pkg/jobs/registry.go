@@ -1144,12 +1144,13 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 	}
 }
 
-// TODO (sajjad): Why are we returning column 'created' in this query? It's not
-// being used.
-const expiredJobsQuery = "SELECT id, payload, status, created FROM system.jobs " +
-	"WHERE (created < $1) AND (id > $2) " +
-	"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
-	"LIMIT $3"
+// The ordering is important as we keep track of the maximum ID we've seen.
+const expiredJobsQuery = `
+SELECT id, payload, status, created FROM "".crdb_internal.system_jobs
+WHERE (created < $1) AND (id > $2)
+ORDER BY id
+LIMIT $3
+	`
 
 // cleanupOldJobsPage deletes up to cleanupPageSize job rows with ID > minID.
 // minID is supposed to be the maximum ID returned by the previous page (0 if no
@@ -1157,7 +1158,8 @@ const expiredJobsQuery = "SELECT id, payload, status, created FROM system.jobs "
 func (r *Registry) cleanupOldJobsPage(
 	ctx context.Context, olderThan time.Time, minID jobspb.JobID, pageSize int,
 ) (done bool, maxID jobspb.JobID, retErr error) {
-	it, err := r.db.Executor().QueryIterator(ctx, "gc-jobs", nil /* txn */, expiredJobsQuery, olderThan, minID, pageSize)
+	it, err := r.db.Executor().QueryIterator(ctx, "gc-jobs", nil, /* txn */
+		expiredJobsQuery, olderThan, minID, pageSize)
 	if err != nil {
 		return false, 0, err
 	}

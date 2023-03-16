@@ -882,11 +882,36 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 }
 
 const (
+	// systemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
+	// `system.job_info` tables to return relevant information about a job.
+	//
+	// NB: Every job on creation writes a row each for its payload and progress to
+	// the `system.job_info` table. For a given job there will always be at most
+	// one row each for its payload and progress. This is because of the
+	// `system.job_info` write semantics described `InfoStorage.Write`.
+	// Theoretically, a job could have no rows corresponding to its progress and
+	// so we perform a LEFT JOIN to get a NULL value when no progress row is
+	// found.
+	systemJobsAndJobInfoBaseQuery = `
+WITH
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'::BYTES),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress'::BYTES)
+	SELECT 
+		id, status, created, payload.value AS payload, progress.value AS progress,
+		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
+	FROM system.jobs AS j
+	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+`
+	// Before clusterversion.V23_1JobInfoTableIsBackfilled, the system.job_info
+	// table has not been fully populated with the payload and progress of jobs in
+	// the cluster.
 	systemJobsBaseQuery = `
 		SELECT
 			id, status, created, payload, progress, created_by_type, created_by_id,
 			claim_session_id, claim_instance_id, num_runs, last_run, job_type
 		FROM system.jobs`
+
 	// TODO(jayant): remove the version gate in 24.1
 	// Before clusterversion.V23_1BackfillTypeColumnInJobsTable, the system.jobs table did not have
 	// a fully populated job_type column, so we must project it manually
@@ -896,18 +921,45 @@ const (
 			claim_session_id, claim_instance_id, num_runs, last_run,
 			crdb_internal.job_payload_type(payload) as job_type
 		FROM system.jobs`
+
 	systemJobsIDPredicate     = ` WHERE id = $1`
 	systemJobsTypePredicate   = ` WHERE job_type = $1`
 	systemJobsStatusPredicate = ` WHERE status = $1`
 )
 
+type systemJobsPredicate int
+
+const (
+	noPredicate systemJobsPredicate = iota
+	jobID
+	jobType
+	jobStatus
+)
+
 func getInternalSystemJobsQueryFromClusterVersion(
-	ctx context.Context, version clusterversion.Handle,
+	ctx context.Context, version clusterversion.Handle, predicate systemJobsPredicate,
 ) string {
-	if !version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
-		return oldSystemJobsBaseQuery
+	var baseQuery string
+	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+		baseQuery = systemJobsAndJobInfoBaseQuery
+	} else if version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
+		baseQuery = systemJobsBaseQuery
+	} else {
+		baseQuery = oldSystemJobsBaseQuery
 	}
-	return systemJobsBaseQuery
+
+	switch predicate {
+	case noPredicate:
+		return baseQuery
+	case jobID:
+		return baseQuery + systemJobsIDPredicate
+	case jobType:
+		return baseQuery + systemJobsTypePredicate
+	case jobStatus:
+		return baseQuery + systemJobsStatusPredicate
+	}
+
+	return ""
 }
 
 // TODO(tbg): prefix with kv_.
@@ -934,28 +986,28 @@ CREATE TABLE crdb_internal.system_jobs (
 	indexes: []virtualIndex{
 		{
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version) + systemJobsIDPredicate
+				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, jobID)
 				targetType := tree.MustBeDInt(unwrappedConstraint)
 				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
 			},
 		},
 		{
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version) + systemJobsTypePredicate
+				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, jobType)
 				targetType := tree.MustBeDString(unwrappedConstraint)
 				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
 			},
 		},
 		{
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version) + systemJobsStatusPredicate
+				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, jobStatus)
 				targetType := tree.MustBeDString(unwrappedConstraint)
 				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
 			},
 		},
 	},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		_, err := populateSystemJobsTableRows(ctx, p, addRow, getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version))
+		_, err := populateSystemJobsTableRows(ctx, p, addRow, getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, noPredicate))
 		return err
 	},
 }
@@ -5426,7 +5478,12 @@ func collectMarshaledJobMetadataMap(
 	}
 	// Build job map with referenced job IDs.
 	m := make(marshaledJobMetadataMap)
-	query := `SELECT id, status, payload, progress FROM system.jobs`
+
+	// Be careful to query against the empty database string, which avoids taking
+	// a lease against the current database (in case it's currently unavailable).
+	query := `
+SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
+`
 	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.Txn(),
 		sessiondata.RootUserSessionDataOverride,

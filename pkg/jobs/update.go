@@ -102,7 +102,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 	row, err := u.txn.QueryRowEx(
 		ctx, "select-job", u.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
-		getSelectStmtForJobUpdate(j.session != nil, useReadLock), j.ID(),
+		getSelectStmtForJobUpdate(ctx, j.session != nil, useReadLock, u.j.registry.settings.Version), j.ID(),
 	)
 	if err != nil {
 		return err
@@ -373,21 +373,56 @@ func (u Updater) now() time.Time {
 }
 
 // getSelectStmtForJobUpdate constructs the select statement used in Job.update.
-func getSelectStmtForJobUpdate(hasSession, useReadLock bool) string {
+func getSelectStmtForJobUpdate(
+	ctx context.Context, hasSession, useReadLock bool, version clusterversion.Handle,
+) string {
 	const (
-		selectWithoutSession = `SELECT status, payload, progress`
-		selectWithSession    = selectWithoutSession + `, claim_session_id`
-		from                 = ` FROM system.jobs WHERE id = $1`
-		fromForUpdate        = from + ` FOR UPDATE`
-		backoffColumns       = ", COALESCE(last_run, created), COALESCE(num_runs, 0)"
+		selectWithoutSession = `
+WITH
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'::BYTES),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress'::BYTES)
+	SELECT
+		status, payload.value AS payload, progress.value AS progress`
+		selectWithSession = selectWithoutSession + `, claim_session_id`
+		from              = `
+	FROM system.jobs AS j
+	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+	WHERE id = $1
+`
+		fromForUpdate = from + `FOR UPDATE`
+
+		// TODO(adityamaru): Delete deprecated queries once we are outside the 22.2
+		// compatibility window.
+		deprecatedSelectWithoutSession = `SELECT status, payload, progress`
+		deprecatedSelectWithSession    = deprecatedSelectWithoutSession + `, claim_session_id`
+		deprecatedFrom                 = ` FROM system.jobs WHERE id = $1`
+		deprecatedFromForUpdate        = deprecatedFrom + ` FOR UPDATE`
+		backoffColumns                 = ", COALESCE(last_run, created), COALESCE(num_runs, 0)"
 	)
-	stmt := selectWithoutSession
-	if hasSession {
-		stmt = selectWithSession
+
+	var stmt string
+	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+		stmt = selectWithoutSession
+		if hasSession {
+			stmt = selectWithSession
+		}
+		stmt = stmt + backoffColumns
+		if useReadLock {
+			return stmt + fromForUpdate
+		}
+		stmt = stmt + from
+	} else {
+		stmt = deprecatedSelectWithoutSession
+		if hasSession {
+			stmt = deprecatedSelectWithSession
+		}
+		stmt = stmt + backoffColumns
+		if useReadLock {
+			return stmt + deprecatedFromForUpdate
+		}
+		stmt = stmt + deprecatedFrom
 	}
-	stmt = stmt + backoffColumns
-	if useReadLock {
-		return stmt + fromForUpdate
-	}
-	return stmt + from
+
+	return stmt
 }

@@ -10,6 +10,7 @@ package replicationutils
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -187,8 +189,8 @@ func TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(
 	var progressBytes []byte
 	var payload jobspb.Payload
 	var progress jobspb.Progress
-	sqlRunner.QueryRow(t, "SELECT payload, progress FROM system.jobs WHERE id = $1",
-		ingestionJobID).Scan(&payloadBytes, &progressBytes)
+	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
+	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
 	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
 	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
 	details := payload.GetStreamIngestion()
@@ -204,8 +206,8 @@ func TestingGetStreamIngestionStatsFromReplicationJob(
 	var progressBytes []byte
 	var payload jobspb.Payload
 	var progress jobspb.Progress
-	sqlRunner.QueryRow(t, "SELECT payload, progress FROM system.jobs WHERE id = $1",
-		ingestionJobID).Scan(&payloadBytes, &progressBytes)
+	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
+	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
 	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
 	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
 	details := payload.GetStreamIngestion()
