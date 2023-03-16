@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 
+	_ "github.com/apache/arrow/go/v11/parquet"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
