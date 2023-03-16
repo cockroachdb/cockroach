@@ -11,14 +11,10 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
 	"io"
-	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,22 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
-
-const (
-	applicationTypeJSON = `application/json`
-	applicationTypeCSV  = `text/csv`
-	authorizationHeader = `Authorization`
-)
-
-func isWebhookSink(u *url.URL) bool {
-	switch u.Scheme {
-	// allow HTTP here but throw an error later to make it clear HTTPS is required
-	case changefeedbase.SinkSchemeWebhookHTTP, changefeedbase.SinkSchemeWebhookHTTPS:
-		return true
-	default:
-		return false
-	}
-}
 
 type deprecatedWebhookSink struct {
 	// Webhook configuration.
@@ -80,7 +60,7 @@ type deprecatedWebhookSink struct {
 	workerCtx   context.Context
 	workerGroup ctxgroup.Group
 	exitWorkers func() // Signaled to shut down all workers.
-	eventsChans []chan []messagePayload
+	eventsChans []chan []deprecatedMessagePayload
 	metrics     metricsRecorder
 }
 
@@ -100,7 +80,7 @@ type encodedPayload struct {
 	mvcc     hlc.Timestamp
 }
 
-func encodePayloadJSONWebhook(messages []messagePayload) (encodedPayload, error) {
+func encodePayloadJSONWebhook(messages []deprecatedMessagePayload) (encodedPayload, error) {
 	result := encodedPayload{
 		emitTime: timeutil.Now(),
 	}
@@ -129,7 +109,7 @@ func encodePayloadJSONWebhook(messages []messagePayload) (encodedPayload, error)
 	return result, err
 }
 
-func encodePayloadCSVWebhook(messages []messagePayload) (encodedPayload, error) {
+func encodePayloadCSVWebhook(messages []deprecatedMessagePayload) (encodedPayload, error) {
 	result := encodedPayload{
 		emitTime: timeutil.Now(),
 	}
@@ -150,7 +130,7 @@ func encodePayloadCSVWebhook(messages []messagePayload) (encodedPayload, error) 
 	return result, nil
 }
 
-type messagePayload struct {
+type deprecatedMessagePayload struct {
 	// Payload message fields.
 	key      []byte
 	val      []byte
@@ -162,15 +142,15 @@ type messagePayload struct {
 // webhookMessage contains either messagePayload or a flush request.
 type webhookMessage struct {
 	flushDone *chan struct{}
-	payload   messagePayload
+	payload   deprecatedMessagePayload
 }
 
 type batch struct {
-	buffer      []messagePayload
+	buffer      []deprecatedMessagePayload
 	bufferBytes int
 }
 
-func (b *batch) addToBuffer(m messagePayload) {
+func (b *batch) addToBuffer(m deprecatedMessagePayload) {
 	b.bufferBytes += len(m.val)
 	b.buffer = append(b.buffer, m)
 }
@@ -350,84 +330,6 @@ func makeDeprecatedWebhookSink(
 	return sink, nil
 }
 
-func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, error) {
-	client := &httputil.Client{
-		Client: &http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{
-				DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
-			},
-		},
-	}
-
-	dialConfig := struct {
-		tlsSkipVerify bool
-		caCert        []byte
-		clientCert    []byte
-		clientKey     []byte
-	}{}
-
-	transport := client.Transport.(*http.Transport)
-
-	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
-		return nil, err
-	}
-	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
-		return nil, err
-	}
-	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
-		return nil, err
-	}
-	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
-		return nil, err
-	}
-
-	transport.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: dialConfig.tlsSkipVerify,
-	}
-
-	if dialConfig.caCert != nil {
-		caCertPool, err := x509.SystemCertPool()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not load system root CA pool")
-		}
-		if caCertPool == nil {
-			caCertPool = x509.NewCertPool()
-		}
-		if !caCertPool.AppendCertsFromPEM(dialConfig.caCert) {
-			return nil, errors.Errorf("failed to parse certificate data:%s", string(dialConfig.caCert))
-		}
-		transport.TLSClientConfig.RootCAs = caCertPool
-	}
-
-	if dialConfig.clientCert != nil && dialConfig.clientKey == nil {
-		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamClientKey)
-	} else if dialConfig.clientKey != nil && dialConfig.clientCert == nil {
-		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientKey, changefeedbase.SinkParamClientCert)
-	}
-
-	if dialConfig.clientCert != nil && dialConfig.clientKey != nil {
-		cert, err := tls.X509KeyPair(dialConfig.clientCert, dialConfig.clientKey)
-		if err != nil {
-			return nil, errors.Wrap(err, `invalid client certificate data provided`)
-		}
-		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
-	}
-
-	return client, nil
-}
-
-func defaultRetryConfig() retry.Options {
-	opts := retry.Options{
-		InitialBackoff: 500 * time.Millisecond,
-		MaxRetries:     3,
-		Multiplier:     2,
-	}
-	// max backoff should be initial * 2 ^ maxRetries
-	opts.MaxBackoff = opts.InitialBackoff * time.Duration(int(math.Pow(2.0, float64(opts.MaxRetries))))
-	return opts
-}
-
 // defaultWorkerCount() is the number of CPU's on the machine
 func defaultWorkerCount() int {
 	return system.NumCPU()
@@ -440,7 +342,7 @@ func (s *deprecatedWebhookSink) Dial() error {
 
 func (s *deprecatedWebhookSink) setupWorkers() {
 	// setup events channels to send to workers and the worker group
-	s.eventsChans = make([]chan []messagePayload, s.parallelism)
+	s.eventsChans = make([]chan []deprecatedMessagePayload, s.parallelism)
 	s.workerGroup = ctxgroup.WithContext(s.workerCtx)
 	s.batchChan = make(chan webhookMessage)
 
@@ -455,7 +357,7 @@ func (s *deprecatedWebhookSink) setupWorkers() {
 		return nil
 	})
 	for i := 0; i < s.parallelism; i++ {
-		s.eventsChans[i] = make(chan []messagePayload)
+		s.eventsChans[i] = make(chan []deprecatedMessagePayload)
 		j := i
 		s.workerGroup.GoCtx(func(ctx context.Context) error {
 			s.workerLoop(j)
@@ -483,8 +385,8 @@ func (s *deprecatedWebhookSink) shouldSendBatch(b batch) bool {
 	}
 }
 
-func (s *deprecatedWebhookSink) splitAndSendBatch(batch []messagePayload) error {
-	workerBatches := make([][]messagePayload, s.parallelism)
+func (s *deprecatedWebhookSink) splitAndSendBatch(batch []deprecatedMessagePayload) error {
+	workerBatches := make([][]deprecatedMessagePayload, s.parallelism)
 	for _, msg := range batch {
 		// split batch into per-worker batches
 		i := s.workerIndex(msg.key)
@@ -702,7 +604,7 @@ func (s *deprecatedWebhookSink) EmitRow(
 	case err := <-s.errChan:
 		return err
 	case s.batchChan <- webhookMessage{
-		payload: messagePayload{
+		payload: deprecatedMessagePayload{
 			key:      key,
 			val:      value,
 			alloc:    alloc,
