@@ -532,7 +532,12 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// The nightly 8TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
+			//
+			// NB: we use 16 CPUs to get better EBS bandwidth on AWS. With 8 CPUs, we get
+			// a c5d.xlarge at 287.50 MB/s base throughput, with 16 CPUs we get 593.75 MB/s.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/97019#issuecomment-1452144587
+			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16, nodes: 10, volumeSize: 2000}),
 			backup: makeBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
