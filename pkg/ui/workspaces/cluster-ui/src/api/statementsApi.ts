@@ -85,8 +85,8 @@ export const getCombinedStatements = (
     start: req.start.toInt(),
     end: req.end.toInt(),
     "fetch_mode.stats_type": FetchStatsMode.StmtStatsOnly,
-    "fetch_mode.sort": req.fetch_mode.sort,
-    limit: req.limit.toInt(),
+    "fetch_mode.sort": req.fetch_mode?.sort,
+    limit: req.limit?.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
@@ -101,11 +101,11 @@ export const getFlushedTxnStatsApi = (
   req: StatementsRequest,
 ): Promise<SqlStatsResponse> => {
   const queryStr = propsToQueryString({
-    start: req.start.toInt(),
-    end: req.end.toInt(),
+    start: req.start?.toInt(),
+    end: req.end?.toInt(),
     "fetch_mode.stats_type": FetchStatsMode.TxnStatsOnly,
     "fetch_mode.sort": req.fetch_mode?.sort,
-    limit: req.limit.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
+    limit: req.limit?.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
