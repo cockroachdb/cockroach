@@ -125,6 +125,14 @@ type Builder struct {
 	// are disabled and only statements whitelisted are allowed.
 	insideFuncDef bool
 
+	// insideUDF is true when the current expressions are being built within a
+	// UDF.
+	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
+	// boolean will not be sufficient to track whether or not we are in a UDF.
+	// We'll need to track the depth of the UDFs we are building expressions
+	// within.
+	insideUDF bool
+
 	// If set, we are collecting view dependencies in schemaDeps. This can only
 	// happen inside view/function definitions.
 	//
