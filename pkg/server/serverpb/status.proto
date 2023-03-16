@@ -1620,7 +1620,8 @@ message StatementsResponse {
 enum StatsSortOptions {
   SERVICE_LAT = 0;
   CPU_TIME = 1;
-  EXECUTION_COUNT = 2;
+  PCT_RUNTIME = 2;
+  EXECUTION_COUNT = 3;
 }
 message CombinedStatementsStatsRequest {
   // Unix time range for aggregated statements.
