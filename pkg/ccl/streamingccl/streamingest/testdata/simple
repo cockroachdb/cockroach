@@ -30,6 +30,11 @@ SELECT strip_host(source_cluster_uri) FROM [SHOW TENANT destination WITH REPLICA
 ----
 postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted
 
+query-sql as=source-system
+SHOW TENANT source WITH REPLICATION STATUS
+----
+10 source ready none <nil> <nil> <nil> <nil> <nil> <nil>
+
 exec-sql as=source-tenant
 CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
 ----
@@ -53,6 +58,12 @@ SHOW TENANTS
 ----
 1 system ready shared
 2 destination replicating none
+
+query-sql as=destination-system
+SELECT id, name, data_state, service_mode, source_tenant_name, cutover_time FROM [SHOW TENANTS WITH REPLICATION STATUS]
+----
+1 system ready shared <nil> <nil>
+2 destination replicating none source <nil>
 
 let $ts as=source-system
 SELECT clock_timestamp()::timestamp::string
