@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
@@ -555,6 +556,22 @@ func addSSTablePreApply(
 		return false /* copied */
 	}
 
+	if err := ingestViaCopy(ctx, st, eng, ingestPath, term, index, sst, limiter); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
+
+	return true /* copied */
+}
+
+func ingestViaCopy(
+	ctx context.Context,
+	st *cluster.Settings,
+	eng storage.Engine,
+	ingestPath string,
+	term, index uint64,
+	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
+	limiter *rate.Limiter,
+) error {
 	log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
 
 	// TODO(tschottdorf): remove this once sideloaded storage guarantees its
@@ -568,17 +585,17 @@ func addSSTablePreApply(
 		// command as committed). Just unlink the file (the storage engine
 		// created a hard link); after that we're free to write it again.
 		if err := eng.Remove(ingestPath); err != nil {
-			log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", ingestPath, err)
+			return errors.Wrapf(err, "while removing existing file during ingestion of %s", ingestPath)
 		}
 	}
 	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
-		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
+		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	if err := eng.IngestExternalFiles(ctx, []string{ingestPath}); err != nil {
-		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
+		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
-	return true /* copied */
+	return nil
 }
 
 func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
