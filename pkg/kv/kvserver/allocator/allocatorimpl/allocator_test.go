@@ -1985,6 +1985,212 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 }
 
+func TestAllocatorTransferLeaseTargetLoadConvergence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	floats := func(nums ...float64) []float64 {
+		return nums
+	}
+
+	storeWithLoad := func(id int, load float64) *roachpb.StoreDescriptor {
+		return &roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(id),
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(id)},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: load,
+				CPUPerSecond:     load * float64(time.Millisecond),
+			},
+		}
+	}
+
+	testCases := []struct {
+		name                                 string
+		leaseLoad                            float64
+		curReplStoreLoads, nonReplStoreLoads []float64
+		preferredStores, constrainedStores   []roachpb.StoreID
+		leaseholder, expected                roachpb.StoreID
+	}{
+		{
+			name:              "delta isn't significant between s1, s2 and s3 when considering lease load",
+			leaseLoad:         1000,
+			curReplStoreLoads: floats(2000, 1000, 1000),
+			leaseholder:       1,
+			expected:          0,
+		},
+		{
+			name:              "s1 already has the least load",
+			leaseLoad:         0,
+			curReplStoreLoads: floats(999, 1000, 1000),
+			leaseholder:       1,
+			expected:          0,
+		},
+		{
+			name:              "s1's load isn't significantly higher than s2 and s3",
+			leaseLoad:         0,
+			curReplStoreLoads: floats(1100, 1000, 1000),
+			leaseholder:       1,
+			expected:          0,
+		},
+		{
+			name:              "delta doesn't converge but should still transfer",
+			leaseLoad:         900,
+			curReplStoreLoads: floats(1000, 1000, 0, 0),
+			leaseholder:       1,
+			expected:          3,
+		},
+		{
+			name:              "new leaseholder will be hotter than s1",
+			leaseLoad:         1500,
+			curReplStoreLoads: floats(2000, 1000, 0, 0),
+			leaseholder:       1,
+			expected:          3,
+		},
+
+		// We expect the non-replica store to be included. This is really testing
+		// that we don't erroneously include a store which is not a valid
+		// leaseholder at this time:
+		// - Not a preferred leaseholder, when one exists
+		// - Doesn't satisfy the replica and voter constraints
+		{
+			// NB: S1 is overfull w.r.t the store's with replicas for the range.
+			// However, it would be considered underfull when including the non
+			// replica stores. Since the  non-replica store is equally preferred and
+			// there are no constraints, it should be included.
+			name:              "s1 is overfull w.r.t replica stores but not comparable stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(2000, 1000, 1000),
+			nonReplStoreLoads: floats(4000),
+			leaseholder:       1,
+			expected:          0,
+		},
+		{
+			name:              "s1 is overfull w.r.t constrained stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(2000, 0, 0, 10000),
+			constrainedStores: []roachpb.StoreID{1, 2, 3},
+			leaseholder:       1,
+			expected:          2,
+		},
+		{
+			name:              "s1 is overfull w.r.t preferred stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(2000, 0, 0, 10000),
+			preferredStores:   []roachpb.StoreID{1, 2, 3},
+			leaseholder:       1,
+			expected:          2,
+		},
+		{
+			name:              "s1 is overfull w.r.t preferred stores, including non replica stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(2000, 0, 0),
+			nonReplStoreLoads: floats(10000),
+			preferredStores:   []roachpb.StoreID{1, 2, 3},
+			leaseholder:       1,
+			expected:          2,
+		},
+		{
+			name:              "s1 is overfull w.r.t preferred and constrained stores but not in comparison to just constrained stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(2000, 0, 10000),
+			constrainedStores: []roachpb.StoreID{1, 2, 3},
+			preferredStores:   []roachpb.StoreID{1, 2},
+			leaseholder:       1,
+			expected:          2,
+		},
+		{
+			name:              "preferences are ignored when not overlapping the constraiend stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(1000, 1000, 1000),
+			nonReplStoreLoads: floats(0, 0, 0),
+			// s1-s3 satisfy the range constraints, whilst s4-s6 are the preferred
+			// leaseholders. Logically here a replica could never end up on s4-s6 so
+			// it doesn't make sense that any lease transfers would occur as the
+			// domain should be just s1-s3.
+			constrainedStores: []roachpb.StoreID{1, 2, 3},
+			preferredStores:   []roachpb.StoreID{4, 5, 6},
+			leaseholder:       1,
+			expected:          0,
+		},
+		{
+			name:              "s1 is overfull w.r.t s2 but not among all preferred stores",
+			leaseLoad:         500,
+			curReplStoreLoads: floats(1000, 0, 1000),
+			nonReplStoreLoads: floats(10000, 10000),
+			preferredStores:   []roachpb.StoreID{1, 2, 4, 5},
+			leaseholder:       1,
+			expected:          0,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stopper, g, sp, a, _ := CreateTestAllocator(ctx, 10, true /* deterministic */)
+			defer stopper.Stop(ctx)
+			n := len(tc.curReplStoreLoads) + len(tc.nonReplStoreLoads)
+			stores := make([]*roachpb.StoreDescriptor, n)
+			existing := make([]roachpb.ReplicaDescriptor, 0, n)
+			i := 0
+			for ; i < len(tc.curReplStoreLoads); i++ {
+				existing = append(existing, replicas(roachpb.StoreID(i+1))...)
+				stores[i] = storeWithLoad(i+1, tc.curReplStoreLoads[i])
+			}
+			for j := 0; j < len(tc.nonReplStoreLoads); j++ {
+				stores[i+j] = storeWithLoad(i+j+1, tc.nonReplStoreLoads[j])
+			}
+
+			rangeUsageInfo := allocator.RangeUsageInfo{
+				QueriesPerSecond:         tc.leaseLoad,
+				RequestCPUNanosPerSecond: tc.leaseLoad * float64(time.Millisecond),
+			}
+
+			config := roachpb.SpanConfig{NumReplicas: int32(len(tc.curReplStoreLoads))}
+			if len(tc.preferredStores) > 0 {
+				for _, storeID := range tc.preferredStores {
+					stores[int(storeID-1)].Attrs.Attrs = append(stores[int(storeID-1)].Attrs.Attrs, "prefer")
+				}
+				config.LeasePreferences = []roachpb.LeasePreference{
+					{Constraints: []roachpb.Constraint{
+						{Value: "prefer", Type: roachpb.Constraint_REQUIRED},
+					}},
+				}
+			}
+			if len(tc.constrainedStores) > 0 {
+				for _, storeID := range tc.constrainedStores {
+					stores[int(storeID-1)].Attrs.Attrs = append(stores[int(storeID-1)].Attrs.Attrs, "constrained")
+				}
+				config.Constraints = []roachpb.ConstraintsConjunction{{
+					Constraints: []roachpb.Constraint{
+						{Value: "constrained", Type: roachpb.Constraint_REQUIRED}},
+				}}
+			}
+
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(stores, t)
+
+			target := a.TransferLeaseTarget(
+				ctx,
+				sp,
+				config,
+				existing,
+				&mockRepl{
+					replicationFactor: int32(n),
+					storeID:           tc.leaseholder,
+				},
+				rangeUsageInfo,
+				false, /* forceDecisionWithoutStats */
+				allocator.TransferLeaseOptions{
+					Goal:                   allocator.LoadConvergence,
+					CheckCandidateFullness: true,
+					LoadDimensions:         []load.Dimension{load.CPU},
+				},
+			)
+			require.Equal(t, tc.expected, target.StoreID)
+		})
+	}
+
+}
+
 func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3059,12 +3265,16 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 		expectedAllowLeaseRepl   roachpb.StoreID /* excludeLeaseRepl = false */
 		expectedExcludeLeaseRepl roachpb.StoreID /* excludeLeaseRepl = true */
 	}{
+		// For these tests, the lease count of the stores is equal to 100 * storeID
+		// e.g. s1: 100, s2: 200, ..., s6: 600.
 		{1, replicas(1, 3, 5), preferEast, 0, 3},
 		// When `excludeLeaseRepl` = false, we'd expect either store 2 or 3
 		// to be produced by `TransferLeaseTarget` (since both of them have
 		// less-than-mean leases). In this case, the rng should produce 3.
-		{1, replicas(1, 2, 3), preferEast, 0, 3},
-		{3, replicas(1, 3, 5), preferEast, 0, 1},
+		{1, replicas(1, 2, 3), preferEast, 0, 2},
+		// NB: Preferred stores are s1..s4, avg lease count = 250. s3 has more than
+		// the average number of leases, So we expect a transfer towards s1 (100).
+		{3, replicas(1, 3, 5), preferEast, 1, 1},
 		{5, replicas(1, 4, 5), preferEast, 1, 1},
 		{5, replicas(3, 4, 5), preferEast, 3, 3},
 		{1, replicas(1, 5, 6), preferEast, 0, 5},
