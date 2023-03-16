@@ -1913,6 +1913,16 @@ p - prompt interactively for a confirmation
 `,
 	}
 
+	RecoverIgnoreInternalVersion = FlagInfo{
+		Name: "ignore-internal-version",
+		Description: `
+When set, staging and local store plan application commands will ignore internal
+cluster version. This option must only be used to bypass version check if
+cluster is stuck in the middle of upgrade and locally stored versions differ
+from node to node and previous application or staging attempt failed.
+`,
+	}
+
 	PrintKeyLength = FlagInfo{
 		Name: "print-key-max-length",
 		Description: `
