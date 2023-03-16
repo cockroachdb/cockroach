@@ -2521,7 +2521,6 @@ var (
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				Type:                descpb.IndexDescriptor_INVERTED,
 				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT},
-				CompositeColumnIDs:  []descpb.ColumnID{13},
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
