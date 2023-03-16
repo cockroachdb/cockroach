@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -2025,7 +2024,6 @@ func TestStoreSplitGCHint(t *testing.T) {
 // and the uninitialized replica reacting to messages.
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 66480, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
@@ -2103,6 +2101,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		errChan := make(chan *kvpb.Error)
+		failedSendLog := log.Every(time.Second)
 
 		// Closed when the split goroutine is done.
 		splitDone := make(chan struct{})
@@ -2147,7 +2146,15 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 						Term: term,
 					},
 				}, rpc.DefaultClass); !sent {
-					t.Error("transport failed to send vote request")
+					// SendAsync can return false, indicating the message didn't send.
+					// The most likely reason this test encounters a message failing to
+					// send is the outgoing message queue being full. The queue filling
+					// up is expected given it has fixed capacity and this loop is
+					// attempting to sending 1 MsgVote every microsecond. See comments
+					// below and above for the frequency rationale.
+					if failedSendLog.ShouldLog() {
+						log.Infof(ctx, "transport failed to send vote request")
+					}
 				}
 				select {
 				case <-splitDone:
