@@ -736,6 +736,33 @@ CREATE TABLE system.external_connections (
 	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
 );`
 
+	SystemTenantTasksSchema = `
+CREATE TABLE system.tenant_tasks (
+	tenant_id    INT8 NOT NULL,
+	issuer       STRING NOT NULL,
+	task_id      INT8 NOT NULL,
+	created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	payload_id   STRING NOT NULL,
+	owner        STRING NOT NULL,
+	owner_id     OID,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id, issuer, task_id),
+	FAMILY "primary" (tenant_id, issuer, task_id, created, payload_id, owner, owner_id)
+);`
+
+	SystemTaskPayloadsSchema = `
+CREATE TABLE system.task_payloads (
+	id           STRING NOT NULL,
+	created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	owner        STRING NOT NULL,
+	owner_id     OID,
+	min_version  STRING NOT NULL,
+	description  STRING,
+	type         STRING NOT NULL,
+	value        BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id),
+	FAMILY "primary" (id, created, owner, owner_id, min_version, description, type, value)
+);`
+
 	SystemJobInfoTableSchema = `
 CREATE TABLE system.job_info (
 	job_id INT8 NOT NULL,
@@ -1023,6 +1050,8 @@ func MakeSystemTables() []SystemTable {
 		SpanStatsUniqueKeysTable,
 		SpanStatsBucketsTable,
 		SpanStatsSamplesTable,
+		SystemTaskPayloadsTable,
+		SystemTenantTasksTable,
 	}
 }
 
@@ -2933,6 +2962,71 @@ var (
 				KeyColumnIDs:        singleID1,
 			},
 		),
+	)
+
+	SystemTenantTasksTable = makeSystemTable(
+		SystemTenantTasksSchema,
+		systemTable(
+			catconstants.TenantTasksTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int},
+				{Name: "issuer", ID: 2, Type: types.String},
+				{Name: "task_id", ID: 3, Type: types.Int},
+				{Name: "created", ID: 4, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "payload_id", ID: 5, Type: types.String},
+				{Name: "owner", ID: 6, Type: types.String},
+				{Name: "owner_id", ID: 7, Type: types.Oid, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"tenant_id", "issuer", "task_id", "created", "payload_id", "owner", "owner_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"tenant_id", "issuer", "task_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			}),
+	)
+
+	SystemTaskPayloadsTable = makeSystemTable(
+		SystemTaskPayloadsSchema,
+		systemTable(
+			catconstants.TaskPayloadsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.String},
+				{Name: "created", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "owner", ID: 3, Type: types.String},
+				{Name: "owner_id", ID: 4, Type: types.Oid, Nullable: true},
+				{Name: "min_version", ID: 5, Type: types.String},
+				{Name: "description", ID: 6, Type: types.String, Nullable: true},
+				{Name: "type", ID: 7, Type: types.String},
+				{Name: "value", ID: 8, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"id", "created", "owner", "owner_id", "min_version", "description", "type", "value"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
+			}),
 	)
 
 	SystemJobInfoTable = makeSystemTable(

@@ -455,6 +455,8 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SpanStatsBucketsTable)
 	target.AddDescriptor(systemschema.SpanStatsSamplesTable)
 	target.AddDescriptor(systemschema.SpanStatsTenantBoundariesTable)
+	target.AddDescriptorForSystemTenant(systemschema.SystemTaskPayloadsTable)
+	target.AddDescriptorForSystemTenant(systemschema.SystemTenantTasksTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
@@ -466,7 +468,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 46
+const NumSystemTablesForSystemTenant = 48
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.

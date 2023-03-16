@@ -1,0 +1,17 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "autoconfig",
+    srcs = ["auto_config.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/autoconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+    ],
+)
+
+get_x_data(name = "get_x_data")

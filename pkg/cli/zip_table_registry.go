@@ -1216,6 +1216,30 @@ var zipSystemTables = DebugZipTableRegistry{
 			`"avgSize"`,
 		},
 	},
+	"system.task_payloads": {
+		// `value` column may contain customer info, such as URI params
+		// containing access keys, encryption salts, etc.
+		// `description` is user-defined and may contain PII.
+		nonSensitiveCols: NonSensitiveColumns{
+			"id",
+			"created",
+			"owner",
+			"owner_id",
+			"min_version",
+			"type",
+		},
+	},
+	"system.tenant_tasks": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"tenant_id",
+			"issuer",
+			"task_id",
+			"created",
+			"payload_id",
+			"owner",
+			"owner_id",
+		},
+	},
 	"system.tenant_settings": {
 		customQueryRedacted: `SELECT * FROM (
 			SELECT *

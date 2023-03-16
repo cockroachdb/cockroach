@@ -7,9 +7,10 @@ CREATE TABLE t (a INT PRIMARY KEY)
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
+ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/57>  <after:/Max>  {1}       1
+<before:/Table/59>  <after:/Max>  {1}       1
 
 query TTT colnames
 ALTER TABLE t SPLIT AT VALUES (1), (10)
@@ -20,10 +21,11 @@ key            pretty  split_enforced_until
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
+ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
+<before:/Table/59>  …/1/1         {1}       1
 …/1/1               …/1/10        {1}       1
-<before:/Table/57>  …/1/1         {1}       1
 …/1/10              <after:/Max>  {1}       1
 
 statement ok

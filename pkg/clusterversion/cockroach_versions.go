@@ -490,6 +490,14 @@ const (
 	// the GC jobs to adopt the use of DelRange with tombstones.
 	V23_1WaitedForDelRangeInGCJob
 
+	// V23_1_TaskSystemTables is the version where the system tables
+	// task_payloads and tenant_tasks have been created.
+	V23_1_TaskSystemTables
+
+	// V23_1_CreateAutoConfigRunnerJob is the version where the auto
+	// config runner persistent job has been created.
+	V23_1_CreateAutoConfigRunnerJob
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -846,6 +854,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 86},
+	},
+	{
+		Key:     V23_1_TaskSystemTables,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 88},
+	},
+	{
+		Key:     V23_1_CreateAutoConfigRunnerJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 90},
 	},
 
 	// *************************************************

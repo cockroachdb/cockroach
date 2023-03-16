@@ -3645,6 +3645,17 @@ var charts = []sectionDescription{
 					"jobs.poll_jobs_stats.resume_retry_error",
 				},
 			},
+			{
+				Title: "Auto Config Runner Job",
+				Metrics: []string{
+					"jobs.auto_config_runner.fail_or_cancel_completed",
+					"jobs.auto_config_runner.fail_or_cancel_failed",
+					"jobs.auto_config_runner.fail_or_cancel_retry_error",
+					"jobs.auto_config_runner.resume_completed",
+					"jobs.auto_config_runner.resume_failed",
+					"jobs.auto_config_runner.resume_retry_error",
+				},
+			},
 		},
 	},
 	{

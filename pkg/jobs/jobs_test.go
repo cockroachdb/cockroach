@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -238,6 +238,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			DontUseJobs:                       true,
 			SkipJobMetricsPollingJobBootstrap: true,
+			SkipAutoConfigRunnerJobBootstrap:  true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 
@@ -2073,13 +2074,13 @@ func TestShowAutomaticJobs(t *testing.T) {
 			2, "AUTO CREATE STATS", out.id, out.typ)
 	}
 
-	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOBS]`).Scan(&out.id, &out.typ)
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOBS] ORDER BY job_id LIMIT 1`).Scan(&out.id, &out.typ)
 	if out.id != 1 || out.typ != "CREATE STATS" {
 		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
 			1, "CREATE STATS", out.id, out.typ)
 	}
 
-	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS]`).Scan(&out.id, &out.typ)
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS] ORDER BY job_id LIMIT 1`).Scan(&out.id, &out.typ)
 	if out.id != 2 || out.typ != "AUTO CREATE STATS" {
 		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
 			2, "AUTO CREATE STATS", out.id, out.typ)
