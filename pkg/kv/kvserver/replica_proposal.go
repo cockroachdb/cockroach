@@ -541,28 +541,36 @@ func addSSTablePreApply(
 
 	ingestPath := path + ".ingested"
 
-	// The SST may already be on disk, thanks to the sideloading mechanism.  If
+	// The SST may already be on disk, thanks to the sideloading mechanism. If
 	// so we can try to add that file directly, via a new hardlink if the
-	// filesystem supports it, rather than writing a new copy of it.  We cannot
+	// filesystem supports it, rather than writing a new copy of it. We cannot
 	// pass it the path in the sideload store as the engine deletes the passed
 	// path on success.
-	if linkErr := eng.Link(path, ingestPath); linkErr == nil {
-		ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
-		if ingestErr != nil {
-			log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
+	if linkErr := eng.Link(path, ingestPath); linkErr != nil {
+		// We're on a weird file system that doesn't support Link. This is unlikely
+		// to happen in any "normal" deployment but we have a fallback path anyway.
+		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
+		if err := ingestViaCopy(ctx, st, eng, ingestPath, term, index, sst, limiter); err != nil {
+			log.Fatalf(ctx, "%v", err)
 		}
-		// Adding without modification succeeded, no copy necessary.
-		log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
-		return false /* copied */
+		return true /* copied */
 	}
 
-	if err := ingestViaCopy(ctx, st, eng, ingestPath, term, index, sst, limiter); err != nil {
-		log.Fatalf(ctx, "%v", err)
+	// Regular path - we made a hard link, so we can ingest the hard link now.
+	ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
+	if ingestErr != nil {
+		log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 	}
+	// Adding without modification succeeded, no copy necessary.
+	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
 
-	return true /* copied */
+	return false /* copied */
 }
 
+// ingestViaCopy writes the SST to ingestPath (with rate limiting) and then ingests it
+// into the Engine.
+//
+// This is not normally called, as we prefer to make a hard-link and ingest that instead.
 func ingestViaCopy(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -572,8 +580,6 @@ func ingestViaCopy(
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
 ) error {
-	log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
-
 	// TODO(tschottdorf): remove this once sideloaded storage guarantees its
 	// existence.
 	if err := eng.MkdirAll(filepath.Dir(ingestPath)); err != nil {
