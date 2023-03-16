@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/backgroundprofiler/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1750,6 +1751,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.status.sessionRegistry,
 	); err != nil {
 		return err
+	}
+
+	backgroundProfiler := profiler.NewBackgroundProfiler(workersCtx, s.ClusterSettings(),
+		s.stopper, int32(state.nodeID), s.cfg.RuntimeProfileDirName)
+	if backgroundProfiler != nil {
+		if err := backgroundProfiler.Start(workersCtx); err != nil {
+			return err
+		}
+		s.cfg.Tracer.SetBackgroundProfiler(backgroundProfiler)
 	}
 
 	// Export statistics to graphite, if enabled by configuration.

@@ -21,6 +21,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/backgroundprofiler",
         "//pkg/settings",
         "//pkg/util",
         "//pkg/util/buildutil",

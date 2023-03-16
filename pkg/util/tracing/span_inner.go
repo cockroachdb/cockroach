@@ -174,12 +174,13 @@ func (s *spanInner) Meta() SpanMeta {
 	var traceID tracingpb.TraceID
 	var spanID tracingpb.SpanID
 	var recordingType tracingpb.RecordingType
-	var sterile bool
+	var sterile, enableBackgroundProfiling bool
 
 	if s.crdb != nil {
 		traceID, spanID = s.crdb.traceID, s.crdb.spanID
 		recordingType = s.crdb.mu.recording.recordingType.load()
 		sterile = s.isSterile()
+		enableBackgroundProfiling = s.crdb.enableBackgroundProfiling
 	}
 
 	var otelCtx oteltrace.SpanContext
@@ -191,15 +192,17 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID == 0 &&
 		!otelCtx.TraceID().IsValid() &&
 		recordingType == 0 &&
-		!sterile {
+		!sterile &&
+		!enableBackgroundProfiling {
 		return SpanMeta{}
 	}
 	return SpanMeta{
-		traceID:       traceID,
-		spanID:        spanID,
-		otelCtx:       otelCtx,
-		recordingType: recordingType,
-		sterile:       sterile,
+		traceID:                   traceID,
+		spanID:                    spanID,
+		otelCtx:                   otelCtx,
+		recordingType:             recordingType,
+		sterile:                   sterile,
+		enableBackgroundProfiling: enableBackgroundProfiling,
 	}
 }
 

@@ -303,7 +303,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that verbose tracing is propagated and triggers verbosity on the
 	// remote side.
 
-	s1 := tr.StartSpan("a", WithRecording(tracingpb.RecordingVerbose))
+	s1 := tr.StartSpan("a", WithRecording(tracingpb.RecordingVerbose), WithBackgroundProfiling())
 
 	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(s1.Meta(), carrier)
@@ -320,6 +320,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if trace1 != trace2 {
 		t.Errorf("traceID doesn't match: parent %d child %d", trace1, trace2)
 	}
+	require.Equal(t, s1.Meta().enableBackgroundProfiling, s2.Meta().enableBackgroundProfiling)
 	s2.Recordf("x=%d", 1)
 
 	// Verify that recording was started automatically.

@@ -61,6 +61,12 @@ type crdbSpan struct {
 	// whenever a Structured event is recorded by the span and its children.
 	eventListeners []EventListener
 
+	// enableBackgroundProfiling is true if the span is part of an operation that
+	// is being profiled on-demand by the backgroundprofiler.Profiler. If true and
+	// if the span is a local, root span, then it will be Subscribed to the
+	// background profiler on creation and unsubscribed on Finish().
+	enableBackgroundProfiling bool
+
 	// Locking rules:
 	// - If locking both a parent and a child, the parent must be locked first. In
 	// practice, children don't take the parent's lock.
@@ -1444,6 +1450,12 @@ func (s *crdbSpan) setGoroutineID(gid int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.goroutineID = uint64(gid)
+}
+
+func (s *crdbSpan) getGoroutineID() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.goroutineID
 }
 
 type atomicRecordingType tracingpb.RecordingType

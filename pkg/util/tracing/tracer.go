@@ -22,6 +22,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/server/backgroundprofiler"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -92,7 +93,8 @@ const (
 	fieldNameTraceID = prefixTracerState + "traceid"
 	fieldNameSpanID  = prefixTracerState + "spanid"
 	// fieldNameRecordingType will contain the desired type of trace recording.
-	fieldNameRecordingType = "rec"
+	fieldNameRecordingType             = "rec"
+	fieldNameEnableBackgroundProfiling = "backgroundprofile"
 
 	// fieldNameOtel{TraceID,SpanID} will contain the OpenTelemetry span info, hex
 	// encoded.
@@ -226,7 +228,7 @@ type TracingMode int
 const (
 	// TracingModeFromEnv configures tracing according to enableTracingByDefault.
 	TracingModeFromEnv TracingMode = iota
-	// TracingModeOnDemand means that Spans will no be created unless there's a
+	// TracingModeOnDemand means that Spans will not be created unless there's a
 	// particular reason to create them (i.e. a span being created with
 	// WithForceRealSpan(), a net.Trace or OpenTelemetry tracers attached).
 	TracingModeOnDemand
@@ -302,6 +304,11 @@ type Tracer struct {
 	// Currently, this is used to mark spans as redactable and to redact
 	// them at the network boundary from KV.
 	_redactable int32 // accessed atomically
+
+	// backgroundProfiler is a handle to the profiler service that can be
+	// subscribed to/unsubscribed from by spans that have been instructed to
+	// collect runtime profiles.
+	backgroundProfiler backgroundprofiler.Profiler
 
 	// Pointer to an OpenTelemetry tracer used as a "shadow tracer", if any. If
 	// not nil, the respective *otel.Tracer will be used to create mirror spans
@@ -394,7 +401,7 @@ type SpanRegistry struct {
 		syncutil.Mutex
 		// m stores all the currently open spans. Note that a span being present
 		// here proves that the corresponding Span.Finish() call has not yet
-		// completed (but crdbSpan.Finish() might have finished), therefor the span
+		// completed (but crdbSpan.Finish() might have finished), therefore the span
 		// cannot be reused while present in the registry. At the same time, note
 		// that Span.Finish() can be called on these spans so, when using one of
 		// these spans, we need to be prepared for that use to be concurrent with
@@ -593,6 +600,12 @@ func (t *Tracer) SetActiveSpansRegistryEnabled(to bool) {
 // to register spans with the activeSpansRegistry
 func (t *Tracer) ActiveSpansRegistryEnabled() bool {
 	return atomic.LoadInt32(&t._activeSpansRegistryEnabled) != 0
+}
+
+// SetBackgroundProfiler sets a handle on the Tracer to the BackgroundProfiler
+// service that can be used to trigger on-demand profiles.
+func (t *Tracer) SetBackgroundProfiler(profiler backgroundprofiler.Profiler) {
+	t.backgroundProfiler = profiler
 }
 
 // NewTracer creates a Tracer with default options.
@@ -1213,6 +1226,7 @@ child operation: %s, tracer created at:
 
 	s.i.crdb.SetRecordingType(opts.recordingType())
 	s.i.crdb.parentSpanID = opts.parentSpanID()
+	s.i.crdb.enableBackgroundProfiling = opts.enableBackgroundProfiling()
 
 	var localRoot bool
 	{
@@ -1261,6 +1275,28 @@ child operation: %s, tracer created at:
 	// spans. Span.Finish will take care of removing it.
 	if localRoot {
 		t.activeSpansRegistry.addSpan(s.i.crdb)
+
+		// TODO(during review): Do we want to tie this to Verbose recording or have
+		// its own flag. An advantage of making it an independent flag is that we do
+		// not have to enable the verbose collection of traces to trigger background
+		// profile collection.
+		//
+		// If the span is a local root and has background profiling enabled, we
+		// subscribe to the background profiler. Subscribing involves joining a
+		// running profile or starting a new profile if this is the first root span
+		// of the operation that is being profiled.
+		if s.i.crdb.enableBackgroundProfiling {
+			if t.backgroundProfiler != nil {
+				// We want the profiler labels to remain set for the lifetime of the
+				// tracing span. Given that we Unsubscribe only when the span is
+				// Finish()ing, i.e. when the goroutine is returning, we do not need to
+				// undo the profiler labels set by the backgroundProfiler.
+				labelledCtx, _ := t.backgroundProfiler.Subscribe(ctx, s)
+				if labelledCtx != nil {
+					ctx = labelledCtx
+				}
+			}
+		}
 	}
 
 	return maybeWrapCtx(ctx, s)
@@ -1319,6 +1355,9 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
 	carrier.Set(fieldNameRecordingType, sm.recordingType.ToCarrierValue())
+	if sm.enableBackgroundProfiling {
+		carrier.Set(fieldNameEnableBackgroundProfiling, "")
+	}
 }
 
 var noopSpanMeta = SpanMeta{}
@@ -1333,6 +1372,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	var otelSpanID oteltrace.SpanID
 	var recordingTypeExplicit bool
 	var recordingType tracingpb.RecordingType
+	var enableBackgroundProfiling bool
 
 	iterFn := func(k, v string) error {
 		switch k = strings.ToLower(k); k {
@@ -1365,6 +1405,8 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		case fieldNameRecordingType:
 			recordingTypeExplicit = true
 			recordingType = tracingpb.RecordingTypeFromCarrierValue(v)
+		case fieldNameEnableBackgroundProfiling:
+			enableBackgroundProfiling = true
 		}
 		return nil
 	}
@@ -1408,7 +1450,8 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		// The sterile field doesn't make it across the wire. The simple fact that
 		// there was any tracing info in the carrier means that the parent span was
 		// not sterile.
-		sterile: false,
+		sterile:                   false,
+		enableBackgroundProfiling: enableBackgroundProfiling,
 	}, nil
 }
 

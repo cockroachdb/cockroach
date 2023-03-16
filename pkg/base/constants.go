@@ -46,6 +46,10 @@ const (
 	// stores profiles when the periodic CPU profile dump is enabled.
 	CPUProfileDir = "pprof_dump"
 
+	// RuntimeProfileDir is the directory name where the
+	// backgroundprofiler.Profiler stores profiles.
+	RuntimeProfileDir = "runtime_profiler"
+
 	// InflightTraceDir is the directory name where the job trace dumper stores traces
 	// when a job opts in to dumping its execution traces.
 	InflightTraceDir = "inflight_trace_dump"

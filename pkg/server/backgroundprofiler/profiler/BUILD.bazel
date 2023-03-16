@@ -1,0 +1,64 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "profiler_proto",
+    srcs = ["profiler.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "profiler_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/backgroundprofiler/profiler",
+    proto = ":profiler_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+go_library(
+    name = "profiler",
+    srcs = ["profiler.go"],
+    embed = [":profiler_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/backgroundprofiler/profiler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/backgroundprofiler",
+        "//pkg/server/dumpstore",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/pprofutil",
+        "//pkg/util/protoutil",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_pprof//profile",
+    ],
+)
+
+go_test(
+    name = "profiler_test",
+    srcs = ["profiler_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":profiler",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_google_pprof//profile",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

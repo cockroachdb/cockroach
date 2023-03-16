@@ -142,6 +142,11 @@ type TestServerArgs struct {
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 
+	// If set, a RuntimeProfileDir is initialized at the provided path. Runtime
+	// profiles that are collected by backgroundprofiler.Profiler during the
+	// execution of the test will be written to this directory.
+	RuntimeProfileDir string
+
 	// DisableSpanConfigs disables the use of the span configs infrastructure
 	// (in favor of the gossiped system config span). It's equivalent to setting
 	// COCKROACH_DISABLE_SPAN_CONFIGS, and is only intended for tests written
@@ -352,6 +357,13 @@ type TestTenantArgs struct {
 	// heapprofiler. If empty, no heap profiles will be collected during the test.
 	// If set, this directory should be cleaned up after the test completes.
 	HeapProfileDirName string
+
+	// RuntimeProfileDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is the directory name for runtime profiles
+	// using backgroundprofiler.Profiler. If empty, no runtime profiles will be
+	// collected during the test. If set, this directory should be cleaned up
+	// after the test completes.
+	RuntimeProfileDirName string
 
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
