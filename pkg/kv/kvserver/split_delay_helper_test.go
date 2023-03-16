@@ -37,8 +37,8 @@ func (h *testSplitDelayHelper) RaftStatus(context.Context) (roachpb.RangeID, *ra
 	return h.rangeID, h.raftStatus
 }
 
-func (h *testSplitDelayHelper) MaxTicks() int {
-	return h.numAttempts
+func (h *testSplitDelayHelper) MaxDelay() time.Duration {
+	return time.Duration(h.numAttempts) * h.TickDuration()
 }
 
 func (h *testSplitDelayHelper) TickDuration() time.Duration {
