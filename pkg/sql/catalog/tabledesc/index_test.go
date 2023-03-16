@@ -252,23 +252,15 @@ func TestIndexInterface(t *testing.T) {
 	errMsgFmt := "Unexpected %s result for index '%s'."
 
 	// Check index methods on features not tested here.
-	for pos, idx := range indexes {
+	for _, idx := range indexes {
 		require.False(t, idx.IsDisabled(),
 			errMsgFmt, "IsDisabled", idx.GetName())
 		require.False(t, idx.IsCreatedExplicitly(),
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
 		require.False(t, idx.HasOldStoredColumns(),
 			errMsgFmt, "HasOldStoredColumns", idx.GetName())
-		if pos != 2 {
-			require.Equalf(t, 0, idx.NumCompositeColumns(),
-				errMsgFmt, "NumCompositeColumns", idx.GetName())
-		} else {
-			// The secondary index "s2" is an inverted index on the JSONB
-			// column, and we thus expect one composite column for this
-			// index and 0 for all the others.
-			require.Equalf(t, 1, idx.NumCompositeColumns(),
-				errMsgFmt, "NumCompositeColumns", idx.GetName())
-		}
+		require.Equalf(t, 1, idx.NumCompositeColumns(),
+			errMsgFmt, "NumCompositeColumns", idx.GetName())
 	}
 
 	// Check particular index features.
