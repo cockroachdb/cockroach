@@ -29,6 +29,7 @@ import {
   selectLastReset,
   selectStatements,
   selectStatementsDataValid,
+  selectStatementsDataInFlight,
   selectStatementsLastError,
   selectTotalFingerprints,
   selectColumns,
@@ -97,6 +98,7 @@ export const ConnectedStatementsPage = withRouter(
         sortSetting: selectSortSetting(state),
         statements: selectStatements(state, props),
         isDataValid: selectStatementsDataValid(state),
+        isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
         totalFingerprints: selectTotalFingerprints(state),
@@ -120,8 +122,7 @@ export const ConnectedStatementsPage = withRouter(
         refreshNodes: () => dispatch(nodesActions.refresh()),
         refreshUserSQLRoles: () =>
           dispatch(uiConfigActions.refreshUserSQLRoles()),
-        resetSQLStats: (req: StatementsRequest) =>
-          dispatch(sqlStatsActions.reset(req)),
+        resetSQLStats: () => dispatch(sqlStatsActions.reset()),
         dismissAlertMessage: () =>
           dispatch(
             localStorageActions.update({

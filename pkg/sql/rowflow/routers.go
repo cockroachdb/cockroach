@@ -309,7 +309,8 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
-		go func(ctx context.Context, rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
+		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
+			defer wg.Done()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
@@ -402,9 +403,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			ro.memoryMonitor.Stop(ctx)
 			ro.diskMonitor.Stop(ctx)
 			ro.rowBufToPushFromMon.Stop(ctx)
-
-			wg.Done()
-		}(ctx, rb, &rb.outputs[i], wg)
+		}(ctx, rb, &rb.outputs[i])
 	}
 }
 
