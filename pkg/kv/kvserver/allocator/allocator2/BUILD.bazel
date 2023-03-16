@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "allocator2",
+    srcs = ["constraint.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocator2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "allocator2_test",
+    srcs = ["constraint_test.go"],
+    embed = [":allocator2"],
+)
