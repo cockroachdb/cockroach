@@ -237,6 +237,10 @@ type TestClusterInterface interface {
 	// Only boolean capabilities are currently supported as we wait for the
 	// specified capabilities to have a "true" value.
 	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, map[tenantcapabilities.CapabilityID]string)
+
+	// ToggleReplicateQueues activates or deactivates the replication queues on all
+	// the stores on all the nodes.
+	ToggleReplicateQueues(active bool)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.

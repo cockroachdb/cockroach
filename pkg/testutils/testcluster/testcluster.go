@@ -1457,8 +1457,7 @@ func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 	return tc.clusterArgs.ReplicationMode
 }
 
-// ToggleReplicateQueues activates or deactivates the replication queues on all
-// the stores on all the nodes.
+// ToggleReplicateQueues implements TestClusterInterface.
 func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	for _, s := range tc.Servers {
 		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
