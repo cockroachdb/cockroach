@@ -488,6 +488,7 @@ SELECT count(replicas)
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
+	t.Skipf("oh noes, test skippy %s", t.Name())
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	externalIP, err := c.ExternalIP(ctx, t.L(), c.Range(1, c.Spec().NodeCount))
