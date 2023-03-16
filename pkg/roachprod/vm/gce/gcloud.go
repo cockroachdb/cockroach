@@ -230,6 +230,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
 		TerminateOnMigration: false,
+		UseMultipleDisks:     true, // don't default to RAID0
 		useSharedUser:        true,
 		preemptible:          false,
 	}

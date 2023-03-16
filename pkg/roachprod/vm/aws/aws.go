@@ -203,6 +203,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
 		CreateRateLimit:  2,
+		UseMultipleDisks: true, // don't default to RAID0
 	}
 }
 

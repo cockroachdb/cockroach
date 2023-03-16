@@ -42,6 +42,9 @@ func AWSMachineType(cpus int, highmem bool) string {
 	}
 
 	// There is no c5d.24xlarge.
+	//
+	// TODO(tbg): there seems to be, see:
+	// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/compute-optimized-instances.html
 	if family == "c5d" && size == "24xlarge" {
 		family = "m5d"
 	}

@@ -104,10 +104,15 @@ func awsMachineSupportsSSD(machineType string) bool {
 	return false
 }
 
-func getAWSOpts(machineType string, zones []string, volumeSize int, localSSD bool) vm.ProviderOpts {
+func getAWSOpts(
+	machineType string, zones []string, volumeSize int, localSSD bool, RAID0 bool,
+) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
 		opts.DefaultEBSVolume.Disk.VolumeSize = volumeSize
+	}
+	if RAID0 {
+		opts.UseMultipleDisks = false // NB: the default is true
 	}
 	if localSSD {
 		opts.SSDMachineType = machineType
@@ -137,12 +142,8 @@ func getGCEOpts(
 		opts.Zones = zones
 	}
 	opts.SSDCount = localSSDCount
-	if localSSD && localSSDCount > 0 {
-		// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
-		// to mount multiple disks as a single store using a RAID 0 array, we
-		// must explicitly ask for multiple stores to be enabled, _unless_ the
-		// test has explicitly asked for RAID0.
-		opts.UseMultipleDisks = !RAID0
+	if RAID0 {
+		opts.UseMultipleDisks = false // NB: the default is true, i.e. no RAID0
 	}
 	opts.TerminateOnMigration = terminateOnMigration
 
@@ -250,7 +251,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD)
+		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD, s.RAID0)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
