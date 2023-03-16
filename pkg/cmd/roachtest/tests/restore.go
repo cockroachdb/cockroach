@@ -600,6 +600,9 @@ func registerRestore(r registry.Registry) {
 					return nil
 				})
 				m.Wait()
+
+				// Fail because it's helpful to get the tsdump.
+				t.Errorf("TBG(SUCCESS)")
 			},
 		})
 	}
