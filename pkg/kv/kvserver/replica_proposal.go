@@ -526,18 +526,14 @@ func addSSTablePreApply(
 	}
 
 	tBegin := timeutil.Now()
-	var tEndDelayed time.Time
 	defer func() {
 		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
 			log.Infof(ctx,
-				"ingesting SST of size %s at index %d took %.2fs (%.2fs on which in PreIngestDelay)",
-				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(), tEndDelayed.Sub(tBegin).Seconds(),
+				"ingesting SST of size %s at index %d took %.2fs",
+				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
 			)
 		}
 	}()
-
-	eng.PreIngestDelay(ctx)
-	tEndDelayed = timeutil.Now()
 
 	ingestPath := path + ".ingested"
 
