@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -459,10 +460,11 @@ func (f *jobFeed) Resume() error {
 
 // Details implements FeedJob interface.
 func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
+	stmt := fmt.Sprintf(`
+SELECT payload FROM (%s)
+`, jobutils.InternalSystemJobsBaseQuery)
 	var payloadBytes []byte
-	if err := f.db.QueryRow(
-		`SELECT payload FROM system.jobs WHERE id=$1`, f.jobID,
-	).Scan(&payloadBytes); err != nil {
+	if err := f.db.QueryRow(stmt, f.jobID).Scan(&payloadBytes); err != nil {
 		return nil, errors.Wrapf(err, "Details for job %d", f.jobID)
 	}
 	var payload jobspb.Payload
@@ -474,10 +476,11 @@ func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 
 // HighWaterMark implements FeedJob interface.
 func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
+	stmt := fmt.Sprintf(`
+SELECT progress FROM (%s)
+`, jobutils.InternalSystemJobsBaseQuery)
 	var details []byte
-	if err := f.db.QueryRow(
-		`SELECT progress FROM system.jobs WHERE id=$1`, f.jobID,
-	).Scan(&details); err != nil {
+	if err := f.db.QueryRow(stmt, f.jobID).Scan(&details); err != nil {
 		return hlc.Timestamp{}, errors.Wrapf(err, "HighWaterMark for job %d", f.jobID)
 	}
 	var progress jobspb.Progress
