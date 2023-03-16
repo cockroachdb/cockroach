@@ -182,6 +182,10 @@ type JSON interface {
 	// and a boolean indicating if this JSON value is a bool type.
 	AsBool() (bool, bool)
 
+	// AsArray returns the JSON document as an Array if it is a array type,
+	// and a boolean indicating if this JSON value is a array type.
+	AsArray() ([]JSON, bool)
+
 	// Exists implements the `?` operator: does the string exist as a top-level
 	// key within the JSON value?
 	//
