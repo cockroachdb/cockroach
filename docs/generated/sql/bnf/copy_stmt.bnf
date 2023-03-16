@@ -9,8 +9,8 @@ copy_stmt ::=
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 'WITH' '(' copy_generic_options_list ')'
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT'  '(' copy_generic_options_list ')'
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 
-	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
-	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
-	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' 'WITH' '(' copy_generic_options_list ')'
-	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT'  '(' copy_generic_options_list ')'
-	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' 
+	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
+	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
+	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' 'WITH' '(' copy_generic_options_list ')'
+	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT'  '(' copy_generic_options_list ')'
+	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' 
