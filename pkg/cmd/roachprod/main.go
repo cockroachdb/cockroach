@@ -1050,6 +1050,18 @@ var storageSnapshotCmd = &cobra.Command{
 	}),
 }
 
+var fixLongRunningAWSHostnamesCmd = &cobra.Command{
+	Use:   "fix-long-running-aws-hostnames <cluster>",
+	Short: "changes the hostnames of VMs in long-running AWS clusters",
+	Long: `This is a temporary workaround, and will be removed once we no longer ` +
+		`have AWS clusters that were created with the default hostname.`,
+
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
+		return roachprod.FixLongRunningAWSHostnames(context.Background(), roachprodLibraryLogger, args[0])
+	}),
+}
+
 func main() {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	var loggerError error
@@ -1105,6 +1117,7 @@ func main() {
 		grafanaDumpCmd,
 		grafanaURLCmd,
 		rootStorageCmd,
+		fixLongRunningAWSHostnamesCmd,
 	)
 	setBashCompletionFunction()
 
