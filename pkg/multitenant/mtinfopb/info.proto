@@ -103,10 +103,23 @@ message UsageInfo {
   // All-time consumption for this tenant. Each field has a corresponding column
   // in system.tenant_usage.
   optional roachpb.TenantConsumption consumption = 4 [(gogoproto.nullable) = false];
+
+  // Next ID: 5
+}
+
+// SettingOverride represents a cluster setting override for one tenant.
+message SettingOverride {
+  option (gogoproto.equal) = true;
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional string value = 2 [(gogoproto.nullable) = false];
+  optional string value_type = 3 [(gogoproto.nullable) = false];
+  optional string reason = 4;
+  // Next ID: 5
 }
 
 // TenantInfoWithUsage contains the information for a tenant in a multi-tenant
-// cluster plus metadata related to cost control and consumption.
+// cluster plus metadata related to cost control and consumption and setting overrides.
 message TenantInfoWithUsage {
   option (gogoproto.equal) = true;
 
@@ -115,5 +128,7 @@ message TenantInfoWithUsage {
 
   optional SQLInfo extra_columns = 3 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
 
-  // Next ID: 4
+  repeated SettingOverride setting_overrides = 4;
+
+  // Next ID: 5
 }

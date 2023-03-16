@@ -125,20 +125,22 @@ func TestReplicaProbeRequest(t *testing.T) {
 			kvpb.RoutingPolicy_LEASEHOLDER,
 			kvpb.RoutingPolicy_NEAREST,
 		} {
-			var b kv.Batch
-			b.AddRawRequest(probeReq)
-			b.Header.RoutingPolicy = policy
-			err := db.Run(ctx, &b)
-			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-				// Rare but it can happen that we're proposing on a replica
-				// that is just about to get a snapshot. In that case we'll
-				// get:
-				//
-				// result is ambiguous: unable to determine whether command was applied via snapshot
-				t.Logf("ignoring: %s", err)
-				err = nil
-			}
-			require.NoError(t, err)
+			testutils.SucceedsSoon(t, func() error {
+				var b kv.Batch
+				b.AddRawRequest(probeReq)
+				b.Header.RoutingPolicy = policy
+				err := db.Run(ctx, &b)
+				if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+					// Rare but it can happen that we're proposing on a replica
+					// that is just about to get a snapshot. In that case we'll
+					// get:
+					//
+					// result is ambiguous: unable to determine whether command was applied via snapshot
+					return errors.Wrapf(err, "retrying")
+				}
+				require.NoError(t, err)
+				return nil
+			})
 		}
 	}
 	// Check expected number of probes seen on each Replica in the apply loop.
