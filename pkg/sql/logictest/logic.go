@@ -313,8 +313,7 @@ import (
 //            duration. If the test succeeds at any time during that period, it
 //            is considered successful. Otherwise, it is a failure. See
 //            testutils.SucceedsSoon for more information. If run with the
-//            -rewrite flag, inserts a 2s sleep before executing the query
-//            once.
+//            -rewrite flag, the query will be run only once after a 2s sleep.
 //      - async: runs the query asynchronously, marking it as a pending
 //            query using the label parameter as a unique name, to be completed
 //            and validated later with "awaitquery". This is intended for use

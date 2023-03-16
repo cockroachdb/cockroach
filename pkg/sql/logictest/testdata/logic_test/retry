@@ -4,6 +4,8 @@ SELECT nextval('s')
 
 # Unit test for bug #95664, retry on a query producing an error should
 # try again and succeed if err doesn't happen again.
+# NOTE: This test will fail when the --rewrite flag is used because the query
+# will only be run once.
 query I retry
 SELECT
   CASE subq.val
