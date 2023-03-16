@@ -133,10 +133,11 @@ export function workloadPctBarChart(
   return barChartFactory(
     "grey",
     [
-      bar(
-        "pct-workload",
-        (d: StatementStatistics) =>
-          (d.stats.service_lat.mean * longToInt(d.stats.count)) / totalWorkload,
+      bar("pct-workload", (d: StatementStatistics) =>
+        totalWorkload !== 0
+          ? (d.stats.service_lat.mean * longToInt(d.stats.count)) /
+            totalWorkload
+          : 0,
       ),
     ],
     v => Percentage(v, 1, 1),
