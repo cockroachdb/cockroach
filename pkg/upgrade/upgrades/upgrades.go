@@ -282,6 +282,16 @@ var upgrades = []upgradebase.Upgrade{
 		checkForPausedGCJobs,
 		waitForDelRangeInGCJob,
 	),
+	upgrade.NewSystemUpgrade(
+		"create system.tenant_tasks and system.task_payloads",
+		toCV(clusterversion.V23_1_TaskSystemTables),
+		createTaskSystemTables,
+	),
+	upgrade.NewPermanentTenantUpgrade("create auto config runner job",
+		toCV(clusterversion.V23_1_CreateAutoConfigRunnerJob),
+		createAutoConfigRunnerJob,
+		"create auto config runner job",
+	),
 }
 
 func init() {

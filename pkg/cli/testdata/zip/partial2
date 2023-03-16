@@ -66,7 +66,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [cluster] retrieving SQL data for system.statement_diagnostics... writing output: debug/system.statement_diagnostics.txt... done
 [cluster] retrieving SQL data for system.statement_diagnostics_requests... writing output: debug/system.statement_diagnostics_requests.txt... done
 [cluster] retrieving SQL data for system.table_statistics... writing output: debug/system.table_statistics.txt... done
+[cluster] retrieving SQL data for system.task_payloads... writing output: debug/system.task_payloads.txt... done
 [cluster] retrieving SQL data for system.tenant_settings... writing output: debug/system.tenant_settings.txt... done
+[cluster] retrieving SQL data for system.tenant_tasks... writing output: debug/system.tenant_tasks.txt... done
 [cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.txt... done
 [cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt... done
 [cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
@@ -114,7 +116,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] 1 log file ...
 [node 1] [log file ...
 [node 1] requesting ranges... received response... done
-[node 1] 58 ranges found
+[node 1] 60 ranges found
 [node 1] writing range 1... converting to JSON... writing binary output: debug/nodes/1/ranges/1.json... done
 [node 1] writing range 2... converting to JSON... writing binary output: debug/nodes/1/ranges/2.json... done
 [node 1] writing range 3... converting to JSON... writing binary output: debug/nodes/1/ranges/3.json... done
@@ -173,6 +175,8 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] writing range 56... converting to JSON... writing binary output: debug/nodes/1/ranges/56.json... done
 [node 1] writing range 57... converting to JSON... writing binary output: debug/nodes/1/ranges/57.json... done
 [node 1] writing range 58... converting to JSON... writing binary output: debug/nodes/1/ranges/58.json... done
+[node 1] writing range 59... converting to JSON... writing binary output: debug/nodes/1/ranges/59.json... done
+[node 1] writing range 60... converting to JSON... writing binary output: debug/nodes/1/ranges/60.json... done
 [node 3] node status... converting to JSON... writing binary output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
 [node 3] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/3/crdb_internal.active_range_feeds.txt... done
@@ -213,7 +217,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 3] 1 log file ...
 [node 3] [log file ...
 [node 3] requesting ranges... received response... done
-[node 3] 58 ranges found
+[node 3] 60 ranges found
 [node 3] writing range 1... converting to JSON... writing binary output: debug/nodes/3/ranges/1.json... done
 [node 3] writing range 2... converting to JSON... writing binary output: debug/nodes/3/ranges/2.json... done
 [node 3] writing range 3... converting to JSON... writing binary output: debug/nodes/3/ranges/3.json... done
@@ -272,6 +276,8 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 3] writing range 56... converting to JSON... writing binary output: debug/nodes/3/ranges/56.json... done
 [node 3] writing range 57... converting to JSON... writing binary output: debug/nodes/3/ranges/57.json... done
 [node 3] writing range 58... converting to JSON... writing binary output: debug/nodes/3/ranges/58.json... done
+[node 3] writing range 59... converting to JSON... writing binary output: debug/nodes/3/ranges/59.json... done
+[node 3] writing range 60... converting to JSON... writing binary output: debug/nodes/3/ranges/60.json... done
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done

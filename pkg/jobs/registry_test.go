@@ -127,6 +127,7 @@ func TestRegistryGC(t *testing.T) {
 				// This test wants to look at job records.
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
+				SkipAutoConfigRunnerJobBootstrap:  true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -277,6 +278,7 @@ func TestRegistryGCPagination(t *testing.T) {
 				// This test wants to count job records.
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
+				SkipAutoConfigRunnerJobBootstrap:  true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -463,6 +465,7 @@ func TestBatchJobsCreation(t *testing.T) {
 						UpgradeManager: &upgradebase.TestingKnobs{
 							DontUseJobs:                       true,
 							SkipJobMetricsPollingJobBootstrap: true,
+							SkipAutoConfigRunnerJobBootstrap:  true,
 						},
 						KeyVisualizer: &keyvisualizer.TestingKnobs{
 							SkipJobBootstrap: true,
@@ -643,6 +646,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 				UpgradeManager: &upgradebase.TestingKnobs{
 					DontUseJobs:                       true,
 					SkipJobMetricsPollingJobBootstrap: true,
+					SkipAutoConfigRunnerJobBootstrap:  true,
 				},
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,

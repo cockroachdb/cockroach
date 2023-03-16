@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	// Import keyvisjob so that it's init function will be called.
+	// Import keyvisjob so that its init function will be called.
 	_ "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisjob"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
