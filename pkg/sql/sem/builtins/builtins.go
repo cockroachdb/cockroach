@@ -6405,9 +6405,6 @@ Parameters:` + randgencfg.ConfigDoc,
 	),
 
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
-	//
-	// TODO(multitenantTeam): use tenantName instead of tenantID. See issue:
-	// https://github.com/cockroachdb/cockroach/issues/96176
 	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
@@ -6448,6 +6445,45 @@ Parameters:` + randgencfg.ConfigDoc,
 				return args[0], nil
 			},
 			Info:       "Updates resource limits for the tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tenant_name", Typ: types.String},
+				{Name: "available_request_units", Typ: types.Float},
+				{Name: "refill_rate", Typ: types.Float},
+				{Name: "max_burst_request_units", Typ: types.Float},
+				{Name: "as_of", Typ: types.Timestamp},
+				{Name: "as_of_consumed_request_units", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tenantName := roachpb.TenantName(tree.MustBeDString(args[0]))
+				tenantID, err := evalCtx.Tenant.LookupTenantID(ctx, tenantName)
+				if err != nil {
+					return nil, err
+				}
+
+				availableRU := float64(tree.MustBeDFloat(args[1]))
+				refillRate := float64(tree.MustBeDFloat(args[2]))
+				maxBurstRU := float64(tree.MustBeDFloat(args[3]))
+				asOf := tree.MustBeDTimestamp(args[4]).Time
+				asOfConsumed := float64(tree.MustBeDFloat(args[5]))
+
+				if err := evalCtx.Tenant.UpdateTenantResourceLimits(
+					ctx,
+					tenantID.ToUint64(),
+					availableRU,
+					refillRate,
+					maxBurstRU,
+					asOf,
+					asOfConsumed,
+				); err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt((tenantID.ToUint64()))), nil
+			},
+			Info:       "Updates resource limits for the tenant with the provided name. Must be run by the System tenant.",
 			Volatility: volatility.Volatile,
 		},
 	),

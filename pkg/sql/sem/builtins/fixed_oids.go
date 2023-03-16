@@ -2368,6 +2368,7 @@ var builtinOidsArray = []string{
 	2394: `array_cat_agg(arg1: varbit[]) -> varbit[]`,
 	2395: `array_cat_agg(arg1: anyenum[]) -> anyenum[]`,
 	2396: `array_cat_agg(arg1: tuple[]) -> tuple[]`,
+	2397: `crdb_internal.update_tenant_resource_limits(tenant_name: string, available_request_units: float, refill_rate: float, max_burst_request_units: float, as_of: timestamp, as_of_consumed_request_units: float) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
