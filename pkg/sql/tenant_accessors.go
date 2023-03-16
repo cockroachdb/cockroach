@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -146,6 +147,18 @@ func getTenantInfoFromRow(row tree.Datums) (*mtinfopb.TenantInfo, error) {
 		// Records created for CC Serverless pre-v23.1.
 		info.ServiceMode = mtinfopb.ServiceModeExternal
 	}
+
+	// In the SQL layer, we give the system tenant ALL capabilities here to avoid
+	// needing to special case anywhere else in this layer. The authorizer also
+	// special cases the system tenant by bypassing capability requirements.
+	if info.ID == roachpb.SystemTenantID.ToUint64() {
+		for _, capID := range tenantcapabilities.CapabilityIDs {
+			if capID.CapabilityType() == tenantcapabilities.Bool {
+				info.ProtoInfo.Capabilities.Cap(capID).Set(true)
+			}
+		}
+	}
+
 	return info, nil
 }
 
