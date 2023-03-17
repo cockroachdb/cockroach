@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -197,6 +196,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
 				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
+					&execinfra.FlowCtx{Gateway: false},
+					0, /* processorID */
 					allocators,
 					colexecargs.OpWithMetaInfo{
 						Root:            hashRouterInput,
@@ -230,9 +231,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// matter which context we use since it'll only be used by the
 				// memory accounting system.
 				syncAllocator := colmem.NewAllocator(ctx, &syncMemAccount, testColumnFactory)
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncAllocator, synchronizerInputs, &wg)
+				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote}
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, syncAllocator, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
-				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				runOutboxInbox := func(
 					outboxCtx context.Context,
@@ -245,6 +246,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
+						&execinfra.FlowCtx{Gateway: false},
+						0, /* processorID */
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
 						outboxConverterMemAcc,
 						colexecargs.OpWithMetaInfo{
@@ -262,7 +265,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							outboxCtx,
 							dialer,
 							execinfra.StaticSQLInstanceID,
-							flowID,
 							execinfrapb.StreamID(id),
 							flowCtxCancel,
 							0, /* connectionTimeout */

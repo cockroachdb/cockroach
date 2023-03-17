@@ -55,7 +55,7 @@ func convertToVecTree(
 	// creator.
 	creator := newVectorizedFlowCreator(
 		nil /* flowBase */, newNoopFlowCreatorHelper(), nil /* componentCreator */, false, false,
-		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer, colcontainer.DiskQueueCfg{},
 		flowCtx.Cfg.VecFDSemaphore, flowCtx.NewTypeResolver(flowCtx.Txn),
 		admission.WorkInfo{},
 	)
