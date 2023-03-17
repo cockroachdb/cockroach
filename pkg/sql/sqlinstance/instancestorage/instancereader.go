@@ -68,13 +68,14 @@ func NewReader(storage *Storage, slReader sqlliveness.Reader, stopper *stop.Stop
 func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 	r.setCache(&singletonInstanceFeed{
 		instance: instancerow{
-			region:     self.Region,
-			instanceID: self.InstanceID,
-			sqlAddr:    self.InstanceSQLAddr,
-			rpcAddr:    self.InstanceRPCAddr,
-			sessionID:  self.SessionID,
-			locality:   self.Locality,
-			timestamp:  hlc.Timestamp{}, // intentionally zero
+			region:        self.Region,
+			instanceID:    self.InstanceID,
+			sqlAddr:       self.InstanceSQLAddr,
+			rpcAddr:       self.InstanceRPCAddr,
+			sessionID:     self.SessionID,
+			locality:      self.Locality,
+			binaryVersion: self.BinaryVersion,
+			timestamp:     hlc.Timestamp{}, // intentionally zero
 		},
 	})
 	// Make sure that the reader shuts down gracefully.
@@ -129,6 +130,7 @@ func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
 		InstanceSQLAddr: row.sqlAddr,
 		SessionID:       row.sessionID,
 		Locality:        row.locality,
+		BinaryVersion:   row.binaryVersion,
 	}
 }
 
@@ -180,6 +182,7 @@ func (r *Reader) GetInstance(
 		InstanceSQLAddr: instance.sqlAddr,
 		SessionID:       instance.sessionID,
 		Locality:        instance.locality,
+		BinaryVersion:   instance.binaryVersion,
 	}
 	return instanceInfo, nil
 }

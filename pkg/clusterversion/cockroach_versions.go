@@ -498,6 +498,10 @@ const (
 	// config runner persistent job has been created.
 	V23_1_CreateAutoConfigRunnerJob
 
+	// V23_1AlterSystemSQLInstancesAddBinaryVersion is the version where the
+	// binary_version column has been added to the system.sql_instances table.
+	V23_1AlterSystemSQLInstancesAddBinaryVersion
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -862,6 +866,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_CreateAutoConfigRunnerJob,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 90},
+	},
+	{
+		Key:     V23_1AlterSystemSQLInstancesAddBinaryVersion,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 92},
 	},
 
 	// *************************************************

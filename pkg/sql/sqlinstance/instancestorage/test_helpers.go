@@ -86,6 +86,7 @@ func (s *Storage) CreateInstanceDataForTest(
 	sessionID sqlliveness.SessionID,
 	sessionExpiration hlc.Timestamp,
 	locality roachpb.Locality,
+	binaryVersion roachpb.Version,
 ) error {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -97,7 +98,7 @@ func (s *Storage) CreateInstanceDataForTest(
 		}
 
 		key := s.newRowCodec.encodeKey(region, instanceID)
-		value, err := s.newRowCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality)
+		value, err := s.newRowCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality, binaryVersion)
 		if err != nil {
 			return err
 		}
@@ -121,7 +122,7 @@ func (s *Storage) GetInstanceDataForTest(
 	if row.Value == nil {
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
-	rpcAddr, sqlAddr, sessionID, locality, _, err := s.newRowCodec.decodeValue(*row.Value)
+	rpcAddr, sqlAddr, sessionID, locality, binaryVersion, _, err := s.newRowCodec.decodeValue(*row.Value)
 	if err != nil {
 		return sqlinstance.InstanceInfo{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
@@ -131,6 +132,7 @@ func (s *Storage) GetInstanceDataForTest(
 		InstanceSQLAddr: sqlAddr,
 		SessionID:       sessionID,
 		Locality:        locality,
+		BinaryVersion:   binaryVersion,
 	}
 	return instanceInfo, nil
 }
