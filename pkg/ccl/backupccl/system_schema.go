@@ -623,6 +623,12 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SpanStatsTenantBoundariesTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.StatementActivityTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.TransactionActivityTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(
