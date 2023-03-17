@@ -1,5 +1,6 @@
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 ARG additional_packages
+ARG fips_enable
 
 # For deployment, we need the following additionally installed:
 # tzdata - for time zone functions; reinstalled to replace the missing
@@ -10,6 +11,7 @@ RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
     && microdnf install tzdata hostname tar gzip xz $additional_packages -y \
     && rm -rf /var/cache/yum
+RUN if [[ -n $fips_enable ]]; then fips-mode-setup --enable --no-bootcfg; fi
 
 RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
 COPY cockroach.sh cockroach /cockroach/

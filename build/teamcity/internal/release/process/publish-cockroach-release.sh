@@ -169,7 +169,7 @@ docker build \
   --platform="linux/amd64" \
   --tag="${dockerhub_tag_fips}" \
   --tag="${gcr_tag_fips}" \
-  --build-arg additional_packages=openssl \
+  --build-arg additional_packages="openssl crypto-policies-scripts" --build-arg fips_enable=1 \
   "build/deploy-${platform_name}"
 docker push "$gcr_tag_fips"
 docker push "$dockerhub_tag_fips"
