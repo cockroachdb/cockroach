@@ -94,9 +94,12 @@ type invertedJoiner struct {
 	fetcher rowFetcher
 
 	// rowsRead is the total number of rows that the fetcher read from disk.
-	rowsRead int64
-	alloc    tree.DatumAlloc
-	rowAlloc rowenc.EncDatumRowAlloc
+	rowsRead                  int64
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
+	alloc                     tree.DatumAlloc
+	rowAlloc                  rowenc.EncDatumRowAlloc
 
 	// prefixKey is used to avoid reallocating a prefix key (when we have a
 	// non-inverted prefix).
@@ -149,8 +152,6 @@ type invertedJoiner struct {
 
 	spanBuilder           span.Builder
 	outputContinuationCol bool
-
-	scanStats execstats.ScanStats
 }
 
 var _ execinfra.Processor = &invertedJoiner{}
@@ -726,7 +727,10 @@ func (ij *invertedJoiner) appendPrefixColumn(
 
 // Start is part of the RowSource interface.
 func (ij *invertedJoiner) Start(ctx context.Context) {
-	ctx = ij.StartInternal(ctx, invertedJoinerProcName)
+	ctx = ij.StartInternal(
+		ctx, invertedJoinerProcName, &ij.contentionEventsListener,
+		&ij.scanStatsListener, &ij.tenantConsumptionListener,
+	)
 	ij.input.Start(ctx)
 	ij.runningState = ijReadingInput
 }
@@ -762,14 +766,13 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	ij.scanStats = execstats.GetScanStats(ij.Ctx(), ij.ExecStatsTrace)
 	ret := execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(ij.fetcher.GetBytesRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(ij.Ctx(), ij.ExecStatsTrace)),
+			ContentionTime:      optional.MakeTimeValue(ij.contentionEventsListener.CumulativeContentionTime),
 			BatchRequestsIssued: optional.MakeUint(uint64(ij.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
@@ -779,8 +782,8 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(ij.scanStats.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(ij.tenantConsumptionListener.ConsumedRU)
+	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStatsListener.ScanStats)
 	return &ret
 }
 
