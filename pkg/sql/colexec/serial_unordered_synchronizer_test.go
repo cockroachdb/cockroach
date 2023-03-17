@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,7 +55,10 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 			},
 		}
 	}
-	s := NewSerialUnorderedSynchronizer(inputs,
+	s := NewSerialUnorderedSynchronizer(
+		&execinfra.FlowCtx{Gateway: true},
+		0, /* processorID */
+		inputs,
 		0,   /* serialInputIdxExclusiveUpperBound */
 		nil, /* exceedsInputIdxExclusiveUpperBoundError */
 	)

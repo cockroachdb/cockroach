@@ -243,7 +243,7 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 
 // GetTraceDataAsMetadata returns the trace data as execinfrapb.ProducerMetadata
 // object.
-func GetTraceDataAsMetadata(span *tracing.Span) *execinfrapb.ProducerMetadata {
+func GetTraceDataAsMetadata(_ *FlowCtx, span *tracing.Span) *execinfrapb.ProducerMetadata {
 	if trace := span.GetConfiguredRecording(); len(trace) > 0 {
 		meta := execinfrapb.GetProducerMeta()
 		meta.TraceData = trace
@@ -256,8 +256,8 @@ func GetTraceDataAsMetadata(span *tracing.Span) *execinfrapb.ProducerMetadata {
 // dst. The ConsumerStatus returned by dst is ignored.
 //
 // Note that the tracing data is distinct between different processors, since
-// each one gets its own trace "recording group".
-func SendTraceData(ctx context.Context, dst RowReceiver) {
+// each one gets its own "detached" tracing span.
+func SendTraceData(ctx context.Context, _ *FlowCtx, dst RowReceiver) {
 	if rec := tracing.SpanFromContext(ctx).GetConfiguredRecording(); rec != nil {
 		dst.Push(nil /* row */, &execinfrapb.ProducerMetadata{TraceData: rec})
 	}

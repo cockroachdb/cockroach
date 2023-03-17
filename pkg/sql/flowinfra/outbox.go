@@ -50,6 +50,7 @@ type Outbox struct {
 	execinfra.RowChannel
 
 	flowCtx       *execinfra.FlowCtx
+	processorID   int32
 	streamID      execinfrapb.StreamID
 	sqlInstanceID base.SQLInstanceID
 	// The rows received from the RowChannel will be forwarded on this stream once
@@ -97,12 +98,13 @@ var _ Startable = &Outbox{}
 // NewOutbox creates a new Outbox.
 func NewOutbox(
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	sqlInstanceID base.SQLInstanceID,
 	streamID execinfrapb.StreamID,
 	numOutboxes *int32,
 	isGatewayNode bool,
 ) *Outbox {
-	m := &Outbox{flowCtx: flowCtx, sqlInstanceID: sqlInstanceID}
+	m := &Outbox{flowCtx: flowCtx, processorID: processorID, sqlInstanceID: sqlInstanceID}
 	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
@@ -227,12 +229,11 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 	ctx, m.outboxCtxCancel = context.WithCancel(ctx)
 
 	var span *tracing.Span
-	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
+	ctx, span = execinfra.ProcessorSpan(ctx, m.flowCtx, "outbox", m.processorID)
 	defer span.Finish()
 	if span != nil {
 		m.statsCollectionEnabled = span.RecordingType() != tracingpb.RecordingOff
 		if span.IsVerbose() {
-			span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(m.flowCtx.ID.String()))
 			span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(m.streamID)))
 		}
 	}

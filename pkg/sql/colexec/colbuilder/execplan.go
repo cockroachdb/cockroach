@@ -435,6 +435,8 @@ func (r opResult) createDiskBackedSort(
 			outputUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[2], factory)
 			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexecdisk.NewExternalSorter(
+				flowCtx,
+				processorID,
 				sortUnlimitedAllocator,
 				mergeUnlimitedAllocator,
 				outputUnlimitedAllocator,
@@ -910,7 +912,7 @@ func NewColOperator(
 				if canUseDirectScan() {
 					scanOp, resultTypes, err = colfetcher.NewColBatchDirectScan(
 						ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-						flowCtx, core.TableReader, post, args.TypeResolver,
+						flowCtx, spec.ProcessorID, core.TableReader, post, args.TypeResolver,
 					)
 					if err != nil {
 						return r, err
@@ -920,7 +922,7 @@ func NewColOperator(
 			if scanOp == nil {
 				scanOp, resultTypes, err = colfetcher.NewColBatchScan(
 					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-					flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
+					flowCtx, spec.ProcessorID, core.TableReader, post, estimatedRowCount, args.TypeResolver,
 				)
 				if err != nil {
 					return r, err
@@ -953,7 +955,7 @@ func NewColOperator(
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
 				ctx, getStreamingAllocator(ctx, args),
 				colmem.NewAllocator(ctx, accounts[0], factory),
-				accounts[1], accounts[2], flowCtx,
+				accounts[1], accounts[2], flowCtx, spec.ProcessorID,
 				inputs[0].Root, core.JoinReader, post, inputTypes,
 				streamerDiskMonitor, args.TypeResolver,
 			)

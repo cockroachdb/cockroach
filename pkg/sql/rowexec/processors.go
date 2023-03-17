@@ -210,7 +210,7 @@ func NewProcessor(
 		}
 		switch core.Backfiller.Type {
 		case execinfrapb.BackfillerSpec_Index:
-			return newIndexBackfiller(ctx, flowCtx, *core.Backfiller)
+			return newIndexBackfiller(ctx, flowCtx, processorID, *core.Backfiller)
 		case execinfrapb.BackfillerSpec_Column:
 			return newColumnBackfiller(ctx, flowCtx, processorID, *core.Backfiller)
 		}
@@ -365,7 +365,7 @@ func NewProcessor(
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return backfill.NewIndexBackfillMerger(ctx, flowCtx, *core.IndexBackfillMerger)
+		return backfill.NewIndexBackfillMerger(ctx, flowCtx, processorID, *core.IndexBackfillMerger)
 	}
 	if core.Ttl != nil {
 		if err := checkNumIn(inputs, 0); err != nil {

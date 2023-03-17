@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 // FlowCoordinator is the execinfra.Processor that is responsible for shutting
@@ -266,13 +265,7 @@ func (f *BatchFlowCoordinator) pushError(err error) execinfra.ConsumerStatus {
 func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	status := execinfra.NeedMoreRows
 
-	ctx, span := execinfra.ProcessorSpan(ctx, "batch flow coordinator")
-	if span != nil {
-		if span.IsVerbose() {
-			span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(f.flowCtx.ID.String()))
-			span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(f.processorID)))
-		}
-	}
+	ctx, span := execinfra.ProcessorSpan(ctx, f.flowCtx, "batch flow coordinator", f.processorID)
 
 	// Make sure that we close the coordinator and notify the batch receiver in
 	// all cases.
@@ -313,7 +306,7 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 		for _, s := range f.input.StatsCollectors {
 			span.RecordStructured(s.GetStats())
 		}
-		if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+		if meta := execinfra.GetTraceDataAsMetadata(f.flowCtx, span); meta != nil {
 			status = f.output.PushBatch(nil /* batch */, meta)
 			if status == execinfra.ConsumerClosed {
 				return
