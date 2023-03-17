@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -94,6 +95,7 @@ func main() {
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
+	var enableFIPS bool
 
 	cobra.EnableCommandSorting = false
 
@@ -244,6 +246,7 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
+				enableFIPS:             enableFIPS,
 			})
 		},
 	}
@@ -281,6 +284,7 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
+				enableFIPS:             enableFIPS,
 			})
 		},
 	}
@@ -333,6 +337,8 @@ runner itself.
 				"is present in the list,"+"the respective binary will be used when a "+
 				"multi-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
+		cmd.Flags().BoolVar(
+			&enableFIPS, "fips", false, "Run tests in enableFIPS mode")
 	}
 
 	parseCreateOpts(runCmd.Flags(), &overrideOpts)
@@ -382,11 +388,27 @@ type cliCfg struct {
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
+	enableFIPS             bool
+}
+
+// kernelFIPSEnabled check if the kernel has FIPS support enabled.
+func kernelFIPSEnabled() bool {
+	content, err := os.ReadFile("/proc/sys/crypto/fips_enabled")
+	if err != nil {
+		return false
+	}
+	if strings.TrimSpace(string(content)) == "1" {
+		return true
+	}
+	return false
 }
 
 func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
+	}
+	if cfg.enableFIPS && !kernelFIPSEnabled() {
+		return fmt.Errorf("requested FIPS tests, but FIPS is not enabled by the kernel")
 	}
 	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 	register(&r)
@@ -419,6 +441,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		cpuQuota:    cfg.cpuQuota,
 		debugMode:   cfg.debugMode,
 		clusterID:   cfg.clusterID,
+		enableFIPS:  cfg.enableFIPS,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err

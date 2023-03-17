@@ -36,7 +36,11 @@ import (
 const (
 	defaultProject = "cockroach-ephemeral"
 	// ProviderName is gce.
-	ProviderName = "gce"
+	ProviderName        = "gce"
+	DefaultImage        = "ubuntu-2004-focal-v20210603"
+	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
+	defaultImageProject = "ubuntu-os-cloud"
+	FIPSImageProject    = "ubuntu-os-pro-cloud"
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -225,7 +229,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		MachineType:          "n1-standard-4",
 		MinCPUPlatform:       "",
 		Zones:                nil,
-		Image:                "ubuntu-2004-focal-v20210603",
+		Image:                DefaultImage,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -688,12 +692,16 @@ func (p *Provider) Create(
 	}
 
 	// Fixed args.
+	imageProject := defaultImageProject
+	if opts.EnableFIPS {
+		imageProject = FIPSImageProject
+	}
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
 		"--scopes", "cloud-platform",
 		"--image", providerOpts.Image,
-		"--image-project", "ubuntu-os-cloud",
+		"--image-project", imageProject,
 		"--boot-disk-type", "pd-ssd",
 	}
 
@@ -757,7 +765,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.EnableFIPS)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
