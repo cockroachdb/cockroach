@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
@@ -278,6 +277,8 @@ func TestOutboxInbox(t *testing.T) {
 			outboxConverterMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxConverterMemAcc.Close(ctx)
 			outbox, err := NewOutbox(
+				&execinfra.FlowCtx{Gateway: false},
+				0, /* processorID */
 				colmem.NewAllocator(outboxCtx, &outboxMemAcc, coldata.StandardColumnFactory),
 				&outboxConverterMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 			)
@@ -521,6 +522,8 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(outboxHostCtx)
 	outbox, err := NewOutbox(
+		&execinfra.FlowCtx{Gateway: false},
+		0, /* processorID */
 		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: outboxInput}, typs, nil, /* getStats */
 	)
@@ -702,6 +705,8 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				expectedMetadata = tc.overrideExpectedMetadata
 			}
 			outbox, err := NewOutbox(
+				&execinfra.FlowCtx{Gateway: false},
+				0, /* processorID */
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 				testMemAcc,
 				colexecargs.OpWithMetaInfo{
@@ -798,6 +803,8 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
+		&execinfra.FlowCtx{Gateway: false},
+		0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
@@ -863,6 +870,8 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
+		&execinfra.FlowCtx{Gateway: false},
+		0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
@@ -874,7 +883,6 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 			ctx,
 			dialer,
 			base.SQLInstanceID(0),
-			execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			outboxStreamID,
 			nil, /* flowCtxCancel */
 			0,   /* connectionTimeout */

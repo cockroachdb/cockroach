@@ -31,7 +31,9 @@ import (
 // we want to run it in the RootTxn.
 type SerialUnorderedSynchronizer struct {
 	colexecop.InitHelper
-	span *tracing.Span
+	flowCtx     *execinfra.FlowCtx
+	processorID int32
+	span        *tracing.Span
 
 	inputs []colexecargs.OpWithMetaInfo
 	// curSerialInputIdx indicates the index of the current input being consumed.
@@ -66,11 +68,15 @@ func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.Op
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	inputs []colexecargs.OpWithMetaInfo,
 	serialInputIdxExclusiveUpperBound uint32,
 	exceedsInputIdxExclusiveUpperBoundError error,
 ) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
+		flowCtx:                                 flowCtx,
+		processorID:                             processorID,
 		inputs:                                  inputs,
 		serialInputIdxExclusiveUpperBound:       serialInputIdxExclusiveUpperBound,
 		exceedsInputIdxExclusiveUpperBoundError: exceedsInputIdxExclusiveUpperBoundError,
@@ -82,7 +88,7 @@ func (s *SerialUnorderedSynchronizer) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	s.Ctx, s.span = execinfra.ProcessorSpan(s.Ctx, "serial unordered sync")
+	s.Ctx, s.span = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "serial unordered sync", s.processorID)
 	for _, input := range s.inputs {
 		input.Root.Init(s.Ctx)
 	}
@@ -115,7 +121,7 @@ func (s *SerialUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata
 				s.span.RecordStructured(stats.GetStats())
 			}
 		}
-		if meta := execinfra.GetTraceDataAsMetadata(s.span); meta != nil {
+		if meta := execinfra.GetTraceDataAsMetadata(s.flowCtx, s.span); meta != nil {
 			bufferedMeta = append(bufferedMeta, *meta)
 		}
 	}

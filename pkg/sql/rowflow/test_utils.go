@@ -32,7 +32,7 @@ func MakeTestRouter(
 	if err != nil {
 		return nil, err
 	}
-	r.init(ctx, flowCtx, types)
+	r.init(ctx, flowCtx, 0 /* processorID */, types)
 	r.Start(ctx, wg, nil /* flowCtxCancel */)
 	return r, nil
 }

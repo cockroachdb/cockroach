@@ -101,8 +101,9 @@ type ColIndexJoin struct {
 		datumCols      []coldata.DatumVec
 	}
 
-	flowCtx *execinfra.FlowCtx
-	cf      *cFetcher
+	flowCtx     *execinfra.FlowCtx
+	processorID int32
+	cf          *cFetcher
 	// txn is the transaction used by the index joiner.
 	txn *kv.Txn
 
@@ -138,9 +139,9 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 	}
 	// If tracing is enabled, we need to start a child span so that the only
 	// contention events present in the recording would be because of this
-	// cFetcher. Note that ProcessorSpan method itself will check whether
-	// tracing is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colindexjoin")
+	// fetcher. Note that ProcessorSpan method itself will check whether tracing
+	// is enabled.
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colindexjoin", s.processorID)
 	s.Input.Init(s.Ctx)
 }
 
@@ -481,6 +482,7 @@ func NewColIndexJoin(
 	kvFetcherMemAcc *mon.BoundAccount,
 	streamerBudgetAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
 	post *execinfrapb.PostProcessSpec,
@@ -583,6 +585,7 @@ func NewColIndexJoin(
 	op := &ColIndexJoin{
 		OneInputNode:     colexecop.NewOneInputNode(input),
 		flowCtx:          flowCtx,
+		processorID:      processorID,
 		cf:               fetcher,
 		spanAssembler:    spanAssembler,
 		ResultTypes:      tableArgs.typs,

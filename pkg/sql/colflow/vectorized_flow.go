@@ -259,7 +259,6 @@ func (f *vectorizedFlow) Setup(
 		f.GetRowSyncFlowConsumer(),
 		f.GetBatchSyncFlowConsumer(),
 		flowCtx.Cfg.PodNodeDialer,
-		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
 		flowCtx.NewTypeResolver(flowCtx.Txn),
@@ -543,6 +542,8 @@ type admissionOptions struct {
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
 	newOutbox(
+		flowCtx *execinfra.FlowCtx,
+		processorID int32,
 		allocator *colmem.Allocator,
 		converterMemAcc *mon.BoundAccount,
 		input colexecargs.OpWithMetaInfo,
@@ -561,13 +562,15 @@ type remoteComponentCreator interface {
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	allocator *colmem.Allocator,
 	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, converterMemAcc, input, typs, getStats)
+	return colrpc.NewOutbox(flowCtx, processorID, allocator, converterMemAcc, input, typs, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -612,7 +615,6 @@ type vectorizedFlowCreator struct {
 	isGatewayNode     bool
 	waitGroup         *sync.WaitGroup
 	podNodeDialer     *nodedialer.Dialer
-	flowID            execinfrapb.FlowID
 	exprHelper        *colexecargs.ExprHelper
 	typeResolver      descs.DistSQLTypeResolver
 	admissionInfo     admission.WorkInfo
@@ -676,7 +678,6 @@ func newVectorizedFlowCreator(
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	podNodeDialer *nodedialer.Dialer,
-	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	typeResolver descs.DistSQLTypeResolver,
@@ -692,7 +693,6 @@ func newVectorizedFlowCreator(
 		rowReceiver:       rowSyncFlowConsumer,
 		batchReceiver:     batchSyncFlowConsumer,
 		podNodeDialer:     podNodeDialer,
-		flowID:            flowID,
 		exprHelper:        creator.exprHelper,
 		typeResolver:      typeResolver,
 		admissionInfo:     admissionInfo,
@@ -782,6 +782,7 @@ func (s *vectorizedFlowCreator) Release() {
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	op colexecargs.OpWithMetaInfo,
 	outputTyps []*types.T,
 	stream *execinfrapb.StreamEndpointSpec,
@@ -789,7 +790,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (execopnode.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
+		flowCtx, processorID, colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 		s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 		op, outputTyps, getStats,
 	)
@@ -803,7 +804,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			ctx,
 			s.podNodeDialer,
 			stream.TargetNodeID,
-			s.flowID,
 			stream.StreamID,
 			flowCtxCancel,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
@@ -822,6 +822,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	input colexecargs.OpWithMetaInfo,
 	outputTyps []*types.T,
 	output *execinfrapb.OutputRouterSpec,
@@ -854,7 +855,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	diskMon, diskAccounts := s.monitorRegistry.CreateDiskAccounts(ctx, flowCtx, mmName, numOutputs)
 	router, outputs := NewHashRouter(
-		allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx),
+		flowCtx, processorID, allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx),
 		s.diskQueueCfg, s.fdSemaphore, diskAccounts, converterAccounts,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
@@ -874,7 +875,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
 			if _, err := s.setupRemoteOutputStream(
-				ctx, flowCtx, colexecargs.OpWithMetaInfo{
+				ctx, flowCtx, processorID, colexecargs.OpWithMetaInfo{
 					Root:            op,
 					MetadataSources: colexecop.MetadataSources{op},
 				}, outputTyps, stream, factory, nil, /* getStats */
@@ -920,6 +921,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 func (s *vectorizedFlowCreator) setupInput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
 	factory coldata.ColumnFactory,
@@ -997,9 +999,12 @@ func (s *vectorizedFlowCreator) setupInput(
 		statsInputs := inputStreamOps
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			os := colexec.NewOrderedSynchronizer(
+				flowCtx,
+				processorID,
 				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 				execinfra.GetWorkMemLimit(flowCtx), inputStreamOps,
-				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering), 0, /* tuplesToMerge */
+				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				0, /* tuplesToMerge */
 			)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            os,
@@ -1014,7 +1019,7 @@ func (s *vectorizedFlowCreator) setupInput(
 					err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
 				}
 			}
-			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
+			sync := colexec.NewSerialUnorderedSynchronizer(flowCtx, processorID, inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
@@ -1025,8 +1030,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// must use the serial unordered sync above in order to remove any
 			// concurrency.
 			allocator := colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
-			sync := colexec.NewParallelUnorderedSynchronizer(allocator, inputStreamOps, s.waitGroup)
-			sync.LocalPlan = flowCtx.Local
+			sync := colexec.NewParallelUnorderedSynchronizer(flowCtx, processorID, allocator, inputStreamOps, s.waitGroup)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
@@ -1078,6 +1082,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		return s.setupRouter(
 			ctx,
 			flowCtx,
+			pspec.ProcessorID,
 			opWithMetaInfo,
 			opOutputTypes,
 			output,
@@ -1095,7 +1100,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		// Set up an Outbox.
 		outbox, err := s.setupRemoteOutputStream(
-			ctx, flowCtx, opWithMetaInfo, opOutputTypes, outputStream, factory,
+			ctx, flowCtx, pspec.ProcessorID, opWithMetaInfo, opOutputTypes, outputStream, factory,
 			s.makeGetStatsFnForOutbox(flowCtx, opWithMetaInfo.StatsCollectors, outputStream.OriginNodeID),
 		)
 		if err != nil {
@@ -1195,7 +1200,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 			inputs := make([]colexecargs.OpWithMetaInfo, len(pspec.Input))
 			for i := range pspec.Input {
-				inputs[i], err = s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
+				inputs[i], err = s.setupInput(ctx, flowCtx, pspec.ProcessorID, pspec.Input[i], opt, factory)
 				if err != nil {
 					return
 				}

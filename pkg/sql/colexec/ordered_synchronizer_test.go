@@ -148,7 +148,7 @@ func TestOrderedSync(t *testing.T) {
 			typs[i] = types.Int
 		}
 		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, execinfra.DefaultMemoryLimit, colexectestutils.MakeInputs(inputs), typs, tc.ordering, 0 /* tuplesToMerge */), nil
+			return NewOrderedSynchronizer(&execinfra.FlowCtx{Gateway: true}, 0 /* processorID */, testAllocator, execinfra.DefaultMemoryLimit, colexectestutils.MakeInputs(inputs), typs, tc.ordering, 0 /* tuplesToMerge */), nil
 		})
 	}
 }
@@ -189,7 +189,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		inputs[i].Root = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op := NewOrderedSynchronizer(testAllocator, execinfra.DefaultMemoryLimit, inputs, typs, ordering, 0 /* tuplesToMerge */)
+	op := NewOrderedSynchronizer(&execinfra.FlowCtx{Gateway: true}, 0 /* processorID */, testAllocator, execinfra.DefaultMemoryLimit, inputs, typs, ordering, 0 /* tuplesToMerge */)
 	op.Init(context.Background())
 	out := colexectestutils.NewOpTestOutput(op, expected)
 	if err := out.Verify(); err != nil {
@@ -218,7 +218,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op := NewOrderedSynchronizer(testAllocator, execinfra.DefaultMemoryLimit, inputs, typs, ordering, 0 /* tuplesToMerge */)
+	op := NewOrderedSynchronizer(&execinfra.FlowCtx{Gateway: true}, 0 /* processorID */, testAllocator, execinfra.DefaultMemoryLimit, inputs, typs, ordering, 0 /* tuplesToMerge */)
 	op.Init(ctx)
 
 	b.SetBytes(8 * int64(coldata.BatchSize()) * numInputs)

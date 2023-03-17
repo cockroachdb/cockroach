@@ -70,7 +70,7 @@ func setupRouter(
 		Mon:         evalCtx.TestingMon,
 		DiskMonitor: diskMonitor,
 	}
-	r.init(ctx, &flowCtx, inputTypes)
+	r.init(ctx, &flowCtx, 0 /* processorID */, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.Start(ctx, wg, nil /* flowCtxCancel */)
 	return r, wg
@@ -680,7 +680,7 @@ func TestRouterBlocks(t *testing.T) {
 				Mon:         evalCtx.TestingMon,
 				DiskMonitor: diskMonitor,
 			}
-			router.init(ctx, &flowCtx, colTypes)
+			router.init(ctx, &flowCtx, 0 /* processorID */, colTypes)
 			var wg sync.WaitGroup
 			router.Start(ctx, &wg, nil /* flowCtxCancel */)
 
@@ -818,7 +818,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		// writes to the channel (after the first one).
 		rowChan.InitWithBufSizeAndNumSenders(types.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 		rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
-		rb.init(ctx, &flowCtx, types.OneIntCol)
+		rb.init(ctx, &flowCtx, 0 /* processorID */, types.OneIntCol)
 		// output is the sole router output in this test.
 		output := &rb.outputs[0]
 		if !memErrorWhenConsumingRows {

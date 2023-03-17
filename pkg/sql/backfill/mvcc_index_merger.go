@@ -76,7 +76,8 @@ var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
 // IndexBackfillMerger is a processor that merges entries from the corresponding
 // temporary index to a new index.
 type IndexBackfillMerger struct {
-	spec execinfrapb.IndexBackfillMergerSpec
+	processorID int32
+	spec        execinfrapb.IndexBackfillMergerSpec
 
 	desc catalog.TableDescriptor
 
@@ -106,10 +107,10 @@ const indexBackfillMergeProgressReportInterval = 10 * time.Second
 func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowReceiver) {
 	opName := "IndexBackfillMerger"
 	ctx = logtags.AddTag(ctx, opName, int(ibm.spec.Table.ID))
-	ctx, span := execinfra.ProcessorSpan(ctx, opName)
+	ctx, span := execinfra.ProcessorSpan(ctx, ibm.flowCtx, opName, ibm.processorID)
 	defer span.Finish()
 	defer output.ProducerDone()
-	defer execinfra.SendTraceData(ctx, output)
+	defer execinfra.SendTraceData(ctx, ibm.flowCtx, output)
 
 	mu := struct {
 		syncutil.Mutex
@@ -502,17 +503,21 @@ func (ibm *IndexBackfillMerger) Resume(output execinfra.RowReceiver) {
 
 // NewIndexBackfillMerger creates a new IndexBackfillMerger.
 func NewIndexBackfillMerger(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.IndexBackfillMergerSpec,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	spec execinfrapb.IndexBackfillMergerSpec,
 ) (*IndexBackfillMerger, error) {
 	mergerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfiller-merger-mon")
 
 	ibm := &IndexBackfillMerger{
-		spec:    spec,
-		desc:    tabledesc.NewUnsafeImmutable(&spec.Table),
-		flowCtx: flowCtx,
-		evalCtx: flowCtx.NewEvalCtx(),
-		mon:     mergerMon,
+		processorID: processorID,
+		spec:        spec,
+		desc:        tabledesc.NewUnsafeImmutable(&spec.Table),
+		flowCtx:     flowCtx,
+		evalCtx:     flowCtx.NewEvalCtx(),
+		mon:         mergerMon,
 	}
 
 	ibm.muBoundAccount.boundAccount = mergerMon.MakeBoundAccount()
