@@ -98,7 +98,10 @@ type RoutineExpr struct {
 	// its inputs are NULL. If false, the function will not be evaluated in the
 	// presence of null inputs, and will instead evaluate directly to NULL.
 	//
-	// NOTE: This boolean only affects evaluation of set-returning Routines.
+	// NOTE: This boolean only affects evaluation of Routines within project-set
+	// operators. This can apply to scalar routines if they are used as data
+	// source (e.g. SELECT * FROM scalar_udf()), and always applies to
+	// set-returning routines.
 	// Strict non-set-returning routines are not invoked when their arguments
 	// are NULL because optbuilder wraps them in a CASE expressions.
 	CalledOnNullInput bool
