@@ -371,8 +371,16 @@ jest_test(
     size = "enormous",
     data = JEST_DEPS,
     templated_args = [
+        # Increase the JS heap size: https://nodejs.org/docs/latest-v16.x/api/cli.html#--max-old-space-sizesize-in-megabytes
         "--node_options=--max-old-space-size=8192",
-        "-w 25%",
+        # Prevent a v8-internal leak of compiled bytecode: https://github.com/facebook/jest/issues/11956#issuecomment-1401094780
+        "--node_options=--no-compilation-cache",
+        # Populate the global.gc() function during JS execution:
+        # https://github.com/v8/v8/blob/5fe0aa3bc79c0a9d3ad546b79211f07105f09585/src/flags/flag-definitions.h#L1484-L1487
+        "--node_options=--expose-gc",
+        # Force jest workers to collect garbage after each suite: https://jestjs.io/docs/27.x/cli#--logheapusage
+        "--logHeapUsage",
+        "--maxWorkers=4",
         "--ci",
         "--config",
         "$(rootpath jest.config.js)",
