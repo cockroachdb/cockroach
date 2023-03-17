@@ -489,7 +489,7 @@ func (ds *DistSender) partialRangeFeed(
 			token = rangecache.EvictionToken{}
 		}
 		if errInfo.resolveSpan {
-			return divideSpanOnRangeBoundaries(ctx, ds, rs, active.StartAfter, sendSingleRangeInfo(rangeCh))
+			return divideSpanOnRangeBoundaries(ctx, ds, rs, startAfter, sendSingleRangeInfo(rangeCh))
 		}
 	}
 	return ctx.Err()
