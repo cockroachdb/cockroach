@@ -255,6 +255,7 @@ go_test(
         "client_split_burst_test.go",
         "client_split_test.go",
         "client_store_test.go",
+        "client_stuck_disk_test.go",
         "client_tenant_test.go",
         "client_test.go",
         "closed_timestamp_test.go",

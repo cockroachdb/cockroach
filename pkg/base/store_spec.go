@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
@@ -248,7 +249,9 @@ type StoreSpec struct {
 	Size        SizeSpec
 	BallastSize *SizeSpec
 	InMemory    bool
-	Attributes  roachpb.Attributes
+	// Only used if InMem.
+	FS         vfs.FS // TODO(tbg): find a better way to inject this hook
+	Attributes roachpb.Attributes
 	// StickyInMemoryEngineID is a unique identifier associated with a given
 	// store which will remain in memory even after the default Engine close
 	// until it has been explicitly cleaned up by CleanupStickyInMemEngine[s]

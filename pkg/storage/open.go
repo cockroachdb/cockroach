@@ -239,6 +239,11 @@ func InMemory() Location {
 	}
 }
 
+// LocationWithFS foo
+func LocationWithFS(dir string, fs vfs.FS) Location {
+	return Location{dir: dir, fs: fs}
+}
+
 type engineConfig struct {
 	PebbleConfig
 	// cacheSize is stored separately so that we can avoid constructing the

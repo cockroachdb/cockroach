@@ -765,7 +765,11 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		}
 
 		if spec.InMemory {
-			location = storage.InMemory()
+			if spec.FS != nil {
+				location = storage.LocationWithFS("", spec.FS)
+			} else {
+				location = storage.InMemory()
+			}
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
