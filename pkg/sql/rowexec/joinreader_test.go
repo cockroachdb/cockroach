@@ -1399,6 +1399,7 @@ func TestJoinReaderDrain(t *testing.T) {
 			TempStorage: tempEngine,
 		},
 		Txn:         leafTxn,
+		Gateway:     false,
 		DiskMonitor: diskMonitor,
 	}
 
