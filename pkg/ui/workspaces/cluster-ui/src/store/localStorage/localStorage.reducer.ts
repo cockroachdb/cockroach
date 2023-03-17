@@ -13,7 +13,7 @@ import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "src/queryFilter/";
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { WorkloadInsightEventFilters } from "src/insights";
-import { DEFAULT_STATS_REQ_OPTIONS } from "../../api/statementsApi";
+import { DEFAULT_STATS_REQ_OPTIONS } from "src/api";
 import { SqlStatsSortType } from "src/api/statementsApi";
 
 type SortSetting = {
