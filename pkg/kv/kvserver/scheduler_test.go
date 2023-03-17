@@ -249,9 +249,14 @@ func TestSchedulerLoop(t *testing.T) {
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
 	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1)
-
 	s.Start(stopper)
-	s.EnqueueRaftTicks(1, 2, 3)
+
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
+	batch.Add(1)
+	batch.Add(2)
+	batch.Add(3)
+	s.EnqueueRaftTicks(batch)
 
 	testutils.SucceedsSoon(t, func() error {
 		const expected = "ready=[] request=[] tick=[1:1,2:1,3:1]"
@@ -313,7 +318,12 @@ func TestSchedulerBuffering(t *testing.T) {
 
 		const id = roachpb.RangeID(1)
 		if c.flag != 0 {
-			s.signal(s.enqueueN(c.flag, id, id, id, id, id))
+			batch := s.NewEnqueueBatch()
+			for i := 0; i < 5; i++ {
+				batch.Add(id)
+			}
+			s.enqueueBatch(c.flag, batch)
+			batch.Close()
 			if started != nil {
 				<-started // wait until slow Ready processing has started
 				// NB: this is necessary to work around the race between the subsequent
@@ -322,11 +332,9 @@ func TestSchedulerBuffering(t *testing.T) {
 			}
 		}
 
-		cnt := 0
 		for t := c.ticks; t > 0; t-- {
-			cnt += s.enqueue1(stateRaftTick, id)
+			s.enqueue1(stateRaftTick, id)
 		}
-		s.signal(cnt)
 		if done != nil {
 			close(done) // finish slow Ready processing to unblock progress
 		}
@@ -379,13 +387,14 @@ func runSchedulerEnqueueRaftTicks(
 
 	// Collect range IDs in the same way as raftTickLoop does, such that the
 	// performance is comparable.
-	var buf []roachpb.RangeID
-	getRangeIDs := func() []roachpb.RangeID {
-		buf = buf[:0]
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
+	getRangeIDs := func() raftSchedulerBatch {
+		batch.Reset()
 		for id := range ranges {
-			buf = append(buf, id)
+			batch.Add(id)
 		}
-		return buf
+		return batch
 	}
 	ids := getRangeIDs()
 
@@ -395,7 +404,9 @@ func runSchedulerEnqueueRaftTicks(
 		if collect {
 			ids = getRangeIDs()
 		}
-		s.EnqueueRaftTicks(ids...)
-		s.mu.queue = rangeIDQueue{} // flush queue
+		s.EnqueueRaftTicks(ids)
+		for _, shard := range s.shards {
+			shard.queue = rangeIDQueue{} // flush queue
+		}
 	}
 }
