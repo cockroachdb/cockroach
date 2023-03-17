@@ -82,6 +82,8 @@ full-translate
 /Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/5{8-9}                              database system (host)
 /Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 /Table/11{0-1}                             range default
 /Table/11{1-2}                             range default
 /Table/11{2-3}                             range default

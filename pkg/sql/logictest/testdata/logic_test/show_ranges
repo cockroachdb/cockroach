@@ -197,11 +197,11 @@ SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES]
 ORDER BY range_id
 ----
 start_key        end_key          range_id  split_enforced_until
-/Table/59        /Table/106/1/10  60        NULL
-/Table/106/1/10  /Table/106/2/20  61        2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/20  /Table/106/2/30  62        2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/30  /Table/107/1/42  63        2262-04-11 23:47:16.854776 +0000 +0000
-/Table/107/1/42  /Max             64        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/61        /Table/106/1/10  62        NULL
+/Table/106/1/10  /Table/106/2/20  63        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/20  /Table/106/2/30  64        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/30  /Table/107/1/42  65        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/107/1/42  /Max             66        2262-04-11 23:47:16.854776 +0000 +0000
 
 # Ditto, verbose form.
 query TTIIT colnames
@@ -209,11 +209,11 @@ SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SH
 ORDER BY range_id
 ----
 start_key        end_key          range_id  lease_holder  split_enforced_until
-/Table/59        /Table/106/1/10  60        1             NULL
-/Table/106/1/10  /Table/106/2/20  61        1             2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/20  /Table/106/2/30  62        1             2262-04-11 23:47:16.854776 +0000 +0000
-/Table/106/2/30  /Table/107/1/42  63        1             2262-04-11 23:47:16.854776 +0000 +0000
-/Table/107/1/42  /Max             64        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/61        /Table/106/1/10  62        1             NULL
+/Table/106/1/10  /Table/106/2/20  63        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/20  /Table/106/2/30  64        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/106/2/30  /Table/107/1/42  65        1             2262-04-11 23:47:16.854776 +0000 +0000
+/Table/107/1/42  /Max             66        1             2262-04-11 23:47:16.854776 +0000 +0000
 
 # Show that the new tables shows up in the full range list.
 query TTITTTITITT colnames
@@ -227,13 +227,13 @@ start_key        end_key          range_id  database_name  schema_name  table_na
 /Table/25        /Table/26        27        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      /Table/25/2
 /Table/26        /Table/27        28        system         public       replication_critical_localities  26        primary     1         /Table/26/1      /Table/26/2
 /Table/27        /Table/28        29        system         public       replication_stats                27        primary     1         /Table/27/1      /Table/27/2
-/Table/59        /Table/106/1/10  60        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  61        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  61        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/20  /Table/106/2/30  62        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  63        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  63        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/2
-/Table/107/1/42  /Max             64        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/2
+/Table/61        /Table/106/1/10  62        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/2
+/Table/106/1/10  /Table/106/2/20  63        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/2
+/Table/106/1/10  /Table/106/2/20  63        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
+/Table/106/2/20  /Table/106/2/30  64        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
+/Table/106/2/30  /Table/107/1/42  65        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
+/Table/106/2/30  /Table/107/1/42  65        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/2
+/Table/107/1/42  /Max             66        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/2
 
 subtest show_ranges_from_database/with_tables
 
@@ -265,12 +265,12 @@ FROM [SHOW RANGES WITH TABLES]
 ORDER BY range_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  table_start_key  table_end_key
-/Table/59        /Table/106/1/10  60        public       t           106       /Table/106       /Table/107
-/Table/106/1/10  /Table/106/2/20  61        public       t           106       /Table/106       /Table/107
-/Table/106/2/20  /Table/106/2/30  62        public       t           106       /Table/106       /Table/107
-/Table/106/2/30  /Table/107/1/42  63        public       t           106       /Table/106       /Table/107
-/Table/106/2/30  /Table/107/1/42  63        public       u           107       /Table/107       /Table/108
-/Table/107/1/42  /Max             64        public       u           107       /Table/107       /Table/108
+/Table/61        /Table/106/1/10  62        public       t           106       /Table/106       /Table/107
+/Table/106/1/10  /Table/106/2/20  63        public       t           106       /Table/106       /Table/107
+/Table/106/2/20  /Table/106/2/30  64        public       t           106       /Table/106       /Table/107
+/Table/106/2/30  /Table/107/1/42  65        public       t           106       /Table/106       /Table/107
+/Table/106/2/30  /Table/107/1/42  65        public       u           107       /Table/107       /Table/108
+/Table/107/1/42  /Max             66        public       u           107       /Table/107       /Table/108
 
 
 subtest show_ranges_from_database/with_indexes
@@ -304,13 +304,13 @@ FROM [SHOW RANGES WITH INDEXES]
 ORDER BY range_id, table_id, index_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key
-/Table/59        /Table/106/1/10  60        public       t           106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  61        public       t           106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  61        public       t           106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/20  /Table/106/2/30  62        public       t           106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  63        public       t           106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  63        public       u           107       u_pkey      1         /Table/107/1     /Table/107/2
-/Table/107/1/42  /Max             64        public       u           107       u_pkey      1         /Table/107/1     /Table/107/2
+/Table/61        /Table/106/1/10  62        public       t           106       t_pkey      1         /Table/106/1     /Table/106/2
+/Table/106/1/10  /Table/106/2/20  63        public       t           106       t_pkey      1         /Table/106/1     /Table/106/2
+/Table/106/1/10  /Table/106/2/20  63        public       t           106       idx         2         /Table/106/2     /Table/106/3
+/Table/106/2/20  /Table/106/2/30  64        public       t           106       idx         2         /Table/106/2     /Table/106/3
+/Table/106/2/30  /Table/107/1/42  65        public       t           106       idx         2         /Table/106/2     /Table/106/3
+/Table/106/2/30  /Table/107/1/42  65        public       u           107       u_pkey      1         /Table/107/1     /Table/107/2
+/Table/107/1/42  /Max             66        public       u           107       u_pkey      1         /Table/107/1     /Table/107/2
 
 
 subtest show_ranges_from_table
@@ -342,10 +342,10 @@ SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM
 ORDER BY range_id
 ----
 start_key           end_key                  range_id  split_enforced_until
-<before:/Table/59>  …/1/10                   60        NULL
-…/1/10              …/2/20                   61        2262-04-11 23:47:16.854776 +0000 +0000
-…/2/20              …/2/30                   62        2262-04-11 23:47:16.854776 +0000 +0000
-…/2/30              <after:/Table/107/1/42>  63        2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/61>  …/1/10                   62        NULL
+…/1/10              …/2/20                   63        2262-04-11 23:47:16.854776 +0000 +0000
+…/2/20              …/2/30                   64        2262-04-11 23:47:16.854776 +0000 +0000
+…/2/30              <after:/Table/107/1/42>  65        2262-04-11 23:47:16.854776 +0000 +0000
 
 # Ditto, verbose form.
 query TTIIT colnames
@@ -353,10 +353,10 @@ SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SH
 ORDER BY range_id
 ----
 start_key           end_key                  range_id  lease_holder  split_enforced_until
-<before:/Table/59>  …/1/10                   60        1             NULL
-…/1/10              …/2/20                   61        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/2/20              …/2/30                   62        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/2/30              <after:/Table/107/1/42>  63        1             2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/61>  …/1/10                   62        1             NULL
+…/1/10              …/2/20                   63        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/2/20              …/2/30                   64        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/2/30              <after:/Table/107/1/42>  65        1             2262-04-11 23:47:16.854776 +0000 +0000
 
 # Let's inspect the other table for comparison.
 query TTIT colnames
@@ -364,8 +364,8 @@ SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM
 ORDER BY range_id
 ----
 start_key                 end_key       range_id  split_enforced_until
-<before:/Table/106/2/30>  …/1/42        63        2262-04-11 23:47:16.854776 +0000 +0000
-…/1/42                    <after:/Max>  64        2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/106/2/30>  …/1/42        65        2262-04-11 23:47:16.854776 +0000 +0000
+…/1/42                    <after:/Max>  66        2262-04-11 23:47:16.854776 +0000 +0000
 
 
 
@@ -398,11 +398,11 @@ SELECT start_key, end_key, range_id, index_name, index_id, index_start_key, inde
 ORDER BY range_id, index_id
 ----
 start_key           end_key                  range_id  index_name  index_id  index_start_key  index_end_key
-<before:/Table/59>  …/1/10                   60        t_pkey      1         …/1              …/2
-…/1/10              …/2/20                   61        t_pkey      1         …/1              …/2
-…/1/10              …/2/20                   61        idx         2         …/2              …/3
-…/2/20              …/2/30                   62        idx         2         …/2              …/3
-…/2/30              <after:/Table/107/1/42>  63        idx         2         …/2              …/3
+<before:/Table/61>  …/1/10                   62        t_pkey      1         …/1              …/2
+…/1/10              …/2/20                   63        t_pkey      1         …/1              …/2
+…/1/10              …/2/20                   63        idx         2         …/2              …/3
+…/2/20              …/2/30                   64        idx         2         …/2              …/3
+…/2/30              <after:/Table/107/1/42>  65        idx         2         …/2              …/3
 
 
 
@@ -434,18 +434,18 @@ query TTIT colnames
 SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx]
 ----
 start_key                 end_key                  range_id  split_enforced_until
-<before:/Table/106/1/10>  …/20                     61        2262-04-11 23:47:16.854776 +0000 +0000
-…/20                      …/30                     62        2262-04-11 23:47:16.854776 +0000 +0000
-…/30                      <after:/Table/107/1/42>  63        2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/106/1/10>  …/20                     63        2262-04-11 23:47:16.854776 +0000 +0000
+…/20                      …/30                     64        2262-04-11 23:47:16.854776 +0000 +0000
+…/30                      <after:/Table/107/1/42>  65        2262-04-11 23:47:16.854776 +0000 +0000
 
 # Ditto, verbose form.
 query TTIIT colnames
 SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS]
 ----
 start_key                 end_key                  range_id  lease_holder  split_enforced_until
-<before:/Table/106/1/10>  …/20                     61        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/20                      …/30                     62        1             2262-04-11 23:47:16.854776 +0000 +0000
-…/30                      <after:/Table/107/1/42>  63        1             2262-04-11 23:47:16.854776 +0000 +0000
+<before:/Table/106/1/10>  …/20                     63        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/20                      …/30                     64        1             2262-04-11 23:47:16.854776 +0000 +0000
+…/30                      <after:/Table/107/1/42>  65        1             2262-04-11 23:47:16.854776 +0000 +0000
 
 subtest cast_error
 

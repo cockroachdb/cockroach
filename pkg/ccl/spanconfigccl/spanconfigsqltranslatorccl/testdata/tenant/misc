@@ -99,18 +99,6 @@ translate database=db
 ----
 /Tenant/10/Table/10{7-8}                   ttl_seconds=11
 
-# Schema.
-translate id=58
-----
-
-# Enum.
-translate id=59
-----
-
-# Array type alias.
-translate id=60
-----
-
 # Test that non-existent IDs do not generate span configurations either.
 translate id=500
 ----

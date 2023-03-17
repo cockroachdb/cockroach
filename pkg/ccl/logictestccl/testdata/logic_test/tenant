@@ -58,4 +58,3 @@ subtest regression_95612
 
 statement ok
 PREPARE pstmt AS ALTER TENANT 'foo' COMPLETE REPLICATION TO LATEST
-

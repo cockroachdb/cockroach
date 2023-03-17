@@ -28,6 +28,8 @@ var (
 		catconstants.ProtectedTimestampsRecordsTableName,
 		catconstants.StatementStatisticsTableName,
 		catconstants.TransactionStatisticsTableName,
+		catconstants.StatementActivityTableName,
+		catconstants.TransactionActivityTableName,
 	}
 
 	readWriteSystemTables = []catconstants.SystemTableName{
