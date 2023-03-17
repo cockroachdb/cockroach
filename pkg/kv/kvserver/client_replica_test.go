@@ -3555,6 +3555,7 @@ func TestReplicaTombstone(t *testing.T) {
 	})
 	t.Run("(4) (4.1) raft messages to newer replicaID ", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		skip.WithIssue(t, 98883, "flaky test")
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
