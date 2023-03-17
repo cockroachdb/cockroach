@@ -277,7 +277,7 @@ func allocateDescriptorRewrites(
 			if table.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[table.GetID()] = &jobspb.DescriptorRewrite{
 					ParentID:       tempSysDBID,
-					ParentSchemaID: keys.PublicSchemaIDForBackup,
+					ParentSchemaID: keys.SystemPublicSchemaID,
 				}
 			}
 		}
@@ -290,7 +290,7 @@ func allocateDescriptorRewrites(
 			if typ.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[typ.GetID()] = &jobspb.DescriptorRewrite{
 					ParentID:       tempSysDBID,
-					ParentSchemaID: keys.PublicSchemaIDForBackup,
+					ParentSchemaID: keys.SystemPublicSchemaID,
 				}
 			}
 		}
@@ -427,8 +427,7 @@ func allocateDescriptorRewrites(
 				// If we're restoring to a public schema of database that already exists
 				// we can populate the rewrite ParentSchemaID field here since we
 				// already have the database descriptor.
-				if table.GetParentSchemaID() == keys.PublicSchemaIDForBackup ||
-					table.GetParentSchemaID() == descpb.InvalidID {
+				if table.GetParentSchemaID() == descpb.InvalidID {
 					publicSchemaID := parentDB.GetSchemaID(tree.PublicSchema)
 					descriptorRewrites[table.ID].ParentSchemaID = publicSchemaID
 				}
@@ -552,8 +551,7 @@ func allocateDescriptorRewrites(
 				// If we're restoring to a public schema of database that already exists
 				// we can populate the rewrite ParentSchemaID field here since we
 				// already have the database descriptor.
-				if typ.GetParentSchemaID() == keys.PublicSchemaIDForBackup ||
-					typ.GetParentSchemaID() == descpb.InvalidID {
+				if typ.GetParentSchemaID() == descpb.InvalidID {
 					publicSchemaID := parentDB.GetSchemaID(tree.PublicSchema)
 					descriptorRewrites[typ.ID].ParentSchemaID = publicSchemaID
 					descriptorRewrites[typ.ArrayTypeID].ParentSchemaID = publicSchemaID

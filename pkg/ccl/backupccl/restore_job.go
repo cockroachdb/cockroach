@@ -1473,7 +1473,7 @@ func remapPublicSchemas(
 			//
 			// We also have to consider restoring tables from the system table
 			// where the system public schema still uses 29 as an ID.
-			if details.DescriptorRewrites[id].ParentSchemaID == keys.PublicSchemaIDForBackup ||
+			if details.DescriptorRewrites[id].ParentSchemaID == keys.SystemPublicSchemaID ||
 				details.DescriptorRewrites[id].ParentSchemaID == descpb.InvalidID {
 				details.DescriptorRewrites[id].ParentSchemaID = publicSchemaID
 			}

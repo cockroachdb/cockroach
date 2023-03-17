@@ -804,7 +804,7 @@ func backupShowerDefault(
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
 				typeIDToTypeDescriptor := make(map[descpb.ID]catalog.TypeDescriptor)
-				schemaIDToName[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
+				schemaIDToName[keys.SystemPublicSchemaID] = catconstants.PublicSchemaName
 				for _, desc := range descriptors {
 					switch d := desc.(type) {
 					case catalog.DatabaseDescriptor:

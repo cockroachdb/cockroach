@@ -1072,13 +1072,6 @@ func resolveTableNamesForIDs(
 			if scDesc, ok := d.(catalog.SchemaDescriptor); ok {
 				scName = scDesc.GetName()
 			}
-		} else {
-			if tableDesc.GetParentSchemaID() == keys.PublicSchemaIDForBackup {
-				// For backups created in 21.2 and prior, the "public" schema is descriptorless,
-				// and always uses the const `keys.PublicSchemaIDForBackUp` as the "public"
-				// schema ID.
-				scName = tree.PublicSchema
-			}
 		}
 
 		result[id] = tree.NewTableNameWithSchema(

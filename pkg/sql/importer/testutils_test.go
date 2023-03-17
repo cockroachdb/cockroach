@@ -70,7 +70,7 @@ func descForTable(
 			name,
 			tree.SequenceOptions{},
 			parent,
-			keys.PublicSchemaIDForBackup,
+			keys.PublicSchemaID,
 			id-1,
 			ts,
 			priv,

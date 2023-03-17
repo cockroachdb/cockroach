@@ -120,8 +120,7 @@ func (r *DescriptorResolver) LookupSchema(
 		// TODO(richardjcai): We should remove the check for keys.PublicSchemaID
 		// in 22.2, when we're guaranteed to not have synthesized public schemas
 		// for the non-system databases.
-		if !scOk && scID == keys.SystemPublicSchemaID ||
-			!scOk && scID == keys.PublicSchemaIDForBackup {
+		if !scOk && scID == keys.SystemPublicSchemaID {
 			scDesc, scOk = schemadesc.GetPublicSchema(), true
 		}
 		if dbOk && scOk {
@@ -206,7 +205,7 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 
 			if !desc.(catalog.DatabaseDescriptor).HasPublicSchemaWithDescriptor() {
 				r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
-				r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaIDForBackup
+				r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaID
 				r.ObjIDsBySchema[desc.GetID()][tree.PublicSchema] = &catalog.DescriptorIDSet{}
 			}
 		}
@@ -263,22 +262,15 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		// Look up what schema this descriptor belongs under.
 		schemaMap := r.ObjsByName[parentDesc.GetID()]
 		scID := desc.GetParentSchemaID()
-		var scName string
-		// TODO(richardjcai): We can remove this in 22.2, still have to handle
-		// this case in the mixed version cluster.
-		if scID == keys.PublicSchemaIDForBackup {
-			scName = tree.PublicSchema
-		} else {
-			scDescI, ok := r.DescByID[scID]
-			if !ok {
-				return errors.Errorf("schema %d not found for desc %d", scID, desc.GetID())
-			}
-			scDesc, err := catalog.AsSchemaDescriptor(scDescI)
-			if err != nil {
-				return err
-			}
-			scName = scDesc.GetName()
+		scDescI, ok := r.DescByID[scID]
+		if !ok {
+			return errors.Errorf("schema %d not found for desc %d", scID, desc.GetID())
 		}
+		scDesc, err := catalog.AsSchemaDescriptor(scDescI)
+		if err != nil {
+			return err
+		}
+		scName := scDesc.GetName()
 
 		// Create an entry for the descriptor.
 		objMap := schemaMap[scName]
@@ -393,9 +385,6 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedSchemas := make(map[descpb.ID]struct{})
 	maybeAddSchemaDesc := func(id descpb.ID, requirePublic bool) error {
 		// Only add user defined schemas.
-		if id == keys.PublicSchemaIDForBackup {
-			return nil
-		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
 			if schemaDesc == nil || !schemaDesc.Public() {
@@ -585,15 +574,11 @@ func DescriptorsMatchingTargets(
 				// but was just part of an expansion.
 				continue
 			}
-			// If this object is a member of a user defined schema, then request the
-			// user defined schema.
-			if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
-				// Note, that although we're processing the database expansions,
-				// since the table is in a PUBLIC state, we also expect the schema
-				// to be in a similar state.
-				if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
-					return err
-				}
+			// Note, that although we're processing the database expansions,
+			// since the table is in a PUBLIC state, we also expect the schema
+			// to be in a similar state.
+			if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
+				return err
 			}
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:

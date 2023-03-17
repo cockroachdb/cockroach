@@ -441,12 +441,6 @@ const (
 	// descriptorless.
 	// TODO(richardjcai): This should be fully removed in 22.2.
 	PublicSchemaID = 29 // pseudo
-	// PublicSchemaIDForBackup is used temporarily to determine cases of
-	// PublicSchemaID being used for backup.
-	// We need to keep this around since backups created prior to 22.1 use 29
-	// as the ID for a virtual public schema. In restores, we look for this 29
-	// and synthesize a public schema with a descriptor when necessary.
-	PublicSchemaIDForBackup = 29
 	// SystemPublicSchemaID represents the ID used for the pseudo public
 	// schema in the system database.
 	SystemPublicSchemaID = 29 // pseudo

@@ -64,7 +64,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		mkTyp := func(desc typDesc) catalog.Descriptor {
 			// Set a default parent schema for the type descriptors.
 			if desc.ParentSchemaID == descpb.InvalidID {
-				desc.ParentSchemaID = keys.PublicSchemaIDForBackup
+				desc.ParentSchemaID = keys.PublicSchemaID
 			}
 			return typedesc.NewBuilder(&desc).BuildImmutable()
 		}
