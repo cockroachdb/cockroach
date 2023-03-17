@@ -34,6 +34,8 @@ export type StatementDetailsResponseWithKey = {
 };
 
 export type SqlStatsResponse = cockroach.server.serverpb.StatementsResponse;
+export const SqlStatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
+export type SqlStatsSortType = cockroach.server.serverpb.StatsSortOptions;
 
 const FetchStatsMode =
   cockroach.server.serverpb.CombinedStatementsStatsRequest.StatsType;
@@ -42,9 +44,6 @@ export type ErrorWithKey = {
   err: Error;
   key: string;
 };
-
-export const SqlStatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
-export type SqlStatsSortType = cockroach.server.serverpb.StatsSortOptions;
 
 export const DEFAULT_STATS_REQ_OPTIONS = {
   limit: 100,

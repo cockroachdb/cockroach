@@ -53,7 +53,7 @@ import {
   selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
 import {
   StatementsPageRoot,
@@ -70,6 +70,7 @@ import {
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
+  SqlStatsSortType,
 } from "../api";
 
 type StateProps = {
