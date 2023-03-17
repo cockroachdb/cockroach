@@ -383,15 +383,16 @@ $input
 #        an aggregation). So it's desirable to perform this conversion in the
 #        interest of decorrelation.
 #
-# So the outcome is that we can perform uncorrelated ARRAY(...)s over any datatype,
-# and correlated ones only over the types that array_agg supports.
+# So the outcome is that we can perform uncorrelated ARRAY(...)s over any
+# datatype, and correlated ones only over the types that array_agg supports.
 #
 # Note that optbuilder should have already verified that if the input is
-# correlated, then we can array_agg over the input type.  Also note that the
-# Max1Row operator we introduce is guaranteed to be eliminated as
-# MakeArrayAggForFlatten will return a ScalarGroupBy.
+# correlated, then we can array_agg over the input type.
 [NormalizeArrayFlattenToAgg, Normalize]
-(ArrayFlatten $input:(HasOuterCols $input) $subquery:*)
+(ArrayFlatten
+    $input:*
+    $private:* & (CanNormalizeArrayFlatten $input $private)
+)
 =>
 (Coalesce
     [
@@ -403,7 +404,7 @@ $input
                         (ArrayAgg
                             (Variable
                                 $requestedCol:(SubqueryRequestedCol
-                                    $subquery
+                                    $private
                                 )
                             )
                         )
@@ -414,7 +415,7 @@ $input
                 ]
                 (MakeGrouping
                     (MakeEmptyColSet)
-                    (SubqueryOrdering $subquery)
+                    (SubqueryOrdering $private)
                 )
             )
             (MakeUnorderedSubquery)

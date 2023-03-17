@@ -43,6 +43,10 @@ define SubqueryPrivate {
     # will eventually be output. It is only used for ArrayFlatten expressions.
     RequestedCol ColumnID
 
+    # WithinUDF is set to true if the subquery exists inside a UDFExpr. It is
+    # only used for ArrayFlatten expressions.
+    WithinUDF bool
+
     # Cmp is only used for AnyOp.
     Cmp Operator
 

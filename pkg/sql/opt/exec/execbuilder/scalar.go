@@ -495,6 +495,16 @@ func (b *Builder) buildArrayFlatten(
 		panic(errors.AssertionFailedf("input to ArrayFlatten should be uncorrelated"))
 	}
 
+	if b.planLazySubqueries {
+		// The NormalizeArrayFlattenToAgg rule should have converted an
+		// ArrayFlatten within a UDF into an aggregation.
+		// We don't yet convert an ArrayFlatten within a correlated subquery
+		// into an aggregation, so we return a decorrelation error.
+		// TODO(mgartner): Build an ArrayFlatten within a correlated subquery as
+		// a Routine, or apply NormalizeArrayFlattenToAgg to all ArrayFlattens.
+		return nil, b.decorrelationError()
+	}
+
 	root, err := b.buildRelational(af.Input)
 	if err != nil {
 		return nil, err
@@ -762,10 +772,6 @@ func (b *Builder) buildSubquery(
 		// because we don't need to optimize the subquery input any further.
 		// It's already been fully optimized because it is uncorrelated and has
 		// no outer columns.
-		//
-		// TODO(mgartner): Uncorrelated subqueries only need to be evaluated
-		// once. We should cache their result to avoid all this overhead for
-		// every invocation.
 		inputRowCount := int64(input.Relational().Statistics().RowCountIfAvailable())
 		withExprs := make([]builtWithExpr, len(b.withExprs))
 		copy(withExprs, b.withExprs)
