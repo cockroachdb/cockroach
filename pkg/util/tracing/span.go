@@ -539,8 +539,23 @@ type EventListener interface {
 	// span recording Structured events during traced operations.
 	//
 	// Notify will not be called concurrently on the same span.
-	Notify(event Structured)
+	Notify(event Structured) EventConsumptionStatus
 }
+
+// EventConsumptionStatus describes whether the structured event has been "consumed"
+// by the EventListener.
+type EventConsumptionStatus int
+
+const (
+	// EventNotConsumed indicates that the event wasn't "consumed" by the
+	// EventListener, so other listeners as well as any ancestor spans should be
+	// notified about the event.
+	EventNotConsumed EventConsumptionStatus = iota
+	// EventConsumed indicates that the event has been "consumed" by the
+	// EventListener, so neither other listeners for the span nor the ancestor
+	// spans should be notified about it.
+	EventConsumed
+)
 
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {
