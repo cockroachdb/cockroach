@@ -5,6 +5,7 @@ go_library(
     name = "upgrades",
     srcs = [
         "alter_jobs_add_job_type.go",
+        "alter_sql_instances_binary_version.go",
         "alter_sql_instances_sql_addr.go",
         "alter_table_statistics_partial_predicate_and_id.go",
         "backfill_jobs_info_table_migration.go",
@@ -65,6 +66,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -87,6 +89,7 @@ go_test(
     size = "large",
     srcs = [
         "alter_jobs_add_job_type_test.go",
+        "alter_sql_instances_binary_version_test.go",
         "alter_sql_instances_sql_addr_test.go",
         "alter_table_statistics_partial_predicate_and_id_test.go",
         "backfill_jobs_info_table_migration_test.go",

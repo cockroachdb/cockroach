@@ -292,6 +292,12 @@ var upgrades = []upgradebase.Upgrade{
 		createAutoConfigRunnerJob,
 		"create auto config runner job",
 	),
+	upgrade.NewTenantUpgrade(
+		"add binary_version column to system.sql_instances table",
+		toCV(clusterversion.V23_1AlterSystemSQLInstancesAddBinaryVersion),
+		upgrade.NoPrecondition,
+		alterSystemSQLInstancesTableAddBinaryVersion,
+	),
 }
 
 func init() {
