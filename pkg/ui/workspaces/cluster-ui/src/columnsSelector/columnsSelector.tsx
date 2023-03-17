@@ -18,7 +18,7 @@ import {
   dropdownContentWrapper,
   hidden,
 } from "../queryFilter/filterClasses";
-import { List } from "@cockroachlabs/icons";
+import { Gear } from "@cockroachlabs/icons";
 import {
   DeselectOptionActionMeta,
   SelectOptionActionMeta,
@@ -233,7 +233,8 @@ export default class ColumnsSelector extends React.Component<
         className={cx("float")}
       >
         <Button type="secondary" size="small" onClick={this.toggleOpen}>
-          <List />
+          <Gear className={cx("icon")} />
+          Columns
         </Button>
         <div className={dropdownArea}>
           <div className={dropdownContentWrapper}>
