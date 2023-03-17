@@ -785,6 +785,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 			TempStorage: tempEngine,
 		},
 		Txn:         leafTxn,
+		Gateway:     false,
 		DiskMonitor: diskMonitor,
 	}
 
