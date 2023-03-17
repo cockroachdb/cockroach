@@ -12,8 +12,11 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
-    shard_count = 16,
-    tags = ["cpu:2"],
+    shard_count = 48,
+    tags = [
+        "ccl_test",
+        "cpu:2",
+    ],
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",

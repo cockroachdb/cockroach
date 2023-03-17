@@ -32,6 +32,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":backupresolver"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl",
         "//pkg/ccl/storageccl",

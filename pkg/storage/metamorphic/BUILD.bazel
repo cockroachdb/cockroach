@@ -45,7 +45,7 @@ go_test(
     args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":metamorphic"],
-    shard_count = 16,
+    shard_count = 8,
     deps = [
         "//pkg/settings/cluster",
         "//pkg/testutils",

@@ -66,6 +66,7 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     embed = [":streamproducer"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

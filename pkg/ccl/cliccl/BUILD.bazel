@@ -55,6 +55,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":cliccl"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/build",
         "//pkg/ccl",

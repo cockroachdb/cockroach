@@ -37,6 +37,7 @@ go_test(
         "main_test.go",
     ],
     args = ["-test.timeout=55s"],
+    tags = ["ccl_test"],
     deps = [
         ":workloadccl",
         "//pkg/base",
