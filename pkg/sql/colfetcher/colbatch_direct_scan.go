@@ -57,11 +57,10 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	// If tracing is enabled, we need to start a child span so that the only
-	// contention events present in the recording would be because of this
-	// fetcher. Note that ProcessorSpan method itself will check whether tracing
-	// is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colbatchdirectscan", s.processorID)
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
+		s.Ctx, s.flowCtx, "colbatchdirectscan", s.processorID,
+		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+	)
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
 	err := s.fetcher.SetupNextFetch(
 		ctx, s.Spans, nil /* spanIDs */, s.batchBytesLimit, firstBatchLimit,
@@ -146,6 +145,9 @@ func (s *ColBatchDirectScan) GetBytesRead() int64 {
 func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 	return s.fetcher.GetBatchRequestsIssued()
 }
+
+// TODO(yuzefovich): check whether GetScanStats and GetConsumedRU should be
+// reimplemented.
 
 // GetKVCPUTime is part of the colexecop.KVReader interface.
 //

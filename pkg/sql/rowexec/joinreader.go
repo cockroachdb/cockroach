@@ -191,6 +191,10 @@ type joinReader struct {
 	// disk.
 	rowsRead int64
 
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
+
 	// curBatchRowsRead is the number of rows that this fetcher read from disk for
 	// the current batch.
 	curBatchRowsRead int64
@@ -239,10 +243,6 @@ type joinReader struct {
 	// limitHintHelper is used in limiting batches of input rows in the presence
 	// of hard and soft limits.
 	limitHintHelper execinfra.LimitHintHelper
-
-	// scanStats is collected from the trace after we finish doing work for this
-	// join.
-	scanStats execstats.ScanStats
 
 	// Set errorOnLookup to true to cause the join to error out just prior to
 	// performing a lookup. This is currently only set when the join contains
@@ -1151,7 +1151,10 @@ func (jr *joinReader) performMemoryAccounting() error {
 
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) {
-	ctx = jr.StartInternal(ctx, joinReaderProcName)
+	ctx = jr.StartInternal(
+		ctx, joinReaderProcName, &jr.contentionEventsListener,
+		&jr.scanStatsListener, &jr.tenantConsumptionListener,
+	)
 	jr.input.Start(ctx)
 	jr.runningState = jrReadingInput
 }
@@ -1200,14 +1203,13 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	jr.scanStats = execstats.GetScanStats(jr.Ctx(), jr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(jr.Ctx(), jr.ExecStatsTrace)),
+			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.CumulativeContentionTime),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
@@ -1225,8 +1227,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
 		}
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(jr.scanStats.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(jr.tenantConsumptionListener.ConsumedRU)
+	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStatsListener.ScanStats)
 	return ret
 }
 

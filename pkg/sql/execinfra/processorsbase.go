@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
@@ -368,14 +367,6 @@ type ProcessorBaseNoHelper struct {
 	//
 	// Can return nil.
 	ExecStatsForTrace func() *execinfrapb.ComponentStats
-	// storeExecStatsTrace indicates whether ExecStatsTrace should be populated
-	// in InternalClose.
-	storeExecStatsTrace bool
-	// ExecStatsTrace stores the recording in case HijackExecStatsForTrace has
-	// been called. This is needed in order to provide the access to the
-	// recording after the span has been finished in InternalClose. Only set if
-	// storeExecStatsTrace is true.
-	ExecStatsTrace tracingpb.Recording
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling InternalClose()) and generate the trailing meta that
@@ -629,13 +620,7 @@ func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.Component
 	}
 	execStatsForTrace := pb.ExecStatsForTrace
 	pb.ExecStatsForTrace = nil
-	pb.storeExecStatsTrace = true
-	return func() *execinfrapb.ComponentStats {
-		cs := execStatsForTrace()
-		// Make sure to unset the trace since we don't need it anymore.
-		pb.ExecStatsTrace = nil
-		return cs
-	}
+	return execStatsForTrace
 }
 
 // moveToTrailingMeta switches the processor to the "trailing meta" state: only
@@ -669,9 +654,6 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 		}
 		if trace := pb.span.GetConfiguredRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
-			if pb.storeExecStatsTrace {
-				pb.ExecStatsTrace = trace
-			}
 		}
 	}
 
@@ -820,14 +802,23 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func ProcessorSpan(
-	ctx context.Context, flowCtx *FlowCtx, name string, processorID int32,
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	name string,
+	processorID int32,
+	eventListeners ...tracing.EventListener,
 ) (context.Context, *tracing.Span) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
-	retCtx, retSpan := sp.Tracer().StartSpanCtx(ctx, name,
-		tracing.WithParent(sp), tracing.WithDetachedRecording())
+	var listenersOpt tracing.SpanOption
+	if len(eventListeners) > 0 {
+		listenersOpt = tracing.WithEventListeners(eventListeners...)
+	}
+	retCtx, retSpan := sp.Tracer().StartSpanCtx(
+		ctx, name, tracing.WithParent(sp), tracing.WithDetachedRecording(), listenersOpt,
+	)
 	if retSpan.IsVerbose() {
 		retSpan.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(flowCtx.ID.String()))
 		retSpan.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(processorID)))
@@ -846,13 +837,15 @@ func ProcessorSpan(
 //	< other initialization >
 //
 // so that the caller doesn't mistakenly use old ctx object.
-func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string) context.Context {
+func (pb *ProcessorBaseNoHelper) StartInternal(
+	ctx context.Context, name string, eventListeners ...tracing.EventListener,
+) context.Context {
 	pb.origCtx = ctx
 	pb.ctx = ctx
 	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
 		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
 	if !noSpan {
-		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID)
+		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID, eventListeners...)
 	}
 	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.ctx)
 	return pb.ctx

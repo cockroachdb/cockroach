@@ -343,34 +343,44 @@ func TestExplainMVCCSteps(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 
-	r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
-	r.Exec(t, "CREATE TABLE bc (b PRIMARY KEY, c) AS SELECT g, g FROM generate_series(1,1000) g(g)")
+	for _, vectorize := range []bool{true, false} {
+		if vectorize {
+			r.Exec(t, "SET vectorize = on")
+		} else {
+			r.Exec(t, "SET vectorize = off")
+		}
+		r.Exec(t, "DROP TABLE IF EXISTS ab")
+		r.Exec(t, "DROP TABLE IF EXISTS bc")
+		r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
+		r.Exec(t, "CREATE TABLE bc (b PRIMARY KEY, c) AS SELECT g, g FROM generate_series(1,1000) g(g)")
 
-	scanQuery := "SELECT count(*) FROM ab"
-	expectedSteps, expectedSeeks := 1000, 1
-	foundSteps, foundSeeks := getMVCCStats(t, r, scanQuery)
+		scanQuery := "SELECT count(*) FROM ab"
+		expectedSteps, expectedSeeks := 1000, 1
+		foundSteps, foundSeeks := getMVCCStats(t, r, scanQuery)
 
-	assert.Equal(t, expectedSteps, foundSteps)
-	assert.Equal(t, expectedSeeks, foundSeeks)
-	assert.Equal(t, expectedSteps, foundSteps)
-	assert.Equal(t, expectedSeeks, foundSeeks)
+		assert.Equal(t, expectedSteps, foundSteps)
+		assert.Equal(t, expectedSeeks, foundSeeks)
+		assert.Equal(t, expectedSteps, foundSteps)
+		assert.Equal(t, expectedSeeks, foundSeeks)
 
-	// Update all rows.
-	r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
+		// Update all rows.
+		r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
 
-	expectedSteps, expectedSeeks = 1000, 1
-	foundSteps, foundSeeks = getMVCCStats(t, r, scanQuery)
+		expectedSteps, expectedSeeks = 1000, 1
+		foundSteps, foundSeeks = getMVCCStats(t, r, scanQuery)
 
-	assert.Equal(t, expectedSteps, foundSteps)
-	assert.Equal(t, expectedSeeks, foundSeeks)
+		assert.Equal(t, expectedSteps, foundSteps)
+		assert.Equal(t, expectedSeeks, foundSeeks)
 
-	// Check that the lookup join (which is executed via a row-by-row processor
-	// wrapped into the vectorized flow) correctly propagates the scan stats.
-	lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
-	foundSteps, foundSeeks = getMVCCStats(t, r, lookupJoinQuery)
-	// We're mainly interested in the fact whether the propagation takes place,
-	// so one of the values being positive is sufficient.
-	assert.Greater(t, foundSteps+foundSeeks, 0)
+		// Check that the lookup join (which is executed via a row-by-row
+		// processor wrapped into the vectorized flow when vectorize=true)
+		// correctly propagates the scan stats.
+		lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
+		foundSteps, foundSeeks = getMVCCStats(t, r, lookupJoinQuery)
+		// We're mainly interested in the fact whether the propagation takes
+		// place, so one of the values being positive is sufficient.
+		assert.Greater(t, foundSteps+foundSeeks, 0)
+	}
 }
 
 // getMVCCStats returns the number of MVCC steps and seeks found in the EXPLAIN
