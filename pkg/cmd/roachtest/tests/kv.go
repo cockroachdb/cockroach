@@ -463,7 +463,6 @@ func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   registry.OwnerKV,
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/59094",
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
