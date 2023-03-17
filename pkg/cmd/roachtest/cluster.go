@@ -2353,12 +2353,26 @@ func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gos
 }
 
 // ConnE returns a SQL connection to the specified node.
-func (c *clusterImpl) ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error) {
+func (c *clusterImpl) ConnE(
+	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),
+) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
 	if err != nil {
 		return nil, err
 	}
-	db, err := gosql.Open("postgres", urls[0])
+	connOptions := &option.ConnOption{}
+	for _, opt := range opts {
+		opt(connOptions)
+	}
+	dataSourceName := urls[0]
+	if len(connOptions.Options) > 0 {
+		vals := make(url.Values)
+		for k, v := range connOptions.Options {
+			vals.Add(k, v)
+		}
+		dataSourceName = dataSourceName + "&" + vals.Encode()
+	}
+	db, err := gosql.Open("postgres", dataSourceName)
 	if err != nil {
 		return nil, err
 	}
