@@ -1311,13 +1311,19 @@ func TestWithRemoteParentFromTraceInfo(t *testing.T) {
 type mockEventListener struct {
 	eventsSeen int
 	notifyImpl func()
+	// If set, then the events are "consumed" by this listener.
+	consuming bool
 }
 
-func (f *mockEventListener) Notify(_ Structured) {
+func (f *mockEventListener) Notify(_ Structured) EventConsumptionStatus {
 	f.eventsSeen++
 	if f.notifyImpl != nil {
 		f.notifyImpl()
 	}
+	if f.consuming {
+		return EventConsumed
+	}
+	return EventNotConsumed
 }
 
 var _ EventListener = &mockEventListener{}
@@ -1349,6 +1355,14 @@ func TestEventListener(t *testing.T) {
 	require.Equal(t, 5, rootEventListener.eventsSeen)
 	require.Equal(t, 2, childEventListener.eventsSeen)
 
+	// Make the child event listener "consume" the event and ensure that the
+	// parent doesn't get notified about it.
+	childEventListener.consuming = true
+	childSp.RecordStructured(&types.Int32Value{Value: 9})
+	require.Equal(t, 5, rootEventListener.eventsSeen)
+	require.Equal(t, 3, childEventListener.eventsSeen)
+	childEventListener.consuming = false
+
 	// Finish the child span, and ensure the Structured events aren't re-seen by
 	// the listener when the child deposits them with the parent.
 	childSp.Finish()
@@ -1356,7 +1370,7 @@ func TestEventListener(t *testing.T) {
 
 	// Create a remote child, and the root listener should not be inherited.
 	remoteSp := tr.StartSpan("remote-child", WithRemoteParentFromSpanMeta(sp.Meta()))
-	remoteSp.RecordStructured(&types.Int32Value{Value: 9})
+	remoteSp.RecordStructured(&types.Int32Value{Value: 10})
 	require.Equal(t, 5, rootEventListener.eventsSeen)
 
 	// But, when we import the recording in the root span, the root listener
@@ -1366,14 +1380,14 @@ func TestEventListener(t *testing.T) {
 
 	// Create another child.
 	childSp2 := tr.StartSpan("child2", WithParent(sp))
-	childSp2.RecordStructured(&types.Int32Value{Value: 10})
+	childSp2.RecordStructured(&types.Int32Value{Value: 11})
 	require.Equal(t, 7, rootEventListener.eventsSeen)
 
 	// Now Finish() the parent before the child and ensure that the root event
 	// listener does not see events from the child once the parent has been
 	// Finish()ed.
 	sp.Finish()
-	childSp2.RecordStructured(&types.Int32Value{Value: 11})
+	childSp2.RecordStructured(&types.Int32Value{Value: 12})
 	require.Equal(t, 7, rootEventListener.eventsSeen)
 	childSp2.Finish()
 }
