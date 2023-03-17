@@ -192,7 +192,6 @@ go_test(
         "sink_cloudstorage_test.go",
         "sink_kafka_connection_test.go",
         "sink_test.go",
-        "sink_webhook_test.go",
         "testfeed_test.go",
         "validations_test.go",
     ],

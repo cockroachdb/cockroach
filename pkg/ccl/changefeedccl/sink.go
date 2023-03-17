@@ -212,8 +212,12 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
+			// return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+			// 	return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+			// 		defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+			// })
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
 					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
 			})
 		case isPubsubSink(u):

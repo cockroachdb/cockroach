@@ -17,7 +17,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -163,36 +162,6 @@ func (b *batch) reset() {
 type batchConfig struct {
 	Bytes, Messages int          `json:",omitempty"`
 	Frequency       jsonDuration `json:",omitempty"`
-}
-
-type jsonMaxRetries int
-
-func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
-	var i int64
-	// try to parse as int
-	i, err := strconv.ParseInt(string(b), 10, 64)
-	if err == nil {
-		if i <= 0 {
-			return errors.Errorf("max retry count must be a positive integer. use 'inf' for infinite retries.")
-		}
-		*j = jsonMaxRetries(i)
-	} else {
-		// if that fails, try to parse as string (only accept 'inf')
-		var s string
-		// using unmarshal here to remove quotes around the string
-		if err := json.Unmarshal(b, &s); err != nil {
-			return err
-		}
-		if strings.ToLower(s) == "inf" {
-			// if used wants infinite retries, set to zero as retry.Options interprets this as infinity
-			*j = 0
-		} else if n, err := strconv.Atoi(s); err == nil { // also accept ints as strings
-			*j = jsonMaxRetries(n)
-		} else {
-			return errors.Errorf("max retries must be either a positive int or 'inf' for infinite retries.")
-		}
-	}
-	return nil
 }
 
 // wrapper structs to unmarshal json, retry.Options will be the actual config

@@ -49,6 +49,7 @@ type webhookSinkClient struct {
 	format     changefeedbase.FormatType
 	url        sinkURL
 	authHeader string
+	batchCfg   sinkBatchConfig
 	client     *httputil.Client
 }
 
@@ -59,6 +60,7 @@ func makeWebhookSinkClient(
 	u sinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
+	batchCfg sinkBatchConfig,
 ) (SinkClient, error) {
 	err := validateWebhookOpts(u, encodingOpts, opts)
 	if err != nil {
@@ -71,6 +73,7 @@ func makeWebhookSinkClient(
 		ctx:        ctx,
 		authHeader: opts.AuthHeader,
 		format:     encodingOpts.Format,
+		batchCfg:   batchCfg,
 	}
 
 	var connTimeout time.Duration
@@ -165,85 +168,36 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	return client, nil
 }
 
-func (we *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, error) {
-	req, err := http.NewRequestWithContext(we.ctx, http.MethodPost, we.url.String(), bytes.NewReader(body))
+func (wse *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, error) {
+	req, err := http.NewRequestWithContext(wse.ctx, http.MethodPost, wse.url.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	switch we.format {
+	switch wse.format {
 	case changefeedbase.OptFormatJSON:
 		req.Header.Set("Content-Type", applicationTypeJSON)
 	case changefeedbase.OptFormatCSV:
 		req.Header.Set("Content-Type", applicationTypeCSV)
 	}
 
-	if we.authHeader != "" {
-		req.Header.Set(authorizationHeader, we.authHeader)
+	if wse.authHeader != "" {
+		req.Header.Set(authorizationHeader, wse.authHeader)
 	}
 
 	return req, nil
 }
 
-// EncodeBatch implements the SinkClient interface
-func (we *webhookSinkClient) EncodeBatch(_ string, batch []messagePayload) (SinkPayload, error) {
-	var reqBody []byte
-	var err error
-
-	switch we.format {
-	case changefeedbase.OptFormatJSON:
-		reqBody, err = encodeWebhookMsgJSON(batch)
-	case changefeedbase.OptFormatCSV:
-		reqBody, err = encodeWebhookMsgCSV(batch)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return we.makePayloadForBytes(reqBody)
-}
-
-type webhookJsonEvent struct {
-	Payload []json.RawMessage `json:"payload"`
-	Length  int               `json:"length"`
-}
-
-func encodeWebhookMsgJSON(messages []messagePayload) ([]byte, error) {
-	payload := make([]json.RawMessage, len(messages))
-	for i, m := range messages {
-		payload[i] = m.val
-	}
-
-	body := &webhookJsonEvent{
-		Payload: payload,
-		Length:  len(payload),
-	}
-	j, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	return j, err
-}
-
-func encodeWebhookMsgCSV(messages []messagePayload) ([]byte, error) {
-	var mergedMsgs []byte
-	for _, m := range messages {
-		mergedMsgs = append(mergedMsgs, m.val...)
-	}
-	return mergedMsgs, nil
-}
-
 // EncodeResolvedMeessage implements the SinkClient interface
-func (we *webhookSinkClient) EncodeResolvedMessage(
+func (wse *webhookSinkClient) EncodeResolvedMessage(
 	payload resolvedMessagePayload,
 ) (SinkPayload, error) {
-	return we.makePayloadForBytes(payload.body)
+	return wse.makePayloadForBytes(payload.body)
 }
 
-// EmitPayload implements the SinkClient interface
-func (we *webhookSinkClient) EmitPayload(batch SinkPayload) error {
+// Flush implements the SinkClient interface
+func (wse *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error {
 	req := batch.(*http.Request)
-	res, err := we.client.Do(req)
+	res, err := wse.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -260,8 +214,8 @@ func (we *webhookSinkClient) EmitPayload(batch SinkPayload) error {
 }
 
 // Close implements the SinkClient interface
-func (we *webhookSinkClient) Close() error {
-	we.client.CloseIdleConnections()
+func (wse *webhookSinkClient) Close() error {
+	wse.client.CloseIdleConnections()
 	return nil
 }
 
@@ -296,30 +250,115 @@ func validateWebhookOpts(
 	return nil
 }
 
+type webhookCSVWriter struct {
+	bytes        []byte
+	messageCount int
+	sc           *webhookSinkClient
+}
+
+func (cw *webhookCSVWriter) AppendKV(payload messagePayload) {
+	cw.bytes = append(cw.bytes, payload.val...)
+	cw.messageCount += 1
+}
+
+func (cw *webhookCSVWriter) ShouldFlush() bool {
+	return cw.sc.shouldFlush(len(cw.bytes), cw.messageCount)
+}
+
+func (cw *webhookCSVWriter) Close() (SinkPayload, error) {
+	return cw.sc.makePayloadForBytes(cw.bytes)
+}
+
+type webhookJSONWriter struct {
+	payload    []json.RawMessage
+	bytesCount int
+	sc         *webhookSinkClient
+}
+
+func (jw *webhookJSONWriter) AppendKV(payload messagePayload) {
+	jw.payload = append(jw.payload, payload.val)
+	jw.bytesCount += len(payload.val)
+}
+
+func (jw *webhookJSONWriter) ShouldFlush() bool {
+	return jw.sc.shouldFlush(jw.bytesCount, len(jw.payload))
+}
+
+type webhookJsonEvent struct {
+	Payload []json.RawMessage `json:"payload"`
+	Length  int               `json:"length"`
+}
+
+func (jw *webhookJSONWriter) Close() (SinkPayload, error) {
+	body := &webhookJsonEvent{
+		Payload: jw.payload,
+		Length:  len(jw.payload),
+	}
+	j, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return jw.sc.makePayloadForBytes(j)
+}
+
+func (wse *webhookSinkClient) MakeBatchWriter() BatchWriter {
+	if wse.format == changefeedbase.OptFormatCSV {
+		return &webhookCSVWriter{sc: wse}
+	} else {
+		return &webhookJSONWriter{
+			sc:      wse,
+			payload: make([]json.RawMessage, 0, wse.batchCfg.Messages),
+		}
+	}
+}
+
+func (wse *webhookSinkClient) shouldFlush(bytes int, messages int) bool {
+	fmt.Printf("\x1b[33mwebhookSink shouldFlush\x1b[0m\n")
+	switch {
+	// all zero values is interpreted as flush every time
+	case wse.batchCfg.Messages == 0 && wse.batchCfg.Bytes == 0 && wse.batchCfg.Frequency == 0:
+		fmt.Printf("\x1b[33m                        true\x1b[0m\n")
+		return true
+	// messages threshold has been reached
+	case wse.batchCfg.Messages > 0 && messages >= wse.batchCfg.Messages:
+		fmt.Printf("\x1b[33m                        true\x1b[0m\n")
+		return true
+	// bytes threshold has been reached
+	case wse.batchCfg.Bytes > 0 && bytes >= wse.batchCfg.Bytes:
+		fmt.Printf("\x1b[33m                        true\x1b[0m\n")
+		return true
+	default:
+		fmt.Printf("\x1b[33m                        false\x1b[0m\n")
+		return false
+	}
+}
+
 func makeWebhookSink(
 	ctx context.Context,
 	u sinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
-	numWorkers int64,
+	numWorkers int,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
-	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts)
+	fmt.Printf("\x1b[33mwebhookSink makeWebhokoSink\x1b[0m\n")
+	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("\x1b[33mwebhookSink makeWebhookSinkClient\x1b[0m\n")
+
+	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg)
 	if err != nil {
 		return nil, err
 	}
 
-	flushCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
-	if err != nil {
-		return nil, err
-	}
-
+	fmt.Printf("\x1b[33mwebhookSink makeBatchingSink\x1b[0m\n")
 	return makeBatchingSink(
 		ctx,
 		sinkTypeWebhook,
 		sinkClient,
-		flushCfg,
 		retryOpts,
 		numWorkers,
 		nil,
