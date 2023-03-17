@@ -38,7 +38,7 @@ const ClearStats = (props: clearStatsProps): React.ReactElement => {
   return (
     <>
       <a className={cx("action", "separator")} onClick={showModal}>
-        reset SQL stats
+        Reset SQL Stats
       </a>
       <Modal
         visible={visible}

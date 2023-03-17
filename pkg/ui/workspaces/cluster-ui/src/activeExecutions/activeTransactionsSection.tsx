@@ -83,6 +83,7 @@ export const ActiveTransactionsSection: React.FC<
         <ColumnsSelector
           options={tableColumns}
           onSubmitColumns={onColumnsSelect}
+          size={"small"}
         />
         <TableStatistics
           pagination={pagination}

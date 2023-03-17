@@ -12,10 +12,10 @@ import { duration } from "moment";
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 
 export const limitOptions = [
-  { value: 25, name: "25" },
-  { value: 50, name: "50" },
-  { value: 100, name: "100" },
-  { value: 500, name: "500" },
+  { value: 25, label: "25" },
+  { value: 50, label: "50" },
+  { value: 100, label: "100" },
+  { value: 500, label: "500" },
 ];
 
 export function getSortLabel(sort: SqlStatsSortType): string {
@@ -35,8 +35,8 @@ export function getSortLabel(sort: SqlStatsSortType): string {
 
 export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions).map(
   sortVal => ({
-    value: sortVal,
-    name: getSortLabel(sortVal as SqlStatsSortType),
+    value: sortVal as SqlStatsSortType,
+    label: getSortLabel(sortVal as SqlStatsSortType),
   }),
 );
 

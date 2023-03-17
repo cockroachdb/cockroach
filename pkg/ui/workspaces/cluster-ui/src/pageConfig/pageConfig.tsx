@@ -8,32 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext } from "react";
+import React from "react";
 import classnames from "classnames/bind";
 import styles from "./pageConfig.module.scss";
-import { CockroachCloudContext } from "../contexts";
 
 export interface PageConfigProps {
   layout?: "list" | "spread";
   children?: React.ReactNode;
+  className?: string;
 }
 
 const cx = classnames.bind(styles);
 
 export function PageConfig(props: PageConfigProps): React.ReactElement {
-  const isCockroachCloud = useContext(CockroachCloudContext);
-
   const classes = cx({
     "page-config__list": props.layout !== "spread",
     "page-config__spread": props.layout === "spread",
   });
 
   return (
-    <div
-      className={cx("page-config", {
-        "page-config__white-background": isCockroachCloud,
-      })}
-    >
+    <div className={`${cx("page-config", {})} ${props.className}`}>
       <ul className={classes}>{props.children}</ul>
     </div>
   );
