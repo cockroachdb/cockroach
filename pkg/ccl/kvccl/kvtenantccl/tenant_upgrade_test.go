@@ -194,6 +194,7 @@ func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
 // between version upgrades.
 func TestTenantUpgradeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 98555, "flaky test")
 	defer log.Scope(t).Close(t)
 	// Contains information for starting a tenant
 	// and maintaining a stopper.
