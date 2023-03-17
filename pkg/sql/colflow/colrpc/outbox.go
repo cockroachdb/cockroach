@@ -346,14 +346,16 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
 	}
-	if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
-		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{
-			Value: &execinfrapb.RemoteProducerMetadata_TraceData_{
-				TraceData: &execinfrapb.RemoteProducerMetadata_TraceData{
-					CollectedSpans: trace,
+	if !o.flowCtx.Gateway {
+		if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
+			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{
+				Value: &execinfrapb.RemoteProducerMetadata_TraceData_{
+					TraceData: &execinfrapb.RemoteProducerMetadata_TraceData{
+						CollectedSpans: trace,
+					},
 				},
-			},
-		})
+			})
+		}
 	}
 	if len(msg.Data.Metadata) == 0 {
 		return nil
