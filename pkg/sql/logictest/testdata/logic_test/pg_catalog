@@ -1133,6 +1133,13 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 1062763829  25        4         true         false                true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 3403232968 3403232968  0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
 1183313104  44        2         true         false                true          false           true          false           true        false         false       true       false           1 2            0 3403232968               0 0          2 2          NULL      NULL                                                                                                                          2
 1183313107  44        3         true         false                false         false           true          false           true        false         false       true       false           1 4 3          0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+1229708768  60        6         true         false                true          false           true          false           true        false         false       true       false           1 2 3 4 5 6    0 0 0 0 3403232968 0       0 0 0 0 0 0  2 2 2 2 2 2  NULL      NULL                                                                                                                          6
+1229708770  60        2         false        false                false         false           false         false           true        false         false       true       false           1 12           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+1229708771  60        2         false        false                false         false           false         false           true        false         false       true       false           2 3            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+1229708772  60        2         false        false                false         false           false         false           true        false         false       true       false           1 15           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+1229708773  60        2         false        false                false         false           false         false           true        false         false       true       false           1 13           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+1229708774  60        2         false        false                false         false           false         false           true        false         false       true       false           1 17           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+1229708775  60        2         false        false                false         false           false         false           true        false         false       true       false           1 16           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
 1276104432  12        2         true         false                true          false           true          false           true        false         false       true       false           1 6            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
 1322500096  28        1         true         false                true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 1489445036  35        6         false        false                false         false           false         false           true        false         false       true       false           2 1 3 6 7 8    0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
@@ -1186,6 +1193,13 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 3966258450  14        1         true         false                true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
 4012654114  30        3         true         false                true          false           true          false           true        false         false       true       false           1 2 3          0 0 3403232968             0 0 0        2 2 2        NULL      NULL                                                                                                                          3
 4133203393  45        2         true         false                true          false           true          false           true        false         false       true       false           1 2            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
+4179599057  61        4         true         false                true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 3403232968 0           0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
+4179599058  61        1         false        false                false         false           false         false           true        false         false       true       false           2              0                          0            2            NULL      NULL                                                                                                                          1
+4179599059  61        2         false        false                false         false           false         false           true        false         false       true       false           1 9            0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+4179599060  61        2         false        false                false         false           false         false           true        false         false       true       false           1 10           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+4179599061  61        2         false        false                false         false           false         false           true        false         false       true       false           1 12           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+4179599062  61        2         false        false                false         false           false         false           true        false         false       true       false           1 13           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
+4179599063  61        2         false        false                false         false           false         false           true        false         false       true       false           1 14           0 0                        0 0          2 1          NULL      NULL                                                                                                                          2
 4225994721  13        2         true         false                true          false           true          false           true        false         false       true       false           1 7            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
 
 # From #26504
@@ -1236,6 +1250,24 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1183313104  0                           2
 1183313107  0                           1
 1183313107  0                           2
+1229708768  0                           1
+1229708768  0                           2
+1229708768  0                           3
+1229708768  0                           4
+1229708768  0                           5
+1229708768  0                           6
+1229708770  0                           1
+1229708770  0                           2
+1229708771  0                           1
+1229708771  0                           2
+1229708772  0                           1
+1229708772  0                           2
+1229708773  0                           1
+1229708773  0                           2
+1229708774  0                           1
+1229708774  0                           2
+1229708775  0                           1
+1229708775  0                           2
 1276104432  0                           1
 1276104432  0                           2
 1322500096  0                           1
@@ -1323,6 +1355,21 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 4012654114  0                           3
 4133203393  0                           1
 4133203393  0                           2
+4179599057  0                           1
+4179599057  0                           2
+4179599057  0                           3
+4179599057  0                           4
+4179599058  0                           1
+4179599059  0                           1
+4179599059  0                           2
+4179599060  0                           1
+4179599060  0                           2
+4179599061  0                           1
+4179599061  0                           2
+4179599062  0                           1
+4179599062  0                           2
+4179599063  0                           1
+4179599063  0                           2
 4225994721  0                           1
 4225994721  0                           2
 
