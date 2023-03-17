@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 
 # Builds all bits needed for roachtests, stages them in bin/ and lib.docker_amd64/.
+platform=${1:-crosslinux}
 
-bazel build --config crosslinux --config ci --config with_ui -c opt --config force_build_cdeps \
+bazel build --config $platform --config ci --config with_ui -c opt --config force_build_cdeps \
       //pkg/cmd/cockroach //pkg/cmd/workload //pkg/cmd/roachtest \
       //c-deps:libgeos
-bazel build --config crosslinux --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
-BAZEL_BIN=$(bazel info bazel-bin --config crosslinux --config ci --config with_ui -c opt)
+bazel build --config $platform --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
+BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci --config with_ui -c opt)
 # Move this stuff to bin for simplicity.
 mkdir -p bin
 chmod o+rwx bin
