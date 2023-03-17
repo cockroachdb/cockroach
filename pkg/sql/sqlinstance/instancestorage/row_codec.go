@@ -57,13 +57,14 @@ type rowCodec struct {
 
 type valueColumnIdx int
 
-const numValueColumns = 4
+const numValueColumns = 5
 
 const (
 	addrColumnIdx valueColumnIdx = iota
 	sessionIDColumnIdx
 	localityColumnIdx
 	sqlAddrColumnIdx
+	binaryVersionColumnIdx
 
 	// Ensure we have the right number of value columns.
 	_ uint = iota - numValueColumns
@@ -71,10 +72,11 @@ const (
 )
 
 var valueColumnNames = [numValueColumns]string{
-	addrColumnIdx:      "addr",
-	sessionIDColumnIdx: "session_id",
-	localityColumnIdx:  "locality",
-	sqlAddrColumnIdx:   "sql_addr",
+	addrColumnIdx:          "addr",
+	sessionIDColumnIdx:     "session_id",
+	localityColumnIdx:      "locality",
+	sqlAddrColumnIdx:       "sql_addr",
+	binaryVersionColumnIdx: "binary_version",
 }
 
 // rbrKeyCodec is used by the regional by row compatible sql_instances index format.
@@ -197,7 +199,7 @@ func (d *rowCodec) decodeRow(key roachpb.Key, value *roachpb.Value) (instancerow
 		return r, nil
 	}
 
-	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.timestamp, err = d.decodeValue(*value)
+	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.binaryVersion, r.timestamp, err = d.decodeValue(*value)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "failed to decode value for: %v", key)
 	}
@@ -207,7 +209,11 @@ func (d *rowCodec) decodeRow(key roachpb.Key, value *roachpb.Value) (instancerow
 
 // encodeValue encodes the sql_instance columns into a kv value.
 func (d *rowCodec) encodeValue(
-	rpcAddr string, sqlAddr string, sessionID sqlliveness.SessionID, locality roachpb.Locality,
+	rpcAddr string,
+	sqlAddr string,
+	sessionID sqlliveness.SessionID,
+	locality roachpb.Locality,
+	binaryVersion roachpb.Version,
 ) (*roachpb.Value, error) {
 	var valueBuf []byte
 	columnsToEncode := [numValueColumns]func() tree.Datum{
@@ -237,6 +243,9 @@ func (d *rowCodec) encodeValue(
 			}
 			return tree.NewDString(sqlAddr)
 		},
+		binaryVersionColumnIdx: func() tree.Datum {
+			return tree.NewDString(binaryVersion.String())
+		},
 	}
 	for i, f := range columnsToEncode {
 		var err error
@@ -256,7 +265,7 @@ func (d *rowCodec) encodeValue(
 }
 
 func (d *rowCodec) encodeAvailableValue() (*roachpb.Value, error) {
-	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}), roachpb.Locality{})
+	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}), roachpb.Locality{}, roachpb.Version{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode available sql_instances value")
 	}
@@ -271,17 +280,18 @@ func (d *rowCodec) decodeValue(
 	sqlAddr string,
 	sessionID sqlliveness.SessionID,
 	locality roachpb.Locality,
+	binaryVersion roachpb.Version,
 	timestamp hlc.Timestamp,
 	_ error,
 ) {
 	// The rest of the columns are stored as a single family.
 	bytes, err := value.GetTuple()
 	if err != nil {
-		return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, roachpb.Version{}, hlc.Timestamp{}, err
 	}
 	datums, err := d.decoder.Decode(&tree.DatumAlloc{}, bytes)
 	if err != nil {
-		return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, roachpb.Version{}, hlc.Timestamp{}, err
 	}
 	for i, f := range [numValueColumns]func(datum tree.Datum) error{
 		addrColumnIdx: func(datum tree.Datum) error {
@@ -326,6 +336,14 @@ func (d *rowCodec) decodeValue(
 			}
 			return nil
 		},
+		binaryVersionColumnIdx: func(datum tree.Datum) error {
+			if datum != tree.DNull {
+				var err error
+				binaryVersion, err = roachpb.ParseVersion(string(tree.MustBeDString(datum)))
+				return err
+			}
+			return nil
+		},
 	} {
 		ord := d.valueColumnOrdinals[i]
 		// Deal with the fact that new columns may not yet have been added.
@@ -334,8 +352,8 @@ func (d *rowCodec) decodeValue(
 			datum = datums[ord]
 		}
 		if err := f(datum); err != nil {
-			return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+			return "", "", "", roachpb.Locality{}, roachpb.Version{}, hlc.Timestamp{}, err
 		}
 	}
-	return rpcAddr, sqlAddr, sessionID, locality, value.Timestamp, nil
+	return rpcAddr, sqlAddr, sessionID, locality, binaryVersion, value.Timestamp, nil
 }

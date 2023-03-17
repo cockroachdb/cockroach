@@ -663,14 +663,15 @@ CREATE TABLE system.tenant_usage (
 
 	SQLInstancesTableSchema = `
 CREATE TABLE system.sql_instances (
-    id           INT NOT NULL,
-    addr         STRING,
-    session_id   BYTES,
-    locality     JSONB,
-    sql_addr     STRING,
-    crdb_region  BYTES NOT NULL,
+    id             INT NOT NULL,
+    addr           STRING,
+    session_id     BYTES,
+    locality       JSONB,
+    sql_addr       STRING,
+    crdb_region    BYTES NOT NULL,
+    binary_version STRING,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
-    FAMILY "primary" (id, addr, session_id, locality, sql_addr, crdb_region)
+    FAMILY "primary" (id, addr, session_id, locality, sql_addr, crdb_region, binary_version)
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -2751,13 +2752,14 @@ var (
 					{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
 					{Name: "sql_addr", ID: 5, Type: types.String, Nullable: true},
 					{Name: "crdb_region", ID: 6, Type: types.Bytes, Nullable: false},
+					{Name: "binary_version", ID: 7, Type: types.String, Nullable: true},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
 						Name:            "primary",
 						ID:              0,
-						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region"},
-						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 						DefaultColumnID: 0,
 					},
 				},

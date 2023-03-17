@@ -36,18 +36,20 @@ type InstanceInfo struct {
 	InstanceRPCAddr string
 	SessionID       sqlliveness.SessionID
 	Locality        roachpb.Locality
+	BinaryVersion   roachpb.Version
 }
 
 // SafeFormat implements redact.SafeFormatter.
 func (ii InstanceInfo) SafeFormat(s interfaces.SafePrinter, verb rune) {
 	s.Printf(
-		"Instance{RegionPrefix: %v, InstanceID: %d, SQLAddr: %v, RPCAddr: %v, SessionID: %s, Locality: %v}",
+		"Instance{RegionPrefix: %v, InstanceID: %d, SQLAddr: %v, RPCAddr: %v, SessionID: %s, Locality: %v, BinaryVersion: %v}",
 		redact.SafeString(base64.StdEncoding.EncodeToString(ii.Region)),
 		ii.InstanceID,
 		ii.InstanceSQLAddr,
 		ii.InstanceRPCAddr,
 		ii.SessionID,
 		ii.Locality,
+		ii.BinaryVersion,
 	)
 }
 
