@@ -53,9 +53,10 @@ import {
   selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { SqlStatsSortType } from "../api";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IDuration = google.protobuf.IDuration;

@@ -1,0 +1,29 @@
+@import "../core/index.module";
+
+.search-area {
+  border: 1px solid $colors--neutral-3;
+  border-radius: 3px;
+  margin-bottom: 10px;
+  margin-right: 10px;
+  padding: 20px;
+  background-color: white;
+}
+
+.top-area {
+  z-index: 5;
+  background-color: white;
+}
+
+.timescale-small {
+  width: 455px;
+}
+
+.label {
+  color: $colors--neutral-6;
+  font-family: $font-family--semi-bold;
+  font-size: $font-size--medium;
+}
+
+.margin-top-btn {
+  margin-top: 22px;
+}
