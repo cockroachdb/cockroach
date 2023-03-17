@@ -320,6 +320,17 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 	}
 })
 
+// OnlySingleDMLs causes the Smither to only emit single-statement DML (SELECT,
+// INSERT, UPDATE, DELETE).
+var OnlySingleDMLs = simpleOption("only single DMLs", func(s *Smither) {
+	s.stmtWeights = []statementWeight{
+		{20, makeSelect},
+		{5, makeInsert},
+		{5, makeUpdate},
+		{1, makeDelete},
+	}
+})
+
 // OnlyNoDropDDLs causes the Smither to only emit DDLs, but won't ever drop
 // a table.
 var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
