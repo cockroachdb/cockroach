@@ -2369,6 +2369,7 @@ system         pg_extension  spatial_ref_sys                  proj4text         
 system         pg_extension  spatial_ref_sys                  srid                                                                                                      1
 system         pg_extension  spatial_ref_sys                  srtext                                                                                                    4
 system         public        sql_instances                    addr                                                                                                      2
+system         public        sql_instances                    binary_version                                                                                            7
 system         public        sql_instances                    crdb_region                                                                                               6
 system         public        sql_instances                    id                                                                                                        1
 system         public        sql_instances                    locality                                                                                                  4
