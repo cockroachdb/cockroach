@@ -42,6 +42,7 @@ type colBatchScanBase struct {
 	execinfra.SpansWithCopy
 
 	flowCtx         *execinfra.FlowCtx
+	processorID     int32
 	limitHint       rowinfra.RowLimit
 	batchBytesLimit rowinfra.BytesLimit
 	parallelize     bool
@@ -122,6 +123,7 @@ func newColBatchScanBase(
 	ctx context.Context,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
@@ -185,6 +187,7 @@ func newColBatchScanBase(
 	*s = colBatchScanBase{
 		SpansWithCopy:   s.SpansWithCopy,
 		flowCtx:         flowCtx,
+		processorID:     processorID,
 		limitHint:       limitHint,
 		batchBytesLimit: batchBytesLimit,
 		parallelize:     spec.Parallelize,
@@ -217,9 +220,9 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	}
 	// If tracing is enabled, we need to start a child span so that the only
 	// contention events present in the recording would be because of this
-	// cFetcher. Note that ProcessorSpan method itself will check whether
-	// tracing is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
+	// fetcher. Note that ProcessorSpan method itself will check whether tracing
+	// is enabled.
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colbatchscan", s.processorID)
 	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
 		s.Ctx,
@@ -304,13 +307,14 @@ func NewColBatchScan(
 	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
-		ctx, kvFetcherMemAcc, flowCtx, spec, post, typeResolver,
+		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver,
 	)
 	if err != nil {
 		return nil, nil, err
