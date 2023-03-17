@@ -95,9 +95,10 @@ func TestStorage(t *testing.T) {
 		const rpcAddr = "rpcAddr"
 		const sqlAddr = "sqlAddr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
+		binaryVersion := roachpb.Version{Major: 28, Minor: 4}
 		const expiration = time.Minute
 		{
-			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), rpcAddr, sqlAddr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), rpcAddr, sqlAddr, locality, binaryVersion)
 			require.NoError(t, err)
 			require.Equal(t, id, instance.InstanceID)
 		}
@@ -121,9 +122,12 @@ func TestStorage(t *testing.T) {
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}},
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region5"}}},
 		}
+		binaryVersions := []roachpb.Version{
+			{Major: 22, Minor: 2}, {Major: 23, Minor: 1}, {Major: 23, Minor: 2}, {Major: 23, Minor: 3}, {Major: 24, Minor: 1},
+		}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 		for _, index := range []int{0, 1, 2} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index])
+			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index], binaryVersions[index])
 			require.NoError(t, err)
 			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
 			require.Equal(t, instanceIDs[index], instance.InstanceID)
@@ -141,6 +145,7 @@ func TestStorage(t *testing.T) {
 				require.Equal(t, rpcAddresses[i], instances[i].InstanceRPCAddr)
 				require.Equal(t, sqlAddresses[i], instances[i].InstanceSQLAddr)
 				require.Equal(t, localities[i], instances[i].Locality)
+				require.Equal(t, binaryVersions[i], instances[i].BinaryVersion)
 			}
 			for _, i := range []int{3, 4} {
 				require.Equal(t, base.SQLInstanceID(i+1), instances[i].InstanceID)
@@ -148,12 +153,13 @@ func TestStorage(t *testing.T) {
 				require.Empty(t, instances[i].InstanceRPCAddr)
 				require.Empty(t, instances[i].InstanceSQLAddr)
 				require.Empty(t, instances[i].Locality)
+				require.Empty(t, instances[i].BinaryVersion)
 			}
 		}
 
 		// Create two more instances.
 		for _, index := range []int{3, 4} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index])
+			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index], binaryVersions[index])
 			require.NoError(t, err)
 			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
 			require.Equal(t, instanceIDs[index], instance.InstanceID)
@@ -171,6 +177,7 @@ func TestStorage(t *testing.T) {
 				require.Equal(t, rpcAddresses[i], instances[i].InstanceRPCAddr)
 				require.Equal(t, sqlAddresses[i], instances[i].InstanceSQLAddr)
 				require.Equal(t, localities[i], instances[i].Locality)
+				require.Equal(t, binaryVersions[i], instances[i].BinaryVersion)
 			}
 		}
 
@@ -195,10 +202,11 @@ func TestStorage(t *testing.T) {
 		rpcAddr6 := "rpcAddr6"
 		sqlAddr6 := "sqlAddr6"
 		locality6 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region6"}}}
+		binaryVersion6 := roachpb.Version{Major: 24, Minor: 3}
 		{
 			require.NoError(t, slStorage.Delete(ctx, sessionIDs[4]))
 			require.NoError(t, slStorage.Insert(ctx, sessionID6, sessionExpiry))
-			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, rpcAddr6, sqlAddr6, locality6)
+			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, rpcAddr6, sqlAddr6, locality6, binaryVersion6)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[4], instance.InstanceID)
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
@@ -213,12 +221,14 @@ func TestStorage(t *testing.T) {
 					require.Equal(t, rpcAddr6, instance.InstanceRPCAddr)
 					require.Equal(t, sqlAddr6, instance.InstanceSQLAddr)
 					require.Equal(t, locality6, instance.Locality)
+					require.Equal(t, binaryVersion6, instance.BinaryVersion)
 					continue
 				}
 				require.Equal(t, sessionIDs[index+1], instance.SessionID)
 				require.Equal(t, rpcAddresses[index+1], instance.InstanceRPCAddr)
 				require.Equal(t, sqlAddresses[index+1], instance.InstanceSQLAddr)
 				require.Equal(t, localities[index+1], instance.Locality)
+				require.Equal(t, binaryVersions[index+1], instance.BinaryVersion)
 			}
 			require.Equal(t, []base.SQLInstanceID{2, 3, 4, 5}, foundIDs)
 		}
@@ -228,8 +238,9 @@ func TestStorage(t *testing.T) {
 			newSessionID := makeSession()
 			newRPCAddr := "rpcAddr7"
 			newSQLAddr := "sqlAddr7"
+			newBinaryVersion := roachpb.Version{Major: 29, Minor: 4}
 			newLocality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region7"}}}
-			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newRPCAddr, newSQLAddr, newLocality)
+			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newRPCAddr, newSQLAddr, newLocality, newBinaryVersion)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[0], instance.InstanceID)
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
@@ -244,16 +255,19 @@ func TestStorage(t *testing.T) {
 					require.Equal(t, newRPCAddr, instances[index].InstanceRPCAddr)
 					require.Equal(t, newSQLAddr, instances[index].InstanceSQLAddr)
 					require.Equal(t, newLocality, instances[index].Locality)
+					require.Equal(t, newBinaryVersion, instances[index].BinaryVersion)
 				case 4:
 					require.Equal(t, sessionID6, instances[index].SessionID)
 					require.Equal(t, rpcAddr6, instances[index].InstanceRPCAddr)
 					require.Equal(t, sqlAddr6, instances[index].InstanceSQLAddr)
 					require.Equal(t, locality6, instances[index].Locality)
+					require.Equal(t, binaryVersion6, instances[index].BinaryVersion)
 				default:
 					require.Equal(t, sessionIDs[index], instances[index].SessionID)
 					require.Equal(t, rpcAddresses[index], instances[index].InstanceRPCAddr)
 					require.Equal(t, sqlAddresses[index], instances[index].InstanceSQLAddr)
 					require.Equal(t, localities[index], instances[index].Locality)
+					require.Equal(t, binaryVersions[index], instances[index].BinaryVersion)
 				}
 			}
 			for index := len(instanceIDs); index < len(instances); index++ {
@@ -262,6 +276,7 @@ func TestStorage(t *testing.T) {
 				require.Empty(t, instances[index].InstanceRPCAddr)
 				require.Empty(t, instances[index].InstanceSQLAddr)
 				require.Empty(t, instances[index].Locality)
+				require.Empty(t, instances[index].BinaryVersion)
 			}
 		}
 	})
@@ -294,6 +309,7 @@ func TestSQLAccess(t *testing.T) {
 		expectedNumCols = 5
 	)
 	var locality roachpb.Locality
+	var binaryVersion roachpb.Version
 	require.NoError(t, locality.Set(tierStr))
 	instance, err := storage.CreateInstance(
 		ctx,
@@ -302,6 +318,7 @@ func TestSQLAccess(t *testing.T) {
 		"rpcAddr",
 		"sqlAddr",
 		locality,
+		binaryVersion,
 	)
 	require.NoError(t, err)
 
@@ -426,6 +443,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	)
 	sessionID := makeSession()
 	locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test-region"}}}
+	binaryVersion := roachpb.Version{Major: 23, Minor: 4}
 	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 	err := slStorage.Insert(ctx, sessionID, sessionExpiry)
 	if err != nil {
@@ -451,7 +469,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, binaryVersion)
 			require.NoError(t, err)
 			if len(state.freeInstances) > 0 {
 				_, free := state.freeInstances[instance.InstanceID]
@@ -513,6 +531,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 				require.Equal(t, sqlAddr, instanceInfo.InstanceSQLAddr)
 				require.Equal(t, sessionID, instanceInfo.SessionID)
 				require.Equal(t, locality, instanceInfo.Locality)
+				require.Equal(t, binaryVersion, instanceInfo.BinaryVersion)
 				_, live := state.liveInstances[i]
 				require.True(t, live)
 			}
@@ -617,6 +636,7 @@ func TestReclaimLoop(t *testing.T) {
 		require.Empty(t, instance.InstanceSQLAddr)
 		require.Empty(t, instance.SessionID)
 		require.Empty(t, instance.Locality)
+		require.Empty(t, instance.BinaryVersion)
 	}
 
 	// Consume two rows.
@@ -629,6 +649,10 @@ func TestReclaimLoop(t *testing.T) {
 		{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
 		{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
 	}
+	binaryVersions := []roachpb.Version{
+		{Major: 22, Minor: 2}, {Major: 23, Minor: 1},
+	}
+
 	for i, id := range instanceIDs {
 		require.NoError(t, slStorage.Insert(ctx, sessionIDs[i], sessionExpiry))
 		require.NoError(t, storage.CreateInstanceDataForTest(
@@ -640,6 +664,7 @@ func TestReclaimLoop(t *testing.T) {
 			sessionIDs[i],
 			sessionExpiry,
 			localities[i],
+			binaryVersions[i],
 		))
 	}
 
@@ -674,11 +699,13 @@ func TestReclaimLoop(t *testing.T) {
 			require.Equal(t, sqlAddresses[i], instance.InstanceSQLAddr)
 			require.Equal(t, sessionIDs[i], instance.SessionID)
 			require.Equal(t, localities[i], instance.Locality)
+			require.Equal(t, binaryVersions[i], instance.BinaryVersion)
 		default:
 			require.Empty(t, instance.InstanceRPCAddr)
 			require.Empty(t, instance.InstanceSQLAddr)
 			require.Empty(t, instance.SessionID)
 			require.Empty(t, instance.Locality)
+			require.Empty(t, instance.BinaryVersion)
 		}
 	}
 }
