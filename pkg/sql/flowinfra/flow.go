@@ -105,8 +105,22 @@ type Flow interface {
 	// It is assumed that rowSyncFlowConsumer is set, so all errors encountered
 	// when running this flow are sent to it.
 	//
+	// noWait is set true when the flow is bound to a pausable portal. With it set,
+	// the function returns without waiting the all goroutines to finish. For a
+	// pausable portal we will persist this flow and reuse it when re-executing
+	// the portal. The flow will be cleaned when the portal is closed, rather than
+	// when each portal execution finishes.
+	//
 	// The caller needs to call f.Cleanup().
-	Run(context.Context)
+	Run(ctx context.Context, noWait bool)
+
+	// Resume continue running the headproc saved in the FlowBase, but with
+	// a new output receiver. It is called when resuming a paused portal.
+	// The lifecycle of a flow for a pausable portal is:
+	// flow.Run(ctx, true /* noWait */) (only once), flow.Resume() (for all
+	// re-executions of the portal), flow.Cleanup() (only once)
+	// TODO(janexing): confirm the comment is accurate.
+	Resume(ctx context.Context, recv execinfra.RowReceiver)
 
 	// Wait waits for all the goroutines for this flow to exit. If the context gets
 	// canceled before all goroutines exit, it calls f.cancel().
@@ -480,9 +494,29 @@ func (f *FlowBase) Start(ctx context.Context) error {
 	return f.StartInternal(ctx, f.processors, f.outputs)
 }
 
+// Resume is part of the Flow interface.
+func (f *FlowBase) Resume(ctx context.Context, recv execinfra.RowReceiver) {
+	if len(f.processors) != 1 || len(f.outputs) != 1 {
+		f.rowSyncFlowConsumer.Push(
+			nil, /* row */
+			&execinfrapb.ProducerMetadata{
+				Err: errors.AssertionFailedf(
+					"length of both the processor and the output must be 1",
+				)})
+		f.rowSyncFlowConsumer.ProducerDone()
+		return
+	}
+
+	f.outputs[0] = recv
+	log.VEventf(ctx, 1, "resuming %T in the flow's goroutine", f.processors[0])
+	f.processors[0].Resume(recv)
+}
+
 // Run is part of the Flow interface.
-func (f *FlowBase) Run(ctx context.Context) {
-	defer f.Wait()
+func (f *FlowBase) Run(ctx context.Context, noWait bool) {
+	if !noWait {
+		defer f.Wait()
+	}
 
 	if len(f.processors) == 0 {
 		f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.AssertionFailedf("no processors in flow")})

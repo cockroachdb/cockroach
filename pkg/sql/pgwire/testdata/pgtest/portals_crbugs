@@ -29,7 +29,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported, please set sql.defaults.multiple_active_portals.enabled to true. (Note this feature is in preview)"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
@@ -70,7 +70,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported, please set sql.defaults.multiple_active_portals.enabled to true. (Note this feature is in preview)"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send

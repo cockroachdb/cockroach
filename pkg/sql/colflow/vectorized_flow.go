@@ -288,16 +288,32 @@ func (f *vectorizedFlow) Setup(
 	return ctx, opChains, nil
 }
 
+// Resume is part of the Flow interface.
+func (f *vectorizedFlow) Resume(ctx context.Context, recv execinfra.RowReceiver) {
+	if f.batchFlowCoordinator != nil {
+		recv.Push(
+			nil, /* row */
+			&execinfrapb.ProducerMetadata{
+				Err: errors.AssertionFailedf(
+					"batchFlowCoordinator should be nil for vectorizedFlow",
+				)})
+		return
+	}
+	f.FlowBase.Resume(ctx, recv)
+}
+
 // Run is part of the Flow interface.
-func (f *vectorizedFlow) Run(ctx context.Context) {
+func (f *vectorizedFlow) Run(ctx context.Context, noWait bool) {
 	if f.batchFlowCoordinator == nil {
 		// If we didn't create a BatchFlowCoordinator, then we have a processor
 		// as the root, so we run this flow with the default implementation.
-		f.FlowBase.Run(ctx)
+		f.FlowBase.Run(ctx, noWait)
 		return
 	}
 
-	defer f.Wait()
+	if !noWait {
+		defer f.Wait()
+	}
 
 	if err := f.StartInternal(ctx, nil /* processors */, nil /* outputs */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
