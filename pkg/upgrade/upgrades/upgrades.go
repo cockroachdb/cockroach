@@ -292,6 +292,12 @@ var upgrades = []upgradebase.Upgrade{
 		createAutoConfigRunnerJob,
 		"create auto config runner job",
 	),
+	upgrade.NewTenantUpgrade(
+		"create statement_activity and transaction_activity tables",
+		toCV(clusterversion.V23_1AddSystemActivityTables),
+		upgrade.NoPrecondition,
+		systemStatisticsActivityTableMigration,
+	),
 }
 
 func init() {
