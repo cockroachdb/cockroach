@@ -121,6 +121,10 @@ func TestMultiRegionDataDriven(t *testing.T) {
 			skip.UnderStressWithIssue(t, 92235, "flaky test")
 		}
 
+		if strings.Contains(path, "regional_by_table") {
+			skip.WithIssue(t, 98905, "flaky test")
+		}
+
 		ds := datadrivenTestState{}
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex

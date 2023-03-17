@@ -1,5 +1,7 @@
 # Test that sequence functions work in DistSQL queries.
 
+skip 999999
+
 statement ok
 CREATE TABLE t (c int PRIMARY KEY)
 

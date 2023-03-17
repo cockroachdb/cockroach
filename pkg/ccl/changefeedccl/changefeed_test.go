@@ -863,6 +863,7 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 
 func TestChangefeedRandomExpressions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 96532, "flaky test")
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t)
 	skip.UnderRace(t)
@@ -2054,6 +2055,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 // allowed.
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 98905, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {

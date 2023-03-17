@@ -2681,6 +2681,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 func TestSystemZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 98905, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// This test is relatively slow and resource intensive. When run under

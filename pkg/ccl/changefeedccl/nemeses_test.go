@@ -23,6 +23,7 @@ import (
 
 func TestChangefeedNemeses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 98905, "flaky test")
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
 

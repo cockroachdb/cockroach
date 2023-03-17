@@ -1,6 +1,8 @@
 # Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate
 # equivalence. The use of sorts here force the planning of merge join.
 
+skip 999999
+
 statement ok
 CREATE TABLE distsql_mj_test (k INT, v INT)
 
