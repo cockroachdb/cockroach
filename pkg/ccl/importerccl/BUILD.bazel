@@ -12,6 +12,7 @@ go_test(
         "//c-deps:libgeos",
         "//pkg/sql/importer:testdata",
     ],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
