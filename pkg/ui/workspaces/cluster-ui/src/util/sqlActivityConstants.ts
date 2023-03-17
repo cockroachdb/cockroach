@@ -13,10 +13,10 @@ import { TimeScale } from "../timeScaleDropdown";
 import { SqlStatsSortOptions, SqlStatsSortType } from "../api/statementsApi";
 
 export const limitOptions = [
-  { value: 100, name: "100" },
-  { value: 200, name: "200" },
-  { value: 500, name: "500" },
-  { value: 1000, name: "1000" },
+  { value: 100, label: "100" },
+  { value: 200, label: "200" },
+  { value: 500, label: "500" },
+  { value: 1000, label: "1000" },
 ];
 
 export function getSortLabel(sort: SqlStatsSortType): string {
@@ -40,8 +40,8 @@ export function getSortLabel(sort: SqlStatsSortType): string {
 
 export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions).map(
   sortVal => ({
-    value: sortVal,
-    name: getSortLabel(sortVal as SqlStatsSortType),
+    value: sortVal as SqlStatsSortType,
+    label: getSortLabel(sortVal as SqlStatsSortType),
   }),
 );
 

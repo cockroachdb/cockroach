@@ -17,6 +17,7 @@ export interface PageConfigProps {
   layout?: "list" | "spread";
   children?: React.ReactNode;
   whiteBkg?: boolean;
+  className?: string;
 }
 
 const cx = classnames.bind(styles);
@@ -31,9 +32,9 @@ export function PageConfig(props: PageConfigProps): React.ReactElement {
 
   return (
     <div
-      className={cx("page-config", {
+      className={`${cx("page-config", {
         "page-config__white-background": whiteBkg,
-      })}
+      })} ${props.className}`}
     >
       <ul className={classes}>{props.children}</ul>
     </div>
