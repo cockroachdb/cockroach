@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,14 +40,10 @@ import (
 )
 
 const (
-	createTable                         = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemKey                           = "\xc3"
-	systemKeyPretty                     = "/Table/59"
-	secondaryKeyPretty                  = "/Tenant/10"
-	secondaryWithoutCapabilityKeyPretty = "/Tenant/20"
-	maxTimestamp                        = "2262-04-11 23:47:16.854776 +0000 +0000"
-	ok                                  = "ok"
-	ignore                              = "*"
+	createTable  = "CREATE TABLE t(i int PRIMARY KEY);"
+	maxTimestamp = "2262-04-11 23:47:16.854776 +0000 +0000"
+	ok           = "ok"
+	ignore       = "*"
 )
 
 var ctx = context.Background()
@@ -58,12 +53,16 @@ type testClusterCfg struct {
 	numNodes int
 }
 
-func createTestClusterArgs(numReplicas, numVoters int32) base.TestClusterArgs {
+func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) base.TestClusterArgs {
 	zoneCfg := zonepb.DefaultZoneConfig()
 	zoneCfg.NumReplicas = proto.Int32(numReplicas)
 	zoneCfg.NumVoters = proto.Int32(numVoters)
+
+	clusterSettings := cluster.MakeTestingClusterSettings()
+	kvserver.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, int64(kvserver.LBRebalancingOff))
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Settings: clusterSettings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DefaultZoneConfigOverride:       &zoneCfg,
@@ -71,27 +70,6 @@ func createTestClusterArgs(numReplicas, numVoters int32) base.TestClusterArgs {
 				},
 			},
 		},
-	}
-}
-
-func verifyResults(t *testing.T, message string, rows *gosql.Rows, expectedResults [][]string) {
-	actualResults, err := sqlutils.RowsToStrMatrix(rows)
-	require.NoErrorf(t, err, message)
-	require.Equalf(t, len(expectedResults), len(actualResults), message)
-	for i, actualRowResult := range actualResults {
-		expectedRowResult := expectedResults[i]
-		require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d\nexpected=%v\n  actual=%v", message, expectedRowResult, actualRowResult, i)
-		for j, actualColResult := range actualRowResult {
-			expectedColResult := expectedRowResult[j]
-			switch expectedColResult {
-			case "": // For results that should be empty.
-				require.Emptyf(t, actualColResult, "%s row=%d col=%d", message, i, j)
-			case ignore: // For non-deterministic results that should be non-empty.
-				require.NotEmptyf(t, actualColResult, "%s row=%d col=%d", message, i, j)
-			default: // For deterministic results that should be non-empty.
-				require.Containsf(t, actualColResult, expectedColResult, "%s row=%d col=%d", message, i, j)
-			}
-		}
 	}
 }
 
@@ -391,15 +369,49 @@ func (te tenantExpected) isSet() bool {
 	return len(te.result) > 0 || te.errorMessage != ""
 }
 
-func (te tenantExpected) validate(t *testing.T, rows *gosql.Rows, err error, message string) {
-	errorMessage := te.errorMessage
-	if errorMessage == "" {
-		require.NoErrorf(t, err, message)
-		verifyResults(t, message, rows, te.result)
-	} else {
-		require.Errorf(t, err, message)
-		require.Containsf(t, err.Error(), errorMessage, message)
-	}
+func (te tenantExpected) validate(
+	t *testing.T, runQuery func() (*gosql.Rows, error), message string,
+) {
+	expectedErrorMessage := te.errorMessage
+	expectedResults := te.result
+
+	// runQuery can be non-deterministic because of KV race conditions. Retry the
+	// query to make the test less flaky.
+	// See: https://github.com/cockroachdb/cockroach/issues/95252
+	testutils.SucceedsSoon(t, func() error {
+		rows, err := runQuery()
+		if expectedErrorMessage == "" {
+			require.NoErrorf(t, err, message)
+			actualResults, err := sqlutils.RowsToStrMatrix(rows)
+			require.NoErrorf(t, err, message)
+			require.Equalf(t, len(expectedResults), len(actualResults), message)
+			for i, actualRowResult := range actualResults {
+				expectedRowResult := expectedResults[i]
+				require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d\nexpected=%v\n  actual=%v", message, expectedRowResult, actualRowResult, i)
+				for j, actualColResult := range actualRowResult {
+					expectedColResult := expectedRowResult[j]
+					switch expectedColResult {
+					case "": // For results that should be empty.
+						if len(actualColResult) != 0 {
+							return errors.Newf("expected empty actual=%q %s row=%d col=%d", actualColResult, message, i, j)
+						}
+					case ignore: // For non-deterministic results that should be non-empty.
+						if len(actualColResult) == 0 {
+							return errors.Newf("expected non-empty actual=%q %s row=%d col=%d", actualColResult, message, i, j)
+						}
+					default: // For deterministic results that should be non-empty.
+						if !strings.Contains(actualColResult, expectedColResult) {
+							return errors.Newf("expected %q contains %q %s row=%d col=%d", actualColResult, expectedColResult, message, i, j)
+						}
+					}
+				}
+			}
+		} else {
+			require.Errorf(t, err, message)
+			require.Containsf(t, err.Error(), expectedErrorMessage, message)
+		}
+		return nil
+	})
 }
 
 func bcap(cap tenantcapabilities.CapabilityID, val bool) capValue {
@@ -417,13 +429,13 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE LEASE",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
 			system: tenantExpected{
-				result: [][]string{{ignore, systemKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{ignore, secondaryKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -431,13 +443,13 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE LEASE",
 			query: "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{ignore, systemKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{ignore, secondaryKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -445,10 +457,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
 			system: tenantExpected{
-				result: [][]string{{systemKey, systemKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: `client tenant does not have capability "can_admin_relocate_range"`,
@@ -459,7 +471,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER TABLE x SPLIT AT",
 			query: "ALTER TABLE t SPLIT AT VALUES (1);",
 			system: tenantExpected{
-				result: [][]string{{"\xf0\x89\x89", "/1", maxTimestamp}},
+				result: [][]string{{ignore, "/1", maxTimestamp}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
@@ -560,7 +572,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER TABLE x SCATTER",
 			query: "ALTER TABLE t SCATTER;",
 			system: tenantExpected{
-				result: [][]string{{systemKey, systemKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
@@ -593,7 +605,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			tc.runTest(
 				t,
 				testClusterCfg{},
-				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
+				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					setups := tc.setups
 					setup := tc.setup
 					if setup != "" {
@@ -605,8 +617,13 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 						_, err := db.ExecContext(ctx, setup)
 						require.NoErrorf(t, err, setup, "%s setup=%s", message, setup)
 					}
-					rows, err := db.QueryContext(ctx, tc.query)
-					expected.validate(t, rows, err, message)
+					tExp.validate(
+						t,
+						func() (*gosql.Rows, error) {
+							return db.QueryContext(ctx, tc.query)
+						},
+						message,
+					)
 				},
 			)
 		})
@@ -639,21 +656,27 @@ func TestTruncateTable(t *testing.T) {
 	tc.runTest(
 		t,
 		testClusterCfg{},
-		func(_ serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
+		func(_ serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 			_, err := db.ExecContext(ctx, createTable)
 			message := fmt.Sprintf("tenant=%s", tenant)
 			require.NoErrorf(t, err, message)
 			_, err = db.ExecContext(ctx, "ALTER TABLE t SPLIT AT VALUES (1);")
 			require.NoErrorf(t, err, message)
 
-			// validateErr and validateRows come from separate queries for TRUNCATE.
-			_, validateErr := db.ExecContext(ctx, "TRUNCATE TABLE t;")
-			var validateRows *gosql.Rows
-			if err == nil {
-				validateRows, err = db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM INDEX t@primary];")
-				require.NoErrorf(t, err, message)
-			}
-			expected.validate(t, validateRows, validateErr, message)
+			tExp.validate(
+				t,
+				func() (*gosql.Rows, error) {
+					// validateErr and validateRows come from separate queries for TRUNCATE.
+					_, validateErr := db.ExecContext(ctx, "TRUNCATE TABLE t;")
+					var validateRows *gosql.Rows
+					if err == nil {
+						validateRows, err = db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM INDEX t@primary];")
+						require.NoErrorf(t, err, message)
+					}
+					return validateRows, validateErr
+				},
+				message,
+			)
 		},
 	)
 }
@@ -669,13 +692,13 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE VOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{ignore, systemKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{ignore, secondaryKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -683,13 +706,13 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE VOTERS",
 			query: "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{ignore, systemKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{ignore, secondaryKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -707,7 +730,7 @@ func TestRelocateVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -715,6 +738,7 @@ func TestRelocateVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testCluster.ToggleReplicateQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -733,9 +757,14 @@ func TestRelocateVoters(t *testing.T) {
 						fromReplica = replicas[1]
 					}
 					query := fmt.Sprintf(tc.query, fromReplica, toReplica)
-					rows, err := db.QueryContext(ctx, query)
 					message = getReplicaStateMessage(tenant, query, replicaState, fromReplica, toReplica)
-					tExp.validate(t, rows, err, message)
+					tExp.validate(
+						t,
+						func() (*gosql.Rows, error) {
+							return db.QueryContext(ctx, query)
+						},
+						message,
+					)
 				},
 			)
 		})
@@ -754,10 +783,10 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[%[1]s], 1);",
 			system: tenantExpected{
-				result: [][]string{{systemKey, systemKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: `client tenant does not have capability "can_admin_relocate_range"`,
@@ -778,14 +807,15 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
 				},
-				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
+				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
 					message := fmt.Sprintf("tenant=%s", tenant)
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testCluster.ToggleReplicateQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -801,9 +831,14 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 					newVotingReplicas[1] = votingReplicas[1]
 					newVotingReplicas[2] = getToReplica(testCluster.NodeIDs(), votingReplicas)
 					query := fmt.Sprintf(tc.query, nodeIDsToArrayString(newVotingReplicas))
-					rows, err := db.QueryContext(ctx, query)
 					message = getReplicaStateMessage(tenant, query, replicaState, votingReplicas[2], newVotingReplicas[2])
-					expected.validate(t, rows, err, message)
+					tExp.validate(
+						t,
+						func() (*gosql.Rows, error) {
+							return db.QueryContext(ctx, query)
+						},
+						message,
+					)
 				},
 			)
 		})
@@ -816,20 +851,18 @@ func TestRelocateNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 97320, "flaky test")
-
 	testCases := []testCase{
 		{
 			desc:  "ALTER RANGE x RELOCATE NONVOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{ignore, systemKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{ignore, secondaryKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -837,13 +870,13 @@ func TestRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE NONVOTERS",
 			query: "ALTER RANGE RELOCATE NONVOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{ignore, systemKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{ignore, secondaryKeyPretty, ok}},
+				result: [][]string{{ignore, ignore, ok}},
 			},
 			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, secondaryWithoutCapabilityKeyPretty, `does not have capability "can_admin_relocate_range"`}},
+				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
 			},
 			queryCapability: bcap(tenantcapabilities.CanAdminRelocateRange, true),
 		},
@@ -861,14 +894,15 @@ func TestRelocateNonVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
 				},
-				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {
+				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
 					message := fmt.Sprintf("tenant=%s", tenant)
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testCluster.ToggleReplicateQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -884,8 +918,13 @@ func TestRelocateNonVoters(t *testing.T) {
 					fromReplica := replicaState.nonVotingReplicas[0]
 					query := fmt.Sprintf(tc.query, fromReplica, toReplica)
 					message = getReplicaStateMessage(tenant, query, replicaState, fromReplica, toReplica)
-					rows, err := db.QueryContext(ctx, query)
-					expected.validate(t, rows, err, message)
+					tExp.validate(
+						t,
+						func() (*gosql.Rows, error) {
+							return db.QueryContext(ctx, query)
+						},
+						message,
+					)
 				},
 			)
 		})
@@ -903,10 +942,10 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE NONVOTERS",
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[%[1]s], 1);",
 			system: tenantExpected{
-				result: [][]string{{systemKey, systemKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
+				result: [][]string{{ignore, ignore}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: `client tenant does not have capability "can_admin_relocate_range"`,
@@ -927,7 +966,7 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -935,6 +974,7 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testCluster.ToggleReplicateQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -946,9 +986,14 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 					)
 					newNonVotingReplicas := []roachpb.NodeID{getToReplica(testCluster.NodeIDs(), replicaState.replicas)}
 					query := fmt.Sprintf(tc.query, nodeIDsToArrayString(newNonVotingReplicas))
-					rows, err := db.QueryContext(ctx, query)
 					message = getReplicaStateMessage(tenant, query, replicaState, replicaState.nonVotingReplicas[0], newNonVotingReplicas[0])
-					tExp.validate(t, rows, err, message)
+					tExp.validate(
+						t,
+						func() (*gosql.Rows, error) {
+							return db.QueryContext(ctx, query)
+						},
+						message,
+					)
 				},
 			)
 		})

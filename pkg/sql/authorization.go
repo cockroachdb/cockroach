@@ -557,6 +557,21 @@ func MemberOfWithAdminOption(
 	// in-flight for each user. The role_memberships table version is also part
 	// of the request key so that we don't read data from an old version of the
 	// table.
+	//
+	// The singleflight closure uses a fresh transaction to prevent a data race
+	// that may occur if the context is cancelled, leading to the outer txn
+	// being cleaned up. We set the timestamp of this new transaction to be
+	// the modification time of system.role_members' table descriptor to
+	// ensure that we are reading from the right version of the table.
+	// Unfortunately, we cannot use the modification time of the descriptor
+	// if it's at version 1 since the permanent upgrade that adds the initial
+	// row for the system.role_members did not bump the version. However,
+	// this implies that the table is at its initial state, so it is safe
+	// to use the current transaction's read timestamp.
+	newTxnTimestamp := tableDesc.GetModificationTime()
+	if tableDesc.GetVersion() == 1 {
+		newTxnTimestamp = txn.KV().ReadTimestamp()
+	}
 	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
 		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
 		singleflight.DoOpts{
@@ -564,10 +579,22 @@ func MemberOfWithAdminOption(
 			InheritCancelation: false,
 		},
 		func(ctx context.Context) (interface{}, error) {
-			return resolveMemberOfWithAdminOption(
-				ctx, member, txn,
-				useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
-			)
+			var m map[username.SQLUsername]bool
+			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
+				err := newTxn.KV().SetFixedTimestamp(ctx, newTxnTimestamp)
+				if err != nil {
+					return err
+				}
+				m, err = resolveMemberOfWithAdminOption(
+					ctx, member, newTxn,
+					useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
+				)
+				if err != nil {
+					return err
+				}
+				return err
+			})
+			return m, err
 		})
 	var memberships map[username.SQLUsername]bool
 	res := future.WaitForResult(ctx)
