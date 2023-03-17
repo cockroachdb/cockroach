@@ -1032,6 +1032,10 @@ system         public        tenant_tasks                     root     DELETE   
 system         public        tenant_tasks                     root     INSERT          true
 system         public        tenant_tasks                     root     SELECT          true
 system         public        tenant_tasks                     root     UPDATE          true
+system         public        statement_activity               admin    SELECT          true
+system         public        statement_activity               root     SELECT          true
+system         public        transaction_activity             admin    SELECT          true
+system         public        transaction_activity             root     SELECT          true
 a              pg_extension  NULL                             public   USAGE           false
 a              public        NULL                             admin    ALL             true
 a              public        NULL                             public   CREATE          false
@@ -1514,6 +1518,7 @@ system         public       sqlliveness                      root     DELETE    
 system         public       sqlliveness                      root     INSERT          true
 system         public       sqlliveness                      root     SELECT          true
 system         public       sqlliveness                      root     UPDATE          true
+system         public       statement_activity               root     SELECT          true
 system         public       statement_bundle_chunks          root     DELETE          true
 system         public       statement_bundle_chunks          root     INSERT          true
 system         public       statement_bundle_chunks          root     SELECT          true
@@ -1548,6 +1553,7 @@ system         public       tenant_usage                     root     INSERT    
 system         public       tenant_usage                     root     SELECT          true
 system         public       tenant_usage                     root     UPDATE          true
 system         public       tenants                          root     SELECT          true
+system         public       transaction_activity             root     SELECT          true
 system         public       transaction_statistics           root     SELECT          true
 system         public       ui                               root     DELETE          true
 system         public       ui                               root     INSERT          true
