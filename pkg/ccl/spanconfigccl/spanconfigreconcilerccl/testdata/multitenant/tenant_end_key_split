@@ -9,16 +9,16 @@ mutations discard
 
 # Initialize a new tenant, tenant=11, that DOES NOT have a pre-existing tenant,
 # tenant=12, next to it.
-initialize tenant=11
+initialize tenant=12
 ----
 
 # A record IS written for a key that logically belongs to the next tenant,
 # tenant=12, because tenant=12 DOES NOT exist.
-state offset=57 limit=3
+state offset=59 limit=3
 ----
 ...
-/Table/5{8-9}                              database system (host)
-/Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 /Tenant/11{-\x00}                          database system (tenant)
 ...
 
@@ -33,18 +33,18 @@ reconcile tenant=11
 # Peek near the start of the span_configurations table where tenant=11's records
 # are stored. The first one is from the start of its keyspace to start of
 # table with ID=4: /Tenant/11{-/Table/4}.
-state offset=56 limit=3
+state offset=58 limit=3
 ----
 ...
-/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/5{8-9}                              database system (host)
 /Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 ...
 
 # Peek near the end of the span_configurations table where tenant=11's records
 # are stored. The last one is for its last system table:
 # /Tenant/11/Table/5{7-8}. Right now the split is at /Tenant/12. Which is fine.
-state offset=99 limit=3
+state offset=101 limit=3
 ----
 ...
 /Tenant/11/Table/5{5-6}                    database system (tenant)
@@ -102,6 +102,8 @@ upsert /Tenant/11/Table/5{4-5}             database system (tenant)
 upsert /Tenant/11/Table/5{5-6}             database system (tenant)
 upsert /Tenant/11/Table/5{6-7}             database system (tenant)
 upsert /Tenant/11/Table/5{7-8}             database system (tenant)
+upsert /Tenant/11/Table/5{8-9}             database system (tenant)
+upsert /Tenant/11/Table/{59-60}            database system (tenant)
 
 # Initialize a new tenant, tenant=10, that DOES have a pre-existing tenant,
 # tenant=11, next to it.
@@ -110,10 +112,10 @@ initialize tenant=10
 
 # A record IS NOT written for a key that logically belongs to the next tenant,
 # tenant=11, because tenant=11 DOES exist.
-state offset=57 limit=3
+state offset=59 limit=3
 ----
 ...
-/Table/5{8-9}                              database system (host)
-/Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 ...

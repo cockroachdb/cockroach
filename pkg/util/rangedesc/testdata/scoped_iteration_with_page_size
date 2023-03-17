@@ -59,18 +59,20 @@ scan page-size=3
 - r57:/Table/5{6-7}
 - r58:/Table/5{7-8}
 - r59:/Table/5{8-9}
-- r60:/{Table/59-Max}
-scan through /M{in-ax} (page-size=3) found 60/60 descriptors
+- r60:/Table/{59-60}
+- r61:/Table/6{0-1}
+- r62:/{Table/61-Max}
+scan through /M{in-ax} (page-size=3) found 62/62 descriptors
 
 scan scope=1 page-size=5
 ----
 - r2:/System/NodeLiveness{-Max}
-scan through /System/NodeLiveness{-Max} (page-size=5) found 1/60 descriptors
+scan through /System/NodeLiveness{-Max} (page-size=5) found 1/62 descriptors
 
 scan scope=1 page-size=500
 ----
 - r2:/System/NodeLiveness{-Max}
-scan through /System/NodeLiveness{-Max} (page-size=500) found 1/60 descriptors
+scan through /System/NodeLiveness{-Max} (page-size=500) found 1/62 descriptors
 
 scan scope=6 page-size=4
 ----
@@ -84,4 +86,4 @@ scan scope=6 page-size=4
 - r47:/Table/4{5-6}
 - r48:/Table/4{6-7}
 - r49:/Table/4{7-8}
-scan through /Table/{38-48} (page-size=4) found 10/60 descriptors
+scan through /Table/{38-48} (page-size=4) found 10/62 descriptors

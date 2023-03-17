@@ -88,6 +88,8 @@ state offset=51
 /Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/5{8-9}                              database system (host)
 /Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -138,6 +140,8 @@ state offset=57
 ...
 /Table/5{8-9}                              database system (host)
 /Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -154,5 +158,7 @@ state offset=57
 ...
 /Table/5{8-9}                              database system (host)
 /Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 /Table/10{6-7}                             range default
 /Table/10{7-8}                             range default
