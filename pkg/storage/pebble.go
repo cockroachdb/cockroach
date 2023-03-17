@@ -93,6 +93,25 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"storage.value_blocks.enabled", true)).WithPublic()
 
+// IngestAsFlushable controls whether ingested sstables that overlap the
+// memtable may be lazily ingested: written to the WAL and enqueued in the list
+// of flushables (eg, memtables, large batches and now lazily-ingested
+// sstables). This only affects sstables that are ingested in the future. If a
+// sstable was already lazily ingested but not flushed, a crash and subsequent
+// recovery will still enqueue the sstables as flushable when the ingest's WAL
+// entry is replayed.
+//
+// The value of this cluster setting is ignored if the cluster version is not
+// yet at least V23_1EnableFlushableIngest.
+//
+// This cluster setting will be removed in a subsequent release.
+var IngestAsFlushable = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.ingest_as_flushable.enabled",
+	"set to true to enable lazy ingestion of sstables",
+	util.ConstantWithMetamorphicTestBool(
+		"storage.ingest_as_flushable.enabled", true))
+
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
 func EngineKeyCompare(a, b []byte) int {
@@ -938,6 +957,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return !version.Less(clusterversion.ByKey(
 			clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
 			ValueBlocksEnabled.Get(&cfg.Settings.SV)
+	}
+	opts.Experimental.DisableIngestAsFlushable = func() bool {
+		return !IngestAsFlushable.Get(&cfg.Settings.SV)
 	}
 
 	auxDir := opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
