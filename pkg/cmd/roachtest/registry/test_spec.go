@@ -84,9 +84,27 @@ type TestSpec struct {
 	// cannot be run with encryption enabled.
 	EncryptionSupport EncryptionSupport
 
+	// SkipPostValidations is a set of post-validations that should be skipped
+	// after the test completes. This is useful for tests that are known to be
+	// incompatible with some validations. By default, tests will run all
+	// validations.
+	SkipPostValidations PostValidation
+
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
+
+// PostValidation is a type of post-validation that runs after a test completes.
+type PostValidation int
+
+const (
+	// PostValidationReplicaDivergence is a post-validation that checks for
+	// replica divergence.
+	PostValidationReplicaDivergence PostValidation = 1 << iota
+	// PostValidationInvalidDescriptors is a post-validation that checks for
+	// invalid descriptors.
+	PostValidationInvalidDescriptors
+)
 
 // MatchType is the type of match a file has to a TestFilter.
 type MatchType int
