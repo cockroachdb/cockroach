@@ -391,7 +391,10 @@ $input
 # Max1Row operator we introduce is guaranteed to be eliminated as
 # MakeArrayAggForFlatten will return a ScalarGroupBy.
 [NormalizeArrayFlattenToAgg, Normalize]
-(ArrayFlatten $input:(HasOuterCols $input) $subquery:*)
+(ArrayFlatten
+    $input:*
+    $private:* & (CanNormalizeArrayFlatten $input $private)
+)
 =>
 (Coalesce
     [
@@ -403,7 +406,7 @@ $input
                         (ArrayAgg
                             (Variable
                                 $requestedCol:(SubqueryRequestedCol
-                                    $subquery
+                                    $private
                                 )
                             )
                         )
@@ -414,7 +417,7 @@ $input
                 ]
                 (MakeGrouping
                     (MakeEmptyColSet)
-                    (SubqueryOrdering $subquery)
+                    (SubqueryOrdering $private)
                 )
             )
             (MakeUnorderedSubquery)

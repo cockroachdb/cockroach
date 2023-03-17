@@ -2937,6 +2937,26 @@ SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
 NULL  false  NULL
 
 
+subtest array_flatten
+
+statement ok
+CREATE FUNCTION arr(x INT) RETURNS INT[] LANGUAGE SQL AS $$
+  SELECT ARRAY(VALUES (1), (2), (x));
+$$
+
+query T
+SELECT arr(10)
+----
+{1,2,10}
+
+query T
+SELECT arr(i) FROM generate_series(1, 3) g(i)
+----
+{1,2,1}
+{1,2,2}
+{1,2,3}
+
+
 subtest variadic
 
 # Variadic UDFS are not currently supported.
@@ -3046,10 +3066,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100271  f_93314         105  1546506610  14  false  false  false  v  0  100270  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100273  f_93314_alias   105  1546506610  14  false  false  false  v  0  100272  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100277  f_93314_comp    105  1546506610  14  false  false  false  v  0  100274  ·  {}  NULL  SELECT (1, 2);
-100278  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100276  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100272  f_93314         105  1546506610  14  false  false  false  v  0  100271  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100274  f_93314_alias   105  1546506610  14  false  false  false  v  0  100273  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100278  f_93314_comp    105  1546506610  14  false  false  false  v  0  100275  ·  {}  NULL  SELECT (1, 2);
+100279  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100277  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.

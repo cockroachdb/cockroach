@@ -562,3 +562,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: corr@corr_pkey
       spans: FULL SCAN
+
+# Case where the a correlated subquery contains an uncorrelated array-flatten
+# subquery.
+statement error could not decorrelate subquery
+SELECT
+  CASE WHEN k < 5 THEN (SELECT array(SELECT 1) FROM corr tmp WHERE k*10 = corr.k) END
+FROM corr
