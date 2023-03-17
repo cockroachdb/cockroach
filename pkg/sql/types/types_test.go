@@ -1086,3 +1086,74 @@ func TestEnumWithoutTypeMetaNameDoesNotPanicInSQLString(t *testing.T) {
 	arrayType := MakeArray(typ)
 	require.Equal(t, "@100100[]", arrayType.SQLString())
 }
+
+func TestSQLStringForError(t *testing.T) {
+	const userDefinedOID = oidext.CockroachPredefinedOIDMax + 500
+	userDefinedEnum := MakeEnum(userDefinedOID, userDefinedOID+3)
+	nonUserDefinedEnum := MakeEnum(500, 503)
+	userDefinedTuple := &T{
+		InternalType: InternalType{
+			Family: TupleFamily, Oid: userDefinedOID, TupleContents: []*T{Int}, Locale: &emptyLocale,
+		},
+		TypeMeta: UserDefinedTypeMetadata{Name: &UserDefinedTypeName{Name: "foo"}},
+	}
+	arrayWithUserDefinedContent := MakeArray(userDefinedEnum)
+
+	testCases := []struct {
+		typ      *T
+		expected string
+	}{
+		{ // Case 1: un-redacted
+			typ:      Int,
+			expected: "INT8",
+		},
+		{ // Case 2: un-redacted
+			typ:      Float,
+			expected: "FLOAT8",
+		},
+		{ // Case 3: un-redacted
+			typ:      Decimal,
+			expected: "DECIMAL",
+		},
+		{ // Case 4: un-redacted
+			typ:      String,
+			expected: "STRING",
+		},
+		{ // Case 5: un-redacted
+			typ:      TimestampTZ,
+			expected: "TIMESTAMPTZ",
+		},
+		{ // Case 6: un-redacted
+			typ:      nonUserDefinedEnum,
+			expected: "@500",
+		},
+		{ // Case 7: redacted because user-defined
+			typ:      userDefinedEnum,
+			expected: "USER DEFINED ENUM: ‹@100500›",
+		},
+		{ // Case 8: un-redacted
+			typ:      MakeTuple([]*T{Int, Float}),
+			expected: "RECORD",
+		},
+		{ // Case 9: un-redacted because contents are not visible
+			typ:      MakeTuple([]*T{Int, userDefinedEnum}),
+			expected: "RECORD",
+		},
+		{ // Case 10: redacted because user-defined
+			typ:      userDefinedTuple,
+			expected: "USER DEFINED RECORD: ‹FOO›",
+		},
+		{ // Case 11: un-redacted
+			typ:      MakeArray(Int),
+			expected: "INT8[]",
+		},
+		{ // Case 12: redacted element type
+			typ:      arrayWithUserDefinedContent,
+			expected: "USER DEFINED ARRAY: ‹@100500[]›",
+		},
+	}
+
+	for i, tc := range testCases {
+		require.Equalf(t, tc.expected, string(tc.typ.SQLStringForError()), "test case %d", i+1)
+	}
+}
