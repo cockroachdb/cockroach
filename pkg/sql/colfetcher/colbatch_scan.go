@@ -48,8 +48,11 @@ type colBatchScanBase struct {
 	parallelize     bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
-	tracingSpan *tracing.Span
-	mu          struct {
+	tracingSpan               *tracing.Span
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
+	mu                        struct {
 		syncutil.Mutex
 		// rowsRead contains the number of total rows this ColBatchScan has
 		// returned so far.
@@ -86,12 +89,17 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 
 // GetContentionTime is part of the colexecop.KVReader interface.
 func (s *colBatchScanBase) GetContentionTime() time.Duration {
-	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
+	return s.contentionEventsListener.CumulativeContentionTime
 }
 
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *colBatchScanBase) GetScanStats() execstats.ScanStats {
-	return execstats.GetScanStats(s.Ctx, nil /* recording */)
+	return s.scanStatsListener.ScanStats
+}
+
+// GetConsumedRU is part of the colexecop.KVReader interface.
+func (s *colBatchScanBase) GetConsumedRU() uint64 {
+	return s.tenantConsumptionListener.ConsumedRU
 }
 
 // Release implements the execreleasable.Releasable interface.
@@ -218,11 +226,10 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	// If tracing is enabled, we need to start a child span so that the only
-	// contention events present in the recording would be because of this
-	// fetcher. Note that ProcessorSpan method itself will check whether tracing
-	// is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colbatchscan", s.processorID)
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
+		s.Ctx, s.flowCtx, "colbatchscan", s.processorID,
+		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+	)
 	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
 		s.Ctx,

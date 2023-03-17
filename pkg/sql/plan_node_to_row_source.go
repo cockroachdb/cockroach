@@ -46,6 +46,8 @@ type planNodeToRowSource struct {
 
 	// run time state machine values
 	row rowenc.EncDatumRow
+
+	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
 var _ execinfra.LocalProcessor = &planNodeToRowSource{}
@@ -166,7 +168,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 }
 
 func (p *planNodeToRowSource) Start(ctx context.Context) {
-	ctx = p.StartInternal(ctx, nodeName(p.node))
+	ctx = p.StartInternal(ctx, nodeName(p.node), &p.tenantConsumptionListener)
 	p.params.ctx = ctx
 	// This starts all of the nodes below this node.
 	if err := startExec(p.params, p.node); err != nil {
@@ -261,13 +263,12 @@ func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
 	// Propagate RUs from IO requests.
 	// TODO(drewk): we should consider propagating other stats for planNode
 	// operators.
-	scanStats := execstats.GetScanStats(p.Ctx(), p.ExecStatsTrace)
-	if scanStats.ConsumedRU == 0 {
+	if p.tenantConsumptionListener.ConsumedRU == 0 {
 		return nil
 	}
 	return &execinfrapb.ComponentStats{
 		Exec: execinfrapb.ExecStats{
-			ConsumedRU: optional.MakeUint(scanStats.ConsumedRU),
+			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.ConsumedRU),
 		},
 	}
 }
