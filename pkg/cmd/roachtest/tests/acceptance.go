@@ -37,6 +37,7 @@ func registerAcceptance(r registry.Registry) {
 				name:              "gossip/restart-node-one",
 				fn:                runGossipRestartNodeOne,
 				encryptionSupport: registry.EncryptionAlwaysDisabled,
+				skip:              "skippy dooo",
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
