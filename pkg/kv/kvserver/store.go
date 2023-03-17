@@ -123,6 +123,13 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	// As of November 2020, this default value could be re-tuned.
 	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
 
+// storeSchedulerShardSize specifies the maximum number of scheduler worker
+// goroutines per mutex shard. By default, we spin up 8 workers per CPU core,
+// capped at 96, so 12 is equivalent to 1.5 CPUs per shard, or a maximum of 8
+// shards. This relieves contention by an order of magnitude at high core
+// counts, while also avoiding starvation by excessive sharding.
+var storeSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 12)
+
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
@@ -1295,7 +1302,7 @@ func NewStore(
 	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
 	// unnecessary elections when ticks are temporarily delayed and piled up.
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency,
-		cfg.RaftElectionTimeoutTicks)
+		storeSchedulerShardSize, cfg.RaftElectionTimeoutTicks)
 
 	s.syncWaiter = logstore.NewSyncWaiterLoop()
 
