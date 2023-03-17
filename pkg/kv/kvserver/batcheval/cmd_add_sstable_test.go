@@ -64,6 +64,7 @@ func TestEvalAddSSTable(t *testing.T) {
 		noShadowBelow  int64 // DisallowShadowingBelow
 		requireReqTS   bool  // AddSSTableRequireAtRequestTimestamp
 		expect         kvs
+		expectAny      bool
 		expectErr      interface{} // error type, substring, substring slice, or true (any)
 		expectErrRace  interface{}
 		expectStatsEst bool // expect MVCCStats.ContainsEstimates, don't check stats
@@ -1040,6 +1041,48 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{rangeKV("a", "b", 7, "")},
 			expectErr:  &kvpb.WriteTooOldError{},
 		},
+		"DisallowConflict allows overlapping sst range tombstones": {
+			noConflict: true,
+			data:       kvs{pointKV("ib", 6, "foo"), pointKV("if", 6, "foo"), pointKV("it", 6, "foo"), rangeKV("i", "j", 5, "")},
+			sst:        kvs{rangeKV("ia", "irc", 8, ""), rangeKV("ie", "iu", 9, ""), pointKV("ic", 7, "foo"), pointKV("iq", 8, "foo")},
+			expectAny:  true,
+		},
+		"DisallowConflict does not miss deleted ext keys": {
+			noConflict: true,
+			data:       kvs{pointKV("c", 6, "foo"), pointKV("d", 6, "foo"), pointKV("e", 6, "foo"), rangeKV("bb", "j", 5, "")},
+			sst:        kvs{rangeKV("b", "k", 8, ""), pointKV("cc", 9, "foo"), pointKV("dd", 7, "foo"), pointKV("ee", 7, "foo")},
+			expectAny:  true,
+		},
+		"DisallowConflict does not miss deleted ext keys 2": {
+			noConflict: true,
+			data:       kvs{pointKV("kr", 7, "foo"), pointKV("krj", 7, "foo"), pointKV("ksq", 7, "foo"), pointKV("ku", 6, "foo")},
+			sst:        kvs{rangeKV("ke", "l", 11, ""), pointKV("kr", 8, "bar"), pointKV("ksxk", 9, "bar")},
+			expectAny:  true,
+		},
+		"DisallowConflict does not miss deleted ext keys 3": {
+			noConflict: true,
+			data:       kvs{pointKV("xe", 5, "foo"), pointKV("xg", 6, "foo"), pointKV("xh", 7, "foo"), rangeKV("xf", "xk", 5, "")},
+			sst:        kvs{pointKV("xeqn", 10, "foo"), pointKV("xh", 12, "foo"), rangeKV("x", "xp", 11, "")},
+			expectAny:  true,
+		},
+		"DisallowConflict does not miss deleted ext keys 4": {
+			noConflict: true,
+			data:       kvs{pointKV("xh", 7, "foo")},
+			sst:        kvs{pointKV("xh", 12, "foo"), rangeKV("x", "xp", 11, "")},
+			expectAny:  true,
+		},
+		"DisallowConflict does not repeatedly count ext value deleted by ext range": {
+			noConflict: true,
+			data:       kvs{rangeKV("bf", "bjs", 7, ""), pointKV("bbeg", 6, "foo"), pointKV("bf", 6, "foo"), pointKV("bl", 6, "foo")},
+			sst:        kvs{pointKV("bbtq", 11, "foo"), pointKV("bbw", 11, "foo"), pointKV("bc", 11, "foo"), pointKV("bl", 12, "foo")},
+			expectAny:  true,
+		},
+		"DisallowConflict does not miss sst range keys after overlapping point": {
+			noConflict: true,
+			data:       kvs{pointKV("oe", 8, "foo"), pointKV("oi", 8, "foo"), rangeKV("o", "omk", 7, ""), pointKV("od", 6, "foo")},
+			sst:        kvs{pointKV("oe", 11, "foo"), pointKV("oih", 12, "foo"), rangeKV("ods", "ogvh", 10, ""), rangeKV("ogvh", "ohl", 10, ""), rangeKV("ogvh", "ohl", 9, "")},
+			expectAny:  true,
+		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
 		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {
@@ -1198,7 +1241,9 @@ func TestEvalAddSSTable(t *testing.T) {
 						}
 
 						// Scan resulting data from engine.
-						require.Equal(t, expect, storageutils.ScanEngine(t, engine))
+						if !tc.expectAny {
+							require.Equal(t, expect, storageutils.ScanEngine(t, engine))
+						}
 
 						// Check that stats were updated correctly.
 						if tc.expectStatsEst {
