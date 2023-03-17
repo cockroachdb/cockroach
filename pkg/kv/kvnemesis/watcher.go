@@ -87,7 +87,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 			w.mu.Unlock()
 
 			ds := dss[i]
-			err := ds.RangeFeed(ctx, []roachpb.Span{dataSpan}, ts, true /* withDiff */, eventC)
+			err := ds.RangeFeed(ctx, []roachpb.Span{dataSpan}, ts, eventC, kvcoord.WithDiff())
 			if isRetryableRangeFeedErr(err) {
 				log.Infof(ctx, "got retryable RangeFeed error: %+v", err)
 				continue

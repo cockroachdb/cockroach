@@ -69,6 +69,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/future",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
