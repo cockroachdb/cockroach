@@ -907,6 +907,8 @@ func TestHashRouterOneOutput(t *testing.T) {
 			converterMemAcc := tu.testMemMonitor.MakeBoundAccount()
 			defer converterMemAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(
+				&execinfra.FlowCtx{Gateway: true},
+				0, /* processorID */
 				[]*colmem.Allocator{tu.testAllocator},
 				colexecargs.OpWithMetaInfo{
 					Root: colexectestutils.NewOpFixedSelTestInput(tu.testAllocator, sel, len(sel), data, typs),
@@ -1342,6 +1344,8 @@ func BenchmarkHashRouter(b *testing.B) {
 					defer converterMemAcc.Close(ctx)
 				}
 				r, outputs := NewHashRouter(
+					&execinfra.FlowCtx{Gateway: true},
+					0, /* processorID */
 					allocators,
 					colexecargs.OpWithMetaInfo{Root: input},
 					typs,

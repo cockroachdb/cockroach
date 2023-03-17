@@ -837,13 +837,20 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
-func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
+func ProcessorSpan(
+	ctx context.Context, flowCtx *FlowCtx, name string, processorID int32,
+) (context.Context, *tracing.Span) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(ctx, name,
+	retCtx, retSpan := sp.Tracer().StartSpanCtx(ctx, name,
 		tracing.WithParent(sp), tracing.WithDetachedRecording())
+	if retSpan.IsVerbose() {
+		retSpan.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(flowCtx.ID.String()))
+		retSpan.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(processorID)))
+	}
+	return retCtx, retSpan
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
@@ -863,11 +870,7 @@ func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string)
 	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
 		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
 	if !noSpan {
-		pb.ctx, pb.span = ProcessorSpan(ctx, name)
-		if pb.span != nil && pb.span.IsVerbose() {
-			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
-			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
-		}
+		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID)
 	}
 	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.ctx)
 	return pb.ctx
