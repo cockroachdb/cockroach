@@ -39,6 +39,7 @@ export interface TimeScaleDropdownProps {
     curTimeScale: TimeScale,
     timeWindow: TimeWindow,
   ) => TimeScale;
+  className?: string;
 }
 
 export const getTimeLabel = (
@@ -127,6 +128,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   options = defaultTimeScaleOptions,
   setTimeScale,
   adjustTimeScaleOnChange,
+  className,
 }): React.ReactElement => {
   const end = currentScale.fixedWindowEnd
     ? moment.utc(currentScale.fixedWindowEnd)
@@ -245,7 +247,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   };
 
   return (
-    <div className={cx("timescale")}>
+    <div className={`${cx("timescale")} ${className}`}>
       <RangeSelect
         selected={formatRangeSelectSelected(currentWindow, currentScale)}
         onPresetOptionSelect={onPresetOptionSelect}

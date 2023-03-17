@@ -23,7 +23,6 @@ import {
 } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
-import { TableStatistics } from "../tableStatistics";
 import {
   Filter,
   Filters,
@@ -66,7 +65,6 @@ import {
 import ClearStats from "../sqlActivity/clearStats";
 import LoadingError from "../sqlActivity/errorComponent";
 import {
-  TimeScaleDropdown,
   TimeScale,
   timeScaleToString,
   timeScale1hMinOptions,
@@ -76,21 +74,21 @@ import {
 
 import { commonStyles } from "../common";
 import moment from "moment";
-
-import { Dropdown } from "src/dropdown";
 import {
   STATS_LONG_LOADING_DURATION,
-  limitOptions,
   stmtRequestSortOptions,
   getSortLabel,
 } from "src/util/sqlActivityConstants";
 import { Button } from "src/button";
+import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IDuration = google.protobuf.IDuration;
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 // Most of the props are supposed to be provided as connected props
 // from redux store.
@@ -213,7 +211,7 @@ export class StatementsPage extends React.Component<
     super(props);
     const defaultState = {
       pagination: {
-        pageSize: 20,
+        pageSize: 50,
         current: 1,
       },
       limit: this.props.limit,
@@ -556,7 +554,7 @@ export class StatementsPage extends React.Component<
     this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
   };
 
-  renderStatements = (regions: string[]): React.ReactElement => {
+  renderStatements = (): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
       onSelectDiagnosticsReportDropdownOption,
@@ -568,14 +566,25 @@ export class StatementsPage extends React.Component<
       hasViewActivityRedactedRole,
       sortSetting,
       search,
+      apps,
+      databases,
+      hasAdminRole,
     } = this.props;
     const data = this.filteredStatementsData();
     const statements = this.props.statements ?? [];
-    const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     // If the cluster is a tenant cluster we don't show info
     // about nodes/regions.
     populateRegionNodeForStatements(statements, nodeRegions, isTenant);
+
+    const nodes = isTenant
+      ? []
+      : Object.keys(nodeRegions)
+          .map(n => Number(n))
+          .sort();
+    const regions = isTenant
+      ? []
+      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
 
     // Creates a list of all possible columns,
     // hiding nodeRegions if is not multi-region and
@@ -622,25 +631,78 @@ export class StatementsPage extends React.Component<
     const displayColumns = columns.filter(c => isColumnSelected(c));
 
     const period = timeScaleToString(this.props.timeScale);
+    const clearFilter = activeFilters ? (
+      <PageConfigItem>
+        <Button onClick={this.onClearFilters} type="flat" size="small">
+          clear filter
+        </Button>
+      </PageConfigItem>
+    ) : (
+      <></>
+    );
+
+    const sortSettingLabel = getSortLabel(this.props.reqSortSetting);
 
     return (
-      <div>
+      <>
+        <h5 className={`${commonStyles("base-heading")} ${cx("margin-top")}`}>
+          {`Results - Top ${this.props.limit} Statement Fingerprints by ${sortSettingLabel}`}
+        </h5>
+        <section className={cx("filter-area")}>
+          <PageConfig className={cx("float-left")}>
+            <PageConfigItem>
+              <Search
+                onSubmit={this.onSubmitSearchField}
+                onClear={this.onClearSearchField}
+                defaultValue={search}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <Filter
+                onSubmitFilters={this.onSubmitFilters}
+                appNames={apps}
+                dbNames={databases}
+                regions={regions}
+                nodes={nodes.map(n => "n" + n)}
+                activeFilters={activeFilters}
+                filters={filters}
+                showDB={true}
+                showSqlType={true}
+                showScan={true}
+                showRegions={regions.length > 1}
+                showNodes={!isTenant && nodes.length > 1}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <ColumnsSelector
+                options={tableColumns}
+                onSubmitColumns={onColumnsChange}
+              />
+            </PageConfigItem>
+            {clearFilter}
+          </PageConfig>
+          <PageConfig className={cx("float-right")}>
+            <PageConfigItem>
+              <p className={timeScaleStylesCx("time-label")}>
+                Showing aggregated stats from{" "}
+                <span className={timeScaleStylesCx("bold")}>{period}</span>
+              </p>
+            </PageConfigItem>
+            {hasAdminRole && (
+              <PageConfigItem
+                className={`${commonStyles("separator")} ${cx(
+                  "reset-btn-area",
+                )} `}
+              >
+                <ClearStats
+                  resetSQLStats={this.resetSQLStats}
+                  tooltipType="statement"
+                />
+              </PageConfigItem>
+            )}
+          </PageConfig>
+        </section>
         <section className={sortableTableCx("cl-table-container")}>
-          <div>
-            <ColumnsSelector
-              options={tableColumns}
-              onSubmitColumns={onColumnsChange}
-            />
-            <TableStatistics
-              pagination={pagination}
-              search={search}
-              totalCount={totalCount}
-              arrayItemName="statements"
-              activeFilters={activeFilters}
-              period={period}
-              onClearFilters={this.onClearFilters}
-            />
-          </div>
           <StatementsSortedTable
             className="statements-table"
             data={data}
@@ -661,7 +723,7 @@ export class StatementsPage extends React.Component<
           total={data.length}
           onChange={this.onChangePage}
         />
-      </div>
+      </>
     );
   };
 
@@ -670,23 +732,7 @@ export class StatementsPage extends React.Component<
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
-      apps,
-      databases,
-      search,
-      isTenant,
-      nodeRegions,
-      hasAdminRole,
     } = this.props;
-
-    const nodes = isTenant
-      ? []
-      : Object.keys(nodeRegions)
-          .map(n => Number(n))
-          .sort();
-    const regions = isTenant
-      ? []
-      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
-    const { filters, activeFilters } = this.state;
 
     const longLoadingMessage = (
       <Delayed delay={STATS_LONG_LOADING_DURATION}>
@@ -698,92 +744,42 @@ export class StatementsPage extends React.Component<
     );
 
     return (
-      <div className={cx("root", "table-area")}>
-        <PageConfig>
-          <PageConfigItem>
-            <Search
-              onSubmit={this.onSubmitSearchField as any}
-              onClear={this.onClearSearchField}
-              defaultValue={search}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Filter
-              onSubmitFilters={this.onSubmitFilters}
-              appNames={apps}
-              dbNames={databases}
-              regions={regions}
-              nodes={nodes.map(n => "n" + n)}
-              activeFilters={activeFilters}
-              filters={filters}
-              showDB={true}
-              showSqlType={true}
-              showScan={true}
-              showRegions={regions.length > 1}
-              showNodes={nodes.length > 1}
-            />
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <Dropdown items={limitOptions} onChange={this.onChangeLimit}>
-              Limit: {this.state.limit ?? "N/A"}
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown
-              items={stmtRequestSortOptions}
-              onChange={this.onChangeReqSort}
-            >
-              Sort By: {getSortLabel(this.state.reqSortSetting)}
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem>
-            <TimeScaleDropdown
-              options={timeScale1hMinOptions}
-              currentScale={this.state.timeScale}
-              setTimeScale={this.changeTimeScale}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Button size="small" onClick={this.updateRequestParams}>
-              Submit Request
-            </Button>
-          </PageConfigItem>
-          {hasAdminRole && (
-            <PageConfigItem
-              className={`${commonStyles("separator")} ${cx(
-                "reset-btn-area",
-              )} `}
-            >
-              <ClearStats
-                resetSQLStats={this.resetSQLStats}
-                tooltipType="statement"
-              />
-            </PageConfigItem>
-          )}
-        </PageConfig>
-        <Loading
-          loading={this.props.isReqInFlight}
-          page={"statements"}
-          error={this.props.statementsError}
-          render={() => this.renderStatements(regions)}
-          renderError={() =>
-            LoadingError({
-              statsType: "statements",
-              timeout: this.props.statementsError?.name
-                ?.toLowerCase()
-                .includes("timeout"),
-            })
-          }
+      <div className={cx("root")}>
+        <SearchCriteria
+          sortOptions={stmtRequestSortOptions}
+          topValue={this.state.limit}
+          byValue={this.state.reqSortSetting}
+          currentScale={this.state.timeScale}
+          onChangeTop={this.onChangeLimit}
+          onChangeBy={this.onChangeReqSort}
+          onChangeTimeScale={this.changeTimeScale}
+          onApply={this.updateRequestParams}
         />
-        {this.props.isReqInFlight &&
-          getValidErrorsList(this.props.statementsError) == null &&
-          longLoadingMessage}
-        <ActivateStatementDiagnosticsModal
-          ref={this.activateDiagnosticsRef}
-          activate={onActivateStatementDiagnostics}
-          refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-          onOpenModal={onDiagnosticsModalOpen}
-        />
+        <div className={cx("table-area")}>
+          <Loading
+            loading={this.props.isReqInFlight}
+            page={"statements"}
+            error={this.props.statementsError}
+            render={() => this.renderStatements()}
+            renderError={() =>
+              LoadingError({
+                statsType: "statements",
+                timeout: this.props.statementsError?.name
+                  ?.toLowerCase()
+                  .includes("timeout"),
+              })
+            }
+          />
+          {this.props.isReqInFlight &&
+            getValidErrorsList(this.props.statementsError) == null &&
+            longLoadingMessage}
+          <ActivateStatementDiagnosticsModal
+            ref={this.activateDiagnosticsRef}
+            activate={onActivateStatementDiagnostics}
+            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
+            onOpenModal={onDiagnosticsModalOpen}
+          />
+        </div>{" "}
       </div>
     );
   }
