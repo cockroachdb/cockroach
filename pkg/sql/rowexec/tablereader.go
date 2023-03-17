@@ -55,10 +55,11 @@ type tableReader struct {
 	fetcher rowFetcher
 	alloc   tree.DatumAlloc
 
-	scanStats execstats.ScanStats
-
 	// rowsRead is the number of rows read and is tracked unconditionally.
-	rowsRead int64
+	rowsRead                  int64
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
 var _ execinfra.Processor = &tableReader{}
@@ -195,7 +196,10 @@ func (tr *tableReader) Start(ctx context.Context) {
 	}
 
 	// Keep ctx assignment so we remember StartInternal can make a new one.
-	ctx = tr.StartInternal(ctx, tableReaderProcName)
+	ctx = tr.StartInternal(
+		ctx, tableReaderProcName, &tr.contentionEventsListener,
+		&tr.scanStatsListener, &tr.tenantConsumptionListener,
+	)
 	// Appease the linter.
 	_ = ctx
 }
@@ -306,20 +310,19 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	tr.scanStats = execstats.GetScanStats(tr.Ctx(), tr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:          is.NumTuples,
 			KVTime:              is.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(tr.Ctx(), tr.ExecStatsTrace)),
+			ContentionTime:      optional.MakeTimeValue(tr.contentionEventsListener.CumulativeContentionTime),
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(is.kvCPUTime),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(tr.scanStats.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(tr.tenantConsumptionListener.ConsumedRU)
+	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStatsListener.ScanStats)
 	return ret
 }
 

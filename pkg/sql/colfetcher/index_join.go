@@ -109,8 +109,11 @@ type ColIndexJoin struct {
 
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
-	tracingSpan *tracing.Span
-	mu          struct {
+	tracingSpan               *tracing.Span
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
+	mu                        struct {
 		syncutil.Mutex
 		// rowsRead contains the number of total rows this ColIndexJoin has
 		// returned so far.
@@ -137,11 +140,10 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	// If tracing is enabled, we need to start a child span so that the only
-	// contention events present in the recording would be because of this
-	// fetcher. Note that ProcessorSpan method itself will check whether tracing
-	// is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colindexjoin", s.processorID)
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
+		s.Ctx, s.flowCtx, "colindexjoin", s.processorID,
+		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+	)
 	s.Input.Init(s.Ctx)
 }
 
@@ -408,7 +410,17 @@ func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
 
 // GetContentionTime is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetContentionTime() time.Duration {
-	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
+	return s.contentionEventsListener.CumulativeContentionTime
+}
+
+// GetScanStats is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
+	return s.scanStatsListener.ScanStats
+}
+
+// GetConsumedRU is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetConsumedRU() uint64 {
+	return s.tenantConsumptionListener.ConsumedRU
 }
 
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
@@ -661,11 +673,6 @@ var (
 // increase cluster instability.
 func adjustMemEstimate(estimate int64) int64 {
 	return estimate*memEstimateMultiplier + memEstimateAdditive
-}
-
-// GetScanStats is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
-	return execstats.GetScanStats(s.Ctx, nil /* recording */)
 }
 
 // Release implements the execinfra.Releasable interface.
