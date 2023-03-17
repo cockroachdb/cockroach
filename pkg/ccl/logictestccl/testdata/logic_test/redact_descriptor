@@ -147,7 +147,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                 "b"
             ],
             "unique": true,
-            "version": 5
+            "version": 4
         },
         "privileges": {
             "ownerProto": "root",

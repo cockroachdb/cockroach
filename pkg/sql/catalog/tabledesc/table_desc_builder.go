@@ -607,9 +607,6 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	default:
 		break
 	}
-	//if desc.PrimaryIndex.Version > 5 {
-	//	return false
-	//}
 	// Update primary index by populating StoreColumnIDs/Names slices.
 	nonVirtualCols := make([]*descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 	maybeAddCol := func(col *descpb.ColumnDescriptor) {
