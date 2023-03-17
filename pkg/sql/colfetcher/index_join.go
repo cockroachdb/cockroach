@@ -376,8 +376,10 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
-	if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+	if !s.flowCtx.Gateway {
+		if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
+			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+		}
 	}
 	return trailingMeta
 }

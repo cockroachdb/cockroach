@@ -662,8 +662,10 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 				pb.span.RecordStructured(stats)
 			}
 		}
-		if trace := pb.span.GetConfiguredRecording(); trace != nil {
-			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+		if !pb.FlowCtx.Gateway {
+			if trace := pb.span.GetConfiguredRecording(); trace != nil {
+				pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			}
 		}
 	}
 
@@ -834,9 +836,22 @@ func ProcessorSpan(
 	if len(eventListeners) > 0 {
 		listenersOpt = tracing.WithEventListeners(eventListeners...)
 	}
-	retCtx, retSpan := sp.Tracer().StartSpanCtx(
-		ctx, name, tracing.WithParent(sp), tracing.WithDetachedRecording(), listenersOpt,
-	)
+	var retCtx context.Context
+	var retSpan *tracing.Span
+	if flowCtx.Gateway {
+		retCtx, retSpan = sp.Tracer().StartSpanCtx(
+			ctx, name, tracing.WithParent(sp), listenersOpt,
+		)
+	} else {
+		// The trace from each processor will be imported into the span of the
+		// flow on the gateway, in DistSQLReceiver.pushMeta, so we use the
+		// detached option.
+		// TODO(yuzefovich): only use the detached recording for the root
+		// components of the remote flows.
+		retCtx, retSpan = sp.Tracer().StartSpanCtx(
+			ctx, name, tracing.WithParent(sp), tracing.WithDetachedRecording(), listenersOpt,
+		)
+	}
 	if retSpan.IsVerbose() {
 		retSpan.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(flowCtx.ID.String()))
 		retSpan.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(processorID)))
