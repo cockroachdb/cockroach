@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -73,9 +72,9 @@ type KVReader interface {
 	// GetBatchRequestsIssued returns the number of BatchRequests issued to KV
 	// by this operator. It must be safe for concurrent use.
 	GetBatchRequestsIssued() int64
-	// GetContentionInfo returns the amount of time KV reads spent
+	// GetContentionTime returns the amount of time KV reads spent
 	// contending. It must be safe for concurrent use.
-	GetContentionInfo() (time.Duration, []kvpb.ContentionEvent)
+	GetContentionTime() time.Duration
 	// GetScanStats returns statistics about the scan that happened during the
 	// KV reads. It must be safe for concurrent use.
 	GetScanStats() execstats.ScanStats
