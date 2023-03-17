@@ -30,20 +30,15 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 	return collectStats && tracing.SpanFromContext(ctx) != nil
 }
 
-// GetCumulativeContentionTime is a helper function to return all the contention
-// events from trace and the cumulative contention time. It calculates the
-// cumulative contention time from the given recording or, if the recording is
-// nil, from the tracing span from the context. All contention events found in
-// the trace are included.
-func GetCumulativeContentionTime(
-	ctx context.Context, recording tracingpb.Recording,
-) (time.Duration, []kvpb.ContentionEvent) {
+// GetCumulativeContentionTime is a helper function to return the cumulative
+// contention time. It calculates the cumulative contention time from the given
+// recording or, if the recording is nil, from the tracing span from the
+// context. All contention events found in the trace are included.
+func GetCumulativeContentionTime(ctx context.Context, recording tracingpb.Recording) time.Duration {
 	var cumulativeContentionTime time.Duration
 	if recording == nil {
-		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
+		recording = tracing.SpanFromContext(ctx).GetRecording(tracingpb.RecordingStructured)
 	}
-
-	var contentionEvents []kvpb.ContentionEvent
 	var ev kvpb.ContentionEvent
 	for i := range recording {
 		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
@@ -54,10 +49,9 @@ func GetCumulativeContentionTime(
 				return
 			}
 			cumulativeContentionTime += ev.Duration
-			contentionEvents = append(contentionEvents, ev)
 		})
 	}
-	return cumulativeContentionTime, contentionEvents
+	return cumulativeContentionTime
 }
 
 // ScanStats contains statistics on the internal MVCC operators used to satisfy

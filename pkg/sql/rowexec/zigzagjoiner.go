@@ -845,11 +845,9 @@ func (z *zigzagJoiner) ConsumerClosed() {
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	z.scanStats = execstats.GetScanStats(z.Ctx(), z.ExecStatsTrace)
 
-	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(z.Ctx(), z.ExecStatsTrace)
 	kvStats := execinfrapb.KVStats{
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime:      optional.MakeTimeValue(contentionTime),
-		ContentionEvents:    contentionEvents,
+		ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx(), z.ExecStatsTrace)),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
 	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)

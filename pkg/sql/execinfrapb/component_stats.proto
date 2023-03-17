@@ -15,7 +15,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "gogoproto/gogo.proto";
 
 import "util/optional/optional.proto";
-import "kv/kvpb/api.proto";
 
 // ComponentID identifies a component in a flow. There are multiple types of
 // components (e.g. processors, streams); each component of a certain type has
@@ -150,9 +149,6 @@ message KVStats {
   optional util.optional.Uint range_key_count = 18 [(gogoproto.nullable) = false];
   optional util.optional.Uint range_key_contained_points = 19 [(gogoproto.nullable) = false];
   optional util.optional.Uint range_key_skipped_points = 20 [(gogoproto.nullable) = false];
-
-  // contention_events hit at the statement level.
-  repeated cockroach.roachpb.ContentionEvent contention_events = 10 [(gogoproto.nullable) = false];
 
   // Cumulated CPU time spent fulfilling KV requests on a SQL goroutine. This
   // would not include CPU time spent on a remote node, but would include time

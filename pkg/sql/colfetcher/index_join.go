@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -406,8 +405,8 @@ func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
 	return s.cf.cpuStopWatch.Elapsed()
 }
 
-// GetContentionInfo is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetContentionInfo() (time.Duration, []kvpb.ContentionEvent) {
+// GetContentionTime is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetContentionTime() time.Duration {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
