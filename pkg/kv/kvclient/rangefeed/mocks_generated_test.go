@@ -38,10 +38,10 @@ func (m *MockDB) EXPECT() *MockDBMockRecorder {
 }
 
 // RangeFeed mocks base method.
-func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 bool, arg4 chan<- kvcoord.RangeFeedMessage, arg5 ...kvcoord.RangeFeedOption) error {
+func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 chan<- kvcoord.RangeFeedMessage, arg4 ...kvcoord.RangeFeedOption) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4}
-	for _, a := range arg5 {
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RangeFeed", varargs...)
@@ -50,9 +50,9 @@ func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.T
 }
 
 // RangeFeed indicates an expected call of RangeFeed.
-func (mr *MockDBMockRecorder) RangeFeed(arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{}) *gomock.Call {
+func (mr *MockDBMockRecorder) RangeFeed(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockDB)(nil).RangeFeed), varargs...)
 }
 

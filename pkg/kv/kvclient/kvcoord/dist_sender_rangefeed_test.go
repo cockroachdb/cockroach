@@ -204,7 +204,7 @@ func rangeFeed(
 			opts = append(opts, kvcoord.WithMuxRangeFeed())
 			ctx = context.WithValue(ctx, useMuxRangeFeedCtxKey{}, struct{}{})
 		}
-		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, false, events, opts...)
+		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events, opts...)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		for {
@@ -552,7 +552,7 @@ func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(events)
-			err := ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, false, events)
+			err := ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events)
 			t.Logf("from RangeFeed: %v", err)
 			return err
 		})
