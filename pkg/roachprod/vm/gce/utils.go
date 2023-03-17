@@ -221,6 +221,13 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings
 
 sudo touch /mnt/data1/.roachprod-initialized
+{{ if .EnableFIPS }}
+sudo ua enable fips --assume-yes
+if [[ $(cat /proc/sys/crypto/fips_enabled) != "1" ]]; then
+  echo "FIPS mode is not enabled, exiting..."
+  exit 1
+fi
+{{ end }}
 `
 
 // writeStartupScript writes the startup script to a temp file.
@@ -230,18 +237,20 @@ sudo touch /mnt/data1/.roachprod-initialized
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	extraMountOpts string, fileSystem string, useMultiple bool,
+	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool,
 ) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 		Zfs              bool
+		EnableFIPS       bool
 	}
 
 	args := tmplParams{
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,
 		Zfs:              fileSystem == vm.Zfs,
+		EnableFIPS:       enableFIPS,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
