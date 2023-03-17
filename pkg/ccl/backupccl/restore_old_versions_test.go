@@ -110,7 +110,17 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		require.NoError(t, err)
 
 		// Ensure that the restore succeeds.
-		sqlDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
+		//
+		// The restore queries are run with `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
+		// option to ensure the restore is successful on development branches. This
+		// is because, while the backups were generated on release branches and have
+		// versions such as 22.2 in their manifest, the development branch will have
+		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
+		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
+		// that the manifest version is always less than the
+		// BinaryMinSupportedVersion which will in turn fail the restore unless we
+		// pass in the specified option to elide the compatability check.
+		sqlDB.Exec(t, `RESTORE FROM LATEST IN $1 WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION`, localFoo)
 
 		sqlDB.CheckQueryResults(t, "SHOW DATABASES", [][]string{
 			{"data", "root", "NULL", "NULL", "{}", "NULL"},
@@ -272,7 +282,16 @@ func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *tes
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s'", localFoo))
+		// The restore queries are run with `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
+		// option to ensure the restore is successful on development branches. This
+		// is because, while the backups were generated on release branches and have
+		// versions such as 22.2 in their manifest, the development branch will have
+		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
+		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
+		// that the manifest version is always less than the
+		// BinaryMinSupportedVersion which will in turn fail the restore unless we
+		// pass in the specified option to elide the compatability check.
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
 			{"admin", "root", "true", "2", "1"},
