@@ -111,7 +111,6 @@ export interface DatabaseTablePageData {
   databaseName: string;
   name: string;
   details: DatabaseTablePageDataDetails;
-  stats: DatabaseTablePageDataStats;
   indexStats: DatabaseTablePageIndexStats;
   showNodeRegionsSection?: boolean;
   automaticStatsCollectionEnabled?: boolean;
@@ -130,6 +129,9 @@ export interface DatabaseTablePageDataDetails {
   totalBytes: number;
   liveBytes: number;
   livePercentage: number;
+  sizeInBytes: number;
+  rangeCount: number;
+  nodesByRegionString?: string;
 }
 
 export interface DatabaseTablePageIndexStats {
@@ -158,18 +160,8 @@ interface Grant {
   privileges: string[];
 }
 
-export interface DatabaseTablePageDataStats {
-  loading: boolean;
-  loaded: boolean;
-  lastError: Error;
-  sizeInBytes: number;
-  rangeCount: number;
-  nodesByRegionString?: string;
-}
-
 export interface DatabaseTablePageActions {
   refreshTableDetails: (database: string, table: string) => void;
-  refreshTableStats: (database: string, table: string) => void;
   refreshSettings: () => void;
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
@@ -267,17 +259,6 @@ export class DatabaseTablePage extends React.Component<
       this.props.details.lastError === undefined
     ) {
       return this.props.refreshTableDetails(
-        this.props.databaseName,
-        this.props.name,
-      );
-    }
-
-    if (
-      !this.props.stats.loaded &&
-      !this.props.stats.loading &&
-      this.props.stats.lastError === undefined
-    ) {
-      return this.props.refreshTableStats(
         this.props.databaseName,
         this.props.name,
       );
@@ -549,11 +530,9 @@ export class DatabaseTablePage extends React.Component<
               className={cx("tab-pane")}
             >
               <Loading
-                loading={this.props.details.loading && this.props.stats.loading}
+                loading={this.props.details.loading}
                 page={"table_details"}
-                error={
-                  this.props.details.lastError || this.props.stats.lastError
-                }
+                error={this.props.details.lastError}
                 render={() => (
                   <>
                     <Row gutter={18}>
@@ -567,7 +546,7 @@ export class DatabaseTablePage extends React.Component<
                         <SummaryCard className={cx("summary-card")}>
                           <SummaryCardItem
                             label="Size"
-                            value={format.Bytes(this.props.stats.sizeInBytes)}
+                            value={format.Bytes(this.props.details.sizeInBytes)}
                           />
                           <SummaryCardItem
                             label="Replicas"
@@ -575,7 +554,7 @@ export class DatabaseTablePage extends React.Component<
                           />
                           <SummaryCardItem
                             label="Ranges"
-                            value={this.props.stats.rangeCount}
+                            value={this.props.details.rangeCount}
                           />
                           <SummaryCardItem
                             label="% of Live Data"
@@ -621,7 +600,7 @@ export class DatabaseTablePage extends React.Component<
                           {this.props.showNodeRegionsSection && (
                             <SummaryCardItem
                               label="Regions/Nodes"
-                              value={this.props.stats.nodesByRegionString}
+                              value={this.props.details.nodesByRegionString}
                             />
                           )}
                           <SummaryCardItem
@@ -699,13 +678,9 @@ export class DatabaseTablePage extends React.Component<
                 renderError={() =>
                   LoadingError({
                     statsType: "databases",
-                    timeout:
-                      this.props.details.lastError?.name
-                        ?.toLowerCase()
-                        .includes("timeout") ||
-                      this.props.stats.lastError?.name
-                        ?.toLowerCase()
-                        .includes("timeout"),
+                    timeout: this.props.details.lastError?.name
+                      ?.toLowerCase()
+                      .includes("timeout"),
                   })
                 }
               />

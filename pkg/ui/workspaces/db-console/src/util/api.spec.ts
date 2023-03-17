@@ -367,13 +367,11 @@ describe("rest api", function () {
             "mock zone config stmt",
           );
           expect(
-            moment(
-              resp.results.heuristicsDetails.stats_last_created_at,
-            ).isSame(mockStatsLastCreatedTimestamp),
+            moment(resp.results.heuristicsDetails.stats_last_created_at).isSame(
+              mockStatsLastCreatedTimestamp,
+            ),
           ).toBe(true);
-          expect(resp.results.stats.spanStats.approximate_disk_bytes).toBe(
-            100,
-          );
+          expect(resp.results.stats.spanStats.approximate_disk_bytes).toBe(100);
           expect(resp.results.stats.spanStats.live_bytes).toBe(200);
           expect(resp.results.stats.spanStats.total_bytes).toBe(400);
           expect(resp.results.stats.spanStats.range_count).toBe(400);
