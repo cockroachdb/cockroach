@@ -58,13 +58,22 @@ type MultiConnPoolCfg struct {
 	// connection warmup phase.
 	WarmupConns int
 
+	// ConnHealthCheckPeriod specifies the amount of time between connection
+	// health checks.  Defaults to 10% of MaxConnLifetime.
+	ConnHealthCheckPeriod time.Duration
+
+	// MaxConnIdleTime specifies the amount of time a connection will be idle
+	// before being closed by the health checker.  Defaults to 50% of the
+	// MaxConnLifetime.
+	MaxConnIdleTime time.Duration
+
 	// MaxConnLifetime specifies the max age of individual connections in
 	// connection pools.  If 0, a default value of 5 minutes is used.
 	MaxConnLifetime time.Duration
 
 	// MaxConnLifetimeJitter shortens the max age of a connection by a random
-	// duration less than the specified jitter.  If 0, a default value of 30
-	// seconds is used.
+	// duration less than the specified jitter.  If 0, default to 50% of
+	// MaxConnLifetime.
 	MaxConnLifetimeJitter time.Duration
 
 	// LogLevel specifies the log level (default: warn)
@@ -117,13 +126,21 @@ func NewMultiConnPool(
 	if cfg.LogLevel != 0 {
 		logLevel = cfg.LogLevel
 	}
-	maxConnLifetime := 5 * time.Minute
+	maxConnLifetime := 300 * time.Second
 	if cfg.MaxConnLifetime > 0 {
 		maxConnLifetime = cfg.MaxConnLifetime
 	}
-	maxConnLifetimeJitter := 30 * time.Second
+	maxConnLifetimeJitter := time.Duration(0.5 * float64(maxConnLifetime))
 	if cfg.MaxConnLifetimeJitter > 0 {
 		maxConnLifetimeJitter = cfg.MaxConnLifetimeJitter
+	}
+	connHealthCheckPeriod := time.Duration(0.1 * float64(maxConnLifetime))
+	if cfg.ConnHealthCheckPeriod > 0 {
+		connHealthCheckPeriod = cfg.ConnHealthCheckPeriod
+	}
+	maxConnIdleTime := time.Duration(0.5 * float64(maxConnLifetime))
+	if cfg.MaxConnIdleTime > 0 {
+		maxConnIdleTime = cfg.MaxConnIdleTime
 	}
 
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
@@ -139,8 +156,10 @@ func NewMultiConnPool(
 			if err != nil {
 				return nil, err
 			}
+			poolCfg.HealthCheckPeriod = connHealthCheckPeriod
 			poolCfg.MaxConnLifetime = maxConnLifetime
 			poolCfg.MaxConnLifetimeJitter = maxConnLifetimeJitter
+			poolCfg.MaxConnIdleTime = maxConnIdleTime
 			poolCfg.MaxConns = int32(numConns)
 			poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
 				m.mu.RLock()

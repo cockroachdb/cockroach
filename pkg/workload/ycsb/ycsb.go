@@ -461,8 +461,11 @@ func (g *ycsb) Ops(
 		return workload.QueryLoad{}, err
 	}
 	pool, err := workload.NewMultiConnPool(ctx, workload.MultiConnPoolCfg{
-		// We want number of connections = number of workers.
-		MaxTotalConnections: g.connFlags.Concurrency,
+		ConnHealthCheckPeriod: g.connFlags.ConnHealthCheckPeriod,
+		MaxConnIdleTime:       g.connFlags.MaxConnIdleTime,
+		MaxConnLifetime:       g.connFlags.MaxConnLifetime,
+		MaxConnLifetimeJitter: g.connFlags.MaxConnLifetimeJitter,
+		MaxTotalConnections:   g.connFlags.Concurrency, // We want number of connections = number of workers.
 	}, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err

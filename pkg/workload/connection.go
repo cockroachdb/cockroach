@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 )
@@ -26,6 +27,11 @@ type ConnFlags struct {
 	Concurrency int
 	// Method for issuing queries; see SQLRunner.
 	Method string
+
+	ConnHealthCheckPeriod time.Duration
+	MaxConnIdleTime       time.Duration
+	MaxConnLifetime       time.Duration
+	MaxConnLifetimeJitter time.Duration
 }
 
 // NewConnFlags returns an initialized ConnFlags.
@@ -37,6 +43,10 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.GOMAXPROCS(0),
 		`Number of concurrent workers`)
 	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare, simple)`)
+	c.DurationVar(&c.ConnHealthCheckPeriod, `conn-healthcheck-period`, 30*time.Second, `Interval that health checks are run on connections`)
+	c.DurationVar(&c.MaxConnIdleTime, `max-conn-idle-time`, 150*time.Second, `Max time an idle connection will be kept around`)
+	c.DurationVar(&c.MaxConnLifetime, `max-conn-lifetime`, 300*time.Second, `Max connection lifetime`)
+	c.DurationVar(&c.MaxConnLifetimeJitter, `max-conn-lifetime-jitter`, 150*time.Second, `Jitter max connection lifetime by this amount`)
 	genFlags.AddFlagSet(c.FlagSet)
 	if genFlags.Meta == nil {
 		genFlags.Meta = make(map[string]FlagMeta)

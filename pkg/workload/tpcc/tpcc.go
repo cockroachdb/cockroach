@@ -762,10 +762,14 @@ func (w *tpcc) Ops(
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
 	cfg := workload.MultiConnPoolCfg{
-		MaxTotalConnections: (w.numConns + len(urls) - 1) / len(urls), // round up
+		ConnHealthCheckPeriod: w.connFlags.ConnHealthCheckPeriod,
+		MaxConnIdleTime:       w.connFlags.MaxConnIdleTime,
+		MaxConnLifetime:       w.connFlags.MaxConnLifetime,
+		MaxConnLifetimeJitter: w.connFlags.MaxConnLifetimeJitter,
+		MaxTotalConnections:   (w.numConns + len(urls) - 1) / len(urls), // round up
 		// Limit the number of connections per pool (otherwise preparing statements
 		// at startup can be slow).
-		MaxConnsPerPool: 50,
+		MaxConnsPerPool: w.connFlags.Concurrency,
 	}
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 

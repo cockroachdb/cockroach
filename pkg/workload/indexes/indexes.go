@@ -159,7 +159,11 @@ func (w *indexes) Ops(
 		return workload.QueryLoad{}, err
 	}
 	cfg := workload.MultiConnPoolCfg{
-		MaxTotalConnections: w.connFlags.Concurrency + 1,
+		ConnHealthCheckPeriod: w.connFlags.ConnHealthCheckPeriod,
+		MaxConnIdleTime:       w.connFlags.MaxConnIdleTime,
+		MaxConnLifetime:       w.connFlags.MaxConnLifetime,
+		MaxConnLifetimeJitter: w.connFlags.MaxConnLifetimeJitter,
+		MaxTotalConnections:   w.connFlags.Concurrency + 1,
 	}
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
