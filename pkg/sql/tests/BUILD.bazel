@@ -6,21 +6,26 @@ go_library(
     srcs = [
         "command_filters.go",
         "data.go",
+        "explain_test_util.go",
         "server_params.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/internal/sqlsmith",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sqlstats",
         "//pkg/testutils/storageutils",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
     ],
 )
 
