@@ -155,6 +155,7 @@ func (s *schemaChange) Ops(
 		MaxConnLifetime:       s.connFlags.MaxConnLifetime,
 		MaxConnLifetimeJitter: s.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   s.connFlags.Concurrency,
+		MinConns:              s.connFlags.MinConns,
 	}
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {

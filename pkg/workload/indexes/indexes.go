@@ -164,6 +164,7 @@ func (w *indexes) Ops(
 		MaxConnLifetime:       w.connFlags.MaxConnLifetime,
 		MaxConnLifetimeJitter: w.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   w.connFlags.Concurrency + 1,
+		MinConns:              w.connFlags.MinConns,
 	}
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {

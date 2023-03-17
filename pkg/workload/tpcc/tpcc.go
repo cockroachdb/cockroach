@@ -770,6 +770,7 @@ func (w *tpcc) Ops(
 		// Limit the number of connections per pool (otherwise preparing statements
 		// at startup can be slow).
 		MaxConnsPerPool: w.connFlags.Concurrency,
+		MinConns:        w.connFlags.MinConns,
 	}
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 

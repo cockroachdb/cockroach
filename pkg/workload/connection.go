@@ -32,6 +32,7 @@ type ConnFlags struct {
 	MaxConnIdleTime       time.Duration
 	MaxConnLifetime       time.Duration
 	MaxConnLifetimeJitter time.Duration
+	MinConns              int
 }
 
 // NewConnFlags returns an initialized ConnFlags.
@@ -44,6 +45,7 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 		`Number of concurrent workers`)
 	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare, simple)`)
 	c.DurationVar(&c.ConnHealthCheckPeriod, `conn-healthcheck-period`, 30*time.Second, `Interval that health checks are run on connections`)
+	c.IntVar(&c.MinConns, `min-conns`, 0, `Minimum number of connections to attempt to keep in the pool`)
 	c.DurationVar(&c.MaxConnIdleTime, `max-conn-idle-time`, 150*time.Second, `Max time an idle connection will be kept around`)
 	c.DurationVar(&c.MaxConnLifetime, `max-conn-lifetime`, 300*time.Second, `Max connection lifetime`)
 	c.DurationVar(&c.MaxConnLifetimeJitter, `max-conn-lifetime-jitter`, 150*time.Second, `Jitter max connection lifetime by this amount`)

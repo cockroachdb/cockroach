@@ -76,6 +76,11 @@ type MultiConnPoolCfg struct {
 	// MaxConnLifetime.
 	MaxConnLifetimeJitter time.Duration
 
+	// MinConns is the minimum number of connections the connection pool will
+	// attempt to keep.  Connection count may dip below this value periodically,
+	// see pgxpool documentation for details.
+	MinConns int
+
 	// LogLevel specifies the log level (default: warn)
 	LogLevel tracelog.LogLevel
 }
@@ -142,6 +147,10 @@ func NewMultiConnPool(
 	if cfg.MaxConnIdleTime > 0 {
 		maxConnIdleTime = cfg.MaxConnIdleTime
 	}
+	minConns := 0
+	if cfg.MinConns > 0 {
+		minConns = cfg.MinConns
+	}
 
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
@@ -161,6 +170,10 @@ func NewMultiConnPool(
 			poolCfg.MaxConnLifetimeJitter = maxConnLifetimeJitter
 			poolCfg.MaxConnIdleTime = maxConnIdleTime
 			poolCfg.MaxConns = int32(numConns)
+			if minConns > numConns {
+				minConns = numConns
+			}
+			poolCfg.MinConns = int32(minConns)
 			poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
 				m.mu.RLock()
 				defer m.mu.RUnlock()
