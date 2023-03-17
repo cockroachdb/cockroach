@@ -1099,10 +1099,14 @@ func (r *testRunner) teardownTest(
 		if db != nil {
 			defer db.Close()
 			t.L().Printf("running validation checks on node %d (<10m)", node)
-			c.FailOnInvalidDescriptors(ctx, db, t)
+			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+				c.FailOnInvalidDescriptors(ctx, db, t)
+			}
 			// Detect replica divergence (i.e. ranges in which replicas have arrived
 			// at the same log position with different states).
-			c.FailOnReplicaDivergence(ctx, db, t)
+			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+				c.FailOnReplicaDivergence(ctx, db, t)
+			}
 		} else {
 			t.L().Printf("no live node found, skipping validation checks")
 		}
