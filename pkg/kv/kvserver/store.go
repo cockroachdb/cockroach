@@ -2124,6 +2124,13 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 // This reduces user-visible latency when range lookups are needed to serve a
 // request and reduces ping-ponging of r1's lease to different replicas as
 // maybeGossipFirstRange is called on each (e.g.  #24753).
+//
+// Currently, this is only used for ranges that _require_ expiration-based
+// leases, as determined by Replica.requiresExpirationLeaseRLocked(), i.e. the
+// meta and liveness ranges. For large numbers of expiration-based leases, e.g.
+// with kv.expiration_leases_only.enabled, a more sophisticated scheduler is
+// needed since the linear scan here can't keep up. See:
+// https://github.com/cockroachdb/cockroach/issues/98433
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.

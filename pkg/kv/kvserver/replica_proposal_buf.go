@@ -1252,7 +1252,7 @@ func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool
 		raftGroup.BasicStatus(),
 		livenessMap,
 		r.descRLocked(),
-		r.requiresExpiringLeaseRLocked(),
+		r.shouldUseExpirationLeaseRLocked(),
 		r.store.Clock().Now(),
 	)
 }

@@ -11579,12 +11579,12 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	}
 
 	tests := []struct {
-		leaseStatus           kvserverpb.LeaseStatus
-		raftStatus            raft.BasicStatus
-		livenessMap           livenesspb.IsLiveMap
-		desc                  *roachpb.RangeDescriptor
-		requiresExpiringLease bool
-		exp                   bool
+		leaseStatus             kvserverpb.LeaseStatus
+		raftStatus              raft.BasicStatus
+		livenessMap             livenesspb.IsLiveMap
+		desc                    *roachpb.RangeDescriptor
+		requiresExpirationLease bool
+		exp                     bool
 	}{
 		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, false, true},
 		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, false, false},
@@ -11614,7 +11614,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		v := shouldCampaignOnWake(test.leaseStatus, storeID, test.raftStatus, test.livenessMap, test.desc, test.requiresExpiringLease)
+		v := shouldCampaignOnWake(test.leaseStatus, storeID, test.raftStatus, test.livenessMap, test.desc, test.requiresExpirationLease)
 		if v != test.exp {
 			t.Errorf("%d: expected %v but got %v", i, test.exp, v)
 		}
@@ -11709,10 +11709,10 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		raftStatus            raft.BasicStatus
-		requiresExpiringLease bool
-		exp                   bool
+		name                    string
+		raftStatus              raft.BasicStatus
+		requiresExpirationLease bool
+		exp                     bool
 	}{
 		{"candidate", candidate, false, false},
 		{"leader", leader, false, false},
@@ -11726,7 +11726,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			v := shouldCampaignOnLeaseRequestRedirect(tc.raftStatus, livenessMap, &desc, tc.requiresExpiringLease, now)
+			v := shouldCampaignOnLeaseRequestRedirect(tc.raftStatus, livenessMap, &desc, tc.requiresExpirationLease, now)
 			require.Equal(t, tc.exp, v)
 		})
 	}
