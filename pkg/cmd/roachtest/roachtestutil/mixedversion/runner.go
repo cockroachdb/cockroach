@@ -476,6 +476,21 @@ func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
 	return err
 }
 
+// Run performs `cluster.RunE` on a randomly picked node.
+func (h *Helper) Run(rng *rand.Rand, cmd ...string) error {
+	node := h.runner.crdbNodes[rng.Intn(len(h.runner.crdbNodes))]
+	h.stepLogger.Printf("executing command:\n%s\nNode: %v", cmd, node)
+	return h.runner.cluster.RunE(h.ctx, option.NodeListOption{node}, cmd...)
+}
+
+// InitLegacyWorkload initializes a legacy workload on all nodes.
+func (h *Helper) InitLegacyWorkload(workloadPath string, workload string) {
+	// Stage workload on all nodes as the load node to run workload is chosen
+	// randomly.
+	h.runner.cluster.Put(h.ctx, workloadPath, "./workload", h.runner.crdbNodes)
+	h.runner.cluster.Run(h.ctx, h.runner.crdbNodes, "./workload init", workload)
+}
+
 func (h *Helper) Connect(node int) *gosql.DB {
 	return h.runner.conn(node)
 }

@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -102,7 +103,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if c.IsLocal() && runtime.GOARCH == "arm64" {
 		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 	}
-
+	initWorkload := sync.Once{}
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
 	mvt.InMixedVersion("run backup", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		// Verify that backups can be created in various configurations. This is
@@ -124,6 +125,22 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			return nil
+		},
+	)
+	mvt.InMixedVersion(
+		"test schema change step",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			initWorkload.Do(func() {
+				h.InitLegacyWorkload(t.DeprecatedWorkload(), "schemachange")
+			})
+			l.Printf("running schema workload step")
+			runCmd := []string{
+				"./workload run schemachange --verbose=1",
+				fmt.Sprintf("--max-ops %d", 10),
+				fmt.Sprintf("--concurrency %d", 2),
+				fmt.Sprintf("{pgurl:1-%d}", len(c.All())),
+			}
+			return h.Run(rng, runCmd...)
 		},
 	)
 	mvt.AfterUpgradeFinalized(
