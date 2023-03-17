@@ -36,7 +36,11 @@ import (
 const (
 	defaultProject = "cockroach-ephemeral"
 	// ProviderName is gce.
-	ProviderName = "gce"
+	ProviderName        = "gce"
+	DefaultImage        = "ubuntu-2004-focal-v20210603"
+	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
+	defaultImageProject = "ubuntu-os-cloud"
+	FIPSImageProject    = "ubuntu-os-pro-cloud"
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -225,7 +229,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		MachineType:          "n1-standard-4",
 		MinCPUPlatform:       "",
 		Zones:                nil,
-		Image:                "ubuntu-2004-focal-v20210603",
+		Image:                DefaultImage,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -582,9 +586,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210603",
+	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
-			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
+			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images. "+
+			"Note: this option is ignored if --fips is passed.")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
@@ -688,12 +693,19 @@ func (p *Provider) Create(
 	}
 
 	// Fixed args.
+	image := providerOpts.Image
+	imageProject := defaultImageProject
+	if opts.EnableFIPS {
+		// NB: if FIPS is enabled, it overrides the image passed via CLI (--gce-image)
+		image = FIPSImage
+		imageProject = FIPSImageProject
+	}
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
 		"--scopes", "cloud-platform",
-		"--image", providerOpts.Image,
-		"--image-project", "ubuntu-os-cloud",
+		"--image", image,
+		"--image-project", imageProject,
 		"--boot-disk-type", "pd-ssd",
 	}
 
@@ -757,7 +769,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.EnableFIPS)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}

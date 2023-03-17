@@ -1002,7 +1002,7 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(name, extraMountOpts, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(name, extraMountOpts, providerOpts.UseMultipleDisks, opts.EnableFIPS)
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -1017,12 +1017,16 @@ func (p *Provider) runInstance(
 		return *fl
 	}
 
+	imageID := withFlagOverride(az.region.AMI, &providerOpts.ImageAMI)
+	if opts.EnableFIPS {
+		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
+	}
 	args := []string{
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
 		"--count", "1",
 		"--instance-type", machineType,
-		"--image-id", withFlagOverride(az.region.AMI, &providerOpts.ImageAMI),
+		"--image-id", imageID,
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
