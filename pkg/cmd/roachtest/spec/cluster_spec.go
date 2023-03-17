@@ -155,6 +155,7 @@ func getGCEOpts(
 	localSSD bool,
 	RAID0 bool,
 	terminateOnMigration bool,
+	enableFIPS bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -173,6 +174,9 @@ func getGCEOpts(
 		opts.UseMultipleDisks = !RAID0
 	}
 	opts.TerminateOnMigration = terminateOnMigration
+	if enableFIPS {
+		opts.Image = gce.FIPSImage
+	}
 
 	return opts
 }
@@ -189,7 +193,7 @@ func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
-	clusterName string, useIOBarrier bool,
+	clusterName string, useIOBarrier bool, enableFIPS bool,
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
 
 	createVMOpts := vm.DefaultCreateOpts()
@@ -220,6 +224,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	createVMOpts.GeoDistributed = s.Geo
+	createVMOpts.EnableFIPS = enableFIPS
 	machineType := s.InstanceType
 	ssdCount := s.SSDs
 	if s.CPUs != 0 {
@@ -275,13 +280,18 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
+	if createVMOpts.EnableFIPS && !(s.Cloud == GCE || s.Cloud == AWS) {
+		return vm.CreateOpts{}, nil, errors.Errorf(
+			"node creation with enableFIPS enables not yet supported on %s", s.Cloud,
+		)
+	}
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
-			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration, createVMOpts.EnableFIPS)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
 	}

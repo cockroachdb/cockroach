@@ -5,6 +5,7 @@
         "value": [
             {
                 "ami_id": "ami-09ff2b6ef00accc2e",
+                "ami_id_fips": "ami-09bfd307c31e4669c",
                 "region": "ap-northeast-1",
                 "security_group": "sg-0006e480d77a10104",
                 "subnets": {
@@ -15,6 +16,7 @@
             },
             {
                 "ami_id": "ami-0b329fb1f17558744",
+                "ami_id_fips": "ami-0dd93e9ad24d01f62",
                 "region": "ap-northeast-2",
                 "security_group": "sg-0e00c2f8f274a0fea",
                 "subnets": {
@@ -26,6 +28,7 @@
             },
             {
                 "ami_id": "ami-01957c76cce45de38",
+                "ami_id_fips": "ami-04ea778eedaf3a8df",
                 "region": "ap-south-1",
                 "security_group": "sg-03a68bb0d765c135e",
                 "subnets": {
@@ -36,6 +39,7 @@
             },
             {
                 "ami_id": "ami-048b4b1ddefe6759f",
+                "ami_id_fips": "ami-0145aa2d8188220bc",
                 "region": "ap-southeast-1",
                 "security_group": "sg-089484fc595751cf7",
                 "subnets": {
@@ -46,6 +50,7 @@
             },
             {
                 "ami_id": "ami-052a251c7ca533c26",
+                "ami_id_fips": "ami-066f9bd76e75011be",
                 "region": "ap-southeast-2",
                 "security_group": "sg-00bbe741d9d00fd3a",
                 "subnets": {
@@ -56,6 +61,7 @@
             },
             {
                 "ami_id": "ami-095509bf36d02a8e0",
+                "ami_id_fips": "ami-0713fd833b63915e3",
                 "region": "ca-central-1",
                 "security_group": "sg-0d97f7ec3edc8f7c1",
                 "subnets": {
@@ -66,6 +72,7 @@
             },
             {
                 "ami_id": "ami-0d3905203a039e3b0",
+                "ami_id_fips": "ami-02cc4114e1c012f9c",
                 "region": "eu-central-1",
                 "security_group": "sg-05979c18ed21a6757",
                 "subnets": {
@@ -76,6 +83,7 @@
             },
             {
                 "ami_id": "ami-0b7fd7bc9c6fb1c78",
+                "ami_id_fips": "ami-014603057f9da7d50",
                 "region": "eu-west-1",
                 "security_group": "sg-033eb468bf7e3c6b5",
                 "subnets": {
@@ -86,6 +94,7 @@
             },
             {
                 "ami_id": "ami-02ead6ecbd926d792",
+                "ami_id_fips": "ami-0fcf0f89559d79e80",
                 "region": "eu-west-2",
                 "security_group": "sg-0cb561f660955a29c",
                 "subnets": {
@@ -96,6 +105,7 @@
             },
             {
                 "ami_id": "ami-0d7b738ade930e24a",
+                "ami_id_fips": "ami-03ecf0588cc1bd0f4",
                 "region": "eu-west-3",
                 "security_group": "sg-032bca7008934e2ce",
                 "subnets": {
@@ -106,6 +116,7 @@
             },
             {
                 "ami_id": "ami-03f2389c2526e67bd",
+                "ami_id_fips": "ami-0977da93caf83799e",
                 "region": "sa-east-1",
                 "security_group": "sg-0e7fdf92c3b1dbd11",
                 "subnets": {
@@ -116,6 +127,7 @@
             },
             {
                 "ami_id": "ami-04cc2b0ad9e30a9c8",
+                "ami_id_fips": "ami-03cf7ddd346310b5f",
                 "region": "us-east-1",
                 "security_group": "sg-09730a5bc7432abe7",
                 "subnets": {
@@ -129,6 +141,7 @@
             },
             {
                 "ami_id": "ami-02fc6052104add5ae",
+                "ami_id_fips": "ami-08692707dfc6f8b64",
                 "region": "us-east-2",
                 "security_group": "sg-0319fc9c9599a6145",
                 "subnets": {
@@ -139,6 +152,7 @@
             },
             {
                 "ami_id": "ami-07be40433001d2433",
+                "ami_id_fips": "ami-026c3cf51388880d6",
                 "region": "us-west-1",
                 "security_group": "sg-0d1ae4a3dc5d6040e",
                 "subnets": {
@@ -148,6 +162,7 @@
             },
             {
                 "ami_id": "ami-0a62a78cfedc09d76",
+                "ami_id_fips": "ami-0dc12dcaaa9dcf99d",
                 "region": "us-west-2",
                 "security_group": "sg-067af4f878a9f27e3",
                 "subnets": {

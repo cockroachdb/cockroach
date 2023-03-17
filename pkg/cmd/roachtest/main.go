@@ -94,6 +94,7 @@ func main() {
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
+	var enableFIPS bool
 
 	cobra.EnableCommandSorting = false
 
@@ -244,6 +245,7 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
+				enableFIPS:             enableFIPS,
 			})
 		},
 	}
@@ -281,6 +283,7 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
+				enableFIPS:             enableFIPS,
 			})
 		},
 	}
@@ -333,6 +336,8 @@ runner itself.
 				"is present in the list,"+"the respective binary will be used when a "+
 				"multi-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
+		cmd.Flags().BoolVar(
+			&enableFIPS, "fips", false, "Run tests in enableFIPS mode")
 	}
 
 	parseCreateOpts(runCmd.Flags(), &overrideOpts)
@@ -382,6 +387,7 @@ type cliCfg struct {
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
+	enableFIPS             bool
 }
 
 func runTests(register func(registry.Registry), cfg cliCfg) error {
@@ -419,6 +425,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		cpuQuota:    cfg.cpuQuota,
 		debugMode:   cfg.debugMode,
 		clusterID:   cfg.clusterID,
+		enableFIPS:  cfg.enableFIPS,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err
