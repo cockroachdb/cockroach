@@ -102,10 +102,12 @@ translate database=db
 # Schema.
 translate id=58
 ----
+/Tenant/10/Table/5{8-9}                    database system (tenant)
 
 # Enum.
 translate id=59
 ----
+/Tenant/10/Table/{59-60}                   database system (tenant)
 
 # Array type alias.
 translate id=60
