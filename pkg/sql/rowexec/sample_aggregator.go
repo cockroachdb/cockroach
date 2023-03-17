@@ -185,7 +185,7 @@ func newSampleAggregator(
 }
 
 func (s *sampleAggregator) pushTrailingMeta(ctx context.Context, output execinfra.RowReceiver) {
-	execinfra.SendTraceData(ctx, output)
+	execinfra.SendTraceData(ctx, s.FlowCtx, output)
 }
 
 // Run is part of the Processor interface.

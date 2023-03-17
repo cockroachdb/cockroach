@@ -41,7 +41,7 @@ import (
 type router interface {
 	execinfra.RowReceiver
 	flowinfra.Startable
-	init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []*types.T)
+	init(ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, types []*types.T)
 }
 
 // makeRouter creates a router. The router's init must be called before the
@@ -206,7 +206,9 @@ func (ro *routerOutput) popRowsLocked(ctx context.Context) ([]rowenc.EncDatumRow
 const semaphorePeriod = 8
 
 type routerBase struct {
-	types []*types.T
+	flowCtx     *execinfra.FlowCtx
+	processorID int32
+	types       []*types.T
 
 	outputs []routerOutput
 
@@ -261,12 +263,16 @@ func (rb *routerBase) setupStreams(
 }
 
 // init must be called after setupStreams but before Start.
-func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []*types.T) {
+func (rb *routerBase) init(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, types []*types.T,
+) {
 	// Check if we're recording stats.
 	if s := tracing.SpanFromContext(ctx); s != nil && s.RecordingType() != tracingpb.RecordingOff {
 		rb.statsCollectionEnabled = true
 	}
 
+	rb.flowCtx = flowCtx
+	rb.processorID = processorID
 	rb.types = types
 	for i := range rb.outputs {
 		// This method must be called before we Start() so we don't need
@@ -313,7 +319,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			defer wg.Done()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
-				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
+				ctx, span = execinfra.ProcessorSpan(ctx, rb.flowCtx, "router output", rb.processorID)
 				defer span.Finish()
 				if span.IsVerbose() {
 					span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(ro.streamID)))
@@ -380,7 +386,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
 						span.RecordStructured(&ro.stats)
-						if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+						if meta := execinfra.GetTraceDataAsMetadata(rb.flowCtx, span); meta != nil {
 							ro.mu.Unlock()
 							rb.semaphore <- struct{}{}
 							status := ro.stream.Push(nil /* row */, meta)
