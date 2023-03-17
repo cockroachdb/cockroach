@@ -83,8 +83,8 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 	return s.mu.rowsRead
 }
 
-// GetContentionInfo is part of the colexecop.KVReader interface.
-func (s *colBatchScanBase) GetContentionInfo() (time.Duration, []kvpb.ContentionEvent) {
+// GetContentionTime is part of the colexecop.KVReader interface.
+func (s *colBatchScanBase) GetContentionTime() time.Duration {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
