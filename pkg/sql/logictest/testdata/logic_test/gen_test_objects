@@ -173,16 +173,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-comments.
-databa&se_role_settings
-pr"otected__ts_records
-protected_ts%v_meta
-rangelog
-replication_sTats
-scheduled_jobs
-settings
-sql_instances
-tena'nts
+comm%pents
+migrations
+role_members
+role_options
+ro😤le_id_s😠eq
+statement_diagn
+ostics  _reques          ts
+task_payloads
+tenant_settings
+transaction_statisti/cs
+ui
 
 # Again, the column names are randomized.
 query TTT
@@ -191,26 +192,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-"comments."                comment         text
-"comments."                object_id       bigint
-"comments."                rowid           bigint
-"comments."                sub_id          bigint
-"comments."                type            bigint
-"databa&se_role_settings"  datab̹ase_id    oid
-"databa&se_role_settings"  "role_name"    text
-"databa&se_role_settings"  role_id         oid
-"databa&se_role_settings"  rowid           bigint
-"databa&se_role_settings"  "se ttings"     ARRAY
-"pr""otected__ts_records"  "Id\f"          uuid
-"pr""otected__ts_records"  "me\rta"        bytea
-"pr""otected__ts_records"  "meta_t""ype"   text
-"pr""otected__ts_records"  num_spans       bigint
-"pr""otected__ts_records"  rowid           bigint
-"pr""otected__ts_records"  "ta.rget"       bytea
-"pr""otected__ts_records"  "ts&"           numeric
-"pr""otected__ts_records"  "veri%7dfi͟ed"  boolean
-"pr""otected__ts_records"  😲spans          bytea
-"protected_ts%v_meta"      " num_span/s"   bigint
+"comm%pents"  "co\\xf4mment"        text
+"comm%pents"  obj😀ect_id            bigint
+"comm%pents"  rowid                 bigint
+"comm%pents"  sub_id                bigint
+"comm%pents"  tyͭpe                 bigint
+migrations    completed_at          timestamp with time zone
+migrations    "i""ntern.al"         bigint
+migrations    major                 bigint
+migrations    m😲inor                bigint
+migrations    "patch%7d"            bigint
+migrations    rowid                 bigint
+role_members  " r͢ole"              text
+role_members  "isAdmi\\U0004E5D5n"  boolean
+role_members  member                text
+role_members  member͛_id            oid
+role_members  "role\f_id̫"          oid
+role_members  rowid                 bigint
+role_options  "Username"            text
+role_options  option͙               text
+role_options  rowid                 bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -228,15 +229,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  "sc%phe                      duled\n_jobs"
-"d%qbt1"  public  table_statistics
-"d%qbt1"  public  web_sessions
-"d%qbt2"  public  lease
-"d%qbt2"  public  "r*o)le_i d_seq"
-"d%qbt2"  public  "statement_bund le_chunks"
-dbt3      public  "joi-n_tokens %q"
-dbt3      public  "r%qepor\\U0008E540ts_meTa"
-dbt3      public  "span_stats_unique_keys  "
+"d%qbt1"  public  database_role_settings
+"d%qbt1"  public  locations
+"d%qbt1"  public  "sp'an%q_configurations"
+"d%qbt2"  public  de😂scriptor
+"d%qbt2"  public  sq̐lliveness
+"d%qbt2"  public  task_payloads
+dbt3      public  locations
+dbt3      public  statement_statistics
+dbt3      public  table_statistics
 
 
 statement ok
