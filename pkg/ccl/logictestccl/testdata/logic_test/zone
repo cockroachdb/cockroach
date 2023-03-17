@@ -32,7 +32,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@t_pkey
   spans: [/10 - /10]
 
 query T retry
@@ -79,7 +79,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@tertiary
+  table: t@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -126,7 +126,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@tertiary
   spans: [/10 - /10]
 
 # ------------------------------------------------------------------------------
@@ -148,7 +148,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@t_pkey
+  table: t@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -209,7 +209,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@t_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -260,7 +260,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@tertiary
+  table: t@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -317,7 +317,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@tertiary
   spans: [/10 - /10]
 
 query T retry
@@ -379,7 +379,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@t_pkey
+  table: t@secondary
   spans: [/10 - /10]
 
 statement ok
@@ -411,7 +411,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36642@secondary
+  table: t36642@t36642_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -428,7 +428,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36642@tertiary
+  table: t36642@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -486,7 +486,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36644@secondary
+  table: t36644@t36644_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -504,7 +504,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36644@tertiary
+  table: t36644@secondary
   spans: [/10 - /10]
 
 subtest regression_35756
