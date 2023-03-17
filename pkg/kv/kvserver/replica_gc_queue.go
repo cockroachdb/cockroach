@@ -98,7 +98,7 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 			maxSize:                  defaultQueueMaxSize,
 			needsLease:               false,
 			needsRaftInitialized:     true,
-			needsSystemConfig:        false,
+			needsSpanConfigs:         false,
 			acceptsUnsplitRanges:     true,
 			processDestroyedReplicas: true,
 			successes:                store.metrics.ReplicaGCQueueSuccesses,

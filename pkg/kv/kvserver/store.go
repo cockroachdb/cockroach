@@ -2257,12 +2257,12 @@ func (s *Store) startGossip() {
 	}
 }
 
-var errSysCfgUnavailable = errors.New("system config not available in gossip")
+var errSpanConfigsUnavailable = errors.New("span configs not available")
 
 // GetConfReader exposes access to a configuration reader.
 func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
-		return nil, errSysCfgUnavailable
+		return nil, errSpanConfigsUnavailable
 	}
 
 	if s.cfg.SpanConfigsDisabled ||
@@ -2271,11 +2271,31 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
-			return nil, errSysCfgUnavailable
+			return nil, errSpanConfigsUnavailable
 		}
 		return sysCfg, nil
 	}
 
+	if s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+		// This code path is used in various internal queues. It's important to
+		// surface explicitly that we don't have any span configs instead of
+		// falling back to the statically configured one.
+		// - enabling range merges would be extremely dangerous -- we could
+		//   collapse everything into a single range.
+		// - enabling the split queue would mean applying the statically
+		//   configured range sizes in the fallback span config. For clusters
+		//   configured with larger range sizes, this could lead to a burst of
+		//   splitting post node-restart.
+		// - enabling the MVCC GC queue would mean applying the statically
+		//   configured default GC TTL and ignoring any set protected
+		//   timestamps. The latter is best-effort protection, but for clusters
+		//   configured with GC TTL greater than the default, post node-restart
+		//   it could lead to a burst of MVCC GC activity and AOST queries
+		//   failing to find expected data.
+		// - enabling the replicate queue would mean replicating towards the
+		//   statically defined 3x replication in the fallback span config.
+		return nil, errSpanConfigsUnavailable
+	}
 	return s.cfg.SpanConfigSubscriber, nil
 }
 
