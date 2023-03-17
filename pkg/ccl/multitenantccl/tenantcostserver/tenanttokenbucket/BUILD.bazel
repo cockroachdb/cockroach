@@ -19,6 +19,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tenanttokenbucket"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/testutils/datapathutils",

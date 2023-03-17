@@ -26,6 +26,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":throttler"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
