@@ -7,14 +7,19 @@ provider "aws" {}
 # ---------------------------------------------------------------------------------------------------------------------
 # Module variables
 # ---------------------------------------------------------------------------------------------------------------------
-variable "region"                 { description = "AWS Region name" }
-variable "image_name"             { 
-    description = "CockroachDB base image name" 
-    default = "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20210325"
+variable "region" { description = "AWS Region name" }
+variable "image_name" {
+  description = "CockroachDB base image name"
+  default     = "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20210325"
+}
+
+variable "image_name_fips" {
+  description = "CockroachDB base image name"
+  default     = "ubuntu-pro-fips-server/images/hvm-ssd/ubuntu-focal-20.04-amd64-pro-fips-server-20221121-7bc828d1-c072-4d33-a989-fbad50380cfb"
 }
 
 variable "label" {
-    description = "Used as the resource name prefix."
+  description = "Used as the resource name prefix."
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -37,9 +42,10 @@ output "region_info" {
     "region"         = "${var.region}"
     "security_group" = "${aws_security_group.region_security_group.id}"
     "ami_id"         = "${data.aws_ami.node_ami.image_id}"
-    "subnets"        = "${zipmap(
-        "${aws_subnet.region_subnets.*.availability_zone}", 
-        "${aws_subnet.region_subnets.*.id}"
+    "ami_id_fips"    = "${data.aws_ami.node_ami_fips.image_id}"
+    "subnets" = "${zipmap(
+      "${aws_subnet.region_subnets.*.availability_zone}",
+      "${aws_subnet.region_subnets.*.id}"
     )}"
   }
 }

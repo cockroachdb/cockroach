@@ -743,6 +743,7 @@ type clusterConfig struct {
 	localCluster bool
 	useIOBarrier bool
 	alloc        *quotapool.IntAlloc
+	enableFIPS   bool
 }
 
 // clusterFactory is a creator of clusters.
@@ -876,7 +877,7 @@ func (f *clusterFactory) newCluster(
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
-	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier)
+	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.enableFIPS)
 	if err != nil {
 		// We must release the allocation because cluster creation is not possible at this point.
 		cfg.alloc.Release()
