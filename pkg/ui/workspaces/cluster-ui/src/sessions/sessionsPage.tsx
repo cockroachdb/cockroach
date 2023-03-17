@@ -412,6 +412,7 @@ export class SessionsPage extends React.Component<
               <ColumnsSelector
                 options={tableColumns}
                 onSubmitColumns={onColumnsChange}
+                size={"small"}
               />
               <TableStatistics
                 pagination={pagination}

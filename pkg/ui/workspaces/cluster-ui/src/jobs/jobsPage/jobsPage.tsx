@@ -313,6 +313,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
                   <ColumnsSelector
                     options={tableColumns}
                     onSubmitColumns={onColumnsChange}
+                    size={"small"}
                   />
                   <div className={cx("jobs-table-summary")}>
                     <h4 className={cx("cl-count-title")}>

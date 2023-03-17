@@ -52,7 +52,7 @@ import {
   selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import { StatementsRequest, SqlStatsSortType } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import {
