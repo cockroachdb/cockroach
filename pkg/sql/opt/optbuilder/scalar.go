@@ -149,14 +149,7 @@ func (b *Builder) buildScalar(
 
 		inCol := s.cols[0].id
 
-		// This looks kind of arbitrary and strange, because it is:
-		// We cannot array_agg over some types, but we can only decorrelate via array_agg.
-		// Thus, we reject a query that is correlated and over a type that we can't array_agg.
 		typ := b.factory.Metadata().ColumnMeta(inCol).Type
-		if !s.outerCols.Empty() && !memo.AggregateOverloadExists(opt.ArrayAggOp, typ) {
-			panic(unimplementedWithIssueDetailf(35710, "", "can't execute a correlated ARRAY(...) over %s", typ))
-		}
-
 		if err := types.CheckArrayElementType(typ); err != nil {
 			panic(err)
 		}
@@ -169,6 +162,7 @@ func (b *Builder) buildScalar(
 			OriginalExpr: s.Subquery,
 			Ordering:     s.ordering,
 			RequestedCol: inCol,
+			WithinUDF:    b.insideUDF,
 		}
 		out = b.factory.ConstructArrayFlatten(s.node, &subqueryPrivate)
 
