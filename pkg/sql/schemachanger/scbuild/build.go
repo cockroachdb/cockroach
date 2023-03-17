@@ -173,6 +173,14 @@ func IsFullySupportedWithFalsePositive(
 	return scbuildstmt.IsFullySupportedWithFalsePositive(statement, version, sessiondatapb.UseNewSchemaChangerOn)
 }
 
+// SortPrimaryIndexesBySourcingLocation sorts all adding primary indexes
+// by their SourceIndexID "locationally".
+func SortPrimaryIndexesBySourcingLocation(
+	primaryIndexes map[*scpb.PrimaryIndex]bool,
+) []*scpb.PrimaryIndex {
+	return scbuildstmt.SortPrimaryIndexesBySourcingLocation(primaryIndexes)
+}
+
 // Export dependency interfaces.
 // These are defined in the scbuildstmts package instead of scbuild to avoid
 // circular import dependencies.

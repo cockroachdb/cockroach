@@ -14,15 +14,18 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -87,6 +90,89 @@ func (p Plan) ExplainViz() (stagesURL, depsURL string, err error) {
 		return "", "", err
 	}
 	return stagesURL, depsURL, nil
+}
+
+func (p Plan) ExplainPrimaryIndexes() (string, error) {
+	// Collect all involving tables and their primary indexes.
+	tableIDToPrimaryIndexes := make(map[catid.DescID]map[*scpb.PrimaryIndex]bool)
+	var primaryIndexIDs catid.IndexSet
+	for _, target := range p.Targets {
+		tableIDToPrimaryIndexes[screl.GetDescID(target.Element())] = make(map[*scpb.PrimaryIndex]bool)
+	}
+	for i, target := range p.Targets {
+		if target.GetPrimaryIndex() == nil {
+			continue
+		}
+		if p.Current[i] == scpb.Status_ABSENT && target.TargetStatus == scpb.Status_ABSENT {
+			// "ghost" primary indexes; exclude them!
+			continue
+		}
+		tableIDToPrimaryIndexes[target.GetPrimaryIndex().TableID][target.GetPrimaryIndex()] = true
+		primaryIndexIDs.Add(target.GetPrimaryIndex().IndexID)
+	}
+
+	// Collect all primary index's index columns.
+	indexIDToIndexCols := make(map[catid.IndexID][]*scpb.IndexColumn)
+	for i, target := range p.Targets {
+		if target.GetIndexColumn() == nil {
+			continue
+		}
+		if !primaryIndexIDs.Contains(target.GetIndexColumn().IndexID) {
+			// exclude non-primary indexes.
+			continue
+		}
+		if p.Current[i] == scpb.Status_ABSENT && target.TargetStatus == scpb.Status_ABSENT {
+			// "ghost" index columns; exclude them!
+			continue
+		}
+		indexIDToIndexCols[target.GetIndexColumn().IndexID] = append(indexIDToIndexCols[target.GetIndexColumn().IndexID], target.GetIndexColumn())
+	}
+
+	var sb strings.Builder
+	for tableID, primaryIndexes := range tableIDToPrimaryIndexes {
+		sortedPrimaryIndexes := scbuild.SortPrimaryIndexesBySourcingLocation(primaryIndexes)
+
+		sb.WriteString(fmt.Sprintf("Table %v: ", tableID))
+		for i := range sortedPrimaryIndexes {
+			// retrieve all key columns and all stored columns of this primary index
+			indexID := sortedPrimaryIndexes[i].IndexID
+			sb.WriteString("[")
+			if err := serializeIndexColsTo(&sb, indexIDToIndexCols[indexID]); err != nil {
+				return "", err
+			}
+			sb.WriteString("]")
+			if i != len(sortedPrimaryIndexes)-1 {
+				sb.WriteString("  <--  ")
+			}
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+func serializeIndexColsTo(sb *strings.Builder, indexCols []*scpb.IndexColumn) error {
+	// Sort them by (kind, ordinalInKind)
+	sort.Slice(indexCols, func(i, j int) bool {
+		return (indexCols[i].Kind < indexCols[j].Kind) ||
+			(indexCols[i].Kind == indexCols[j].Kind && indexCols[i].OrdinalInKind < indexCols[j].OrdinalInKind)
+	})
+
+	hasWrittenColon := false
+	for i, indexCol := range indexCols {
+		if indexCol.Kind == scpb.IndexColumn_KEY_SUFFIX {
+			return errors.AssertionFailedf("should not observe key_suffic columns")
+		}
+		sb.WriteString(fmt.Sprintf("%v", indexCol.ColumnID))
+		// Write either a ":" or a "," after each column.
+		if !hasWrittenColon && ((i == len(indexCols)-1 && indexCol.Kind == scpb.IndexColumn_KEY) ||
+			(i != len(indexCols)-1 && indexCols[i+1].Kind == scpb.IndexColumn_STORED)) {
+			sb.WriteString(" : ")
+			hasWrittenColon = true
+		} else if i != len(indexCols)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	return nil
 }
 
 // ExplainCompact returns a human-readable plan rendering for

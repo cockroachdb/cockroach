@@ -572,6 +572,39 @@ func handleDropColumnFreshlyAddedPrimaryIndex(
 	}
 }
 
+// SortPrimaryIndexesBySourcingLocation sorts all adding primary indexes
+// by their SourceIndexID "locationally".
+func SortPrimaryIndexesBySourcingLocation(
+	primaryIndexes map[*scpb.PrimaryIndex]bool,
+) []*scpb.PrimaryIndex {
+	// Make a local copy of `primaryIndexes` as we're going to modify `localCopy`.
+	localCopy := make(map[*scpb.PrimaryIndex]bool)
+	for k, v := range primaryIndexes {
+		localCopy[k] = v
+	}
+
+	ret := make([]*scpb.PrimaryIndex, len(localCopy))
+	sources := make(map[catid.IndexID]bool)
+	for addingPrimaryIndex := range localCopy {
+		sources[addingPrimaryIndex.SourceIndexID] = true
+	}
+	for len(localCopy) > 0 {
+		for primaryIndex := range localCopy {
+			if _, ok := sources[primaryIndex.IndexID]; ok {
+				// this primary index is currently used as someone else's source.
+				continue
+			}
+			// Find the one that's nobody's source!
+			// Put it to `sourtedPrimaryIndexes`, back to front.
+			ret[len(localCopy)-1] = primaryIndex
+			delete(localCopy, primaryIndex)
+			delete(sources, primaryIndex.SourceIndexID)
+			break
+		}
+	}
+	return ret
+}
+
 func assertAllColumnElementsAreDropped(colElts ElementResultSet) {
 	if stillPublic := colElts.Filter(publicTargetFilter); !stillPublic.IsEmpty() {
 		var elements []scpb.Element

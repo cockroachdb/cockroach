@@ -122,19 +122,21 @@ const (
 	ExplainFlagShape
 	ExplainFlagViz
 	ExplainFlagRedact
+	ExplainFlagDDLPrimaryIndexes
 	numExplainFlags = iota
 )
 
 var explainFlagStrings = [...]string{
-	ExplainFlagVerbose: "VERBOSE",
-	ExplainFlagTypes:   "TYPES",
-	ExplainFlagEnv:     "ENV",
-	ExplainFlagCatalog: "CATALOG",
-	ExplainFlagJSON:    "JSON",
-	ExplainFlagMemo:    "MEMO",
-	ExplainFlagShape:   "SHAPE",
-	ExplainFlagViz:     "VIZ",
-	ExplainFlagRedact:  "REDACT",
+	ExplainFlagVerbose:           "VERBOSE",
+	ExplainFlagTypes:             "TYPES",
+	ExplainFlagEnv:               "ENV",
+	ExplainFlagCatalog:           "CATALOG",
+	ExplainFlagJSON:              "JSON",
+	ExplainFlagMemo:              "MEMO",
+	ExplainFlagShape:             "SHAPE",
+	ExplainFlagViz:               "VIZ",
+	ExplainFlagRedact:            "REDACT",
+	ExplainFlagDDLPrimaryIndexes: "PK",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {

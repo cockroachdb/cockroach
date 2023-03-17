@@ -103,7 +103,9 @@ func (n *explainDDLNode) setExplainValues(
 	}
 
 	var info string
-	if n.options.Flags[tree.ExplainFlagVerbose] {
+	if n.options.Flags[tree.ExplainFlagDDLPrimaryIndexes] {
+		info, err = p.ExplainPrimaryIndexes()
+	} else if n.options.Flags[tree.ExplainFlagVerbose] {
 		info, err = p.ExplainVerbose()
 	} else {
 		info, err = p.ExplainCompact()
