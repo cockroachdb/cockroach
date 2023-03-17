@@ -337,9 +337,9 @@ func TestTableReaderDrain(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 		},
-		Txn:    leafTxn,
-		Local:  true,
-		NodeID: evalCtx.NodeID,
+		Txn:     leafTxn,
+		Gateway: false,
+		NodeID:  evalCtx.NodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
 		Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
@@ -390,8 +390,9 @@ func TestLimitScans(t *testing.T) {
 				func() int64 { return 2 << 10 }, s.Stopper(),
 			),
 		},
-		Txn:    kv.NewTxn(ctx, kvDB, s.NodeID()),
-		NodeID: evalCtx.NodeID,
+		Txn:     kv.NewTxn(ctx, kvDB, s.NodeID()),
+		NodeID:  evalCtx.NodeID,
+		Gateway: true,
 	}
 	spec := execinfrapb.TableReaderSpec{
 		FetchSpec: makeFetchSpec(t, tableDesc, "t_pkey", ""),
@@ -419,12 +420,6 @@ func TestLimitScans(t *testing.T) {
 		if row != nil {
 			rows++
 		}
-
-		// Simulate what the DistSQLReceiver does and ingest the trace.
-		if meta != nil && len(meta.TraceData) > 0 {
-			sp.ImportRemoteRecording(meta.TraceData)
-		}
-
 		if row == nil && meta == nil {
 			break
 		}
