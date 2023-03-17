@@ -121,17 +121,13 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 // StartedDefaultTestTenant returns whether this cluster started a default
 // test tenant.
 func (tc *TestCluster) StartedDefaultTestTenant() bool {
-	return !tc.Servers[0].Cfg.DisableDefaultTestTenant
+	return tc.Servers[0].StartedDefaultTestTenant()
 }
 
 // TenantOrServer returns either the ith server in the cluster or the tenant server associated with
 // the ith server if the cluster started with a default test tenant.
 func (tc *TestCluster) TenantOrServer(idx int) serverutils.TestTenantInterface {
-	s := tc.Server(idx)
-	if tc.StartedDefaultTestTenant() {
-		return s.TestTenants()[0]
-	}
-	return s
+	return tc.Server(idx).TenantOrServer()
 }
 
 // stopServers stops the stoppers for each individual server in the cluster.

@@ -275,6 +275,14 @@ type TestServerInterface interface {
 
 	// TestTenants returns the test tenants associated with the server
 	TestTenants() []TestTenantInterface
+
+	// StartedDefaultTestTenant returns true if the server has started the default
+	// test tenant.
+	StartedDefaultTestTenant() bool
+
+	// TenantOrServer returns the default test tenant, if it was started or this
+	// server if not.
+	TenantOrServer() TestTenantInterface
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
