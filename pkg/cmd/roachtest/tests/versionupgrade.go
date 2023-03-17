@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"math/rand"
 	"path/filepath"
 	"runtime"
@@ -102,8 +103,15 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if c.IsLocal() && runtime.GOARCH == "arm64" {
 		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 	}
-
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
+	mvt.OnStartup("setup schema changer workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
+		// Stage workload on all nodes as the load node to run workload is chosen
+		// randomly.
+		if err := c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload", c.All()); err != nil {
+			return err
+		}
+		return c.RunE(ctx, c.All(), "./workload init", "schemachange")
+	})
 	mvt.InMixedVersion("run backup", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		// Verify that backups can be created in various configurations. This is
 		// important to test because changes in system tables might cause backups to
@@ -124,6 +132,19 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			return nil
+		},
+	)
+	mvt.InMixedVersion(
+		"test schema change step",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			l.Printf("running schema workload step")
+			runCmd := roachtestutil.NewCommand("./workload run schemachange")
+			runCmd.Flag("verbose", 1)
+			runCmd.Flag("max-ops", 10)
+			runCmd.Flag("concurrency", 2)
+			runCmd.Arg("{pgurl:1-%d}", len(c.All()))
+			randomNode := c.All().RandNode()
+			return c.RunE(ctx, randomNode, runCmd.String())
 		},
 	)
 	mvt.AfterUpgradeFinalized(
