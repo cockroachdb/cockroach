@@ -79,6 +79,13 @@ func (a kvAuth) unaryInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
+		// When an RPC comes in from tenant to KV, we strip metadata that
+		// identifies an authenticated user because that context is only
+		// valid with the tenant.
+		// *Warning*: If a request contains a validated username as part
+		// of gRPC metadata, a KV server could use that information if
+		// it matches the same username on the system tenant.
+		ctx = grpcutil.ClearIncomingContext(ctx)
 		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), info.FullMethod, req); err != nil {
 			return nil, err
 		}

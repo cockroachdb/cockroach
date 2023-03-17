@@ -2476,6 +2476,13 @@ type tableMeta struct {
 func (t *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
+	ctx = t.AnnotateCtx(forwardSQLIdentityThroughRPCCalls(ctx))
+
+	err := t.privilegeChecker.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return t.sqlServer.tenantConnect.HotRangesV2(ctx, req)
 }
 
@@ -3435,6 +3442,7 @@ func (s *statusServer) ListExecutionInsights(
 func (s *statusServer) SpanStats(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
