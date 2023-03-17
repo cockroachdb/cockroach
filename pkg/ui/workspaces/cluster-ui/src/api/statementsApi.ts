@@ -19,6 +19,7 @@ import {
 } from "src/util";
 import Long from "long";
 import { AggregateStatistics } from "../statementsTable";
+import { SqlStatsSortOptions } from "../util/sqlActivityConstants";
 const STATEMENTS_PATH = "/_status/combinedstmts";
 const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
 
@@ -34,14 +35,12 @@ export type StatementDetailsResponseWithKey = {
 };
 
 export type SqlStatsResponse = cockroach.server.serverpb.StatementsResponse;
+export type SqlStatsSortType = SqlStatsSortOptions;
 
 export type ErrorWithKey = {
   err: Error;
   key: string;
 };
-
-export const SqlStatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
-export type SqlStatsSortType = cockroach.server.serverpb.StatsSortOptions;
 
 export const DEFAULT_STATS_REQ_OPTIONS = {
   limit: 100,
@@ -51,7 +50,7 @@ export const DEFAULT_STATS_REQ_OPTIONS = {
 // THhe required fields to create a stmts request.
 type StmtReqFields = {
   limit: number;
-  sort: SqlStatsSortType;
+  sort: SqlStatsSortOptions;
   start: moment.Moment;
   end: moment.Moment;
 };
@@ -67,7 +66,7 @@ export function createCombinedStmtsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
     limit: Long.fromNumber(limit ?? DEFAULT_STATS_REQ_OPTIONS.limit),
-    sort,
+    sort: SqlStatsSortOptions[sort],
   });
 }
 

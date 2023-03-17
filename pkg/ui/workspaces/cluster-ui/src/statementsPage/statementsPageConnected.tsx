@@ -53,7 +53,8 @@ import {
   selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import { StatementsRequest } from "src/api/statementsApi";
+import { SqlStatsSortOptions } from "src/util/sqlActivityConstants";
 import { TimeScale } from "../timeScaleDropdown";
 import {
   StatementsPageRoot,
@@ -253,7 +254,7 @@ export const ConnectedStatementsPage = withRouter(
           ),
         onChangeLimit: (limit: number) =>
           dispatch(updateStmtsPageLimitAction(limit)),
-        onChangeReqSort: (sort: SqlStatsSortType) =>
+        onChangeReqSort: (sort: SqlStatsSortOptions) =>
           dispatch(updateStmsPageReqSortAction(sort)),
       },
       activePageProps: mapDispatchToRecentStatementsPageProps(dispatch),

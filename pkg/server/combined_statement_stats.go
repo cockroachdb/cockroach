@@ -105,17 +105,19 @@ func getCombinedStatementStats(
 	return response, nil
 }
 
-func getColumnFromSortOption(sort serverpb.StatsSortOptions) string {
+func getColumnFromSortOption(sort string) string {
 	switch sort {
-	case serverpb.StatsSortOptions_SERVICE_LAT:
-		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
-	case serverpb.StatsSortOptions_CPU_TIME:
+	case "CPU_TIME":
 		return `(statistics -> 'statistics' -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
-	case serverpb.StatsSortOptions_EXECUTION_COUNT:
+	case "CONTENTION_TIME":
+		return "(statistics -> 'statistics' -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC"
+	case "EXECUTION_COUNT":
 		return `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
-	case serverpb.StatsSortOptions_PCT_RUNTIME:
+	case "PCT_RUNTIME":
 		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT  *
              (statistics -> 'statistics' ->> 'cnt')::FLOAT DESC`
+	case "SERVICE_LAT":
+		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
 	default:
 		return `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
 	}

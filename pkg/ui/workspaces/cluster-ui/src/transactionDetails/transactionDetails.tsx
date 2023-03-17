@@ -89,7 +89,7 @@ import {
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
-import { SqlStatsSortType } from "src/api/statementsApi";
+import { SqlStatsSortOptions } from "src/util/sqlActivityConstants";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -104,7 +104,7 @@ const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 export interface TransactionDetailsStateProps {
   timeScale: TimeScale;
   limit: number;
-  reqSortSetting: SqlStatsSortType;
+  reqSortSetting: SqlStatsSortOptions;
   error?: Error | null;
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];

@@ -37,7 +37,8 @@ import {
   selectTxnsPageReqSort,
   selectTimeScale,
 } from "../store/utils/selectors";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import { StatementsRequest } from "src/api/statementsApi";
+import { SqlStatsSortOptions } from "src/util/sqlActivityConstants";
 import {
   actions as localStorageActions,
   updateTxnsPageLimitAction,
@@ -168,7 +169,7 @@ export const TransactionsPageConnected = withRouter(
         },
         onChangeLimit: (limit: number) =>
           dispatch(updateTxnsPageLimitAction(limit)),
-        onChangeReqSort: (sort: SqlStatsSortType) =>
+        onChangeReqSort: (sort: SqlStatsSortOptions) =>
           dispatch(updateTxnsPageReqSortAction(sort)),
       },
       activePageProps: mapDispatchToRecentTransactionsPageProps(dispatch),

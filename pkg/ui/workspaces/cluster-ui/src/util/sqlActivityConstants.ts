@@ -10,23 +10,33 @@
 
 import { duration } from "moment";
 import { TimeScale } from "../timeScaleDropdown";
-import { SqlStatsSortOptions, SqlStatsSortType } from "../api/statementsApi";
 
 export const limitOptions = [
-  { value: 100, name: "100" },
-  { value: 200, name: "200" },
-  { value: 500, name: "500" },
-  { value: 1000, name: "1000" },
+  { label: "25", value: 25 },
+  { label: "50", value: 50 },
+  { label: "100", value: 100 },
+  { label: "500", value: 500 },
 ];
 
-export function getSortLabel(sort: SqlStatsSortType): string {
+export enum SqlStatsSortOptions {
+  CONTENTION_TIME = "CONTENTION_TIME",
+  CPU_TIME = "CPU_TIME",
+  EXECUTION_COUNT = "EXECUTION_COUNT",
+  PCT_RUNTIME = "PCT_RUNTIME",
+  SERVICE_LAT = "SERVICE_LAT",
+}
+export function getSortLabel(sort: SqlStatsSortOptions): string {
   switch (sort) {
-    case SqlStatsSortOptions.SERVICE_LAT:
-      return "Service Latency";
-    case SqlStatsSortOptions.EXECUTION_COUNT:
-      return "Execution Count";
+    case SqlStatsSortOptions.CONTENTION_TIME:
+      return "Contention Time";
     case SqlStatsSortOptions.CPU_TIME:
       return "CPU Time";
+    case SqlStatsSortOptions.EXECUTION_COUNT:
+      return "Execution Count";
+    case SqlStatsSortOptions.PCT_RUNTIME:
+      return "% of Runtime";
+    case SqlStatsSortOptions.SERVICE_LAT:
+      return "Service Latency";
     default:
       return "";
   }
@@ -35,7 +45,7 @@ export function getSortLabel(sort: SqlStatsSortType): string {
 export const requestSortOptions = Object.values(SqlStatsSortOptions).map(
   sortVal => ({
     value: sortVal,
-    name: getSortLabel(sortVal as SqlStatsSortType),
+    label: getSortLabel(sortVal as SqlStatsSortOptions),
   }),
 );
 

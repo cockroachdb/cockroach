@@ -1578,7 +1578,7 @@ message StatementsRequest {
   int64 end = 4 [(gogoproto.nullable) = true];
   StatsFetchMode fetch_mode = 5;
   int64 limit = 6;
-  StatsSortOptions sort = 7;
+  string sort = 7;
 }
 
 message StatementsResponse {
@@ -1617,12 +1617,6 @@ message StatementsResponse {
   repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
 }
 
-enum StatsSortOptions {
-  SERVICE_LAT = 0;
-  CPU_TIME = 1;
-  PCT_RUNTIME = 2;
-  EXECUTION_COUNT = 3;
-}
 message CombinedStatementsStatsRequest {
   // Unix time range for aggregated statements.
   int64 start = 1 [(gogoproto.nullable) = true];
@@ -1643,7 +1637,7 @@ message CombinedStatementsStatsRequest {
 
   int64 limit = 6;
 
-  StatsSortOptions sort = 7;
+  string sort = 7;
 }
 
 message FlushedTxnsStatsRequest {
@@ -1651,7 +1645,7 @@ message FlushedTxnsStatsRequest {
   int64 start = 1 [(gogoproto.nullable) = true];
   int64 end = 2 [(gogoproto.nullable) = true];
   int64 limit = 3;
-  StatsSortOptions sort = 4;
+  string sort = 4;
 }
 
 // StatementDetailsRequest requests the details of a Statement, based on its keys.

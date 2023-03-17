@@ -13,8 +13,8 @@ import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "src/queryFilter/";
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { WorkloadInsightEventFilters } from "src/insights";
-import { DEFAULT_STATS_REQ_OPTIONS } from "../../api/statementsApi";
-import { SqlStatsSortType } from "src/api/statementsApi";
+import { DEFAULT_STATS_REQ_OPTIONS } from "src/api";
+import { SqlStatsSortOptions } from "src/util/sqlActivityConstants";
 
 type SortSetting = {
   ascending: boolean;
@@ -40,9 +40,9 @@ export type LocalStorageState = {
   "showColumns/JobsPage": string;
   [LocalStorageKeys.GLOBAL_TIME_SCALE]: TimeScale;
   [LocalStorageKeys.STMT_FINGERPRINTS_LIMIT]: number;
-  [LocalStorageKeys.STMT_FINGERPRINTS_SORT]: SqlStatsSortType;
+  [LocalStorageKeys.STMT_FINGERPRINTS_SORT]: SqlStatsSortOptions;
   [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]: number;
-  [LocalStorageKeys.TXN_FINGERPRINTS_SORT]: SqlStatsSortType;
+  [LocalStorageKeys.TXN_FINGERPRINTS_SORT]: SqlStatsSortOptions;
   "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
   "sortSetting/StatementsPage": SortSetting;
@@ -256,7 +256,7 @@ export const updateStmtsPageLimitAction = (
   });
 
 export const updateStmsPageReqSortAction = (
-  sort: SqlStatsSortType,
+  sort: SqlStatsSortOptions,
 ): PayloadAction<Payload> =>
   localStorageSlice.actions.update({
     key: LocalStorageKeys.STMT_FINGERPRINTS_SORT,
@@ -272,7 +272,7 @@ export const updateTxnsPageLimitAction = (
   });
 
 export const updateTxnsPageReqSortAction = (
-  sort: SqlStatsSortType,
+  sort: SqlStatsSortOptions,
 ): PayloadAction<Payload> =>
   localStorageSlice.actions.update({
     key: LocalStorageKeys.TXN_FINGERPRINTS_SORT,
