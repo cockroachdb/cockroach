@@ -2476,6 +2476,13 @@ type tableMeta struct {
 func (t *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	err := t.privilegeChecker.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return t.sqlServer.tenantConnect.HotRangesV2(ctx, req)
 }
 

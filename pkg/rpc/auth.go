@@ -79,6 +79,19 @@ func (a kvAuth) unaryInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
+		// Clear any leftover gRPC incoming metadata, if this call
+		// is originating from a RPC handler function called as
+		// a result of a tenant call. This is this case:
+		//
+		//    tenant -(rpc)-> tenant -(rpc)-> KV
+		//                            ^ YOU ARE HERE
+		//
+		// at this point, the left side RPC has left some incoming
+		// metadata in the context, but we need to get rid of it
+		// before we let the call go through KV. Any stray metadata
+		// could influence the execution on the KV-level handlers.
+		ctx = grpcutil.ClearIncomingContext(ctx)
+
 		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), info.FullMethod, req); err != nil {
 			return nil, err
 		}
@@ -110,6 +123,19 @@ func (a kvAuth) streamInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
+		// Clear any leftover gRPC incoming metadata, if this call
+		// is originating from a RPC handler function called as
+		// a result of a tenant call. This is this case:
+		//
+		//    tenant -(rpc)-> tenant -(rpc)-> KV
+		//                            ^ YOU ARE HERE
+		//
+		// at this point, the left side RPC has left some incoming
+		// metadata in the context, but we need to get rid of it
+		// before we let the call go through KV. Any stray metadata
+		// could influence the execution on the KV-level handlers.
+		ctx = grpcutil.ClearIncomingContext(ctx)
+
 		origSS := ss
 		ss = &wrappedServerStream{
 			ServerStream: origSS,
