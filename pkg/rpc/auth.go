@@ -79,6 +79,12 @@ func (a kvAuth) unaryInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
+		// When an RPC comes in from tenant to KV, we strip all metadata
+		// from the context because that metadata is only valid in the
+		// context of that tenant. Any stray metadata could influence the
+		// execution on the KV-level handlers.
+		ctx = grpcutil.ClearIncomingContext(ctx)
+
 		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), info.FullMethod, req); err != nil {
 			return nil, err
 		}
@@ -110,6 +116,12 @@ func (a kvAuth) streamInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
+		// When an RPC comes in from tenant to KV, we strip all metadata
+		// from the context because that metadata is only valid in the
+		// context of that tenant. Any stray metadata could influence the
+		// execution on the KV-level handlers.
+		ctx = grpcutil.ClearIncomingContext(ctx)
+
 		origSS := ss
 		ss = &wrappedServerStream{
 			ServerStream: origSS,

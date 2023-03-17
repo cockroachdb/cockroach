@@ -147,6 +147,24 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 	aSpan := tenantA.GetTenant().Codec().TenantSpan()
 	bSpan := tenantB.GetTenant().Codec().TenantSpan()
 
+	t.Run("test tenant permissioning", func(t *testing.T) {
+		req := roachpb.SpanStatsRequest{
+			NodeID:   "0",
+			StartKey: roachpb.RKey(aSpan.Key),
+			EndKey:   roachpb.RKey(aSpan.EndKey),
+		}
+		resp := roachpb.SpanStatsResponse{}
+
+		client := helper.TestCluster().TenantHTTPClient(t, 1, false)
+		err := client.PostJSONChecked("/_status/span", &req, &resp)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Forbidden")
+
+		adminClient := helper.TestCluster().TenantHTTPClient(t, 1, true)
+		adminClient.PostJSON("/_status/span", &req, &resp)
+		require.Greaterf(t, resp.RangeCount, int32(0), "postive range count")
+	})
+
 	t.Run("test tenant isolation", func(t *testing.T) {
 		_, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
@@ -1394,10 +1412,16 @@ func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.Tenan
 	t.Run("test http request for hot ranges", func(t *testing.T) {
 		client := helper.TestCluster().TenantHTTPClient(t, 1, false)
 		defer client.Close()
-		grantStmt := `GRANT SYSTEM VIEWCLUSTERMETADATA TO authentic_user_noadmin;`
-		helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
+
 		req := serverpb.HotRangesRequest{}
 		resp := serverpb.HotRangesResponseV2{}
+		err := client.PostJSONChecked("/_status/v2/hotranges", &req, &resp)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Forbidden")
+
+		grantStmt := `GRANT SYSTEM VIEWCLUSTERMETADATA TO authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
+
 		client.PostJSON("/_status/v2/hotranges", &req, &resp)
 		require.NotEmpty(t, resp.Ranges)
 	})
