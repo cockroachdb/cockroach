@@ -22,7 +22,6 @@ import {
 } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
-import { TableStatistics } from "../tableStatistics";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -56,7 +55,6 @@ import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { UIConfigState } from "../store";
 import {
-  SqlStatsSortType,
   StatementsRequest,
   createCombinedStmtsRequest,
 } from "src/api/statementsApi";
@@ -66,7 +64,6 @@ import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
-  TimeScaleDropdown,
   timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
@@ -80,17 +77,18 @@ import {
   StatementDiagnosticsReport,
 } from "../api";
 import { filteredStatementsData } from "../sqlActivity/util";
-import { Dropdown } from "src/dropdown";
 import {
+  SqlStatsSortOptions,
   STATS_LONG_LOADING_DURATION,
-  limitOptions,
-  requestSortOptions,
   getSortLabel,
 } from "src/util/sqlActivityConstants";
 import { Button } from "src/button";
+import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 // Most of the props are supposed to be provided as connected props
 // from redux store.
@@ -124,7 +122,7 @@ export interface StatementsPageDispatchProps {
   onColumnsChange?: (selectedColumns: string[]) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
   onChangeLimit: (limit: number) => void;
-  onChangeReqSort: (sort: SqlStatsSortType) => void;
+  onChangeReqSort: (sort: SqlStatsSortOptions) => void;
 }
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
@@ -133,7 +131,7 @@ export interface StatementsPageStateProps {
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   limit: number;
-  reqSortSetting: SqlStatsSortType;
+  reqSortSetting: SqlStatsSortOptions;
   statementsError: Error | null;
   apps: string[];
   databases: string[];
@@ -155,7 +153,9 @@ export interface StatementsPageState {
   activeFilters?: number;
   timeScale: TimeScale;
   limit: number;
-  reqSortSetting: SqlStatsSortType;
+  reqSortSetting: SqlStatsSortOptions;
+  appliedLimit: number;
+  appliedSort: string;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
@@ -210,12 +210,14 @@ export class StatementsPage extends React.Component<
     super(props);
     const defaultState = {
       pagination: {
-        pageSize: 20,
+        pageSize: 1000,
         current: 1,
       },
       limit: this.props.limit,
       timeScale: this.props.timeScale,
       reqSortSetting: this.props.reqSortSetting,
+      appliedLimit: this.props.limit,
+      appliedSort: getSortLabel(this.props.reqSortSetting),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -286,6 +288,11 @@ export class StatementsPage extends React.Component<
     this.props.onChangeReqSort(this.state.reqSortSetting);
     this.props.onTimeScaleChange(this.state.timeScale);
     this.refreshStatements();
+    this.setState(prevState => ({
+      ...prevState,
+      appliedLimit: this.state.limit,
+      appliedSort: getSortLabel(this.state.reqSortSetting),
+    }));
   };
 
   resetPagination = (): void => {
@@ -473,11 +480,11 @@ export class StatementsPage extends React.Component<
     this.setState(prevState => ({ ...prevState, limit: newLimit }));
   };
 
-  onChangeReqSort = (newSort: SqlStatsSortType): void => {
+  onChangeReqSort = (newSort: SqlStatsSortOptions): void => {
     this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
   };
 
-  renderStatements = (regions: string[]): React.ReactElement => {
+  renderStatements = (): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
       onSelectDiagnosticsReportDropdownOption,
@@ -489,6 +496,9 @@ export class StatementsPage extends React.Component<
       hasViewActivityRedactedRole,
       sortSetting,
       search,
+      apps,
+      databases,
+      hasAdminRole,
     } = this.props;
     const statements = this.props.statements ?? [];
     const data = filteredStatementsData(
@@ -499,8 +509,16 @@ export class StatementsPage extends React.Component<
       isTenant,
     );
     const totalWorkload = calculateTotalWorkload(statements);
-    const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+    const regions = unique(
+      isTenant
+        ? flatMap(statements, statement => statement.stats.regions)
+        : nodes.map(node => nodeRegions[node.toString()]),
+    ).sort();
+
     // If the cluster is a tenant cluster we don't show info
     // about nodes/regions.
     populateRegionNodeForStatements(statements, nodeRegions);
@@ -543,25 +561,85 @@ export class StatementsPage extends React.Component<
     );
 
     const period = timeScaleToString(this.props.timeScale);
+    const clearFilter = activeFilters ? (
+      <PageConfigItem>
+        <Button onClick={this.onClearFilters} type="flat" size="small">
+          clear filter
+        </Button>
+      </PageConfigItem>
+    ) : (
+      <></>
+    );
 
     return (
-      <div>
+      <>
+        <SearchCriteria
+          topValue={this.state.limit}
+          byValue={getSortLabel(this.state.reqSortSetting)}
+          currentScale={this.state.timeScale}
+          onChangeTop={this.onChangeLimit}
+          onChangeBy={this.onChangeReqSort}
+          onChangeTimeScale={this.changeTimeScale}
+          onApply={this.updateRequestParams}
+        />
+        <h5 className={`${commonStyles("base-heading")} ${cx("margin-top")}`}>
+          {`Results - Top ${this.state.appliedLimit} Statement Fingerprints by ${this.state.appliedSort}`}
+        </h5>
+        <section className={cx("filter-area")}>
+          <PageConfig className={cx("float-left")}>
+            <PageConfigItem>
+              <Search
+                onSubmit={this.onSubmitSearchField}
+                onClear={this.onClearSearchField}
+                defaultValue={search}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <Filter
+                onSubmitFilters={this.onSubmitFilters}
+                appNames={apps}
+                dbNames={databases}
+                regions={regions}
+                nodes={nodes.map(n => "n" + n)}
+                activeFilters={activeFilters}
+                filters={filters}
+                showDB={true}
+                showSqlType={true}
+                showScan={true}
+                showRegions={regions.length > 1}
+                showNodes={!isTenant && nodes.length > 1}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <ColumnsSelector
+                options={tableColumns}
+                onSubmitColumns={onColumnsChange}
+              />
+            </PageConfigItem>
+            {clearFilter}
+          </PageConfig>
+          <PageConfig className={cx("float-right")}>
+            <PageConfigItem>
+              <p className={timeScaleStylesCx("time-label")}>
+                Showing aggregated stats from{" "}
+                <span className={timeScaleStylesCx("bold")}>{period}</span>
+              </p>
+            </PageConfigItem>
+            {hasAdminRole && (
+              <PageConfigItem
+                className={`${commonStyles("separator")} ${cx(
+                  "reset-btn-area",
+                )} `}
+              >
+                <ClearStats
+                  resetSQLStats={this.resetSQLStats}
+                  tooltipType="statement"
+                />
+              </PageConfigItem>
+            )}
+          </PageConfig>
+        </section>
         <section className={sortableTableCx("cl-table-container")}>
-          <div>
-            <ColumnsSelector
-              options={tableColumns}
-              onSubmitColumns={onColumnsChange}
-            />
-            <TableStatistics
-              pagination={pagination}
-              search={search}
-              totalCount={totalCount}
-              arrayItemName="statements"
-              activeFilters={activeFilters}
-              period={period}
-              onClearFilters={this.onClearFilters}
-            />
-          </div>
           <StatementsSortedTable
             className="statements-table"
             data={data}
@@ -583,7 +661,7 @@ export class StatementsPage extends React.Component<
           total={data.length}
           onChange={this.onChangePage}
         />
-      </div>
+      </>
     );
   };
 
@@ -592,27 +670,7 @@ export class StatementsPage extends React.Component<
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
-      apps,
-      databases,
-      statements,
-      search,
-      isTenant,
-      nodeRegions,
-      hasAdminRole,
     } = this.props;
-
-    const nodes = Object.keys(nodeRegions)
-      .map(n => Number(n))
-      .sort();
-
-    const regions = unique(
-      isTenant
-        ? flatMap(statements, statement => statement.stats.regions)
-        : nodes.map(node => nodeRegions[node.toString()]),
-    ).sort();
-
-    const { filters, activeFilters } = this.state;
-
     const longLoadingMessage = (
       <Delayed delay={STATS_LONG_LOADING_DURATION}>
         <InlineAlert
@@ -624,74 +682,12 @@ export class StatementsPage extends React.Component<
 
     return (
       <div className={cx("root")}>
-        <PageConfig>
-          <PageConfigItem>
-            <Search
-              onSubmit={this.onSubmitSearchField}
-              onClear={this.onClearSearchField}
-              defaultValue={search}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Filter
-              onSubmitFilters={this.onSubmitFilters}
-              appNames={apps}
-              dbNames={databases}
-              regions={regions}
-              nodes={nodes.map(n => "n" + n)}
-              activeFilters={activeFilters}
-              filters={filters}
-              showDB={true}
-              showSqlType={true}
-              showScan={true}
-              showRegions={regions.length > 1}
-              showNodes={!isTenant && nodes.length > 1}
-            />
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <Dropdown items={limitOptions} onChange={this.onChangeLimit}>
-              Limit: {this.state.limit ?? "N/A"}
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown
-              items={requestSortOptions}
-              onChange={this.onChangeReqSort}
-            >
-              Sort By: {getSortLabel(this.state.reqSortSetting)}
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem>
-            <TimeScaleDropdown
-              options={timeScale1hMinOptions}
-              currentScale={this.state.timeScale}
-              setTimeScale={this.changeTimeScale}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Button size="small" onClick={this.updateRequestParams}>
-              Submit Request
-            </Button>
-          </PageConfigItem>
-          {hasAdminRole && (
-            <PageConfigItem
-              className={`${commonStyles("separator")} ${cx(
-                "reset-btn-area",
-              )} `}
-            >
-              <ClearStats
-                resetSQLStats={this.resetSQLStats}
-                tooltipType="statement"
-              />
-            </PageConfigItem>
-          )}
-        </PageConfig>
         <div className={cx("table-area")}>
           <Loading
             loading={this.props.isReqInFlight}
             page={"statements"}
             error={this.props.statementsError}
-            render={() => this.renderStatements(regions)}
+            render={() => this.renderStatements()}
             renderError={() =>
               LoadingError({
                 statsType: "statements",

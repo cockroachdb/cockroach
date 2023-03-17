@@ -25,7 +25,6 @@ import {
   updateSortSettingQueryParamsOnTab,
 } from "../sortedtable";
 import { Pagination } from "../pagination";
-import { TableStatistics } from "../tableStatistics";
 import { statisticsClasses } from "./transactionsPageClasses";
 import {
   aggregateAcrossNodeIDs,
@@ -52,7 +51,6 @@ import {
 import { UIConfigState } from "../store";
 import {
   createCombinedStmtsRequest,
-  SqlStatsSortType,
   StatementsRequest,
 } from "src/api/statementsApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
@@ -65,7 +63,6 @@ import ClearStats from "../sqlActivity/clearStats";
 import LoadingError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
 import {
-  TimeScaleDropdown,
   TimeScale,
   timeScaleToString,
   timeScale1hMinOptions,
@@ -76,25 +73,28 @@ import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import moment from "moment";
-import { Dropdown } from "src/dropdown";
 import {
+  SqlStatsSortOptions,
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
-  limitOptions,
-  requestSortOptions,
 } from "src/util/sqlActivityConstants";
 import { Button } from "src/button";
+import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
 const cx = classNames.bind(styles);
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 interface TState {
   filters?: Filters;
   pagination: ISortedTablePagination;
   timeScale: TimeScale;
   limit: number;
-  reqSortSetting: SqlStatsSortType;
+  reqSortSetting: SqlStatsSortOptions;
+  appliedLimit: number;
+  appliedSort: string;
 }
 
 export interface TransactionsPageStateProps {
@@ -105,7 +105,7 @@ export interface TransactionsPageStateProps {
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   limit: number;
-  reqSortSetting: SqlStatsSortType;
+  reqSortSetting: SqlStatsSortOptions;
   error?: Error | null;
   filters: Filters;
   isTenant?: UIConfigState["isTenant"];
@@ -123,7 +123,7 @@ export interface TransactionsPageDispatchProps {
   resetSQLStats: () => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onChangeLimit: (limit: number) => void;
-  onChangeReqSort: (sort: SqlStatsSortType) => void;
+  onChangeReqSort: (sort: SqlStatsSortOptions) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
   onSearchComplete?: (query: string) => void;
@@ -161,9 +161,11 @@ export class TransactionsPage extends React.Component<
       timeScale: this.props.timeScale,
       reqSortSetting: this.props.reqSortSetting,
       pagination: {
-        pageSize: this.props.pageSize || 20,
+        pageSize: this.props.pageSize || 1000,
         current: 1,
       },
+      appliedLimit: this.props.limit,
+      appliedSort: getSortLabel(this.props.reqSortSetting),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(this.state, stateFromHistory);
@@ -387,7 +389,7 @@ export class TransactionsPage extends React.Component<
     this.setState(prevState => ({ ...prevState, limit: newLimit }));
   };
 
-  onChangeReqSort = (newSort: SqlStatsSortType): void => {
+  onChangeReqSort = (newSort: SqlStatsSortOptions): void => {
     this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
   };
 
@@ -396,9 +398,14 @@ export class TransactionsPage extends React.Component<
     this.props.onChangeReqSort(this.state.reqSortSetting);
     this.props.onTimeScaleChange(this.state.timeScale);
     this.refreshData();
+    this.setState(prevState => ({
+      ...prevState,
+      appliedLimit: this.state.limit,
+      appliedSort: getSortLabel(this.state.reqSortSetting),
+    }));
   };
 
-  render(): React.ReactElement {
+  renderTransactions(): React.ReactElement {
     const {
       data,
       nodeRegions,
@@ -409,19 +416,9 @@ export class TransactionsPage extends React.Component<
       search,
       hasAdminRole,
     } = this.props;
+    const { pagination, filters } = this.state;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
-    const { filters } = this.state;
-
-    const nodes = Object.keys(nodeRegions)
-      .map(n => Number(n))
-      .sort();
-
-    const regions = unique(
-      isTenant
-        ? flatMap(statements, statement => statement.stats.regions)
-        : nodes.map(node => nodeRegions[node.toString()]),
-    ).sort();
 
     // We apply the search filters and app name filters prior to aggregating across Node IDs
     // in order to match what's done on the Statements Page.
@@ -443,6 +440,162 @@ export class TransactionsPage extends React.Component<
       internal_app_name_prefix,
     );
 
+    const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
+      filteredTransactions,
+      statements,
+    ).map(t => ({
+      stats_data: t.stats_data,
+      node_id: t.node_id,
+      regions: generateRegion(t, statements),
+      regionNodes: generateRegionNode(t, statements, nodeRegions),
+    }));
+    const { current, pageSize } = pagination;
+    const hasData = data?.transactions?.length > 0;
+    const isUsedFilter = search?.length > 0;
+
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+
+    const regions = unique(
+      isTenant
+        ? flatMap(statements, statement => statement.stats.regions)
+        : nodes.map(node => nodeRegions[node.toString()]),
+    ).sort();
+
+    // Creates a list of all possible columns,
+    // hiding nodeRegions if is not multi-region and
+    // hiding columns that won't be displayed for tenants.
+    const columns = makeTransactionsColumns(
+      transactionsToDisplay,
+      statements,
+      isTenant,
+      search,
+    )
+      .filter(c => !(c.name === "regions" && regions.length < 2))
+      .filter(c => !(c.name === "regionNodes" && regions.length < 2))
+      .filter(c => !(isTenant && c.hideIfTenant));
+
+    // Iterate over all available columns and create list of SelectOptions with initial selection
+    // values based on stored user selections in local storage and default column configs.
+    // Columns that are set to alwaysShow are filtered from the list.
+    const tableColumns = columns
+      .filter(c => !c.alwaysShow)
+      .map(
+        (c): SelectOption => ({
+          label: getLabel(c.name as StatisticTableColumnKeys, "transaction"),
+          value: c.name,
+          isSelected: isSelectedColumn(userSelectedColumnsToShow, c),
+        }),
+      );
+
+    // List of all columns that will be displayed based on the column selection.
+    const displayColumns = columns.filter(c =>
+      isSelectedColumn(userSelectedColumnsToShow, c),
+    );
+
+    const period = timeScaleToString(this.props.timeScale);
+    const clearFilter = activeFilters ? (
+      <PageConfigItem>
+        <Button onClick={this.onClearFilters} type="flat" size="small">
+          clear filter
+        </Button>
+      </PageConfigItem>
+    ) : (
+      <></>
+    );
+
+    return (
+      <>
+        <SearchCriteria
+          topValue={this.state.limit}
+          byValue={getSortLabel(this.state.reqSortSetting)}
+          currentScale={this.state.timeScale}
+          onChangeTop={this.onChangeLimit}
+          onChangeBy={this.onChangeReqSort}
+          onChangeTimeScale={this.changeTimeScale}
+          onApply={this.updateRequestParams}
+        />
+        <h5 className={`${commonStyles("base-heading")} ${cx("margin-top")}`}>
+          {`Results - Top ${this.state.appliedLimit} Transaction Fingerprints by ${this.state.appliedSort}`}
+        </h5>
+        <section className={cx("filter-area")}>
+          <PageConfig className={cx("float-left")}>
+            <PageConfigItem>
+              <Search
+                onSubmit={this.onSubmitSearchField}
+                onClear={this.onClearSearchField}
+                defaultValue={search}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <Filter
+                onSubmitFilters={this.onSubmitFilters}
+                appNames={appNames}
+                regions={regions}
+                timeLabel={"Transaction fingerprint"}
+                nodes={nodes.map(n => "n" + n)}
+                activeFilters={activeFilters}
+                filters={filters}
+                showRegions={regions.length > 1}
+                showNodes={!isTenant && nodes.length > 1}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <ColumnsSelector
+                options={tableColumns}
+                onSubmitColumns={onColumnsChange}
+              />
+            </PageConfigItem>
+            {clearFilter}
+          </PageConfig>
+          <PageConfig className={cx("float-right")}>
+            <PageConfigItem>
+              <p className={timeScaleStylesCx("time-label")}>
+                Showing aggregated stats from{" "}
+                <span className={timeScaleStylesCx("bold")}>{period}</span>
+              </p>
+            </PageConfigItem>
+            {hasAdminRole && (
+              <PageConfigItem
+                className={`${commonStyles("separator")} ${cx(
+                  "reset-btn-area",
+                )} `}
+              >
+                <ClearStats
+                  resetSQLStats={this.resetSQLStats}
+                  tooltipType="statement"
+                />
+              </PageConfigItem>
+            )}
+          </PageConfig>
+        </section>
+        <section className={statisticsClasses.tableContainerClass}>
+          <TransactionsTable
+            columns={displayColumns}
+            transactions={transactionsToDisplay}
+            sortSetting={sortSetting}
+            onChangeSortSetting={this.onChangeSortSetting}
+            pagination={pagination}
+            renderNoResult={
+              <EmptyTransactionsPlaceholder
+                transactionView={TransactionViewType.FINGERPRINTS}
+                isEmptySearchResults={hasData && isUsedFilter}
+              />
+            }
+          />
+        </section>
+        <Pagination
+          pageSize={pageSize}
+          current={current}
+          total={transactionsToDisplay.length}
+          onChange={this.onChangePage}
+        />
+      </>
+    );
+  }
+
+  render(): React.ReactElement {
     const longLoadingMessage = (
       <Delayed delay={STATS_LONG_LOADING_DURATION}>
         <InlineAlert
@@ -454,157 +607,12 @@ export class TransactionsPage extends React.Component<
 
     return (
       <>
-        <PageConfig>
-          <PageConfigItem>
-            <Search
-              onSubmit={this.onSubmitSearchField}
-              onClear={this.onClearSearchField}
-              defaultValue={search}
-              placeholder={"Search Transactions"}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Filter
-              onSubmitFilters={this.onSubmitFilters}
-              appNames={appNames}
-              regions={regions}
-              timeLabel={"Transaction fingerprint"}
-              nodes={nodes.map(n => "n" + n)}
-              activeFilters={activeFilters}
-              filters={filters}
-              showRegions={regions.length > 1}
-              showNodes={!isTenant && nodes.length > 1}
-            />
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <Dropdown items={limitOptions} onChange={this.onChangeLimit}>
-              Limit: {this.state.limit ?? "N/A"}
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown
-              items={requestSortOptions}
-              onChange={this.onChangeReqSort}
-            >
-              Sort By: {getSortLabel(this.state.reqSortSetting)}
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <TimeScaleDropdown
-              options={timeScale1hMinOptions}
-              currentScale={this.state.timeScale}
-              setTimeScale={this.changeTimeScale}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Button size="small" onClick={this.updateRequestParams}>
-              Submit Request
-            </Button>
-          </PageConfigItem>
-          {hasAdminRole && (
-            <PageConfigItem>
-              <ClearStats
-                resetSQLStats={this.resetSQLStats}
-                tooltipType="transaction"
-              />
-            </PageConfigItem>
-          )}
-        </PageConfig>
         <div className={cx("table-area")}>
           <Loading
             loading={this.props.isReqInFlight}
             page={"transactions"}
             error={this.props?.error}
-            render={() => {
-              const { pagination } = this.state;
-              const transactionsToDisplay: TransactionInfo[] =
-                aggregateAcrossNodeIDs(filteredTransactions, statements).map(
-                  t => ({
-                    stats_data: t.stats_data,
-                    node_id: t.node_id,
-                    regions: generateRegion(t, statements),
-                    regionNodes: generateRegionNode(t, statements, nodeRegions),
-                  }),
-                );
-              const { current, pageSize } = pagination;
-              const hasData = data?.transactions?.length > 0;
-              const isUsedFilter = search?.length > 0;
-
-              // Creates a list of all possible columns,
-              // hiding nodeRegions if is not multi-region and
-              // hiding columns that won't be displayed for tenants.
-              const columns = makeTransactionsColumns(
-                transactionsToDisplay,
-                statements,
-                isTenant,
-                search,
-              )
-                .filter(c => !(c.name === "regions" && regions.length < 2))
-                .filter(c => !(c.name === "regionNodes" && regions.length < 2))
-                .filter(c => !(isTenant && c.hideIfTenant));
-
-              // Iterate over all available columns and create list of SelectOptions with initial selection
-              // values based on stored user selections in local storage and default column configs.
-              // Columns that are set to alwaysShow are filtered from the list.
-              const tableColumns = columns
-                .filter(c => !c.alwaysShow)
-                .map(
-                  (c): SelectOption => ({
-                    label: getLabel(
-                      c.name as StatisticTableColumnKeys,
-                      "transaction",
-                    ),
-                    value: c.name,
-                    isSelected: isSelectedColumn(userSelectedColumnsToShow, c),
-                  }),
-                );
-
-              // List of all columns that will be displayed based on the column selection.
-              const displayColumns = columns.filter(c =>
-                isSelectedColumn(userSelectedColumnsToShow, c),
-              );
-
-              const period = timeScaleToString(this.props.timeScale);
-
-              return (
-                <>
-                  <section className={statisticsClasses.tableContainerClass}>
-                    <ColumnsSelector
-                      options={tableColumns}
-                      onSubmitColumns={onColumnsChange}
-                    />
-                    <TableStatistics
-                      pagination={pagination}
-                      search={search}
-                      totalCount={transactionsToDisplay.length}
-                      arrayItemName="transactions"
-                      activeFilters={activeFilters}
-                      period={period}
-                      onClearFilters={this.onClearFilters}
-                    />
-                    <TransactionsTable
-                      columns={displayColumns}
-                      transactions={transactionsToDisplay}
-                      sortSetting={sortSetting}
-                      onChangeSortSetting={this.onChangeSortSetting}
-                      pagination={pagination}
-                      renderNoResult={
-                        <EmptyTransactionsPlaceholder
-                          transactionView={TransactionViewType.FINGERPRINTS}
-                          isEmptySearchResults={hasData && isUsedFilter}
-                        />
-                      }
-                    />
-                  </section>
-                  <Pagination
-                    pageSize={pageSize}
-                    current={current}
-                    total={transactionsToDisplay.length}
-                    onChange={this.onChangePage}
-                  />
-                </>
-              );
-            }}
+            render={() => this.renderTransactions()}
             renderError={() =>
               LoadingError({
                 statsType: "transactions",

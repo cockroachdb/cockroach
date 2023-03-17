@@ -23,25 +23,6 @@ go_library(
     ],
 )
 
-go_library(
-    name = "acl",
-    srcs = [
-        "denylist.go",
-        "file.go",
-        "watcher.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/log",
-        "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_google_btree//:btree",
-        "@in_gopkg_yaml_v2//:yaml_v2",
-    ],
-)
-
 go_test(
     name = "acl_test",
     srcs = [

@@ -232,7 +232,7 @@ export default class ColumnsSelector extends React.Component<
         ref={this.dropdownRef}
         className={cx("float")}
       >
-        <Button type="secondary" size="small" onClick={this.toggleOpen}>
+        <Button type="secondary" onClick={this.toggleOpen}>
           <Gear className={cx("icon")} />
           Columns
         </Button>
