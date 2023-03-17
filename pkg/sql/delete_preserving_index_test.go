@@ -704,7 +704,7 @@ func TestMergeProcessor(t *testing.T) {
 		sp := tableDesc.IndexSpan(codec, srcIndex.GetID())
 
 		output := fakeReceiver{}
-		im, err := backfill.NewIndexBackfillMerger(ctx, &flowCtx, execinfrapb.IndexBackfillMergerSpec{
+		im, err := backfill.NewIndexBackfillMerger(ctx, &flowCtx, 0 /* processorID */, execinfrapb.IndexBackfillMergerSpec{
 			Table:            tableDesc.TableDescriptor,
 			TemporaryIndexes: []descpb.IndexID{srcIndex.GetID()},
 			AddedIndexes:     []descpb.IndexID{dstIndex.GetID()},
