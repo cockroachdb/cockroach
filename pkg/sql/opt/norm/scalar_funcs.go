@@ -387,3 +387,9 @@ func (c *CustomFuncs) SplitTupleEq(lhs, rhs *memo.TupleExpr) memo.FiltersExpr {
 	}
 	return res
 }
+
+// CanNormalizeArrayFlatten returns true if the input is correlated or if the
+// ArrayFlatten exists within a UDF.
+func (c *CustomFuncs) CanNormalizeArrayFlatten(input memo.RelExpr, p *memo.SubqueryPrivate) bool {
+	return c.HasOuterCols(input) || p.WithinUDF
+}

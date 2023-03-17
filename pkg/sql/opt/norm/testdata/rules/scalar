@@ -1986,6 +1986,50 @@ project
                 └── key: (8)
 
 exec-ddl
+CREATE FUNCTION arr() RETURNS INT[] LANGUAGE SQL AS $$
+  SELECT ARRAY(VALUES (1), (2));
+$$
+----
+
+# Should trigger for uncorrelated ArrayFlatten subqueries within a UDF
+norm expect=NormalizeArrayFlattenToAgg format=show-scalars
+SELECT arr()
+----
+values
+ ├── columns: arr:4
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── udf: arr
+           └── body
+                └── values
+                     ├── columns: array:3
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(3)
+                     └── tuple
+                          └── coalesce
+                               ├── subquery
+                               │    └── scalar-group-by
+                               │         ├── columns: array_agg:2
+                               │         ├── cardinality: [1 - 1]
+                               │         ├── key: ()
+                               │         ├── fd: ()-->(2)
+                               │         ├── values
+                               │         │    ├── columns: column1:1!null
+                               │         │    ├── cardinality: [2 - 2]
+                               │         │    ├── tuple
+                               │         │    │    └── const: 1
+                               │         │    └── tuple
+                               │         │         └── const: 2
+                               │         └── aggregations
+                               │              └── array-agg [as=array_agg:2, outer=(1)]
+                               │                   └── variable: column1:1
+                               └── const: ARRAY[]
+
+exec-ddl
 CREATE TABLE pg_class (
      oid OID NULL,
      relname NAME NOT NULL,

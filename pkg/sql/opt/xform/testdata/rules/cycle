@@ -106,7 +106,7 @@ memo (not optimized, ~6KB, required=[], cycle=[G1->G4->G6->G9->G10->G12->G13->G1
  ├── G7: (variable v)
  ├── G8: (const 1)
  ├── G9: (scalar-list G10 G11)
- ├── G10: (subquery G12 &{<nil>  0 unknown false})
+ ├── G10: (subquery G12 &{<nil>  0 false unknown false})
  ├── G11: (false)
  ├── G12: (project G13 G14)
  ├── G13: (limit G1 G8)
