@@ -59,6 +59,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":kvtenantccl"],
     shard_count = 16,
+    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

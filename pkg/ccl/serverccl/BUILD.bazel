@@ -46,6 +46,7 @@ go_test(
     args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":serverccl"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

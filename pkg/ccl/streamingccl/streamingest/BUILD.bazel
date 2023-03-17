@@ -91,6 +91,7 @@ go_test(
     args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":streamingest"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
