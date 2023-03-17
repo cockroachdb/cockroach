@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -35,9 +34,6 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Owner:             registry.OwnerMultiTenant,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-			}
 			runMultiTenantUpgrade(ctx, t, c, *t.BuildVersion())
 		},
 	})
@@ -226,7 +222,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("migrating first tenant 11 server to the current version after system tenant is finalized which should fail because second server is still on old binary - expecting a failure here too")
 	expectErr(t, tenant11a.pgURL,
-		"pq: validate cluster version failed: some tenant pods running on binary less than 23.1",
+		`pq: error validating the version of one or more SQL server instances: validate cluster version failed: some tenant pods running on binary less than 23.1`,
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
 	t.Status("verify that the first tenant 11 server can now query the storage cluster")
