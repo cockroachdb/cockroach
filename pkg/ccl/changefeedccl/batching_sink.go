@@ -86,9 +86,10 @@ type batchingSink struct {
 	client       SinkClient
 	topicNamer   *TopicNamer
 	concreteType sinkType
+	frequency    time.Duration
 	ioWorkers    int
 	retryOpts    retry.Options
-	timeSource   timeutil.TimeSource
+	ts           timeutil.TimeSource
 	metrics      metricsRecorder
 
 	flushCh chan struct{}
@@ -233,7 +234,10 @@ func (bs *batchingSink) EmitResolvedTimestamp(
 		if err != nil {
 			return err
 		}
-		err = bs.client.Flush(ctx, payload)
+
+		err = retry.WithMaxAttempts(ctx, bs.retryOpts, bs.retryOpts.MaxRetries+1, func() error {
+			return bs.client.Flush(ctx, payload)
+		})
 		if err != nil {
 			return err
 		}
@@ -341,8 +345,11 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	)
 	defer ioEmitter.Close()
 
-	flushBatch := func() {
+	tryFlushBatch := func() {
 		fmt.Printf("\x1b[31mbatchingSink flushBatch\x1b[0m\n")
+		if pendingBatch.isEmpty() {
+			return
+		}
 		payload, err := pendingBatch.writer.Close()
 		if err != nil {
 			bs.handleError(err)
@@ -369,23 +376,36 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		}
 	}
 
+	fmt.Printf("\x1b[35mbatchingSink CREATE FLUSHTIMER runBatchingWorker\x1b[0m\n")
+	flushTimer := bs.ts.NewTimer()
+	defer flushTimer.Stop()
+
 	defer fmt.Printf("\x1b[31mbatchingSink DONE runBatchingWorker\x1b[0m\n")
 	for {
 		fmt.Printf("\x1b[31mbatchingSink FOR WAIT runBatchingWorker\x1b[0m\n")
 		select {
 		case req := <-bs.eventCh:
 			fmt.Printf("\x1b[31mbatchingSink receive <-eventCh\x1b[0m\n")
-			if _, isFlush := req.(flushReq); isFlush && !pendingBatch.isEmpty() {
-				flushBatch()
+			if _, isFlush := req.(flushReq); isFlush {
+				tryFlushBatch()
 				continue
 			} else if event, isKV := req.(*kvEvent); isKV {
+				if pendingBatch.isEmpty() && bs.frequency > 0 {
+					fmt.Printf("\x1b[35mbatchingSink RESET FLUSHTIMER runBatchingWorker\x1b[0m\n")
+					flushTimer.Reset(bs.frequency)
+				}
 				pendingBatch.Append(event)
+
 				if pendingBatch.writer.ShouldFlush() {
-					flushBatch()
+					tryFlushBatch()
 				}
 			}
 		case result := <-ioEmitter.resultCh:
 			handleResult(result)
+		case <-flushTimer.Ch():
+			fmt.Printf("\x1b[35mbatchingSink FLUSHTIMER FIRE runBatchingWorker\x1b[0m\n")
+			flushTimer.MarkRead()
+			tryFlushBatch()
 		case <-ctx.Done():
 			fmt.Printf("\x1b[31mbatchingSink ctx done runBatchingWorker\x1b[0m\n")
 			return
@@ -450,6 +470,7 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	emitWithRetries := func(ctx context.Context, payload IORequest) error {
 		fmt.Printf("\x1b[32mparallelIO emitWithRetries\x1b[0m\n")
 		return retry.WithMaxAttempts(ctx, pe.retryOpts, pe.retryOpts.MaxRetries+1, func() error {
+			fmt.Printf("\x1b[34mparallelIO ATTEMPT emitWithRetries\x1b[0m\n")
 			return pe.ioHandler(ctx, payload)
 		})
 	}
@@ -551,6 +572,7 @@ func makeBatchingSink(
 	ctx context.Context,
 	concreteType sinkType,
 	client SinkClient,
+	minFlushFrequency time.Duration,
 	retryOpts retry.Options,
 	numWorkers int,
 	topicNamer *TopicNamer,
@@ -561,9 +583,10 @@ func makeBatchingSink(
 		client:       client,
 		topicNamer:   topicNamer,
 		concreteType: concreteType,
+		frequency:    minFlushFrequency,
 		ioWorkers:    numWorkers,
 		retryOpts:    retryOpts,
-		timeSource:   timeSource,
+		ts:           timeSource,
 		metrics:      metrics,
 		flushCh:      make(chan struct{}),
 		wg:           ctxgroup.WithContext(ctx),
