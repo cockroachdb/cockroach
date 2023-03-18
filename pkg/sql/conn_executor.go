@@ -1046,12 +1046,14 @@ func (s *Server) newConnExecutor(
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmtsLru: make(map[string]struct{ prev, next string }),
+		portals:      make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmtsLru: make(map[string]struct{ prev, next string }),
+		portals:      make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sdMutIterator.sds)
@@ -1646,6 +1648,13 @@ type prepStmtNamespace struct {
 	// prepStmts contains the prepared statements currently available on the
 	// session.
 	prepStmts map[string]*PreparedStatement
+	// prepStmtsLru is a circular doubly-linked list containing the prepared
+	// statement names ordered by most recent access (needed to determine
+	// evictions when prepared_statements_cache_size is set). There is a special
+	// entry for the empty string which is both the head and tail of the
+	// list. (Consequently, if it exists, the actual prepared statement for the
+	// empty string does not have an entry in this list and cannot be evicted.)
+	prepStmtsLru map[string]struct{ prev, next string }
 	// portals contains the portals currently available on the session. Note
 	// that PreparedPortal.accountForCopy needs to be called if a copy of a
 	// PreparedPortal is retained.
@@ -1653,19 +1662,76 @@ type prepStmtNamespace struct {
 }
 
 // HasActivePortals returns true if there are portals in the session.
-func (ns prepStmtNamespace) HasActivePortals() bool {
+func (ns *prepStmtNamespace) HasActivePortals() bool {
 	return len(ns.portals) > 0
 }
 
 // HasPortal returns true if there exists a given named portal in the session.
-func (ns prepStmtNamespace) HasPortal(s string) bool {
+func (ns *prepStmtNamespace) HasPortal(s string) bool {
 	_, ok := ns.portals[s]
 	return ok
 }
 
+func (ns *prepStmtNamespace) addLruEntry(name string) {
+	if name == "" {
+		return
+	}
+	var this struct{ prev, next string }
+	// Note: must do this serially in case head and next are the same entry.
+	head := ns.prepStmtsLru[""]
+	this.next = head.next
+	head.next = name
+	ns.prepStmtsLru[""] = head
+	next, ok := ns.prepStmtsLru[this.next]
+	if !ok || next.prev != "" {
+		// If the chain has broken for some reason, just leak the broken part and
+		// start a new list.
+		this.next = ""
+		next = ns.prepStmtsLru[this.next]
+	}
+	next.prev = name
+	ns.prepStmtsLru[this.next] = next
+	ns.prepStmtsLru[name] = this
+}
+
+func (ns *prepStmtNamespace) delLruEntry(name string) {
+	if name == "" {
+		return
+	}
+	this, ok := ns.prepStmtsLru[name]
+	if !ok {
+		return
+	}
+	// Note: must do this serially in case prev and next are the same entry.
+	if prev, ok := ns.prepStmtsLru[this.prev]; ok && prev.next == name {
+		prev.next = this.next
+		ns.prepStmtsLru[this.prev] = prev
+	}
+	if next, ok := ns.prepStmtsLru[this.next]; ok && next.prev == name {
+		next.prev = this.prev
+		ns.prepStmtsLru[this.next] = next
+	}
+	delete(ns.prepStmtsLru, name)
+}
+
+func (ns *prepStmtNamespace) touchLruEntry(name string) {
+	if name == "" {
+		return
+	}
+	if head, ok := ns.prepStmtsLru[""]; ok && head.next == name {
+		if this, ok := ns.prepStmtsLru[name]; ok && this.prev == "" {
+			// Already at the front of the list.
+			return
+		}
+	}
+	ns.delLruEntry(name)
+	ns.addLruEntry(name)
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
-func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+func (ns *prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
+	// TODO(michae2): prepStmtsLru
 	for name, stmt := range ns.prepStmts {
 		ret = append(
 			ret,
@@ -1679,11 +1745,19 @@ func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.Migra
 	return ret
 }
 
-func (ns prepStmtNamespace) String() string {
+func (ns *prepStmtNamespace) String() string {
 	var sb strings.Builder
 	sb.WriteString("Prep stmts: ")
 	for name := range ns.prepStmts {
-		sb.WriteString(name + " ")
+		if name == "" {
+			sb.WriteString("\"\" ")
+		} else {
+			sb.WriteString(name + " ")
+		}
+	}
+	sb.WriteString("Prep stmts ordered by most recent access: ")
+	for entry, ok := ns.prepStmtsLru[""]; ok && entry.next != ""; entry, ok = ns.prepStmtsLru[entry.next] {
+		sb.WriteString(entry.next + " ")
 	}
 	sb.WriteString("Portals: ")
 	for name := range ns.portals {
@@ -1697,7 +1771,7 @@ func (ns *prepStmtNamespace) resetToEmpty(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
 	// No errors could occur since we're releasing the resources.
-	_ = ns.resetTo(ctx, prepStmtNamespace{}, prepStmtsNamespaceMemAcc)
+	_ = ns.resetTo(ctx, &prepStmtNamespace{}, prepStmtsNamespaceMemAcc)
 }
 
 // resetTo resets a namespace to equate another one (`to`). All the receiver's
@@ -1708,11 +1782,14 @@ func (ns *prepStmtNamespace) resetToEmpty(
 // It can only return an error if we've reached the memory limit and had to make
 // a copy of portals.
 func (ns *prepStmtNamespace) resetTo(
-	ctx context.Context, to prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+	ctx context.Context, to *prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) error {
 	for name, p := range ns.prepStmts {
 		p.decRef(ctx)
 		delete(ns.prepStmts, name)
+	}
+	for name := range ns.prepStmtsLru {
+		delete(ns.prepStmtsLru, name)
 	}
 	for name, p := range ns.portals {
 		p.close(ctx, prepStmtsNamespaceMemAcc, name)
@@ -1722,6 +1799,9 @@ func (ns *prepStmtNamespace) resetTo(
 	for name, ps := range to.prepStmts {
 		ps.incRef(ctx)
 		ns.prepStmts[name] = ps
+	}
+	for name, entry := range to.prepStmtsLru {
+		ns.prepStmtsLru[name] = entry
 	}
 	for name, p := range to.portals {
 		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, name); err != nil {
@@ -2930,7 +3010,7 @@ func (ex *connExecutor) generateID() clusterunique.ID {
 // prepStmtsNamespaceAtTxnRewindPos that's not part of prepStmtsNamespace.
 func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) error {
 	return ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(
-		ctx, ex.extraTxnState.prepStmtsNamespace, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		ctx, &ex.extraTxnState.prepStmtsNamespace, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
@@ -2938,7 +3018,7 @@ func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) error {
 // not part of prepStmtsNamespaceAtTxnRewindPos.
 func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) error {
 	return ex.extraTxnState.prepStmtsNamespace.resetTo(
-		ctx, ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		ctx, &ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
@@ -4017,14 +4097,17 @@ func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 }
 
 // Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
+func (ps connExPrepStmtsAccessor) Get(name string, touchLru bool) (*PreparedStatement, bool) {
 	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+	if ok && touchLru {
+		ps.ex.extraTxnState.prepStmtsNamespace.touchLruEntry(name)
+	}
 	return s, ok
 }
 
 // Delete is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
-	_, ok := ps.Get(name)
+	_, ok := ps.Get(name, false /* touchLru */)
 	if !ok {
 		return false
 	}
