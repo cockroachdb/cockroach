@@ -121,6 +121,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
         "//pkg/col/typeconv",  # keep
         "//pkg/geo",
         "//pkg/geo/geopb",

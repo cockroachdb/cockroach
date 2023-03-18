@@ -59,7 +59,7 @@ func convertToVecTree(
 		flowCtx.Cfg.VecFDSemaphore, flowCtx.NewTypeResolver(flowCtx.Txn),
 		admission.WorkInfo{},
 	)
-	opChains, _, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
+	opChains, _, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, nil /*localVectorSources*/, fuseOpt)
 	cleanup = func() {
 		creator.cleanup(ctx)
 		creator.Release()

@@ -242,7 +242,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.addTargetNamedColsForInsert(ins.Columns)
 	} else {
 		values := mb.extractValuesInput(ins.Rows)
-		if values != nil {
+		if values != nil && len(values.Rows) > 0 {
 			// Target columns are implicitly targeted by VALUES expression in the
 			// same order they appear in the target table schema.
 			mb.addTargetTableColsForInsert(len(values.Rows[0]))

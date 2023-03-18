@@ -267,7 +267,7 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	opChains, batchFlowCoordinator, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
+	opChains, batchFlowCoordinator, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), f.GetLocalVectorSources(), opt)
 	if err != nil {
 		// It is (theoretically) possible that some of the memory monitoring
 		// infrastructure was created even in case of an error, and we need to
@@ -1142,6 +1142,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
 	localProcessors []execinfra.LocalProcessor,
+	localVectorSources map[int32]any,
 	opt flowinfra.FuseOpt,
 ) (opChains execopnode.OpChains, batchFlowCoordinator *BatchFlowCoordinator, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
@@ -1194,6 +1195,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				StreamingMemAccount:  s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      localProcessors,
+				LocalVectorSources:   localVectorSources,
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,

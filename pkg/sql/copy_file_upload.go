@@ -151,7 +151,7 @@ func newFileUploadMachine(
 	c.format = tree.CopyFormatText
 	c.null = `\N`
 	c.delimiter = '\t'
-	c.rows.Init(c.rowsMemAcc, colinfo.ColTypeInfoFromResCols(c.resultColumns), copyBatchRowSize)
+	c.rows.Init(c.rowsMemAcc, colinfo.ColTypeInfoFromResCols(c.resultColumns), CopyBatchRowSize)
 	c.scratchRow = make(tree.Datums, len(c.resultColumns))
 	return
 }
