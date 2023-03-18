@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -336,5 +337,63 @@ func TestSchedulerBuffering(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+func BenchmarkSchedulerEnqueueRaftTicks(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	skip.UnderShort(b)
+
+	ctx := context.Background()
+
+	for _, collect := range []bool{false, true} {
+		for _, numRanges := range []int{1, 10, 100, 1000, 10000, 100000} {
+			for _, numWorkers := range []int{8, 16, 32, 64, 128} {
+				b.Run(fmt.Sprintf("collect=%t/ranges=%d/workers=%d", collect, numRanges, numWorkers),
+					func(b *testing.B) {
+						runSchedulerEnqueueRaftTicks(ctx, b, collect, numRanges, numWorkers)
+					},
+				)
+			}
+		}
+	}
+}
+
+func runSchedulerEnqueueRaftTicks(
+	ctx context.Context, b *testing.B, collect bool, numRanges, numWorkers int,
+) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, numWorkers, 5)
+
+	// raftTickLoop keeps unquiesced ranges in a map, so we do the same.
+	ranges := make(map[roachpb.RangeID]struct{})
+	for id := 1; id <= numRanges; id++ {
+		ranges[roachpb.RangeID(id)] = struct{}{}
+	}
+
+	// Collect range IDs in the same way as raftTickLoop does, such that the
+	// performance is comparable.
+	var buf []roachpb.RangeID
+	getRangeIDs := func() []roachpb.RangeID {
+		buf = buf[:0]
+		for id := range ranges {
+			buf = append(buf, id)
+		}
+		return buf
+	}
+	ids := getRangeIDs()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if collect {
+			ids = getRangeIDs()
+		}
+		s.EnqueueRaftTicks(ids...)
+		s.mu.queue = rangeIDQueue{} // flush queue
 	}
 }
