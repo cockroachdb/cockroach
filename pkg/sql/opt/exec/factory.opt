@@ -566,7 +566,7 @@ define Upsert {
 # as they appear in the table schema.
 #
 # The passthrough parameter contains all the result columns that are part of
-# the input node that the update node needs to return (passing through from
+# the input node that the delete node needs to return (passing through from
 # the input). The pass through columns are used to return any column from the
 # USING tables that are referenced in the RETURNING clause.
 define Delete {
