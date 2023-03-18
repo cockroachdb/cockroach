@@ -1242,10 +1242,14 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	// evaluating on the scratch range.
 	var rejectExtraneousRequests int64 // accessed atomically
 
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	cargs := aggressiveResolvedTimestampClusterArgs
 	cargs.ReplicationMode = base.ReplicationManual
 	manualClock := hlc.NewHybridManualClock()
 	cargs.ServerArgs = base.TestServerArgs{
+		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manualClock,

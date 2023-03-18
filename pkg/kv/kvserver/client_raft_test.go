@@ -1315,9 +1315,13 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		return nil
 	}
 
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	clusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			// Reduce the election timeout some to speed up the test.
 			RaftConfig: base.RaftConfig{RaftElectionTimeoutTicks: 10},
 			Knobs: base.TestingKnobs{
@@ -1749,7 +1753,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 		}
 		propNode := tc.GetFirstStoreFromServer(t, propIdx).TestSender()
 		tc.TransferRangeLeaseOrFatal(t, *leaderRepl.Desc(), tc.Target(propIdx))
-		tc.WaitForLeaseUpgrade(ctx, t, *leaderRepl.Desc())
+		tc.MaybeWaitForLeaseUpgrade(ctx, t, *leaderRepl.Desc())
 		testutils.SucceedsSoon(t, func() error {
 			// Lease transfers may not be immediately observed by the new
 			// leaseholder. Wait until the new leaseholder is aware.
@@ -4871,10 +4875,17 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		},
 	}
 
+	// This test relies on epoch leases being invalidated when a node restart,
+	// which isn't true for expiration leases, so we disable expiration lease
+	// metamorphism.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
+			Settings: st,
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory:               true,

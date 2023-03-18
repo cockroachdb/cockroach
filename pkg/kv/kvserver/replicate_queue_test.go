@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2070,6 +2071,8 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
@@ -2082,6 +2085,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 			// statuses pre and post enabling the replicate queue.
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings:                 st,
 				DisableDefaultTestTenant: true,
 				ScanMinIdleTime:          time.Millisecond,
 				ScanMaxIdleTime:          time.Millisecond,
@@ -2367,8 +2371,12 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			// Speed up the replicate queue, which switches the lease type.
 			ScanMinIdleTime: time.Millisecond,
 			ScanMaxIdleTime: time.Millisecond,

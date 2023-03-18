@@ -2060,11 +2060,14 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, 2,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -4357,6 +4360,11 @@ func TestStrictGCEnforcement(t *testing.T) {
 		// not be updated for the duration of the test.
 		protectedts.PollInterval.Override(ctx, &tc.Server(0).ClusterSettings().SV, 500*time.Hour)
 		defer protectedts.PollInterval.Override(ctx, &tc.Server(0).ClusterSettings().SV, 2*time.Minute)
+
+		// Disable follower reads. When metamorphically enabling expiration-based
+		// leases, an expired lease will cause a follower read which bypasses the
+		// strict GC enforcement.
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = false")
 
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 		defer sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
