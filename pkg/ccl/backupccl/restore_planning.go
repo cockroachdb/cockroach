@@ -882,15 +882,14 @@ func resolveOptionsForRestoreJobDescription(
 	}
 
 	newOpts := tree.RestoreOptions{
-		SkipMissingFKs:                   opts.SkipMissingFKs,
-		SkipMissingSequences:             opts.SkipMissingSequences,
-		SkipMissingSequenceOwners:        opts.SkipMissingSequenceOwners,
-		SkipMissingViews:                 opts.SkipMissingViews,
-		SkipMissingUDFs:                  opts.SkipMissingUDFs,
-		Detached:                         opts.Detached,
-		SchemaOnly:                       opts.SchemaOnly,
-		VerifyData:                       opts.VerifyData,
-		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		SkipMissingFKs:            opts.SkipMissingFKs,
+		SkipMissingSequences:      opts.SkipMissingSequences,
+		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
+		SkipMissingViews:          opts.SkipMissingViews,
+		SkipMissingUDFs:           opts.SkipMissingUDFs,
+		Detached:                  opts.Detached,
+		SchemaOnly:                opts.SchemaOnly,
+		VerifyData:                opts.VerifyData,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1418,48 +1417,6 @@ func checkClusterRegions(
 	return nil
 }
 
-// checkBackupManifestVersionCompatability performs various checks to ensure
-// that the manifests we are about to restore are from backups taken on a
-// version compatible with our current version.
-func checkBackupManifestVersionCompatability(
-	p sql.PlanHookState,
-	currentActiveVersion clusterversion.ClusterVersion,
-	mainBackupManifests []backuppb.BackupManifest,
-	unsafeRestoreIncompatibleVersion bool,
-) error {
-	// We support restoring a backup that was taken on a cluster with a cluster
-	// version >= the earliest binary version that we can interoperate with.
-	minimumRestoreableVersion := p.ExecCfg().Settings.Version.BinaryMinSupportedVersion()
-	for i := range mainBackupManifests {
-		v := mainBackupManifests[i].ClusterVersion
-		// This is the "cluster" version that does not change between patch releases
-		// but rather just tracks migrations run. If the backup is more migrated
-		// than this cluster, then this cluster isn't ready to restore this backup.
-		if currentActiveVersion.Less(v) {
-			return errors.Errorf("backup from version %s is newer than current version %s", v, currentActiveVersion)
-		}
-
-		// If the backup is from a version earlier than the minimum restoreable
-		// version, then we do not support restoring it. Unless, the user has
-		// explicitly run the restore with the `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
-		// option.
-		if !unsafeRestoreIncompatibleVersion && v.Less(minimumRestoreableVersion) {
-			if v.Major == 0 {
-				// This accounts for manifests that were generated on a version before
-				// the `ClusterVersion` field exists.
-				return errors.WithHint(errors.Newf("the backup is from a version older than our "+
-					"minimum restoreable version %s", minimumRestoreableVersion),
-					"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/v22.2/restoring-backups-across-versions.html")
-			}
-			return errors.WithHint(errors.Newf("backup from version %s is older than the "+
-				"minimum restoreable version %s", v, minimumRestoreableVersion),
-				"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/v22.2/restoring-backups-across-versions.html")
-		}
-	}
-
-	return nil
-}
-
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
@@ -1635,9 +1592,15 @@ func doRestorePlan(
 	}()
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if err := checkBackupManifestVersionCompatability(p, currentVersion, mainBackupManifests,
-		restoreStmt.Options.UnsafeRestoreIncompatibleVersion); err != nil {
-		return err
+	for i := range mainBackupManifests {
+		if v := mainBackupManifests[i].ClusterVersion; v.Major != 0 {
+			// This is the "cluster" version that does not change between patches but
+			// rather just tracks migrations run. If the backup is more migrated than
+			// this cluster, then this cluster isn't ready to restore this backup.
+			if currentVersion.Less(v) {
+				return errors.Errorf("backup from version %s is newer than current version %s", v, currentVersion)
+			}
+		}
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {

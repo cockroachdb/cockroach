@@ -1427,7 +1427,6 @@ unreserved_keyword ::=
 	| 'UNKNOWN'
 	| 'UNLISTEN'
 	| 'UNLOGGED'
-	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 	| 'UNSET'
 	| 'UNSPLIT'
 	| 'UNTIL'
@@ -2665,7 +2664,6 @@ restore_options ::=
 	| 'TENANT' '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
 	| 'VERIFY_BACKUP_TABLE_DATA'
-	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -3992,7 +3990,6 @@ bare_label_keywords ::=
 	| 'UNKNOWN'
 	| 'UNLISTEN'
 	| 'UNLOGGED'
-	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 	| 'UNSET'
 	| 'UNSPLIT'
 	| 'UNTIL'
