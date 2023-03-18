@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/lib/pq/oid"
 )
 
 const alterBackupScheduleOp = "ALTER BACKUP SCHEDULE"
@@ -442,9 +444,18 @@ func processFullBackupRecurrence(
 			return scheduleDetails{}, err
 		}
 
+		var ownerID oid.Oid
+		if p.IsActive(ctx, clusterversion.V23_1ScheduledJobsTableHasOwnerIDColumn) {
+			var err error
+			ownerID, err = p.UserID(ctx)
+			if err != nil {
+				return scheduleDetails{}, err
+			}
+		}
 		s.incJob, s.incArgs, err = makeBackupSchedule(
 			env,
 			p.User(),
+			ownerID,
 			s.fullJob.ScheduleLabel(),
 			incRecurrence,
 			*s.fullJob.ScheduleDetails(),
