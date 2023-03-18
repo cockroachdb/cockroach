@@ -10340,11 +10340,10 @@ def go_deps():
             "gazelle:proto_import_prefix raft/v3",
         ],
         build_file_proto_mode = "default",
-        importpath = "go.etcd.io/raft/v3",
+	importpath = "go.etcd.io/raft/v3",
 	vcs = "git",
-	remote = "https://github.com/tbg/raft",
+        remote = "https://github.com/tbg/raft",
         commit = "apply-remote-commit",
-
     )
     go_repository(
         name = "io_goji",

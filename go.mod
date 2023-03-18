@@ -205,7 +205,7 @@ require (
 	github.com/spf13/afero v1.6.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/twpayne/go-geom v1.4.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg-go/pbkdf2 v1.0.0
@@ -424,3 +424,5 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
+
+replace go.etcd.io/raft/v3 => github.com/tbg/raft/v3 v3.0.0-20230317165238-f353149418c6

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -377,8 +376,6 @@ func TestWriteWithStuckLeaseholderDisk(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer log.Scope(t).Close(t)
 
-	skip.IgnoreLint(t, "demo test, fails right now")
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	fs := newWriteBlockingFS(vfs.NewMem(), ctx.Done(), t.Errorf)
@@ -415,5 +412,6 @@ func TestWriteWithStuckLeaseholderDisk(t *testing.T) {
 		ba.Add(put)
 		_, pErr := repl.Send(ctx, &ba)
 		require.NoError(t, pErr.GoError())
+		t.Log(key)
 	}
 }
