@@ -3494,6 +3494,10 @@ func (m *sessionDataMutator) SetDefaultTextSearchConfig(val string) {
 	m.data.DefaultTextSearchConfig = val
 }
 
+func (m *sessionDataMutator) SetPreparedStatementsCacheSize(val int64) {
+	m.data.PreparedStatementsCacheSize = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
