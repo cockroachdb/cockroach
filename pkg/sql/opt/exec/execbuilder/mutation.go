@@ -511,9 +511,10 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
 
-	//Construct the result columns for the passthrough set
+	// Construct the result columns for the passthrough set.
 	var passthroughCols colinfo.ResultColumns
 	if del.NeedResults() {
+		passthroughCols = make(colinfo.ResultColumns, 0, len(del.PassthroughCols))
 		for _, passthroughCol := range del.PassthroughCols {
 			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
 			passthroughCols = append(passthroughCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
