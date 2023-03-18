@@ -66,10 +66,14 @@ func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 	defer sp.Finish()
 
 	j := i.j
+
+	// We expect there to be only a single row for a given <job_id, info_key>.
+	// This is because all older revisions are deleted before a new one is
+	// inserted in `InfoStorage.Write`.
 	row, err := i.txn.QueryRowEx(
 		ctx, "job-info-get", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 ORDER BY written DESC LIMIT 1",
+		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2",
 		j.ID(), infoKey,
 	)
 

@@ -19,10 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -750,6 +752,78 @@ func HasJobNotFoundError(err error) bool {
 	return errors.HasType(err, (*JobNotFoundError)(nil))
 }
 
+func (j *Job) loadJobPayloadAndProgress(
+	ctx context.Context, st *cluster.Settings, txn isql.Txn,
+) (*jobspb.Payload, *jobspb.Progress, error) {
+	if txn == nil {
+		return nil, nil, errors.New("cannot load job payload and progress with a nil txn")
+	}
+
+	payload := &jobspb.Payload{}
+	progress := &jobspb.Progress{}
+	if st.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+		infoStorage := j.InfoStorage(txn)
+
+		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
+		}
+		if !exists {
+			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job not found in system.job_info")
+		}
+		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+			return nil, nil, err
+		}
+
+		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
+		}
+		if !exists {
+			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job not found in system.job_info")
+		}
+		if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+			return nil, nil, &JobNotFoundError{jobID: j.ID()}
+		}
+
+		return payload, progress, nil
+	}
+
+	// If V23_1JobInfoTableIsBackfilled is not active we should read the payload
+	// and progress from the system.jobs table.
+	const (
+		queryNoSessionID   = "SELECT payload, progress FROM system.jobs WHERE id = $1"
+		queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
+	)
+	sess := sessiondata.RootUserSessionDataOverride
+
+	var err error
+	var row tree.Datums
+	if j.session == nil {
+		row, err = txn.QueryRowEx(ctx, "load-job-payload-progress-query", txn.KV(), sess,
+			queryNoSessionID, j.ID())
+	} else {
+		row, err = txn.QueryRowEx(ctx, "load-job-payload-progress-query", txn.KV(), sess,
+			queryWithSessionID, j.ID(), j.session.ID().UnsafeBytes())
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if row == nil {
+		return nil, nil, &JobNotFoundError{jobID: j.ID()}
+	}
+	payload, err = UnmarshalPayload(row[0])
+	if err != nil {
+		return nil, nil, err
+	}
+	progress, err = UnmarshalProgress(row[1])
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return payload, progress, nil
+}
+
 func (u Updater) load(ctx context.Context) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.internalDB.Txn(ctx, func(
@@ -780,7 +854,7 @@ func (u Updater) load(ctx context.Context) (retErr error) {
 	}()
 
 	const (
-		queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id, status FROM system.jobs WHERE id = $1"
+		queryNoSessionID   = "SELECT created_by_type, created_by_id, status FROM system.jobs WHERE id = $1"
 		queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
 	)
 	sess := sessiondata.RootUserSessionDataOverride
@@ -800,19 +874,16 @@ func (u Updater) load(ctx context.Context) (retErr error) {
 	if row == nil {
 		return &JobNotFoundError{jobID: j.ID()}
 	}
-	payload, err = UnmarshalPayload(row[0])
+	createdBy, err = unmarshalCreatedBy(row[0], row[1])
 	if err != nil {
 		return err
 	}
-	progress, err = UnmarshalProgress(row[1])
+	status, err = unmarshalStatus(row[2])
 	if err != nil {
 		return err
 	}
-	createdBy, err = unmarshalCreatedBy(row[2], row[3])
-	if err != nil {
-		return err
-	}
-	status, err = unmarshalStatus(row[4])
+
+	payload, progress, err = j.loadJobPayloadAndProgress(ctx, j.registry.settings, u.txn)
 	return err
 }
 

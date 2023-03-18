@@ -954,7 +954,9 @@ func backupAndRestore(
 		}
 
 		found := false
-		const stmt = "SELECT payload FROM system.jobs ORDER BY created DESC LIMIT 10"
+		stmt := `
+SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
+`
 		rows := sqlDB.Query(t, stmt)
 		for rows.Next() {
 			var payloadBytes []byte
@@ -1673,6 +1675,12 @@ func createAndWaitForJob(
 		t, `INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
 		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progressBytes,
 	).Scan(&jobID)
+	db.Exec(
+		t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, jobID, jobs.GetLegacyPayloadKey(), payload,
+	)
+	db.Exec(
+		t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, jobID, jobs.GetLegacyProgressKey(), progressBytes,
+	)
 	jobutils.WaitForJobToSucceed(t, db, jobID)
 }
 

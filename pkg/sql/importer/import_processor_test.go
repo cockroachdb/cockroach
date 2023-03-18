@@ -630,9 +630,13 @@ func queryJob(db sqlutils.DBHandle, jobID jobspb.JobID) (js jobState) {
 		status: "",
 		prog:   jobspb.ImportProgress{},
 	}
+
+	stmt := `
+SELECT status, payload, progress FROM crdb_internal.system_jobs WHERE id = $1
+`
 	var progressBytes, payloadBytes []byte
 	js.err = db.QueryRowContext(
-		context.Background(), "SELECT status, payload, progress FROM system.jobs WHERE id = $1", jobID).Scan(
+		context.Background(), stmt, jobID).Scan(
 		&js.status, &payloadBytes, &progressBytes)
 	if js.err != nil {
 		return
