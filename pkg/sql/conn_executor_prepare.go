@@ -127,6 +127,24 @@ func (ex *connExecutor) addPreparedStmt(
 		return nil, err
 	}
 	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
+	ex.extraTxnState.prepStmtsNamespace.addLruEntry(name)
+
+	// Check if we're over prepared_statement_cache_size.
+	cacheSize := ex.sessionData().PreparedStatementsCacheSize
+	if cacheSize != 0 {
+		alloc := ex.sessionPreparedMon.AllocBytes()
+		lru := ex.extraTxnState.prepStmtsNamespace.prepStmtsLru
+		// While we're over the cache size, deallocate the LRU prepared statement.
+		for head := lru[""]; head.prev != "" && head.prev != name; head = lru[""] {
+			if alloc <= cacheSize {
+				break
+			}
+			// If the prepared statement is referenced from multiple namespaces,
+			// deleting it won't immediately free memory, so we subtract the memory
+			// estimate instead of checking ex.sessionPreparedMon.AllocBytes() again.
+			alloc -= ex.deletePreparedStmt(ctx, head.prev)
+		}
+	}
 
 	// Remember the inferred placeholder types so they can be reported on
 	// Describe. First, try to preserve the hints sent by the client.
@@ -313,6 +331,7 @@ func (ex *connExecutor) execBind(
 			pgcode.InvalidSQLStatementName,
 			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
+	ex.extraTxnState.prepStmtsNamespace.touchLruEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
 	// Otherwise, for user-defined types we won't take the correct leases and
@@ -522,13 +541,16 @@ func (ex *connExecutor) exhaustPortal(portalName string) {
 	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 }
 
-func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
+func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) int64 {
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if !ok {
-		return
+		return 0
 	}
+	alloc := ps.memAcc.Allocated()
 	ps.decRef(ctx)
 	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
+	ex.extraTxnState.prepStmtsNamespace.delLruEntry(name)
+	return alloc
 }
 
 func (ex *connExecutor) deletePortal(ctx context.Context, name string) {

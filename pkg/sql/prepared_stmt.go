@@ -106,9 +106,10 @@ type preparedStatementsAccessor interface {
 	// List returns all prepared statements as a map keyed by name.
 	// The map itself is a copy of the prepared statements.
 	List() map[string]*PreparedStatement
-	// Get returns the prepared statement with the given name. The returned bool
-	// is false if a statement with the given name doesn't exist.
-	Get(name string) (*PreparedStatement, bool)
+	// Get returns the prepared statement with the given name. If touchLru is
+	// true, this counts as an access for LRU bookkeeping. The returned bool is
+	// false if a statement with the given name doesn't exist.
+	Get(name string, touchLru bool) (*PreparedStatement, bool)
 	// Delete removes the PreparedStatement with the provided name from the
 	// collection. If a portal exists for that statement, it is also removed.
 	// The method returns true if statement with that name was found and removed,

@@ -459,6 +459,8 @@ func (ex *connExecutor) execStmtInOpenState(
 			)
 			return makeErrEvent(err)
 		}
+		ex.extraTxnState.prepStmtsNamespace.touchLruEntry(name)
+
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
 		if err != nil {
@@ -2103,7 +2105,7 @@ func (ex *connExecutor) sessionStateBase64() (tree.Datum, error) {
 	// we look at CurState() directly.
 	_, isNoTxn := ex.machine.CurState().(stateNoTxn)
 	state, err := serializeSessionState(
-		!isNoTxn, ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
+		!isNoTxn, &ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
 		ex.server.cfg,
 	)
 	if err != nil {
