@@ -281,13 +281,3 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
 	false,
 )
-
-// SinkWorkers specifies the maximum number of workers used by Webhook
-// sink changefeeds.
-var SinkWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"changefeed.sink_workers",
-	"the number of workers used by changefeeds when sending requests to the sink: <0 disables, "+
-		"0 assigns a reasonable default, >0 assigns the setting value.",
-	0,
-).WithPublic()

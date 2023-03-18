@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"math"
 	"net/url"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -782,20 +781,4 @@ func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
 		}
 	}
 	return nil
-}
-
-func numSinkWorkers(cfg *execinfra.ServerConfig) int64 {
-	numWorkers := changefeedbase.SinkWorkers.Get(&cfg.Settings.SV)
-	if numWorkers > 0 {
-		return numWorkers
-	}
-
-	idealNumber := 2 * runtime.GOMAXPROCS(0)
-	if idealNumber < 1 {
-		return 1
-	}
-	if idealNumber > 32 {
-		return 32
-	}
-	return int64(idealNumber)
 }
