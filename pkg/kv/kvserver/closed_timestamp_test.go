@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -671,8 +672,13 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			st := mergeFilter{}
 			manual := hlc.NewHybridManualClock()
 			pinnedLeases := kvserver.NewPinnedLeases()
+
+			cs := cluster.MakeTestingClusterSettings()
+			kvserver.ExpirationLeasesOnly.Override(ctx, &cs.SV, false) // override metamorphism
+
 			clusterArgs := base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
+					Settings: cs,
 					RaftConfig: base.RaftConfig{
 						// We set the raft election timeout to a small duration. This should
 						// result in the node liveness duration being ~3.6 seconds. Note that

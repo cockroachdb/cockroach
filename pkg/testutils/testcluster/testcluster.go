@@ -1051,11 +1051,25 @@ func (tc *TestCluster) IncrClockForLeaseUpgrade(t *testing.T, clock *hlc.HybridM
 	)
 }
 
+// MaybeWaitForLeaseUpgrade waits until the lease held for the given range
+// descriptor is upgraded to an epoch-based one, but only if we expect the lease
+// to be upgraded.
+func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
+	ctx context.Context, t *testing.T, desc roachpb.RangeDescriptor,
+) {
+	if kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV) {
+		return
+	}
+	tc.WaitForLeaseUpgrade(ctx, t, desc)
+}
+
 // WaitForLeaseUpgrade waits until the lease held for the given range descriptor
 // is upgraded to an epoch-based one.
 func (tc *TestCluster) WaitForLeaseUpgrade(
 	ctx context.Context, t *testing.T, desc roachpb.RangeDescriptor,
 ) {
+	require.False(t, kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV),
+		"cluster configured to only use expiration leases")
 	testutils.SucceedsSoon(t, func() error {
 		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
 		require.NoError(t, err)

@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -57,10 +56,15 @@ func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						DisableMergeQueue: true,
@@ -69,7 +73,7 @@ func TestStoreRangeLease(t *testing.T) {
 			},
 		},
 	)
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
 	store := tc.GetFirstStoreFromServer(t, 0)
 	// NodeLivenessKeyMax is a static split point, so this is always
@@ -839,7 +843,6 @@ func TestLeaseholderRelocate(t *testing.T) {
 
 	// Make sure the lease is on 3 and is fully upgraded.
 	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
-	tc.WaitForLeaseUpgrade(ctx, t, rhsDesc)
 
 	// Check that the lease moved to 3.
 	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
@@ -872,17 +875,24 @@ func TestLeaseholderRelocate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, tc.Target(3), leaseHolder)
 
-	// Double check that lease moved directly.
+	// Double check that lease moved directly. The tail of the lease history
+	// should all be on leaseHolder.NodeID. We may metamorphically enable
+	// kv.expiration_leases_only.enabled, in which case there will be a single
+	// expiration lease, but otherwise we'll have transferred an expiration lease
+	// and then upgraded to an epoch lease.
 	repl := tc.GetFirstStoreFromServer(t, 3).
 		LookupReplica(roachpb.RKey(rhsDesc.StartKey.AsRawKey()))
 	history := repl.GetLeaseHistory()
 
-	require.Equal(t, leaseHolder.NodeID,
-		history[len(history)-1].Replica.NodeID)
-	require.Equal(t, leaseHolder.NodeID,
-		history[len(history)-2].Replica.NodeID) // account for the lease upgrade
-	require.Equal(t, tc.Target(2).NodeID,
-		history[len(history)-3].Replica.NodeID)
+	require.Equal(t, leaseHolder.NodeID, history[len(history)-1].Replica.NodeID)
+	var prevLeaseHolder roachpb.NodeID
+	for i := len(history) - 1; i >= 0; i-- {
+		if id := history[i].Replica.NodeID; id != leaseHolder.NodeID {
+			prevLeaseHolder = id
+			break
+		}
+	}
+	require.Equal(t, tc.Target(2).NodeID, prevLeaseHolder)
 }
 
 func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
@@ -1100,15 +1110,20 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		locality("us-west"),
 		locality("us-west"),
 	}
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	// Speed up lease transfers.
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyRegistry.CloseAllStickyInMemEngines()
-	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 	serverArgs := make(map[int]base.TestServerArgs)
 	numNodes := 4
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
+			Settings: st,
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -1346,13 +1361,6 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 		return nil
 	}
 
-	// The lease request timeout depends on the Raft election timeout, so we set
-	// it low to get faster timeouts (800 ms) and speed up the test.
-	var raftCfg base.RaftConfig
-	raftCfg.SetDefaults()
-	raftCfg.RaftHeartbeatIntervalTicks = 1
-	raftCfg.RaftElectionTimeoutTicks = 2
-
 	manualClock := hlc.NewHybridManualClock()
 
 	// Start a two-node cluster.
@@ -1360,7 +1368,11 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			RaftConfig: raftCfg,
+			RaftConfig: base.RaftConfig{
+				// Lease request timeout depends on Raft election timeout, speed it up.
+				RaftHeartbeatIntervalTicks: 1,
+				RaftElectionTimeoutTicks:   2,
+			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
@@ -1383,27 +1395,10 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 	require.NoError(t, err)
 
-	tc.IncrClockForLeaseUpgrade(t, manualClock)
-	tc.WaitForLeaseUpgrade(ctx, t, desc)
-
-	// Stop n2 and increment its epoch to invalidate the lease.
+	// Stop n2 and invalidate its leases by forwarding the clock.
 	tc.StopServer(1)
-	n2ID := tc.Server(1).NodeID()
-	lv, ok := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
-	require.True(t, ok)
-	lvNode2, ok := lv.GetLiveness(n2ID)
-	require.True(t, ok)
-	manualClock.Forward(lvNode2.Expiration.WallTime)
-
-	testutils.SucceedsSoon(t, func() error {
-		lvNode2, ok = lv.GetLiveness(n2ID)
-		require.True(t, ok)
-		err := lv.IncrementEpoch(context.Background(), lvNode2.Liveness)
-		if errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
-			return nil
-		}
-		return err
-	})
+	leaseDuration := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().RangeLeaseDuration
+	manualClock.Increment(leaseDuration.Nanoseconds())
 	require.False(t, repl.CurrentLeaseStatus(ctx).IsValid())
 
 	// Trying to acquire the lease should error with an empty NLHE, since the
@@ -1456,11 +1451,14 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 	}{}
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
 	manualClock := hlc.NewHybridManualClock()
 	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					// Never ticked -- demonstrating that we're not relying on
@@ -1527,6 +1525,8 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 		clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade-1),
 		false, /* initializeVersion */
 	)
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
