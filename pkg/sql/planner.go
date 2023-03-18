@@ -604,6 +604,19 @@ func (p *planner) User() username.SQLUsername {
 	return p.SessionData().User()
 }
 
+// TODO(yang): Improve this by caching the user ID somewhere.
+func (p *planner) UserID(ctx context.Context) (oid.Oid, error) {
+	row, err := p.QueryRowEx(ctx, "planner-get-current-user-id",
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT user_id FROM system.users WHERE username = $1`,
+		p.User(),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return tree.MustBeDOid(row[0]).Oid, nil
+}
+
 func (p *planner) TemporarySchemaName() string {
 	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
