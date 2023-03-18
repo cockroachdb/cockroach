@@ -107,7 +107,7 @@ func loadTPCHDataset(
 	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
 		return err
 	}
-	query := fmt.Sprintf(`RESTORE tpch.* FROM '%s' WITH into_db = 'tpch';`, tpchURL)
+	query := fmt.Sprintf(`RESTORE tpch.* FROM '%s' WITH into_db = 'tpch', unsafe_restore_incompatible_version;`, tpchURL)
 	_, err = db.ExecContext(ctx, query)
 	return err
 }
