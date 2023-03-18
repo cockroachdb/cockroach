@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -121,6 +123,25 @@ func (ex *connExecutor) addPreparedStmt(
 		return nil, err
 	}
 	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
+	ex.extraTxnState.prepStmtsNamespace.addLRUEntry(name, prepared.memAcc.Allocated())
+
+	// Check if we're over prepared_statements_cache_size.
+	cacheSize := ex.sessionData().PreparedStatementsCacheSize
+	if cacheSize != 0 {
+		lru := ex.extraTxnState.prepStmtsNamespace.prepStmtsLRU
+		// While we're over the cache size, deallocate the LRU prepared statement.
+		for tail := lru[prepStmtsLRUTail]; tail.prev != prepStmtsLRUHead && tail.prev != name; tail = lru[prepStmtsLRUTail] {
+			if ex.extraTxnState.prepStmtsNamespace.prepStmtsLRUAlloc <= cacheSize {
+				break
+			}
+			log.VEventf(
+				ctx, 1,
+				"prepared statements are using more than prepared_statements_cache_size (%s), "+
+					"automatically deallocating %s", string(humanizeutil.IBytes(cacheSize)), tail.prev,
+			)
+			ex.deletePreparedStmt(ctx, tail.prev)
+		}
+	}
 
 	// Remember the inferred placeholder types so they can be reported on
 	// Describe. First, try to preserve the hints sent by the client.
@@ -303,10 +324,9 @@ func (ex *connExecutor) execBind(
 
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
-		return retErr(pgerror.Newf(
-			pgcode.InvalidSQLStatementName,
-			"unknown prepared statement %q", bindCmd.PreparedStatementName))
+		return retErr(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
 	}
+	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
 	// Otherwise, for user-defined types we won't take the correct leases and
@@ -512,8 +532,10 @@ func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
 	if !ok {
 		return
 	}
+	alloc := ps.memAcc.Allocated()
 	ps.decRef(ctx)
 	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
+	ex.extraTxnState.prepStmtsNamespace.delLRUEntry(name, alloc)
 }
 
 func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
@@ -564,10 +586,10 @@ func (ex *connExecutor) execDescribe(
 	case pgwirebase.PrepareStatement:
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(descCmd.Name)]
 		if !ok {
-			return retErr(pgerror.Newf(
-				pgcode.InvalidSQLStatementName,
-				"unknown prepared statement %q", descCmd.Name))
+			return retErr(newPreparedStmtDNEError(ex.sessionData(), string(descCmd.Name)))
 		}
+		// Not currently counting this as an LRU touch on prepStmtsLRU for
+		// prepared_statements_cache_size (but maybe we should?).
 
 		ast := ps.AST
 		if execute, ok := ast.(*tree.Execute); ok {
@@ -576,9 +598,7 @@ func (ex *connExecutor) execDescribe(
 			// return the wrong information for describe.
 			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(execute.Name)]
 			if !found {
-				return retErr(pgerror.Newf(
-					pgcode.InvalidSQLStatementName,
-					"unknown prepared statement %q", descCmd.Name))
+				return retErr(newPreparedStmtDNEError(ex.sessionData(), string(execute.Name)))
 			}
 			ast = innerPs.AST
 		}
@@ -643,4 +663,20 @@ func (ex *connExecutor) isAllowedInAbortedTxn(ast tree.Statement) bool {
 	default:
 		return false
 	}
+}
+
+// newPreparedStmtDNEError creates an InvalidSQLStatementName error for when a
+// prepared statement does not exist.
+func newPreparedStmtDNEError(sd *sessiondata.SessionData, name string) error {
+	err := pgerror.Newf(
+		pgcode.InvalidSQLStatementName, "prepared statement %q does not exist", name,
+	)
+	cacheSize := sd.PreparedStatementsCacheSize
+	if cacheSize != 0 {
+		err = errors.WithHintf(
+			err, "note that prepared_statements_cache_size is set to %s",
+			string(humanizeutil.IBytes(cacheSize)),
+		)
+	}
+	return err
 }
