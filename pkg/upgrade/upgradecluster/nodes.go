@@ -40,56 +40,45 @@ type Nodes []Node
 // usage of this entails wrapping it under a stabilizing loop, like we do in
 // EveryNode.
 func NodesFromNodeLiveness(ctx context.Context, nl NodeLiveness) (Nodes, error) {
+	nodeList := nl.NotDecommissionedList()
+
 	var ns []Node
-	ls, err := nl.GetLivenessesFromKV(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, l := range ls {
-		if l.Membership.Decommissioned() {
-			continue
+	for _, nodeId := range nodeList {
+		status := nl.GetNodeStatus(nodeId)
+		if !status.IsAlive() {
+			return nil, errors.Newf("n%d required, but unavailable", nodeId)
 		}
-		live, err := nl.IsLive(l.NodeID)
-		if err != nil {
-			return nil, err
-		}
-		if !live {
-			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
-		}
-		ns = append(ns, Node{ID: l.NodeID, Epoch: l.Epoch})
+		ns = append(ns, Node{ID: nodeId})
 	}
 	return ns, nil
 }
 
 // Identical returns whether or not two lists of Nodes are identical as sets,
-// and if not, what changed (in terms of cluster membership operations and epoch
-// changes). The textual diffs are only to be used for logging purposes.
+// and if not, what changed (in terms of cluster membership operations).
+// The textual diffs are only to be used for logging purposes.
 func (ns Nodes) Identical(other Nodes) (ok bool, _ []redact.RedactableString) {
 	a, b := ns, other
 
 	type ent struct {
-		node         Node
-		count        int
-		epochChanged bool
+		node  Node
+		count int
 	}
 	m := map[roachpb.NodeID]ent{}
 	for _, node := range a {
-		m[node.ID] = ent{count: 1, node: node, epochChanged: false}
+		m[node.ID] = ent{count: 1, node: node}
 	}
 	for _, node := range b {
 		e, ok := m[node.ID]
-		e.count--
-		if ok && e.node.Epoch != node.Epoch {
-			e.epochChanged = true
+		if ok {
+			e.count--
+			m[node.ID] = ent{count: 0, node: node}
+		} else {
+			m[node.ID] = ent{count: -1, node: node}
 		}
-		m[node.ID] = e
 	}
 
 	var diffs []redact.RedactableString
 	for id, e := range m {
-		if e.epochChanged {
-			diffs = append(diffs, redact.Sprintf("n%d's Epoch changed", id))
-		}
 		if e.count > 0 {
 			diffs = append(diffs, redact.Sprintf("n%d was decommissioned", id))
 		}

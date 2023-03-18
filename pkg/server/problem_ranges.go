@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"google.golang.org/grpc/codes"
@@ -35,7 +34,7 @@ func (s *systemStatusServer) ProblemRanges(
 		ProblemsByNodeID: make(map[roachpb.NodeID]serverpb.ProblemRangesResponse_NodeProblems),
 	}
 
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	isLiveMap := s.nodeLiveness.NotDeadList()
 	// If there is a specific nodeID requested, limited the responses to
 	// just that node.
 	if len(req.NodeID) > 0 {
@@ -43,9 +42,7 @@ func (s *systemStatusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = livenesspb.IsLiveMap{
-			requestedNodeID: livenesspb.IsLiveMapEntry{IsLive: true},
-		}
+		isLiveMap = []roachpb.NodeID{requestedNodeID}
 	}
 
 	type nodeResponse struct {
@@ -56,7 +53,7 @@ func (s *systemStatusServer) ProblemRanges(
 
 	responses := make(chan nodeResponse)
 	// TODO(bram): consider abstracting out this repeated pattern.
-	for nodeID := range isLiveMap {
+	for _, nodeID := range isLiveMap {
 		nodeID := nodeID
 		if err := s.stopper.RunAsyncTask(
 			ctx, "server.statusServer: requesting remote ranges",

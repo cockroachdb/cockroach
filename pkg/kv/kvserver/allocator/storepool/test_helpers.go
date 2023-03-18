@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,9 +55,7 @@ func (m *MockNodeLiveness) SetNodeStatus(
 
 // NodeLivenessFunc is the method that can be injected as part of store pool
 // construction to mock out node liveness, in tests.
-func (m *MockNodeLiveness) NodeLivenessFunc(
-	nodeID roachpb.NodeID, now time.Time, threshold time.Duration,
-) livenesspb.NodeLivenessStatus {
+func (m *MockNodeLiveness) NodeLivenessFunc(nodeID roachpb.NodeID) livenesspb.NodeLivenessStatus {
 	m.Lock()
 	defer m.Unlock()
 	if status, ok := m.nodes[nodeID]; ok {
@@ -82,7 +81,7 @@ func CreateTestStorePool(
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	mnl := NewMockNodeLiveness(defaultNodeStatus)
 
-	TimeUntilStoreDead.Override(ctx, &st.SV, timeUntilStoreDeadValue)
+	liveness.TimeUntilStoreDead.Override(ctx, &st.SV, timeUntilStoreDeadValue)
 	storePool := NewStorePool(
 		ambientCtx,
 		st,

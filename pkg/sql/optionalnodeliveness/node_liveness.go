@@ -12,8 +12,6 @@ package optionalnodeliveness
 
 import (
 	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -21,13 +19,11 @@ import (
 
 // Interface is the interface used in Container.
 type Interface interface {
-	Self() (livenesspb.Liveness, bool)
-	GetLivenesses() []livenesspb.Liveness
-	GetLiveness(nodeID roachpb.NodeID) (liveness.Record, bool)
-	GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error)
-	IsAvailable(roachpb.NodeID) bool
-	IsAvailableNotDraining(roachpb.NodeID) bool
-	IsLive(roachpb.NodeID) (bool, error)
+	ConvertToNodeStatus(livenesspb.Liveness) livenesspb.NodeStatusEntry
+	GetNodeStatus(roachpb.NodeID) livenesspb.NodeStatusEntry
+	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
+	HealthyList() []roachpb.NodeID
+	NotDecommissionedList() []roachpb.NodeID
 }
 
 // Container optionally gives access to liveness information about

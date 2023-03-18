@@ -525,12 +525,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
 		nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
 	}
+	// TODO: The nodeLivenessFn seems somewhat redundant here, maybe remove.
 	storePool := storepool.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		g,
 		clock,
-		nodeLiveness.GetNodeCount,
+		func() int { return len(nodeLiveness.NotDecommissionedList()) }, // TODO: Verify this
 		nodeLivenessFn,
 		/* deterministic */ false,
 	)

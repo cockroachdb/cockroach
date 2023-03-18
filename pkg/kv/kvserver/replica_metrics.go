@@ -141,7 +141,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	leader := d.raftStatus != nil && d.raftStatus.RaftState == raft.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
 	if leader {
-		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
+		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc)
 		leaderPausedFollowerCount = int64(len(d.paused))
 	}
 
@@ -263,7 +263,7 @@ func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap livenesspb.
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raftSparseStatus, desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap,
+	raftStatus *raftSparseStatus, desc *roachpb.RangeDescriptor,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {

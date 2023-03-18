@@ -888,8 +888,8 @@ func TestLeaseholderRelocate(t *testing.T) {
 }
 
 func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
-	for i := range tc.Servers {
-		testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+	for _, s := range tc.Servers {
+		testutils.SucceedsSoon(t, s.HeartbeatNodeLiveness)
 	}
 	// Make sure that all store pools have seen liveness heartbeats from everyone.
 	testutils.SucceedsSoon(t, func() error {
@@ -1002,16 +1002,16 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 	}
 	// We need to wait until 2 and 3 are considered to be dead.
-	timeUntilStoreDead := storepool.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	wait(timeUntilStoreDead.Nanoseconds())
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {
-		if dead, timetoDie, err := store.GetStoreConfig().StorePool.IsDead(
+		if dead, err := store.GetStoreConfig().StorePool.IsDead(
 			tc.GetFirstStoreFromServer(t, storeIdx).StoreID()); err != nil || !dead {
 			// Sometimes a gossip update arrives right after server shutdown and
 			// after we manually moved the time, so move it again.
 			if err == nil {
-				wait(timetoDie.Nanoseconds())
+				wait(timeUntilStoreDead.Nanoseconds())
 			}
 			// NB: errors.Wrapf(nil, ...) returns nil.
 			// nolint:errwrap
@@ -1204,8 +1204,8 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	}
 
 	heartbeat := func(servers ...int) {
-		for _, i := range servers {
-			testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+		for _, s := range tc.Servers {
+			testutils.SucceedsSoon(t, s.HeartbeatNodeLiveness)
 		}
 	}
 

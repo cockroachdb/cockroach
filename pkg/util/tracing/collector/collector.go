@@ -27,7 +27,7 @@ import (
 // NodeLiveness is the subset of the interface satisfied by CRDB's node liveness
 // component that the tracing service relies upon.
 type NodeLiveness interface {
-	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
+	GetLivenesses(context.Context) ([]livenesspb.Liveness, error)
 }
 
 // TraceCollector can be used to extract recordings from inflight spans for a

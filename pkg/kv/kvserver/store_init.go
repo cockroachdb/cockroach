@@ -79,7 +79,7 @@ func WriteInitialClusterData(
 	// We start off at epoch=0; when nodes heartbeat their liveness records for
 	// the first time it'll get incremented to epoch=1 [2].
 	//
-	// [1]: See `(*NodeLiveness).CreateLivenessRecord` and usages for where that happens.
+	// [1]: See `(*NodeLiveness).create` and usages for where that happens.
 	// [2]: See `(*NodeLiveness).Start` for where that happens.
 	livenessRecord := livenesspb.Liveness{NodeID: kvstorage.FirstNodeID, Epoch: 0}
 	if err := livenessVal.SetProto(&livenessRecord); err != nil {

@@ -766,7 +766,7 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 // liveness of the Node with ID NodeID.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
-	nodeLivenessFn := func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	nodeLivenessFn := func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		// TODO(kvoli): Implement liveness records for nodes, that signal they
 		// are dead when simulating partitions, crashes etc.
 		return livenesspb.NodeLivenessStatus_LIVE

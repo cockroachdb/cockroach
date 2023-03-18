@@ -239,11 +239,7 @@ func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse,
 		Nodes: statuses,
 	}
 
-	clock := k.clock
-	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, k.nodeLiveness, clock.Now().GoTime(), k.st)
-	if err != nil {
-		return nil, err
-	}
+	resp.LivenessByNodeID = k.nodeLiveness.GetLivenessStatusMap()
 	return &resp, nil
 }
 

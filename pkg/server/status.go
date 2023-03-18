@@ -1814,11 +1814,7 @@ func (s *systemStatusServer) nodesHelper(
 		Nodes: statuses,
 	}
 
-	clock := s.clock
-	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
-	if err != nil {
-		return nil, 0, err
-	}
+	resp.LivenessByNodeID = s.nodeLiveness.GetLivenessStatusMap()
 	return &resp, next, nil
 }
 

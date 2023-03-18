@@ -2615,10 +2615,7 @@ func TestDecommissionPreCheckUnready(t *testing.T) {
 
 	awaitDecommissioned := func(nID roachpb.NodeID) {
 		testutils.SucceedsSoon(t, func() error {
-			livenesses, err := adminSrv.NodeLiveness().(*liveness.NodeLiveness).GetLivenessesFromKV(ctx)
-			if err != nil {
-				return err
-			}
+			livenesses := adminSrv.NodeLiveness().(*liveness.NodeLiveness).GetLivenesses()
 			for _, nodeLiveness := range livenesses {
 				if nodeLiveness.NodeID == nID {
 					if nodeLiveness.Membership == livenesspb.MembershipStatus_DECOMMISSIONED {

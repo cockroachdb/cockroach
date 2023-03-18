@@ -881,13 +881,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
 	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
 	if hasNodeLiveness {
-		// TODO(erikgrinaker): We may want to use IsAvailableNotDraining instead, to
-		// avoid scheduling long-running flows (e.g. rangefeeds or backups) on nodes
-		// that are being drained/decommissioned. However, these nodes can still be
-		// leaseholders, and preventing processor scheduling on them can cause a
-		// performance cliff for e.g. table reads that then hit the network.
+		// NB: We exclude draining nodes since we don't want to start new flows on
+		// them. Ideally we could separate out the two phases of draining (stopping
+		// SQL and removing leases). In practice, removing leases is almost
+		// instantaneous (<1 sec) so it is typically OK to just leave this as it is.
 		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
-			return nodeLiveness.IsAvailable(roachpb.NodeID(sqlInstanceID))
+			return nodeLiveness.GetNodeStatus(roachpb.NodeID(sqlInstanceID)).IsAvailableNotDraining()
 		}
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
@@ -906,18 +905,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// TODO(dt): any reason not to just always use the instance reader? And just
 		// pass it directly instead of making a new closure here?
 		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
-			var ns []roachpb.NodeID
-			ls, err := nodeLiveness.GetLivenessesFromKV(ctx)
-			if err != nil {
-				return nil, err
-			}
-			for _, l := range ls {
-				if l.Membership.Decommissioned() {
-					continue
-				}
-				ns = append(ns, l.NodeID)
-			}
-			return ns, nil
+			// TODO: Should this including decommissioning?
+			return nodeLiveness.HealthyList(), nil
 		}
 	} else {
 		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {

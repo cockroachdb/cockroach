@@ -12,7 +12,6 @@ package storepool
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -50,12 +49,12 @@ var _ AllocatorStorePool = &OverrideStorePool{}
 func OverrideNodeLivenessFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
 ) NodeLivenessFunc {
-	return func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		if override, ok := overrides[nid]; ok {
 			return override
 		}
 
-		return realNodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return realNodeLivenessFunc(nid)
 	}
 }
 
@@ -66,7 +65,16 @@ func OverrideNodeCountFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, nodeLiveness *liveness.NodeLiveness,
 ) NodeCountFunc {
 	return func() int {
-		return nodeLiveness.GetNodeCountWithOverrides(overrides)
+		var count int
+		// TODO: Check this
+		for _, l := range nodeLiveness.NotDeadList() {
+			if overrideStatus, ok := overrides[l]; !ok ||
+				(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
+					overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
+				count++
+			}
+		}
+		return count
 	}
 }
 
@@ -221,5 +229,5 @@ func (o *OverrideStorePool) UpdateLocalStoreAfterRelocate(
 // capacity changes in the storepool. This currently doesn't consider local
 // updates (UpdateLocalStoreAfterRelocate, UpdateLocalStoreAfterRebalance,
 // UpdateLocalStoresAfterLeaseTransfer) as capacity changes.
-func (o *OverrideStorePool) SetOnCapacityChange(fn CapacityChangeFn) {
+func (o *OverrideStorePool) SetOnCapacityChange(_ CapacityChangeFn) {
 }

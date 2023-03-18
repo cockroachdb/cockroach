@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -2202,36 +2201,10 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 	return nil
 }
 
-// getLivenessStatusMap generates a map from NodeID to LivenessStatus for all
-// nodes known to gossip. Nodes that haven't pinged their liveness record for
-// more than server.time_until_store_dead are considered dead.
-//
-// To include all nodes (including ones not in the gossip network), callers
-// should consider calling (statusServer).NodesWithLiveness() instead where
-// possible.
-//
-// getLivenessStatusMap() includes removed nodes (dead + decommissioned).
-func getLivenessStatusMap(
-	ctx context.Context, nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
-) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
-	livenesses, err := nl.GetLivenessesFromKV(ctx)
-	if err != nil {
-		return nil, err
-	}
-	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
-
-	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := storepool.LivenessStatus(liveness, now, threshold)
-		statusMap[liveness.NodeID] = status
-	}
-	return statusMap, nil
-}
-
 // getLivenessResponse returns LivenessResponse: a map from NodeID to LivenessStatus and
 // a slice containing the liveness record of all nodes that have ever been a part of the
 // cluster.
-func getLivenessResponse(
+func (s *adminServer) getLivenessResponse(
 	ctx context.Context, nl optionalnodeliveness.Interface, now time.Time, st *cluster.Settings,
 ) (*serverpb.LivenessResponse, error) {
 	livenesses, err := nl.GetLivenessesFromKV(ctx)
@@ -2239,12 +2212,9 @@ func getLivenessResponse(
 		return nil, serverError(ctx, err)
 	}
 
-	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
-
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := storepool.LivenessStatus(liveness, now, threshold)
-		statusMap[liveness.NodeID] = status
+	for _, l := range livenesses {
+		statusMap[l.NodeID] = nl.ConvertToNodeStatus(l).LivenessStatus()
 	}
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
@@ -2274,7 +2244,7 @@ func (s *systemAdminServer) Liveness(
 ) (*serverpb.LivenessResponse, error) {
 	clock := s.clock
 
-	return getLivenessResponse(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
+	return s.getLivenessResponse(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
 }
 
 func (s *adminServer) Jobs(
@@ -2718,10 +2688,6 @@ func (s *systemAdminServer) DecommissionPreCheck(
 
 	// Initially evaluate node liveness status, so we filter the nodes to check.
 	var nodesToCheck []roachpb.NodeID
-	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now().GoTime(), s.st)
-	if err != nil {
-		return nil, serverError(ctx, err)
-	}
 
 	resp := &serverpb.DecommissionPreCheckResponse{}
 	resultsByNodeID := make(map[roachpb.NodeID]serverpb.DecommissionPreCheckResponse_NodeCheckResult)
@@ -2729,18 +2695,18 @@ func (s *systemAdminServer) DecommissionPreCheck(
 	// Any nodes that are already decommissioned or have unknown liveness should
 	// not be checked, and are added to response without replica counts or errors.
 	for _, nID := range req.NodeIDs {
-		livenessStatus := livenessStatusByNodeID[nID]
-		if livenessStatus == livenesspb.NodeLivenessStatus_UNKNOWN {
+		status := s.nodeLiveness.GetNodeStatus(nID).LivenessStatus()
+		if status == livenesspb.NodeLivenessStatus_UNKNOWN {
 			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 				NodeID:                nID,
 				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
-				LivenessStatus:        livenessStatus,
+				LivenessStatus:        status,
 			}
-		} else if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+		} else if status == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 				NodeID:                nID,
 				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_ALREADY_DECOMMISSIONED,
-				LivenessStatus:        livenessStatus,
+				LivenessStatus:        status,
 			}
 		} else {
 			nodesToCheck = append(nodesToCheck, nID)
@@ -2785,9 +2751,10 @@ func (s *systemAdminServer) DecommissionPreCheck(
 		resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 			NodeID:                nID,
 			DecommissionReadiness: readiness,
-			LivenessStatus:        livenessStatusByNodeID[nID],
-			ReplicaCount:          int64(numReplicas),
-			CheckedRanges:         rangeCheckErrsByNode[nID],
+			// TODO(baptist): We already loaded this, use the cached version.
+			LivenessStatus: s.nodeLiveness.GetNodeStatus(nID).LivenessStatus(),
+			ReplicaCount:   int64(numReplicas),
+			CheckedRanges:  rangeCheckErrsByNode[nID],
 		}
 	}
 

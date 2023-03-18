@@ -37,11 +37,13 @@ go_test(
     srcs = [
         "helper_test.go",
         "main_test.go",
+        "node_liveness_test.go",
         "nodes_test.go",
     ],
     args = ["-test.timeout=55s"],
     embed = [":upgradecluster"],
     deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",
@@ -51,9 +53,10 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
-        "//pkg/upgrade/nodelivenesstest",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@org_golang_google_grpc//:go_default_library",
     ],
 )
