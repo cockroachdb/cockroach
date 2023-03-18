@@ -31,8 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 var rootCmd = &cobra.Command{
@@ -244,20 +248,26 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern)
+		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
+
 		if err != nil {
 			return err
 		}
 
 		// sort by cluster names for stable output.
 		names := make([]string, len(filteredCloud.Clusters))
+		maxClusterName := 0
 		i := 0
 		for name := range filteredCloud.Clusters {
 			names[i] = name
+			if len(name) > maxClusterName {
+				maxClusterName = len(name)
+			}
 			i++
 		}
 		sort.Strings(names)
 
+		p := message.NewPrinter(language.English)
 		if listJSON {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
@@ -266,15 +276,65 @@ hosts file.
 			}
 		} else {
 			// Align columns left and separate with at least two spaces.
-			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
+			// N.B. colors use escape codes which don't play nice with tabwriter [1].
+			// We use a hacky workaround below to color the empty string.
+			// [1] https://github.com/golang/go/issues/12073
+
+			// Print header.
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				"Cluster", "Clouds", "Size", "VM",
+				color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
+				color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
+				color.HiWhiteString("$/TTL"))
+			// Print separator.
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				"", "", "",
+				color.HiWhiteString(""), color.HiWhiteString(""),
+				color.HiWhiteString(""), color.HiWhiteString(""),
+				color.HiWhiteString(""))
+			totalCostPerHour := 0.0
 			for _, name := range names {
 				c := filteredCloud.Clusters[name]
 				if listDetails {
 					c.PrintDetails(config.Logger)
 				} else {
-					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
+					// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
+					// so we make it left-aligned.
+					fmt.Fprintf(tw, "%s\t%s\t%d\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
+						len(c.VMs), c.VMs[0].MachineType)
 					if !c.IsLocal() {
-						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
+						colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
+							switch {
+							case cost <= 100:
+								return color.HiGreenString
+							case cost <= 1000:
+								return color.HiBlueString
+							default:
+								return color.HiRedString
+							}
+						}
+						timeRemaining := c.LifetimeRemaining().Round(time.Second)
+						cost := c.CostPerHour
+						totalCostPerHour += cost
+						alive := timeutil.Since(c.CreatedAt).Round(time.Minute)
+						costSinceCreation := cost * float64(alive) / float64(time.Hour)
+						costRemaining := cost * float64(timeRemaining) / float64(time.Hour)
+						if cost > 0 {
+							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
+								color.HiGreenString(p.Sprintf("$%.2f", cost)),
+								colorByCostBucket(costSinceCreation)(p.Sprintf("$%.2f", costSinceCreation)),
+								color.HiWhiteString(alive.String()),
+								color.HiBlueString(timeRemaining.String()),
+								colorByCostBucket(costRemaining)(p.Sprintf("$%.2f", costRemaining)))
+						} else {
+							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
+								color.HiGreenString(""),
+								color.HiGreenString(""),
+								color.HiWhiteString(alive.String()),
+								color.HiBlueString(timeRemaining.String()),
+								color.HiGreenString(""))
+						}
 					} else {
 						fmt.Fprintf(tw, "\t(-)")
 					}
@@ -283,6 +343,10 @@ hosts file.
 			}
 			if err := tw.Flush(); err != nil {
 				return err
+			}
+
+			if totalCostPerHour > 0 {
+				_, _ = p.Printf("\nTotal cost per hour: $%.2f\n", totalCostPerHour)
 			}
 
 			// Optionally print any dangling instances with errors
