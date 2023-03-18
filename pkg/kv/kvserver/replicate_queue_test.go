@@ -2361,6 +2361,11 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	skip.UnderRace(t) // too slow under stressrace
 	skip.UnderShort(t)
 
+	timeout := 5 * time.Second
+	if skip.Stress() {
+		timeout = 30 * time.Second
+	}
+
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -2410,12 +2415,12 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		epochLeases, expLeases = countLeases()
+		t.Logf("enabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 		return epochLeases == 0 && expLeases > 0
-	}, 10*time.Second, 200*time.Millisecond)
-	t.Logf("enabled: epochLeases=%d expLeases=%d", epochLeases, expLeases)
+	}, timeout, 500*time.Millisecond)
 
 	// Run a scan across the ranges, just to make sure they work.
-	scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	scanCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	_, err = db.Scan(scanCtx, scratchKey, scratchKey.PrefixEnd(), 1)
 	require.NoError(t, err)
@@ -2429,7 +2434,7 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		epochLeases, expLeases = countLeases()
+		t.Logf("disabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 		return epochLeases > 0 && expLeases > 0 && expLeases <= initialExpLeases
-	}, 10*time.Second, 200*time.Millisecond)
-	t.Logf("disabled: epochLeases=%d expLeases=%d", epochLeases, expLeases)
+	}, timeout, 500*time.Millisecond)
 }
