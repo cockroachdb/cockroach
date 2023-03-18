@@ -680,7 +680,7 @@ func (b *BoundAccount) Monitor() *BytesMonitor {
 	return b.mon
 }
 
-func (b *BoundAccount) allocated() int64 {
+func (b *BoundAccount) Allocated() int64 {
 	if b == nil {
 		return 0
 	}
@@ -767,7 +767,7 @@ func (b *BoundAccount) Close(ctx context.Context) {
 		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
-	if a := b.allocated(); a > 0 {
+	if a := b.Allocated(); a > 0 {
 		b.mon.releaseBytes(ctx, a)
 	}
 }
@@ -983,7 +983,7 @@ func (mm *BytesMonitor) roundSize(sz int64) int64 {
 func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	// NB: mm.mu need not be locked here, as this is only called from StopMonitor().
 	if log.V(2) {
-		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.allocated())
+		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.Allocated())
 	}
 	mm.mu.curBudget.Clear(ctx)
 }

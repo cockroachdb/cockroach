@@ -2289,6 +2289,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`prepared_statements_cache_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			limit, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			m.SetPreparedStatementsCacheSize(limit)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().PreparedStatementsCacheSize)), nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return string(humanizeutil.IBytes(0))
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

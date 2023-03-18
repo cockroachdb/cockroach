@@ -4218,6 +4218,7 @@ override_multi_region_zone_config                     off                 NULL  
 parallelize_multi_key_lookup_joins_enabled            off                 NULL      NULL        NULL        string
 password_encryption                                   crdb-bcrypt         NULL      NULL        NULL        string
 prefer_lookup_joins_for_fks                           off                 NULL      NULL        NULL        string
+prepared_statements_cache_size                        0 B                 NULL      NULL        NULL        string
 propagate_input_ordering                              off                 NULL      NULL        NULL        string
 reorder_joins_limit                                   8                   NULL      NULL        NULL        string
 require_explicit_primary_keys                         off                 NULL      NULL        NULL        string
@@ -4350,6 +4351,7 @@ override_multi_region_zone_config                     off                 NULL  
 parallelize_multi_key_lookup_joins_enabled            off                 NULL  user     NULL      false               false
 password_encryption                                   crdb-bcrypt         NULL  user     NULL      crdb-bcrypt         crdb-bcrypt
 prefer_lookup_joins_for_fks                           off                 NULL  user     NULL      off                 off
+prepared_statements_cache_size                        0 B                 NULL  user     NULL      0 B                 0 B
 propagate_input_ordering                              off                 NULL  user     NULL      off                 off
 reorder_joins_limit                                   8                   NULL  user     NULL      8                   8
 require_explicit_primary_keys                         off                 NULL  user     NULL      off                 off
@@ -4478,6 +4480,7 @@ override_multi_region_zone_config                     NULL    NULL     NULL     
 parallelize_multi_key_lookup_joins_enabled            NULL    NULL     NULL     NULL        NULL
 password_encryption                                   NULL    NULL     NULL     NULL        NULL
 prefer_lookup_joins_for_fks                           NULL    NULL     NULL     NULL        NULL
+prepared_statements_cache_size                        NULL    NULL     NULL     NULL        NULL
 propagate_input_ordering                              NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                                   NULL    NULL     NULL     NULL        NULL
 require_explicit_primary_keys                         NULL    NULL     NULL     NULL        NULL

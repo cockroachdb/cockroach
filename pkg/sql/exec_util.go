@@ -3302,6 +3302,10 @@ func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
 	m.data.OptimizerAlwaysUseHistograms = val
 }
 
+func (m *sessionDataMutator) SetPreparedStatementsCacheSize(val int64) {
+	m.data.PreparedStatementsCacheSize = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
