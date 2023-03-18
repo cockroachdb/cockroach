@@ -965,7 +965,7 @@ func (s *Server) newConnExecutor(
 		mon.MemoryResource,
 		memMetrics.SessionPreparedCurBytesCount,
 		memMetrics.SessionPreparedMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
+		1024 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
 	)
 	// The txn monitor is started in txnState.resetForNewSQLTxn().
 	txnMon := mon.NewMonitor(
@@ -1046,12 +1046,14 @@ func (s *Server) newConnExecutor(
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmtsLRU: make(map[string]struct{ prev, next string }),
+		portals:      make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmtsLRU: make(map[string]struct{ prev, next string }),
+		portals:      make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sdMutIterator.sds)
@@ -1646,6 +1648,13 @@ type prepStmtNamespace struct {
 	// prepStmts contains the prepared statements currently available on the
 	// session.
 	prepStmts map[string]*PreparedStatement
+	// prepStmtsLRU is a circular doubly-linked list containing the prepared
+	// statement names ordered by most recent access (needed to determine
+	// evictions when prepared_statements_cache_size is set). There is a special
+	// entry for the empty string which is both the head and tail of the
+	// list. (Consequently, if it exists, the actual prepared statement for the
+	// empty string does not have an entry in this list and cannot be evicted.)
+	prepStmtsLRU map[string]struct{ prev, next string }
 	// portals contains the portals currently available on the session. Note
 	// that PreparedPortal.accountForCopy needs to be called if a copy of a
 	// PreparedPortal is retained.
@@ -1653,20 +1662,106 @@ type prepStmtNamespace struct {
 }
 
 // HasActivePortals returns true if there are portals in the session.
-func (ns prepStmtNamespace) HasActivePortals() bool {
+func (ns *prepStmtNamespace) HasActivePortals() bool {
 	return len(ns.portals) > 0
 }
 
 // HasPortal returns true if there exists a given named portal in the session.
-func (ns prepStmtNamespace) HasPortal(s string) bool {
+func (ns *prepStmtNamespace) HasPortal(s string) bool {
 	_, ok := ns.portals[s]
 	return ok
 }
 
+const prepStmtsLRUHead = ""
+const prepStmtsLRUTail = ""
+
+// addLRUEntry adds a new prepared statement name to the LRU list. It is an
+// error to re-add an existing name to the LRU list.
+func (ns *prepStmtNamespace) addLRUEntry(name string) {
+	if name == prepStmtsLRUHead {
+		return
+	}
+	if _, ok := ns.prepStmtsLRU[name]; ok {
+		// Assert that we're not re-adding an existing name to the LRU list.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU unexpected existing entry (%s): %v", name, ns.prepStmtsLRU,
+		))
+	}
+	var this struct{ prev, next string }
+	this.prev = prepStmtsLRUHead
+	// Note: must do this serially in case head and next are the same entry.
+	head := ns.prepStmtsLRU[this.prev]
+	this.next = head.next
+	head.next = name
+	ns.prepStmtsLRU[prepStmtsLRUHead] = head
+	next, ok := ns.prepStmtsLRU[this.next]
+	if !ok || next.prev != prepStmtsLRUHead {
+		// Assert that the chain isn't broken before we modify it.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU head entry not correct (%s): %v", this.next, ns.prepStmtsLRU,
+		))
+	}
+	next.prev = name
+	ns.prepStmtsLRU[this.next] = next
+	ns.prepStmtsLRU[name] = this
+}
+
+// delLRUEntry removes a prepared statement name from the LRU list. (It is not an
+// error to remove a non-existent prepared statement.)
+func (ns *prepStmtNamespace) delLRUEntry(name string) {
+	if name == prepStmtsLRUHead {
+		return
+	}
+	this, ok := ns.prepStmtsLRU[name]
+	if !ok {
+		// Not an error to remove a non-existent prepared statement.
+		return
+	}
+	// Note: must do this serially in case prev and next are the same entry.
+	prev, ok := ns.prepStmtsLRU[this.prev]
+	if !ok || prev.next != name {
+		// Assert that the chain isn't broken before we modify it.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU prev entry not correct (%s): %v", this.prev, ns.prepStmtsLRU,
+		))
+	}
+	prev.next = this.next
+	ns.prepStmtsLRU[this.prev] = prev
+	next, ok := ns.prepStmtsLRU[this.next]
+	if !ok || next.prev != name {
+		// Assert that the chain isn't broken before we modify it.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU next entry not correct (%s): %v", this.next, ns.prepStmtsLRU,
+		))
+	}
+	next.prev = this.prev
+	ns.prepStmtsLRU[this.next] = next
+	delete(ns.prepStmtsLRU, name)
+}
+
+// touchLRUEntry moves an existing prepared statement to the front of the LRU
+// list.
+func (ns *prepStmtNamespace) touchLRUEntry(name string) {
+	if name == prepStmtsLRUHead {
+		return
+	}
+	if ns.prepStmtsLRU[prepStmtsLRUHead].next == name {
+		// Already at the front of the list.
+		return
+	}
+	ns.delLRUEntry(name)
+	ns.addLRUEntry(name)
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
-func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+func (ns *prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
-	for name, stmt := range ns.prepStmts {
+
+	// Serialize prepared statements from least-recently used to most-recently
+	// used, so that we build the LRU list correctly when deserializing.
+	for e, ok := ns.prepStmtsLRU[prepStmtsLRUTail]; ok && e.prev != prepStmtsLRUHead; e, ok = ns.prepStmtsLRU[e.prev] {
+		name := e.prev
+		stmt := ns.prepStmts[name]
 		ret = append(
 			ret,
 			sessiondatapb.MigratableSession_PreparedStatement{
@@ -1676,14 +1771,38 @@ func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.Migra
 			},
 		)
 	}
+	// Finally, serialize the anonymous prepared statement (if it exists).
+	if stmt, ok := ns.prepStmts[""]; ok {
+		ret = append(
+			ret,
+			sessiondatapb.MigratableSession_PreparedStatement{
+				Name:                 "",
+				PlaceholderTypeHints: stmt.InferredTypes,
+				SQL:                  stmt.SQL,
+			},
+		)
+	}
+
 	return ret
 }
 
-func (ns prepStmtNamespace) String() string {
+func (ns *prepStmtNamespace) String() string {
 	var sb strings.Builder
 	sb.WriteString("Prep stmts: ")
-	for name := range ns.prepStmts {
-		sb.WriteString(name + " ")
+	for name, ps := range ns.prepStmts {
+		if name == "" {
+			sb.WriteString("\"\" ")
+		} else {
+			sb.WriteString(name + " ")
+		}
+	}
+	sb.WriteString("Prep stmts ordered by most recent access: ")
+	// Put the anonymous prepared statement first (if it exists).
+	if _, ok := ns.prepStmts[""]; ok {
+		sb.WriteString("\"\" ")
+	}
+	for e, ok := ns.prepStmtsLRU[prepStmtsLRUHead]; ok && e.next != prepStmtsLRUTail; e, ok = ns.prepStmtsLRU[e.next] {
+		sb.WriteString(e.next + " ")
 	}
 	sb.WriteString("Portals: ")
 	for name := range ns.portals {
@@ -1697,7 +1816,7 @@ func (ns *prepStmtNamespace) resetToEmpty(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
 	// No errors could occur since we're releasing the resources.
-	_ = ns.resetTo(ctx, prepStmtNamespace{}, prepStmtsNamespaceMemAcc)
+	_ = ns.resetTo(ctx, &prepStmtNamespace{}, prepStmtsNamespaceMemAcc)
 }
 
 // resetTo resets a namespace to equate another one (`to`). All the receiver's
@@ -1708,11 +1827,14 @@ func (ns *prepStmtNamespace) resetToEmpty(
 // It can only return an error if we've reached the memory limit and had to make
 // a copy of portals.
 func (ns *prepStmtNamespace) resetTo(
-	ctx context.Context, to prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+	ctx context.Context, to *prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) error {
 	for name, p := range ns.prepStmts {
 		p.decRef(ctx)
 		delete(ns.prepStmts, name)
+	}
+	for name := range ns.prepStmtsLRU {
+		delete(ns.prepStmtsLRU, name)
 	}
 	for name, p := range ns.portals {
 		p.close(ctx, prepStmtsNamespaceMemAcc, name)
@@ -1722,6 +1844,9 @@ func (ns *prepStmtNamespace) resetTo(
 	for name, ps := range to.prepStmts {
 		ps.incRef(ctx)
 		ns.prepStmts[name] = ps
+	}
+	for name, entry := range to.prepStmtsLRU {
+		ns.prepStmtsLRU[name] = entry
 	}
 	for name, p := range to.portals {
 		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, name); err != nil {
@@ -2933,7 +3058,7 @@ func (ex *connExecutor) generateID() clusterunique.ID {
 // prepStmtsNamespaceAtTxnRewindPos that's not part of prepStmtsNamespace.
 func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) error {
 	return ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(
-		ctx, ex.extraTxnState.prepStmtsNamespace, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		ctx, &ex.extraTxnState.prepStmtsNamespace, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
@@ -2941,7 +3066,7 @@ func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) error {
 // not part of prepStmtsNamespaceAtTxnRewindPos.
 func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) error {
 	return ex.extraTxnState.prepStmtsNamespace.resetTo(
-		ctx, ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		ctx, &ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
@@ -4020,14 +4145,17 @@ func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 }
 
 // Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
+func (ps connExPrepStmtsAccessor) Get(name string, touchLRU bool) (*PreparedStatement, bool) {
 	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+	if ok && touchLRU {
+		ps.ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
+	}
 	return s, ok
 }
 
 // Delete is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
-	_, ok := ps.Get(name)
+	_, ok := ps.Get(name, false /* touchLRU */)
 	if !ok {
 		return false
 	}
