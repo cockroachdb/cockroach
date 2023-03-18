@@ -66,5 +66,5 @@ FROM
 	getAllIndexesQuery += `
 ORDER BY 1, 2, 4`
 
-	return parse(fmt.Sprintf(getAllIndexesQuery, name.String()))
+	return d.parse(fmt.Sprintf(getAllIndexesQuery, name.String()))
 }

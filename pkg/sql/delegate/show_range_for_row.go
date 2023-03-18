@@ -83,7 +83,7 @@ WHERE (r.start_key <= crdb_internal.encode_key(%[1]d, %[2]d, %[3]s))
   AND (r.end_key   >  crdb_internal.encode_key(%[1]d, %[2]d, %[3]s)) ORDER BY r.start_key
 	`
 	// note: CatalogName.String() != Catalog()
-	return parse(
+	return d.parse(
 		fmt.Sprintf(
 			query,
 			table.ID(),

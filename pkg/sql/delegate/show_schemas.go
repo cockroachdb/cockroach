@@ -38,7 +38,7 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 		lexbase.EscapeSQLString(string(name)),
 	)
 
-	return parse(getSchemasQuery)
+	return d.parse(getSchemasQuery)
 }
 
 func (d *delegator) delegateShowCreateAllSchemas() (tree.Statement, error) {
@@ -53,7 +53,7 @@ func (d *delegator) delegateShowCreateAllSchemas() (tree.Statement, error) {
 		lexbase.EscapeSQLString(databaseLiteral),
 	)
 
-	return parse(query)
+	return d.parse(query)
 }
 
 // getSpecifiedOrCurrentDatabase returns the name of the specified database, or

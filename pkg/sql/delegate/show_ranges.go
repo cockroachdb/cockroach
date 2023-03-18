@@ -690,7 +690,7 @@ AND s.end_key > r.start_key`)
 		// debugging invalid syntax more difficult.
 		fullQuery = fmt.Sprintf(`SELECT %s AS query`, lexbase.EscapeSQLString(fullQuery))
 	}
-	return parse(fullQuery)
+	return d.parse(fullQuery)
 }
 
 // In the shared logic above, we propagate the set of columns

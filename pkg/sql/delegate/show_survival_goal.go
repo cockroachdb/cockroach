@@ -33,5 +33,5 @@ FROM crdb_internal.databases
 WHERE name = %s`,
 		lexbase.EscapeSQLString(dbName),
 	)
-	return parse(query)
+	return d.parse(query)
 }

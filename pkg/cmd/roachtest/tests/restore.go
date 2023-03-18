@@ -283,6 +283,13 @@ func registerRestore(r registry.Registry) {
 			timeout:  1 * time.Hour,
 		},
 		{
+			// Benchmarks using a low memory per core ratio - we don't expect ideal
+			// performance but nodes should not OOM.
+			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
+			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
+			timeout:  1 * time.Hour,
+		},
+		{
 			// Benchmarks if per node throughput remains constant if the number of
 			// nodes doubles relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
@@ -342,7 +349,7 @@ func registerRestore(r registry.Registry) {
 
 				if c.Spec().Cloud != sp.backup.cloud {
 					// For now, only run the test on the cloud provider that also stores the backup.
-					t.Skip("test configured to run on %s", sp.backup.cloud)
+					t.Skipf("test configured to run on %s", sp.backup.cloud)
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
@@ -390,6 +397,9 @@ type hardwareSpecs struct {
 	// volumeSize indicates the size of per node block storage (pd-ssd for gcs,
 	// ebs for aws). If zero, local ssd's are used.
 	volumeSize int
+
+	// mem is the memory per cpu.
+	mem spec.MemPerCPU
 }
 
 func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
@@ -397,6 +407,9 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
 	if hw.volumeSize != 0 {
 		clusterOpts = append(clusterOpts, spec.VolumeSize(hw.volumeSize))
+	}
+	if hw.mem != spec.Auto {
+		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
 	return r.MakeClusterSpec(hw.nodes, clusterOpts...)
 }
@@ -406,6 +419,9 @@ func (hw hardwareSpecs) String(verbose bool) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("/nodes=%d", hw.nodes))
 	builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
+	if hw.mem != spec.Auto {
+		builder.WriteString(fmt.Sprintf("/%smem", hw.mem))
+	}
 	if verbose {
 		builder.WriteString(fmt.Sprintf("/volSize=%dGB", hw.volumeSize))
 	}
@@ -421,6 +437,9 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 	}
 	if override.nodes != 0 {
 		specs.nodes = override.nodes
+	}
+	if override.mem != spec.Auto {
+		specs.mem = override.mem
 	}
 	if override.volumeSize != 0 {
 		specs.volumeSize = override.volumeSize

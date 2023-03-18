@@ -86,6 +86,11 @@ func validateTable(
 	if !found {
 		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
+	for _, requiredColumn := range canHandle.RequiredColumns {
+		if catalog.FindColumnByName(tableDesc, requiredColumn) == nil {
+			return errors.Errorf("required column %s not present on table %s", requiredColumn, tableDesc.GetName())
+		}
+	}
 
 	return err
 }
