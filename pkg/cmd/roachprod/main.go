@@ -32,8 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 var rootCmd = &cobra.Command{
@@ -259,6 +263,7 @@ hosts file.
 		}
 		sort.Strings(names)
 
+		p := message.NewPrinter(language.English)
 		if listJSON {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
@@ -268,6 +273,7 @@ hosts file.
 		} else {
 			// Align columns left and separate with at least two spaces.
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+			totalCostPerHour := 0.0
 			for _, name := range names {
 				c := filteredCloud.Clusters[name]
 				if listDetails {
@@ -275,7 +281,18 @@ hosts file.
 				} else {
 					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
 					if !c.IsLocal() {
-						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
+						timeRemaining := c.LifetimeRemaining().Round(time.Second)
+						cost := c.CostPerHour
+						totalCostPerHour += cost
+						alive := timeutil.Since(c.CreatedAt).Round(time.Minute)
+						costSinceCreation := cost * float64(alive) / float64(time.Hour)
+						costRemaining := cost * float64(timeRemaining) / float64(time.Hour)
+						fmt.Fprintf(tw, "\t~%s/h\tspent %-18s in %s\t(%-18s + %s until GC)",
+							color.HiGreenString(p.Sprintf("$%.2f", cost)),
+							color.HiGreenString(p.Sprintf("$%.2f", costSinceCreation)),
+							alive,
+							color.YellowString(timeRemaining.String()),
+							color.HiGreenString(p.Sprintf("$%.2f", costRemaining)))
 					} else {
 						fmt.Fprintf(tw, "\t(-)")
 					}
@@ -285,6 +302,8 @@ hosts file.
 			if err := tw.Flush(); err != nil {
 				return err
 			}
+
+			_, _ = p.Printf("\nTotal cost per hour: $%.2f\n", totalCostPerHour)
 
 			// Optionally print any dangling instances with errors
 			if listDetails {
