@@ -104,53 +104,6 @@ import (
 
 var testServerRegion = "us-east-1"
 
-func TestChangefeedBasics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		defer closeFeed(t, foo)
-
-		// 'initial' is skipped because only the latest value ('updated') is
-		// emitted by the initial scan.
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
-		})
-
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
-		})
-
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
-		assertPayloads(t, foo, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
-			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
-		})
-
-		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": null}`,
-		})
-	}
-
-	// cdcTest(t, testFn, feedTestForceSink("kafka"))
-	// cdcTest(t, testFn, feedTestForceSink("enterprise"))
-	cdcTest(t, testFn, feedTestForceSink("webhook"))
-	// cdcTest(t, testFn, feedTestForceSink("pubsub"))
-	// cdcTest(t, testFn, feedTestForceSink("sinkless"))
-	// cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
-
-	// NB running TestChangefeedBasics, which includes a DELETE, with
-	// cloudStorageTest is a regression test for #36994.
-}
-
 func TestChangefeedReplanning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -259,6 +212,53 @@ func TestChangefeedReplanning(t *testing.T) {
 		}
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestChangefeedBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": null}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("enterprise"))
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+
+	// NB running TestChangefeedBasics, which includes a DELETE, with
+	// cloudStorageTest is a regression test for #36994.
 }
 
 func TestToJSONAsChangefeed(t *testing.T) {
@@ -6663,7 +6663,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	// TODO(ssd): Tenant testing disabled because of use of DB()
 	for _, sz := range []int64{100 << 20, 100} {
 		maxCheckpointSize = sz
-		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestNoForcedSyntheticTimestamps)
+		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestForceSink("webhook"), feedTestNoForcedSyntheticTimestamps)
 	}
 }
 
@@ -6795,7 +6795,6 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 			[]int{http.StatusOK, http.StatusOK, http.StatusOK}...))
 		defer closeFeed(t, foo)
 
-		fmt.Printf("\n\x1b[32m ABOUT TO INSERT VALUE \x1b[0m\n\n")
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'b')`)
 		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)

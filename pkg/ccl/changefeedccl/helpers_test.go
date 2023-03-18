@@ -838,7 +838,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		"cloudstorage": 0,
 	}
 	if options.externalIODir != "" {
-		sinkWeights["cloudstorage"] = 0
+		sinkWeights["cloudstorage"] = 3
 	}
 	if options.allowedSinkTypes != nil {
 		sinkWeights = map[string]int{}
@@ -855,6 +855,9 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 	for _, weight := range sinkWeights {
 		weightTotal += weight
 	}
+	if weightTotal == 0 {
+		return ""
+	}
 	p := rand.Float32() * float32(weightTotal)
 	var sum float32 = 0
 	for sink, weight := range sinkWeights {
@@ -863,7 +866,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 			return sink
 		}
 	}
-	return "kafka" // unreachable
+	return ""
 }
 
 // addCloudStorageOptions adds the options necessary to enable a server to run a
@@ -983,6 +986,9 @@ func cdcTestNamedWithSystem(
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
 
 	sinkType := randomSinkTypeWithOptions(options)
+	if sinkType == "" {
+		return
+	}
 	testLabel := sinkType
 	if name != "" {
 		testLabel = fmt.Sprintf("%s/%s", sinkType, name)

@@ -454,13 +454,13 @@ type parallelIO struct {
 	ioHandler IOHandler
 	resultCh  chan ioResult
 	requestCh chan IORequest
+	doneCh    chan struct{}
 }
 
 func (pe *parallelIO) Close() {
 	// if err := pe.wg.Wait(); err != nil {
 	// 	return err
 	// }
-	close(pe.requestCh)
 	fmt.Printf("\x1b[32mparallelIO wg wait\x1b[0m\n")
 	_ = pe.wg.Wait()
 	fmt.Printf("\x1b[32mparallelIO wg wait done\x1b[0m\n")
@@ -480,6 +480,7 @@ func newParallelIO(
 		ioHandler: handler,
 		requestCh: make(chan IORequest, numWorkers),
 		resultCh:  make(chan ioResult, numWorkers),
+		doneCh:    make(chan struct{}),
 	}
 
 	wg.GoCtx(func(ctx context.Context) error {
@@ -510,6 +511,8 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 		for {
 			select {
 			case <-ctx.Done():
+				return
+			case <-pe.doneCh:
 				return
 
 				// In order to send on emitCh we have to also check for receive on
@@ -572,6 +575,7 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 
 		select {
 		case <-ctx.Done():
+		case <-pe.doneCh:
 		case pe.resultCh <- res:
 		}
 	}
@@ -580,11 +584,10 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case req, ok := <-pe.requestCh:
+		case <-pe.doneCh:
+			return nil
+		case req := <-pe.requestCh:
 			fmt.Printf("\x1b[32mparallelIO requestCh\x1b[0m\n")
-			if !ok {
-				return nil
-			}
 			if inflight.Intersects(req.Keys()) {
 				fmt.Printf("\x1b[32mparallelIO pending\x1b[0m\n")
 				pending = append(pending, req)
