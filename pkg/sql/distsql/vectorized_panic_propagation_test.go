@@ -50,6 +50,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		nil, /* rowSyncFlowConsumer */
 		nil, /* batchSyncFlowConsumer */
 		nil, /* localProcessors */
+		nil, /* localVectorProcessors */
 		nil, /* onFlowCleanup */
 		"",  /* statementSQL */
 	)

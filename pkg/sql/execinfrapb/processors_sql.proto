@@ -1087,3 +1087,18 @@ message HashGroupJoinerSpec {
 
   optional AggregatorSpec aggregator_spec = 3 [(gogoproto.nullable) = false];
 }
+
+// InsertSpec is a limited insert processor that can only handle vectorized 
+// batch inserts for rows affected insert queries (ie doesn't support returning
+// rows or inserts from select).
+message InsertSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  repeated uint32 column_ids = 2 [
+    (gogoproto.customname) = "ColumnIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"
+  ];
+  // The serialized bytes from intsets.Fast.Encode. 
+  optional bytes check_ords = 3;
+  // Whether the insert should be autocommitted.
+  optional bool auto_commit = 4 [(gogoproto.nullable) = false];
+}

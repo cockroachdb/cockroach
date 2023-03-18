@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -35,6 +36,9 @@ type valuesNode struct {
 	externallyOwnedContainer bool
 
 	valuesRun
+
+	// Allow passing a coldata.Batch through a valuesNode.
+	coldataBatch coldata.Batch
 }
 
 func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity int) *valuesNode {

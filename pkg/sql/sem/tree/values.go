@@ -19,6 +19,8 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/col/coldata"
+
 // ValuesClause represents a VALUES clause.
 type ValuesClause struct {
 	Rows []Exprs
@@ -59,6 +61,28 @@ func (r RawRows) Get(i, j int) Expr {
 type LiteralValuesClause struct {
 	Rows ExprContainer
 }
+
+// VectorRows lets us store a Batch in a tree.LiteralValuesClause.
+type VectorRows struct {
+	Batch coldata.Batch
+}
+
+// NumRows implements the ExprContainer interface.
+func (r VectorRows) NumRows() int {
+	return r.Batch.Length()
+}
+
+// NumCols implements the ExprContainer interface.
+func (r VectorRows) NumCols() int {
+	return r.Batch.Width()
+}
+
+// Get implements the ExprContainer interface.
+func (r VectorRows) Get(i, j int) Expr {
+	return DNull
+}
+
+var _ ExprContainer = VectorRows{}
 
 // Format implements the NodeFormatter interface.
 func (node *ValuesClause) Format(ctx *FmtCtx) {

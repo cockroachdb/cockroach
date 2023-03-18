@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -191,6 +192,9 @@ type ServerConfig struct {
 	// AdmissionPacerFactory is used to integrate CPU-intensive work
 	// with elastic CPU control.
 	AdmissionPacerFactory admission.PacerFactory
+
+	// Allow mutation operations to trigger stats refresh.
+	StatsRefresher *stats.Refresher
 
 	// *sql.ExecutorConfig exposed as an interface (due to dependency cycles).
 	ExecutorConfig interface{}
