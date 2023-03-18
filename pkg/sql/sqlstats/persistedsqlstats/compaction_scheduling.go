@@ -13,6 +13,7 @@ package persistedsqlstats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -60,6 +61,9 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 
 	compactionSchedule.SetScheduleLabel(compactionScheduleName)
 	compactionSchedule.SetOwner(username.NodeUserName())
+	if st.Version.IsActive(ctx, clusterversion.V23_1ScheduledJobsTableHasOwnerIDColumn) {
+		compactionSchedule.SetOwnerID(username.NodeUserID)
+	}
 
 	args, err := pbtypes.MarshalAny(&ScheduledSQLStatsCompactorExecutionArgs{})
 	if err != nil {
