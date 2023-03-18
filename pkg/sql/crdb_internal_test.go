@@ -836,6 +836,10 @@ func TestInternalJobsTableRetryColumns(t *testing.T) {
 				"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
 				1, jobs.StatusRunning, timeutil.Now(), payloadBytes,
 			)
+			tdb.Exec(t,
+				"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
+				1, jobs.GetLegacyPayloadKey(), payloadBytes,
+			)
 
 			validateFn(ctx, tdb)
 		}
@@ -1327,11 +1331,23 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 		"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
 		1, jobs.StatusRunning, timeutil.Now(), payloadBytes,
 	)
+	tdb.Exec(t,
+		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
+		1, jobs.GetLegacyPayloadKey(), payloadBytes,
+	)
 
 	tdb.Exec(t,
 		"INSERT INTO system.jobs values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
 		2, jobs.StatusRunning, timeutil.Now(), payloadBytes, []byte("progress"), "created by", 2, []byte("claim session id"),
 		2, 2, timeutil.Now(), jobspb.TypeImport.String(),
+	)
+	tdb.Exec(t,
+		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
+		2, jobs.GetLegacyPayloadKey(), payloadBytes,
+	)
+	tdb.Exec(t,
+		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
+		2, jobs.GetLegacyProgressKey(), []byte("progress"),
 	)
 
 	res := tdb.QueryStr(t, "SELECT * FROM system.jobs ORDER BY id")
@@ -1421,6 +1437,10 @@ func TestCorruptPayloadError(t *testing.T) {
 	tdb.Exec(t,
 		"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
 		1, jobs.StatusRunning, timeutil.Now(), []byte("invalid payload"),
+	)
+	tdb.Exec(t,
+		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
+		1, jobs.GetLegacyPayloadKey(), []byte("invalid payload"),
 	)
 
 	tdb.ExpectErrWithHint(t, "proto", "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.system_jobs")

@@ -204,6 +204,8 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 		db.QueryRow(t,
 			`INSERT INTO system.jobs (status, payload, progress, created) VALUES ($1, $2, $3, $4) RETURNING id`,
 			status, payload, progress, created).Scan(&id)
+		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyPayloadKey(), payload)
+		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyProgressKey(), progress)
 		return strconv.Itoa(int(id))
 	}
 
@@ -292,9 +294,12 @@ func TestRegistryGCPagination(t *testing.T) {
 	for i := 0; i < 2*cleanupPageSize+1; i++ {
 		payload, err := protoutil.Marshal(&jobspb.Payload{})
 		require.NoError(t, err)
-		db.Exec(t,
-			`INSERT INTO system.jobs (status, created, payload) VALUES ($1, $2, $3)`,
-			StatusCanceled, timeutil.Now().Add(-time.Hour), payload)
+		var jobID jobspb.JobID
+		db.QueryRow(t,
+			`INSERT INTO system.jobs (status, created, payload) VALUES ($1, $2, $3) RETURNING id`,
+			StatusCanceled, timeutil.Now().Add(-time.Hour), payload).Scan(&jobID)
+		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
+			jobID, GetLegacyPayloadKey(), payload)
 	}
 
 	ts := timeutil.Now()

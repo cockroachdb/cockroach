@@ -310,7 +310,9 @@ FROM system.namespace`
 		return nil, nil, nil, err
 	}
 
-	stmt = `SELECT id, status, payload, progress FROM system.jobs`
+	stmt = `
+SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
+`
 	jobsTable = make(doctor.JobsTable, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {

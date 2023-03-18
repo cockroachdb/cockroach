@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -2258,9 +2259,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
 	var status string
 	var payloadBytes []byte
 	var progressBytes []byte
-	if err := db.QueryRow(
-		`SELECT status, payload, progress FROM system.jobs WHERE id = $1`, jobID,
-	).Scan(&status, &payloadBytes, &progressBytes); err != nil {
+	if err := db.QueryRow(jobutils.InternalSystemJobsBaseQuery, jobID).Scan(&status, &payloadBytes, &progressBytes); err != nil {
 		return nil, err
 	}
 	var payload jobspb.Payload

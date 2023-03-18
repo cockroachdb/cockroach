@@ -149,7 +149,7 @@ func processJobPTSRecord(
 ) error {
 	j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
 	if err != nil {
-		return nil // nolint:returnerrcheck -- job maybe deleted when we run; just keep going.
+		return nil // nolint:returnerrcheck -- schedule maybe deleted when we run; just keep going.
 	}
 	p := j.Payload()
 	jobType, err := p.CheckType()

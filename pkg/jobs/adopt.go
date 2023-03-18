@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -144,9 +146,21 @@ COALESCE(last_run, created) + least(
 	processQueryWithBackoff = processQueryBase + ", " + canRunArgs +
 		" WHERE " + processQueryWhereBase + " AND " + canRunClause
 
-	resumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
-	resumeQueryWhereBase   = `id = $1 AND claim_session_id = $2`
+	// resumeQueryBaseCols selects NULL values for the payload and progress that
+	// will be read from the system.job_info table. This allows us to get results
+	// aligned with deprecatedResumeQueryBaseCols below.
+	resumeQueryBaseCols    = "status, NULL, NULL, crdb_internal.sql_liveness_is_alive(claim_session_id)"
 	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
+		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+
+	// deprecatedResumeQueryBaseCols loads the payload and progress from
+	// system.jobs instead of the system.job_info table.
+	//
+	// TODO(adityamaru): Remove the deprecated queries once we are outside the
+	// compatability window for 22.2.
+	deprecatedResumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	resumeQueryWhereBase             = `id = $1 AND claim_session_id = $2`
+	deprecatedResumeQueryWithBackoff = `SELECT ` + deprecatedResumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
 		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 )
 
@@ -245,7 +259,14 @@ func (r *Registry) resumeJob(
 	ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session,
 ) (retErr error) {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
-	resumeQuery := resumeQueryWithBackoff
+
+	readPayloadAndProgressFromJobInfo := r.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled)
+	var resumeQuery string
+	if readPayloadAndProgressFromJobInfo {
+		resumeQuery = resumeQueryWithBackoff
+	} else {
+		resumeQuery = deprecatedResumeQueryWithBackoff
+	}
 	args := []interface{}{jobID, s.ID().UnsafeBytes(),
 		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.db.Executor().QueryRowEx(
@@ -291,22 +312,51 @@ func (r *Registry) resumeJob(
 		return nil
 	}
 
-	payload, err := UnmarshalPayload(row[1])
-	if err != nil {
-		return err
-	}
-
-	progress, err := UnmarshalProgress(row[2])
-	if err != nil {
-		return err
-	}
-
 	createdBy, err := unmarshalCreatedBy(row[5], row[6])
 	if err != nil {
 		return err
 	}
-
 	job := &Job{id: jobID, registry: r, createdBy: createdBy}
+
+	payload := &jobspb.Payload{}
+	progress := &jobspb.Progress{}
+	if readPayloadAndProgressFromJobInfo {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			infoStorage := job.InfoStorage(txn)
+			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job not found in system.job_info")
+			}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+				return err
+			}
+
+			progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job not found in system.job_info")
+			}
+			return protoutil.Unmarshal(progressBytes, progress)
+		}); err != nil {
+			return err
+		}
+	} else {
+		payload, err = UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+
+		progress, err = UnmarshalProgress(row[2])
+		if err != nil {
+			return err
+		}
+	}
+
 	job.mu.payload = *payload
 	job.mu.progress = *progress
 	job.session = s
