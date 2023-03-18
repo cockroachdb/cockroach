@@ -12,8 +12,10 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,11 +29,33 @@ func (bq *baseQueue) testingAdd(
 }
 
 func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
-	// Check that the system config is available. It is needed by many queues. If
-	// it's not available, some queues silently fail to process any replicas,
-	// which is undesirable for this method.
-	if _, err := s.GetConfReader(ctx); err != nil {
-		return errors.Wrap(err, "unable to retrieve conf reader")
+	if q.queueConfig.needsSpanConfigs {
+		// Check that the system config is available. It is needed by many
+		// queues. If it's not available, some queues silently fail to process
+		// any replicas, which is undesirable for this method. Retry moderately
+		// to allow the span config reconciler to get started.
+		opts := retry.Options{
+			InitialBackoff: time.Millisecond * 10,
+			MaxBackoff:     time.Millisecond * 100,
+			Multiplier:     2,
+			MaxRetries:     100,
+		}
+		var lastErr error
+		gotConfReader := false
+		for r := retry.Start(opts); r.Next(); {
+			if _, lastErr = s.GetConfReader(ctx); lastErr != nil {
+				if lastErr == errSpanConfigsUnavailable {
+					continue // retry
+				}
+				return errors.Wrap(lastErr, "unable to retrieve conf reader")
+			}
+
+			gotConfReader = true
+			break
+		}
+		if !gotConfReader {
+			return errors.Wrap(lastErr, "unable to retrieve conf reader despite retrying")
+		}
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {

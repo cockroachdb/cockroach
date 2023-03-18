@@ -401,7 +401,19 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	}
 	s.mu.Lock()
 	s.mu.internal = freshStore
-	s.setLastUpdatedLocked(ts)
+	if len(events) != 0 {
+		// In very rare cases, right during cluster bootstrap before the span
+		// config reconciler has ever had a chance to run (i.e.
+		// system.span_configurations is empty), it's possible that the
+		// subscriber has subscribed to an empty span config state. We've only
+		// seen this happen in unit tests with 50ms scan intervals. So it's not
+		// been meaningfully "updated" in any sense of the word -- we'll perhaps
+		// get the initial state in the next partial update. We don't set the
+		// last-updated timestamp until then -- various components in KV rely on
+		// this timestamp to be non-empty as proof we have span configs as of
+		// some timestamp.
+		s.setLastUpdatedLocked(ts)
+	}
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 	for i := range handlers {
@@ -426,7 +438,12 @@ func (s *KVSubscriber) handlePartialUpdate(
 		// avoid this mutex.
 		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}
-	s.setLastUpdatedLocked(ts)
+	if len(events) != 0 || !s.mu.lastUpdated.IsEmpty() {
+		// We only set the last-updated timestamp once we know we have some
+		// valid span config state, either by a set of non-empty events or
+		// having already seen it earlier.
+		s.setLastUpdatedLocked(ts)
+	}
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
