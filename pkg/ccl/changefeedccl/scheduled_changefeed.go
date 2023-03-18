@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/lib/pq/oid"
 )
 
 const opName = "CREATE SCHEDULE FOR CHANGEFEED"
@@ -359,6 +360,7 @@ func makeScheduledChangefeedSpec(
 func makeChangefeedSchedule(
 	env scheduledjobs.JobSchedulerEnv,
 	owner username.SQLUsername,
+	ownerID oid.Oid,
 	label string,
 	recurrence *schedulebase.ScheduleRecurrence,
 	details jobspb.ScheduleDetails,
@@ -367,6 +369,7 @@ func makeChangefeedSchedule(
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
 	sj.SetOwner(owner)
+	sj.SetOwnerID(ownerID)
 
 	if err := sj.SetSchedule(recurrence.Cron); err != nil {
 		return nil, err
@@ -612,7 +615,15 @@ func doCreateChangefeedSchedule(
 		Select:  spec.Select,
 	}
 
-	es, err := makeChangefeedSchedule(env, p.User(), scheduleLabel, recurrence, details, createChangefeedNode)
+	var ownerID oid.Oid
+	if p.IsActive(ctx, clusterversion.V23_1ScheduledJobsTableHasOwnerIDColumn) {
+		var err error
+		ownerID, err = p.UserID(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	es, err := makeChangefeedSchedule(env, p.User(), ownerID, scheduleLabel, recurrence, details, createChangefeedNode)
 	if err != nil {
 		return err
 	}
