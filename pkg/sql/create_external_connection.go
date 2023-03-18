@@ -136,24 +136,22 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
-	row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`SELECT user_id FROM system.users WHERE username = $1`,
-		p.User(),
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to get owner ID for External Connection")
+	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
+		row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT user_id FROM system.users WHERE username = $1`,
+			p.User(),
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to get owner ID for External Connection")
+		}
+		ownerID := tree.MustBeDOid(row[0]).Oid
+		ex.SetOwnerID(ownerID)
 	}
-	ownerID := tree.MustBeDOid(row[0]).Oid
-	ex.SetOwnerID(ownerID)
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.
-	excludedCols := make(map[string]bool)
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
-		excludedCols["owner_id"] = true
-	}
-	if err := ex.Create(params.ctx, txn, excludedCols); err != nil {
+	if err := ex.Create(params.ctx, txn); err != nil {
 		return errors.Wrap(err, "failed to create external connection")
 	}
 
