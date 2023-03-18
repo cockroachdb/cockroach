@@ -79,18 +79,9 @@ func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testin
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
-		// The restore queries are run with `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
-		// option to ensure the restore is successful on development branches. This
-		// is because, while the backups were generated on release branches and have
-		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
-		restoreQuery := `RESTORE test.* FROM LATEST IN $1 WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
+		restoreQuery := `RESTORE test.* FROM LATEST IN $1`
 		if isSchemaOnly {
-			restoreQuery = restoreQuery + ", schema_only"
+			restoreQuery = restoreQuery + " with schema_only"
 		}
 		sqlDB.QueryRow(t, restoreQuery, localFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused,

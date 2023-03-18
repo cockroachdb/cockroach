@@ -126,25 +126,24 @@ func (node Backup) Coverage() DescriptorCoverage {
 
 // RestoreOptions describes options for the RESTORE execution.
 type RestoreOptions struct {
-	EncryptionPassphrase             Expr
-	DecryptionKMSURI                 StringOrPlaceholderOptList
-	IntoDB                           Expr
-	SkipMissingFKs                   bool
-	SkipMissingSequences             bool
-	SkipMissingSequenceOwners        bool
-	SkipMissingViews                 bool
-	SkipMissingUDFs                  bool
-	Detached                         bool
-	SkipLocalitiesCheck              bool
-	DebugPauseOn                     Expr
-	NewDBName                        Expr
-	IncludeAllSecondaryTenants       Expr
-	IncrementalStorage               StringOrPlaceholderOptList
-	AsTenant                         Expr
-	ForceTenantID                    Expr
-	SchemaOnly                       bool
-	VerifyData                       bool
-	UnsafeRestoreIncompatibleVersion bool
+	EncryptionPassphrase       Expr
+	DecryptionKMSURI           StringOrPlaceholderOptList
+	IntoDB                     Expr
+	SkipMissingFKs             bool
+	SkipMissingSequences       bool
+	SkipMissingSequenceOwners  bool
+	SkipMissingViews           bool
+	SkipMissingUDFs            bool
+	Detached                   bool
+	SkipLocalitiesCheck        bool
+	DebugPauseOn               Expr
+	NewDBName                  Expr
+	IncludeAllSecondaryTenants Expr
+	IncrementalStorage         StringOrPlaceholderOptList
+	AsTenant                   Expr
+	ForceTenantID              Expr
+	SchemaOnly                 bool
+	VerifyData                 bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -487,11 +486,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("verify_backup_table_data")
 	}
-
-	if o.UnsafeRestoreIncompatibleVersion {
-		maybeAddSep()
-		ctx.WriteString("unsafe_restore_incompatible_version")
-	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -624,14 +618,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
 	}
 
-	if o.UnsafeRestoreIncompatibleVersion {
-		if other.UnsafeRestoreIncompatibleVersion {
-			return errors.New("unsafe_restore_incompatible_version specified multiple times")
-		}
-	} else {
-		o.UnsafeRestoreIncompatibleVersion = other.UnsafeRestoreIncompatibleVersion
-	}
-
 	return nil
 }
 
@@ -655,8 +641,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.ForceTenantID == options.ForceTenantID &&
 		o.SchemaOnly == options.SchemaOnly &&
 		o.VerifyData == options.VerifyData &&
-		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion
+		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants
 }
 
 // BackupTargetList represents a list of targets.
