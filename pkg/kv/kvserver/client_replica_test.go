@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -2700,9 +2701,6 @@ func TestSystemZoneConfigs(t *testing.T) {
 					DisableLoadBasedSplitting: true,
 				},
 			},
-			// This test was written for the gossip-backed SystemConfigSpan
-			// infrastructure.
-			DisableSpanConfigs: true,
 			// Scan like a bat out of hell to ensure replication and replica GC
 			// happen in a timely manner.
 			ScanInterval: 50 * time.Millisecond,
@@ -2711,10 +2709,22 @@ func TestSystemZoneConfigs(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
 
-	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	initialRangeCount, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// The initial splits we have when bootstrapping CRDB, look roughly like so:
+	//   r6:/Table/{0-3} [(n1,s1):1, (n4,s4):2, (n7,s7):3, (n3,s3):4, (n6,s6):5, next=6, gen=8]
+	//   r7:/Table/{3-4} [(n1,s1):1, (n6,s6):2, (n7,s7):3, (n4,s4):4, (n5,s5):5, next=6, gen=8]
+	//
+	// Span configs however collapse the known-empty /Table/{0-3} keyspace into
+	// the adjacent range, so we have:
+	//
+	//   r6:/Table/{0-4} [(n1,s1):1, (n4,s4):2, (n3,s3):3, (n2,s2):4, (n5,s5):5, next=6, gen=17]
+	//
+	// Which is why we have this -1 term below.
+	expectedSystemRanges := initialRangeCount - 1
 	expectedUserRanges := 1
 	expectedSystemRanges -= expectedUserRanges
 	systemNumReplicas := int(*zonepb.DefaultSystemZoneConfig().NumReplicas)
@@ -2745,8 +2755,19 @@ func TestSystemZoneConfigs(t *testing.T) {
 		for _, desc := range replicas {
 			totalReplicas += len(desc.Replicas().VoterDescriptors())
 		}
+		sortedDesc := make([]roachpb.RangeDescriptor, 0, 0)
+		for _, desc := range replicas {
+			sortedDesc = append(sortedDesc, desc)
+		}
+		sort.Slice(sortedDesc, func(i, j int) bool {
+			return sortedDesc[i].RangeID < sortedDesc[j].RangeID
+		})
+		var buf strings.Builder
+		for _, desc := range sortedDesc {
+			buf.WriteString(fmt.Sprintf("%s\n", desc))
+		}
 		if totalReplicas != expectedReplicas {
-			return fmt.Errorf("got %d voters, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
+			return fmt.Errorf("got %d voters, want %d; details: %+v", totalReplicas, expectedReplicas, buf.String())
 		}
 		return nil
 	}
