@@ -2854,6 +2854,48 @@ func TestChangefeedJobControl(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedCustomKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH key_column='b', unordered`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: ["dog"]->{"after": {"a": 0, "b": "dog", "c": "cat"}}`,
+		})
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'dog', 'zebra')`)
+		assertPayloads(t, foo, []string{
+			`foo: ["dog"]->{"after": {"a": 1, "b": "dog", "c": "zebra"}}`,
+		})
+		sqlDB.Exec(t, `ALTER TABLE foo RENAME COLUMN b to b2`)
+		requireErrorSoon(context.Background(), t, foo, regexp.MustCompile(`required column b not present`))
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestChangefeedCustomKeyAvro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='avro', key_column='b', unordered`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: {"b":{"string":"dog"}}->{"after":{"foo":{"a":{"long":0},"b":{"string":"dog"},"c":{"string":"cat"}}}}`,
+		})
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedColumnFamilyAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4630,6 +4672,7 @@ func TestChangefeedErrors(t *testing.T) {
 	// Unordered flag required for some options, disallowed for others.
 	sqlDB.ExpectErr(t, `resolved timestamps cannot be guaranteed to be correct in unordered mode`, `CREATE CHANGEFEED FOR foo WITH resolved, unordered`)
 	sqlDB.ExpectErr(t, `Use of gcpubsub without specifying a region requires the WITH unordered option.`, `CREATE CHANGEFEED FOR foo INTO "gcpubsub://foo"`)
+	sqlDB.ExpectErr(t, `key_column requires the unordered option`, `CREATE CHANGEFEED FOR foo WITH key_column='b'`)
 
 	// The topics option should not be exposed to users since it is used
 	// internally to display topics in the show changefeed jobs query

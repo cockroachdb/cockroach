@@ -21,7 +21,7 @@ import (
 func (d *delegator) delegateShowTypes() (tree.Statement, error) {
 	// TODO (SQL Features, SQL Exec): Once more user defined types are added
 	//  they should be added here.
-	return parse(`
+	return d.parse(`
 SELECT
   schema, name, owner
 FROM
@@ -42,5 +42,5 @@ func (d *delegator) delegateShowCreateAllTypes() (tree.Statement, error) {
 		lexbase.EscapeSQLString(databaseLiteral),
 	)
 
-	return parse(query)
+	return d.parse(query)
 }

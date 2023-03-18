@@ -72,5 +72,5 @@ SELECT role AS role_name,
 
 	}
 
-	return parse(query.String())
+	return d.parse(query.String())
 }

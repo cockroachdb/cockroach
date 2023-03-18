@@ -149,6 +149,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoSchemaTelemetry,
 	TypePollJobsStats,
 	TypeAutoConfigRunner,
+	TypeKeyVisualizer,
 }
 
 // DetailsType returns the type for a payload detail.

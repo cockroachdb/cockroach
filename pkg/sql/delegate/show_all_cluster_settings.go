@@ -76,12 +76,12 @@ func (d *delegator) delegateShowClusterSettingList(
 	}
 
 	if stmt.All {
-		return parse(
+		return d.parse(
 			`SELECT variable, value, type AS setting_type, public, description
        FROM   crdb_internal.cluster_settings`,
 		)
 	}
-	return parse(
+	return d.parse(
 		`SELECT variable, value, type AS setting_type, description
      FROM   crdb_internal.cluster_settings
      WHERE  public IS TRUE`,
@@ -117,7 +117,7 @@ func (d *delegator) delegateShowTenantClusterSettingList(
 	// Note: we do the validation in SQL (via CASE...END) because the
 	// TenantID expression may be complex (incl subqueries, etc) and we
 	// cannot evaluate it in the go code.
-	return parse(`
+	return d.parse(`
 WITH
   tenant_id AS (SELECT id AS tenant_id FROM [SHOW TENANT ` + stmt.TenantSpec.String() + `]),
   isvalid AS (

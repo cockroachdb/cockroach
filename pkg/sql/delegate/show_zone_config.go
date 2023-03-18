@@ -18,5 +18,5 @@ func (d *delegator) delegateShowZoneConfig(n *tree.ShowZoneConfig) (tree.Stateme
 	if n.ZoneSpecifier != (tree.ZoneSpecifier{}) {
 		return nil, nil
 	}
-	return parse(`SELECT target, raw_config_sql FROM crdb_internal.zones`)
+	return d.parse(`SELECT target, raw_config_sql FROM crdb_internal.zones`)
 }

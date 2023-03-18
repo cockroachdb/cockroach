@@ -294,3 +294,22 @@ vectorized: true
           missing stats
           table: t93370@t93370_pkey
           spans: FULL SCAN
+
+statement ok
+CREATE TABLE t97362 (i INT, j INT)
+
+statement error pq: WITH clause "alias_0" does not return any columns
+SHOW CHANGEFEED JOBS WITH alias_0 AS MATERIALIZED (CREATE TYPE "int" AS ENUM ()) SELECT * FROM alias_0
+
+statement error pq: WITH clause "alias_0" does not return any columns
+WITH alias_0 AS MATERIALIZED (DELETE FROM t97362 WHERE i=1) SELECT * FROM alias_0
+
+query I
+WITH alias_0 AS MATERIALIZED (DELETE FROM t97362 WHERE i=1 RETURNING j) SELECT * FROM alias_0
+----
+
+statement error pq: WITH clause "alias_0" does not return any columns
+WITH alias_0 AS MATERIALIZED (CREATE TABLE t97362b ("i" INT, "j" INT)) SELECT * FROM alias_0
+
+statement error pq:
+WITH alias_0 AS MATERIALIZED (CREATE OR REPLACE FUNCTION sq(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL) SELECT * FROM alias_0;

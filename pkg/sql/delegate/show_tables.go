@@ -112,5 +112,5 @@ ORDER BY schema_name, table_name
 		estimatedRowCountJoin,
 		lexbase.EscapeSQLString(string(name.CatalogName)),
 	)
-	return parse(query)
+	return d.parse(query)
 }

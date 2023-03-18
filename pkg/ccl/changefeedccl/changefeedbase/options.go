@@ -76,6 +76,7 @@ const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
 	OptConfluentSchemaRegistry  = `confluent_schema_registry`
 	OptCursor                   = `cursor`
+	OptCustomKeyColumn          = `key_column`
 	OptEndTime                  = `end_time`
 	OptEnvelope                 = `envelope`
 	OptFormat                   = `format`
@@ -309,6 +310,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptAvroSchemaPrefix:         stringOption,
 	OptConfluentSchemaRegistry:  stringOption,
 	OptCursor:                   timestampOption,
+	OptCustomKeyColumn:          stringOption,
 	OptEndTime:                  timestampOption,
 	OptEnvelope:                 enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
 	OptFormat:                   enum("json", "avro", "csv", "experimental_avro", "parquet"),
@@ -347,7 +349,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptMVCCTimestamps, OptDiff, OptSplitColumnFamilies,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
-	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered,
+	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter)
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -447,11 +449,17 @@ var AlterChangefeedTargetOptions = map[string]OptionPermittedValues{
 	OptNoInitialScan: flagOption,
 }
 
-type incompatibleOptions struct {
+type optionRelationship struct {
 	opt1   string
 	opt2   string
 	reason string
 }
+
+// opt1 and opt2 cannot both be set.
+type incompatibleOptions optionRelationship
+
+// if opt1 is set, opt2 must also be set.
+type dependentOption optionRelationship
 
 func makeInvertedIndex(pairs []incompatibleOptions) map[string][]incompatibleOptions {
 	m := make(map[string][]incompatibleOptions, len(pairs)*2)
@@ -462,8 +470,20 @@ func makeInvertedIndex(pairs []incompatibleOptions) map[string][]incompatibleOpt
 	return m
 }
 
+func makeDirectedInvertedIndex(pairs []dependentOption) map[string][]dependentOption {
+	m := make(map[string][]dependentOption, len(pairs))
+	for _, p := range pairs {
+		m[p.opt1] = append(m[p.opt1], p)
+	}
+	return m
+}
+
 var incompatibleOptionsMap = makeInvertedIndex([]incompatibleOptions{
 	{opt1: OptUnordered, opt2: OptResolvedTimestamps, reason: `resolved timestamps cannot be guaranteed to be correct in unordered mode`},
+})
+
+var dependentOptionsMap = makeDirectedInvertedIndex([]dependentOption{
+	{opt1: OptCustomKeyColumn, opt2: OptUnordered, reason: `using a value other than the primary key as the message key means end-to-end ordering cannot be preserved`},
 })
 
 // MakeStatementOptions wraps and canonicalizes the options we get
@@ -677,16 +697,21 @@ func (s StatementOptions) ShouldUseFullStatementTimeName() bool {
 type CanHandle struct {
 	MultipleColumnFamilies bool
 	VirtualColumns         bool
+	RequiredColumns        []string
 }
 
 // GetCanHandle returns a populated CanHandle.
 func (s StatementOptions) GetCanHandle() CanHandle {
 	_, families := s.m[OptSplitColumnFamilies]
 	_, virtual := s.m[OptVirtualColumns]
-	return CanHandle{
+	h := CanHandle{
 		MultipleColumnFamilies: families,
 		VirtualColumns:         virtual,
 	}
+	if s.IsSet(OptCustomKeyColumn) {
+		h.RequiredColumns = append(h.RequiredColumns, s.m[OptCustomKeyColumn])
+	}
+	return h
 }
 
 // EncodingOptions describe how events are encoded when
@@ -703,6 +728,7 @@ type EncodingOptions struct {
 	AvroSchemaPrefix  string
 	SchemaRegistryURI string
 	Compression       string
+	CustomKeyColumn   string
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -748,6 +774,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o.SchemaRegistryURI = s.m[OptConfluentSchemaRegistry]
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
 	o.Compression = s.m[OptCompression]
+	o.CustomKeyColumn = s.m[OptCustomKeyColumn]
 
 	s.cache.EncodingOptions = o
 	return o, o.Validate()
@@ -1036,6 +1063,13 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 		for _, pair := range incompatibleOptionsMap[o] {
 			if s.IsSet(pair.opt1) && s.IsSet(pair.opt2) {
 				return errors.Newf(`%s is not usable with %s because %s`, pair.opt1, pair.opt2, pair.reason)
+			}
+		}
+	}
+	for o := range s.m {
+		for _, pair := range dependentOptionsMap[o] {
+			if s.IsSet(pair.opt1) && !s.IsSet(pair.opt2) {
+				return errors.Newf(`%s requires the %s option because %s`, pair.opt1, pair.opt2, pair.reason)
 			}
 		}
 	}

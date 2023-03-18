@@ -36,6 +36,29 @@ const (
 	Zfs fileSystemType = 1
 )
 
+type MemPerCPU int
+
+const (
+	Auto MemPerCPU = iota
+	Standard
+	High
+	Low
+)
+
+func (m MemPerCPU) String() string {
+	switch m {
+	case Auto:
+		return "auto"
+	case Standard:
+		return "standard"
+	case High:
+		return "high"
+	case Low:
+		return "low"
+	}
+	return "unknown"
+}
+
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
@@ -44,7 +67,7 @@ type ClusterSpec struct {
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
-	HighMem              bool
+	Mem                  MemPerCPU
 	SSDs                 int
 	RAID0                bool
 	VolumeSize           int
@@ -85,8 +108,13 @@ func ClustersCompatible(s1, s2 ClusterSpec) bool {
 // String implements fmt.Stringer.
 func (s ClusterSpec) String() string {
 	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
-	if s.HighMem {
-		str += "m"
+	switch s.Mem {
+	case Standard:
+		str += "sm"
+	case High:
+		str += "hm"
+	case Low:
+		str += "lm"
 	}
 	if s.Geo {
 		str += "-Geo"
@@ -202,11 +230,11 @@ func (s *ClusterSpec) RoachprodOpts(
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType = AWSMachineType(s.CPUs, s.HighMem)
+				machineType = AWSMachineType(s.CPUs, s.Mem)
 			case GCE:
-				machineType = GCEMachineType(s.CPUs, s.HighMem)
+				machineType = GCEMachineType(s.CPUs, s.Mem)
 			case Azure:
-				machineType = AzureMachineType(s.CPUs, s.HighMem)
+				machineType = AzureMachineType(s.CPUs, s.Mem)
 			}
 		}
 
