@@ -293,10 +293,8 @@ func generatePlaceholders(n int) string {
 // Only the values initialized in the receiver are persisted in the system
 // table. If an error is returned, it is callers responsibility to handle it
 // (e.g. rollback transaction).
-func (e *MutableExternalConnection) Create(
-	ctx context.Context, txn isql.Txn, excludedCols map[string]bool,
-) error {
-	cols, qargs, err := e.marshalChanges(excludedCols)
+func (e *MutableExternalConnection) Create(ctx context.Context, txn isql.Txn) error {
+	cols, qargs, err := e.marshalChanges()
 	if err != nil {
 		return err
 	}
@@ -335,17 +333,11 @@ func (e *MutableExternalConnection) Create(
 
 // marshalChanges marshals all changes in the in-memory representation and returns
 // the names of the columns and marshaled values.
-func (e *MutableExternalConnection) marshalChanges(
-	excludedCols map[string]bool,
-) ([]string, []interface{}, error) {
+func (e *MutableExternalConnection) marshalChanges() ([]string, []interface{}, error) {
 	var cols []string
 	var qargs []interface{}
 
 	for col := range e.dirty {
-		if excludedCols[col] {
-			continue
-		}
-
 		var arg tree.Datum
 		var err error
 
@@ -359,6 +351,9 @@ func (e *MutableExternalConnection) marshalChanges(
 		case `owner`:
 			arg = tree.NewDString(e.rec.Owner.Normalized())
 		case `owner_id`:
+			if e.rec.OwnerID == 0 {
+				continue
+			}
 			arg = tree.NewDOid(e.rec.OwnerID)
 		default:
 			return nil, nil, errors.Newf("cannot marshal column %q", col)

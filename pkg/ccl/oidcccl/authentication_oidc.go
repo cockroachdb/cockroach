@@ -199,7 +199,10 @@ func reloadConfigLocked(
 
 	provider, err := oidc.NewProvider(ctx, server.conf.providerURL)
 	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC provider, disabling OIDC: %v", err)
+		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		if log.V(1) {
+			log.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
+		}
 		return
 	}
 
@@ -208,7 +211,10 @@ func reloadConfigLocked(
 
 	redirectURL, err := getRegionSpecificRedirectURL(locality, server.conf.redirectURLConf)
 	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC provider, disabling OIDC: %v", err)
+		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		if log.V(1) {
+			log.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
+		}
 		return
 	}
 
@@ -312,16 +318,16 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		oauth2Token, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
+		credentials, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
-		rawIDToken, ok := oauth2Token.Extra(idTokenKey).(string)
+		rawIDToken, ok := credentials.Extra(idTokenKey).(string)
 		if !ok {
-			log.Error(ctx, "OIDC: failed to extract ID token from OAuth2 token")
+			log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -340,23 +346,23 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		var principal string
-		claim := claims[oidcAuthentication.conf.claimJSONKey]
-		if err := json.Unmarshal(claim, &principal); err != nil {
-			log.Errorf(ctx, "OIDC: failed to complete authentication: failed to extract claim key %s: %v", oidcAuthentication.conf.claimJSONKey, err)
+		if log.V(1) {
+			log.Infof(
+				ctx,
+				"attempting to extract SQL username from the payload using the claim key %s and regex %s",
+				oidcAuthentication.conf.claimJSONKey,
+				oidcAuthentication.conf.principalRegex,
+			)
+		}
+
+		username, err := extractUsernameFromClaims(
+			ctx, claims, oidcAuthentication.conf.claimJSONKey, oidcAuthentication.conf.principalRegex,
+		)
+		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
-		match := oidcAuthentication.conf.principalRegex.FindStringSubmatch(principal)
-		numGroups := len(match)
-		if numGroups != 2 {
-			log.Errorf(ctx, "OIDC: failed to complete authentication: expected one group in regexp, got %d", numGroups)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-			return
-		}
-
-		username := match[1]
 		cookie, err := userLoginFromSSO(ctx, username)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
