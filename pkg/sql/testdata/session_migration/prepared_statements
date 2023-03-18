@@ -113,3 +113,69 @@ exec
 SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
 ----
 ERROR: crdb_internal.deserialize_session(): prepared statement "s2" already exists (SQLSTATE 42P05)
+
+# Test if the LRU list of prepared statements is preserved during migration.
+
+exec
+DEALLOCATE ALL
+----
+
+exec
+SET prepared_statements_cache_size = '32 KiB'
+----
+
+wire_prepare pscs1
+SELECT 101
+----
+
+wire_prepare pscs2
+SELECT 102
+----
+
+wire_prepare pscs3
+SELECT 103
+----
+
+wire_prepare pscs4
+SELECT 104
+----
+
+wire_exec pscs2
+----
+
+query
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs2
+pscs3
+pscs4
+
+let $z
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+exec
+DEALLOCATE ALL
+----
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$z', 'hex') )
+----
+
+query
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs2
+pscs3
+pscs4
+
+wire_prepare pscs5
+SELECT 105
+----
+
+query
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs2
+pscs4
+pscs5

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -127,6 +128,29 @@ func (ex *connExecutor) addPreparedStmt(
 		return nil, err
 	}
 	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
+	ex.extraTxnState.prepStmtsNamespace.addLRUEntry(name)
+
+	// Check if we're over prepared_statements_cache_size.
+	cacheSize := ex.sessionData().PreparedStatementsCacheSize
+	if cacheSize != 0 {
+		alloc := ex.sessionPreparedMon.AllocBytes()
+		lru := ex.extraTxnState.prepStmtsNamespace.prepStmtsLRU
+		// While we're over the cache size, deallocate the LRU prepared statement.
+		for tail := lru[prepStmtsLRUTail]; tail.prev != prepStmtsLRUHead && tail.prev != name; tail = lru[prepStmtsLRUTail] {
+			if alloc <= cacheSize {
+				break
+			}
+			log.VEventf(
+				ctx, 1,
+				"prepared statements are using more than prepared_statements_cache_size (%s), "+
+					"automatically deallocating %s", string(humanizeutil.IBytes(cacheSize)), tail.prev,
+			)
+			// If the prepared statement is referenced from multiple namespaces,
+			// deleting it won't immediately free memory, so we subtract the memory
+			// estimate instead of checking ex.sessionPreparedMon.AllocBytes() again.
+			alloc -= ex.deletePreparedStmt(ctx, tail.prev)
+		}
+	}
 
 	// Remember the inferred placeholder types so they can be reported on
 	// Describe. First, try to preserve the hints sent by the client.
@@ -313,6 +337,7 @@ func (ex *connExecutor) execBind(
 			pgcode.InvalidSQLStatementName,
 			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
+	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
 	// Otherwise, for user-defined types we won't take the correct leases and
@@ -522,13 +547,19 @@ func (ex *connExecutor) exhaustPortal(portalName string) {
 	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 }
 
-func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
+// deletePreparedStmt removes the named prepared statement from the
+// connExecutor's prepared statement namespace, and returns the amount of memory
+// that will be released (once the prepared statement's refcount goes to zero).
+func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) int64 {
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if !ok {
-		return
+		return 0
 	}
+	alloc := ps.memAcc.Allocated()
 	ps.decRef(ctx)
 	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
+	ex.extraTxnState.prepStmtsNamespace.delLRUEntry(name)
+	return alloc
 }
 
 func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
@@ -583,6 +614,8 @@ func (ex *connExecutor) execDescribe(
 				pgcode.InvalidSQLStatementName,
 				"unknown prepared statement %q", descCmd.Name))
 		}
+		// Not currently counting this as an LRU touch on prepStmtsLRU for
+		// prepared_statements_cache_size (but maybe we should?).
 
 		ast := ps.AST
 		if execute, ok := ast.(*tree.Execute); ok {
