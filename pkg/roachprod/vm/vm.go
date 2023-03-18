@@ -92,6 +92,10 @@ type VM struct {
 
 	// NonBootAttachedVolumes are the non-bootable volumes attached to the VM.
 	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
+
+	// CostPerHour is the estimated cost per hour of this VM, in US dollars. 0 if
+	//there is no estimate available.
+	CostPerHour float64
 }
 
 // Name generates the name for the i'th node in a cluster.

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
+	cloudbilling "google.golang.org/api/cloudbilling/v1beta"
 )
 
 const (
@@ -1004,7 +1005,92 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		}
 	}
 
+	if err := populateCostPerHour(vms); err != nil {
+		return nil, err
+	}
+
 	return vms, nil
+}
+
+func populateCostPerHour(vms vm.List) error {
+	// Construct cost estimation service
+	ctx := context.Background()
+	service, err := cloudbilling.NewService(ctx)
+	if err != nil {
+		return err
+	}
+	beta := cloudbilling.NewV1betaService(service)
+	scenario := cloudbilling.EstimateCostScenarioWithListPriceRequest{
+		CostScenario: &cloudbilling.CostScenario{
+			ScenarioConfig: &cloudbilling.ScenarioConfig{
+				EstimateDuration: "3600s",
+			},
+			Workloads: []*cloudbilling.Workload{},
+		},
+	}
+	// Workload estimation service can handle 100 workloads at a time, so page
+	// 100 VMs at a time.
+	for len(vms) > 0 {
+		scenario.CostScenario.Workloads = scenario.CostScenario.Workloads[:0]
+		var page vm.List
+		if len(vms) <= 100 {
+			page, vms = vms, nil
+		} else {
+			page, vms = vms[:100], vms[100:]
+		}
+		for _, vm := range page {
+			machineType := vm.MachineType
+			workload := cloudbilling.Workload{
+				Name: vm.Name,
+				ComputeVmWorkload: &cloudbilling.ComputeVmWorkload{
+					InstancesRunning: &cloudbilling.Usage{
+						UsageRateTimeline: &cloudbilling.UsageRateTimeline{
+							UsageRateTimelineEntries: []*cloudbilling.UsageRateTimelineEntry{
+								{
+									// We're estimating the cost of 1 vm at a time.
+									UsageRate: 1,
+								},
+							},
+						},
+					},
+					MachineType: &cloudbilling.MachineType{
+						PredefinedMachineType: &cloudbilling.PredefinedMachineType{
+							MachineType: machineType,
+						},
+					},
+					PersistentDisks: []*cloudbilling.PersistentDisk{},
+					Region:          "us-east1",
+				},
+			}
+			for _, v := range vm.NonBootAttachedVolumes {
+				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
+					DiskSize: &cloudbilling.Usage{
+						UsageRateTimeline: &cloudbilling.UsageRateTimeline{
+							Unit: "GiBy",
+							UsageRateTimelineEntries: []*cloudbilling.UsageRateTimelineEntry{
+								{
+									UsageRate: float64(v.Size),
+								},
+							},
+						},
+					},
+					DiskType: "pd-ssd",
+				})
+			}
+			scenario.CostScenario.Workloads = append(scenario.CostScenario.Workloads, &workload)
+		}
+		estimate, err := beta.EstimateCostScenario(&scenario).Do()
+		if err != nil {
+			fmt.Println("Error estimating VM costs (will continue without):", err.Error())
+			continue
+		}
+		workloadEstimates := estimate.CostEstimationResult.SegmentCostEstimates[0].WorkloadCostEstimates
+		for i := range workloadEstimates {
+			workloadEstimate := workloadEstimates[i].WorkloadTotalCostEstimate.NetCostEstimate
+			page[i].CostPerHour = float64(workloadEstimate.Units) + float64(workloadEstimate.Nanos)/1e9
+		}
+	}
+	return nil
 }
 
 func serializeLabel(s string) string {
