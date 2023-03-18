@@ -6663,7 +6663,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	// TODO(ssd): Tenant testing disabled because of use of DB()
 	for _, sz := range []int64{100 << 20, 100} {
 		maxCheckpointSize = sz
-		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestForceSink("webhook"), feedTestNoForcedSyntheticTimestamps)
+		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestNoForcedSyntheticTimestamps)
 	}
 }
 
@@ -6795,6 +6795,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 			[]int{http.StatusOK, http.StatusOK, http.StatusOK}...))
 		defer closeFeed(t, foo)
 
+		fmt.Printf("\n\x1b[32m ABOUT TO INSERT VALUE \x1b[0m\n\n")
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'b')`)
 		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)

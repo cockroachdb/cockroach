@@ -102,6 +102,7 @@ type batchingSink struct {
 
 	wg      ctxgroup.Group
 	eventCh chan interface{}
+	termCh  chan struct{}
 	doneCh  chan struct{}
 }
 
@@ -150,11 +151,13 @@ func (bs *batchingSink) Flush(ctx context.Context) error {
 		return ctx.Err()
 	case <-bs.doneCh:
 		return nil
+	case <-bs.termCh:
+		return bs.mu.termErr
 	case <-bs.flushCh:
 		bs.mu.Lock()
 		defer bs.mu.Unlock()
 		bs.mu.shouldNotify = false
-		return bs.mu.termErr
+		return nil
 	}
 }
 
@@ -168,7 +171,7 @@ func (bs *batchingSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	fmt.Printf("\x1b[31mbatchingSink EmitRow\x1b[0m\n")
+	fmt.Printf("\x1b[31mbatchingSink EmitRow %s\x1b[0m\n", string(key))
 
 	var topicName string
 	var err error
@@ -197,6 +200,10 @@ func (bs *batchingSink) EmitRow(
 		return ctx.Err()
 	case bs.eventCh <- payload:
 		fmt.Printf("\x1b[31mbatchingSink sent to eventCh<-\x1b[0m\n")
+	case <-bs.doneCh:
+		return nil
+	case <-bs.termCh:
+		return nil
 	}
 
 	return nil
@@ -327,6 +334,7 @@ func (bs *batchingSink) handleError(err error) {
 	defer bs.mu.Unlock()
 	if bs.mu.termErr == nil {
 		bs.mu.termErr = err
+		close(bs.termCh)
 	}
 }
 
@@ -345,28 +353,8 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	)
 	defer ioEmitter.Close()
 
-	tryFlushBatch := func() {
-		fmt.Printf("\x1b[31mbatchingSink flushBatch\x1b[0m\n")
-		if pendingBatch.isEmpty() {
-			return
-		}
-		payload, err := pendingBatch.writer.Close()
-		if err != nil {
-			bs.handleError(err)
-			return
-		}
-		pendingBatch.payload = payload
-		select {
-		case <-ctx.Done():
-		case ioEmitter.requestCh <- pendingBatch:
-		case <-bs.doneCh:
-		}
-		pendingBatch = &sinkBatch{
-			writer: bs.client.MakeBatchWriter(),
-		}
-	}
-
 	handleResult := func(result ioResult) {
+		fmt.Printf("\x1b[31mbatchingSink HANDLE RESULT runBatchingWorker\x1b[0m\n")
 		batch, _ := result.payload.(*sinkBatch)
 		defer bs.decInFlight(batch.numMessages)
 		defer batch.alloc.Release(ctx)
@@ -376,7 +364,39 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		}
 	}
 
-	fmt.Printf("\x1b[35mbatchingSink CREATE FLUSHTIMER runBatchingWorker\x1b[0m\n")
+	tryFlushBatch := func() {
+		if pendingBatch.isEmpty() {
+			return
+		}
+		fmt.Printf("\x1b[35mbatchingSink flushBatch\x1b[0m\n")
+		payload, err := pendingBatch.writer.Close()
+		if err != nil {
+			bs.handleError(err)
+			return
+		}
+		pendingBatch.payload = payload
+		fmt.Printf("\x1b[31mbatchingSink FLUSH WAIT runBatchingWorker\x1b[0m\n")
+	L:
+		for {
+			select {
+			case <-ctx.Done():
+				break L
+			case ioEmitter.requestCh <- pendingBatch:
+				fmt.Printf("\x1b[31mbatchingSink sent to requestCh\x1b[0m\n")
+				break L
+			case result := <-ioEmitter.resultCh:
+				handleResult(result)
+			case <-bs.doneCh:
+				break L
+			case <-bs.termCh:
+				break L
+			}
+		}
+		pendingBatch = &sinkBatch{
+			writer: bs.client.MakeBatchWriter(),
+		}
+	}
+
 	flushTimer := bs.ts.NewTimer()
 	defer flushTimer.Stop()
 
@@ -385,13 +405,13 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		fmt.Printf("\x1b[31mbatchingSink FOR WAIT runBatchingWorker\x1b[0m\n")
 		select {
 		case req := <-bs.eventCh:
-			fmt.Printf("\x1b[31mbatchingSink receive <-eventCh\x1b[0m\n")
 			if _, isFlush := req.(flushReq); isFlush {
+				fmt.Printf("\x1b[31mbatchingSink receive FlushReq <-eventCh\x1b[0m\n")
 				tryFlushBatch()
 				continue
 			} else if event, isKV := req.(*kvEvent); isKV {
+				fmt.Printf("\x1b[31mbatchingSink receive KV <-eventCh\x1b[0m\n")
 				if pendingBatch.isEmpty() && bs.frequency > 0 {
-					fmt.Printf("\x1b[35mbatchingSink RESET FLUSHTIMER runBatchingWorker\x1b[0m\n")
 					flushTimer.Reset(bs.frequency)
 				}
 				pendingBatch.Append(event)
@@ -411,6 +431,9 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 			return
 		case <-bs.doneCh:
 			fmt.Printf("\x1b[31mbatchingSink doneCh runBatchingWorker\x1b[0m\n")
+			return
+		case <-bs.termCh:
+			fmt.Printf("\x1b[31mbatchingSink termCh runBatchingWorker\x1b[0m\n")
 			return
 		}
 	}
@@ -469,8 +492,8 @@ func newParallelIO(
 func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error {
 	emitWithRetries := func(ctx context.Context, payload IORequest) error {
 		fmt.Printf("\x1b[32mparallelIO emitWithRetries\x1b[0m\n")
+		defer fmt.Printf("\x1b[34mparallelIO SENT\x1b[0m\n")
 		return retry.WithMaxAttempts(ctx, pe.retryOpts, pe.retryOpts.MaxRetries+1, func() error {
-			fmt.Printf("\x1b[34mparallelIO ATTEMPT emitWithRetries\x1b[0m\n")
 			return pe.ioHandler(ctx, payload)
 		})
 	}
@@ -484,19 +507,24 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	var handleResult func(ioResult)
 
 	submitPayload := func(ctx context.Context, req IORequest) {
-		select {
-		case <-ctx.Done():
+		for {
+			select {
+			case <-ctx.Done():
+				return
 
-			// In order to send on emitCh we have to also check for receive on
-			// emitResultCh to avoid all emit workers being blocked on
-			// emitResultCh<- and therefore being unable to read from emitCh
-		case emitCh <- req:
-		case res := <-emitResultCh:
-			handleResult(res)
+				// In order to send on emitCh we have to also check for receive on
+				// emitResultCh to avoid all emit workers being blocked on
+				// emitResultCh<- and therefore being unable to read from emitCh
+			case emitCh <- req:
+				return
+			case res := <-emitResultCh:
+				handleResult(res)
+			}
 		}
 	}
 
-	submitResult := func(ctx context.Context, req IORequest) {
+	emitRequest := func(ctx context.Context, req IORequest) {
+		fmt.Printf("\x1b[32mparallelIO EMIT REQUEST\x1b[0m\n")
 		select {
 		case <-ctx.Done():
 		case emitResultCh <- ioResult{
@@ -508,8 +536,10 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 
 	for i := 0; i < numEmitWorkers; i++ {
 		pe.wg.GoCtx(func(ctx context.Context) error {
+			fmt.Printf("\x1b[32mparallelIO WORKER WAIT\x1b[0m\n")
 			for req := range emitCh {
-				submitResult(ctx, req)
+				emitRequest(ctx, req)
+				fmt.Printf("\x1b[32mparallelIO WORKER WAIT\x1b[0m\n")
 			}
 			return nil
 		})
@@ -521,6 +551,7 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	var pending []IORequest
 
 	handleResult = func(res ioResult) {
+		fmt.Printf("\x1b[32mparallelIO HANDLE RESULT\x1b[0m\n")
 		if res.err == nil {
 			// Clear out the completed keys
 			inflight.DifferenceWith(res.payload.Keys())
@@ -584,13 +615,14 @@ func makeBatchingSink(
 		topicNamer:   topicNamer,
 		concreteType: concreteType,
 		frequency:    minFlushFrequency,
-		ioWorkers:    numWorkers,
+		ioWorkers:    1,
 		retryOpts:    retryOpts,
 		ts:           timeSource,
 		metrics:      metrics,
-		flushCh:      make(chan struct{}),
+		flushCh:      make(chan struct{}, 1),
 		wg:           ctxgroup.WithContext(ctx),
 		eventCh:      make(chan interface{}),
+		termCh:       make(chan struct{}),
 		doneCh:       make(chan struct{}),
 	}
 

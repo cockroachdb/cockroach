@@ -398,9 +398,7 @@ func (s *deprecatedWebhookSink) flushWorkers(done chan struct{}) error {
 // per-worker batches to be sent separately
 func (s *deprecatedWebhookSink) batchWorker() {
 	var batchTracker batch
-	fmt.Printf("\x1b[35mdeprecated CREATE FLUSHTIMER\x1b[0m\n")
 	batchTimer := s.ts.NewTimer()
-	fmt.Printf("\x1b[35mTimers (%+v)\x1b[0m\n", s.ts.(*timeutil.ManualTime).Timers())
 	defer batchTimer.Stop()
 
 	for {
