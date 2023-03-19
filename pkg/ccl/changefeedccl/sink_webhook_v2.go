@@ -256,8 +256,8 @@ type webhookCSVWriter struct {
 	sc           *webhookSinkClient
 }
 
-func (cw *webhookCSVWriter) AppendKV(payload messagePayload) {
-	cw.bytes = append(cw.bytes, payload.val...)
+func (cw *webhookCSVWriter) AppendKV(key []byte, value []byte, topic string) {
+	cw.bytes = append(cw.bytes, value...)
 	cw.messageCount += 1
 }
 
@@ -275,9 +275,9 @@ type webhookJSONWriter struct {
 	sc         *webhookSinkClient
 }
 
-func (jw *webhookJSONWriter) AppendKV(payload messagePayload) {
-	jw.payload = append(jw.payload, payload.val)
-	jw.bytesCount += len(payload.val)
+func (jw *webhookJSONWriter) AppendKV(key []byte, value []byte, topic string) {
+	jw.payload = append(jw.payload, value)
+	jw.bytesCount += len(value)
 }
 
 func (jw *webhookJSONWriter) ShouldFlush() bool {

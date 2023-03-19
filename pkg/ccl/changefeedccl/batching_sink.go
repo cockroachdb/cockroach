@@ -30,7 +30,7 @@ import (
 // these payloads can be emitted.  Emitting is a separate step to Encoding to
 // allow for the same encoded payload to retry the Emitting.
 type SinkClient interface {
-	EncodeResolvedMessage(resolvedMessagePayload) (SinkPayload, error)
+	MakeResolvedPayload(body []byte, topic string) (SinkPayload, error)
 	MakeBatchWriter() BatchWriter
 	Flush(context.Context, SinkPayload) error
 
@@ -38,7 +38,7 @@ type SinkClient interface {
 }
 
 type BatchWriter interface {
-	AppendKV(messagePayload)
+	AppendKV(key []byte, value []byte, topic string)
 	ShouldFlush() bool
 	Close() (SinkPayload, error)
 }
@@ -47,23 +47,13 @@ type BatchWriter interface {
 // batch of messages that is ready to be emitted by its EmitRow method.
 type SinkPayload interface{}
 
-// messagePayload represents a KV event to be emitted.
-type messagePayload struct {
-	key   []byte
-	val   []byte
-	topic string
-}
-
-// resolvedMessagePayload represents a Resolved event to be emitted.
-type resolvedMessagePayload struct {
-	body  []byte
-	topic string
-}
-
 type flushReq struct{}
 
 type kvEvent struct {
-	msg   messagePayload
+	key   []byte
+	val   []byte
+	topic string
+
 	alloc kvevent.Alloc
 	mvcc  hlc.Timestamp
 }
@@ -233,11 +223,7 @@ func (bs *batchingSink) EmitResolvedTimestamp(
 	// TODO Do this in parallel by sending it through same pipeline with the
 	// workers and then flush
 	for _, topic := range topics {
-		resolvedMessage := resolvedMessagePayload{
-			body:  data,
-			topic: topic,
-		}
-		payload, err := bs.client.EncodeResolvedMessage(resolvedMessage)
+		payload, err := bs.client.MakeResolvedPayload(data, topic)
 		if err != nil {
 			return err
 		}
@@ -314,12 +300,12 @@ func (mb *sinkBatch) Append(e *kvEvent) {
 		mb.bufferTime = timeutil.Now()
 	}
 
-	mb.keys.Add(int(hash32(hasher, e.msg.key)))
+	mb.keys.Add(int(hash32(hasher, e.key)))
 
-	mb.writer.AppendKV(e.msg)
+	mb.writer.AppendKV(e.key, e.val, e.topic)
 	mb.numMessages += 1
-	mb.numBytes += len(e.msg.val)
-	mb.numBytes += len(e.msg.key)
+	mb.numBytes += len(e.val)
+	mb.numBytes += len(e.key)
 
 	if mb.mvcc.IsEmpty() || e.mvcc.Less(mb.mvcc) {
 		mb.mvcc = e.mvcc
@@ -462,6 +448,7 @@ func (pe *parallelIO) Close() {
 	// 	return err
 	// }
 	fmt.Printf("\x1b[32mparallelIO wg wait\x1b[0m\n")
+	close(pe.doneCh)
 	_ = pe.wg.Wait()
 	fmt.Printf("\x1b[32mparallelIO wg wait done\x1b[0m\n")
 	close(pe.resultCh)
