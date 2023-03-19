@@ -201,9 +201,21 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			http.SetCookie(w, &cookie)
 			// The tenant cookie needs to be set at some point in order for
 			// the dropdown to have a current selection on first load.
+
+			// We only set the default selection from the cluster setting
+			// if it's one of the valid logins. Otherwise, we just use the
+			// first one in the list.
+			tenantSelection := tenantNameToSetCookieSlice[0].name
+			defaultName := defaultTenantSelect.Get(&c.st.SV)
+			for _, t := range tenantNameToSetCookieSlice {
+				if t.name == defaultName {
+					tenantSelection = t.name
+					break
+				}
+			}
 			cookie = http.Cookie{
 				Name:     TenantSelectCookieName,
-				Value:    defaultTenantSelect.Get(&c.st.SV),
+				Value:    tenantSelection,
 				Path:     "/",
 				HttpOnly: false,
 			}
