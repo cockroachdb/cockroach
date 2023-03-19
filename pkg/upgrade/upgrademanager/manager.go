@@ -15,6 +15,7 @@ package upgrademanager
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/migrationstable"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,7 +125,7 @@ func safeToUpgradeTenant(
 	if overrides == nil {
 		return false, errors.AssertionFailedf("overrides informer is nil in secondary tenant")
 	}
-	storageClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
+	storageClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterActiveVersion()
 	if storageClusterVersion.Less(tenantClusterVersion.Version) {
 		// We assert here if we find a tenant with a higher cluster version than
 		// the storage cluster. It's dangerous to run in this mode because the
@@ -314,6 +316,28 @@ func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
 	return nil
 }
 
+func (m *Manager) postToPauseChannelAndWaitForResume(ctx context.Context) {
+	log.Infof(ctx, "pausing at pause point %d", m.knobs.InterlockPausePoint)
+	// To handle the case where the pause point is hit on every migration (which
+	// is the common case), reset the interlock pause point when woken up so
+	// that we won't sleep again.
+	m.knobs.InterlockPausePoint = upgradebase.NoPause
+
+	// Post to the pause point channel.
+	select {
+	case *m.knobs.InterlockReachedPausePointChannel <- struct{}{}:
+	case <-m.deps.Stopper.ShouldQuiesce():
+		return
+	}
+
+	// Wait on the resume channel.
+	select {
+	case <-*m.knobs.InterlockResumeChannel:
+	case <-m.deps.Stopper.ShouldQuiesce():
+		return
+	}
+}
+
 func (m *Manager) Migrate(
 	ctx context.Context,
 	user username.SQLUsername,
@@ -335,6 +359,17 @@ func (m *Manager) Migrate(
 		return nil
 	}
 
+	// Validation functions for updating the settings table. We use this in the
+	// tenant upgrade case to ensure that no new SQL servers were started
+	// mid-upgrade, with versions that are incompatible with the attempted
+	// upgrade (because their binary version is too low).
+	validate := func(ctx context.Context) error {
+		return m.deps.Cluster.ValidateAfterUpdateSystemVersion(ctx)
+	}
+	skipValidation := func(ctx context.Context) error {
+		return nil
+	}
+
 	// Determine whether it's safe to perform the upgrade for secondary tenants.
 	if safe, err := safeToUpgradeTenant(ctx, m.codec, m.settings.OverridesInformer, from); !safe {
 		return err
@@ -346,6 +381,11 @@ func (m *Manager) Migrate(
 		return nil
 	}
 
+	// We only need to persist the first fence to the settings table for
+	// secondary tenant upgrades, and even then, only for the first migration
+	// performed in the loop below.
+	mustPersistFenceVersion := !m.codec.ForSystemTenant()
+
 	// Sanity check that we'll actually be able to perform the real
 	// cluster version bump, cluster-wide, before potentially creating a job
 	// that might be doomed to fail.
@@ -354,106 +394,154 @@ func (m *Manager) Migrate(
 		if err := validateTargetClusterVersion(ctx, m.deps.Cluster, clusterversion.ClusterVersion{Version: finalVersion}); err != nil {
 			return err
 		}
+		if m.knobs.InterlockPausePoint == upgradebase.AfterFirstCheckForInstances {
+			m.postToPauseChannelAndWaitForResume(ctx)
+		}
 	}
 
 	if err := m.checkPreconditions(ctx, clusterVersions); err != nil {
 		return err
 	}
 
+	// The loop below runs the actual migrations and pushes out the version gate
+	// to every server (SQL server in the case of secondary tenants, or
+	// combined KV/Storage server in the case of the storage layer) in the
+	// cluster. Each server will persist the version, bump the local
+	// version gates, and then return. The upgrade associated with the specific
+	// version is executed before any server in the cluster has the
+	// corresponding version activated. Migrations that depend on a certain
+	// version already being activated will need to register using a cluster
+	// version greater than it.
+	//
+	// For each intermediate version, we'll need to first bump the fence
+	// version before bumping the "real" one. Doing so allows us to provide
+	// the invariant that whenever a cluster version is active, all servers
+	// in the cluster (including ones added concurrently during version
+	// upgrades) are running binaries that know about the version. This is
+	// discussed in greater detail below in the [Fence versions] section.
+	//
+	// Note: tenants don't persist their version information anywhere aside from
+	// in the settings table. Nodes however, persist the version information in
+	// each store. As a result, the section below (up to "Fence versions")
+	// applies to storage cluster upgrades only.
+	//
+	// # Storage cluster upgrades
+	//
+	// Below-raft upgrades mutate replica state, making use of the
+	// Migrate(version=V) primitive which they issue against the entire
+	// keyspace. These upgrades typically want to rely on the invariant
+	// that there are no extant replicas in the system that haven't seen the
+	// specific Migrate command.
+	//
+	// This is partly achieved through the implementation of the Migrate
+	// command itself, which waits until it's applied on all followers[2]
+	// before returning. This also addresses the concern of extant snapshots
+	// with pre-migrated state possibly instantiating older version
+	// replicas. The intended learner replicas are listed as part of the
+	// range descriptor, and is also waited on for during command
+	// application. As for stale snapshots, if they specify a replicaID
+	// that's no longer part of the raft group, they're discarded by the
+	// recipient. Snapshots are also discarded unless they move the LAI
+	// forward.
+	//
+	// That still leaves rooms for replicas in the replica GC queue to evade
+	// detection. To address this, below-raft upgrades typically take a
+	// two-phrase approach (the TruncatedAndRangeAppliedStateMigration being
+	// one example of this), where after having migrated the entire keyspace
+	// to version V, and after having prevented subsequent snapshots
+	// originating from replicas with versions < V, the upgrade sets out
+	// to purge outdated replicas in the system[3]. Specifically it
+	// processes all replicas in the GC queue with a version < V (which are
+	// not accessible during the application of the Migrate command).
+	//
+	// [1]: See ReplicaState.Version.
+	// [2]: See Replica.executeWriteBatch, specifically how proposals with the
+	//      Migrate request are handled downstream of raft.
+	// [3]: See PurgeOutdatedReplicas from the SystemUpgrade service.
+	//
+	// # Fence versions
+	//
+	// The upgrade infrastructure makes use of internal fence
+	// versions when stepping through consecutive versions. It's
+	// instructive to walk through how we expect a version upgrade
+	// from v21.1 to v21.2 to take place, and how we behave in the
+	// presence of new v21.1 or v21.2 servers being added to the cluster.
+	//
+	//   - All servers are running v21.1
+	//   - All servers are rolled into v21.2 binaries, but with active
+	//     cluster version still as v21.1
+	//   - The first version bump will be into v21.2-1(fence), see the
+	//     upgrade manager above for where that happens
+	//
+	// Then concurrently:
+	//
+	//   - A new server is added to the cluster, but running binary v21.1
+	//   - We try bumping the cluster gates to v21.2-1(fence)
+	//
+	// If the v21.1 server manages to sneak in before the version bump,
+	// it's fine as the version bump is a no-op one (all fence versions
+	// are). Any subsequent bumps (including the "actual" one bumping to
+	// v21.2) will fail during the validation step where we'll first
+	// check to see that all servers are running v21.2 binaries.
+	//
+	// If the v21.1 server is only added after v21.2-1(fence) is active,
+	// it won't be able to actually join the cluster (it'll be prevented
+	// by the join RPC or, in the tenant case, by the check in preStart that
+	// the binary version of the SQL server is compatible with that of the
+	// tenant active version.
+	//
+	// All of which is to say that once we've seen the servers list
+	// stabilize (as UntilClusterStable enforces), any new servers that
+	// can join the cluster will run a release that support the fence
+	// version, and by design also supports the actual version (which is
+	// the direct successor of the fence).
 	for _, clusterVersion := range clusterVersions {
 		log.Infof(ctx, "stepping through %s", clusterVersion)
+
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
-		// First, run the actual upgrade if any.
-		mig, exists := m.GetUpgrade(clusterVersion)
-		if exists {
-			if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
-				return err
-			}
+
+		fenceVersion := upgrade.FenceVersionFor(ctx, cv)
+		if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
+			return err
+		}
+		if m.knobs.InterlockPausePoint == upgradebase.AfterFenceRPC {
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
-		// Next we'll push out the version gate to every node in the cluster.
-		// Each node will persist the version, bump the local version gates, and
-		// then return. The upgrade associated with the specific version is
-		// executed before any node in the cluster has the corresponding
-		// version activated. Migrations that depend on a certain version
-		// already being activated will need to registered using a cluster
-		// version greater than it.
-		//
-		// For each intermediate version, we'll need to first bump the fence
-		// version before bumping the "real" one. Doing so allows us to provide
-		// the invariant that whenever a cluster version is active, all Nodes in
-		// the cluster (including ones added concurrently during version
-		// upgrades) are running binaries that know about the version.
-
-		// Below-raft upgrades mutate replica state, making use of the
-		// Migrate(version=V) primitive which they issue against the entire
-		// keyspace. These upgrades typically want to rely on the invariant
-		// that there are no extant replicas in the system that haven't seen the
-		// specific Migrate command.
-		//
-		// This is partly achieved through the implementation of the Migrate
-		// command itself, which waits until it's applied on all followers[2]
-		// before returning. This also addresses the concern of extant snapshots
-		// with pre-migrated state possibly instantiating older version
-		// replicas. The intended learner replicas are listed as part of the
-		// range descriptor, and is also waited on for during command
-		// application. As for stale snapshots, if they specify a replicaID
-		// that's no longer part of the raft group, they're discarded by the
-		// recipient. Snapshots are also discarded unless they move the LAI
-		// forward.
-		//
-		// That still leaves rooms for replicas in the replica GC queue to evade
-		// detection. To address this, below-raft upgrades typically take a
-		// two-phrase approach (the TruncatedAndRangeAppliedStateMigration being
-		// one example of this), where after having migrated the entire keyspace
-		// to version V, and after having prevented subsequent snapshots
-		// originating from replicas with versions < V, the upgrade sets out
-		// to purge outdated replicas in the system[3]. Specifically it
-		// processes all replicas in the GC queue with a version < V (which are
-		// not accessible during the application of the Migrate command).
-		//
-		// [1]: See ReplicaState.Version.
-		// [2]: See Replica.executeWriteBatch, specifically how proposals with the
-		//      Migrate request are handled downstream of raft.
-		// [3]: See PurgeOutdatedReplicas from the SystemUpgrade service.
-
-		{
-			// The upgrades infrastructure makes use of internal fence
-			// versions when stepping through consecutive versions. It's
-			// instructive to walk through how we expect a version upgrade
-			// from v21.1 to v21.2 to take place, and how we behave in the
-			// presence of new v21.1 or v21.2 Nodes being added to the cluster.
-			//
-			//   - All Nodes are running v21.1
-			//   - All Nodes are rolled into v21.2 binaries, but with active
-			//     cluster version still as v21.1
-			//   - The first version bump will be into v21.2-1(fence), see the
-			//     upgrade manager above for where that happens
-			//
-			// Then concurrently:
-			//
-			//   - A new node is added to the cluster, but running binary v21.1
-			//   - We try bumping the cluster gates to v21.2-1(fence)
-			//
-			// If the v21.1 Nodes manages to sneak in before the version bump,
-			// it's fine as the version bump is a no-op one (all fence versions
-			// are). Any subsequent bumps (including the "actual" one bumping to
-			// v21.2) will fail during the validation step where we'll first
-			// check to see that all Nodes are running v21.2 binaries.
-			//
-			// If the v21.1 node is only added after v21.2-1(fence) is active,
-			// it won't be able to actually join the cluster (it'll be prevented
-			// by the join RPC).
-			//
-			// All of which is to say that once we've seen the node list
-			// stabilize (as UntilClusterStable enforces), any new nodes that
-			// can join the cluster will run a release that support the fence
-			// version, and by design also supports the actual version (which is
-			// the direct successor of the fence).
-			fenceVersion := upgrade.FenceVersionFor(ctx, cv)
-			if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
-				return err
+		// In the case where we're upgrading secondary tenants there's an extra
+		// dance that must be performed. After we write the fence version to
+		// the settings table we must validate that the set of SQL servers
+		// running, matches those that were present when we performed the bump
+		// above. This is to handle the case where a SQL server with an old
+		// binary starts up in between the bump and the persistence of the fence
+		// version. In that case, the SQL server will be permitted to startup,
+		// but the upgrade can not continue. The retry logic here will detect
+		// the SQL server with the old binary, and the upgrade will fail. If
+		// instead, the newly started SQL server has a binary version which is
+		// upgrade-compatible, the retry will detect that and the upgrade will
+		// proceed. Note that we only need to do this extra dance when we write
+		// the first fence of a given upgrade process, since for subsequent
+		// fences, the too-low-binary SQL server will be prevented from starting
+		// by the check in preStart.
+		if mustPersistFenceVersion {
+			var err error
+			for {
+				err = updateSystemVersionSetting(ctx, cv, validate)
+				if errors.Is(err, upgradecluster.InconsistentSQLServersError) {
+					if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
+						return err
+					}
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				break
 			}
+			mustPersistFenceVersion = false
+		}
+		if m.knobs.InterlockPausePoint == upgradebase.AfterFenceWriteToSettingsTable {
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 
 		// Now sanity check that we'll actually be able to perform the real
@@ -461,17 +549,39 @@ func (m *Manager) Migrate(
 		if err := validateTargetClusterVersion(ctx, m.deps.Cluster, cv); err != nil {
 			return err
 		}
+		if m.knobs.InterlockPausePoint == upgradebase.AfterSecondCheckForInstances {
+			m.postToPauseChannelAndWaitForResume(ctx)
+		}
+
+		// Run the actual upgrade, if any.
+		mig, exists := m.GetUpgrade(clusterVersion)
+		if exists {
+			if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
+				return err
+			}
+		}
+
+		if m.knobs.InterlockPausePoint == upgradebase.AfterMigration {
+			m.postToPauseChannelAndWaitForResume(ctx)
+		}
 
 		// Finally, bump the real version cluster-wide.
 		err := bumpClusterVersion(ctx, m.deps.Cluster, cv)
 		if err != nil {
 			return err
 		}
-		// Bump up the cluster version for tenants, which
-		// will bump over individual version bumps.
-		err = updateSystemVersionSetting(ctx, cv)
+		if m.knobs.InterlockPausePoint == upgradebase.AfterVersionBumpRPC {
+			m.postToPauseChannelAndWaitForResume(ctx)
+		}
+
+		// Updates the version info inside the tenant or host cluster's
+		// (system tenant) settings table.
+		err = updateSystemVersionSetting(ctx, cv, skipValidation)
 		if err != nil {
 			return err
+		}
+		if m.knobs.InterlockPausePoint == upgradebase.AfterVersionWriteToSettingsTable {
+			m.postToPauseChannelAndWaitForResume(ctx)
 		}
 	}
 
@@ -504,7 +614,19 @@ func validateTargetClusterVersion(
 		tx context.Context, client serverpb.MigrationClient,
 	) error {
 		_, err := client.ValidateTargetClusterVersion(ctx, req)
-		return err
+		// The tenant upgrade interlock is new in 23.1, as a result, before
+		// 23.1 there was no Migration RPC for tenants. If we see the error that
+		// no Migration RPC has been started, we assume that the tenant pods
+		// in question are running on a version that predates 23.1, and return
+		// that friendlier error instead. This code can be removed when we no
+		// longer expect to see tenant pods running below version 23.1.
+		// TODO(ajstorm): once the multitenant-upgrade test runs cleanly, make
+		//  this error more structured.
+		if err != nil && strings.Contains(err.Error(), "unknown service cockroach.server.serverpb.Migration") {
+			err = errors.HandledWithMessage(err, "validate cluster version failed: some tenant pods running on binary less than 23.1")
+		}
+		return errors.WithHint(errors.Wrapf(err, "error validating the version of one or more SQL server instances"),
+			"check the binary versions of all running SQL server instances to ensure that they are compatible with the attempted upgrade version")
 	})
 }
 
@@ -514,8 +636,9 @@ func forEveryNodeUntilClusterStable(
 	c upgrade.Cluster,
 	f func(ctx context.Context, client serverpb.MigrationClient) error,
 ) error {
+	log.Infof(ctx, "executing operation %s", redact.Safe(op))
 	return c.UntilClusterStable(ctx, func() error {
-		return c.ForEveryNode(ctx, op, f)
+		return c.ForEveryNodeOrServer(ctx, op, f)
 	})
 }
 
