@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,6 +35,13 @@ type InfoStorage struct {
 // InfoStorage returns a new InfoStorage with the passed in job and txn.
 func (j *Job) InfoStorage(txn isql.Txn) InfoStorage {
 	return InfoStorage{j: j, txn: txn}
+}
+
+// InfoStorageForJobID returns a new InfoStorage with the passed in
+// job ID and txn. It avoids loading the job record. The resulting
+// job_info writes will not check the job session ID.
+func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
+	return InfoStorage{j: &Job{id: jobID}, txn: txn}
 }
 
 func (i InfoStorage) checkClaimSession(ctx context.Context) error {
@@ -138,10 +146,23 @@ func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
 }
 
 func (i InfoStorage) iterate(
-	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
+	ctx context.Context,
+	iterMode iterateMode,
+	infoPrefix []byte,
+	fn func(infoKey, value []byte) error,
 ) (retErr error) {
 	if i.txn == nil {
 		return errors.New("cannot iterate over the job info table without an associated txn")
+	}
+
+	var iterConfig string
+	switch iterMode {
+	case iterateAll:
+		iterConfig = `ORDER BY info_key ASC, written DESC` // with no LIMIT.
+	case getLast:
+		iterConfig = `ORDER BY info_key DESC, written ASC LIMIT 1`
+	default:
+		return errors.AssertionFailedf("unhandled iteration mode %v", iterMode)
 	}
 
 	rows, err := i.txn.QueryIteratorEx(
@@ -150,7 +171,7 @@ func (i InfoStorage) iterate(
 		`SELECT info_key, value
 		FROM system.job_info
 		WHERE job_id = $1 AND info_key >= $2 AND info_key < $3
-		ORDER BY info_key ASC, written DESC`,
+		`+iterConfig,
 		i.j.ID(), infoPrefix, roachpb.Key(infoPrefix).PrefixEnd(),
 	)
 	if err != nil {
@@ -214,8 +235,23 @@ func (i InfoStorage) Delete(ctx context.Context, infoKey []byte) error {
 func (i InfoStorage) Iterate(
 	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
 ) (retErr error) {
-	return i.iterate(ctx, infoPrefix, fn)
+	return i.iterate(ctx, iterateAll, infoPrefix, fn)
 }
+
+// GetLast calls fn on the last info record whose key matches the
+// given prefix.
+func (i InfoStorage) GetLast(
+	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
+) (retErr error) {
+	return i.iterate(ctx, getLast, infoPrefix, fn)
+}
+
+type iterateMode bool
+
+const (
+	iterateAll iterateMode = false
+	getLast    iterateMode = true
+)
 
 const (
 	legacyPayloadKey  = "legacy_payload"
