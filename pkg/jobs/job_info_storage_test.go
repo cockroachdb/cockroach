@@ -57,7 +57,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	job2 := createJob(2)
 	job3 := createJob(3)
 	kPrefix, kA, kB, kC, kD := []byte("🔑"), []byte("🔑A"), []byte("🔑B"), []byte("🔑C"), []byte("🔑D")
-	v1, v2 := []byte("val1"), []byte("val2")
+	v1, v2, v3 := []byte("val1"), []byte("val2"), []byte("val3")
 
 	// Key doesn't exist yet.
 	getJobInfo := func(j *jobs.Job, key []byte) (v []byte, ok bool, err error) {
@@ -153,6 +153,23 @@ func TestJobInfoAccessors(t *testing.T) {
 		})
 	}))
 	require.Equal(t, 3, i)
+
+	// Add a new revision to kC.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.Write(ctx, kC, v3)
+	}))
+	i = 0
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.GetLast(ctx, kPrefix, func(key, value []byte) error {
+			i++
+			require.Equal(t, key, kC)
+			require.Equal(t, v3, value)
+			return nil
+		})
+	}))
+	require.Equal(t, 1, i)
 
 	// Iterate the specific prefix of just a.
 	found := false
