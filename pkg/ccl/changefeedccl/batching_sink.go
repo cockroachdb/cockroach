@@ -551,7 +551,7 @@ func makeBatchingSink(
 		topicNamer:   topicNamer,
 		concreteType: concreteType,
 		frequency:    minFlushFrequency,
-		ioWorkers:    1,
+		ioWorkers:    32,
 		retryOpts:    retryOpts,
 		ts:           timeSource,
 		metrics:      metrics,

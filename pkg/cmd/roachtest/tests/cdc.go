@@ -1222,7 +1222,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: webhookSink,
@@ -1230,7 +1230,7 @@ func registerCDC(r registry.Registry) {
 				opts: map[string]string{
 					"metrics_label": "'webhook'",
 					// Webhook sink without batching is currently too slow to handle even 1 warehouse
-					"webhook_sink_config": `'{"Flush": { "Messages": 500, "Frequency": "5s" } }'`,
+					// "webhook_sink_config": `'{"Flush": { "Messages": 500, "Frequency": "5s" } }'`,
 				},
 			})
 

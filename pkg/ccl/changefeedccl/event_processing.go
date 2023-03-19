@@ -182,7 +182,7 @@ func newEventConsumer(
 		workerChSize: changefeedbase.EventConsumerWorkerQueueSize.Get(&cfg.Settings.SV),
 		spanFrontier: spanFrontier,
 	}
-	var ss EventSink = sink
+	ss := sink
 	if sink.getConcreteType() != sinkTypeWebhook {
 		ss = &safeSink{wrapped: sink, beforeFlush: c.Flush}
 	}

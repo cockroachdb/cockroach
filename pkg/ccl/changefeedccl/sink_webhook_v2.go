@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -106,7 +105,11 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
+				MaxConnsPerHost:     100, // This should probably be == to parallelism.
+				MaxIdleConnsPerHost: 100,
+				MaxIdleConns:        100,
+				IdleConnTimeout:     time.Minute,
+				ForceAttemptHTTP2:   true,
 			},
 		},
 	}
