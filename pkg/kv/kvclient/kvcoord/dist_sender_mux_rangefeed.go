@@ -465,6 +465,8 @@ func (m *rangefeedMuxer) restartActiveRangeFeeds(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
+	m.ds.metrics.RangefeedRestartRanges.Inc(1)
+
 	if log.V(0) {
 		log.Infof(ctx, "RangeFeed %s@%s disconnected with last checkpoint %s ago: %v",
 			active.Span, active.StartAfter, timeutil.Since(active.Resolved.GoTime()), reason)
