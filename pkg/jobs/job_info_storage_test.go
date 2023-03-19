@@ -154,6 +154,18 @@ func TestJobInfoAccessors(t *testing.T) {
 	}))
 	require.Equal(t, 3, i)
 
+	i = 0
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.GetLast(ctx, kPrefix, func(key, value []byte) error {
+			i++
+			require.Equal(t, key, kC)
+			require.Equal(t, v2, value)
+			return nil
+		})
+	}))
+	require.Equal(t, 1, i)
+
 	// Iterate the specific prefix of just a.
 	found := false
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
