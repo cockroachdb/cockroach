@@ -188,10 +188,10 @@ func (wse *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, err
 }
 
 // EncodeResolvedMeessage implements the SinkClient interface
-func (wse *webhookSinkClient) EncodeResolvedMessage(
-	payload resolvedMessagePayload,
+func (wse *webhookSinkClient) MakeResolvedPayload(
+	body []byte, topic string,
 ) (SinkPayload, error) {
-	return wse.makePayloadForBytes(payload.body)
+	return wse.makePayloadForBytes(body)
 }
 
 // Flush implements the SinkClient interface
