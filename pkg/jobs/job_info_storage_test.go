@@ -179,6 +179,23 @@ func TestJobInfoAccessors(t *testing.T) {
 	}))
 	require.True(t, found)
 
+	// Delete kA-kB.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.DeleteRange(ctx, kA, kC)
+	}))
+	// Verify only kC remains.
+	i = 0
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.Iterate(ctx, kPrefix, func(key, value []byte) error {
+			i++
+			require.Equal(t, key, kC)
+			return nil
+		})
+	}))
+	require.Equal(t, 1, i)
+
 	// Iterate a different job.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job3.InfoStorage(txn)
