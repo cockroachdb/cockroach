@@ -24,3 +24,4 @@ export * from "./tracezApi";
 export * from "./databasesApi";
 export * from "./eventsApi";
 export * from "./databaseDetailsApi";
+export * from "./tableDetailsApi";

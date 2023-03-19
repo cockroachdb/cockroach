@@ -6405,7 +6405,7 @@ alter_tenant_stmt:
 tenant_spec:
   d_expr
   { $$.val = &tree.TenantSpec{IsName: true, Expr: $1.expr()} }
-| '[' d_expr ']'
+| '[' a_expr ']'
   { $$.val = &tree.TenantSpec{IsName: false, Expr: $2.expr()} }
 
 // %Help: ALTER TENANT RENAME - rename a tenant

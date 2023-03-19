@@ -244,7 +244,6 @@ describe("Databases Page", function () {
           ],
         },
       ],
-      1,
     );
 
     await driver.refreshNodes();
