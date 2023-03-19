@@ -424,6 +424,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 				if _, err := ms.eachStream(func(id int64, a *activeMuxRangeFeed) error {
 					if !a.startAfter.IsEmpty() && timeutil.Since(a.startAfter.GoTime()) > stuckThreshold() {
 						ms.streams.Delete(id)
+						m.ds.metrics.RangefeedRestartStuck.Inc(1)
 						return m.restartActiveRangeFeed(ctx, a, errRestartStuckRange)
 					}
 					return nil
@@ -440,6 +441,8 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
+	m.ds.metrics.RangefeedRestartRanges.Inc(1)
+
 	if log.V(1) {
 		log.Infof(ctx, "RangeFeed %s@%s disconnected with last checkpoint %s ago: %v",
 			active.Span, active.StartAfter, timeutil.Since(active.Resolved.GoTime()), reason)

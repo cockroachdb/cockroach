@@ -653,6 +653,7 @@ func (ds *DistSender) singleRangeFeed(
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
 	ctx, cancelFeed := context.WithCancel(ctx)
 	defer func() {
+		ds.metrics.RangefeedRestartRanges.Inc(1)
 		if log.V(1) {
 			log.Infof(ctx, "singleRangeFeed terminating with err=%v", retErr)
 		}
