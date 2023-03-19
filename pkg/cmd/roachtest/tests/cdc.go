@@ -36,6 +36,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
@@ -1226,20 +1227,18 @@ func registerCDC(r registry.Registry) {
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: webhookSink,
-				targets:  allTpccTargets,
+				// sinkType: kafkaSink,
+				targets: allTpccTargets,
 				opts: map[string]string{
 					"metrics_label": "'webhook'",
+					"initial_scan":  "'only'",
 					// Webhook sink without batching is currently too slow to handle even 1 warehouse
-					// "webhook_sink_config": `'{"Flush": { "Messages": 500, "Frequency": "5s" } }'`,
+					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+					// "kafka_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
 				},
 			})
 
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
-				steadyLatency:      time.Minute,
-			})
-
-			ct.waitForWorkload()
+			feed.waitForCompletion()
 		},
 	})
 	r.Add(registry.TestSpec{

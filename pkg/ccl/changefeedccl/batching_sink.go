@@ -58,20 +58,6 @@ type kvEvent struct {
 	mvcc  hlc.Timestamp
 }
 
-var kvEventPool = sync.Pool{
-	New: func() interface{} {
-		return new(kvEvent)
-	},
-}
-
-func newKVEvent() *kvEvent {
-	return kvEventPool.Get().(*kvEvent)
-}
-func freeKVEvent(e *kvEvent) {
-	*e = kvEvent{}
-	kvEventPool.Put(e)
-}
-
 type batchingSink struct {
 	client       SinkClient
 	topicNamer   *TopicNamer
@@ -87,9 +73,11 @@ type batchingSink struct {
 		termErr error
 	}
 
-	wg      ctxgroup.Group
-	eventCh chan interface{}
-	doneCh  chan struct{}
+	eventPool sync.Pool
+	eventCh   chan interface{}
+
+	wg     ctxgroup.Group
+	doneCh chan struct{}
 }
 
 // Flush implements the Sink interface, returning the first error that has
@@ -131,7 +119,7 @@ func (bs *batchingSink) EmitRow(
 	// fmt.Printf("\x1b[31mbatchingSink EmitRow %s\x1b[0m\n", string(key))
 	bs.metrics.recordMessageSize(int64(len(key) + len(value)))
 
-	payload := newKVEvent()
+	payload := bs.eventPool.Get().(*kvEvent)
 	payload.key = key
 	payload.val = value
 	payload.topic = "" // unimplemented for now
@@ -250,7 +238,6 @@ func (mb *sinkBatch) Append(e *kvEvent) {
 	}
 
 	mb.alloc.Merge(&e.alloc)
-	freeKVEvent(e)
 }
 
 func (bs *batchingSink) handleError(err error) {
@@ -293,6 +280,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		}
 
 		inflight -= batch.numMessages
+		bs.metrics.recordSinkInFlightCount(int64(inflight))
 		if (result.err != nil || inflight == 0) && sinkFlushWaiter != nil {
 			close(sinkFlushWaiter)
 			sinkFlushWaiter = nil
@@ -347,12 +335,17 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 					tryFlushBatch()
 				}
 			} else if event, isKV := req.(*kvEvent); isKV {
-				inflight += 1
 				// fmt.Printf("\x1b[31mbatchingSink receive KV <-eventCh\x1b[0m\n")
 				if pendingBatch.isEmpty() && bs.frequency > 0 {
 					flushTimer.Reset(bs.frequency)
 				}
+				inflight += 1
+				bs.metrics.recordSinkInFlightCount(int64(inflight))
 				pendingBatch.Append(event)
+
+				// Event no longer needed
+				*event = kvEvent{}
+				bs.eventPool.Put(event)
 
 				if pendingBatch.writer.ShouldFlush() {
 					bs.metrics.recordSizeBasedFlush()
@@ -402,7 +395,6 @@ func (pe *parallelIO) Close() {
 	close(pe.doneCh)
 	_ = pe.wg.Wait()
 	// fmt.Printf("\x1b[32mparallelIO wg wait done\x1b[0m\n")
-	close(pe.resultCh)
 }
 
 func newParallelIO(
@@ -416,8 +408,8 @@ func newParallelIO(
 		retryOpts: retryOpts,
 		wg:        wg,
 		ioHandler: handler,
-		requestCh: make(chan IORequest, numWorkers),
-		resultCh:  make(chan ioResult, numWorkers),
+		requestCh: make(chan IORequest, flushQueueDepth),
+		resultCh:  make(chan ioResult, flushQueueDepth),
 		doneCh:    make(chan struct{}),
 	}
 
@@ -470,6 +462,9 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 			for req := range emitCh {
 				select {
 				case <-ctx.Done():
+					return ctx.Err()
+				case <-pe.doneCh:
+					return nil
 				case emitResultCh <- ioResult{
 					err:     emitWithRetries(ctx, req),
 					payload: req,
@@ -551,13 +546,18 @@ func makeBatchingSink(
 		topicNamer:   topicNamer,
 		concreteType: concreteType,
 		frequency:    minFlushFrequency,
-		ioWorkers:    32,
+		ioWorkers:    1,
 		retryOpts:    retryOpts,
 		ts:           timeSource,
 		metrics:      metrics,
-		wg:           ctxgroup.WithContext(ctx),
-		eventCh:      make(chan interface{}),
-		doneCh:       make(chan struct{}),
+		eventPool: sync.Pool{
+			New: func() interface{} {
+				return new(kvEvent)
+			},
+		},
+		eventCh: make(chan interface{}, flushQueueDepth),
+		wg:      ctxgroup.WithContext(ctx),
+		doneCh:  make(chan struct{}),
 	}
 
 	sink.wg.GoCtx(func(ctx context.Context) error {

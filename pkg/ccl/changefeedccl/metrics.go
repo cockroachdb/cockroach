@@ -64,6 +64,7 @@ type AggMetrics struct {
 	BatchReductionCount       *aggmetric.AggGauge
 	InternalRetryMessageCount *aggmetric.AggGauge
 	SchemaRegistryRetries     *aggmetric.AggCounter
+	SinkInFlightEvents        *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -91,6 +92,7 @@ type metricsRecorder interface {
 	getBackfillCallback() func() func()
 	getBackfillRangeCallback() func(int64) (func(), func())
 	recordSizeBasedFlush()
+	recordSinkInFlightCount(int64)
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -119,6 +121,7 @@ type sliMetrics struct {
 	BatchReductionCount       *aggmetric.Gauge
 	InternalRetryMessageCount *aggmetric.Gauge
 	SchemaRegistryRetries     *aggmetric.Counter
+	SinkInFlightEvents        *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -242,6 +245,13 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+func (m *sliMetrics) recordSinkInFlightCount(count int64) {
+	if m == nil {
+		return
+	}
+	m.SinkInFlightEvents.Update(count)
+}
+
 type wrappingCostController struct {
 	ctx      context.Context
 	inner    metricsRecorder
@@ -283,6 +293,10 @@ func (w *wrappingCostController) recordEmittedBatch(
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
 	w.inner.recordMessageSize(sz)
+}
+
+func (w *wrappingCostController) recordSinkInFlightCount(count int64) {
+	w.inner.recordSinkInFlightCount(count)
 }
 
 func (w *wrappingCostController) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
@@ -502,6 +516,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedSinkInFlightEvents := metric.Metadata{
+		Name:        "changefeed.sink_in_flight_count",
+		Help:        "Number of buffered events in the sink (currently webhook only)",
+		Measurement: "Count of Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -555,6 +575,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		BatchReductionCount:       b.Gauge(metaBatchReductionCount),
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
+		SinkInFlightEvents:        b.Gauge(metaChangefeedSinkInFlightEvents),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -611,6 +632,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		BatchReductionCount:       a.BatchReductionCount.AddChild(scope),
 		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
+		SinkInFlightEvents:        a.SinkInFlightEvents.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm
