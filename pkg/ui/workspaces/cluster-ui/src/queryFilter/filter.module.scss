@@ -127,3 +127,29 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
 .hide {
   display: none;
 }
+
+.badges-area {
+  display: flex;
+  margin-bottom: 5px;
+}
+
+.badge-wrapper {
+  background-color: $colors--neutral-2;
+  border-radius: 3px;
+  color: $colors--neutral-7;
+  display: flex;
+  font-family: $font-family--semi-bold;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  margin-bottom: 5px;
+  margin-right: 5px;
+  padding: 3px 7px;
+  width: fit-content;
+}
+
+.close-area {
+  margin-top: 4px;
+  margin-left: 5px;
+  width: 12px;
+  cursor: pointer;
+}
