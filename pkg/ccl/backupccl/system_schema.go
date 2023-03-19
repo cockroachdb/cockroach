@@ -473,6 +473,55 @@ VALUES ($1, $2, $3, (
 	return nil
 }
 
+func systemExternalConnectionsRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	hasOwnerIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "owner_id")
+	if err != nil {
+		return err
+	}
+	if hasOwnerIDColumn {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
+
+	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	externalConnectionsRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	restoreQuery := fmt.Sprintf(`
+INSERT INTO system.%s (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
+VALUES ($1, $2, $3, $4, $5, $6, (SELECT user_id FROM system.users WHERE username = $6))`, systemTableName)
+	for _, row := range externalConnectionsRows {
+		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+			txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			restoreQuery, row[0], row[1], row[2], row[3], row[4], row[5],
+		); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	return nil
+}
+
 func tableHasColumnName(
 	ctx context.Context, txn isql.Txn, tableName string, columnName string,
 ) (bool, error) {
@@ -714,6 +763,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.SystemExternalConnectionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            systemExternalConnectionsRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.RoleIDSequence.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,

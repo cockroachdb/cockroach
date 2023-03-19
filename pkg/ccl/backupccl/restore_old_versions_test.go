@@ -62,6 +62,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		systemRoleMembersDirs          = testdataBase + "/system-role-members-restore"
 		systemPrivilegesDirs           = testdataBase + "/system-privileges-restore"
 		systemDatabaseRoleSettingsDirs = testdataBase + "/system-database-role-settings-restore"
+		systemExternalConnectionsDirs  = testdataBase + "/system-external-connections-restore"
 	)
 
 	t.Run("cluster-restore", func(t *testing.T) {
@@ -109,6 +110,17 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(systemDatabaseRoleSettingsDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir))
+		}
+	})
+
+	t.Run("full-cluster-restore-system-external-connections-without-ids", func(t *testing.T) {
+		dirs, err := os.ReadDir(systemExternalConnectionsDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(systemExternalConnectionsDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir))
 		}
 	})
 }
@@ -392,6 +404,43 @@ func fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir string) fu
 			{"0", "", "{timezone=America/New_York}", "0"},
 			{"0", "testuser1", "{application_name=roachdb}", "100"},
 			{"0", "testuser2", "{disallow_full_table_scans=on}", "101"},
+		})
+	}
+}
+
+func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		// The restore queries are run with `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
+		// option to ensure the restore is successful on development branches. This
+		// is because, while the backups were generated on release branches and have
+		// versions such as 22.2 in their manifest, the development branch will have
+		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
+		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
+		// that the manifest version is always less than the
+		// BinaryMinSupportedVersion which will in turn fail the restore unless we
+		// pass in the specified option to elide the compatability check.
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.external_connections", [][]string{
+			{"connection1", "2023-03-20 01:26:50.174781 +0000 +0000", "2023-03-20 01:26:50.174781 +0000 +0000", "STORAGE",
+				"\b\u0005\u0012\u0019\n\u0017userfile:///connection1", "testuser1", "100"},
+			{"connection2", "2023-03-20 01:26:51.223986 +0000 +0000", "2023-03-20 01:26:51.223986 +0000 +0000", "STORAGE",
+				"\b\u0005\u0012\u0019\n\u0017userfile:///connection2", "testuser2", "101"},
 		})
 	}
 }
