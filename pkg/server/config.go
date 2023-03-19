@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
@@ -536,6 +537,10 @@ type LocalKVServerInfo struct {
 	InternalServer     kvpb.InternalServer
 	ServerInterceptors rpc.ServerInterceptorInfo
 	Tracer             *tracing.Tracer
+
+	// SameProcessCapabilityAuthorizer is the tenant capability authorizer to
+	// use for servers running in the same process as the KV node.
+	SameProcessCapabilityAuthorizer tenantcapabilities.Authorizer
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
