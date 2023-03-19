@@ -103,6 +103,36 @@ func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 }
 
 func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
+	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
+		// First clear out any older revisions of this info.
+		_, err := txn.ExecEx(
+			ctx, "write-job-info-delete", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
+			j.ID(), infoKey,
+		)
+		if err != nil {
+			return err
+		}
+
+		if value == nil {
+			// Nothing else to do.
+			return nil
+		}
+		// Write the new info, using the same transaction.
+		_, err = txn.ExecEx(
+			ctx, "write-job-info-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
+			j.ID(), infoKey, value,
+		)
+		return err
+	})
+}
+
+func (i InfoStorage) doWrite(
+	ctx context.Context, fn func(ctx context.Context, job *Job, txn isql.Txn) error,
+) error {
 	if i.txn == nil {
 		return errors.New("cannot write to the job info table without an associated txn")
 	}
@@ -120,29 +150,7 @@ func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
 		log.VInfof(ctx, 1, "job %d: writing to the system.job_info with no session ID", j.ID())
 	}
 
-	// First clear out any older revisions of this info.
-	_, err := i.txn.ExecEx(
-		ctx, "write-job-info-delete", i.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
-		j.ID(), infoKey,
-	)
-	if err != nil {
-		return err
-	}
-
-	if value == nil {
-		// Nothing else to do.
-		return nil
-	}
-	// Write the new info, using the same transaction.
-	_, err = i.txn.ExecEx(
-		ctx, "write-job-info-insert", i.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
-		j.ID(), infoKey, value,
-	)
-	return err
+	return fn(ctx, j, i.txn)
 }
 
 func (i InfoStorage) iterate(
@@ -233,6 +241,20 @@ func (i InfoStorage) Write(ctx context.Context, infoKey, value []byte) error {
 // Delete removes the info record for the provided infoKey.
 func (i InfoStorage) Delete(ctx context.Context, infoKey []byte) error {
 	return i.write(ctx, infoKey, nil /* value */)
+}
+
+// DeleteRange removes the info records between the provided
+// start key (inclusive) and end key (exclusive).
+func (i InfoStorage) DeleteRange(ctx context.Context, startInfoKey, endInfoKey []byte) error {
+	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
+		_, err := txn.ExecEx(
+			ctx, "write-job-info-delete", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+			j.ID(), startInfoKey, endInfoKey,
+		)
+		return err
+	})
 }
 
 // Iterate iterates though the info records for a given job and info key prefix.
