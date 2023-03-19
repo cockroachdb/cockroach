@@ -428,7 +428,6 @@ func (s *deprecatedWebhookSink) batchWorker() {
 			} else {
 				if len(batchTracker.buffer) == 1 && time.Duration(s.batchCfg.Frequency) > 0 {
 					// only start timer when first message appears
-					fmt.Printf("\x1b[35mdeprecated TIMER RESET\x1b[0m\n")
 					batchTimer.Reset(time.Duration(s.batchCfg.Frequency))
 				}
 			}
@@ -438,7 +437,6 @@ func (s *deprecatedWebhookSink) batchWorker() {
 		// the new batch has at least one element, the timer will be reset so it'll
 		// be updated.
 		case <-batchTimer.Ch():
-			fmt.Printf("\x1b[35mdeprecated TIMER READ\x1b[0m\n")
 			batchTimer.MarkRead()
 			if len(batchTracker.buffer) > 0 {
 				if err := s.splitAndSendBatch(batchTracker.buffer); err != nil {

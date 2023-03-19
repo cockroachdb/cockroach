@@ -130,23 +130,12 @@ func (bs *batchingSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	fmt.Printf("\x1b[31mbatchingSink EmitRow %s\x1b[0m\n", string(key))
-
-	var topicName string
-	var err error
-	if bs.topicNamer != nil {
-		topicName, err = bs.topicNamer.Name(topic)
-		if err != nil {
-			fmt.Printf("\x1b[31mbatchingSink topicErr\x1b[0m\n")
-			return err
-		}
-	}
-
 	bs.metrics.recordMessageSize(int64(len(key) + len(value)))
 
 	payload := newKVEvent()
 	payload.key = key
 	payload.val = value
-	payload.topic = topicName
+	payload.topic = "" // unimplemented for now
 	payload.mvcc = mvcc
 	payload.alloc = alloc
 
@@ -173,33 +162,19 @@ func (bs *batchingSink) EmitResolvedTimestamp(
 		return err
 	}
 
-	var topics []string
-	if bs.topicNamer == nil {
-		topics = []string{""}
-	} else {
-		topics = bs.topicNamer.DisplayNamesSlice()
-	}
-
 	if err = bs.Flush(ctx); err != nil {
 		return err
 	}
 
-	// TODO Do this in parallel by sending it through same pipeline with the
-	// workers and then flush
-	for _, topic := range topics {
-		payload, err := bs.client.MakeResolvedPayload(data, topic)
-		if err != nil {
-			return err
-		}
-
-		err = retry.WithMaxAttempts(ctx, bs.retryOpts, bs.retryOpts.MaxRetries+1, func() error {
-			return bs.client.Flush(ctx, payload)
-		})
-		if err != nil {
-			return err
-		}
+	payload, err := bs.client.MakeResolvedPayload(data, "")
+	if err != nil {
+		return err
 	}
-	return nil
+
+	return retry.WithMaxAttempts(ctx, bs.retryOpts, bs.retryOpts.MaxRetries+1, func() error {
+		defer bs.metrics.recordFlushRequestCallback()()
+		return bs.client.Flush(ctx, payload)
+	})
 }
 
 // Close implements the Sink interface.
