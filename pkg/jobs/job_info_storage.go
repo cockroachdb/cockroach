@@ -123,6 +123,10 @@ func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
 		return err
 	}
 
+	if value == nil {
+		// Nothing else to do.
+		return nil
+	}
 	// Write the new info, using the same transaction.
 	_, err = i.txn.ExecEx(
 		ctx, "write-job-info-insert", i.txn.KV(),
@@ -195,7 +199,15 @@ func (i InfoStorage) Get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 // using the same transaction, effectively replacing any older row with a row
 // with the new value.
 func (i InfoStorage) Write(ctx context.Context, infoKey, value []byte) error {
+	if value == nil {
+		return errors.AssertionFailedf("missing value (infoKey %q)", string(infoKey))
+	}
 	return i.write(ctx, infoKey, value)
+}
+
+// Delete removes the info record for the provided infoKey.
+func (i InfoStorage) Delete(ctx context.Context, infoKey []byte) error {
+	return i.write(ctx, infoKey, nil /* value */)
 }
 
 // Iterate iterates though the info records for a given job and info key prefix.
