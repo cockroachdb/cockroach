@@ -18,7 +18,6 @@ import moment from "moment";
 
 const {
   SettingsResponse,
-  TableDetailsResponse,
   TableStatsResponse,
   TableIndexStatsResponse,
   NodesResponse,
@@ -194,20 +193,6 @@ export function stubNodesUI(
   stubGet(`/nodes_ui`, NodesResponse.encode(response), STATUS_PREFIX);
 }
 
-export function stubTableDetails(
-  database: string,
-  table: string,
-  response: cockroach.server.serverpb.ITableDetailsResponse,
-) {
-  stubGet(
-    `/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(
-      table,
-    )}`,
-    TableDetailsResponse.encode(response),
-    API_PREFIX,
-  );
-}
-
 export function stubTableStats(
   database: string,
   table: string,
@@ -260,7 +245,7 @@ export function createMockDatabaseRangesForTable(
 export function stubSqlApiCall<T>(
   req: clusterUiApi.SqlExecutionRequest,
   mockTxnResults: mockSqlTxnResult<T>[],
-  times?: number,
+  times: number = 1,
 ) {
   const response = buildSqlExecutionResponse(mockTxnResults);
   fetchMock.mock({

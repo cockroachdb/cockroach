@@ -19,11 +19,6 @@ import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { propsToQueryString } from "src/util/query";
 
-export type TableDetailsRequestMessage =
-  protos.cockroach.server.serverpb.TableDetailsRequest;
-export type TableDetailsResponseMessage =
-  protos.cockroach.server.serverpb.TableDetailsResponse;
-
 export type LocationsRequestMessage =
   protos.cockroach.server.serverpb.LocationsRequest;
 export type LocationsResponseMessage =
@@ -344,26 +339,6 @@ export type APIRequestFn<TReq, TResponse> = (
 
 const serverpb = protos.cockroach.server.serverpb;
 const tspb = protos.cockroach.ts.tspb;
-
-// getTableDetails gets details for a specific table
-export function getTableDetails(
-  req: TableDetailsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<TableDetailsResponseMessage> {
-  const promiseErr = IsValidateUriName(req.database, req.table);
-  if (promiseErr) {
-    return promiseErr;
-  }
-
-  return timeoutFetch(
-    serverpb.TableDetailsResponse,
-    `${API_PREFIX}/databases/${EncodeUriName(
-      req.database,
-    )}/tables/${EncodeUriName(req.table)}`,
-    null,
-    timeout,
-  );
-}
 
 // getUIData gets UI data
 export function getUIData(

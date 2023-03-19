@@ -191,7 +191,6 @@ describe("rest api", function () {
             ],
           },
         ],
-        1,
       );
 
       return clusterUiApi.getDatabaseDetails(dbName).then(result => {
@@ -275,63 +274,142 @@ describe("rest api", function () {
   describe("table details request", function () {
     const dbName = "testDB";
     const tableName = "testTable";
+    const mockOldDate = new Date(2023, 2, 3);
+    const mockZoneConfig = new ZoneConfig({
+      inherited_constraints: true,
+      inherited_lease_preferences: true,
+      null_voter_constraints_is_empty: true,
+      global_reads: true,
+      gc: {
+        ttl_seconds: 100,
+      },
+    });
+    const mockZoneConfigBytes = ZoneConfig.encode(mockZoneConfig).finish();
+    const mockZoneConfigHexString = Array.from(mockZoneConfigBytes)
+      .map(x => x.toString(16).padStart(2, "0"))
+      .join("");
+    const mockStatsLastCreatedTimestamp = moment();
 
     afterEach(fetchMock.restore);
 
     it("correctly requests info about a specific table", function () {
       // Mock out the fetch query
-      fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
-        method: "GET",
-        response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
-          const encodedResponse =
-            protos.cockroach.server.serverpb.TableDetailsResponse.encode(
-              {},
-            ).finish();
-          return {
-            body: encodedResponse,
-          };
-        },
-      });
+      stubSqlApiCall<clusterUiApi.TableDetailsRow>(
+        clusterUiApi.createTableDetailsReq(dbName, tableName),
+        [
+          // Table ID query
+          { rows: [{ table_id: "1" }] },
+          // Table grants query
+          {
+            rows: [{ user: "user", privileges: ["ALL", "NONE", "PRIVILEGE"] }],
+          },
+          // Table schema details query
+          { rows: [{ columns: ["a", "b", "c"], indexes: ["d", "e"] }] },
+          // Table create statement query
+          { rows: [{ statement: "mock create stmt" }] },
+          // Table zone config statement query
+          { rows: [{ raw_config_sql: "mock zone config stmt" }] },
+          // Table heuristics query
+          { rows: [{ stats_last_created_at: mockStatsLastCreatedTimestamp }] },
+          // Table span stats query
+          {
+            rows: [
+              {
+                approximate_disk_bytes: 100,
+                live_bytes: 200,
+                total_bytes: 400,
+                range_count: 400,
+                live_percentage: 0.5,
+              },
+            ],
+          },
+          // Table index usage statistics query
+          {
+            rows: [
+              {
+                last_read: mockOldDate.toISOString(),
+                created_at: mockOldDate.toISOString(),
+                unused_threshold: "1m",
+              },
+            ],
+          },
+          // Table zone config query
+          {
+            rows: [
+              {
+                database_zone_config_hex_string: mockZoneConfigHexString,
+                table_zone_config_hex_string: null,
+              },
+            ],
+          },
+          // Table replicas query
+          {
+            rows: [{ replicas: [1, 2, 3] }],
+          },
+        ],
+      );
 
-      return api
-        .getTableDetails(
-          new protos.cockroach.server.serverpb.TableDetailsRequest({
-            database: dbName,
-            table: tableName,
-          }),
-        )
-        .then(result => {
+      return clusterUiApi
+        .getTableDetails({
+          database: dbName,
+          table: tableName,
+        })
+        .then(resp => {
+          expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+          expect(resp.results.idResp.table_id).toBe("1");
+          expect(resp.results.grantsResp.grants.length).toBe(1);
+          expect(resp.results.schemaDetails.columns.length).toBe(3);
+          expect(resp.results.schemaDetails.indexes.length).toBe(2);
+          expect(resp.results.createStmtResp.statement).toBe(
+            "mock create stmt",
+          );
+          expect(resp.results.zoneConfigResp.configure_zone_statement).toBe(
+            "mock zone config stmt",
+          );
           expect(
-            fetchMock.calls(
-              `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
-            ).length,
-          ).toBe(1);
-          expect(result.columns.length).toBe(0);
-          expect(result.indexes.length).toBe(0);
-          expect(result.grants.length).toBe(0);
+            moment(resp.results.heuristicsDetails.stats_last_created_at).isSame(
+              mockStatsLastCreatedTimestamp,
+            ),
+          ).toBe(true);
+          expect(resp.results.stats.spanStats.approximate_disk_bytes).toBe(100);
+          expect(resp.results.stats.spanStats.live_bytes).toBe(200);
+          expect(resp.results.stats.spanStats.total_bytes).toBe(400);
+          expect(resp.results.stats.spanStats.range_count).toBe(400);
+          expect(resp.results.stats.spanStats.live_percentage).toBe(0.5);
+          expect(resp.results.stats.indexStats.has_index_recommendations).toBe(
+            true,
+          );
+          expect(resp.results.zoneConfigResp.zone_config).toEqual(
+            mockZoneConfig,
+          );
+          expect(resp.results.zoneConfigResp.zone_config_level).toBe(
+            ZoneConfigurationLevel.DATABASE,
+          );
+          expect(resp.results.stats.replicaData.replicaCount).toBe(3);
+          expect(resp.results.stats.replicaData.nodeCount).toBe(3);
+          expect(resp.results.stats.replicaData.nodeIDs).toEqual([1, 2, 3]);
         });
     });
 
     it("correctly handles an error", function (done) {
       // Mock out the fetch query, but return a 500 status code
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.createTableDetailsReq(dbName, tableName),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return { throws: new Error() };
         },
       });
 
-      api
-        .getTableDetails(
-          new protos.cockroach.server.serverpb.TableDetailsRequest({
-            database: dbName,
-            table: tableName,
-          }),
-        )
+      clusterUiApi
+        .getTableDetails({
+          database: dbName,
+          table: tableName,
+        })
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -344,20 +422,23 @@ describe("rest api", function () {
     it("correctly times out", function (done) {
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.createTableDetailsReq(dbName, tableName),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return new Promise<any>(() => {});
         },
       });
 
-      api
+      clusterUiApi
         .getTableDetails(
-          new protos.cockroach.server.serverpb.TableDetailsRequest({
+          {
             database: dbName,
             table: tableName,
-          }),
+          },
           moment.duration(0),
         )
         .then(_result => {
