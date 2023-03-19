@@ -12,11 +12,23 @@ package upgradecluster
 
 import (
 	"context"
+	"reflect"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -120,38 +132,203 @@ import (
 //  5. All tenants have to be at 21.1 cluster version before KV gets upgraded
 //     again in the next release.
 type TenantCluster struct {
-	db *kv.DB
+	// Dialer allows for the construction of connections to other SQL pods.
+	Dialer          NodeDialer
+	InstanceReader  *instancestorage.Reader
+	instancesAtBump []sqlinstance.InstanceInfo
+	DB              *kv.DB
+}
+
+// TenantClusterConfig configures a TenantCluster.
+type TenantClusterConfig struct {
+	// Dialer allows for the construction of connections to other SQL pods.
+	Dialer NodeDialer
+
+	// InstanceReader is used to retrieve all SQL pods for a given tenant.
+	InstanceReader *instancestorage.Reader
+
+	// DB is used to generate transactions for consistent reads of the set of
+	// instances.
+	DB *kv.DB
 }
 
 // NewTenantCluster returns a new TenantCluster.
-func NewTenantCluster(db *kv.DB) *TenantCluster {
-	return &TenantCluster{db: db}
+func NewTenantCluster(cfg TenantClusterConfig) *TenantCluster {
+	return &TenantCluster{
+		Dialer:          cfg.Dialer,
+		InstanceReader:  cfg.InstanceReader,
+		instancesAtBump: make([]sqlinstance.InstanceInfo, 0),
+		DB:              cfg.DB,
+	}
 }
 
-// NumNodes is part of the upgrade.Cluster interface.
-func (t *TenantCluster) NumNodes(ctx context.Context) (int, error) {
-	return 0, errors.AssertionFailedf("non-system tenants cannot iterate nodes")
+// NumNodesOrTenantPods is part of the upgrade.Cluster interface.
+func (t *TenantCluster) NumNodesOrServers(ctx context.Context) (int, error) {
+	// Get the list of all SQL instances running.
+	instances, err := t.InstanceReader.GetAllInstances(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(instances), nil
 }
 
-// ForEveryNode is part of the upgrade.Cluster interface.
-func (t *TenantCluster) ForEveryNode(
+// BumpClusterVersionOpName serves as a tag for tenant cluster version
+// in-memory bump operations. Every time we bump a tenant's cluster version,
+// we send out a gRPC to each of the tenant's SQL servers
+// (via ForEveryNodeOrServer), to have them remotely bump their in-memory
+// version as well. In the first of these such bumps for a migration (the first
+// "fence"), we also cache the list of SQL servers that we contacted, and
+// validate after persisting the fence version to the settings table, that
+// no new SQL servers have joined. If new SQL servers have joined in the
+// interim, we must revalidate that their binary versions are sufficiently
+// up-to-date to continue with the upgrade process. Once the bump value is
+// persisted to disk, no new SQL servers will be permitted to start with
+// binary versions that are less than the tenant's min binary version.
+//
+// This tag is used in the interlock to identify when we're bumping a cluster
+// version and therefore, when we must cache the set of SQL servers contacted.
+const BumpClusterVersionOpName = "bump-cluster-version"
+
+// ForEveryNodeOrServer is part of the upgrade.Cluster interface.
+// TODO(ajstorm): Make the op here more structured.
+func (t *TenantCluster) ForEveryNodeOrServer(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
-	return errors.AssertionFailedf("non-system tenants cannot iterate nodes")
+	// Get the list of all SQL instances running. We must do this using the
+	// "NoCache" method, as the upgrade interlock requires a consistent view of
+	// the currently running SQL instances to avoid RPC failures when attempting
+	// to contact SQL instances which are no longer alive, and to ensure that
+	// it's communicating with all currently alive instances.
+	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
+	if err != nil {
+		return err
+	}
+
+	// If we're bumping the cluster version, cache the list of instances we
+	// contacted at bump time. This list of instances is then consulted at
+	// fence write time to ensure that we contacted the same set of instances.
+	if strings.Contains(op, BumpClusterVersionOpName) {
+		t.instancesAtBump = instances
+	}
+
+	// Limiting of outgoing RPCs at the tenant level mirrors what we do for
+	// nodes at the storage cluster level.
+	const quotaCapacity = 25
+	qp := quotapool.NewIntPool("every-sql-server", quotaCapacity)
+	log.Infof(ctx, "executing %s on nodes %v", redact.Safe(op), instances)
+	grp := ctxgroup.WithContext(ctx)
+
+	for i := range instances {
+		instance := instances[i]
+		alloc, err := qp.Acquire(ctx, 1)
+		if err != nil {
+			return err
+		}
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer alloc.Release()
+
+			conn, err := t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
+			if err != nil {
+				if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
+					if errors.Is(err, rpc.VersionCompatError) {
+						return errors.WithHint(errors.Newf("upgrade failed due to active SQL servers with incompatible binary version(s)"),
+							"upgrade the binary versions of all SQL servers before re-attempting the tenant upgrade")
+					} else {
+						return errors.WithHint(errors.Newf("upgrade failed due to transient SQL servers"),
+							"retry upgrade when the SQL servers for the given tenant are in a stable state (i.e. not starting/stopping)")
+					}
+				}
+				return err
+			}
+			client := serverpb.NewMigrationClient(conn)
+			return fn(ctx, client)
+		})
+	}
+	return grp.Wait()
 }
 
 // UntilClusterStable is part of the upgrade.Cluster interface.
 //
-// Tenant clusters in the current version assume their cluster is stable
-// because they presently assume there is at most one running SQL pod. When
-// that changes, this logic will need to change.
-func (t TenantCluster) UntilClusterStable(ctx context.Context, fn func() error) error {
-	return nil
+// We don't have the same notion of cluster stability with tenant servers as we
+// do with cluster nodes. As a result, this function behaves slightly
+// differently with secondary tenants than it does with the system tenant.
+// Instead of relying on liveness and waiting until all nodes are active before
+// we claim that the cluster has become "stable", we collect the set of active
+// SQL servers, and loop until we find two successive iterations where the SQL
+// server list is consistent. This does not preclude new SQL servers from
+// starting after we've declared "stability", but there are other checks in the
+// tenant upgrade interlock which prevent those new SQL servers from starting if
+// they're at an incompatible binary version (at the time of writing, in
+// SQLServer.preStart).
+func (t *TenantCluster) UntilClusterStable(ctx context.Context, fn func() error) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     1.0,
+		MaxRetries:     60, // retry for 60 seconds
+	}
+
+	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
+	if err != nil {
+		return err
+	}
+
+	// TODO(ajstorm): this could use a test to validate that the retry behavior
+	//  does what we expect. I've tested it manually in the debugger for now.
+	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		if err := fn(); err != nil {
+			return err
+		}
+
+		// Check if the set of servers was stable during the function call.
+		curInstances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
+		if err != nil {
+			return err
+		}
+		if ok := reflect.DeepEqual(instances, curInstances); ok {
+			return nil
+		}
+		if len(instances) != len(curInstances) {
+			log.Infof(ctx,
+				"number of SQL servers has changed (pre: %d, post: %d), retrying",
+				len(instances), len(curInstances))
+		} else {
+			log.Infof(ctx, "different set of SQL servers running (pre: %v, post: %v), retrying", instances, curInstances)
+		}
+		instances = curInstances
+	}
+	return errors.Newf("unable to observe a stable set of SQL servers after maximum iterations")
 }
 
 // IterateRangeDescriptors is part of the upgrade.Cluster interface.
-func (t TenantCluster) IterateRangeDescriptors(
+func (t *TenantCluster) IterateRangeDescriptors(
 	ctx context.Context, size int, init func(), f func(descriptors ...roachpb.RangeDescriptor) error,
 ) error {
 	return errors.AssertionFailedf("non-system tenants cannot iterate ranges")
+}
+
+type inconsistentSQLServersError struct{}
+
+func (inconsistentSQLServersError) Error() string {
+	return "new SQL servers added during migration: migration must be retried"
+}
+
+var InconsistentSQLServersError = inconsistentSQLServersError{}
+
+func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context) error {
+	if len(t.instancesAtBump) == 0 {
+		// We should never get here with an empty slice, since bump must be
+		// called before validation.
+		return errors.AssertionFailedf("call to validate with empty instances slice")
+	}
+
+	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(instances, t.instancesAtBump) {
+		return InconsistentSQLServersError
+	}
+	return nil
 }

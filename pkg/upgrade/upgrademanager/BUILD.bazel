@@ -26,6 +26,7 @@ go_library(
         "//pkg/upgrade",
         "//pkg/upgrade/migrationstable",
         "//pkg/upgrade/upgradebase",
+        "//pkg/upgrade/upgradecluster",
         "//pkg/upgrade/upgradejob:upgrade_job",
         "//pkg/upgrade/upgrades",
         "//pkg/util/log",

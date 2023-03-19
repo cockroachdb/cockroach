@@ -85,7 +85,8 @@ func runMultiTenantDistSQL(
 	require.NoError(t, err)
 
 	instances := make([]*tenantNode, 0, numInstances)
-	instance1 := createTenantNode(ctx, t, c, c.Node(1), tenantID, 2 /* node */, tenantHTTPPort(0), tenantSQLPort(0), createTenantCertNodes(c.All()))
+	instance1 := createTenantNode(ctx, t, c, c.Node(1), tenantID, 2 /* node */, tenantHTTPPort(0), tenantSQLPort(0),
+		createTenantCertNodes(c.All()))
 	instances = append(instances, instance1)
 	defer instance1.stop(ctx, t, c)
 	instance1.start(ctx, t, c, "./cockroach")
