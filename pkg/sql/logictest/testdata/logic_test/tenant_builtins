@@ -286,3 +286,21 @@ query I
 SELECT crdb_internal.destroy_tenant(97873)
 ----
 97873
+
+subtest if_not_exists
+
+query error pgcode 42710 a tenant with ID 10 or with name "tenant-10" already exists
+SELECT crdb_internal.create_tenant('{"id":10}'::JSONB)
+
+query error pgcode 42710 tenant with name "tenant-number-ten" already exists
+SELECT crdb_internal.create_tenant('{"name":"tenant-number-ten"}'::JSONB)
+
+query I
+SELECT crdb_internal.create_tenant('{"id":10, "if_not_exists": true}'::JSONB)
+----
+NULL
+
+query I
+SELECT crdb_internal.create_tenant('{"name":"tenant-number-ten", "if_not_exists": true}'::JSONB)
+----
+NULL

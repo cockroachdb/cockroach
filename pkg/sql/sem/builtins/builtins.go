@@ -4874,6 +4874,9 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
+				if !tid.IsSet() {
+					return tree.DNull, nil
+				}
 				return tree.NewDInt(tree.DInt(tid.ToUint64())), nil
 			},
 			Info: `Creates a new tenant with the provided parameters. ` +
