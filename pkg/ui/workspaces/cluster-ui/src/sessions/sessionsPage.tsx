@@ -41,6 +41,7 @@ import {
   Filters,
   getTimeValueInSeconds,
   handleFiltersFromQueryString,
+  SelectedFilters,
 } from "../queryFilter";
 
 import TerminateQueryModal, {
@@ -405,6 +406,11 @@ export class SessionsPage extends React.Component<
             filters={filters}
             timeLabel={"Session duration"}
           />
+          <SelectedFilters
+            filters={filters}
+            onRemoveFilter={this.onSubmitFilters}
+            onClearFilters={this.onClearFilters}
+          />
         </div>
         <section className={sessionsPageCx("sessions-table-area")}>
           <div className={statementsPageCx("cl-table-statistic")}>
@@ -419,7 +425,6 @@ export class SessionsPage extends React.Component<
                 totalCount={sessionsToDisplay.length}
                 arrayItemName="sessions"
                 activeFilters={activeFilters}
-                onClearFilters={this.onClearFilters}
               />
             </div>
           </div>

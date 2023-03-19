@@ -22,6 +22,7 @@ import {
   calculateActiveFilters,
   Filter,
   getFullFiltersAsStringRecord,
+  SelectedFilters,
 } from "src/queryFilter/filter";
 import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
 import { Pagination } from "src/pagination";
@@ -244,6 +245,12 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
           />
         </PageConfigItem>
       </PageConfig>
+      <SelectedFilters
+        filters={filters}
+        onRemoveFilter={onSubmitFilters}
+        onClearFilters={clearFilters}
+        className={cx("margin-adjusted")}
+      />
       <div className={cx("table-area")}>
         <Loading
           loading={statements === null}
@@ -265,7 +272,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
                   totalCount={statementInsights?.length}
                   arrayItemName="statement insights"
                   activeFilters={countActiveFilters}
-                  onClearFilters={clearFilters}
                 />
               </div>
               <StatementInsightsTable
