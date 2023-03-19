@@ -29,6 +29,7 @@ import {
   Filter,
   Filters,
   handleFiltersFromQueryString,
+  SelectedFilters,
   updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 
@@ -525,6 +526,10 @@ export class StatementsPage extends React.Component<
               onClearFilters={this.onClearFilters}
             />
           </div>
+          <SelectedFilters
+            filters={filters}
+            onRemoveFilter={this.onSubmitFilters}
+          />
           <StatementsSortedTable
             className="statements-table"
             data={data}

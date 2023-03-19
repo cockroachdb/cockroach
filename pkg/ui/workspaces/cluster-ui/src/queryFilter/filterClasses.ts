@@ -39,3 +39,9 @@ export const applyBtn = {
   wrapper: cx("apply-btn__wrapper"),
   btn: cx("apply-btn__btn"),
 };
+
+export const badge = {
+  area: cx("badges-area"),
+  wrapper: cx("badge-wrapper"),
+  closeArea: cx("close-area"),
+};

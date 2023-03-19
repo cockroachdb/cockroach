@@ -11,7 +11,7 @@
 import React from "react";
 import Select from "react-select";
 import { Button } from "../button";
-import { CaretDown } from "@cockroachlabs/icons";
+import { CaretDown, Cancel } from "@cockroachlabs/icons";
 import { Input } from "antd";
 import "antd/lib/input/style";
 import { History } from "history";
@@ -26,6 +26,7 @@ import {
   hidden,
   caretDown,
   checkbox,
+  badge,
 } from "./filterClasses";
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { syncHistory } from "../util";
@@ -246,7 +247,7 @@ export const updateFiltersQueryParamsOnTab = (
 };
 
 /**
- * The State of the filter that is consider inactive.
+ * The State of the filter that is considered inactive.
  * It's different from defaultFilters because we don't want to take
  * timeUnit into consideration.
  * For example, if the timeUnit changes, but the timeValue is still 0,
@@ -264,6 +265,7 @@ export const inactiveFiltersState: Required<Omit<Filters, "timeUnit">> = {
   workloadInsightType: "",
   schemaInsightType: "",
   executionStatus: "",
+  username: "",
 };
 
 export const calculateActiveFilters = (filters: Filters): number => {
@@ -462,7 +464,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const appFilter = (
       <div>
-        <div className={filterLabel.margin}>Application Name</div>
+        <div className={filterLabel.margin}>{getLabelFromKey("app")}</div>
         <MultiSelectCheckbox
           options={appsOptions}
           placeholder="All"
@@ -485,7 +487,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const dbFilter = (
       <div>
-        <div className={filterLabel.margin}>Database</div>
+        <div className={filterLabel.margin}>{getLabelFromKey("database")}</div>
         <MultiSelectCheckbox
           options={databasesOptions}
           placeholder="All"
@@ -508,7 +510,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const usernameFilter = (
       <div>
-        <div className={filterLabel.margin}>User Name</div>
+        <div className={filterLabel.margin}>{getLabelFromKey("username")}</div>
         <MultiSelectCheckbox
           options={usernameOptions}
           placeholder="All"
@@ -534,7 +536,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const sessionStatusFilter = (
       <div>
-        <div className={filterLabel.margin}>Session Status</div>
+        <div className={filterLabel.margin}>
+          {getLabelFromKey("sessionStatus")}
+        </div>
         <MultiSelectCheckbox
           options={sessionStatusOptions}
           placeholder="All"
@@ -560,7 +564,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     );
     const executionStatusFilter = (
       <div>
-        <div className={filterLabel.margin}>Execution Status</div>
+        <div className={filterLabel.margin}>
+          {getLabelFromKey("executionStatus")}
+        </div>
         <MultiSelectCheckbox
           options={executionStatusOptions}
           placeholder="All"
@@ -586,7 +592,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const schemaInsightTypeFilter = (
       <div>
-        <div className={filterLabel.margin}>Schema Insight Type</div>
+        <div className={filterLabel.margin}>
+          {getLabelFromKey("schemaInsightType")}
+        </div>
         <MultiSelectCheckbox
           options={schemaInsightTypeOptions}
           placeholder="All"
@@ -614,7 +622,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     );
     const workloadInsightTypeFilter = (
       <div>
-        <div className={filterLabel.margin}>Workload Insight Type</div>
+        <div className={filterLabel.margin}>
+          {getLabelFromKey("workloadInsightType")}
+        </div>
         <MultiSelectCheckbox
           options={workloadInsightTypeOptions}
           placeholder="All"
@@ -637,7 +647,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     );
     const regionsFilter = (
       <div>
-        <div className={filterLabel.margin}>Region</div>
+        <div className={filterLabel.margin}>{getLabelFromKey("regions")}</div>
         <MultiSelectCheckbox
           options={regionsOptions}
           placeholder="All"
@@ -660,7 +670,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const nodesFilter = (
       <div>
-        <div className={filterLabel.margin}>Node</div>
+        <div className={filterLabel.margin}>{getLabelFromKey("nodes")}</div>
         <MultiSelectCheckbox
           options={nodesOptions}
           placeholder="All"
@@ -701,7 +711,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const sqlTypeFilter = (
       <div>
-        <div className={filterLabel.margin}>Statement Type</div>
+        <div className={filterLabel.margin}>{getLabelFromKey("sqlType")}</div>
         <MultiSelectCheckbox
           options={sqlTypes}
           placeholder="All"
@@ -788,5 +798,100 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         </div>
       </div>
     );
+  }
+}
+
+interface SelectedFilterProps {
+  filters: Filters;
+  onRemoveFilter: (filters: Filters) => void;
+}
+export function SelectedFilters(
+  props: SelectedFilterProps,
+): React.ReactElement {
+  const { filters, onRemoveFilter } = props;
+  const badges = Object.keys(filters).map(filter => {
+    if (
+      filters[filter] != null &&
+      filters[filter] !== inactiveFiltersState[filter] &&
+      filter !== "timeUnit"
+    ) {
+      return (
+        <FilterBadge
+          filters={filters}
+          name={filter}
+          values={filters[filter]}
+          unit={filters["timeUnit"]}
+          key={filter}
+          onRemoveFilter={onRemoveFilter}
+        />
+      );
+    }
+    return null;
+  });
+
+  return <div className={badge.area}>{badges}</div>;
+}
+
+function removeFilter(
+  filters: Filters,
+  filter: string,
+  onRemoveFilter: (filters: Filters) => void,
+): void {
+  filters[filter] = inactiveFiltersState[filter];
+  onRemoveFilter(filters);
+}
+interface FilterBadgeProps {
+  filters: Filters;
+  name: string;
+  values: string | boolean;
+  unit: string;
+  onRemoveFilter: (filters: Filters) => void;
+}
+function FilterBadge(props: FilterBadgeProps): React.ReactElement {
+  const { filters, name, values, onRemoveFilter } = props;
+  const unit = name === "timeNumber" ? props.unit : "";
+  let value = `${getLabelFromKey(name)}: ${values.toString()} ${unit}`;
+  if (value.length > 100) {
+    value = value.substring(0, 100) + "...";
+  }
+  return (
+    <div className={badge.wrapper}>
+      {value}
+      <Cancel
+        className={badge.closeArea}
+        onClick={() => removeFilter(filters, name, onRemoveFilter)}
+      />
+    </div>
+  );
+}
+
+function getLabelFromKey(key: string): string {
+  switch (key) {
+    case "app":
+      return "Application Name";
+    case "database":
+      return "Database";
+    case "executionStatus":
+      return "Execution Status";
+    case "fullScan":
+      return "Full Scan";
+    case "nodes":
+      return "Node";
+    case "regions":
+      return "Region";
+    case "schemaInsightType":
+      return "Schema Insight Type";
+    case "sessionStatus":
+      return "Session Status";
+    case "sqlType":
+      return "Statement Type";
+    case "timeNumber":
+      return "Runs Longer Than";
+    case "username":
+      return "User Name";
+    case "workloadInsightType":
+      return "Workload Insight Type";
+    default:
+      return key;
   }
 }
