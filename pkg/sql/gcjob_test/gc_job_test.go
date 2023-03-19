@@ -437,6 +437,7 @@ func TestGCTenant(t *testing.T) {
 				SQLInfo: mtinfopb.SQLInfo{ID: activeTenID},
 			},
 			execCfg.DefaultZoneConfig,
+			false, /* ifNotExists */
 		)
 		return err
 	}))
@@ -453,6 +454,7 @@ func TestGCTenant(t *testing.T) {
 				},
 			},
 			execCfg.DefaultZoneConfig,
+			false, /* ifNotExists */
 		)
 		return err
 	}))
