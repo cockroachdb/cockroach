@@ -9,6 +9,7 @@
 package serverccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -181,6 +183,47 @@ VALUES($1, $2, $3, $4, $5)`, id, secret, username, created, expires)
 	t.Logf("response 5:\n%#v", body)
 	require.Equal(t, len(body.Sessions), 1)
 	require.Equal(t, body.Sessions[0].ApplicationName, "hello system")
+}
+
+// TestServerControllerDefaultHTTPTenant ensures that the default
+// tenant selected in the cookie does not use the default tenant
+// from the cluster setting *unless* the user successfully logged
+// in to that tenant.
+func TestServerControllerDefaultHTTPTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	defer s.Stopper().Stop(ctx)
+
+	_, sql, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantName: "hello",
+		TenantID:   roachpb.MustMakeTenantID(10),
+	})
+	require.NoError(t, err)
+
+	_, err = sql.Exec("CREATE user foo with password 'cockroach'")
+	require.NoError(t, err)
+
+	client, err := s.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+
+	resp, err := client.Post(s.AdminURL()+"/login",
+		"application/json",
+		bytes.NewBuffer([]byte("{\"username\":\"foo\",\"password\":\"cockroach\"})")),
+	)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	tenantCookie := ""
+	for _, c := range resp.Cookies() {
+		if c.Name == server.TenantSelectCookieName {
+			tenantCookie = c.Value
+		}
+	}
+	require.Equal(t, "hello", tenantCookie)
 }
 
 // TestServerControllerBadHTTPCookies tests the controller's proxy
