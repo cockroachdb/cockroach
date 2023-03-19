@@ -69,6 +69,7 @@ type createTenantConfig struct {
 	ID          *uint64 `json:"id,omitempty"`
 	Name        *string `json:"name,omitempty"`
 	ServiceMode *string `json:"service_mode,omitempty"`
+	IfNotExists bool    `json:"if_not_exists,omitempty"`
 }
 
 func (p *planner) createTenantInternal(
@@ -122,7 +123,7 @@ func (p *planner) createTenantInternal(
 
 	// Create the record. This also auto-allocates an ID if the
 	// tenantID was zero.
-	if _, err := CreateTenantRecord(
+	if resultTid, err := CreateTenantRecord(
 		ctx,
 		p.ExecCfg().Codec,
 		p.ExecCfg().Settings,
@@ -130,9 +131,15 @@ func (p *planner) createTenantInternal(
 		p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
 		info,
 		initialTenantZoneConfig,
+		ctcfg.IfNotExists,
 	); err != nil {
 		return tid, err
+	} else if !resultTid.IsSet() {
+		// No error but no valid tenant ID: there was an IF NOT EXISTS
+		// clause and the tenant already existed. Nothing else to do.
+		return tid, nil
 	}
+
 	// Retrieve the possibly auto-generated ID.
 	tenantID = info.ID
 	tid = roachpb.MustMakeTenantID(tenantID)
@@ -243,6 +250,7 @@ func CreateTenantRecord(
 	spanConfigs spanconfig.KVAccessor,
 	info *mtinfopb.TenantInfoWithUsage,
 	initialTenantZoneConfig *zonepb.ZoneConfig,
+	ifNotExists bool,
 ) (roachpb.TenantID, error) {
 	const op = "create"
 	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
@@ -264,6 +272,11 @@ func CreateTenantRecord(
 	if tenID == 0 {
 		tenantID, err := getAvailableTenantID(ctx, info.Name, txn)
 		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.DuplicateObject && ifNotExists {
+				// IF NOT EXISTS: no error if the tenant already existed.
+				// We also don't have any more work to do.
+				return roachpb.TenantID{}, nil
+			}
 			return roachpb.TenantID{}, err
 		}
 		tenID = tenantID.ToUint64()
@@ -325,11 +338,17 @@ func CreateTenantRecord(
 		query, args...,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
+			if ifNotExists {
+				// IF NOT EXISTS: no error if the tenant already existed.
+				// We also don't have any more work to do.
+				return roachpb.TenantID{}, nil
+			}
 			extra := redact.RedactableString("")
 			if info.Name != "" {
 				extra = redact.Sprintf(" or with name %q", info.Name)
 			}
-			return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject, "a tenant with ID %d%s already exists", tenID, extra)
+			return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject,
+				"a tenant with ID %d%s already exists", tenID, extra)
 		}
 		return roachpb.TenantID{}, errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
@@ -506,7 +525,8 @@ func getAvailableTenantID(
 		return roachpb.TenantID{}, err
 	}
 	if row == nil {
-		return roachpb.TenantID{}, errors.Newf("tenant with name %q already exists", tenantName)
+		return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject,
+			"tenant with name %q already exists", tenantName)
 	}
 	nextID := *row[0].(*tree.DInt)
 	return roachpb.MustMakeTenantID(uint64(nextID)), nil

@@ -4357,8 +4357,8 @@ create_stmt:
 // %Help: CREATE TENANT - create new tenant
 // %Category: Experimental
 // %Text:
-// CREATE TENANT name [ LIKE <tenant_spec> ]
-// CREATE TENANT name [ LIKE <tenant_spec> ] FROM REPLICATION OF <tenant_spec> ON <location> [ WITH OPTIONS ... ]
+// CREATE TENANT [ IF NOT EXISTS ] name [ LIKE <tenant_spec> ]
+// CREATE TENANT [ IF NOT EXISTS ] name [ LIKE <tenant_spec> ] FROM REPLICATION OF <tenant_spec> ON <location> [ WITH OPTIONS ... ]
 create_tenant_stmt:
   CREATE TENANT d_expr opt_like_tenant
   {
@@ -4366,6 +4366,15 @@ create_tenant_stmt:
     $$.val = &tree.CreateTenant{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
       Like: $4.likeTenantSpec(),
+    }
+  }
+| CREATE TENANT IF NOT EXISTS d_expr opt_like_tenant
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateTenant{
+      IfNotExists: true,
+      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
+      Like: $7.likeTenantSpec(),
     }
   }
 | CREATE TENANT d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
@@ -4377,6 +4386,18 @@ create_tenant_stmt:
       ReplicationSourceAddress: $10.expr(),
       Options: *$11.tenantReplicationOptions(),
       Like: $4.likeTenantSpec(),
+    }
+  }
+| CREATE TENANT IF NOT EXISTS d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateTenantFromReplication{
+      IfNotExists: true,
+      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $11.expr()},
+      ReplicationSourceAddress: $13.expr(),
+      Options: *$14.tenantReplicationOptions(),
+      Like: $7.likeTenantSpec(),
     }
   }
 | CREATE TENANT error // SHOW HELP: CREATE TENANT

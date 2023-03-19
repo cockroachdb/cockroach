@@ -206,9 +206,14 @@ func ingestionPlanHook(
 			p.InternalSQLTxn(),
 			p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
 			tenantInfo, initialTenantZoneConfig,
+			ingestionStmt.IfNotExists,
 		)
 		if err != nil {
 			return err
+		} else if !destinationTenantID.IsSet() {
+			// No error but no valid tenant ID: there was an IF NOT EXISTS
+			// clause and the tenant already existed. Nothing else to do.
+			return nil
 		}
 
 		// Create a new stream with stream client.

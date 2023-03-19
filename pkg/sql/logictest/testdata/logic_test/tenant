@@ -124,7 +124,11 @@ SHOW TENANT seven
 # Test creating a tenant with the same name as an existing tenant, but a unique
 # ID.
 statement error tenant with name "three" already exists
-CREATE TENANT three;
+CREATE TENANT three
+
+# Ignore duplicates (this is a no-op because "three" already exists).
+statement ok
+CREATE TENANT IF NOT EXISTS three
 
 statement ok
 set default_transaction_read_only = on;

@@ -2149,13 +2149,17 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 
 // CreateTenant represents a CREATE TENANT statement.
 type CreateTenant struct {
-	TenantSpec *TenantSpec
-	Like       *LikeTenantSpec
+	IfNotExists bool
+	TenantSpec  *TenantSpec
+	Like        *LikeTenantSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TENANT ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
 	ctx.FormatNode(node.TenantSpec)
 	ctx.FormatNode(node.Like)
 }
@@ -2176,7 +2180,8 @@ func (node *LikeTenantSpec) Format(ctx *FmtCtx) {
 // CreateTenantFromReplication represents a CREATE TENANT...FROM REPLICATION
 // statement.
 type CreateTenantFromReplication struct {
-	TenantSpec *TenantSpec
+	IfNotExists bool
+	TenantSpec  *TenantSpec
 
 	// ReplicationSourceTenantName is the name of the tenant that
 	// we are replicating into the newly created tenant.
@@ -2204,6 +2209,9 @@ var _ NodeFormatter = &TenantReplicationOptions{}
 // Format implements the NodeFormatter interface.
 func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TENANT ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
 	// NB: we do not anonymize the tenant name because we assume that tenant names
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)

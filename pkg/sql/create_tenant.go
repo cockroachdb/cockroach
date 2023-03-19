@@ -19,6 +19,7 @@ import (
 )
 
 type createTenantNode struct {
+	ifNotExists    bool
 	tenantSpec     tenantSpec
 	likeTenantSpec tenantSpec
 }
@@ -36,6 +37,7 @@ func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (p
 		}
 	}
 	return &createTenantNode{
+		ifNotExists:    n.IfNotExists,
 		tenantSpec:     tspec,
 		likeTenantSpec: likeTenantSpec,
 	}, nil
@@ -69,6 +71,7 @@ func (n *createTenantNode) startExec(params runParams) error {
 		tenantID := tid.ToUint64()
 		ctcfg.ID = &tenantID
 	}
+	ctcfg.IfNotExists = n.ifNotExists
 	_, err = params.p.createTenantInternal(params.ctx, ctcfg, configTemplate)
 	return err
 }
