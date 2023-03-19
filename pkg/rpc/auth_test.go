@@ -954,6 +954,12 @@ type mockAuthorizer struct {
 	hasExemptFromRateLimiterCapability bool
 }
 
+func (m mockAuthorizer) HasProcessDebugCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return errors.New("tenant does not have capability")
+}
+
 var _ tenantcapabilities.Authorizer = &mockAuthorizer{}
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
