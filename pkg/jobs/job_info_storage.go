@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -139,15 +140,14 @@ func (i InfoStorage) iterate(
 		return errors.New("cannot iterate over the job info table without an associated txn")
 	}
 
-	// TODO(dt): verify this predicate hits the index.
 	rows, err := i.txn.QueryIteratorEx(
 		ctx, "job-info-iter", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT info_key, value 
-		FROM system.job_info 
-		WHERE job_id = $1 AND substring(info_key for $2) = $3 
+		`SELECT info_key, value
+		FROM system.job_info
+		WHERE job_id = $1 AND info_key >= $2 AND info_key < $3
 		ORDER BY info_key ASC, written DESC`,
-		i.j.ID(), len(infoPrefix), infoPrefix,
+		i.j.ID(), infoPrefix, roachpb.Key(infoPrefix).PrefixEnd(),
 	)
 	if err != nil {
 		return err
