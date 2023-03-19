@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
@@ -68,9 +69,31 @@ type Server struct {
 	st         *cluster.Settings
 	mux        *http.ServeMux
 	spy        logSpy
+	authorizer tenantcapabilities.Authorizer
 }
 
+var _ http.Handler = &Server{}
+
 type serverTickleFn = func(ctx context.Context, name roachpb.TenantName) error
+
+type tenantDelegatingServer struct {
+	systemDebugServer *Server
+	tenantID          roachpb.TenantID
+}
+
+func (t tenantDelegatingServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	req = req.WithContext(withTenantID(req.Context(), t.tenantID))
+	t.systemDebugServer.ServeHTTP(w, req)
+}
+
+func NewTenantDelegatingServer(systemDebugServer *Server, tenantID roachpb.TenantID) http.Handler {
+	return &tenantDelegatingServer{
+		systemDebugServer: systemDebugServer,
+		tenantID:          tenantID,
+	}
+}
+
+var _ http.Handler = &tenantDelegatingServer{}
 
 // NewServer sets up a debug server.
 func NewServer(
@@ -79,6 +102,7 @@ func NewServer(
 	hbaConfDebugFn http.HandlerFunc,
 	profiler pprofui.Profiler,
 	serverTickleFn serverTickleFn,
+	authorizer tenantcapabilities.Authorizer,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -171,6 +195,7 @@ func NewServer(
 		st:         st,
 		mux:        mux,
 		spy:        spy,
+		authorizer: authorizer,
 	}
 }
 
@@ -266,8 +291,31 @@ func (ds *Server) RegisterClosedTimestampSideTransport(
 		})
 }
 
+type debugServerTenantIDString struct{}
+
+func getTenantIDFromContext(ctx context.Context) (roachpb.TenantID, error) {
+	if u := ctx.Value(debugServerTenantIDString{}); u != nil {
+		return roachpb.TenantIDFromString(u.(string))
+	}
+	return roachpb.SystemTenantID, nil
+}
+
+func withTenantID(ctx context.Context, tenantID roachpb.TenantID) context.Context {
+	return context.WithValue(ctx, debugServerTenantIDString{}, tenantID.String())
+}
+
 // ServeHTTP serves various tools under the /debug endpoint.
 func (ds *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	requestTenant, err := getTenantIDFromContext(r.Context())
+	if err != nil {
+		http.Error(w, "debug request missing tenant info", http.StatusForbidden)
+		return
+	}
+	if err := ds.authorizer.HasProcessDebugCapability(r.Context(), requestTenant); err != nil {
+		http.Error(w, "tenant does not have capability to debug the running process", http.StatusForbidden)
+		return
+	}
+
 	handler, _ := ds.mux.Handler(r)
 	handler.ServeHTTP(w, r)
 }

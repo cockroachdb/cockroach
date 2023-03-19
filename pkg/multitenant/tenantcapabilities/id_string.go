@@ -18,12 +18,13 @@ func _() {
 	_ = x[CanViewTSDBMetrics-8]
 	_ = x[ExemptFromRateLimiting-9]
 	_ = x[TenantSpanConfigBounds-10]
-	_ = x[MaxCapabilityID-10]
+	_ = x[CanDebugProcess-11]
+	_ = x[MaxCapabilityID-11]
 }
 
-const _ID_name = "can_admin_relocate_rangecan_admin_scattercan_admin_splitcan_admin_unsplitcan_use_nodelocal_storagecan_view_node_infocan_check_consistencycan_view_tsdb_metricsexempt_from_rate_limitingspan_config_bounds"
+const _ID_name = "can_admin_relocate_rangecan_admin_scattercan_admin_splitcan_admin_unsplitcan_use_nodelocal_storagecan_view_node_infocan_check_consistencycan_view_tsdb_metricsexempt_from_rate_limitingspan_config_boundscan_debug_process"
 
-var _ID_index = [...]uint8{0, 24, 41, 56, 73, 98, 116, 137, 158, 183, 201}
+var _ID_index = [...]uint8{0, 24, 41, 56, 73, 98, 116, 137, 158, 183, 201, 218}
 
 func (i ID) String() string {
 	i -= 1

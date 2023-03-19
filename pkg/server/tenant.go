@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -108,7 +109,7 @@ type SQLServerWrapper struct {
 	eventsExporter obs.EventsExporterInterface
 	stopper        *stop.Stopper
 
-	debug *debug.Server
+	debug http.Handler
 
 	// pgL is the SQL listener.
 	pgL net.Listener
@@ -410,14 +411,24 @@ func newTenantServer(
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
 
-	// Create the debug API server.
-	debugServer := debug.NewServer(
-		baseCfg.AmbientCtx,
-		args.Settings,
-		sqlServer.pgServer.HBADebugFn(),
-		sqlServer.execCfg.SQLStatusServer,
-		nil, /* serverTickleFn */
-	)
+	var debugServer http.Handler
+
+	if _, isSharedProcess := deps.instanceIDContainer.OptionalNodeID(); isSharedProcess {
+		debugServer = debug.NewTenantDelegatingServer(
+			args.SystemDebugServer,
+			args.SQLConfig.TenantID,
+		)
+	} else {
+		// Create the debug API server.
+		debugServer = debug.NewServer(
+			baseCfg.AmbientCtx,
+			args.Settings,
+			sqlServer.pgServer.HBADebugFn(),
+			sqlServer.execCfg.SQLStatusServer,
+			nil, /* serverTickleFn */
+			&tenantcapabilitiesauthorizer.AllowEverythingAuthorizer{},
+		)
+	}
 
 	return &SQLServerWrapper{
 		cfg: args.BaseConfig,

@@ -70,6 +70,10 @@ type Authorizer interface {
 	// IsExemptFromRateLimiting returns true of the tenant should
 	// not be subject to rate limiting.
 	IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool
+
+	// HasProcessDebugCapability returns an error if a tenant, referenced by its ID,
+	// is not allowed to debug the running process.
+	HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error
 }
 
 // Entry ties together a tenantID with its capabilities.

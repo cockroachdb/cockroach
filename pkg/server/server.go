@@ -1142,6 +1142,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			}
 			return errors.Newf("server found with type %T", d)
 		},
+		authorizer,
 	)
 
 	recoveryServer := loqrecovery.NewServer(
