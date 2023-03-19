@@ -65,3 +65,10 @@ func (n *AllowNothingAuthorizer) HasNodelocalStorageCapability(
 func (n *AllowNothingAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
 	return false
 }
+
+// HasProcessDebugCapability implements the tenantcapabilities.Authorizer interface.
+func (n *AllowNothingAuthorizer) HasProcessDebugCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return errors.New("operation blocked")
+}

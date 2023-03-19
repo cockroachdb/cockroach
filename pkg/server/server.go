@@ -178,7 +178,7 @@ type Server struct {
 	stopper        *stop.Stopper
 	stopTrigger    *stopTrigger
 
-	debug          *debug.Server
+	debug          debug.IServer
 	kvProber       *kvprober.Prober
 	inspectzServer *inspectz.Server
 
@@ -1218,21 +1218,25 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	drain.serverCtl = sc
 
 	// Create the debug API server.
-	debugServer := debug.NewServer(
-		cfg.BaseConfig.AmbientCtx,
-		st,
-		sqlServer.pgServer.HBADebugFn(),
-		sqlServer.execCfg.SQLStatusServer,
-		// TODO(knz): Remove this once
-		// https://github.com/cockroachdb/cockroach/issues/84585 is
-		// implemented.
-		func(ctx context.Context, name roachpb.TenantName) error {
-			d, err := sc.getServer(ctx, name)
-			if err != nil {
-				return err
-			}
-			return errors.Newf("server found with type %T", d)
-		},
+	debugServer := debug.NewTenantDelegatingServer(
+		debug.NewServer(
+			cfg.BaseConfig.AmbientCtx,
+			st,
+			sqlServer.pgServer.HBADebugFn(),
+			sqlServer.execCfg.SQLStatusServer,
+			// TODO(knz): Remove this once
+			// https://github.com/cockroachdb/cockroach/issues/84585 is
+			// implemented.
+			func(ctx context.Context, name roachpb.TenantName) error {
+				d, err := sc.getServer(ctx, name)
+				if err != nil {
+					return err
+				}
+				return errors.Newf("server found with type %T", d)
+			},
+			authorizer,
+		),
+		roachpb.SystemTenantID,
 	)
 
 	recoveryServer := loqrecovery.NewServer(

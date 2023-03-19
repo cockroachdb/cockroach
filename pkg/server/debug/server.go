@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
@@ -68,9 +69,69 @@ type Server struct {
 	st         *cluster.Settings
 	mux        *http.ServeMux
 	spy        logSpy
+	authorizer tenantcapabilities.Authorizer
 }
 
+// IServer allows the tenantDelegatingServer to be used in both
+// server.go and tenant.go to setup the system tenant and app
+// tenant's debug servers. This allows us to maintain a single
+// code path for both implementations.
+type IServer interface {
+	http.Handler
+
+	RegisterWorkloadCollector(stores *kvserver.Stores) error
+	RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error
+	RegisterClosedTimestampSideTransport(sender *sidetransport.Sender, receiver sidetransportReceiver)
+}
+
+var _ IServer = &Server{}
+var _ IServer = &tenantDelegatingServer{}
+
 type serverTickleFn = func(ctx context.Context, name roachpb.TenantName) error
+
+type tenantDelegatingServer struct {
+	systemDebugServer IServer
+	tenantID          roachpb.TenantID
+}
+
+// RegisterWorkloadCollector implements IServer and delegates to the system server
+func (t tenantDelegatingServer) RegisterWorkloadCollector(stores *kvserver.Stores) error {
+	return t.systemDebugServer.RegisterWorkloadCollector(stores)
+}
+
+// RegisterEngines implements IServer and delegates to the system server
+func (t tenantDelegatingServer) RegisterEngines(
+	specs []base.StoreSpec, engines []storage.Engine,
+) error {
+	return t.systemDebugServer.RegisterEngines(specs, engines)
+}
+
+// RegisterClosedTimestampSideTransport implements IServer and delegates to the system server
+func (t tenantDelegatingServer) RegisterClosedTimestampSideTransport(
+	sender *sidetransport.Sender, receiver sidetransportReceiver,
+) {
+	t.systemDebugServer.RegisterClosedTimestampSideTransport(sender, receiver)
+}
+
+func (t tenantDelegatingServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Only set tenantID when we don't have a valid one, or it's set to system.
+	// This ensures that multiple delegations of the system server don't each
+	// override the tenantID set at the outermost call layer.
+	requestTenant, err := getTenantIDFromContext(req.Context())
+	if err != nil || requestTenant.IsSystem() {
+		req = req.WithContext(withTenantID(req.Context(), t.tenantID))
+	}
+	t.systemDebugServer.ServeHTTP(w, req)
+}
+
+func NewTenantDelegatingServer(systemDebugServer IServer, tenantID roachpb.TenantID) IServer {
+	return &tenantDelegatingServer{
+		systemDebugServer: systemDebugServer,
+		tenantID:          tenantID,
+	}
+}
+
+var _ http.Handler = &tenantDelegatingServer{}
 
 // NewServer sets up a debug server.
 func NewServer(
@@ -79,6 +140,7 @@ func NewServer(
 	hbaConfDebugFn http.HandlerFunc,
 	profiler pprofui.Profiler,
 	serverTickleFn serverTickleFn,
+	authorizer tenantcapabilities.Authorizer,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -171,6 +233,7 @@ func NewServer(
 		st:         st,
 		mux:        mux,
 		spy:        spy,
+		authorizer: authorizer,
 	}
 }
 
@@ -266,8 +329,31 @@ func (ds *Server) RegisterClosedTimestampSideTransport(
 		})
 }
 
+type debugServerTenantIDString struct{}
+
+func getTenantIDFromContext(ctx context.Context) (roachpb.TenantID, error) {
+	if u := ctx.Value(debugServerTenantIDString{}); u != nil {
+		return roachpb.TenantIDFromString(u.(string))
+	}
+	return roachpb.SystemTenantID, nil
+}
+
+func withTenantID(ctx context.Context, tenantID roachpb.TenantID) context.Context {
+	return context.WithValue(ctx, debugServerTenantIDString{}, tenantID.String())
+}
+
 // ServeHTTP serves various tools under the /debug endpoint.
 func (ds *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	requestTenant, err := getTenantIDFromContext(r.Context())
+	if err != nil {
+		http.Error(w, "debug request missing tenant info", http.StatusForbidden)
+		return
+	}
+	if err := ds.authorizer.HasProcessDebugCapability(r.Context(), requestTenant); err != nil {
+		http.Error(w, "tenant does not have capability to debug the running process", http.StatusForbidden)
+		return
+	}
+
 	handler, _ := ds.mux.Handler(r)
 	handler.ServeHTTP(w, r)
 }

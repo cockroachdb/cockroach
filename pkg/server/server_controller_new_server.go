@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -158,7 +159,16 @@ func (s *Server) makeSharedProcessTenantConfig(
 		InternalServer:     s.node,
 		ServerInterceptors: s.grpc.serverInterceptorsInfo,
 	}
-	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper, s.recorder)
+	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(
+		ctx,
+		tenantID,
+		index,
+		parentCfg,
+		localServerInfo,
+		stopper,
+		s.recorder,
+		s.debug,
+	)
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -175,6 +185,7 @@ func makeSharedProcessTenantServerConfig(
 	kvServerInfo LocalKVServerInfo,
 	stopper *stop.Stopper,
 	nodeMetricsRecorder *status.MetricsRecorder,
+	debugServer debug.IServer,
 ) (baseCfg BaseConfig, sqlCfg SQLConfig, err error) {
 	st := cluster.MakeClusterSettings()
 
@@ -345,6 +356,10 @@ func makeSharedProcessTenantServerConfig(
 	sqlCfg.LocalKVServerInfo = &kvServerInfo
 
 	sqlCfg.NodeMetricsRecorder = nodeMetricsRecorder
+
+	// If this isn't set, the tenant will initialize its own debug
+	// server and be permitted to run pprof on the process.
+	sqlCfg.SystemDebugServer = debugServer
 
 	return baseCfg, sqlCfg, nil
 }
