@@ -26,6 +26,7 @@ import {
   defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
+  SelectedFilters,
 } from "../../queryFilter";
 import { queryByName, syncHistory } from "../../util";
 import { getTableSortFromURL } from "../../sortedtable/getTableSortFromURL";
@@ -220,6 +221,12 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
           />
         </PageConfigItem>
       </PageConfig>
+      <SelectedFilters
+        filters={filters}
+        onRemoveFilter={onSubmitFilters}
+        onClearFilters={clearFilters}
+        className={cx("margin-adjusted")}
+      />
       <div className={cx("table-area")}>
         <Loading
           loading={schemaInsights === null}
@@ -236,7 +243,6 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
                   totalCount={filteredSchemaInsights?.length}
                   arrayItemName="schema insights"
                   activeFilters={countActiveFilters}
-                  onClearFilters={clearFilters}
                 />
               </div>
               <InsightsSortedTable
