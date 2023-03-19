@@ -2365,11 +2365,6 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	skip.UnderRace(t) // too slow under stressrace
 	skip.UnderShort(t)
 
-	timeout := 5 * time.Second
-	if skip.Stress() {
-		timeout = 30 * time.Second
-	}
-
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
@@ -2425,10 +2420,10 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 		epochLeases, expLeases = countLeases()
 		t.Logf("enabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 		return epochLeases == 0 && expLeases > 0
-	}, timeout, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond) // accomodate stress/deadlock builds
 
 	// Run a scan across the ranges, just to make sure they work.
-	scanCtx, cancel := context.WithTimeout(ctx, timeout)
+	scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	_, err = db.Scan(scanCtx, scratchKey, scratchKey.PrefixEnd(), 1)
 	require.NoError(t, err)
@@ -2444,5 +2439,5 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 		epochLeases, expLeases = countLeases()
 		t.Logf("disabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 		return epochLeases > 0 && expLeases > 0 && expLeases <= initialExpLeases
-	}, timeout, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
