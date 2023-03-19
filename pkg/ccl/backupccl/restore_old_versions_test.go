@@ -60,6 +60,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	var (
 		clusterDirs           = testdataBase + "/cluster"
 		systemRoleMembersDirs = testdataBase + "/system-role-members-restore"
+		systemPrivilegesDirs  = testdataBase + "/system-privileges-restore"
 	)
 
 	t.Run("cluster-restore", func(t *testing.T) {
@@ -85,6 +86,17 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(systemRoleMembersDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir))
+		}
+	})
+
+	t.Run("full-cluster-restore-system-privileges-without-ids", func(t *testing.T) {
+		dirs, err := os.ReadDir(systemPrivilegesDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(systemPrivilegesDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir))
 		}
 	})
 }
@@ -297,6 +309,41 @@ func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *tes
 			{"admin", "root", "true", "2", "1"},
 			{"testrole", "testuser1", "false", "100", "101"},
 			{"testrole", "testuser2", "true", "100", "102"},
+		})
+	}
+}
+
+func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		// The restore queries are run with `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
+		// option to ensure the restore is successful on development branches. This
+		// is because, while the backups were generated on release branches and have
+		// versions such as 22.2 in their manifest, the development branch will have
+		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
+		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
+		// that the manifest version is always less than the
+		// BinaryMinSupportedVersion which will in turn fail the restore unless we
+		// pass in the specified option to elide the compatability check.
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.privileges", [][]string{
+			{"testuser1", "/global/", "{VIEWACTIVITY}", "{}", "100"},
+			{"testuser2", "/global/", "{MODIFYCLUSTERSETTING}", "{}", "101"},
 		})
 	}
 }
