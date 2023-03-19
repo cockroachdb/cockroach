@@ -1719,6 +1719,14 @@ type StreamingTestingKnobs struct {
 
 	// AfterCutoverStarted allows blocking after the cutover has started.
 	AfterCutoverStarted func()
+
+	// OnCutoverProgressUpdate is called on every progress update
+	// call during the cutover process.
+	OnCutoverProgressUpdate func()
+
+	// CutoverProgressShouldUpdate overrides the standard logic
+	// for whether the job record is updated on a progress update.
+	CutoverProgressShouldUpdate func() bool
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

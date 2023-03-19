@@ -41,7 +41,15 @@ enum ReadConsistencyType {
   // The consistency type is similar to INCONSISTENT in that using it
   // can result in dirty reads. However, like the CONSISTENT type, it
   // requires the replica performing the read to hold a valid read lease,
-  // meaning that it can't return arbitrarily stale data.
+  // meaning that it can't return arbitrarily stale data. Note that
+  // read-committed does not imply any real-time constraints. If process A
+  // completes write w, then process B begins a read r, r is not necessarily
+  // guaranteed to observe w even if they are from the same client. This can
+  // occur due to the unbounded time delay between Raft appends and state
+  // machine application.
+  // TODO(baptist): Should we remove this level as it is virtually identical to
+  // INCONSISTENT. See #98862 as we may change the behavior to give stronger
+  // guarantees.
   READ_UNCOMMITTED = 1;
   // INCONSISTENT reads return the latest available, committed values.
   // They are more efficient, but may read stale values as pending
