@@ -31,6 +31,14 @@ DROP TENANT [_] -- literals removed
 DROP TENANT [123] -- identifiers removed
 
 parse
+DROP TENANT [123::INT]
+----
+DROP TENANT [123::INT8] -- normalized!
+DROP TENANT [((123)::INT8)] -- fully parenthesized
+DROP TENANT [_::INT8] -- literals removed
+DROP TENANT [123::INT8] -- identifiers removed
+
+parse
 DROP TENANT foo IMMEDIATE
 ----
 DROP TENANT foo IMMEDIATE

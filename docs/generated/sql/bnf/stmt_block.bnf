@@ -1832,7 +1832,7 @@ drop_func_stmt ::=
 
 tenant_spec ::=
 	d_expr
-	| '[' d_expr ']'
+	| '[' a_expr ']'
 
 opt_immediate ::=
 	'IMMEDIATE'
