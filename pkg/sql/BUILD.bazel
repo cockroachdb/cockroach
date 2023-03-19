@@ -105,6 +105,7 @@ go_library(
         "drop_tenant.go",
         "drop_type.go",
         "drop_view.go",
+        "error_hints.go",
         "error_if_rows.go",
         "event_log.go",
         "exec_factory_util.go",
