@@ -137,7 +137,7 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error only users with the admin role are allowed to create tenant
+statement error user testuser does not have MANAGETENANT privilege on global
 CREATE TENANT four
 
 subtest drop_tenant

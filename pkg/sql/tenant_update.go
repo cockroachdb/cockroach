@@ -193,7 +193,7 @@ func (p *planner) setTenantService(
 		return readOnlyError("ALTER TENANT SERVICE")
 	}
 
-	if err := p.RequireAdminRole(ctx, "set tenant service"); err != nil {
+	if err := canManageTenant(ctx, p); err != nil {
 		return err
 	}
 	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "set tenant service"); err != nil {
@@ -226,7 +226,7 @@ func (p *planner) renameTenant(
 		return readOnlyError("ALTER TENANT RENAME TO")
 	}
 
-	if err := p.RequireAdminRole(ctx, "rename tenant"); err != nil {
+	if err := canManageTenant(ctx, p); err != nil {
 		return err
 	}
 	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "rename tenant"); err != nil {

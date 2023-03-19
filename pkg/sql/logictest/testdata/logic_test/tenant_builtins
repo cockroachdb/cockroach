@@ -259,10 +259,10 @@ SELECT crdb_internal.update_tenant_resource_limits('tenant-number-ten', 1000, 10
 
 user testuser
 
-statement error only users with the admin role are allowed to create tenant
+statement error user testuser does not have MANAGETENANT privilege on global
 SELECT crdb_internal.create_tenant(314)
 
-statement error only users with the admin role are allowed to create tenant
+statement error user testuser does not have MANAGETENANT privilege on global
 SELECT crdb_internal.create_tenant('not-allowed')
 
 statement error user testuser does not have MANAGETENANT privilege on global
