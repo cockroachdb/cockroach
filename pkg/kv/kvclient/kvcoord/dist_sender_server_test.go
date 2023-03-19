@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1080,9 +1079,6 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 91856) // flaky test
-
 	defer log.Scope(t).Close(t)
 
 	for _, rc := range []kvpb.ReadConsistencyType{
@@ -1090,38 +1086,23 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		kvpb.INCONSISTENT,
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
-			s, _ := startNoSplitMergeServer(t)
+			s, db := startNoSplitMergeServer(t)
 			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
-			db := s.DB()
-			if err := setupMultipleRanges(ctx, db, "b"); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, setupMultipleRanges(ctx, db, "b"))
 
 			// Write keys "a" and "b", the latter of which is the first key in the
 			// second range.
-			keys := [2]string{"a", "b"}
-			ts := [2]hlc.Timestamp{}
-			for i, key := range keys {
+			{
 				b := &kv.Batch{}
-				b.Put(key, "value")
-				if err := db.Run(ctx, b); err != nil {
-					t.Fatal(err)
-				}
-				ts[i] = s.Clock().Now()
-				log.Infof(ctx, "%d: %s %s", i, key, ts[i])
-				if i == 0 {
-					testutils.SucceedsSoon(t, func() error {
-						// Enforce that when we write the second key, it's written
-						// with a strictly higher timestamp. We're dropping logical
-						// ticks and the clock may just have been pushed into the
-						// future, so that's necessary. See #3122.
-						if ts[0].WallTime >= s.Clock().Now().WallTime {
-							return errors.New("time stands still")
-						}
-						return nil
-					})
-				}
+				b.Put("a", "value")
+				require.NoError(t, db.Run(ctx, b))
+			}
+			ts := s.Clock().Now()
+			{
+				b := &kv.Batch{}
+				b.Put("b", "value")
+				require.NoError(t, db.Run(ctx, b))
 			}
 
 			// Do an inconsistent Scan/ReverseScan from a new DistSender and verify
@@ -1132,40 +1113,46 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				kvpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), false),
 				kvpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), false),
 			} {
-				clock := hlc.NewClockForTesting(timeutil.NewManualTime(ts[0].GoTime().Add(1)))
-				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-					AmbientCtx:         s.AmbientCtx(),
-					Settings:           cluster.MakeTestingClusterSettings(),
-					Clock:              clock,
-					NodeDescs:          s.Gossip(),
-					RPCContext:         s.RPCContext(),
-					NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
-					FirstRangeProvider: s.Gossip(),
+				// The looping is necessary since the Put above of a may not have been
+				// applied by time we execute the scan. If it has not run, then try the
+				// scan again. READ_UNCOMMITTED and INCONSISTENT reads to not push
+				// intents.
+				testutils.SucceedsSoon(t, func() error {
+					clock := hlc.NewClockForTesting(timeutil.NewManualTime(ts.GoTime().Add(1)))
+					ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+						AmbientCtx:         s.AmbientCtx(),
+						Settings:           s.ClusterSettings(),
+						Clock:              clock,
+						NodeDescs:          s.Gossip(),
+						RPCContext:         s.RPCContext(),
+						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+						FirstRangeProvider: s.Gossip(),
+					})
+
+					reply, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{ReadConsistency: rc}, request)
+					require.NoError(t, err.GoError())
+
+					var rows []roachpb.KeyValue
+					switch r := reply.(type) {
+					case *kvpb.ScanResponse:
+						rows = r.Rows
+					case *kvpb.ReverseScanResponse:
+						rows = r.Rows
+					default:
+						t.Fatalf("unexpected response %T: %v", reply, reply)
+					}
+
+					if l := len(rows); l != 1 {
+						// This is a retryable error, the row for 'a' may not yet be applied
+						// to the state machine.
+						return errors.Newf("%d: expected 1 row; got %d\n%v", i, l, rows)
+					}
+					if key := string(rows[0].Key); key != "a" {
+						t.Errorf("expected key 'a' got %q", key)
+					}
+
+					return nil
 				})
-
-				reply, err := kv.SendWrappedWith(context.Background(), ds, kvpb.Header{
-					ReadConsistency: rc,
-				}, request)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				var rows []roachpb.KeyValue
-				switch r := reply.(type) {
-				case *kvpb.ScanResponse:
-					rows = r.Rows
-				case *kvpb.ReverseScanResponse:
-					rows = r.Rows
-				default:
-					t.Fatalf("unexpected response %T: %v", reply, reply)
-				}
-
-				if l := len(rows); l != 1 {
-					t.Fatalf("%d: expected 1 row; got %d\n%v", i, l, rows)
-				}
-				if key := string(rows[0].Key); keys[0] != key {
-					t.Errorf("expected key %q; got %q", keys[0], key)
-				}
 			}
 		})
 	}
