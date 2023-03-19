@@ -484,6 +484,7 @@ func (ds *DistSender) partialRangeFeed(
 		if err != nil {
 			return err
 		}
+		ds.metrics.RangefeedRestartRanges.Inc(1)
 		if errInfo.evict {
 			token.Evict(ctx)
 			token = rangecache.EvictionToken{}
