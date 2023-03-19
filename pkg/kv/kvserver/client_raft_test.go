@@ -3267,6 +3267,7 @@ HAVING
 
 func TestDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 96630, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// Five nodes is too much to reliably run under testrace with our aggressive
