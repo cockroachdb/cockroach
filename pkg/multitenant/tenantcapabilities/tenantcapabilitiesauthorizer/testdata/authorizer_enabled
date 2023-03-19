@@ -8,7 +8,7 @@ client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRe
 
 has-capability-for-batch ten=10 cmds=(Merge)
 ----
-client tenant does not have capability "ID(12)" (*kvpb.MergeRequest)
+client tenant does not have capability "ID(13)" (*kvpb.MergeRequest)
 
 has-node-status-capability ten=10
 ----
@@ -34,7 +34,7 @@ ok
 
 has-capability-for-batch ten=10 cmds=(Merge)
 ----
-client tenant does not have capability "ID(12)" (*kvpb.MergeRequest)
+client tenant does not have capability "ID(13)" (*kvpb.MergeRequest)
 
 has-node-status-capability ten=10
 ----

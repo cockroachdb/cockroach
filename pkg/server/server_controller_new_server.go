@@ -155,8 +155,9 @@ func (s *Server) makeSharedProcessTenantConfig(
 	// Create a configuration for the new tenant.
 	parentCfg := s.cfg
 	localServerInfo := LocalKVServerInfo{
-		InternalServer:     s.node,
-		ServerInterceptors: s.grpc.serverInterceptorsInfo,
+		InternalServer:                  s.node,
+		ServerInterceptors:              s.grpc.serverInterceptorsInfo,
+		SameProcessCapabilityAuthorizer: s.rpcContext.TenantRPCAuthorizer,
 	}
 	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper, s.recorder)
 	if err != nil {
