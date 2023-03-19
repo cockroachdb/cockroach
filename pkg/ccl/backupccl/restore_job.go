@@ -1219,6 +1219,7 @@ func createImportingDescriptors(
 						spanConfigs,
 						&tenantInfoCopy,
 						initialTenantZoneConfig,
+						false, /* ifNotExists */
 					); err != nil {
 						return err
 					}
