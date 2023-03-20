@@ -14,7 +14,6 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
-        "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_aws_aws_sdk_go_v2_config//:config",
         "@com_github_aws_aws_sdk_go_v2_service_ec2//:ec2",
