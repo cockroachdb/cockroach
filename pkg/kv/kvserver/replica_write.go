@@ -43,7 +43,7 @@ import (
 // TODO(erikgrinaker): this, and the timeout handling, should be moved into a
 // migration helper that manages checkpointing and retries as well.
 var migrateApplicationTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.migration.migrate_application.timeout",
 	"timeout for a Migrate request to be applied across all replicas of a range",
 	1*time.Minute,

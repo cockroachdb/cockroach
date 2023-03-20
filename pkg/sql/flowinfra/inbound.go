@@ -238,6 +238,8 @@ func processProducerMessage(
 		switch dst.Push(row, meta) {
 		case execinfra.NeedMoreRows:
 			continue
+		case execinfra.SwitchToAnotherPortal:
+			return processMessageResult{err: errors.AssertionFailedf("not allowed to switch to another portal")}
 		case execinfra.DrainRequested:
 			// The rest of rows are not needed by the consumer. We'll send a drain
 			// signal to the producer and expect it to quickly send trailing

@@ -28,7 +28,7 @@ import (
 // information is collected and passed around, regardless of the value of this
 // setting.
 var FollowerReadsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.closed_timestamp.follower_reads_enabled",
 	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
 	true,

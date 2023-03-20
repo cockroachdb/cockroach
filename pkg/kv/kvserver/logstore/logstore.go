@@ -38,7 +38,7 @@ import (
 )
 
 var disableSyncRaftLog = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.raft_log.disable_synchronization_unsafe",
 	"set to true to disable synchronization on Raft log writes to persistent storage. "+
 		"Setting to true risks data loss or data corruption on server crashes. "+
@@ -47,7 +47,7 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 )
 
 var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.raft_log.non_blocking_synchronization.enabled",
 	"set to true to enable non-blocking synchronization on Raft log writes to "+
 		"persistent storage. Setting to true does not risk data loss or data corruption "+

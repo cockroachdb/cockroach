@@ -32,7 +32,7 @@ var MaxBytes = settings.RegisterIntSetting(
 // MaxSpans controls the maximum number of spans which can be protected
 // by all protected timestamp records.
 var MaxSpans = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.protectedts.max_spans",
 	"if non-zero the limit of the number of spans which can be protected",
 	32768,
