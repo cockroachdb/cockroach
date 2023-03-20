@@ -34,6 +34,7 @@ go_library(
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/cli",
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/local",
         "//pkg/testutils",

@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -40,7 +41,9 @@ func (n *dnsProvider) Domain() string {
 }
 
 // CreateRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) error {
+func (n *dnsProvider) CreateRecords(
+	_ context.Context, _ *logger.Logger, records ...vm.DNSRecord,
+) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err
@@ -59,7 +62,9 @@ func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) 
 }
 
 // LookupSRVRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(_ context.Context, name string) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) LookupSRVRecords(
+	_ context.Context, _ *logger.Logger, name string,
+) ([]vm.DNSRecord, error) {
 	records, err := n.loadRecords()
 	if err != nil {
 		return nil, err
@@ -74,7 +79,7 @@ func (n *dnsProvider) LookupSRVRecords(_ context.Context, name string) ([]vm.DNS
 }
 
 // ListRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) ListRecords(_ context.Context) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) ListRecords(_ context.Context, _ *logger.Logger) ([]vm.DNSRecord, error) {
 	records, err := n.loadRecords()
 	if err != nil {
 		return nil, err
@@ -83,7 +88,9 @@ func (n *dnsProvider) ListRecords(_ context.Context) ([]vm.DNSRecord, error) {
 }
 
 // DeleteRecordsByName is part of the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsByName(_ context.Context, names ...string) error {
+func (n *dnsProvider) DeleteRecordsByName(
+	_ context.Context, _ *logger.Logger, names ...string,
+) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err
@@ -101,7 +108,9 @@ func (n *dnsProvider) DeleteRecordsByName(_ context.Context, names ...string) er
 }
 
 // DeleteRecordsBySubdomain is part of the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsBySubdomain(_ context.Context, subdomain string) error {
+func (n *dnsProvider) DeleteRecordsBySubdomain(
+	_ context.Context, _ *logger.Logger, subdomain string,
+) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err

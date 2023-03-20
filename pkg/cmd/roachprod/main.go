@@ -1689,7 +1689,7 @@ The command will print an app.side-eye.io URL where the snapshot can be viewed.
 func validateAndConfigure(cmd *cobra.Command, args []string) {
 	// Skip validation for commands that are self-sufficient.
 	switch cmd.Name() {
-	case "help", "version", "list":
+	case "help", "version":
 		return
 	}
 
@@ -1723,6 +1723,12 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 			printErrAndExit(fmt.Errorf("duplicate cloud provider specified %q", p))
 		}
 		providersSet[p] = struct{}{}
+	}
+	if config.DryRun {
+		if config.Verbose {
+			printErrAndExit(fmt.Errorf("--verbose and --dry-run are mutually exclusive"))
+		}
+		config.Logger.Printf("Enabling [***Experimental***] --dry-run mode. No infra changes will be made!")
 	}
 }
 
@@ -1801,7 +1807,7 @@ var sshKeysListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list every SSH public key installed on clusters managed by roachprod",
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		authorizedKeys, err := gce.GetUserAuthorizedKeys()
+		authorizedKeys, err := gce.GetUserAuthorizedKeys(config.Logger)
 		if err != nil {
 			return err
 		}
@@ -1833,7 +1839,7 @@ var sshKeysAddCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Adding new public key for user %s...\n", ak.User)
-		return gce.AddUserAuthorizedKey(ak)
+		return gce.AddUserAuthorizedKey(config.Logger, ak)
 	}),
 }
 
@@ -1844,7 +1850,7 @@ var sshKeysRemoveCmd = &cobra.Command{
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		user := args[0]
 
-		existingKeys, err := gce.GetUserAuthorizedKeys()
+		existingKeys, err := gce.GetUserAuthorizedKeys(config.Logger)
 		if err != nil {
 			return fmt.Errorf("failed to fetch existing keys: %w", err)
 		}

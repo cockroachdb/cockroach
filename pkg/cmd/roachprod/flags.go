@@ -122,6 +122,11 @@ func initFlags() {
 		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
 			config.SharedUser, config.OSUser.Username))
 
+	rootCmd.PersistentFlags().BoolVarP(&config.DryRun, "dry-run", "d",
+		false, "dry-run mode (log all commands & execute read-only ones; i.e., no infra changes)")
+	rootCmd.PersistentFlags().BoolVarP(&config.Verbose, "verbose", "v",
+		false, "verbose mode (log all executed commands)")
+
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
@@ -188,7 +193,7 @@ func initFlags() {
 		"Show cost estimates",
 	)
 	listCmd.Flags().BoolVarP(&listDetails,
-		"details", "d", false, "Show cluster details")
+		"details", "", false, "Show cluster details")
 	listCmd.Flags().BoolVar(&listJSON,
 		"json", false, "Show cluster specs in a json format")
 	listCmd.Flags().BoolVarP(&listMine,

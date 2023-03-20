@@ -6,6 +6,7 @@
 package aws
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
@@ -28,7 +29,8 @@ func (p *Provider) sshKeyExists(l *logger.Logger, keyName, region string) (bool,
 		"ec2", "describe-key-pairs",
 		"--region", region,
 	}
-	err := p.runJSONCommand(l, args, &data)
+	err := p.RunJSONCommand(context.Background(), l, args, &data)
+
 	if err != nil {
 		return false, err
 	}
@@ -72,7 +74,8 @@ func (p *Provider) sshKeyImport(l *logger.Logger, keyName, region string) error 
 		"--public-key-material", fmt.Sprintf("fileb://%s", sshPublicKeyPath),
 		"--tag-specifications", tagSpecs,
 	}
-	err = p.runJSONCommand(l, args, &data)
+	err = p.RunJSONCommand(context.Background(), l, args, &data)
+
 	// If two roachprod instances run at the same time with the same key, they may
 	// race to upload the key pair.
 	if err == nil || strings.Contains(err.Error(), "InvalidKeyPair.Duplicate") {

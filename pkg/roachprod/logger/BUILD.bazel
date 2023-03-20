@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "log.go",
         "log_redirect.go",
+        "test_utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/logger",
     visibility = ["//visibility:public"],
@@ -13,6 +14,7 @@ go_library(
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
