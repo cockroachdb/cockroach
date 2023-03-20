@@ -62,7 +62,10 @@ func runReplicaGCChangedPeers(
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
+	settings := install.MakeClusterSettings(install.EnvOption([]string{
+		"COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
+		"COCKROACH_SCAN_INTERVAL=1m",
+	}))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, 3))
 
 	h := &replicagcTestHelper{c: c, t: t}
@@ -260,29 +263,41 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 }
 
 func waitForZeroReplicasOnN3(ctx context.Context, t test.Test, db *gosql.DB) {
-	if err := retry.ForDuration(5*time.Minute, func() error {
-		const q = `select range_id, replicas from crdb_internal.ranges_no_leases where replicas @> ARRAY[3];`
-		rows, err := db.QueryContext(ctx, q)
-		if err != nil {
-			return err
-		}
-		m := make(map[int64]string)
-		for rows.Next() {
-			var rangeID int64
-			var replicas string
-			if err := rows.Scan(&rangeID, &replicas); err != nil {
+	var err error
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		Multiplier: 1,
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff: 5 * time.Second,
+	}); r.Next(); {
+		err = func() error {
+			const q = `select range_id, replicas from crdb_internal.ranges_no_leases where replicas @> ARRAY[3];`
+			rows, err := db.QueryContext(ctx, q)
+			if err != nil {
 				return err
 			}
-			m[rangeID] = replicas
+			m := make(map[int64]string)
+			for rows.Next() {
+				var rangeID int64
+				var replicas string
+				if err := rows.Scan(&rangeID, &replicas); err != nil {
+					return err
+				}
+				m[rangeID] = replicas
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			t.L().Printf("found %d replicas found on n3\n", len(m))
+			if len(m) == 0 {
+				return nil
+			}
+			return errors.Errorf("ranges remained on n3 (according to meta2): %+v", m)
+		}()
+		if err == nil {
+			break
 		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		if len(m) == 0 {
-			return nil
-		}
-		return errors.Errorf("ranges remained on n3 (according to meta2): %+v", m)
-	}); err != nil {
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 }
