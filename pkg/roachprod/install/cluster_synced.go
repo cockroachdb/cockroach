@@ -182,7 +182,7 @@ func runWithMaybeRetry(
 }
 
 func scpWithRetry(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
-	return runWithMaybeRetry(l, defaultSCPRetry, func() (*RunResultDetails, error) { return scp(src, dest) })
+	return runWithMaybeRetry(l, defaultSCPRetry, func() (*RunResultDetails, error) { return scp(l, src, dest) })
 }
 
 // Host returns the public IP of a node.
@@ -1965,6 +1965,7 @@ func (c *SyncedCluster) Logs(
 		var stderrBuf bytes.Buffer
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = &stderrBuf
+
 		if err := cmd.Run(); err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -2005,6 +2006,7 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = out
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
+
 		if err := cmd.Run(); err != nil && ctx.Err() == nil {
 			return errors.Wrapf(err, "failed to run cockroach debug merge-logs:\n%v", errBuf.String())
 		}
@@ -2379,7 +2381,7 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 // scp return type conforms to what runWithMaybeRetry expects. A nil error
 // is always returned here since the only error that can happen is an scp error
 // which we do want to be able to retry.
-func scp(src, dest string) (*RunResultDetails, error) {
+func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	args := []string{
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
@@ -2387,6 +2389,7 @@ func scp(src, dest string) (*RunResultDetails, error) {
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
 	cmd := exec.Command(args[0], args[1:]...)
+
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		err = errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
@@ -2421,7 +2424,7 @@ func (c *SyncedCluster) Parallel(
 	if err != nil {
 		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
 		for _, f := range failed {
-			fmt.Fprintf(l.Stderr, "%d: %+v: %s\n", f.Index, f.Err, f.Out)
+			l.Errorf("%d: %+v: %s", f.Index, f.Err, f.Out)
 		}
 		return err
 	}
