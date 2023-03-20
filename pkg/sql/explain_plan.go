@@ -139,7 +139,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 	}
 	// Add index recommendations to output, if they exist.
-	if recs := params.p.instrumentation.indexRecs; recs != nil {
+	if recs := params.p.instrumentation.explainIndexRecs; recs != nil {
 		// First add empty row.
 		rows = append(rows, "")
 		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))
