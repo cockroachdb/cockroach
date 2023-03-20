@@ -548,7 +548,7 @@ func (b *Builder) buildFunction(
 	}
 
 	overload := f.ResolvedOverload()
-	if overload.IsUDF {
+	if overload.HasSQLBody() {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
 
@@ -619,6 +619,7 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change since

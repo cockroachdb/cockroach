@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -372,6 +374,11 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		for j, e := range cb.updateExprs {
 			val, err := eval.Expr(ctx, cb.evalCtx, e)
 			if err != nil {
+				if errors.Is(err, eval.ErrNilTxnInClusterContext) {
+					// Cannot use expressions that depend on the transaction of the
+					// evaluation context as the default value for backfill.
+					return roachpb.Key{}, pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+				}
 				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
 			if j < len(cb.added) && !cb.added[j].IsNullable() && val == tree.DNull {
@@ -876,6 +883,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 			val, err := eval.Expr(ctx, ib.evalCtx, texpr)
 			if err != nil {
+				if errors.Is(err, eval.ErrNilTxnInClusterContext) {
+					// Cannot use expressions that depend on the transaction of the
+					// evaluation context as the default value for backfill.
+					err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+				}
 				return err
 			}
 			colIdx, ok := ib.colIdxMap.Get(colID)
