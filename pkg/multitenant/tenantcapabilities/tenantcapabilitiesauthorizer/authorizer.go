@@ -223,6 +223,25 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 	return nil
 }
 
+func (a *Authorizer) HasNodelocalStorageCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	if a.elideCapabilityChecks(ctx, tenID) {
+		return nil
+	}
+	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
+	if !found {
+		log.Infof(ctx,
+			"no capability information for tenant %s; requests that require capabilities may be denied",
+			tenID,
+		)
+	}
+	if !found || !cp.GetBool(tenantcapabilities.CanUseNodelocalStorage) {
+		return errors.Newf("client tenant does not have capability to use nodelocal storage")
+	}
+	return nil
+}
+
 // elideCapabilityChecks returns true if capability checks should be skipped for
 // the supplied tenant.
 func (a *Authorizer) elideCapabilityChecks(ctx context.Context, tenID roachpb.TenantID) bool {

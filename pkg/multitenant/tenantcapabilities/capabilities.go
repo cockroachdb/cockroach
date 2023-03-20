@@ -75,6 +75,11 @@ type Authorizer interface {
 	// is not allowed to query the TSDB for metrics.
 	HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error
 
+	// HasNodelocalStorageCapability returns an error if a tenant,
+	// referenced by its ID, is not allowed to use the nodelocal
+	// storage service.
+	HasNodelocalStorageCapability(ctx context.Context, tenID roachpb.TenantID) error
+
 	// IsExemptFromRateLimiting returns true of the tenant should
 	// not be subject to rate limiting.
 	IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool
@@ -197,6 +202,10 @@ const (
 	// rate limiter.
 	ExemptFromRateLimiting // exempt_from_rate_limiting
 
+	// CanUseNodelocalStorage allows the tenant to access the nodelocal
+	// storage service on the KV nodes.
+	CanUseNodelocalStorage // can_use_nodelocal_storage
+
 	// TenantSpanConfigBounds contains the bounds for the tenant's
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
@@ -239,6 +248,7 @@ func (c CapabilityID) CapabilityType() Type {
 		CanAdminScatter,
 		CanAdminSplit,
 		CanAdminUnsplit,
+		CanUseNodelocalStorage,
 		CanViewNodeInfo,
 		CanViewTSDBMetrics,
 		ExemptFromRateLimiting:

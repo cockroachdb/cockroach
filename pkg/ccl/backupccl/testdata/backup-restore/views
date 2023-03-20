@@ -27,11 +27,11 @@ sc1.v1 CREATE VIEW sc1.v1 (
 ) AS SELECT a FROM db1.sc1.tbl1
 
 exec-sql
-BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
 ----
 
 exec-sql
-RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://0/test/' WITH new_db_name = db1_new
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
 ----
 
 query-sql
