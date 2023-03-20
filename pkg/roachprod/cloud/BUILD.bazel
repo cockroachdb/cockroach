@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "cloud",
@@ -14,7 +15,6 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
-        "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_aws_aws_sdk_go_v2_config//:config",
         "@com_github_aws_aws_sdk_go_v2_service_ec2//:ec2",
@@ -36,6 +36,14 @@ go_test(
     deps = [
         "@com_github_aws_aws_sdk_go_v2_service_ec2//types",
         "@com_github_stretchr_testify//assert",
+    ],
+)
+
+disallowed_imports_test(
+    "cloud",
+    disallowed_list = [
+        # see https://github.com/cockroachdb/cockroach/issues/99090
+        "//pkg/util/log",
     ],
 )
 

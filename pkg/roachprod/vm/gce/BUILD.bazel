@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "gce",
@@ -18,6 +19,14 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_x_sync//errgroup",
+    ],
+)
+
+disallowed_imports_test(
+    "gce",
+    disallowed_list = [
+        # https://github.com/cockroachdb/cockroach/issues/99090
+        "//pkg/util/log",
     ],
 )
 

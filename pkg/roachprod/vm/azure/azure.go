@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -92,18 +91,18 @@ type Provider struct {
 }
 
 func (p *Provider) SnapshotVolume(
-	volume vm.Volume, name, description string, labels map[string]string,
+	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
 ) (string, error) {
 	// TODO(leon): implement
 	panic("unimplemented")
 }
 
-func (p *Provider) CreateVolume(vm.VolumeCreateOpts) (vm.Volume, error) {
+func (p *Provider) CreateVolume(*logger.Logger, vm.VolumeCreateOpts) (vm.Volume, error) {
 	// TODO(leon): implement
 	panic("unimplemented")
 }
 
-func (p *Provider) AttachVolumeToVM(vm.Volume, *vm.VM) (string, error) {
+func (p *Provider) AttachVolumeToVM(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
 	// TODO(leon): implement
 	panic("unimplemented")
 }
@@ -128,12 +127,12 @@ func (p *Provider) ProjectActive(project string) bool {
 }
 
 // CleanSSH implements vm.Provider, is a no-op, and returns nil.
-func (p *Provider) CleanSSH() error {
+func (p *Provider) CleanSSH(l *logger.Logger) error {
 	return nil
 }
 
 // ConfigSSH is part of the vm.Provider interface and is a no-op.
-func (p *Provider) ConfigSSH(zones []string) error {
+func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	// On Azure, the SSH public key is set as part of VM instance creation.
 	return nil
 }
@@ -195,7 +194,7 @@ func (p *Provider) Create(
 		providerOpts.Zone = defaultZone
 	}
 
-	if _, err := p.createVNets(ctx, providerOpts.Locations, *providerOpts); err != nil {
+	if _, err := p.createVNets(l, ctx, providerOpts.Locations, *providerOpts); err != nil {
 		return err
 	}
 
@@ -232,10 +231,10 @@ func (p *Provider) Create(
 			for _, nodeIdx := range nodes {
 				name := names[nodeIdx]
 				errs.Go(func() error {
-					_, err := p.createVM(ctx, group, subnet, name, sshKey, opts, *providerOpts)
+					_, err := p.createVM(l, ctx, group, subnet, name, sshKey, opts, *providerOpts)
 					err = errors.Wrapf(err, "creating VM %s", name)
 					if err == nil {
-						log.Infof(context.Background(), "created VM %s", name)
+						l.Printf("created VM %s", name)
 					}
 					return err
 				})
@@ -247,7 +246,7 @@ func (p *Provider) Create(
 }
 
 // Delete implements the vm.Provider interface.
-func (p *Provider) Delete(vms vm.List) error {
+func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
@@ -289,13 +288,13 @@ func (p *Provider) Delete(vms vm.List) error {
 }
 
 // Reset implements the vm.Provider interface. It is a no-op.
-func (p *Provider) Reset(vms vm.List) error {
+func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 	return nil
 }
 
 // DeleteCluster implements the vm.DeleteCluster interface, providing
 // a fast-path to tear down all resources associated with a cluster.
-func (p *Provider) DeleteCluster(name string) error {
+func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
@@ -322,7 +321,7 @@ func (p *Provider) DeleteCluster(name string) error {
 		if err != nil {
 			return err
 		}
-		log.Infof(context.Background(), "marked Azure resource group %s for deletion\n", *group.Name)
+		l.Printf("marked Azure resource group %s for deletion\n", *group.Name)
 		futures = append(futures, future)
 
 		if err := it.NextWithContext(ctx); err != nil {
@@ -346,7 +345,7 @@ func (p *Provider) DeleteCluster(name string) error {
 }
 
 // Extend implements the vm.Provider interface.
-func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
+func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
@@ -394,7 +393,7 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 }
 
 // FindActiveAccount implements vm.Provider.
-func (p *Provider) FindActiveAccount() (string, error) {
+func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	// It's a JSON Web Token, so we'll just dissect it enough to get the
 	// data that we want. There are three base64-encoded segments
 	// separated by periods. The second segment is the "claims" JSON
@@ -517,6 +516,7 @@ func (p *Provider) Name() string {
 }
 
 func (p *Provider) createVM(
+	l *logger.Logger,
 	ctx context.Context,
 	group resources.Group,
 	subnet network.Subnet,
@@ -545,11 +545,11 @@ func (p *Provider) createVM(
 	}
 
 	// We first need to allocate a NIC to give the VM network access
-	ip, err := p.createIP(ctx, group, name, providerOpts)
+	ip, err := p.createIP(l, ctx, group, name, providerOpts)
 	if err != nil {
 		return
 	}
-	nic, err := p.createNIC(ctx, group, ip, subnet)
+	nic, err := p.createNIC(l, ctx, group, ip, subnet)
 	if err != nil {
 		return
 	}
@@ -565,7 +565,7 @@ func (p *Provider) createVM(
 
 	osVolumeSize := int32(opts.OsVolumeSize)
 	if osVolumeSize < 32 {
-		log.Info(context.Background(), "WARNING: increasing the OS volume size to minimally allowed 32GB")
+		l.Printf("WARNING: increasing the OS volume size to minimally allowed 32GB")
 		osVolumeSize = 32
 	}
 	// Derived from
@@ -653,7 +653,7 @@ func (p *Provider) createVM(
 		switch providerOpts.NetworkDiskType {
 		case "ultra-disk":
 			var ultraDisk compute.Disk
-			ultraDisk, err = p.createUltraDisk(ctx, group, name+"-ultra-disk", providerOpts)
+			ultraDisk, err = p.createUltraDisk(l, ctx, group, name+"-ultra-disk", providerOpts)
 			if err != nil {
 				return
 			}
@@ -694,7 +694,11 @@ func (p *Provider) createVM(
 
 // createNIC creates a network adapter that is bound to the given public IP address.
 func (p *Provider) createNIC(
-	ctx context.Context, group resources.Group, ip network.PublicIPAddress, subnet network.Subnet,
+	l *logger.Logger,
+	ctx context.Context,
+	group resources.Group,
+	ip network.PublicIPAddress,
+	subnet network.Subnet,
 ) (iface network.Interface, err error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -736,7 +740,7 @@ func (p *Provider) createNIC(
 	}
 	iface, err = future.Result(client)
 	if err == nil {
-		log.Infof(context.Background(), "created NIC %s %s", *iface.Name, *(*iface.IPConfigurations)[0].PrivateIPAddress)
+		l.Printf("created NIC %s %s", *iface.Name, *(*iface.IPConfigurations)[0].PrivateIPAddress)
 	}
 	return
 }
@@ -930,7 +934,7 @@ func (p *Provider) getVnetNetworkSecurityGroupName(location string) string {
 // be able to communicate with one another, although this is scoped by
 // the value of the vnet-name flag.
 func (p *Provider) createVNets(
-	ctx context.Context, locations []string, providerOpts ProviderOpts,
+	l *logger.Logger, ctx context.Context, locations []string, providerOpts ProviderOpts,
 ) (map[string]network.VirtualNetwork, error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -1031,7 +1035,7 @@ func (p *Provider) createVNets(
 		resourceGroup := p.mu.resourceGroups[vnetResourceGroupName(location)]
 		networkSecurityGroup := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(location)]
 		p.mu.Unlock()
-		if vnet, _, err := p.createVNet(ctx, resourceGroup, networkSecurityGroup, prefix, providerOpts); err == nil {
+		if vnet, _, err := p.createVNet(l, ctx, resourceGroup, networkSecurityGroup, prefix, providerOpts); err == nil {
 			ret[location] = vnet
 			vnets = append(vnets, vnet)
 		} else {
@@ -1041,7 +1045,7 @@ func (p *Provider) createVNets(
 
 	// We only need to create peerings if there are new subnets.
 	if newSubnetsCreated {
-		return ret, p.createVNetPeerings(ctx, vnets)
+		return ret, p.createVNetPeerings(l, ctx, vnets)
 	}
 	return ret, nil
 }
@@ -1050,6 +1054,7 @@ func (p *Provider) createVNets(
 // A single /18 subnet will be created within the VNet.
 // The results  will be memoized in the Provider.
 func (p *Provider) createVNet(
+	l *logger.Logger,
 	ctx context.Context,
 	resourceGroup resources.Group,
 	securityGroup network.SecurityGroup,
@@ -1102,13 +1107,15 @@ func (p *Provider) createVNet(
 	p.mu.Lock()
 	p.mu.subnets[*resourceGroup.Location] = subnet
 	p.mu.Unlock()
-	log.Infof(context.Background(), "created Azure VNet %q in %q with prefix %d", vnetName, *resourceGroup.Name, prefix)
+	l.Printf("created Azure VNet %q in %q with prefix %d", vnetName, *resourceGroup.Name, prefix)
 	return
 }
 
 // createVNetPeerings creates a fully-connected graph of peerings
 // between the provided vnets.
-func (p *Provider) createVNetPeerings(ctx context.Context, vnets []network.VirtualNetwork) error {
+func (p *Provider) createVNetPeerings(
+	l *logger.Logger, ctx context.Context, vnets []network.VirtualNetwork,
+) error {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
 		return err
@@ -1160,7 +1167,7 @@ func (p *Provider) createVNetPeerings(ctx context.Context, vnets []network.Virtu
 		if err != nil {
 			return errors.Wrapf(err, "creating vnet peering %s", name)
 		}
-		log.Infof(context.Background(), "created vnet peering %s", *peering.Name)
+		l.Printf("created vnet peering %s", *peering.Name)
 	}
 
 	return nil
@@ -1168,7 +1175,11 @@ func (p *Provider) createVNetPeerings(ctx context.Context, vnets []network.Virtu
 
 // createIP allocates an IP address that will later be bound to a NIC.
 func (p *Provider) createIP(
-	ctx context.Context, group resources.Group, name string, providerOpts ProviderOpts,
+	l *logger.Logger,
+	ctx context.Context,
+	group resources.Group,
+	name string,
+	providerOpts ProviderOpts,
 ) (ip network.PublicIPAddress, err error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -1201,7 +1212,7 @@ func (p *Provider) createIP(
 		return
 	}
 	if ip, err = future.Result(ipc); err == nil {
-		log.Infof(context.Background(), "created Azure IP %s", *ip.Name)
+		l.Printf("created Azure IP %s", *ip.Name)
 	} else {
 		err = errors.Wrapf(err, "creating IP %s", name)
 	}
@@ -1316,7 +1327,11 @@ func (p *Provider) getOrCreateResourceGroup(
 }
 
 func (p *Provider) createUltraDisk(
-	ctx context.Context, group resources.Group, name string, providerOpts ProviderOpts,
+	l *logger.Logger,
+	ctx context.Context,
+	group resources.Group,
+	name string,
+	providerOpts ProviderOpts,
 ) (compute.Disk, error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -1353,7 +1368,7 @@ func (p *Provider) createUltraDisk(
 	if err != nil {
 		return compute.Disk{}, err
 	}
-	log.Infof(context.Background(), "created ultra-disk: %s\n", *disk.Name)
+	l.Printf("created ultra-disk: %s\n", *disk.Name)
 	return disk, err
 }
 

@@ -50,6 +50,9 @@ func DefaultProject() string {
 // projects for which a cron GC job exists.
 var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 
+// Denotes if this provider was successfully initialized.
+var inited = false
+
 // Init registers the GCE provider into vm.Providers.
 //
 // If the gcloud tool is not available on the local path, the provider is a
@@ -66,6 +69,7 @@ func Init() error {
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
+	inited = true
 	vm.Providers[ProviderName] = providerInstance
 	return nil
 }
@@ -290,7 +294,7 @@ type snapshotCreateJson struct {
 }
 
 func (p *Provider) SnapshotVolume(
-	volume vm.Volume, name, description string, labels map[string]string,
+	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
 ) (string, error) {
 	args := []string{
 		"compute",
@@ -320,9 +324,9 @@ func (p *Provider) SnapshotVolume(
 		"add-labels", name,
 		"--labels", s[:len(s)-1],
 	}
-
 	cmd := exec.Command("gcloud", args...)
 	_, err = cmd.CombinedOutput()
+
 	if err != nil {
 		return "", err
 	}
@@ -345,7 +349,9 @@ type describeVolumeCommandResponse struct {
 	Users                  []string          `json:"users"`
 }
 
-func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+func (p *Provider) CreateVolume(
+	l *logger.Logger, vco vm.VolumeCreateOpts,
+) (vol vm.Volume, err error) {
 	// TODO(leon): SourceSnapshotID and IOPS, are not handled
 	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
 		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
@@ -415,6 +421,7 @@ func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err err
 	}
 	cmd := exec.Command("gcloud", args...)
 	_, err = cmd.CombinedOutput()
+
 	if err != nil {
 		return vol, err
 	}
@@ -445,7 +452,7 @@ type attachDiskCmdDisk struct {
 	Type       string `json:"type"`
 }
 
-func (p *Provider) AttachVolumeToVM(volume vm.Volume, vm *vm.VM) (string, error) {
+func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
 	// Volume attach
 	args := []string{
 		"compute",
@@ -629,7 +636,7 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 }
 
 // CleanSSH TODO(peter): document
-func (p *Provider) CleanSSH() error {
+func (p *Provider) CleanSSH(l *logger.Logger) error {
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet", "--remove"}
 		cmd := exec.Command("gcloud", args...)
@@ -643,7 +650,7 @@ func (p *Provider) CleanSSH() error {
 }
 
 // ConfigSSH is part of the vm.Provider interface
-func (p *Provider) ConfigSSH(zones []string) error {
+func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
@@ -826,7 +833,7 @@ func min(a, b int) int {
 }
 
 // Delete TODO(peter): document
-func (p *Provider) Delete(vms vm.List) error {
+func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
@@ -870,7 +877,7 @@ func (p *Provider) Delete(vms vm.List) error {
 }
 
 // Reset implements the vm.Provider interface.
-func (p *Provider) Reset(vms vm.List) error {
+func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
@@ -913,7 +920,7 @@ func (p *Provider) Reset(vms vm.List) error {
 }
 
 // Extend TODO(peter): document
-func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
+func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	// The gcloud command only takes a single instance.  Unlike Delete() above, we have to
 	// perform the iteration here.
 	for _, v := range vms {
@@ -935,7 +942,7 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 }
 
 // FindActiveAccount TODO(peter): document
-func (p *Provider) FindActiveAccount() (string, error) {
+func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	args := []string{"auth", "list", "--format", "json", "--filter", "status~ACTIVE"}
 
 	accounts := make([]jsonAuth, 0)
@@ -1026,7 +1033,7 @@ func (p *Provider) Name() string {
 
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
-	return true
+	return inited
 }
 
 // ProjectActive is part of the vm.Provider interface.

@@ -1,6 +1,7 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_go//extras:bindata.bzl", "bindata")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "aws",
@@ -18,7 +19,6 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
-        "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -58,6 +58,14 @@ bindata(
     metadata = True,
     package = "aws",
     visibility = ["//pkg/gen:__pkg__"],
+)
+
+disallowed_imports_test(
+    "aws",
+    disallowed_list = [
+        # see https://github.com/cockroachdb/cockroach/issues/99090
+        "//pkg/util/log",
+    ],
 )
 
 get_x_data(name = "get_x_data")
