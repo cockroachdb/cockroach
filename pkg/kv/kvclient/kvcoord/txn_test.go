@@ -104,6 +104,8 @@ func TestTxnDBBasics(t *testing.T) {
 // to the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
 func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 	for _, latency := range []time.Duration{0, 10 * time.Millisecond} {
 		b.Run(fmt.Sprintf("latency=%s", latency), func(b *testing.B) {
 			var s localtestcluster.LocalTestCluster
