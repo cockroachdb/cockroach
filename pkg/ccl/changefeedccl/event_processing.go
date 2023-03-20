@@ -185,7 +185,7 @@ func newEventConsumer(
 	ss := sink
 	// Only webhook supports concurrent EmitRow calls
 	if sink.getConcreteType() != sinkTypeWebhook {
-		ss = &safeSink{wrapped: sink, beforeFlush: c.Flush}
+		ss = &safeSink{wrapped: sink}
 	}
 	c.makeConsumer = func() (eventConsumer, error) {
 		return makeConsumer(ss, c)
