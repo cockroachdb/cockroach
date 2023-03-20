@@ -267,6 +267,7 @@ func (sd *StoreDetail) status(
 	// even before the first gossip arrives for a store.
 	deadAsOf := sd.LastUpdatedTime.Add(deadThreshold)
 	if now.After(deadAsOf) {
+		sd.LastUnavailable = now
 		return storeStatusDead
 	}
 	// If there's no descriptor (meaning no gossip ever arrived for this
