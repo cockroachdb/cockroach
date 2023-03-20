@@ -63,8 +63,8 @@ type TestCluster struct {
 
 	// Connection to the storage cluster. Typically, the first connection in
 	// Conns, but could be different if we're transparently running in a test
-	// tenant (see the DisableDefaultTestTenant flag of base.TestServerArgs for
-	// more detail).
+	// tenant (see the DefaultTestTenant flag of base.TestServerArgs for more
+	// detail).
 	storageConn *gosql.DB
 	stopper     *stop.Stopper
 	mu          struct {
@@ -355,8 +355,12 @@ func (tc *TestCluster) Start(t testing.TB) {
 	// (validated below).
 	probabilisticallyStartTestTenant := false
 	if !tc.Servers[0].Cfg.DisableDefaultTestTenant {
-		probabilisticallyStartTestTenant = serverutils.ShouldStartDefaultTestTenant(t)
+		probabilisticallyStartTestTenant = serverutils.ShouldStartDefaultTestTenant(t, tc.serverArgs[0])
 	}
+
+	// If we only allowed probabilistic starting of the test tenant, we disable
+	// starting additional tenants, even if we didn't start the test tenant.
+	preventFurtherTenants := tc.serverArgs[0].DefaultTestTenant == base.TestTenantProbabilisticOnly
 
 	startedTestTenant := true
 	disableLBS := false
@@ -449,6 +453,12 @@ func (tc *TestCluster) Start(t testing.TB) {
 		}
 		return err
 	})
+
+	if preventFurtherTenants {
+		for _, s := range tc.Servers {
+			s.DisableStartTenant(errors.New("attempting to manually start a tenant while DefaultTestTenant is set to TestTenantProbabilisticOnly"))
+		}
+	}
 }
 
 type checkType bool

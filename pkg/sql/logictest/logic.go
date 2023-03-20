@@ -1315,13 +1315,18 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
+	var defaultTestTenant base.DefaultTestTenantOptions
+	if t.cfg.UseTenant || t.cfg.DisableDefaultTestTenant {
+		defaultTestTenant = base.TestTenantDisabled
+	}
+
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
 			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
 				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
 			),
-			DisableDefaultTestTenant: t.cfg.UseTenant || t.cfg.DisableDefaultTestTenant,
+			DefaultTestTenant: defaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.

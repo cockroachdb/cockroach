@@ -66,7 +66,16 @@ const (
 // tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
 // If both the environment variable and the test flag are set, the environment
 // variable wins out.
-func ShouldStartDefaultTestTenant(t testing.TB) bool {
+func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) bool {
+	// Explicit cases for enabling or disabling the default test tenant.
+	if serverArgs.DefaultTestTenant == base.TestTenantDisabled {
+		return false
+	}
+	if serverArgs.DefaultTestTenant == base.TestTenantEnabled {
+		return true
+	}
+
+	// Probabilistic cases for enabling or disabling the default test tenant.
 	var defaultProbabilityOfStartingTestTenant = 0.5
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
@@ -250,6 +259,10 @@ type TestServerInterface interface {
 	// StartSharedProcessTenant() for a tenant simulating a shared-memory server.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
+	// DisableStartTenant prevents manual starting of tenants. If an attempt at
+	// starting a tenant is made, the server will return the specified error.
+	DisableStartTenant(reason error)
+
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
 	//
@@ -307,24 +320,25 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	if !params.DisableDefaultTestTenant {
-		// Determine if we should probabilistically start a test tenant
-		// for this server.
-		startDefaultSQLServer := ShouldStartDefaultTestTenant(t)
-		if !startDefaultSQLServer {
-			// If we're told not to start a test tenant, set the
-			// disable flag explicitly.
-			params.DisableDefaultTestTenant = true
-		}
+	preventFurtherTenants := params.DefaultTestTenant == base.TestTenantProbabilisticOnly
+	// Determine if we should probabilistically start a test tenant
+	// for this server.
+	startDefaultSQLServer := ShouldStartDefaultTestTenant(t, params)
+	if !startDefaultSQLServer {
+		// If we're told not to start a test tenant, set the
+		// disable flag explicitly.
+		params.DefaultTestTenant = base.TestTenantDisabled
 	}
 
 	server, err := NewServer(params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("%+v", err)
+	}
+	if preventFurtherTenants {
+		server.DisableStartTenant(errors.New("attempting to manually start a tenant while DefaultTestTenant is set to TestTenantProbabilisticOnly"))
 	}
 	goDB := OpenDBConn(
 		t, server.ServingSQLAddr(), params.UseDatabase, params.Insecure, server.Stopper())
@@ -407,6 +421,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (TestTenantInterface, *gosql.DB) {
+
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)

@@ -237,7 +237,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 		// Need to disable the test tenant here because it appears as though
 		// we're not able to establish the necessary connections from within
 		// it. More investigation required (tracked with #76378).
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -400,7 +400,7 @@ func TestProxyTLSClose(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -456,7 +456,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -520,8 +520,8 @@ func TestInsecureProxy(t *testing.T) {
 			// complains about not being able to find the user. This may be
 			// because of the connection through the proxy server. More
 			// investigation is required (tracked with #76378).
-			DisableDefaultTestTenant: true,
-			Insecure:                 false,
+			DefaultTestTenant: base.TestTenantDisabled,
+			Insecure:          false,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -700,7 +700,7 @@ func TestDenylistUpdate(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -806,7 +806,7 @@ func TestDirectoryConnect(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	)
 	srv.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -1432,7 +1432,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	// Test must be run from the system tenant as it's altering tenants.
-	params.DisableDefaultTestTenant = true
+	params.DefaultTestTenant = base.TestTenantDisabled
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()

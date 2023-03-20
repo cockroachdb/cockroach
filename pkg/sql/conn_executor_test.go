@@ -1190,7 +1190,8 @@ func TestTransactionDeadline(t *testing.T) {
 	}
 	testClusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Knobs: knobs,
+			DefaultTestTenant: base.TestTenantDisabled,
+			Knobs:             knobs,
 		},
 	}
 	tc := serverutils.StartNewTestCluster(t, 1, testClusterArgs)

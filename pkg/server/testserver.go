@@ -288,7 +288,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TempStorageConfig.Settings = st
 	}
 
-	cfg.DisableDefaultTestTenant = params.DisableDefaultTestTenant
+	cfg.DisableDefaultTestTenant = params.DefaultTestTenant == base.TestTenantDisabled
 
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
@@ -332,6 +332,11 @@ type TestServer struct {
 	// by default, but longer term we may allow for the creation of multiple
 	// test tenants for more advanced testing.
 	testTenants []serverutils.TestTenantInterface
+	// disableStartTenantError is set to an error if the test server should
+	// prevent starting any tenants manually. This is used to prevent tests that
+	// have not explicitly disabled probabilistic testing, or opted in to it, from
+	// starting a tenant to avoid unexpected behavior.
+	disableStartTenantError error
 }
 
 var _ serverutils.TestServerInterface = &TestServer{}
@@ -536,7 +541,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 
 	// If the flag has been set to disable the default test tenant, don't start
 	// it here.
-	if ts.params.DisableDefaultTestTenant || ts.cfg.DisableDefaultTestTenant {
+	if ts.params.DefaultTestTenant == base.TestTenantDisabled || ts.cfg.DisableDefaultTestTenant {
 		return nil
 	}
 
@@ -944,6 +949,11 @@ func (ts *TestServer) StartSharedProcessTenant(
 	return testTenant, sqlDB, err
 }
 
+// DisableStartTenant is part of TestServerInterface.
+func (ts *TestServer) DisableStartTenant(reason error) {
+	ts.disableStartTenantError = reason
+}
+
 // MigrationServer is part of the TestTenantInterface.
 func (t *TestTenant) MigrationServer() interface{} {
 	return t.migrationServer
@@ -953,6 +963,9 @@ func (t *TestTenant) MigrationServer() interface{} {
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
+	if ts.disableStartTenantError != nil {
+		return nil, ts.disableStartTenantError
+	}
 	// Determine if we need to create the tenant before starting it.
 	if !params.DisableCreateTenant {
 		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(

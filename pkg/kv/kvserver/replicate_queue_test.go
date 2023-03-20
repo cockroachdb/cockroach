@@ -539,7 +539,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Test fails with the default tenant. Disabling and
 				// tracking with #76378.
-				DisableDefaultTestTenant: true,
+				DefaultTestTenant: base.TestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					SpanConfig: &spanconfig.TestingKnobs{
 						ConfigureScratchRange: true,
@@ -2085,10 +2085,10 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 			// statuses pre and post enabling the replicate queue.
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Settings:                 st,
-				DisableDefaultTestTenant: true,
-				ScanMinIdleTime:          time.Millisecond,
-				ScanMaxIdleTime:          time.Millisecond,
+				Settings:          st,
+				DefaultTestTenant: base.TestTenantDisabled,
+				ScanMinIdleTime:   time.Millisecond,
+				ScanMaxIdleTime:   time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyEngineRegistry:      stickyEngineRegistry,

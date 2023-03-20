@@ -30,7 +30,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DisableDefaultTestTenant: true, // we're going to manually add tenants
+			DefaultTestTenant: base.TestTenantDisabled, // we're going to manually add tenants
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue: true,

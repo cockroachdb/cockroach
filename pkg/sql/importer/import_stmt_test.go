@@ -2042,9 +2042,9 @@ func TestFailedImportGC(t *testing.T) {
 		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		SQLMemoryPoolSize:        256 << 20,
-		ExternalIODir:            baseDir,
+		DefaultTestTenant: base.TestTenantDisabled,
+		SQLMemoryPoolSize: 256 << 20,
+		ExternalIODir:     baseDir,
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{
 				RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil },
@@ -2151,8 +2151,8 @@ func TestImportIntoCSVCancel(t *testing.T) {
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
-		DisableDefaultTestTenant: true,
-		ExternalIODir:            baseDir,
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -2208,9 +2208,9 @@ func TestImportCSVStmt(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		SQLMemoryPoolSize:        256 << 20,
-		ExternalIODir:            baseDir,
+		DefaultTestTenant: base.TestTenantDisabled,
+		SQLMemoryPoolSize: 256 << 20,
+		ExternalIODir:     baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -2781,9 +2781,9 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		ExternalIODir:            baseDir,
-		SQLMemoryPoolSize:        256 << 20,
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     baseDir,
+		SQLMemoryPoolSize: 256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -2960,8 +2960,8 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DisableDefaultTestTenant: true,
-		ExternalIODir:            datapathutils.TestDataPath(t, "csv")}})
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     datapathutils.TestDataPath(t, "csv")}})
 	defer tc.Stopper().Stop(ctx)
 
 	aboutToRunDSP := make(chan struct{})
@@ -3038,8 +3038,8 @@ func TestImportIntoCSV(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		ExternalIODir:            baseDir}})
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
@@ -4681,7 +4681,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 		base.TestServerArgs{
 			// Test hangs when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -5203,7 +5203,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test fails when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -6387,7 +6387,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
 		args := mkArgs()
-		args.DisableDefaultTestTenant = true
+		args.DefaultTestTenant = base.TestTenantDisabled
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
@@ -7021,7 +7021,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	// Test fails within a test tenant. More investigation is required.
 	// Tracked with #76378.
-	args.DisableDefaultTestTenant = true
+	args.DefaultTestTenant = base.TestTenantDisabled
 	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc := serverutils.StartNewTestCluster(t, nodes, params)

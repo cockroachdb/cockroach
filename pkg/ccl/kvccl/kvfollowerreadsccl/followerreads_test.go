@@ -704,16 +704,16 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				DisableDefaultTestTenant: true,
-				UseDatabase:              "t",
+				DefaultTestTenant: base.TestTenantDisabled,
+				UseDatabase:       "t",
 			},
 			// n4 pretends to have low latency to n2 and n3, so that it tries to use
 			// them for follower reads.
 			// Also, we're going to collect a trace of the test's final query.
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				3: {
-					DisableDefaultTestTenant: true,
-					UseDatabase:              "t",
+					DefaultTestTenant: base.TestTenantDisabled,
+					UseDatabase:       "t",
 					Knobs: base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
 							// Inhibit the checking of connection health done by the
@@ -857,8 +857,8 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			}
 			localities[i] = locality
 			serverArgs[i] = base.TestServerArgs{
-				Locality:                 localities[i],
-				DisableDefaultTestTenant: true, // we'll create one ourselves below.
+				Locality:          localities[i],
+				DefaultTestTenant: base.TestTenantDisabled, // we'll create one ourselves below.
 			}
 		}
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{

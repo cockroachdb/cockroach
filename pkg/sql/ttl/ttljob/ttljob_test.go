@@ -96,9 +96,17 @@ func newRowLevelTTLTestJobTestHelper(
 	if numNodes > 1 {
 		replicationMode = base.ReplicationManual
 	}
+
+	var defaultTestTenant base.DefaultTestTenantOptions
+	// Disable the default test tenant when running multi-tenant tests.
+	if testMultiTenant {
+		defaultTestTenant = base.TestTenantDisabled
+	}
+
 	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: defaultTestTenant,
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
 		},

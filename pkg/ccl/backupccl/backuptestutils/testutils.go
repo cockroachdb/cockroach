@@ -66,13 +66,13 @@ func backupRestoreTestSetupWithParams(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
-	params.ServerArgs.DisableDefaultTestTenant = true
+	params.ServerArgs.DefaultTestTenant = base.TestTenantDisabled
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]
 			param.ExternalIODir = dir
 			param.UseDatabase = "data"
-			param.DisableDefaultTestTenant = true
+			param.DefaultTestTenant = base.TestTenantDisabled
 			params.ServerArgsPerNode[i] = param
 		}
 	}

@@ -201,8 +201,8 @@ SELECT job_id
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DisableDefaultTestTenant: true,
-				Knobs:                    knobs,
+				DefaultTestTenant: base.TestTenantDisabled,
+				Knobs:             knobs,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
@@ -246,8 +246,8 @@ SELECT job_id
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DisableDefaultTestTenant: true,
-				Knobs:                    knobs,
+				DefaultTestTenant: base.TestTenantDisabled,
+				Knobs:             knobs,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
