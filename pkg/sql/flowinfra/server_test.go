@@ -173,7 +173,7 @@ func runLocalFlow(
 	if err != nil {
 		return nil, err
 	}
-	flow.Run(flowCtx)
+	flow.Run(flowCtx, false /* noWait */)
 	flow.Cleanup(flowCtx)
 
 	if !rowBuf.ProducerClosed() {
@@ -210,7 +210,7 @@ func runLocalFlowTenant(
 	if err != nil {
 		return nil, err
 	}
-	flow.Run(flowCtx)
+	flow.Run(flowCtx, false /* noWait */)
 	flow.Cleanup(flowCtx)
 
 	if !rowBuf.ProducerClosed() {

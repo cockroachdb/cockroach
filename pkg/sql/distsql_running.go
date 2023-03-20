@@ -863,7 +863,7 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
-	flow.Run(ctx)
+	flow.Run(ctx, false /* noWait */)
 }
 
 // DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that

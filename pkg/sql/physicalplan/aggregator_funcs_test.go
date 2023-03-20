@@ -84,7 +84,7 @@ func runTestFlow(
 	if err != nil {
 		t.Fatal(err)
 	}
-	flow.Run(ctx)
+	flow.Run(ctx, false /* noWait */)
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed() {

@@ -438,3 +438,8 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 
 	return key, entries, memUsedBuildingBatch, nil
 }
+
+// Resume is part of the execinfra.Processor interface.
+func (ib *indexBackfiller) Resume(output execinfra.RowReceiver) {
+	panic("not implemented")
+}
