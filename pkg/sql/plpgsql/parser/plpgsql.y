@@ -4,15 +4,22 @@ package parser
 import (
   "fmt"
 
+  "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/errors"
+  "github.com/cockroachdb/redact"
 )
 %}
 
 %{
 func setErr(plpgsqllex plpgsqlLexer, err error) int {
     plpgsqllex.(*lexer).setErr(err)
+    return 1
+}
+
+func unimplemented(plpgsqllex plpgsqlLexer, feature string) int {
+    plpgsqllex.(*lexer).Unimplemented(feature)
     return 1
 }
 
@@ -688,11 +695,11 @@ getdiag_item: unreserved_keyword {
     case "returned_sqlstate":
       $$.val = plpgsqltree.PlpgsqlGetdiagReturnedSqlstate;
     default:
-      setErr(plpgsqllex, errors.New("unrecognized GET DIAGNOSTICS item " + $1 ))
+      // TODO(jane): Should this use an unimplemented error instead?
+      setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
   }
 }
 ;
-
 
 getdiag_target:
 // TODO(jane): remove ident.
@@ -797,22 +804,26 @@ opt_case_else:
 
 stmt_loop: opt_loop_label LOOP loop_body
   {
+    return unimplemented(plpgsqllex, "simple loop")
   }
 ;
 
 stmt_while: opt_loop_label WHILE expr_until_loop loop_body
   {
+    return unimplemented(plpgsqllex, "while loop")
   }
 ;
 
 stmt_for: opt_loop_label FOR for_control loop_body
   {
+    return unimplemented(plpgsqllex, "for loop")
   }
 ;
 
 for_control: for_variable IN
   // TODO need to parse the sql expression here.
   {
+    return unimplemented(plpgsqllex, "for loop")
   }
 ;
 
@@ -836,11 +847,13 @@ for_control: for_variable IN
  */
 for_variable: any_identifier
   {
+    return unimplemented(plpgsqllex, "for loop")
   }
 ;
 
 stmt_foreach_a: opt_loop_label FOREACH for_variable foreach_slice IN ARRAY expr_until_loop loop_body
   {
+    return unimplemented(plpgsqllex, "for each loop")
   }
 ;
 
@@ -1043,6 +1056,9 @@ expr_until_then:
 
 expr_until_loop:
   { }
+  {
+    return unimplemented(plpgsqllex, "loop expr")
+  }
 ;
 
 opt_block_label:
@@ -1060,6 +1076,7 @@ opt_loop_label:
   }
 | LESS_LESS any_identifier GREATER_GREATER
   {
+    return unimplemented(plpgsqllex, "loop label")
   }
 ;
 
