@@ -11,12 +11,12 @@ CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT DEFAULT sc1.f1());
 ----
 
 exec-sql
-BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
 ----
 
 query-sql
 WITH descs AS (
-  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
 )
 SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
 ----
@@ -27,7 +27,7 @@ db1 sc1 f1 function false
 db1 sc1 t1 table false
 
 exec-sql
-RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://0/test/' WITH new_db_name = db1_new
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
 ----
 
 exec-sql
@@ -77,12 +77,12 @@ CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT DEFAULT sc1.f1());
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 query-sql
 WITH descs AS (
-  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
 )
 SELECT
   database_name, parent_schema_name, object_name, object_type, is_full_cluster
@@ -102,7 +102,7 @@ new-cluster name=s2 share-io-dir=s1
 
 # Restore into the new cluster.
 exec-sql cluster=s2
-RESTORE FROM LATEST IN 'nodelocal://0/test/'
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 exec-sql
@@ -155,12 +155,12 @@ CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT DEFAULT sc1.f1());
 ----
 
 exec-sql
-BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
 ----
 
 query-sql
 WITH descs AS (
-  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
 )
 SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
 ----
@@ -171,12 +171,12 @@ db1 sc1 f1 function false
 db1 sc1 t1 table false
 
 exec-sql
-RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db2';
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2';
 ----
 pq: cannot restore table "t1" without referenced function 114 (or "skip_missing_udfs" option)
 
 exec-sql
-RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db2', skip_missing_udfs;
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2', skip_missing_udfs;
 ----
 
 exec-sql
@@ -198,12 +198,12 @@ USE db1
 ----
 
 exec-sql
-BACKUP TABLE sc1.t1 INTO 'nodelocal://0/test/'
+BACKUP TABLE sc1.t1 INTO 'nodelocal://1/test/'
 ----
 
 query-sql
 WITH descs AS (
-  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
 )
 SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
 ----
@@ -212,12 +212,12 @@ db1 <nil> sc1 schema false
 db1 sc1 t1 table false
 
 exec-sql
-RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db3';
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db3';
 ----
 pq: cannot restore table "t1" without referenced function 114 (or "skip_missing_udfs" option)
 
 exec-sql
-RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db3', skip_missing_udfs;
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db3', skip_missing_udfs;
 ----
 
 exec-sql

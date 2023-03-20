@@ -146,7 +146,7 @@ CREATE TABLE data2.foo (a int);
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
 	// Populate system.settings.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
 	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
@@ -398,7 +398,7 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
-	const incrementalBackupLocation = "nodelocal://0/inc-full-backup"
+	const incrementalBackupLocation = "nodelocal://1/inc-full-backup"
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
@@ -646,7 +646,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
 	t.Run("during restoration of data", func(t *testing.T) {
@@ -973,8 +973,8 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	_, srcDB, tempDir, cleanupSrc := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	defer cleanupSrc()
 
-	dbBackupLoc := "nodelocal://0/my_db_backup"
-	clusterBackupLoc := "nodelocal://0/my_cluster_backup"
+	dbBackupLoc := "nodelocal://1/my_db_backup"
+	clusterBackupLoc := "nodelocal://1/my_cluster_backup"
 
 	// the small test-case will get entirely buffered/merged by small-file merging
 	// and not report any progress in the meantime unless it is disabled.

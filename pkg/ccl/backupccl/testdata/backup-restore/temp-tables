@@ -33,16 +33,16 @@ pg_temp
 public
 
 exec-sql
-BACKUP TABLE temp_table INTO 'nodelocal://0/temp_table_backup'
+BACKUP TABLE temp_table INTO 'nodelocal://1/temp_table_backup'
 ----
 pq: failed to resolve targets specified in the BACKUP stmt: table "temp_table" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
 
 exec-sql
-BACKUP DATABASE d1 INTO 'nodelocal://0/d1_backup/'
+BACKUP DATABASE d1 INTO 'nodelocal://1/d1_backup/'
 ----
 
 exec-sql
-BACKUP d1.* INTO 'nodelocal://0/d1_star_backup/'
+BACKUP d1.* INTO 'nodelocal://1/d1_star_backup/'
 ----
 
 exec-sql
@@ -50,7 +50,7 @@ COMMENT ON TABLE temp_table IS 'should not show up in restore';
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/full_cluster_backup/';
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
 ----
 
 exec-sql
@@ -59,7 +59,7 @@ DROP DATABASE d1
 ----
 
 exec-sql
-RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://0/d1_backup/'
+RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://1/d1_backup/'
 ----
 
 exec-sql
@@ -88,7 +88,7 @@ DROP DATABASE d1
 ----
 
 exec-sql
-RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://0/d1_star_backup/'
+RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://1/d1_star_backup/'
 ----
 
 exec-sql
@@ -121,7 +121,7 @@ USE defaultdb;
 
 # On full cluster restore we do not restore temp tables
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/';
 ----
 
 query-sql
