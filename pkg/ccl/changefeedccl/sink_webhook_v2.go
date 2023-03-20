@@ -13,7 +13,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -280,40 +279,34 @@ func (cw *webhookCSVWriter) Close() (SinkPayload, error) {
 }
 
 type webhookJSONWriter struct {
-	payload    []json.RawMessage
-	bytesCount int
-	sc         *webhookSinkClient
+	numMessages int
+	sc          *webhookSinkClient
+	buffer      bytes.Buffer
 }
 
 var _ BatchWriter = (*webhookJSONWriter)(nil)
 
 // AppendKV implements the BatchWriter interface
 func (jw *webhookJSONWriter) AppendKV(key []byte, value []byte, topic string) {
-	jw.payload = append(jw.payload, value)
-	jw.bytesCount += len(value)
+	if jw.numMessages == 0 {
+		jw.buffer.WriteString("{\"payload\":[")
+		jw.buffer.Write(value)
+	} else {
+		jw.buffer.WriteByte(',')
+		jw.buffer.Write(value)
+	}
+	jw.numMessages += 1
 }
 
 // ShouldFlush implements the BatchWriter interface
 func (jw *webhookJSONWriter) ShouldFlush() bool {
-	return jw.sc.shouldFlush(jw.bytesCount, len(jw.payload))
-}
-
-type webhookJsonEvent struct {
-	Payload []json.RawMessage `json:"payload"`
-	Length  int               `json:"length"`
+	return jw.sc.shouldFlush(len(jw.buffer.Bytes()), jw.numMessages)
 }
 
 // Close implements the BatchWriter interface
 func (jw *webhookJSONWriter) Close() (SinkPayload, error) {
-	body := &webhookJsonEvent{
-		Payload: jw.payload,
-		Length:  len(jw.payload),
-	}
-	j, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	return jw.sc.makePayloadForBytes(j)
+	jw.buffer.WriteString(fmt.Sprintf("],\"length\":%d}", jw.numMessages))
+	return jw.sc.makePayloadForBytes(jw.buffer.Bytes())
 }
 
 func (wse *webhookSinkClient) MakeBatchWriter() BatchWriter {
@@ -321,8 +314,7 @@ func (wse *webhookSinkClient) MakeBatchWriter() BatchWriter {
 		return &webhookCSVWriter{sc: wse}
 	} else {
 		return &webhookJSONWriter{
-			sc:      wse,
-			payload: make([]json.RawMessage, 0, wse.batchCfg.Messages),
+			sc: wse,
 		}
 	}
 }

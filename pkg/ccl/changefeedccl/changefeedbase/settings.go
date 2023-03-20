@@ -287,7 +287,8 @@ var NewWebhookSinkEnabled = settings.RegisterBoolSetting(
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+	true,
+	// util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
 )
 
 var SinkParallelism = settings.RegisterIntSetting(

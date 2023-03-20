@@ -284,9 +284,13 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		if batchBuffer.isEmpty() {
 			return
 		}
+		defer func() {
+			batchBuffer = bs.newBatchBuffer()
+		}()
 
 		if err := batchBuffer.FinalizePayload(); err != nil {
 			bs.handleError(err)
+			return
 		}
 
 		// Emitting needs to also handle any incoming results to avoid a deadlock
@@ -303,7 +307,6 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 			break
 		}
 
-		batchBuffer = bs.newBatchBuffer()
 	}
 
 	// Flushing requires tracking the number of inflight messages and confirming
