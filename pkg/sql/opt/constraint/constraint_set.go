@@ -314,26 +314,55 @@ func (s *Set) ExtractValueForConstCol(evalCtx *eval.Context, col opt.ColumnID) t
 	return nil
 }
 
-// HasSingleColumnConstValues returns true if the Set contains a single
-// constraint on a single column which allows for one or more non-ranging
-// constant values. On success, returns the column and the constant value.
-func (s *Set) HasSingleColumnConstValues(
+// HasSingleColumnNonNullConstValues returns the single column constrained by
+// the Set if it is constrained to one or more non-ranging constant values. If
+// any of the constant values are NULL, or the Set does not constraint a single
+// column to one or more non-ranging values, then ok=false is returned.
+func (s *Set) HasSingleColumnNonNullConstValues(evalCtx *eval.Context) (col opt.ColumnID, ok bool) {
+	if s.Length() != 1 {
+		return 0, false
+	}
+	c := s.Constraint(0)
+	if c.Columns.Count() != 1 {
+		return 0, false
+	}
+	for i, n := 0, c.Spans.Count(); i < n; i++ {
+		sp := c.Spans.Get(i)
+		start := sp.StartKey()
+		end := sp.EndKey()
+		if start.Length() < 1 || end.Length() < 1 {
+			return 0, false
+		}
+		startVal := start.Value(0)
+		if startVal == tree.DNull {
+			return 0, false
+		}
+		if startVal.Compare(evalCtx, end.Value(0)) != 0 {
+			return 0, false
+		}
+	}
+	return c.Columns.Get(0).ID(), true
+}
+
+// ExtractSingleColumnNonNullConstValues returns the single column constrained by the
+// Set and a slice of constant values it is constrained to. If any of the
+// constant values are NULL, or the Set does not constraint a single column to
+// one or more non-ranging values, then ok=false is returned.
+func (s *Set) ExtractSingleColumnNonNullConstValues(
 	evalCtx *eval.Context,
 ) (col opt.ColumnID, constValues tree.Datums, ok bool) {
-	if s.Length() != 1 {
+	col, ok = s.HasSingleColumnNonNullConstValues(evalCtx)
+	if !ok {
 		return 0, nil, false
 	}
 	c := s.Constraint(0)
-	if c.Columns.Count() != 1 || c.Prefix(evalCtx) != 1 {
-		return 0, nil, false
-	}
 	numSpans := c.Spans.Count()
 	constValues = make(tree.Datums, numSpans)
 	for i := range constValues {
 		val := c.Spans.Get(i).StartKey().Value(0)
 		constValues[i] = val
 	}
-	return c.Columns.Get(0).ID(), constValues, true
+	return col, constValues, true
 }
 
 // allocConstraint allocates space for a new constraint in the set and returns
