@@ -280,34 +280,42 @@ func (cw *webhookCSVWriter) Close() (SinkPayload, error) {
 }
 
 type webhookJSONWriter struct {
-	numMessages int
-	sc          *webhookSinkClient
-	buffer      bytes.Buffer
+	messages [][]byte
+	numBytes int
+	sc       *webhookSinkClient
 }
 
 var _ BatchWriter = (*webhookJSONWriter)(nil)
 
 // AppendKV implements the BatchWriter interface
 func (jw *webhookJSONWriter) AppendKV(key []byte, value []byte, topic string) {
-	if jw.numMessages == 0 {
-		jw.buffer.WriteString("{\"payload\":[")
-		jw.buffer.Write(value)
-	} else {
-		jw.buffer.WriteByte(',')
-		jw.buffer.Write(value)
-	}
-	jw.numMessages += 1
+	jw.messages = append(jw.messages, value)
+	jw.numBytes += len(value)
 }
 
 // ShouldFlush implements the BatchWriter interface
 func (jw *webhookJSONWriter) ShouldFlush() bool {
-	return jw.sc.shouldFlush(len(jw.buffer.Bytes()), jw.numMessages)
+	return jw.sc.shouldFlush(jw.numBytes, len(jw.messages))
 }
 
 // Close implements the BatchWriter interface
 func (jw *webhookJSONWriter) Close() (SinkPayload, error) {
-	jw.buffer.WriteString(fmt.Sprintf("],\"length\":%d}", jw.numMessages))
-	return jw.sc.makePayloadForBytes(jw.buffer.Bytes())
+	var buffer bytes.Buffer
+	prefix := "{\"payload\":["
+	suffix := fmt.Sprintf("],\"length\":%d}", len(jw.messages))
+
+	// Grow all at once to avoid reallocations
+	buffer.Grow(len(prefix) + jw.numBytes + len(jw.messages) + len(suffix))
+
+	buffer.WriteString(prefix)
+	for i, msg := range jw.messages {
+		if i != 0 {
+			buffer.WriteByte(',')
+		}
+		buffer.Write(msg)
+	}
+	buffer.WriteString(suffix)
+	return jw.sc.makePayloadForBytes(buffer.Bytes())
 }
 
 func (wse *webhookSinkClient) MakeBatchWriter() BatchWriter {
@@ -315,7 +323,8 @@ func (wse *webhookSinkClient) MakeBatchWriter() BatchWriter {
 		return &webhookCSVWriter{sc: wse}
 	} else {
 		return &webhookJSONWriter{
-			sc: wse,
+			sc:       wse,
+			messages: make([][]byte, 0, wse.batchCfg.Messages),
 		}
 	}
 }
