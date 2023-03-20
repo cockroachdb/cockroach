@@ -16,6 +16,11 @@ func setErr(plpgsqllex plpgsqlLexer, err error) int {
     return 1
 }
 
+func unimplemented(plpgsqllex plpgsqlLexer, feature string) int {
+    plpgsqllex.(*lexer).Unimplemented(feature)
+    return 1
+}
+
 //functions to cast plpgsqlSymType/sqlSymUnion to other types.
 var _ scanner.ScanSymType = &plpgsqlSymType{}
 
@@ -823,22 +828,26 @@ opt_case_else	:
 
 stmt_loop		: opt_loop_label LOOP loop_body
 					{
+						return unimplemented(plpgsqllex, "simple loop")
 					}
 				;
 
 stmt_while		: opt_loop_label WHILE expr_until_loop loop_body
 					{
+						return unimplemented(plpgsqllex, "while loop")
 					}
 				;
 
 stmt_for		: opt_loop_label FOR for_control loop_body
 					{
+						return unimplemented(plpgsqllex, "for loop")
 					}
 				;
 
 for_control		: for_variable IN
           // TODO need to parse the sql expression here.
 					{
+						return unimplemented(plpgsqllex, "for loop")
 					}
 				;
 
@@ -869,10 +878,16 @@ for_variable	: T_DATUM
 				| T_CWORD
 					{
 					}
+				// TODO: Remove when for_variable types are defined
+				| any_identifier
+		  		{
+        		return unimplemented(plpgsqllex, "for loop")
+     			}
 				;
 
 stmt_foreach_a	: opt_loop_label FOREACH for_variable foreach_slice IN ARRAY expr_until_loop loop_body
 					{
+          	return unimplemented(plpgsqllex, "for each loop")
 					}
 				;
 
@@ -906,7 +921,6 @@ stmt_return:
   //    we can just read until a ';', then do the sql expression validation during compile time.
   RETURN
   {
-
   }
 | RETURN_NEXT NEXT
   {}
@@ -1083,7 +1097,9 @@ expr_until_then :
 				;
 
 expr_until_loop :
-					{ }
+					{
+					return unimplemented(plpgsqllex, "loop expr")
+					}
 				;
 
 opt_block_label	:
@@ -1101,6 +1117,7 @@ opt_loop_label	:
 					}
 				| LESS_LESS any_identifier GREATER_GREATER
 					{
+						return unimplemented(plpgsqllex, "loop label")
 					}
 				;
 

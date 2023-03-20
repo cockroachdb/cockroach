@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	pgunimplemented "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"go/constant"
 	"strings"
 
@@ -226,5 +226,5 @@ func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
 	}
 	_, _ = ParseAndIncPlpgCounter(funcBodyStr, false)
 
-	return unimplemented.New("plpgsql", "plpgsql not supported for udf")
+	return pgunimplemented.New("plpgsql", "plpgsql not supported for udf")
 }
