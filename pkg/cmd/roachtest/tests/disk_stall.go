@@ -77,6 +77,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 				),
 				Owner:   registry.OwnerStorage,
 				Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
+				Timeout: 20 * time.Minute,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, &fuseDiskStaller{
 						t:         t,
