@@ -1273,6 +1273,10 @@ define UDFPrivate {
     # CalledOnNullInput is true if the function should be called when any of its
     # inputs are NULL. If false, the function will not be evaluated in the
     # presence of NULL inputs, and will instead evaluate directly to NULL.
+    #
+    # Note that this field only affects evaluation of UDFs within project-set
+    # operators. Non-scalar UDFs are always in a project-set operator, while
+    # scalar UDFs can be if used as a data source (e.g. SELECT * FROM udf()).
     CalledOnNullInput bool
 }
 
