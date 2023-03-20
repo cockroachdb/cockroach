@@ -578,9 +578,11 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// find potential index candidates in the memo.
 	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
 	if isExplain && p.SessionData().IndexRecommendationsEnabled {
-		if err := opc.makeQueryIndexRecommendation(ctx); err != nil {
+		indexRecs, err := opc.makeQueryIndexRecommendation(ctx)
+		if err != nil {
 			return nil, err
 		}
+		opc.p.instrumentation.explainIndexRecs = indexRecs
 	}
 
 	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
@@ -721,7 +723,9 @@ func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
 // indexes hypothetically added to the table. An index recommendation for the
 // query is outputted based on which hypothetical indexes are helpful in the
 // optimal plan.
-func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (err error) {
+func (opc *optPlanningCtx) makeQueryIndexRecommendation(
+	ctx context.Context,
+) (_ []indexrec.Rec, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate internal errors without having to add
@@ -757,7 +761,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 		return ruleName.IsNormalize()
 	})
 	if _, err = opc.optimizer.Optimize(); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Walk through the fully normalized memo to determine index candidates and
@@ -775,12 +779,13 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 	)
 	opc.optimizer.Memo().Metadata().UpdateTableMeta(f.EvalContext(), hypTables)
 	if _, err = opc.optimizer.Optimize(); err != nil {
-		return err
+		return nil, err
 	}
 
-	opc.p.instrumentation.indexRecs, err = indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
+	var indexRecs []indexrec.Rec
+	indexRecs, err = indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Re-initialize the optimizer (which also re-initializes the factory) and
@@ -794,5 +799,5 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 		f.CopyWithoutAssigningPlaceholders,
 	)
 
-	return nil
+	return indexRecs, nil
 }
