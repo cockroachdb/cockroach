@@ -1358,7 +1358,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// Check whether the filter constrains the first column of the index
 	// to at least two constant values. We need at least two values so that one
 	// can target a local partition and one can target a remote partition.
-	col, vals, ok := filter.ScalarProps().Constraints.HasSingleColumnConstValues(c.e.evalCtx)
+	col, vals, ok := filter.ScalarProps().Constraints.ExtractSingleColumnNonNullConstValues(c.e.evalCtx)
 	if !ok || len(vals) < 2 {
 		return nil, nil, false
 	}
