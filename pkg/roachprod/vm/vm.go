@@ -140,10 +140,10 @@ func (vm *VM) ZoneEntry() (string, error) {
 	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP), nil
 }
 
-func (vm *VM) AttachVolume(v Volume) (deviceName string, err error) {
+func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, err error) {
 	vm.NonBootAttachedVolumes = append(vm.NonBootAttachedVolumes, v)
 	err = ForProvider(vm.Provider, func(provider Provider) error {
-		deviceName, err = provider.AttachVolumeToVM(v, vm)
+		deviceName, err = provider.AttachVolumeToVM(l, v, vm)
 		return err
 	})
 	return deviceName, err
@@ -275,17 +275,17 @@ type ListOptions struct {
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
-	CleanSSH() error
+	CleanSSH(l *logger.Logger) error
 
 	// ConfigSSH takes a list of zones and configures SSH for machines in those
 	// zones for the given provider.
-	ConfigSSH(zones []string) error
+	ConfigSSH(l *logger.Logger, zones []string) error
 	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) error
-	Reset(vms List) error
-	Delete(vms List) error
-	Extend(vms List, lifetime time.Duration) error
+	Reset(l *logger.Logger, vms List) error
+	Delete(l *logger.Logger, vms List) error
+	Extend(l *logger.Logger, vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
-	FindActiveAccount() (string, error)
+	FindActiveAccount(l *logger.Logger) (string, error)
 	List(l *logger.Logger, opts ListOptions) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
@@ -302,15 +302,15 @@ type Provider interface {
 	// provider.
 	ProjectActive(project string) bool
 
-	CreateVolume(vco VolumeCreateOpts) (Volume, error)
-	AttachVolumeToVM(volume Volume, vm *VM) (string, error)
-	SnapshotVolume(volume Volume, name, description string, labels map[string]string) (string, error)
+	CreateVolume(l *logger.Logger, vco VolumeCreateOpts) (Volume, error)
+	AttachVolumeToVM(l *logger.Logger, volume Volume, vm *VM) (string, error)
+	SnapshotVolume(l *logger.Logger, volume Volume, name, description string, labels map[string]string) (string, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can
 // destroy an entire cluster in a single operation.
 type DeleteCluster interface {
-	DeleteCluster(name string) error
+	DeleteCluster(l *logger.Logger, name string) error
 }
 
 // Providers contains all known Provider instances. This is initialized by subpackage init() functions.
@@ -377,14 +377,14 @@ var cachedActiveAccounts map[string]string
 
 // FindActiveAccounts queries the active providers for the name of the user
 // account.
-func FindActiveAccounts() (map[string]string, error) {
+func FindActiveAccounts(l *logger.Logger) (map[string]string, error) {
 	source := cachedActiveAccounts
 
 	if source == nil {
 		// Ask each Provider for its active account name.
 		source = map[string]string{}
 		err := ProvidersSequential(AllProviderNames(), func(p Provider) error {
-			account, err := p.FindActiveAccount()
+			account, err := p.FindActiveAccount(l)
 			if err != nil {
 				return err
 			}

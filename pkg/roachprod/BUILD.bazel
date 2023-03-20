@@ -26,7 +26,6 @@ go_library(
         "//pkg/server/debug/replay",
         "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
-        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
