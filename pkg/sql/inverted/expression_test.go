@@ -123,7 +123,7 @@ func getExprCopy(
 
 func toString(expr Expression) string {
 	tp := treeprinter.New()
-	formatExpression(tp, expr, true /* includeSpansToRead */)
+	formatExpression(tp, expr, true /* includeSpansToRead */, false /* redactable */)
 	return tp.String()
 }
 

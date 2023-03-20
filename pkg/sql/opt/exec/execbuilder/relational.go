@@ -1158,7 +1158,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				// expression.
 				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
 					memo.ExprFmtHideNotVisibleIndexInfo
-				explainOpt := o.FormatExpr(newRightSide, fmtFlags)
+				explainOpt := o.FormatExpr(newRightSide, fmtFlags, false /* redactableValues */)
 				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
 			}
 			return nil, err

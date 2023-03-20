@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // EncVal is the encoded form of a value in the inverted column. This library
@@ -141,30 +142,34 @@ func (is Spans) Equals(other Spans) bool {
 }
 
 // Format pretty-prints the spans.
-func (is Spans) Format(tp treeprinter.Node, label string) {
+func (is Spans) Format(tp treeprinter.Node, label string, redactable bool) {
 	if len(is) == 0 {
 		tp.Childf("%s: empty", label)
 		return
 	}
 	if len(is) == 1 {
-		tp.Childf("%s: %s", label, formatSpan(is[0]))
+		tp.Childf("%s: %s", label, formatSpan(is[0], redactable))
 		return
 	}
 	n := tp.Child(label)
 	for i := 0; i < len(is); i++ {
-		n.Child(formatSpan(is[i]))
+		n.Child(formatSpan(is[i], redactable))
 	}
 }
 
-func formatSpan(span Span) string {
+func formatSpan(span Span, redactable bool) string {
 	end := span.End
 	spanEndOpenOrClosed := ')'
 	if span.IsSingleVal() {
 		end = span.Start
 		spanEndOpenOrClosed = ']'
 	}
-	return fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.Start)),
+	output := fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.Start)),
 		strconv.Quote(string(end)), spanEndOpenOrClosed)
+	if redactable {
+		output = string(redact.Sprintf("%s", redact.Unsafe(output)))
+	}
+	return output
 }
 
 // Len implements sort.Interface.
@@ -390,17 +395,17 @@ func (s *SpanExpression) Copy() Expression {
 func (s *SpanExpression) String() string {
 	tp := treeprinter.New()
 	n := tp.Child("span expression")
-	s.Format(n, true /* includeSpansToRead */)
+	s.Format(n, true /* includeSpansToRead */, false /* redactable */)
 	return tp.String()
 }
 
 // Format pretty-prints the SpanExpression.
-func (s *SpanExpression) Format(tp treeprinter.Node, includeSpansToRead bool) {
+func (s *SpanExpression) Format(tp treeprinter.Node, includeSpansToRead, redactable bool) {
 	tp.Childf("tight: %t, unique: %t", s.Tight, s.Unique)
 	if includeSpansToRead {
-		s.SpansToRead.Format(tp, "to read")
+		s.SpansToRead.Format(tp, "to read", redactable)
 	}
-	s.FactoredUnionSpans.Format(tp, "union spans")
+	s.FactoredUnionSpans.Format(tp, "union spans", redactable)
 	if s.Operator == None {
 		return
 	}
@@ -410,15 +415,15 @@ func (s *SpanExpression) Format(tp treeprinter.Node, includeSpansToRead bool) {
 	case SetIntersection:
 		tp = tp.Child("INTERSECTION")
 	}
-	formatExpression(tp, s.Left, includeSpansToRead)
-	formatExpression(tp, s.Right, includeSpansToRead)
+	formatExpression(tp, s.Left, includeSpansToRead, redactable)
+	formatExpression(tp, s.Right, includeSpansToRead, redactable)
 }
 
-func formatExpression(tp treeprinter.Node, expr Expression, includeSpansToRead bool) {
+func formatExpression(tp treeprinter.Node, expr Expression, includeSpansToRead, redactable bool) {
 	switch e := expr.(type) {
 	case *SpanExpression:
 		n := tp.Child("span expression")
-		e.Format(n, includeSpansToRead)
+		e.Format(n, includeSpansToRead, redactable)
 	default:
 		tp.Child(fmt.Sprintf("%v", e))
 	}
