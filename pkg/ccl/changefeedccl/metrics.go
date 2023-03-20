@@ -62,6 +62,7 @@ type AggMetrics struct {
 	RunningCount              *aggmetric.AggGauge
 	BatchReductionCount       *aggmetric.AggGauge
 	InternalRetryMessageCount *aggmetric.AggGauge
+	SchemaRegistrations       *aggmetric.AggCounter
 	SchemaRegistryRetries     *aggmetric.AggCounter
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
@@ -116,6 +117,7 @@ type sliMetrics struct {
 	RunningCount              *aggmetric.Gauge
 	BatchReductionCount       *aggmetric.Gauge
 	InternalRetryMessageCount *aggmetric.Gauge
+	SchemaRegistrations       *aggmetric.Counter
 	SchemaRegistryRetries     *aggmetric.Counter
 }
 
@@ -492,6 +494,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaSchemaRegistryRegistrations := metric.Metadata{
+		Name:        "changefeed.schema_registry.registrations",
+		Help:        "Number of registration attempts with the schema registry",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -544,6 +552,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		BatchReductionCount:       b.Gauge(metaBatchReductionCount),
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
+		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -599,6 +608,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		BatchReductionCount:       a.BatchReductionCount.AddChild(scope),
 		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
+		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm
