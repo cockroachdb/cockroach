@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
@@ -27,7 +28,9 @@ import (
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	return dsp.SetupAllNodesPlanningWithOracle(ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser)
+	return dsp.SetupAllNodesPlanningWithOracle(
+		ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser, roachpb.Locality{},
+	)
 }
 
 // SetupAllNodesPlanning creates a planCtx and sets up the planCtx.nodeStatuses
@@ -37,11 +40,12 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	if dsp.codec.ForSystemTenant() {
-		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle)
+	if dsp.codec.ForSystemTenant() && !localityFilter.NonEmpty() {
+		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter)
 	}
-	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle)
+	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter)
 }
 
 // setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
@@ -51,9 +55,10 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways, oracle)
+		DistributionTypeAlways, oracle, localityFilter)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
@@ -67,7 +72,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// planCtx.nodeStatuses map ourselves. checkInstanceHealthAndVersionSystem() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		if ok, _ := node.Desc.Locality.Matches(localityFilter); ok {
+			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		}
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.nodeStatuses))
 	for nodeID, status := range planCtx.nodeStatuses {
@@ -85,16 +92,19 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways, oracle)
+		DistributionTypeAlways, oracle, localityFilter)
 	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	sqlInstanceIDs := make([]base.SQLInstanceID, len(pods))
-	for i, pod := range pods {
-		sqlInstanceIDs[i] = pod.InstanceID
+	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(pods))
+	for _, pod := range pods {
+		if ok, _ := pod.Locality.Matches(localityFilter); ok {
+			sqlInstanceIDs = append(sqlInstanceIDs, pod.InstanceID)
+		}
 	}
 	return planCtx, sqlInstanceIDs, nil
 }
