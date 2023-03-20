@@ -288,25 +288,42 @@ func (f *vectorizedFlow) Setup(
 	return ctx, opChains, nil
 }
 
+// Resume is part of the Flow interface.
+func (f *vectorizedFlow) Resume(recv execinfra.RowReceiver) {
+	if f.batchFlowCoordinator != nil {
+		recv.Push(
+			nil, /* row */
+			&execinfrapb.ProducerMetadata{
+				Err: errors.AssertionFailedf(
+					"batchFlowCoordinator should be nil for vectorizedFlow",
+				)})
+		return
+	}
+	f.FlowBase.Resume(recv)
+}
+
 // Run is part of the Flow interface.
-func (f *vectorizedFlow) Run(ctx context.Context) {
+func (f *vectorizedFlow) Run(ctx context.Context, noWait bool) {
+	f.Ctx = ctx
 	if f.batchFlowCoordinator == nil {
 		// If we didn't create a BatchFlowCoordinator, then we have a processor
 		// as the root, so we run this flow with the default implementation.
-		f.FlowBase.Run(ctx)
+		f.FlowBase.Run(f.Ctx, noWait)
 		return
 	}
 
-	defer f.Wait()
+	if !noWait {
+		defer f.Wait()
+	}
 
-	if err := f.StartInternal(ctx, nil /* processors */, nil /* outputs */); err != nil {
+	if err := f.StartInternal(f.Ctx, nil /* processors */, nil /* outputs */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.GetRowSyncFlowConsumer().ProducerDone()
 		return
 	}
 
-	log.VEvent(ctx, 1, "running the batch flow coordinator in the flow's goroutine")
-	f.batchFlowCoordinator.Run(ctx)
+	log.VEvent(f.Ctx, 1, "running the batch flow coordinator in the flow's goroutine")
+	f.batchFlowCoordinator.Run(f.Ctx)
 }
 
 var _ colcontainer.GetPather = &vectorizedFlow{}

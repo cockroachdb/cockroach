@@ -276,3 +276,8 @@ func SetResumeSpansInJob(
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
 	return job.WithTxn(txn).SetDetails(ctx, details)
 }
+
+// Resume is part of the execinfra.Processor interface.
+func (b *backfiller) Resume(output execinfra.RowReceiver) {
+	panic("not implemented")
+}

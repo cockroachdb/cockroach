@@ -35,6 +35,8 @@ import (
 // FlowCtx encompasses the configuration parameters needed for various flow
 // components.
 type FlowCtx struct {
+	Ctx context.Context
+
 	AmbientContext log.AmbientContext
 
 	Cfg *ServerConfig
