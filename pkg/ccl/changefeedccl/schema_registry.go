@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,7 +38,7 @@ type schemaRegistry interface {
 	// given subject. The returned int32 is a schema ID that can
 	// be used in Avro wire messages or in other calls to the
 	// schema registry.
-	RegisterSchemaForSubject(ctx context.Context, subject string, schema string) (int32, error)
+	RegisterSchemaForSubject(ctx context.Context, subject string, schema string) ([]byte, error)
 }
 
 type confluentSchemaVersionRequest struct {
@@ -56,6 +57,7 @@ type confluentSchemaRegistry struct {
 	client     *httputil.Client
 	retryOpts  retry.Options
 	sliMetrics *sliMetrics
+	cache      SharedCache
 }
 
 var _ schemaRegistry = (*confluentSchemaRegistry)(nil)
@@ -98,7 +100,7 @@ func getAndDeleteParams(u *url.URL) (schemaRegistryParams, error) {
 }
 
 func newConfluentSchemaRegistry(
-	baseURL string, p externalConnectionProvider, sliMetrics *sliMetrics,
+	baseURL string, p externalConnectionProvider, sliMetrics *sliMetrics, cache SharedCache,
 ) (*confluentSchemaRegistry, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -110,7 +112,7 @@ func newConfluentSchemaRegistry(
 		if err != nil {
 			return nil, err
 		}
-		return newConfluentSchemaRegistry(actual, p, sliMetrics)
+		return newConfluentSchemaRegistry(actual, p, sliMetrics, cache)
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {
@@ -134,6 +136,7 @@ func newConfluentSchemaRegistry(
 		client:     httpClient,
 		retryOpts:  retryOpts,
 		sliMetrics: sliMetrics,
+		cache:      cache,
 	}, nil
 }
 
@@ -184,40 +187,49 @@ func (r *confluentSchemaRegistry) Ping(ctx context.Context) error {
 //	https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
 func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	ctx context.Context, subject string, schema string,
-) (int32, error) {
-	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions", subject))
-	if log.V(1) {
-		log.Infof(ctx, "registering avro schema %s %s", u, schema)
-	}
+) ([]byte, error) {
+	var cacheKey bytes.Buffer
+	fmt.Fprintf(&cacheKey, "%s %s", subject, schema)
+	return r.cache.FetchWithLock(ctx, cacheKey.Bytes(), func() ([]byte, error) {
+		u := r.urlForPath(fmt.Sprintf("subjects/%s/versions", subject))
+		if log.V(1) {
+			log.Infof(ctx, "registering avro schema %s %s", u, schema)
+		}
 
-	req := confluentSchemaVersionRequest{Schema: schema}
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(req); err != nil {
-		return 0, err
-	}
+		req := confluentSchemaVersionRequest{Schema: schema}
+		var buf bytes.Buffer
+		if err := json.NewEncoder(&buf).Encode(req); err != nil {
+			return nil, err
+		}
 
-	var id int32
-	err := r.doWithRetry(ctx, func() (e error) {
-		resp, err := r.client.Post(ctx, u, confluentSchemaContentType, bytes.NewReader(buf.Bytes()))
+		var id int32
+		err := r.doWithRetry(ctx, func() (e error) {
+			resp, err := r.client.Post(ctx, u, confluentSchemaContentType, bytes.NewReader(buf.Bytes()))
+			if err != nil {
+				return errors.Wrap(err, "contacting confluent schema registry")
+			}
+			defer gracefulClose(ctx, resp.Body)
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				body, _ := io.ReadAll(resp.Body)
+				return errors.Errorf("registering schema to %s %s: %s", u, resp.Status, body)
+			}
+			var res confluentSchemaVersionResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return errors.Wrap(err, "decoding confluent schema registry reply")
+			}
+			id = res.ID
+			return nil
+		})
 		if err != nil {
-			return errors.Wrap(err, "contacting confluent schema registry")
+			return nil, err
 		}
-		defer gracefulClose(ctx, resp.Body)
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			body, _ := io.ReadAll(resp.Body)
-			return errors.Errorf("registering schema to %s %s: %s", u, resp.Status, body)
+		wireEncodedID := []byte{
+			changefeedbase.ConfluentAvroWireFormatMagic,
+			0, 0, 0, 0, // Placeholder for the ID.
 		}
-		var res confluentSchemaVersionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-			return errors.Wrap(err, "decoding confluent schema registry reply")
-		}
-		id = res.ID
-		return nil
+		binary.BigEndian.PutUint32(wireEncodedID[1:5], uint32(id))
+		return wireEncodedID, nil
 	})
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() error) error {

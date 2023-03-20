@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -86,6 +87,9 @@ type changeAggregator struct {
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
 	frontier *schemaChangeFrontier
+
+	// sharedCache is a handle to a cache written to by multiple processors within the same changefeed.
+	sharedCache SharedCache
 
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
@@ -154,6 +158,12 @@ func newChangeAggregatorProcessor(
 		},
 	); err != nil {
 		return nil, err
+	}
+
+	if spec.JobID != catpb.InvalidJobID {
+		ca.sharedCache = sharedCacheForJob(spec.JobID, flowCtx.Cfg.DB)
+	} else {
+		ca.sharedCache = newSharedCacheForCore()
 	}
 
 	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
@@ -933,7 +943,7 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
-	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed), makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics); err != nil {
+	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed), makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics, sharedCacheForJob(spec.JobID, flowCtx.Cfg.DB)); err != nil {
 		return nil, err
 	}
 

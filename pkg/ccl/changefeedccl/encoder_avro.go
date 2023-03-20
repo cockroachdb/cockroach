@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -56,12 +55,12 @@ type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
 
 type confluentRegisteredKeySchema struct {
 	schema     *avroDataRecord
-	registryID int32
+	registryID []byte
 }
 
 type confluentRegisteredEnvelopeSchema struct {
 	schema     *avroEnvelopeRecord
-	registryID int32
+	registryID []byte
 }
 
 var _ Encoder = &confluentAvroEncoder{}
@@ -79,6 +78,7 @@ func newConfluentAvroEncoder(
 	targets changefeedbase.Targets,
 	p externalConnectionProvider,
 	sliMetrics *sliMetrics,
+	sharedMetadataCache SharedCache,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts.AvroSchemaPrefix,
@@ -107,7 +107,7 @@ func newConfluentAvroEncoder(
 			changefeedbase.OptConfluentSchemaRegistry, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
 
-	reg, err := newConfluentSchemaRegistry(opts.SchemaRegistryURI, p, sliMetrics)
+	reg, err := newConfluentSchemaRegistry(opts.SchemaRegistryURI, p, sliMetrics, sharedMetadataCache)
 	if err != nil {
 		return nil, err
 	}
@@ -182,12 +182,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		e.keyCache.Add(cacheKey, registered)
 	}
 
-	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
-	header := []byte{
-		changefeedbase.ConfluentAvroWireFormatMagic,
-		0, 0, 0, 0, // Placeholder for the ID.
-	}
-	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
+	header := append([]byte{}, registered.registryID...)
 	if e.customKeyColumn != "" {
 		it, err := row.DatumNamed(e.customKeyColumn)
 		if err != nil {
@@ -284,12 +279,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 		}
 	}
 
-	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
-	header := []byte{
-		changefeedbase.ConfluentAvroWireFormatMagic,
-		0, 0, 0, 0, // Placeholder for the ID.
-	}
-	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
+	header := append([]byte{}, registered.registryID...)
 	return registered.schema.BinaryFromRow(header, meta, prevRow, updatedRow, updatedRow)
 }
 
@@ -322,18 +312,13 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 			`resolved`: resolved,
 		}
 	}
-	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
-	header := []byte{
-		changefeedbase.ConfluentAvroWireFormatMagic,
-		0, 0, 0, 0, // Placeholder for the ID.
-	}
-	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
+	header := append([]byte{}, registered.registryID...)
 	var nilRow cdcevent.Row
 	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow)
 }
 
 func (e *confluentAvroEncoder) register(
 	ctx context.Context, schema *avroRecord, subject string,
-) (int32, error) {
+) ([]byte, error) {
 	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.codec.Schema())
 }
