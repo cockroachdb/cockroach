@@ -291,7 +291,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	}
 	// Need to disable the test tenant here as the non-tenant case below
 	// assumes that it's operating within the system tenant.
-	serverParams.DisableDefaultTestTenant = true
+	serverParams.DefaultTestTenant = base.TestTenantDisabled
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: serverParams,
 	})

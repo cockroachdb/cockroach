@@ -71,7 +71,7 @@ func TestDataDriven(t *testing.T) {
 
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DisableDefaultTestTenant: true, // We'll create a tenant ourselves.
+				DefaultTestTenant: base.TestTenantDisabled, // We'll create a tenant ourselves.
 				Knobs: base.TestingKnobs{
 					TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
 						WatcherTestingKnobs: &tenantcapabilitieswatcher.TestingKnobs{

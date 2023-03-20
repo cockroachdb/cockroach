@@ -51,7 +51,7 @@ func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					UseTransactionalDescIDGenerator: true,

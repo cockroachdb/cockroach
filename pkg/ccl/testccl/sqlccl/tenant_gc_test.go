@@ -53,6 +53,7 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 
 	ctx := context.Background()
 	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantProbabilistic,
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// Disable the system tenant's reconciliation process so that we can
@@ -475,7 +476,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	ctx := context.Background()
 	args := base.TestServerArgs{
 		// Disable the implicit default test tenant so that we can start our own.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

@@ -879,6 +879,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	}
 
 	params := base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			AdmissionControl: &admission.Options{
 				MaxCPUSlots: numBlockers,

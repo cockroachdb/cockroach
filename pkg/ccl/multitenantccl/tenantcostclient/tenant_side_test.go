@@ -868,7 +868,7 @@ func TestConsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	st := cluster.MakeTestingClusterSettings()
@@ -938,7 +938,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 
 	// This test fails when run with the default test tenant. Disabling and
 	// tracking with #76378.
-	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	tenantID := serverutils.TestTenantID()
@@ -1005,7 +1005,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
 
-	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled, Settings: st})
 	defer hostServer.Stopper().Stop(ctx)
 
 	testProvider := newTestProvider()
@@ -1089,7 +1089,7 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 	if _, err := hostDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		t.Fatalf("changefeed setup failed: %s", err.Error())
@@ -1160,8 +1160,8 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	defer dirCleanupFn()
 	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test fails when run within the default tenant. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		ExternalIODir:            dir,
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     dir,
 	})
 	defer hostServer.Stopper().Stop(context.Background())
 	hostSQL := sqlutils.MakeSQLRunner(hostDB)
@@ -1266,7 +1266,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 
 	hostServer, hostSQL, _ := serverutils.StartServer(b,
 		base.TestServerArgs{
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		})
 	defer hostServer.Stopper().Stop(context.Background())
 

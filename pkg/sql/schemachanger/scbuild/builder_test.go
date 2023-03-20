@@ -112,7 +112,7 @@ func TestBuildDataDriven(t *testing.T) {
 		} {
 			t.Run(depsType.name, func(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-					DisableDefaultTestTenant: true,
+					DefaultTestTenant: base.TestTenantDisabled,
 				})
 				defer s.Stopper().Stop(ctx)
 				tdb := sqlutils.MakeSQLRunner(sqlDB)

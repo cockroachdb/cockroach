@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -59,11 +60,13 @@ type TestClusterConfig struct {
 	// DisableUpgrade prevents the cluster from automatically upgrading to the
 	// latest version.
 	DisableUpgrade bool
-	// If true, a sql tenant server will be started and pointed at a node in the
-	// cluster. Connections on behalf of the logic test will go to that tenant.
-	UseTenant bool
-	// Disable the default test tenant.
-	DisableDefaultTestTenant bool
+
+	// If a test tenant is explicitly enabled, a sql tenant server will be started
+	// and pointed at a node in the cluster. Connections on behalf of the logic
+	// test will go to that tenant. Otherwise, the default test tenant logic will
+	// be followed
+	DefaultTestTenant base.DefaultTestTenantOptions
+
 	// IsCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	IsCCLConfig bool
@@ -262,7 +265,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideDistSQLMode: "off",
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
-		DisableDefaultTestTenant:    true,
+		DefaultTestTenant:           base.TestTenantDisabled,
 		DeclarativeCorpusCollection: true,
 	},
 	{
@@ -306,7 +309,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// this mode which try to modify zone configurations and we're more
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #75569 for more info.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	},
 	{
 		Name:                "5node-disk",
@@ -323,7 +326,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// dev testlogic ccl --files 3node-tenant --subtest $SUBTEST
 		Name:                        threeNodeTenantConfigName,
 		NumNodes:                    3,
-		UseTenant:                   true,
+		DefaultTestTenant:           base.TestTenantEnabled,
 		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
 		DeclarativeCorpusCollection: true,
@@ -337,7 +340,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// dev testlogic ccl --files 3node-tenant-multiregion --subtests $SUBTESTS
 		Name:                        "3node-tenant-multiregion",
 		NumNodes:                    3,
-		UseTenant:                   true,
+		DefaultTestTenant:           base.TestTenantEnabled,
 		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
 		DeclarativeCorpusCollection: true,
@@ -414,14 +417,14 @@ var LogicTestConfigs = []TestClusterConfig{
 		// Need to disable the default test tenant here until we have the
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
-		DisableDefaultTestTenant:    true,
+		DefaultTestTenant:           base.TestTenantDisabled,
 		DeclarativeCorpusCollection: true,
 	},
 	{
 		Name:                        "multiregion-9node-3region-3azs-tenant",
 		NumNodes:                    9,
 		Localities:                  multiregion9node3region3azsLocalities,
-		UseTenant:                   true,
+		DefaultTestTenant:           base.TestTenantEnabled,
 		DeclarativeCorpusCollection: true,
 	},
 	{
