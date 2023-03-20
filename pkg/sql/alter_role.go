@@ -472,8 +472,13 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 	if databaseRoleSettingsHasRoleIDCol {
 		upsertQuery = fmt.Sprintf(`
 UPSERT INTO %s (database_id, role_name, settings, role_id)
-VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $2))`,
-			sessioninit.DatabaseRoleSettingsTableName,
+VALUES ($1, $2, $3, (
+	SELECT CASE $2
+		WHEN '%s' THEN %d
+		ELSE (SELECT user_id FROM system.users WHERE username = $2)
+	END
+))`,
+			sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
 		)
 	}
 
