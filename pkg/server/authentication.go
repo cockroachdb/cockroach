@@ -240,7 +240,7 @@ func (s *authenticationServer) demoLogin(w http.ResponseWriter, req *http.Reques
 
 	w.Header()["Set-Cookie"] = []string{cookie.String()}
 	w.Header()["Location"] = []string{"/"}
-	w.WriteHeader(302)
+	w.WriteHeader(http.StatusTemporaryRedirect)
 	_, _ = w.Write([]byte("you can use the UI now"))
 }
 

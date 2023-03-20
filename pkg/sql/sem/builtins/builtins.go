@@ -2751,7 +2751,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Decimal),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return evalCtx.GetClusterTimestamp(), nil
+				return evalCtx.GetClusterTimestamp()
 			},
 			Info: `Returns the logical time of the current transaction as
 a CockroachDB HLC in decimal form.
@@ -4890,7 +4890,6 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			IsUDF:      true,
 			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'service_mode',
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
@@ -4903,7 +4902,6 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			IsUDF:      true,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
@@ -4914,7 +4912,6 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			IsUDF:      true,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
@@ -4967,7 +4964,6 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			IsUDF:      true,
 			Body:       `SELECT crdb_internal.destroy_tenant($1, false)`,
 			Info:       "DO NOT USE -- USE 'DROP TENANT' INSTEAD.",
 			Volatility: volatility.Volatile,
@@ -6311,7 +6307,6 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				{Name: "number", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
-			IsUDF:      true,
 			Body: `SELECT crdb_internal.generate_test_objects(
 json_build_object('names', $1, 'counts', array[$2]))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
@@ -6327,7 +6322,6 @@ generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 				{Name: "counts", Typ: types.IntArray},
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
-			IsUDF:      true,
 			Body: `SELECT crdb_internal.generate_test_objects(
 json_build_object('names', $1, 'counts', $2))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
