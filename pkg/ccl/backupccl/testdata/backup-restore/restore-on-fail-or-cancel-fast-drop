@@ -50,7 +50,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descripto
 ----
 
 restore expect-pausepoint tag=a
-RESTORE FROM LATEST IN 'nodelocal://0/cluster_backup';
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup';
 ----
 job paused at pausepoint
 
@@ -82,7 +82,7 @@ SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA
 ----
 
 restore
-RESTORE FROM LATEST IN 'nodelocal://0/cluster_backup';
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup';
 ----
 
 subtest end

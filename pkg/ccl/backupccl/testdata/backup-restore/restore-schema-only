@@ -58,7 +58,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 #
 # Fail fast if the user passes new_db_name.
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only, new_db_name='d2';
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only, new_db_name='d2';
 ----
 pq: new_db_name can only be used for RESTORE DATABASE with a single target database
 
@@ -69,18 +69,18 @@ CREATE USER testuser
 
 # Non admins cannot run schema_only cluster restore
 exec-sql user=testuser
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only
 ----
 pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE privilege on global 
 
 # Fail fast using a database backup
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only;
+RESTORE FROM LATEST IN 'nodelocal://1/full_database_backup/' with schema_only;
 ----
 pq: full cluster RESTORE can only be used on full cluster BACKUP files
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only;
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only;
 ----
 
 # there should be no data in the restored tables
@@ -119,7 +119,7 @@ SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > 100
 ############################################################
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full_database_backup/' with schema_only, new_db_name='d2';
 ----
 
 

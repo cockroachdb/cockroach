@@ -48,7 +48,6 @@ go_test(
     embed = [":tenantcostclient"],
     deps = [
         "//pkg/base",
-        "//pkg/blobs",
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/kvccl/kvtenantccl",
