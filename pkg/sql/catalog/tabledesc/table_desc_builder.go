@@ -641,9 +641,10 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	}
 	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
 	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
-	if desc.PrimaryIndex.Version != descpb.JSONCompositeColumnsVersion {
-		desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	if desc.PrimaryIndex.Version == descpb.JSONCompositeColumnsVersion {
+		return false
 	}
+	desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 	return true
 }
 
