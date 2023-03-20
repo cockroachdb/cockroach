@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,18 +45,18 @@ type DNSRecord struct {
 // management services.
 type DNSProvider interface {
 	// CreateRecords creates DNS records.
-	CreateRecords(ctx context.Context, records ...DNSRecord) error
+	CreateRecords(ctx context.Context, l *logger.Logger, records ...DNSRecord) error
 	// LookupSRVRecords looks up SRV records for the given service, proto, and
 	// subdomain. The protocol is usually "tcp" and the subdomain is usually the
 	// cluster name. The service is a combination of the virtual cluster name and
 	// type of service.
-	LookupSRVRecords(ctx context.Context, name string) ([]DNSRecord, error)
+	LookupSRVRecords(ctx context.Context, l *logger.Logger, name string) ([]DNSRecord, error)
 	// ListRecords lists all DNS records managed for the zone.
-	ListRecords(ctx context.Context) ([]DNSRecord, error)
+	ListRecords(ctx context.Context, l *logger.Logger) ([]DNSRecord, error)
 	// DeleteRecordsBySubdomain deletes all DNS records with the given subdomain.
-	DeleteRecordsBySubdomain(ctx context.Context, subdomain string) error
+	DeleteRecordsBySubdomain(ctx context.Context, l *logger.Logger, subdomain string) error
 	// DeleteRecordsByName deletes all DNS records with the given name.
-	DeleteRecordsByName(ctx context.Context, names ...string) error
+	DeleteRecordsByName(ctx context.Context, l *logger.Logger, names ...string) error
 	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
 }
