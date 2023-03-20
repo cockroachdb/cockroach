@@ -14,6 +14,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"sync/atomic"
 	"testing"
@@ -399,19 +400,35 @@ func TestWriteWithStuckLeaseholderDisk(t *testing.T) {
 	repl, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(ctx, rangeID)
 	require.NoError(t, err)
 
-	for key := 0; key < 10; key++ {
+	for key := 0; key < 10000; key++ {
 		if key == 3 {
 			fs.block()
+			defer fs.unblock()
 		}
-		if key == 8 {
-			fs.unblock()
-		}
+
 		var ba kvpb.BatchRequest
 		ba.Timestamp = tc.Servers[0].Clock().Now()
 		put := kvpb.NewPut(append(k[:len(k):len(k)], byte(key)), roachpb.MakeValueFromString("hello"))
 		ba.Add(put)
-		_, pErr := repl.Send(ctx, &ba)
+
+		tCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		stopStack := time.AfterFunc(300*time.Millisecond, func() {
+			// Once writes are blocked, ctx cancellation is broken because of:
+			// https://github.com/cockroachdb/cockroach/issues/98957
+			if false {
+				buf := make([]byte, 1<<20)
+				buf = buf[:runtime.Stack(buf, true)]
+				t.Logf("%s", buf)
+			}
+		}).Stop
+		_, pErr := repl.Send(tCtx, &ba)
+		cancel()
+		stopStack()
+		t.Logf("write %d: %v", key, pErr)
+		if key > 9 && ctx.Err() != nil {
+			fs.unblock()
+			break
+		}
 		require.NoError(t, pErr.GoError())
-		t.Log(key)
 	}
 }
