@@ -1010,7 +1010,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 					// inner expression.
 					fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
 						memo.ExprFmtHideTypes
-					explainOpt := o.FormatExpr(optimizedExpr, fmtFlags)
+					explainOpt := o.FormatExpr(optimizedExpr, fmtFlags, false /* redactableValues */)
 					err = errors.WithDetailf(err, "routineExpr:\n%s", explainOpt)
 				}
 				return err

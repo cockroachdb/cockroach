@@ -107,6 +107,13 @@ func TestCCLLogic_crdb_internal(
 	runCCLLogicTest(t, "crdb_internal")
 }
 
+func TestCCLLogic_explain_redact(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "explain_redact")
+}
+
 func TestCCLLogic_new_schema_changer(
 	t *testing.T,
 ) {
