@@ -246,11 +246,12 @@ func makeImportSpans(
 	spans []roachpb.Span,
 	backups []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
+	lowWaterMark []byte,
 	targetSize int64,
 	introducedSpanFrontier *spanUtils.Frontier,
 	useSimpleImportSpans bool,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
-	var cover []execinfrapb.RestoreSpanEntry
+	cover := make([]execinfrapb.RestoreSpanEntry, 0)
 	spanCh := make(chan execinfrapb.RestoreSpanEntry)
 	g := ctxgroup.WithContext(context.Background())
 	g.Go(func() error {
@@ -260,7 +261,7 @@ func makeImportSpans(
 		return nil
 	})
 
-	err := generateAndSendImportSpans(ctx, spans, backups, layerToIterFactory, nil, introducedSpanFrontier, nil, targetSize, spanCh, useSimpleImportSpans)
+	err := generateAndSendImportSpans(ctx, spans, backups, layerToIterFactory, nil, introducedSpanFrontier, lowWaterMark, targetSize, spanCh, useSimpleImportSpans)
 	close(spanCh)
 
 	if err != nil {
@@ -357,7 +358,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 		backups, nil, nil)
 	require.NoError(t, err)
-	cover, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, noSpanTargetSize, emptySpanFrontier, false)
+	cover, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, nil, noSpanTargetSize, emptySpanFrontier, false)
 	require.NoError(t, err)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
@@ -369,7 +370,18 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: c.sp("l", "m"), Files: c.paths("9")},
 	}, cover)
 
-	coverSized, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, 2<<20, emptySpanFrontier, false)
+	// Check that the correct import spans are created if the job is resumed
+	// after every entry in the cover. The import spans created from a
+	// watermark should just be the full covering excluding entries below
+	// the watermark.
+	for i, e := range cover {
+		waterMark := e.Span.EndKey
+		coverOnResume, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, waterMark, noSpanTargetSize, emptySpanFrontier, false)
+		require.NoError(t, err)
+		require.Equal(t, cover[i+1:], coverOnResume, "resuming on waterMark %s", waterMark)
+	}
+
+	coverSized, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, nil, 2<<20, emptySpanFrontier, false)
 	require.NoError(t, err)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
@@ -385,7 +397,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	coverIntroduced, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, noSpanTargetSize, introducedSpanFrontier, false)
+	coverIntroduced, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, nil, noSpanTargetSize, introducedSpanFrontier, false)
 	require.NoError(t, err)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: c.sp("a", "f"), Files: c.paths("6")},
@@ -714,7 +726,7 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 				execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
 			require.NoError(t, err)
 			cover, err := makeImportSpans(ctx, restoreSpans, backups, layerToIterFactory,
-				0, introducedSpanFrontier, false)
+				nil, 0, introducedSpanFrontier, false)
 			require.NoError(t, err)
 
 			for _, reIntroTable := range reIntroducedTables {
@@ -790,10 +802,25 @@ func TestRestoreEntryCover(t *testing.T) {
 								introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 								require.NoError(t, err)
 								cover, err := makeImportSpans(ctx, backups[numBackups-1].Spans, backups,
-									layerToIterFactory, target<<20, introducedSpanFrontier, simpleImportSpans)
+									layerToIterFactory, nil, target<<20, introducedSpanFrontier, simpleImportSpans)
 								require.NoError(t, err)
 								require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
 									cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
+
+								// Check that the correct import spans are created if the job is
+								// resumed after some random entry in the cover. The import
+								// spans created from a watermark should just be the full
+								// covering excluding entries below the watermark.
+								if len(cover) > 0 {
+									for n := 0; n < 5; n++ {
+										idx := r.Intn(len(cover))
+										waterMark := cover[idx].Span.EndKey
+										resumeCover, err := makeImportSpans(ctx, backups[numBackups-1].Spans, backups,
+											layerToIterFactory, waterMark, target<<20, introducedSpanFrontier, simpleImportSpans)
+										require.NoError(t, err)
+										require.Equal(t, resumeCover, cover[idx+1:])
+									}
+								}
 							})
 						}
 					}

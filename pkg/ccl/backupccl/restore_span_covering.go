@@ -355,6 +355,18 @@ func generateAndSendImportSpans(
 			Span: lastCovSpan,
 		}
 
+		// Do not send covering entry if the entire span is below the
+		// lowWaterMark.
+		if entry.Span.EndKey.Compare(lowWaterMark) <= 0 {
+			return nil
+		}
+
+		// Adjust the covering entry if the start key is below the
+		// lowWaterMark.
+		if entry.Span.Key.Compare(lowWaterMark) < 0 {
+			entry.Span.Key = lowWaterMark
+		}
+
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
 				fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
@@ -378,13 +390,6 @@ func generateAndSendImportSpans(
 
 	for _, span := range requiredSpans {
 		firstInSpan = true
-		if span.EndKey.Compare(lowWaterMark) < 0 {
-			continue
-		}
-		if span.Key.Compare(lowWaterMark) < 0 {
-			span.Key = lowWaterMark
-		}
-
 		layersCoveredLater := make(map[int]bool)
 		for layer := range backups {
 			var coveredLater bool
