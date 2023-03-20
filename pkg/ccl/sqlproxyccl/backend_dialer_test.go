@@ -65,7 +65,7 @@ func TestBackendDialTLS(t *testing.T) {
 		// storage server to be the system tenant, otherwise the
 		// tenant10ToStorage test will fail, since the storage server will
 		// server tenant 10.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer storageServer.Stopper().Stop(ctx)
 

@@ -116,7 +116,7 @@ func TestingCreateMultiRegionClusterWithRegionList(
 				// bonus points, the code to re-enable this should also provide more
 				// flexibility in disabling the default test tenant by callers of this
 				// function. Re-enablement is tracked with #76378.
-				DisableDefaultTestTenant: true,
+				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: region}},
 				},

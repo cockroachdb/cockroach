@@ -37,7 +37,9 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantProbabilistic,
+	}})
 
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0)

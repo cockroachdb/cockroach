@@ -38,7 +38,7 @@ func BenchmarkGenerateObjects(b *testing.B) {
 	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
 		// Secondary tenants have unreasonably low span config limits. We
 		// can't use them yet for this test.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

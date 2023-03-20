@@ -219,7 +219,7 @@ func TestClusterInflightTraces(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// We'll create our own tenants, to ensure they exist as opposed to them
 			// being created randomly.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	}
 
