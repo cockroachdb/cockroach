@@ -72,8 +72,8 @@ func TestTenantUpgrade(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant.
-			DisableDefaultTestTenant: true,
-			Settings:                 settings,
+			DefaultTestTenant: base.TestTenantDisabled,
+			Settings:          settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -223,8 +223,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant here.
-			DisableDefaultTestTenant: true,
-			Settings:                 settings,
+			DefaultTestTenant: base.TestTenantDisabled,
+			Settings:          settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -596,8 +596,8 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Test validates tenant behavior. No need for the default test
 				// tenant.
-				DisableDefaultTestTenant: true,
-				Settings:                 settings,
+				DefaultTestTenant: base.TestTenantDisabled,
+				Settings:          settings,
 				Knobs: base.TestingKnobs{
 					SpanConfig: &spanconfig.TestingKnobs{
 						ManagerDisableJobCreation: true,

@@ -73,6 +73,7 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestTenantProbabilistic,
 				Knobs: base.TestingKnobs{
 					SpanConfig: scKnobs,
 				},

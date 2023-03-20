@@ -201,9 +201,9 @@ func TestRandomParquetExports(t *testing.T) {
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		UseDatabase:              dbName,
-		ExternalIODir:            dir,
+		DefaultTestTenant: base.TestTenantDisabled,
+		UseDatabase:       dbName,
+		ExternalIODir:     dir,
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -298,9 +298,9 @@ func TestBasicParquetTypes(t *testing.T) {
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		UseDatabase:              dbName,
-		ExternalIODir:            dir,
+		DefaultTestTenant: base.TestTenantDisabled,
+		UseDatabase:       dbName,
+		ExternalIODir:     dir,
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)

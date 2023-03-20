@@ -308,7 +308,7 @@ func TestJobInfoUpgradeRegressionTests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),

@@ -53,7 +53,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 				// Need to disable the test tenant because this test fails
 				// when run through a tenant (with internal server error).
 				// More investigation is required. Tracked with #76387.
-				DisableDefaultTestTenant: true,
+				DefaultTestTenant: base.TestTenantDisabled,
 			},
 		})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -125,8 +125,8 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer dirCleanupFn()
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Fails with the default test tenant. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		ExternalIODir:            dir})
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     dir})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -165,7 +165,7 @@ func TestListTenants(t *testing.T) {
 
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -200,7 +200,7 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer s.Stopper().Stop(ctx)
 
 	st, db := serverutils.StartTenant(t, s, base.TestTenantArgs{

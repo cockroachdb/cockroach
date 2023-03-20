@@ -49,9 +49,9 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Fails with the default test tenant due to span limits. Tracked
 			// with #76378.
-			DisableDefaultTestTenant: true,
-			UseDatabase:              "rand",
-			ExternalIODir:            dir,
+			DefaultTestTenant: base.TestTenantDisabled,
+			UseDatabase:       "rand",
+			ExternalIODir:     dir,
 		},
 	}
 	const localFoo = "nodelocal://0/foo/"

@@ -71,7 +71,7 @@ func newAlterSchedulesTestHelper(t *testing.T) (*alterSchedulesTestHelper, func(
 		ExternalIODir: dir,
 		// Some scheduled backup tests fail when run within a tenant. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
 		},
