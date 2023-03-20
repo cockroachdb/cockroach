@@ -297,6 +297,15 @@ func registerRestore(r registry.Registry) {
 			timeout:  1 * time.Hour,
 		},
 		{
+			// Benchmarks if per node throughput remains constant if the cluster
+			// is multi-region.
+			hardware: makeHardwareSpecs(hardwareSpecs{
+				nodes: 6,
+				zones: []string{"us-east-1b", "us-east-2b"}}), // These zones are AWS-specific.
+			backup:  makeBackupSpecs(backupSpecs{}),
+			timeout: 1 * time.Hour,
+		},
+		{
 			// Benchmarks if per node throughput doubles if the vcpu count doubles
 			// relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
@@ -400,6 +409,10 @@ type hardwareSpecs struct {
 
 	// mem is the memory per cpu.
 	mem spec.MemPerCPU
+
+	// Availability zones to use. (Values are cloud-provider-specific.)
+	// If unset, the first of the default availability zones for the provider will be used.
+	zones []string
 }
 
 func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
@@ -411,6 +424,10 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	if hw.mem != spec.Auto {
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
+	if len(hw.zones) > 0 {
+		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
+		clusterOpts = append(clusterOpts, spec.Geo())
+	}
 	return r.MakeClusterSpec(hw.nodes, clusterOpts...)
 }
 
@@ -421,6 +438,9 @@ func (hw hardwareSpecs) String(verbose bool) string {
 	builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
 	if hw.mem != spec.Auto {
 		builder.WriteString(fmt.Sprintf("/%smem", hw.mem))
+	}
+	if len(hw.zones) > 0 {
+		builder.WriteString(fmt.Sprintf("/zones=%s", strings.Join(hw.zones, ",")))
 	}
 	if verbose {
 		builder.WriteString(fmt.Sprintf("/volSize=%dGB", hw.volumeSize))
@@ -444,6 +464,7 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 	if override.volumeSize != 0 {
 		specs.volumeSize = override.volumeSize
 	}
+	specs.zones = override.zones
 	return specs
 }
 
