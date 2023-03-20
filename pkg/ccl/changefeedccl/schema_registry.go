@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -60,23 +61,29 @@ type confluentSchemaRegistry struct {
 
 var _ schemaRegistry = (*confluentSchemaRegistry)(nil)
 
-type schemaRegistryParams map[string][]byte
+type schemaRegistryParams struct {
+	params  map[string][]byte
+	timeout time.Duration
+}
 
 func (s schemaRegistryParams) caCert() []byte {
-	return s[changefeedbase.RegistryParamCACert]
+	return s.params[changefeedbase.RegistryParamCACert]
 }
 
 func (s schemaRegistryParams) clientCert() []byte {
-	return s[changefeedbase.RegistryParamClientCert]
+	return s.params[changefeedbase.RegistryParamClientCert]
 }
 
 func (s schemaRegistryParams) clientKey() []byte {
-	return s[changefeedbase.RegistryParamClientKey]
+	return s.params[changefeedbase.RegistryParamClientKey]
 }
 
-func getAndDeleteParams(u *url.URL) (schemaRegistryParams, error) {
+const timeoutParam = "timeout"
+const defaultSchemaRegistryTimeout = 30 * time.Second
+
+func getAndDeleteParams(u *url.URL) (*schemaRegistryParams, error) {
 	query := u.Query()
-	s := make(schemaRegistryParams, 3)
+	s := schemaRegistryParams{params: make(map[string][]byte, 3)}
 	for _, k := range []string{
 		changefeedbase.RegistryParamCACert,
 		changefeedbase.RegistryParamClientCert,
@@ -87,14 +94,26 @@ func getAndDeleteParams(u *url.URL) (schemaRegistryParams, error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "param %s must be base 64 encoded", k)
 			}
-			s[k] = decoded
+			s.params[k] = decoded
 			query.Del(k)
 		}
 	}
+
+	if strTimeout := query.Get(timeoutParam); strTimeout != "" {
+		dur, err := time.ParseDuration(strTimeout)
+		if err != nil {
+			return nil, err
+		}
+		s.timeout = dur
+	} else {
+		// Default timeout in httputil is way too low. Use something more reasonable.
+		s.timeout = defaultSchemaRegistryTimeout
+	}
+
 	// remove crdb query params to ensure compatibility with schema
 	// registry implementation
 	u.RawQuery = query.Encode()
-	return s, nil
+	return &s, nil
 }
 
 func newConfluentSchemaRegistry(
@@ -140,14 +159,17 @@ func newConfluentSchemaRegistry(
 // Setup the httputil.Client to use when dialing Confluent schema registry. If `ca_cert`
 // is set as a query param in the registry URL, client should trust the corresponding
 // cert while dialing. Otherwise, use the DefaultClient.
-func setupHTTPClient(baseURL *url.URL, s schemaRegistryParams) (*httputil.Client, error) {
-	if len(s) == 0 {
-		return httputil.DefaultClient, nil
+func setupHTTPClient(baseURL *url.URL, s *schemaRegistryParams) (*httputil.Client, error) {
+	if len(s.params) == 0 {
+		return httputil.NewClientWithTimeout(s.timeout), nil
 	}
+
 	httpClient, err := newClientFromTLSKeyPair(s.caCert(), s.clientCert(), s.clientKey())
 	if err != nil {
 		return nil, err
 	}
+	httpClient.Timeout = s.timeout
+
 	if baseURL.Scheme == "http" {
 		log.Warningf(context.Background(), "TLS configuration provided but schema registry %s uses HTTP", baseURL)
 	}
@@ -217,6 +239,7 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	if err != nil {
 		return 0, err
 	}
+	r.sliMetrics.SchemaRegistrations.Inc(1)
 	return id, nil
 }
 
