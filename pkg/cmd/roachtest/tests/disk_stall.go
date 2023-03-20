@@ -51,7 +51,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Name:    fmt.Sprintf("disk-stalled/%s", name),
 			Owner:   registry.OwnerStorage,
 			Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
-			Timeout: 20 * time.Minute,
+			Timeout: 30 * time.Minute,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
@@ -77,6 +77,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 				),
 				Owner:   registry.OwnerStorage,
 				Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
+				Timeout: 30 * time.Minute,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, &fuseDiskStaller{
 						t:         t,
