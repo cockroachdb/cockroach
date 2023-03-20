@@ -268,7 +268,7 @@ func (c *SyncedCluster) allowServiceRegistration() bool {
 func (c *SyncedCluster) maybeRegisterServices(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts, portFunc FindOpenPortsFunc,
 ) error {
-	serviceMap, err := c.MapServices(ctx, startOpts.VirtualClusterName, startOpts.SQLInstance)
+	serviceMap, err := c.MapServices(ctx, l, startOpts.VirtualClusterName, startOpts.SQLInstance)
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 	if err != nil {
 		return err
 	}
-	return c.RegisterServices(ctx, servicesToRegister)
+	return c.RegisterServices(ctx, l, servicesToRegister)
 }
 
 // servicesWithOpenPortSelection returns services to be registered for
@@ -680,9 +680,9 @@ func (c *SyncedCluster) NodeURL(
 
 // NodePort returns the system tenant's SQL port for the given node.
 func (c *SyncedCluster) NodePort(
-	ctx context.Context, node Node, virtualClusterName string, sqlInstance int,
+	ctx context.Context, l *logger.Logger, node Node, virtualClusterName string, sqlInstance int,
 ) (int, error) {
-	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+	desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return 0, err
 	}
@@ -691,9 +691,9 @@ func (c *SyncedCluster) NodePort(
 
 // NodeUIPort returns the system tenant's AdminUI port for the given node.
 func (c *SyncedCluster) NodeUIPort(
-	ctx context.Context, node Node, virtualClusterName string, sqlInstance int,
+	ctx context.Context, l *logger.Logger, node Node, virtualClusterName string, sqlInstance int,
 ) (int, error) {
-	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeUI, sqlInstance)
+	desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeUI, sqlInstance)
 	if err != nil {
 		return 0, err
 	}
@@ -718,7 +718,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if len(c.Nodes) != 1 {
 		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 	}
-	desc, err := c.DiscoverService(ctx, c.Nodes[0], virtualClusterName, ServiceTypeSQL, sqlInstance)
+	desc, err := c.DiscoverService(ctx, l, c.Nodes[0], virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return err
 	}
@@ -745,7 +745,7 @@ func (c *SyncedCluster) ExecSQL(
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	results, _, err := c.ParallelE(ctx, l, WithNodes(nodes).WithDisplay(display).WithFailSlow(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {
 				return nil, err
 			}
@@ -1004,7 +1004,7 @@ func (c *SyncedCluster) generateStartArgs(
 	instance := startOpts.SQLInstance
 	var sqlPort int
 	if startOpts.Target == StartServiceForVirtualCluster {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, instance)
+		desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
@@ -1014,14 +1014,14 @@ func (c *SyncedCluster) generateStartArgs(
 		virtualClusterName = SystemInterfaceName
 		// System interface instance is always 0.
 		instance = 0
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, instance)
+		desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
 		sqlPort = desc.Port
 		args = append(args, fmt.Sprintf("--listen-addr=%s:%d", listenHost, sqlPort))
 	}
-	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeUI, instance)
+	desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeUI, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -1044,7 +1044,7 @@ func (c *SyncedCluster) generateStartArgs(
 		joinTargets := startOpts.GetJoinTargets()
 		addresses := make([]string, len(joinTargets))
 		for i, joinNode := range startOpts.GetJoinTargets() {
-			desc, err := c.DiscoverService(ctx, joinNode, SystemInterfaceName, ServiceTypeSQL, 0)
+			desc, err := c.DiscoverService(ctx, l, joinNode, SystemInterfaceName, ServiceTypeSQL, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -1053,7 +1053,7 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, fmt.Sprintf("--join=%s", strings.Join(addresses, ",")))
 	}
 	if startOpts.Target == StartServiceForVirtualCluster {
-		storageAddrs, err := startOpts.StorageCluster.allPublicAddrs(ctx)
+		storageAddrs, err := startOpts.StorageCluster.allPublicAddrs(ctx, l)
 		if err != nil {
 			return nil, err
 		}
@@ -1199,7 +1199,7 @@ func (c *SyncedCluster) maybeScaleMem(val int) int {
 
 func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger, node Node) error {
 	l.Printf("%s: initializing cluster\n", c.Name)
-	cmd, err := c.generateInitCmd(ctx, node)
+	cmd, err := c.generateInitCmd(ctx, l, node)
 	if err != nil {
 		return err
 	}
@@ -1334,7 +1334,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 		pathPrefix = fmt.Sprintf("%s_", virtualCluster)
 	}
 	path := fmt.Sprintf("%s/%ssettings-initialized", c.NodeDir(node, 1 /* storeIndex */), pathPrefix)
-	port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+	port, err := c.NodePort(ctx, l, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 	if err != nil {
 		return "", err
 	}
@@ -1349,14 +1349,16 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	return clusterSettingsCmd, nil
 }
 
-func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string, error) {
+func (c *SyncedCluster) generateInitCmd(
+	ctx context.Context, l *logger.Logger, node Node,
+) (string, error) {
 	var initCmd string
 	if c.IsLocal() {
 		initCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
-	port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+	port, err := c.NodePort(ctx, l, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 	if err != nil {
 		return "", err
 	}
@@ -1555,7 +1557,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 
 	node := c.Nodes[0]
 	binary := cockroachNodeBinary(c, node)
-	port, err := c.NodePort(ctx, node, startOpts.VirtualClusterName, startOpts.SQLInstance)
+	port, err := c.NodePort(ctx, l, node, startOpts.VirtualClusterName, startOpts.SQLInstance)
 	if err != nil {
 		return err
 	}

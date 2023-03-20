@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,12 +56,9 @@ var (
 		"roachprod-managed.crdb.io",
 	)
 )
-
-var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
-
 var _ vm.DNSProvider = &dnsProvider{}
 
-type ExecFn func(cmd *exec.Cmd) ([]byte, error)
+type ExecFn func(context.Context, *logger.Logger, []string, ...bool) ([]byte, error)
 
 // dnsProvider implements the vm.DNSProvider interface.
 type dnsProvider struct {
@@ -92,9 +88,7 @@ type dnsProvider struct {
 }
 
 func NewDNSProvider() *dnsProvider {
-	return NewDNSProviderWithExec(func(cmd *exec.Cmd) ([]byte, error) {
-		return cmd.CombinedOutput()
-	})
+	return NewDNSProviderWithExec(cliProvider.RunCommand)
 }
 
 func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
@@ -118,7 +112,9 @@ func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
-func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord) error {
+func (n *dnsProvider) CreateRecords(
+	ctx context.Context, l *logger.Logger, records ...vm.DNSRecord,
+) error {
 	recordsByName := make(map[string][]vm.DNSRecord)
 	for _, record := range records {
 		// Ensure we use the normalised name for grouping records.
@@ -128,7 +124,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 
 	for name, recordGroup := range recordsByName {
 		err := n.withRecordLock(name, func() error {
-			existingRecords, err := n.lookupSRVRecords(ctx, name)
+			existingRecords, err := n.lookupSRVRecords(ctx, l, name)
 			if err != nil {
 				return err
 			}
@@ -158,8 +154,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 				"--zone", n.managedZone,
 				"--rrdatas", strings.Join(data, ","),
 			}
-			cmd := exec.CommandContext(ctx, "gcloud", args...)
-			out, err := n.execFn(cmd)
+			out, err := n.execFn(ctx, l, args)
 			if err != nil {
 				// Clear the cache entry if the operation failed, as the records may
 				// have been partially updated.
@@ -186,7 +181,9 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 }
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) LookupSRVRecords(
+	ctx context.Context, l *logger.Logger, name string,
+) ([]vm.DNSRecord, error) {
 	var records []vm.DNSRecord
 	var err error
 	err = n.withRecordLock(name, func() error {
@@ -195,27 +192,28 @@ func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.D
 			records, err = n.fastLookupSRVRecords(ctx, n.resolvers[rIdx], name, true)
 			return err
 		}
-		records, err = n.lookupSRVRecords(ctx, name)
+		records, err = n.lookupSRVRecords(ctx, l, name)
 		return err
 	})
 	return records, err
 }
 
 // ListRecords implements the vm.DNSProvider interface.
-func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
-	return n.listSRVRecords(ctx, "", dnsMaxResults)
+func (n *dnsProvider) ListRecords(ctx context.Context, l *logger.Logger) ([]vm.DNSRecord, error) {
+	return n.listSRVRecords(ctx, l, "", dnsMaxResults)
 }
 
 // DeleteRecordsByName implements the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) error {
+func (n *dnsProvider) DeleteRecordsByName(
+	ctx context.Context, l *logger.Logger, names ...string,
+) error {
 	for _, name := range names {
 		err := n.withRecordLock(name, func() error {
 			args := []string{"--project", n.dnsProject, "dns", "record-sets", "delete", name,
 				"--type", string(vm.SRV),
 				"--zone", n.managedZone,
 			}
-			cmd := exec.CommandContext(ctx, "gcloud", args...)
-			out, err := n.execFn(cmd)
+			out, err := n.execFn(ctx, l, args)
 			// Clear the cache entry regardless of the outcome. As the records may
 			// have been partially deleted.
 			n.clearCacheEntry(name)
@@ -232,9 +230,11 @@ func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) 
 }
 
 // DeleteRecordsBySubdomain implements the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsBySubdomain(ctx context.Context, subdomain string) error {
+func (n *dnsProvider) DeleteRecordsBySubdomain(
+	ctx context.Context, l *logger.Logger, subdomain string,
+) error {
 	suffix := fmt.Sprintf("%s.%s.", subdomain, n.Domain())
-	records, err := n.listSRVRecords(ctx, suffix, dnsMaxResults)
+	records, err := n.listSRVRecords(ctx, l, suffix, dnsMaxResults)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func (n *dnsProvider) DeleteRecordsBySubdomain(ctx context.Context, subdomain st
 			delete(names, name)
 		}
 	}
-	return n.DeleteRecordsByName(ctx, maps.Keys(names)...)
+	return n.DeleteRecordsByName(ctx, l, maps.Keys(names)...)
 }
 
 // Domain implements the vm.DNSProvider interface.
@@ -268,13 +268,15 @@ func (n *dnsProvider) Domain() string {
 // network problems. For lookups, we prefer this to using the gcloud command as
 // it is faster, and preferable when service information is being queried
 // regularly.
-func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) lookupSRVRecords(
+	ctx context.Context, l *logger.Logger, name string,
+) ([]vm.DNSRecord, error) {
 	// Check the cache first.
 	if cachedRecords, ok := n.getCache(name); ok {
 		return cachedRecords, nil
 	}
 	// Lookup the records, if no records are found in the cache.
-	records, err := n.listSRVRecords(ctx, name, dnsMaxResults)
+	records, err := n.listSRVRecords(ctx, l, name, dnsMaxResults)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +297,7 @@ func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.D
 // The data field of the records could be a comma-separated list of values if multiple
 // records are returned for the same name.
 func (n *dnsProvider) listSRVRecords(
-	ctx context.Context, filter string, limit int,
+	ctx context.Context, l *logger.Logger, filter string, limit int,
 ) ([]vm.DNSRecord, error) {
 	args := []string{"--project", n.dnsProject, "dns", "record-sets", "list",
 		"--limit", strconv.Itoa(limit),
@@ -306,8 +308,7 @@ func (n *dnsProvider) listSRVRecords(
 	if filter != "" {
 		args = append(args, "--filter", filter)
 	}
-	cmd := exec.CommandContext(ctx, "gcloud", args...)
-	res, err := n.execFn(cmd)
+	res, err := n.execFn(ctx, l, args)
 	if err != nil {
 		return nil, rperrors.TransientFailure(errors.Wrapf(err, "output: %s", res), dnsProblemLabel)
 	}
@@ -405,12 +406,14 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 	}
 	defer f.Close()
 
-	// Keep imported zone file in dry run mode.
-	defer func() {
-		if err := os.Remove(f.Name()); err != nil {
-			l.Errorf("removing %s failed: %v", f.Name(), err)
-		}
-	}()
+	// Keep imported zone file in dry run or verbose mode.
+	if !config.DryRun && !config.Verbose {
+		defer func() {
+			if err := os.Remove(f.Name()); err != nil {
+				l.Errorf("removing %s failed: %v", f.Name(), err)
+			}
+		}()
+	}
 
 	var zoneBuilder strings.Builder
 	for _, vm := range vms {
@@ -426,11 +429,10 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 
 	args := []string{"--project", p.dnsProject, "dns", "record-sets", "import",
 		f.Name(), "-z", p.publicZone, "--delete-all-existing", "--zone-file-format"}
-	cmd := exec.Command("gcloud", args...)
-	output, err := cmd.CombinedOutput()
+	_, err = cliProvider.RunCommand(context.Background(), l, args)
 
-	return errors.Wrapf(err,
-		"Command: %s\nOutput: %s\nZone file contents:\n%s",
-		cmd, output, zoneBuilder.String(),
-	)
+	if err != nil {
+		return errors.Wrapf(err, "Zone file contents:\n%s", zoneBuilder.String())
+	}
+	return nil
 }

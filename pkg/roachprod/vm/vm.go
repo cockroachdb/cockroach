@@ -6,7 +6,11 @@
 package vm
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -780,4 +784,111 @@ func SanitizeLabelValues(labels map[string]string) map[string]string {
 		sanitized[k] = SanitizeLabel(v)
 	}
 	return sanitized
+}
+
+type CLIProvider struct {
+	// name of CLI command to execute
+	CLICommand string
+
+	// Profile to manage cluster in
+	Profile string
+}
+
+func MaybeLogCmd(l *logger.Logger, cmd *exec.Cmd) {
+	if config.DryRun || config.Verbose {
+		l.PrintfCtxDepth(context.Background(), 2, "exec: %s %s", cmd.Args[0], strings.Join(cmd.Args[1:], " "))
+	}
+}
+
+func MaybeLogCmdStr(l *logger.Logger, cmd string, args []string) {
+	maybeLogCmdStr(l, 1, cmd, args)
+}
+
+// Invoked internally by RunCommand. The depth is 3 because we want to ignore 2 internal calls plus PrintfCtxDepth
+func maybeLogCmdStr(l *logger.Logger, depth int, cmd string, args []string) {
+	if config.DryRun || config.Verbose {
+		l.PrintfCtxDepth(context.Background(), depth+1, "exec: %s %s", cmd, strings.Join(args, " "))
+	}
+}
+
+func (p *CLIProvider) runCommand(
+	ctx context.Context, l *logger.Logger, depth int, args []string, modeOverrides ...bool,
+) ([]byte, error) {
+	if p.CLICommand == "" {
+		return nil, errors.New("CLICommand is not set")
+	}
+	if p.Profile != "" {
+		args = append(args[:len(args):len(args)], "--profile", p.Profile)
+	}
+	maybeLogCmdStr(l, depth+1, p.CLICommand, args)
+	// Determine if the command is required to be executed while in dry-run mode.
+	execRequired := len(modeOverrides) > 0 && modeOverrides[0]
+	if config.DryRun && !execRequired {
+		return nil, nil
+	}
+	var stderrBuf bytes.Buffer
+	var cmd *exec.Cmd
+
+	if ctx == nil {
+		cmd = exec.Command(p.CLICommand, args...)
+	} else {
+		cmd = exec.CommandContext(ctx, p.CLICommand, args...)
+	}
+	cmd.Stderr = &stderrBuf
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
+			config.Logger.Printf("%s", string(exitErr.Stderr))
+		}
+		stderr := stderrBuf.Bytes()
+		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding new zones.
+		// 'gcloud compute instances list --project cockroach-ephemeral --format json'
+		// would fail with, "Invalid value for field 'zone': 'asia-northeast2-a'. Unknown zone.", around the time when
+		// the region was added but not fully available. It remains unclear whether this can still happen with newly
+		// added GCP regions. One potential workaround is to constrain the list of zones.
+		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
+			return nil, errors.Wrapf(err, "failed to run: %s %s\nstdout: %s\nstderr: %s\n",
+				p.CLICommand, strings.Join(args, " "), bytes.TrimSpace(output), bytes.TrimSpace(stderr))
+		}
+	}
+	return output, nil
+}
+
+// Execute a command using CLIProvider's CLICommand.
+// If command exits 0, return stdout, ignoring stderr.
+// Otherwise, the returned error encapsulates both stdout and stderr, including the exit code.
+//
+// N.B. modeOverrides is used to optionally override the default execution mode for the command.
+//
+//	Currently, only the first vararg is used; if true, the command is _executed_ in dry-run mode.
+//	For example, FindActiveAccount is a prerequisite for Create, but it is a read-only command; thus, it must be
+//	executed; otherwise, Create will never be invoked.
+func (p *CLIProvider) RunCommand(
+	ctx context.Context, l *logger.Logger, args []string, modeOverrides ...bool,
+) ([]byte, error) {
+	return p.runCommand(ctx, l, 2, args, modeOverrides...)
+}
+
+// runJSONCommand executes CLIProvider's CLICommand, parsing the output as JSON.
+// If the JSON output is valid, it is unmarshaled into 'parsed'; otherwise, an error is returned.
+func (p *CLIProvider) RunJSONCommand(
+	l *logger.Logger, args []string, parsed interface{}, modeOverrides ...bool,
+) error {
+	if p.CLICommand == "aws" {
+		// Force json output in case the user has overridden the default behavior.
+		args = append(args[:len(args):len(args)], "--output", "json")
+	}
+	rawJSON, err := p.runCommand(context.Background(), l, 3, args, modeOverrides...)
+	if err != nil {
+		return err
+	}
+	execRequired := len(modeOverrides) > 0 && modeOverrides[0]
+
+	if !config.DryRun || execRequired {
+		if err := json.Unmarshal(rawJSON, &parsed); err != nil {
+			return errors.Wrapf(err, "failed to parse json %s", rawJSON)
+		}
+	}
+
+	return nil
 }

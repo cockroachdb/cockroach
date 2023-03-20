@@ -681,6 +681,8 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	for _, v := range cloudCluster.VMs {
 		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
 
+		vm.MaybeLogCmd(l, cmd)
+
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			l.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
@@ -702,7 +704,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	}
 	// Fetch public keys from gcloud to set up ssh access for all users into the
 	// shared ubuntu user.
-	authorizedKeys, err := gce.GetUserAuthorizedKeys()
+	authorizedKeys, err := gce.GetUserAuthorizedKeys(l)
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve authorized keys from gcloud")
 	}
@@ -818,7 +820,7 @@ func updatePrometheusTargets(
 			go func(index int, v vm.VM) {
 				defer wg.Done()
 				// only gce is supported for prometheus
-				desc, err := c.DiscoverService(ctx, install.Node(index), "", install.ServiceTypeUI, 0)
+				desc, err := c.DiscoverService(ctx, l, install.Node(index), "", install.ServiceTypeUI, 0)
 				if err != nil {
 					l.Errorf("error getting the port for node %d: %v", index, err)
 					return
@@ -852,7 +854,6 @@ func createLabels(v vm.VM) map[string]string {
 		"host_ip":  v.PrivateIP,
 		"project":  v.Project,
 		"zone":     v.Zone,
-		"tenant":   install.SystemInterfaceName,
 		"job":      "cockroachdb",
 	}
 	match := regionRegEx.FindStringSubmatch(v.Zone)
@@ -1084,7 +1085,7 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
+		desc, err := c.DiscoverService(ctx, l, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -1139,7 +1140,7 @@ func urlGenerator(
 		port := uConfig.port
 		if port == 0 {
 			desc, err := c.DiscoverService(
-				ctx, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
+				ctx, l, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
 			)
 			if err != nil {
 				return nil, err
@@ -1157,6 +1158,8 @@ func urlGenerator(
 		urls = append(urls, url)
 		if uConfig.openInBrowser {
 			cmd := browserCmd(url)
+
+			vm.MaybeLogCmd(l, cmd)
 
 			if err := cmd.Run(); err != nil {
 				return nil, err
@@ -1221,7 +1224,7 @@ func SQLPorts(
 	}
 	var ports []int
 	for _, node := range c.Nodes {
-		port, err := c.NodePort(ctx, node, virtualClusterName, sqlInstance)
+		port, err := c.NodePort(ctx, l, node, virtualClusterName, sqlInstance)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Error discovering SQL Port for node %d", node)
 		}
@@ -1245,7 +1248,7 @@ func AdminPorts(
 	}
 	var ports []int
 	for _, node := range c.Nodes {
-		port, err := c.NodeUIPort(ctx, node, virtualClusterName, sqlInstance)
+		port, err := c.NodeUIPort(ctx, l, node, virtualClusterName, sqlInstance)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Error discovering UI Port for node %d", node)
 		}
@@ -1295,7 +1298,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
-			port, err := c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+			port, err := c.NodeUIPort(ctx, l, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 			if err != nil {
 				return nil, err
 			}
@@ -1363,6 +1366,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	}
 
 	if err != nil {
+
 		exit.WithCode(exit.UnspecifiedError())
 	}
 
@@ -1374,6 +1378,8 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 				"-http", fmt.Sprintf(":%d", port),
 				file)
 			waitCommands = append(waitCommands, cmd)
+
+			vm.MaybeLogCmd(l, cmd)
 
 			if err := cmd.Start(); err != nil {
 				return err
@@ -2486,7 +2492,7 @@ func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error
 		return err
 	}
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(ctx, c.Name)
+		return p.DeleteRecordsBySubdomain(ctx, l, c.Name)
 	})
 }
 
@@ -2556,7 +2562,7 @@ func sendCaptureCommand(
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, install.WithNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-			port, err := c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+			port, err := c.NodeUIPort(ctx, l, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 			if err != nil {
 				return nil, err
 			}
@@ -2698,7 +2704,7 @@ func CreateLoadBalancer(
 
 	// Find the SQL ports for the service on all nodes.
 	services, err := c.DiscoverServices(
-		ctx, virtualClusterName, install.ServiceTypeSQL,
+		ctx, l, virtualClusterName, install.ServiceTypeSQL,
 		install.ServiceNodePredicate(c.TargetNodes()...), install.ServiceInstancePredicate(sqlInstance),
 	)
 	if err != nil {
@@ -2760,7 +2766,7 @@ func LoadBalancerPgURL(
 		return "", err
 	}
 
-	services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
+	services, err := c.DiscoverServices(ctx, l, opts.VirtualClusterName, install.ServiceTypeSQL,
 		install.ServiceInstancePredicate(opts.SQLInstance))
 	if err != nil {
 		return "", err
@@ -2787,7 +2793,7 @@ func LoadBalancerIP(
 	if err != nil {
 		return "", err
 	}
-	services, err := c.DiscoverServices(ctx, virtualClusterName, install.ServiceTypeSQL,
+	services, err := c.DiscoverServices(ctx, l, virtualClusterName, install.ServiceTypeSQL,
 		install.ServiceInstancePredicate(sqlInstance))
 	if err != nil {
 		return "", err

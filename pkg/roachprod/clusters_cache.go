@@ -86,9 +86,17 @@ func saveCluster(l *logger.Logger, c *cloud.Cluster) error {
 	err = errors.CombineErrors(err, tmpFile.Sync())
 	err = errors.CombineErrors(err, tmpFile.Close())
 	if err == nil {
+		if config.DryRun || config.Verbose {
+			l.Printf("exec: mv %s %s", tmpFile.Name(), filename)
+		}
+		
 		err = os.Rename(tmpFile.Name(), filename)
 	}
 	if err != nil {
+		if config.DryRun || config.Verbose {
+			l.Printf("exec: rm %s", tmpFile.Name())
+		}
+
 		_ = os.Remove(tmpFile.Name())
 		return err
 	}
@@ -258,5 +266,12 @@ func (localVMStorage) SaveCluster(l *logger.Logger, cluster *cloud.Cluster) erro
 // DeleteCluster is part of the local.VMStorage interface.
 func (localVMStorage) DeleteCluster(l *logger.Logger, name string) error {
 	path := clusterFilename(name)
+	if config.DryRun || config.Verbose {
+		l.Printf("exec: rm %s", path)
+	}
+	if config.DryRun {
+		return nil
+	}
+
 	return os.Remove(path)
 }

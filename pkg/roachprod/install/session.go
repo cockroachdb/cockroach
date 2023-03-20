@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -40,6 +41,7 @@ type remoteSession struct {
 	*exec.Cmd
 	cancel  func()
 	logfile string // captures ssh -vvv
+	logger  *logger.Logger
 }
 
 type remoteCommand struct {
@@ -127,7 +129,7 @@ func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 	args = append(args, command.cmd)
 	ctx, cancel := context.WithCancel(context.Background())
 	fullCmd := exec.CommandContext(ctx, "ssh", args...)
-	return &remoteSession{fullCmd, cancel, logfile}
+	return &remoteSession{fullCmd, cancel, logfile, l}
 }
 
 func (s *remoteSession) errWithDebug(err error) error {
@@ -147,6 +149,7 @@ func (s *remoteSession) CombinedOutput(ctx context.Context) ([]byte, error) {
 	commandFinished := make(chan struct{})
 
 	go func() {
+		vm.MaybeLogCmd(s.logger, s.Cmd)
 		b, err = s.Cmd.CombinedOutput()
 		err = s.errWithDebug(err)
 		close(commandFinished)
@@ -165,6 +168,7 @@ func (s *remoteSession) Run(ctx context.Context) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
+		vm.MaybeLogCmd(s.logger, s.Cmd)
 		err = s.errWithDebug(s.Cmd.Run())
 		close(commandFinished)
 	}()
@@ -179,6 +183,7 @@ func (s *remoteSession) Run(ctx context.Context) error {
 }
 
 func (s *remoteSession) Start() error {
+	vm.MaybeLogCmd(s.logger, s.Cmd)
 	return s.errWithDebug(s.Cmd.Start())
 }
 

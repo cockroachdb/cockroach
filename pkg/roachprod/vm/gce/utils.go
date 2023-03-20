@@ -23,6 +23,23 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const (
+	dnsProject = "cockroach-shared"
+	dnsZone    = "roachprod"
+)
+
+var cliProvider = vm.CLIProvider{
+	CLICommand: "gcloud",
+}
+
+// Subdomain is the DNS subdomain to in which to maintain cluster node names.
+var Subdomain = func() string {
+	if d, ok := os.LookupEnv("ROACHPROD_DNS"); ok {
+		return d
+	}
+	return "roachprod.crdb.io"
+}()
+
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
@@ -162,6 +179,7 @@ if [ -e {{ .DisksInitializedFile }} ]; then
   exit 0
 fi
 
+<<<<<<< HEAD
 if [ -e {{ .OSInitializedFile }} ]; then
   echo "OS already initialized, only initializing disks."
   # Initialize disks, but don't write fstab entries again.
@@ -171,6 +189,110 @@ fi
 
 # Initialize disks and write fstab entries.
 setup_disks true
+=======
+{{ if not .Zfs }}
+mount_opts="defaults"
+{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
+{{ end }}
+
+use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
+
+local_nvme=()
+disks=()
+mount_prefix="/mnt/data"
+
+all_nvme_devices=$(nvme list)
+echo $all_nvme_devices
+
+# Enumerate all _local_ NVMe drives.
+for d in $(nvme list|grep nvme |awk '{print $1}'); do
+  if ! mount | grep ${d}; then
+    local_nvme+=("${d}")
+    echo "Local NVMe Disk ${d} not mounted, need to mount..."
+  else
+    echo "Local NVMe Disk  ${d} already mounted, skipping..."
+  fi
+done
+
+# Enumerate all non-NVMe drives.
+{{ if .Zfs }}
+apt-get update -q
+apt-get install -yq zfsutils-linux
+
+for d in $(ls /dev/disk/by-id/google-persistent-disk-[1-9]); do
+  zpool list -v -P | grep ${d} > /dev/null
+  if [ $? -ne 0 ]; then
+{{ else }}
+for d in $(ls /dev/disk/by-id/google-persistent-disk-[1-9]); do
+  if ! mount | grep ${d}; then
+{{ end }}
+    disks+=("${d}")
+    echo "Disk ${d} not mounted, need to mount..."
+  else
+    echo "Disk ${d} already mounted, skipping..."
+  fi
+done
+
+all_disks=( "${disks[@]}" "${local_nvme[@]}" "${ebs_nvme[@]}" )
+echo "All unmounted drives: ${all_disks[@]}"
+
+if [ "${#all_disks[@]}" -eq "0" ]; then
+  mountpoint="${mount_prefix}1"
+  echo "No disks mounted, creating ${mountpoint}"
+  mkdir -p ${mountpoint}
+  chmod 777 ${mountpoint}
+elif [ "${#all_disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+  disknum=1
+  for disk in "${all_disks[@]}"
+  do
+    mountpoint="${mount_prefix}${disknum}"
+    disknum=$((disknum + 1 ))
+    echo "Mounting ${disk} at ${mountpoint}"
+    mkdir -p ${mountpoint}
+{{ if .Zfs }}
+    zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
+    # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+{{ else }}
+    mkfs.ext4 -q -F ${disk}
+    mount -o ${mount_opts} ${disk} ${mountpoint}
+    echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+    tune2fs -m 0 ${disk}
+{{ end }}
+    chmod 777 ${mountpoint}
+  done
+# N.B. RAID0 is supported only for _local_ NVMe drives.
+elif [ "${#local_nvme[@]}" -gt "1" ]; then
+  mountpoint="${mount_prefix}1"
+  echo "${#local_nvme[@]} local NVMe disks unmounted, creating ${mountpoint} using RAID 0"
+  mkdir -p ${mountpoint}
+{{ if .Zfs }}
+  zpool create -f $(basename $mountpoint) -m ${mountpoint} ${local_nvme[@]}
+  # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+{{ else }}
+  raiddisk="/dev/md0"
+  mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#local_nvme[@]} "${local_nvme[@]}"
+  mkfs.ext4 -q -F ${raiddisk}
+  mount -o ${mount_opts} ${raiddisk} ${mountpoint}
+  echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+  tune2fs -m 0 ${raiddisk}
+{{ end }}
+  chmod 777 ${mountpoint}
+fi
+
+if [ "${#disks[@]}" -gt "0" ] && [ ! -n "$use_multiple_disks" ]; then
+  warn_msg="WARNING: disks: ${disks[@]} will remain unmounted. Did you mean to use --enable-multiple-stores?"
+	echo $warn_msg
+	# Print the warning message to the console.
+  echo $warn_msg >> /etc/motd
+fi
+
+# Print the block device and FS usage output. This is useful for debugging.
+lsblk
+df -h
+{{ if .Zfs }}
+zpool list
+{{ end }}
+>>>>>>> a2caf56c477 (roachprod: TBD (--dry-run, --verbose, logger refactor, RAID0 refactor))
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
 if systemctl is-active --quiet sshguard; then
@@ -420,7 +542,7 @@ func (ak AuthorizedKeys) AsProjectMetadata() []byte {
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
 // gcloud cockroach-ephemeral project and returns them formatted for use in
 // an authorized_keys file.
-func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
+func GetUserAuthorizedKeys(l *logger.Logger) (AuthorizedKeys, error) {
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
@@ -428,6 +550,8 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
+
+	vm.MaybeLogCmd(l, cmd)
 
 	if err := cmd.Run(); err != nil {
 		return nil, err
@@ -475,8 +599,8 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 // keys installed on clusters managed by roachprod. Currently, these
 // keys are stored in the project metadata for the roachprod's
 // `DefaultProject`.
-func AddUserAuthorizedKey(ak AuthorizedKey) error {
-	existingKeys, err := GetUserAuthorizedKeys()
+func AddUserAuthorizedKey(l *logger.Logger, ak AuthorizedKey) error {
+	existingKeys, err := GetUserAuthorizedKeys(l)
 	if err != nil {
 		return err
 	}

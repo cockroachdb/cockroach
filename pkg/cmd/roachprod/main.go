@@ -1724,6 +1724,9 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 		}
 		providersSet[p] = struct{}{}
 	}
+	if config.DryRun {
+		config.Logger.Printf("Enabling [***Experimental***] --dry-run mode. No infra changes will be made!")
+	}
 }
 
 var updateCmd = &cobra.Command{
@@ -1801,7 +1804,7 @@ var sshKeysListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list every SSH public key installed on clusters managed by roachprod",
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		authorizedKeys, err := gce.GetUserAuthorizedKeys()
+		authorizedKeys, err := gce.GetUserAuthorizedKeys(config.Logger)
 		if err != nil {
 			return err
 		}
@@ -1833,7 +1836,7 @@ var sshKeysAddCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Adding new public key for user %s...\n", ak.User)
-		return gce.AddUserAuthorizedKey(ak)
+		return gce.AddUserAuthorizedKey(config.Logger, ak)
 	}),
 }
 
@@ -1844,7 +1847,7 @@ var sshKeysRemoveCmd = &cobra.Command{
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		user := args[0]
 
-		existingKeys, err := gce.GetUserAuthorizedKeys()
+		existingKeys, err := gce.GetUserAuthorizedKeys(config.Logger)
 		if err != nil {
 			return fmt.Errorf("failed to fetch existing keys: %w", err)
 		}
