@@ -19,6 +19,7 @@ import (
 	"context"
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -363,7 +364,7 @@ func findUniqueBestMatchingForTableName(
 	}
 
 	if match == descpb.InvalidID {
-		return descpb.InvalidID, errors.AssertionFailedf("no table name found to match input %q", t)
+		return descpb.InvalidID, catalog.ErrDescriptorNotFound
 	}
 
 	return match, nil

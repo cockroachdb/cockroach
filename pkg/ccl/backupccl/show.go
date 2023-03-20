@@ -108,7 +108,8 @@ func (m manifestInfoReader) showBackup(
 	// display them anyway, because we don't have the referenced table names,
 	// etc.
 	err := maybeUpgradeDescriptorsInBackupManifests(ctx, info.manifests, info.layerToIterFactory,
-		true /* skipFKsWithNoMatchingTable */)
+		true, /* skipFKsWithNoMatchingTable */
+		true /* skipMissingSequences */)
 	if err != nil {
 		return err
 	}
@@ -364,7 +365,7 @@ func showBackupPlanHook(
 		var encryption *jobspb.BackupEncryptionOptions
 		kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
 			&p.ExecCfg().ExternalIODirConfig, p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
-		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
+		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup,
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupencryption.BackupOptEncPassphrase]; ok {
 			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)

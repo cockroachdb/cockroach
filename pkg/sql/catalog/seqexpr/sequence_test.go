@@ -228,7 +228,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		expr := "nextval('t2')"
 		_, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.Error(t, err, "no matching name for 't2'; neither 'sc1.t' nor 'sc2.t' match it.")
-		require.Equal(t, "no table name found to match input \"t2\"", err.Error())
+		require.Equal(t, "descriptor not found", err.Error())
 	})
 
 	t.Run("all seq references are by-ID (no upgrades)", func(t *testing.T) {

@@ -40,6 +40,7 @@ type tableDescriptorBuilder struct {
 	mvccTimestamp              hlc.Timestamp
 	isUncommittedVersion       bool
 	skipFKsWithNoMatchingTable bool
+	skipMissingSequences       bool
 	changes                    catalog.PostDeserializationChanges
 }
 
@@ -73,7 +74,7 @@ func NewBuilderWithMVCCTimestamp(
 // to proceed even in the case where a referenced table cannot be retrieved
 // by the ValidationDereferencer. Such upgrades are then not fully complete.
 func NewBuilderForFKUpgrade(
-	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
+	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool, skipMissingSequences bool,
 ) TableDescriptorBuilder {
 	b := newBuilder(
 		desc,
@@ -82,6 +83,7 @@ func NewBuilderForFKUpgrade(
 		catalog.PostDeserializationChanges{},
 	)
 	b.skipFKsWithNoMatchingTable = skipFKsWithNoMatchingTable
+	b.skipMissingSequences = skipMissingSequences
 	return b
 }
 
@@ -163,7 +165,9 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	}
 
 	// Upgrade sequence reference
-	upgradedSequenceReference, err := maybeUpgradeSequenceReference(descLookupFn, tdb.maybeModified)
+	upgradedSequenceReference, err := maybeUpgradeSequenceReference(descLookupFn,
+		tdb.skipMissingSequences,
+		tdb.maybeModified)
 	if err != nil {
 		return err
 	}
@@ -854,15 +858,17 @@ func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
 // If `rel` is a sequence: upgrade its back-references to relations as "ByID".
 // All these attempts are on a best-effort basis.
 func maybeUpgradeSequenceReference(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, rel *descpb.TableDescriptor,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
+	skipSequencesWithMissingSequence bool,
+	rel *descpb.TableDescriptor,
 ) (hasUpgraded bool, err error) {
 	if rel.IsTable() {
-		hasUpgraded, err = maybeUpgradeSequenceReferenceForTable(descLookupFn, rel)
+		hasUpgraded, err = maybeUpgradeSequenceReferenceForTable(descLookupFn, skipSequencesWithMissingSequence, rel)
 		if err != nil {
 			return hasUpgraded, err
 		}
 	} else if rel.IsView() {
-		hasUpgraded, err = maybeUpgradeSequenceReferenceForView(descLookupFn, rel)
+		hasUpgraded, err = maybeUpgradeSequenceReferenceForView(descLookupFn, skipSequencesWithMissingSequence, rel)
 		if err != nil {
 			return hasUpgraded, err
 		}
@@ -885,8 +891,16 @@ func maybeUpgradeSequenceReference(
 // maybeUpgradeSequenceReferenceForTable upgrades all by-name sequence references
 // in `tableDesc` to by-ID.
 func maybeUpgradeSequenceReferenceForTable(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, tableDesc *descpb.TableDescriptor,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
+	skipMissing bool,
+	tableDesc *descpb.TableDescriptor,
 ) (hasUpgraded bool, err error) {
+	defer func() {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) && skipMissing {
+			err = nil
+		}
+	}()
+
 	if !tableDesc.IsTable() {
 		return hasUpgraded, nil
 	}
@@ -923,8 +937,16 @@ func maybeUpgradeSequenceReferenceForTable(
 // maybeUpgradeSequenceReferenceForView similarily upgrades all by-name sequence references
 // in `viewDesc` to by-ID.
 func maybeUpgradeSequenceReferenceForView(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, viewDesc *descpb.TableDescriptor,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
+	skipMissing bool,
+	viewDesc *descpb.TableDescriptor,
 ) (hasUpgraded bool, err error) {
+	defer func() {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) && skipMissing {
+			err = nil
+		}
+	}()
+
 	if !viewDesc.IsView() {
 		return hasUpgraded, err
 	}

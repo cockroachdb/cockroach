@@ -63,6 +63,35 @@ func TestRestoreOldSequences(t *testing.T) {
 	})
 }
 
+func TestRestoreWithMissingSequences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This backup was created on 22.1 by first creating the
+	// following schema on 20.2 and then upgrading trhough 21.1, 21.2,
+	// and 22.1.
+	//
+	// create database metainfo;
+	// use metainfo;
+	//
+	// create sequence node_alias_seq;
+	//
+	// CREATE TABLE node_aliases (
+	// 	id UUID PRIMARY KEY,
+	// 	node_alias INT4 DEFAULT nextval('node_alias_seq')
+	// );
+	params := base.TestServerArgs{}
+	const numAccounts = 1000
+	testdata := testutils.TestDataPath(t, "restore_old_missing_sequences/")
+	_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+	defer cleanup()
+	err := os.Symlink(testdata, filepath.Join(dir, "foo"))
+	require.NoError(t, err)
+	sqlDB.Exec(t, "CREATE DATABASE testdb")
+	sqlDB.Exec(t, "RESTORE TABLE metainfo.public.node_aliases FROM LATEST IN $1 WITH into_db='testdb', skip_missing_foreign_keys, skip_missing_sequences", localFoo)
+}
+
 func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}

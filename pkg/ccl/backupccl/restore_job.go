@@ -524,7 +524,7 @@ func loadBackupSQLDescs(
 		}
 	}
 
-	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
+	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */, true /* skipMissingSequences */); err != nil {
 		mem.Shrink(ctx, sz)
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
