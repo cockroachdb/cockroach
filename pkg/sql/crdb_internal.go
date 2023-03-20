@@ -1502,7 +1502,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
 			anonymized := tree.DNull
-			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query)
+			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query, p)
 			if ok {
 				anonymized = tree.NewDString(anonStr)
 			}

@@ -34,10 +34,10 @@ var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	true,
 )
 
-// storageCoalesceAdjacentSetting is a hidden cluster setting that
+// StorageCoalesceAdjacentSetting is a hidden cluster setting that
 // controls whether we coalesce adjacent ranges outside of the
 // secondary tenant keyspaces if they have the same span config.
-var storageCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+var StorageCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.storage_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs for the ranges specific to the system tenant`,
@@ -152,7 +152,7 @@ func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey
 			// ranges.
 			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
 			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
-				!storageCoalesceAdjacentSetting.Get(&s.settings.SV) {
+				!StorageCoalesceAdjacentSetting.Get(&s.settings.SV) {
 				return roachpb.RKey(match.span.Key), nil
 			}
 		} else {
