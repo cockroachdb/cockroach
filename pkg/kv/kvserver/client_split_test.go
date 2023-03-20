@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -2026,6 +2027,11 @@ func TestStoreSplitGCHint(t *testing.T) {
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// The aggressive Raft timeouts in this test prevents it from maintaining
+	// quorum and making progress when stressing under race or deadlock detection.
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
 	var seen struct {

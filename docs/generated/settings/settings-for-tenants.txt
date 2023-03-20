@@ -36,19 +36,9 @@ feature.restore.enabled	boolean	true	set to true to enable restore, false to dis
 feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true
 jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained
-kv.bulk_io_write.max_rate	byte size	1.0 TiB	the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
-kv.bulk_sst.max_allowed_overage	byte size	64 MiB	if positive, allowed size in excess of target size for SSTs from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
-kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
-kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information
-kv.log_range_and_node_events.enabled	boolean	true	set to true to transactionally log range events (e.g., split, merge, add/remove voter/non-voter) into system.rangelogand node join and restart events into system.eventolog
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records
-kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
-kv.range_split.load_cpu_threshold	duration	500ms	the CPU use per second over which, the range becomes a candidate for load based splitting
-kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
 kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)
-kv.replica_stats.addsst_request_size_factor	integer	50000	the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1
-kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed
@@ -82,7 +72,6 @@ server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with
 server.rangelog.ttl	duration	720h0m0s	if nonzero, entries in system.rangelog older than this duration are periodically purged
 server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)
-server.shutdown.lease_transfer_wait	duration	5s	the timeout for a single iteration of the range lease transfer phase of draining (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM
@@ -260,6 +249,7 @@ sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow stateme
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
+sql.pgwire.multiple_active_portals.enabled	boolean	false	if true, portals with read-only SELECT query without sub/post queries can be executed in interleaving manner, but with local execution plan
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode

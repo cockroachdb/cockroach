@@ -67,7 +67,7 @@ const (
 // IntentAgeThreshold is the threshold after which an extant intent
 // will be resolved.
 var IntentAgeThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.gc.intent_age_threshold",
 	"intents older than this threshold will be resolved when encountered by the MVCC GC queue",
 	2*time.Hour,
@@ -106,7 +106,7 @@ var TxnCleanupThreshold = settings.RegisterDurationSetting(
 // of writing. This value is subject to tuning in real environment as we have
 // more data available.
 var MaxIntentsPerCleanupBatch = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.gc.intent_cleanup_batch_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	5000,
@@ -125,7 +125,7 @@ var MaxIntentsPerCleanupBatch = settings.RegisterIntSetting(
 // The default value is a conservative limit to prevent pending intent key sizes
 // from ballooning.
 var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.gc.intent_cleanup_batch_byte_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	1e6,

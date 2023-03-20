@@ -47,7 +47,7 @@ const (
 // replicate queue will not consider stores which have failed a reservation a
 // viable target.
 var FailedReservationsTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
@@ -59,7 +59,7 @@ const timeAfterStoreSuspectSettingName = "server.time_after_store_suspect"
 // TimeAfterStoreSuspect measures how long we consider a store suspect since
 // it's last failure.
 var TimeAfterStoreSuspect = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	timeAfterStoreSuspectSettingName,
 	"the amount of time we consider a store suspect for after it fails a node liveness heartbeat."+
 		" A suspect node would not receive any new replicas or lease transfers, but will keep the replicas it has.",
