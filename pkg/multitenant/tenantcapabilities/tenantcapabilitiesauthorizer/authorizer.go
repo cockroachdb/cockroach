@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
 
@@ -244,7 +243,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	}
 
 	if a.capabilitiesReader == nil {
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "trying to perform capability check when no reader exists")
+		// logcrash.ReportOrPanic(ctx, &a.settings.SV, "trying to perform capability check when no reader exists")
 		return false
 	}
 	if cp, found := a.capabilitiesReader.GetCapabilities(tenID); found {
