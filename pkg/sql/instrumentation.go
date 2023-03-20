@@ -151,10 +151,11 @@ type instrumentationHelper struct {
 	costEstimate float64
 
 	// indexRecs contains index recommendations for the planned statement. It
-	// will only be populated if the statement is an EXPLAIN statement, or if
-	// recommendations are requested for the statement for populating the
-	// statement_statistics table.
+	// will only be populated if recommendations are requested for the statement
+	// for populating the statement_statistics table.
 	indexRecs []indexrec.Rec
+	// explainIndexRecs contains index recommendations for EXPLAIN statements.
+	explainIndexRecs []indexrec.Rec
 
 	// maxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
@@ -789,24 +790,29 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		stmtType,
 		isInternal,
 	) {
-		opc := &planner.optPlanningCtx
-		opc.reset(ctx)
-		f := opc.optimizer.Factory()
-		evalCtx := opc.p.EvalContext()
-		f.Init(ctx, evalCtx, opc.catalog)
-		f.FoldingControl().AllowStableFolds()
-		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
-		err := bld.Build()
-		if err != nil {
-			log.Warningf(ctx, "unable to build memo: %s", err)
+		// If the statement is an EXPLAIN, then we might have already generated
+		// the index recommendations. If so, we can skip generation here.
+		if len(ih.explainIndexRecs) > 0 {
+			recommendations = ih.explainIndexRecs
 		} else {
-			err = opc.makeQueryIndexRecommendation(ctx)
+			opc := &planner.optPlanningCtx
+			opc.reset(ctx)
+			f := opc.optimizer.Factory()
+			evalCtx := opc.p.EvalContext()
+			f.Init(ctx, evalCtx, opc.catalog)
+			f.FoldingControl().AllowStableFolds()
+			bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
+			err := bld.Build()
 			if err != nil {
-				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+				log.Warningf(ctx, "unable to build memo: %s", err)
+			} else {
+				recommendations, err = opc.makeQueryIndexRecommendation(ctx)
+				if err != nil {
+					log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+				}
 			}
 		}
 		reset = true
-		recommendations = ih.indexRecs
 	}
 	ih.indexRecs = idxRec.UpdateIndexRecommendations(
 		ih.fingerprint,
