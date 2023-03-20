@@ -31,6 +31,10 @@ var (
 	OSUser *user.User
 	// Quiet is used to disable fancy progress output.
 	Quiet = false
+	// DryRun disables executing commands which would otherwise cause infra. changes.
+	DryRun = false
+	// Verbose enables logging all executed commands. What gets logged is a superset of DryRun.
+	Verbose = false
 	// The default roachprod logger.
 	// N.B. When roachprod is used via CLI, this logger is used for all output.
 	//	When roachprod is used via API (e.g. from roachtest), this logger is used only in the few cases,

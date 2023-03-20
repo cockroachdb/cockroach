@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cli",
+    srcs = ["cli.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/cli",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cli_test",
+    size = "small",
+    srcs = ["cli_test.go"],
+    embed = [":cli"],
+    deps = [
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
+        "@com_github_stretchr_testify//require",
+    ],
+)
