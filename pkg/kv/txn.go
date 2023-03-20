@@ -73,13 +73,6 @@ type Txn struct {
 		debugName    string
 		userPriority roachpb.UserPriority
 
-		// previousIDs holds the set of all previous IDs that the Txn's Proto has
-		// had across transaction aborts. This allows us to determine if a given
-		// response was meant for any incarnation of this transaction. This is
-		// useful for catching retriable errors that have escaped inner
-		// transactions, so that they don't cause a retry of an outer transaction.
-		previousIDs map[uuid.UUID]struct{}
-
 		// sender is a stateful sender for use with transactions (usually a
 		// TxnCoordSender). A new sender is created on transaction restarts (not
 		// retries).
@@ -953,11 +946,13 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 				}
 			} else if t := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
-				if !txn.IsRetryableErrMeantForTxn(*t) {
-					// Make sure the txn record that err carries is for this txn.
-					// If it's not, we terminate the "retryable" character of the error. We
-					// might get a TransactionRetryWithProtoRefreshError if the closure ran another
-					// transaction internally and let the error propagate upwards.
+				if txn.ID() != t.TxnID {
+					// Make sure the retryable error is meant for this level by checking
+					// the transaction the error was generated for. If it's not, we
+					// terminate the "retryable" character of the error. We might get a
+					// TransactionRetryWithProtoRefreshError if the closure ran another
+					// transaction internally and let the error propagate upwards instead
+					// of handling it.
 					return errors.Wrapf(err, "retryable error from another txn")
 				}
 				retryable = true
@@ -994,31 +989,31 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 	log.VEventf(ctx, 2, "retrying transaction: %s because of a retryable error: %s",
 		txn.debugNameLocked(), retryErr)
 	txn.resetDeadlineLocked()
-	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
-}
 
-// IsRetryableErrMeantForTxn returns true if err is a retryable
-// error meant to restart this client transaction.
-func (txn *Txn) IsRetryableErrMeantForTxn(
-	retryErr kvpb.TransactionRetryWithProtoRefreshError,
-) bool {
-	if txn.typ != RootTxn {
-		panic(errors.AssertionFailedf("IsRetryableErrMeantForTxn() called on leaf txn"))
+	if txn.mu.ID != retryErr.TxnID {
+		// Sanity check that the retry error we're dealing with is for the current
+		// incarnation of the transaction. Aborted transactions may be retried
+		// transparently in certain cases and such incarnations come with new
+		// txn IDs. However, at no point can both the old and new incarnation of a
+		// transaction be active at the same time -- this would constitute a
+		// programming error.
+		log.Fatalf(
+			ctx,
+			"unexpected retryable error for old incarnation of the transaction %s; current incarnation %s",
+			retryErr.TxnID,
+			txn.mu.ID,
+		)
 	}
 
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-
-	errTxnID := retryErr.TxnID
-
-	// Make sure the txn record that err carries is for this txn.
-	// First check if the error was meant for a previous incarnation
-	// of the transaction.
-	if _, ok := txn.mu.previousIDs[errTxnID]; ok {
-		return true
+	if !retryErr.PrevTxnAborted() {
+		// If the retryable error doesn't correspond to an aborted transaction,
+		// there's no need to switch out the transaction. We simply clear the
+		// retryable error and proceed.
+		txn.mu.sender.ClearTxnRetryableErr(ctx)
+		return
 	}
-	// If not, make sure it was meant for this transaction.
-	return errTxnID == txn.mu.ID
+
+	txn.handleTransactionAbortedErrorLocked(ctx, retryErr)
 }
 
 // Send runs the specified calls synchronously in a single batch and
@@ -1310,55 +1305,29 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *kvpb.
 	return pErr.GoError()
 }
 
-// replaceRootSenderIfTxnAbortedLocked handles
-// TransactionAbortedErrors, on which a new sender is created to
-// replace the current one.
+// handleTransactionAbortedErrorLocked handles performs bookkeeping to handle
+// TransactionAbortedErrors before the transaction can be retried.
 //
-// origTxnID is the id of the txn that generated retryErr. Note that this can be
-// different from retryErr.Transaction - the latter might be a new transaction.
-//
-// TODO(arul): Now that we only expect this to happen on the PrepareForRetry
-// path, by design, should we just inline this function? Some of the handling
-// of non-aborted transactions in this function feels a bit out of place with
-// the new code structure.
-func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
-	ctx context.Context, retryErr *kvpb.TransactionRetryWithProtoRefreshError, origTxnID uuid.UUID,
+// For aborted transactions, the supplied error proto contains a new transaction
+// that should be used on the next transaction attempt. The main thing to do
+// here is to create a new sender associated with this transaction, and replace
+// the current one with it.
+func (txn *Txn) handleTransactionAbortedErrorLocked(
+	ctx context.Context, retryErr *kvpb.TransactionRetryWithProtoRefreshError,
 ) {
-	// The proto inside the error has been prepared for use by the next
-	// transaction attempt.
-	newTxn := &retryErr.Transaction
-
-	if txn.mu.ID != origTxnID {
-		// The transaction has changed since the request that generated the error
-		// was sent. Nothing more to do.
-		log.VEventf(ctx, 2, "retriable error for old incarnation of the transaction")
-		return
-	}
 	if !retryErr.PrevTxnAborted() {
-		// We don't need a new transaction as a result of this error, but we may
-		// have a retryable error that should be cleared.
-		txn.mu.sender.ClearTxnRetryableErr(ctx)
-		return
+		// Sanity check we're dealing with a TransactionAbortedError.
+		log.Fatalf(ctx, "cannot replace root sender if txn not aborted: %v", retryErr)
 	}
 
-	// The ID changed, which means that the cause was a TransactionAbortedError;
-	// we've created a new Transaction that we're about to start using, so we save
-	// the old transaction ID so that concurrent requests or delayed responses
-	// that that throw errors know that these errors were sent to the correct
-	// transaction, even once the proto is reset.
-	txn.recordPreviousTxnIDLocked(txn.mu.ID)
+	// The transaction we had been using thus far has been aborted. The proto
+	// inside the error has been prepared for use by the next transaction attempt.
+	newTxn := &retryErr.Transaction
 	txn.mu.ID = newTxn.ID
 	// Create a new txn sender. We need to preserve the stepping mode, if any.
 	prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
 	txn.mu.sender = txn.db.factory.RootTransactionalSender(newTxn, txn.mu.userPriority)
 	txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
-}
-
-func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
-	if txn.mu.previousIDs == nil {
-		txn.mu.previousIDs = make(map[uuid.UUID]struct{})
-	}
-	txn.mu.previousIDs[txn.mu.ID] = struct{}{}
 }
 
 // SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed
