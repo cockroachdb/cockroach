@@ -34,6 +34,28 @@ func TestFastFromIncomingContext(t *testing.T) {
 	require.Equal(t, v, "world")
 }
 
+func TestClearIncomingContextExcept(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	md := metadata.MD{
+		"hello":   []string{"world", "universe"},
+		"goodbye": []string{"sweet prince", "moon"},
+	}
+
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	ctx2 := ClearIncomingContextExcept(ctx, "goodbye")
+	md2, ok := FastFromIncomingContext(ctx2)
+	require.True(t, ok)
+
+	_, ok = md2["hello"]
+	require.False(t, ok)
+
+	_, ok = md2["goodbye"]
+	require.True(t, ok)
+	require.Equal(t, md["goodbye"], md2["goodbye"])
+}
+
 func BenchmarkFromIncomingContext(b *testing.B) {
 	md := metadata.MD{"hello": []string{"world", "universe"}}
 	ctx := metadata.NewIncomingContext(context.Background(), md)

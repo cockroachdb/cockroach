@@ -498,25 +498,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		}
 	}
 
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
-	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
-	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	s.externalStorageBuilder.init(
-		ctx,
-		s.sqlCfg.ExternalIODirConfig,
-		s.sqlServer.cfg.Settings,
-		s.sqlServer.cfg.IDContainer,
-		s.nodeDialer,
-		s.sqlServer.cfg.TestingKnobs,
-		s.sqlServer.execCfg.InternalDB.
-			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
-		s.costController,
-		s.registry,
-	)
-
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
@@ -756,11 +737,30 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	s.externalStorageBuilder.init(
+		ctx,
+		s.sqlCfg.ExternalIODirConfig,
+		s.sqlServer.cfg.Settings,
+		s.sqlServer.sqlIDContainer,
+		s.nodeDialer,
+		s.sqlServer.cfg.TestingKnobs,
+		false, /* allowLocalFastpath */
+		s.sqlServer.execCfg.InternalDB.
+			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
+		s.costController,
+		s.registry,
+	)
+
 	// If enabled, start reporting diagnostics.
 	if s.sqlServer.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
 		s.startDiagnostics(workersCtx)
 	}
-
 	// Enable the Obs Server.
 	// There is more logic here than in (*Server).PreStart() because
 	// we care about the SQL instance ID too.
