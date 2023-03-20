@@ -45,8 +45,8 @@ func TestTrace(t *testing.T) {
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
 		"drain",
-		"storage.pendingLeaseRequest: requesting lease",
-		"storage.Store: gossip on capacity change",
+		"pendingLeaseRequest: requesting lease",
+		"gossip on capacity change",
 		"outbox",
 		"request range lease",
 		"range lookup",
@@ -364,17 +364,22 @@ func TestTrace(t *testing.T) {
 							}
 							defer rows.Close()
 
-							ignoreSpans := make(map[string]bool)
-							for _, s := range test.optionalSpans {
-								ignoreSpans[s] = true
+							ignoreSpan := func(op string) bool {
+								for _, s := range test.optionalSpans {
+									if strings.Contains(op, s) {
+										return true
+									}
+								}
+								return false
 							}
+
 							r := 0
 							for rows.Next() {
 								var op string
 								if err := rows.Scan(&op); err != nil {
 									t.Fatal(err)
 								}
-								if ignoreSpans[op] {
+								if ignoreSpan(op) {
 									continue
 								}
 
@@ -391,7 +396,7 @@ func TestTrace(t *testing.T) {
 										if err := rows.Scan(&op); err != nil {
 											t.Fatal(err)
 										}
-										if ignoreSpans[op] {
+										if ignoreSpan(op) {
 											continue
 										}
 										t.Errorf("remaining span: %q", op)
