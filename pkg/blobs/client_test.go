@@ -87,9 +87,10 @@ func setUpService(
 	localNodeIDContainer := &base.NodeIDContainer{}
 	localNodeIDContainer.Set(context.Background(), localNodeID)
 	return NewBlobClientFactory(
-		localNodeIDContainer,
+		base.NewSQLIDContainerForNode(localNodeIDContainer),
 		localDialer,
 		localExternalDir,
+		true, /* allowLocalFastpath */
 	)
 }
 

@@ -114,6 +114,8 @@ func (t *TenantCapabilities) Cap(
 		return boolCap{&t.CanAdminUnsplit}
 	case tenantcapabilities.CanViewNodeInfo:
 		return boolCap{&t.CanViewNodeInfo}
+	case tenantcapabilities.CanUseBlobStorage:
+		return boolCap{&t.CanUseBlobStorage}
 	case tenantcapabilities.CanViewTSDBMetrics:
 		return boolCap{&t.CanViewTSDBMetrics}
 	case tenantcapabilities.ExemptFromRateLimiting:
@@ -138,6 +140,8 @@ func (t *TenantCapabilities) GetBool(capabilityID tenantcapabilities.CapabilityI
 		return !t.DisableAdminSplit
 	case tenantcapabilities.CanAdminUnsplit:
 		return t.CanAdminUnsplit
+	case tenantcapabilities.CanUseBlobStorage:
+		return t.CanUseBlobStorage
 	case tenantcapabilities.CanViewNodeInfo:
 		return t.CanViewNodeInfo
 	case tenantcapabilities.CanViewTSDBMetrics:

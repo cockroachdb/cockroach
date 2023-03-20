@@ -21,8 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -157,7 +155,6 @@ type SQLServer struct {
 	internalExecutor *sql.InternalExecutor
 	internalDB       descs.DB
 	leaseMgr         *lease.Manager
-	blobService      *blobs.Service
 	tracingService   *service.Service
 	tenantConnect    kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
@@ -532,13 +529,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}
 
-	// Create blob service for inter-node file sharing.
-	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating blob service")
-	}
-	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
-
 	if err := cfg.stopper.RunAsyncTask(ctx, "tracer-snapshots", func(context.Context) {
 		cfg.Tracer.PeriodicSnapshotsLoop(&cfg.Settings.SV, cfg.stopper.ShouldQuiesce())
 	}); err != nil {
@@ -595,7 +585,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDailer as the podNodeDailer unless we
+	// We can't use the nodeDialer as the podNodeDialer unless we
 	// are serving the system tenant despite the fact that we've
 	// arranged for pod IDs and instance IDs to match since the
 	// secondary tenant gRPC servers currently live on a different
@@ -1361,7 +1351,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalExecutor:               cfg.circularInternalExecutor,
 		internalDB:                     cfg.internalDB,
 		leaseMgr:                       leaseMgr,
-		blobService:                    blobService,
 		tracingService:                 tracingService,
 		tenantConnect:                  cfg.tenantConnect,
 		sessionRegistry:                cfg.sessionRegistry,
