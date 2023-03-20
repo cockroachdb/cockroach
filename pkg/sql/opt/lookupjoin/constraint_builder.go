@@ -179,7 +179,7 @@ func (b *ConstraintBuilder) Build(
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
 		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
-			if _, _, ok := FindJoinFilterConstants(allFilters, firstIdxCol, b.evalCtx); !ok {
+			if !HasJoinFilterConstants(allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
 				}
