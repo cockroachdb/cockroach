@@ -1135,6 +1135,15 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
 		{code: pgcode.DuplicateRelation, condition: sequenceExists && !ifNotExists},
 	}.add(stmt.expectedExecErrors)
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow this to be detected.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(stmt.potentialExecErrors)
 
 	var seqOptions tree.SequenceOptions
 	// Decide if the sequence should be owned by a column. If so, it can
@@ -1296,6 +1305,15 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedForwardQueries},
 	}.add(opStmt.potentialExecErrors)
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow uncategorized errors temporarily.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
@@ -1314,6 +1332,15 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
 	}.add(opStmt.expectedExecErrors)
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow uncategorized errors temporarily.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(opStmt.potentialExecErrors)
 	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
 	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
 	opStmt.sql = tree.Serialize(stmt)
@@ -1436,7 +1463,15 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(opStmt.expectedExecErrors)
-
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow uncategorized errors temporarily.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(opStmt.potentialExecErrors)
 	// Confirm the select itself doesn't run into any column generation errors,
 	// by executing it independently first until we add validation when adding
 	// generated columns. See issue: #81698?, which will allow us to remove this
@@ -1566,7 +1601,15 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(opStmt.expectedExecErrors)
-
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow uncategorized errors temporarily.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
 		destViewName, selectStatement.String())
 	return opStmt, nil
@@ -3664,4 +3707,11 @@ func isFkConstraintsEnabled(ctx context.Context, tx pgx.Tx) (bool, error) {
 		tx,
 		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
 	return !fkConstraintDisabledVersion, err
+}
+
+func maybeExpectPotentialDescIDGenerationError(ctx context.Context, tx pgx.Tx) (bool, error) {
+	descIDGenerationVersion := clusterversion.ByKey(clusterversion.V23_1DescIDSequenceForSystemTenant)
+	descIDGenerationErrorPossible, err := isClusterVersionLessThan(ctx,
+		tx, descIDGenerationVersion)
+	return descIDGenerationErrorPossible, err
 }
