@@ -98,7 +98,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -123,7 +123,7 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -255,7 +255,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -280,7 +280,7 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -310,7 +310,7 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
@@ -339,7 +339,7 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: BACKFILLING
   +    state: DELETE_ONLY
@@ -364,7 +364,7 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: MERGING
@@ -393,7 +393,7 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: MERGING
   +    state: WRITE_ONLY
@@ -451,7 +451,7 @@ upsert descriptor #104
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    version: 4
+  +    version: 5
      modificationTime: {}
      mutations:
   -  - direction: ADD
@@ -477,7 +477,7 @@ upsert descriptor #104
   -      sharded: {}
   -      storeColumnNames: []
   -      unique: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -485,7 +485,7 @@ upsert descriptor #104
          constraintId: 3
          createdExplicitly: true
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -537,7 +537,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-       version: 4
+       version: 5
      modificationTime: {}
   -  mutations:
   -  - direction: DROP
@@ -562,7 +562,7 @@ upsert descriptor #104
   -      storeColumnNames: []
   -      unique: true
   -      useDeletePreservingEncoding: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []

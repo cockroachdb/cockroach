@@ -116,7 +116,7 @@ upsert descriptor #106
   +      storeColumnNames:
   +      - l
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -143,7 +143,7 @@ upsert descriptor #106
   +      - l
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: tbl
@@ -252,7 +252,7 @@ upsert descriptor #106
   +      storeColumnNames:
   +      - l
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -279,7 +279,7 @@ upsert descriptor #106
   +      - l
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: tbl
@@ -348,7 +348,7 @@ upsert descriptor #106
      - direction: ADD
        index:
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
@@ -392,7 +392,7 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: BACKFILLING
   +    state: DELETE_ONLY
@@ -416,7 +416,7 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: MERGING
@@ -444,7 +444,7 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: MERGING
   +    state: WRITE_ONLY
@@ -546,7 +546,7 @@ upsert descriptor #106
          - l
          unique: true
   +      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -577,7 +577,7 @@ upsert descriptor #106
   -      - l
          unique: true
   -      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
        state: WRITE_ONLY
   -  - constraint:
@@ -620,7 +620,7 @@ upsert descriptor #106
   +    storeColumnNames:
   +    - l
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -671,7 +671,7 @@ upsert descriptor #106
   -      - l
   -      unique: true
   -      useDeletePreservingEncoding: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - direction: DROP
@@ -679,7 +679,7 @@ upsert descriptor #106
          constraintId: 1
          createdAtNanos: "1640995200000000000"
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -743,7 +743,7 @@ upsert descriptor #106
   -      partitioning: {}
   -      sharded: {}
   -      unique: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []

@@ -47,7 +47,7 @@ upsert descriptor #106
        - x
        name: primary
   ...
-       version: 4
+       version: 5
      modificationTime: {}
   +  mutations:
   +  - column:
@@ -86,7 +86,7 @@ upsert descriptor #106
   +      - v
   +      - x
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -115,7 +115,7 @@ upsert descriptor #106
   +      - x
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: test
@@ -184,7 +184,7 @@ upsert descriptor #106
        - x
        name: primary
   ...
-       version: 4
+       version: 5
      modificationTime: {}
   +  mutations:
   +  - column:
@@ -223,7 +223,7 @@ upsert descriptor #106
   +      - v
   +      - x
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -252,7 +252,7 @@ upsert descriptor #106
   +      - x
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: test
@@ -289,7 +289,7 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
@@ -311,7 +311,7 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: BACKFILLING
   +    state: DELETE_ONLY
@@ -329,7 +329,7 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: MERGING
@@ -351,7 +351,7 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: MERGING
   +    state: WRITE_ONLY
@@ -407,7 +407,7 @@ upsert descriptor #106
          - x
          unique: true
   +      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -441,7 +441,7 @@ upsert descriptor #106
          - x
          unique: true
   -      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
   ...
      parentId: 104
@@ -505,7 +505,7 @@ upsert descriptor #106
   -      - x
   -      unique: true
   -      useDeletePreservingEncoding: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - direction: DROP
@@ -513,7 +513,7 @@ upsert descriptor #106
          constraintId: 4
          createdExplicitly: true
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -558,7 +558,7 @@ upsert descriptor #106
        - x
        name: primary
   ...
-       version: 4
+       version: 5
      modificationTime: {}
   -  mutations:
   -  - column:
@@ -599,7 +599,7 @@ upsert descriptor #106
   -      - crdb_internal_column_3_name_placeholder
   -      - x
   -      unique: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []

@@ -83,7 +83,7 @@ upsert descriptor #105
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -107,7 +107,7 @@ upsert descriptor #105
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -125,7 +125,7 @@ upsert descriptor #105
   -    - b
   +    - crdb_internal_column_2_name_placeholder
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -228,7 +228,7 @@ upsert descriptor #105
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -252,7 +252,7 @@ upsert descriptor #105
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -270,7 +270,7 @@ upsert descriptor #105
   -    - b
   +    - crdb_internal_column_2_name_placeholder
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -296,7 +296,7 @@ upsert descriptor #104
      volatility: VOLATILE
 upsert descriptor #105
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
@@ -325,7 +325,7 @@ upsert descriptor #104
      volatility: VOLATILE
 upsert descriptor #105
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: BACKFILLING
   +    state: DELETE_ONLY
@@ -350,7 +350,7 @@ upsert descriptor #104
      volatility: VOLATILE
 upsert descriptor #105
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: MERGING
@@ -379,7 +379,7 @@ upsert descriptor #104
      volatility: VOLATILE
 upsert descriptor #105
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: MERGING
   +    state: WRITE_ONLY
@@ -447,7 +447,7 @@ upsert descriptor #105
          storeColumnNames: []
          unique: true
   +      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -479,7 +479,7 @@ upsert descriptor #105
   +      - crdb_internal_column_2_name_placeholder
          unique: true
   -      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
   ...
      parentId: 100
@@ -504,7 +504,7 @@ upsert descriptor #105
   -    - crdb_internal_column_2_name_placeholder
   +    storeColumnNames: []
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -546,7 +546,7 @@ upsert descriptor #105
   -      storeColumnNames: []
   -      unique: true
   -      useDeletePreservingEncoding: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - direction: DROP
@@ -554,7 +554,7 @@ upsert descriptor #105
          constraintId: 1
          createdAtNanos: "1640995200000000000"
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -654,7 +654,7 @@ upsert descriptor #105
   -      storeColumnNames:
   -      - crdb_internal_column_2_name_placeholder
   -      unique: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []

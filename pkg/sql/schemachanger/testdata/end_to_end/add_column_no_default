@@ -89,7 +89,7 @@ upsert descriptor #106
   +    storeColumnNames:
   +    - j
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -156,7 +156,7 @@ upsert descriptor #106
   +    storeColumnNames:
   +    - j
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 105

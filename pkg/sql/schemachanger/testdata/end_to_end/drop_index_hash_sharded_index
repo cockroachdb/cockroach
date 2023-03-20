@@ -98,7 +98,7 @@ upsert descriptor #104
   -      isSharded: true
   -      name: crdb_internal_j_shard_16
   -      shardBuckets: 16
-  -    version: 4
+  -    version: 5
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -145,7 +145,7 @@ upsert descriptor #104
   +        isSharded: true
   +        name: crdb_internal_j_shard_16
   +        shardBuckets: 16
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: WRITE_ONLY
   +  - constraint:
@@ -269,7 +269,7 @@ upsert descriptor #104
   -      isSharded: true
   -      name: crdb_internal_j_shard_16
   -      shardBuckets: 16
-  -    version: 4
+  -    version: 5
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -316,7 +316,7 @@ upsert descriptor #104
   +        isSharded: true
   +        name: crdb_internal_j_shard_16
   +        shardBuckets: 16
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: WRITE_ONLY
   +  - constraint:
@@ -417,7 +417,7 @@ upsert descriptor #104
          partitioning: {}
          sharded:
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   -  - constraint:
@@ -505,7 +505,7 @@ upsert descriptor #104
   -        isSharded: true
   -        name: crdb_internal_j_shard_16
   -        shardBuckets: 16
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - column:

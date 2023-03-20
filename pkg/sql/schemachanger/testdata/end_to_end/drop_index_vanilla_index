@@ -62,7 +62,7 @@ upsert descriptor #104
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
-  -    version: 4
+  -    version: 5
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -85,7 +85,7 @@ upsert descriptor #104
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
@@ -140,7 +140,7 @@ upsert descriptor #104
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
-  -    version: 4
+  -    version: 5
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -163,7 +163,7 @@ upsert descriptor #104
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
@@ -192,7 +192,7 @@ upsert descriptor #104
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
          sharded: {}
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -249,7 +249,7 @@ upsert descriptor #104
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []

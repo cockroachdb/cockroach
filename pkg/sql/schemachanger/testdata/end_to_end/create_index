@@ -96,7 +96,7 @@ upsert descriptor #106
   +      predicate: v = b'@':::@100104
   +      sharded: {}
   +      storeColumnNames: []
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -120,7 +120,7 @@ upsert descriptor #106
   +      sharded: {}
   +      storeColumnNames: []
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -218,7 +218,7 @@ upsert descriptor #106
   +      predicate: v = b'@':::@100104
   +      sharded: {}
   +      storeColumnNames: []
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -242,7 +242,7 @@ upsert descriptor #106
   +      sharded: {}
   +      storeColumnNames: []
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -283,7 +283,7 @@ upsert descriptor #105
   +  version: "4"
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
@@ -317,7 +317,7 @@ upsert descriptor #105
   +  version: "5"
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: BACKFILLING
   +    state: DELETE_ONLY
@@ -347,7 +347,7 @@ upsert descriptor #105
   +  version: "6"
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: MERGING
@@ -381,7 +381,7 @@ upsert descriptor #105
   +  version: "7"
 upsert descriptor #106
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: MERGING
   +    state: WRITE_ONLY
@@ -455,7 +455,7 @@ upsert descriptor #106
   +    predicate: v = b'@':::@100104
   +    sharded: {}
   +    storeColumnNames: []
-  +    version: 4
+  +    version: 5
      modificationTime: {}
      mutations:
   -  - direction: ADD
@@ -480,7 +480,7 @@ upsert descriptor #106
   -      predicate: v = b'@':::@100104
   -      sharded: {}
   -      storeColumnNames: []
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -488,7 +488,7 @@ upsert descriptor #106
          constraintId: 1
          createdExplicitly: true
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -555,7 +555,7 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-       version: 4
+       version: 5
      modificationTime: {}
   -  mutations:
   -  - direction: DROP
@@ -579,7 +579,7 @@ upsert descriptor #106
   -      sharded: {}
   -      storeColumnNames: []
   -      useDeletePreservingEncoding: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []

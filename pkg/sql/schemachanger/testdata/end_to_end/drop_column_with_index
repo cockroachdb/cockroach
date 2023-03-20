@@ -86,7 +86,7 @@ upsert descriptor #104
   -    name: t_j_idx
   -    partitioning: {}
   -    sharded: {}
-  -    version: 3
+  -    version: 5
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -108,7 +108,7 @@ upsert descriptor #104
   +      name: t_j_idx
   +      partitioning: {}
   +      sharded: {}
-  +      version: 3
+  +      version: 5
   +    mutationId: 1
   +    state: WRITE_ONLY
   +  - direction: ADD
@@ -131,7 +131,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -155,7 +155,7 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
   +  - column:
@@ -184,7 +184,7 @@ upsert descriptor #104
   -    - j
   +    - crdb_internal_column_2_name_placeholder
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -250,7 +250,7 @@ upsert descriptor #104
   -    name: t_j_idx
   -    partitioning: {}
   -    sharded: {}
-  -    version: 3
+  -    version: 5
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -272,7 +272,7 @@ upsert descriptor #104
   +      name: t_j_idx
   +      partitioning: {}
   +      sharded: {}
-  +      version: 3
+  +      version: 5
   +    mutationId: 1
   +    state: WRITE_ONLY
   +  - direction: ADD
@@ -295,7 +295,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: BACKFILLING
   +  - direction: ADD
@@ -319,7 +319,7 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      version: 4
+  +      version: 5
   +    mutationId: 1
   +    state: DELETE_ONLY
   +  - column:
@@ -348,7 +348,7 @@ upsert descriptor #104
   -    - j
   +    - crdb_internal_column_2_name_placeholder
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -367,7 +367,7 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
@@ -389,7 +389,7 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: BACKFILLING
   +    state: DELETE_ONLY
@@ -407,7 +407,7 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: MERGING
@@ -429,7 +429,7 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: MERGING
   +    state: WRITE_ONLY
@@ -463,7 +463,7 @@ upsert descriptor #104
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
          sharded: {}
-         version: 3
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -490,7 +490,7 @@ upsert descriptor #104
          storeColumnNames: []
          unique: true
   +      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
@@ -533,7 +533,7 @@ upsert descriptor #104
   +      - crdb_internal_column_2_name_placeholder
          unique: true
   -      useDeletePreservingEncoding: true
-         version: 4
+         version: 5
        mutationId: 1
        state: WRITE_ONLY
   -  - column:
@@ -572,7 +572,7 @@ upsert descriptor #104
   -    - crdb_internal_column_2_name_placeholder
   +    storeColumnNames: []
        unique: true
-       version: 4
+       version: 5
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -606,7 +606,7 @@ upsert descriptor #104
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      version: 3
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - direction: DROP
@@ -630,13 +630,13 @@ upsert descriptor #104
   -      storeColumnNames: []
   -      unique: true
   -      useDeletePreservingEncoding: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
      - column:
          id: 2
   ...
-         version: 4
+         version: 5
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
@@ -715,7 +715,7 @@ upsert descriptor #104
   -      storeColumnNames:
   -      - crdb_internal_column_2_name_placeholder
   -      unique: true
-  -      version: 4
+  -      version: 5
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
