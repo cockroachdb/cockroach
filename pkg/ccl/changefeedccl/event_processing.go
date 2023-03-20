@@ -104,7 +104,7 @@ func newEventConsumer(
 	}
 
 	pacerRequestUnit := changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV)
-	enablePacer := changefeedbase.EventConsumerElasticCPUControlEnabled.Get(&cfg.Settings.SV)
+	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error

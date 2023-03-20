@@ -262,9 +262,9 @@ var EventConsumerPacerRequestSize = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-// EventConsumerElasticCPUControlEnabled determines whether changefeed event
+// PerEventElasticCPUControlEnabled determines whether changefeed event
 // processing integrates with elastic CPU control.
-var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
+var PerEventElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.cpu.per_event_elastic_control.enabled",
 	"determines whether changefeed event processing integrates with elastic CPU control",
@@ -298,3 +298,13 @@ var SinkParallelism = settings.RegisterIntSetting(
 		"0 assigns a reasonable default, >0 assigns the setting value.",
 	0,
 ).WithPublic()
+
+var SinkPacerRequestSize = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.cpu.sink_encoding_allocation",
+	"an event consumer worker will perform a blocking request for CPU time "+
+		"before consuming events. after fully utilizing this CPU time, it will "+
+		"request more",
+	50*time.Millisecond,
+	settings.PositiveDuration,
+)

@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -77,6 +79,7 @@ type batchingSink struct {
 	}
 	wg     ctxgroup.Group
 	hasher hash.Hash32
+	pacer  *admission.Pacer
 	doneCh chan struct{}
 }
 
@@ -174,6 +177,9 @@ func (bs *batchingSink) EmitResolvedTimestamp(
 func (bs *batchingSink) Close() error {
 	close(bs.doneCh)
 	_ = bs.wg.Wait()
+	if bs.pacer != nil {
+		bs.pacer.Close()
+	}
 	return bs.client.Close()
 }
 
@@ -342,6 +348,14 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	defer flushTimer.Stop()
 
 	for {
+		if bs.pacer != nil {
+			if err := bs.pacer.Pace(ctx); err != nil {
+				if pacerLogEvery.ShouldLog() {
+					log.Errorf(ctx, "automatic sink batcher pacing: %v", err)
+				}
+			}
+		}
+
 		select {
 		case req := <-bs.eventCh:
 			if flush, isFlush := req.(flushReq); isFlush {
@@ -397,6 +411,7 @@ func makeBatchingSink(
 	retryOpts retry.Options,
 	numWorkers int,
 	topicNamer *TopicNamer,
+	pacer *admission.Pacer,
 	timeSource timeutil.TimeSource,
 	metrics metricsRecorder,
 ) Sink {
@@ -422,6 +437,7 @@ func makeBatchingSink(
 		eventCh: make(chan interface{}, flushQueueDepth),
 		wg:      ctxgroup.WithContext(ctx),
 		hasher:  makeHasher(),
+		pacer:   pacer,
 		doneCh:  make(chan struct{}),
 	}
 

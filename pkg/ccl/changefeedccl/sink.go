@@ -23,10 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -215,7 +218,7 @@ func getSink(
 			if changefeedbase.NewWebhookSinkEnabled.Get(&serverCfg.Settings.SV) {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						sinkParallelism(serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+						sinkParallelism(serverCfg), sinkPacer(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
 				})
 			} else {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
@@ -796,4 +799,29 @@ func sinkParallelism(cfg *execinfra.ServerConfig) int {
 		return 32
 	}
 	return idealNumber
+}
+
+func sinkPacer(ctx context.Context, cfg *execinfra.ServerConfig) *admission.Pacer {
+	pacerRequestUnit := changefeedbase.SinkPacerRequestSize.Get(&cfg.Settings.SV)
+	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
+
+	var pacer *admission.Pacer = nil
+	if enablePacer {
+		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+
+		pacer = cfg.AdmissionPacerFactory.NewPacer(
+			pacerRequestUnit,
+			admission.WorkInfo{
+				TenantID:        tenantID,
+				Priority:        admissionpb.BulkNormalPri,
+				CreateTime:      timeutil.Now().UnixNano(),
+				BypassAdmission: false,
+			},
+		)
+	}
+
+	return pacer
 }
