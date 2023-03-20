@@ -26,49 +26,49 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 
 
 exec-sql
-EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz WHERE i = 1;
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz WHERE i = 1;
 ----
 
 
 # Pause the import job, in order to back up the importing data.
 import expect-pausepoint tag=a
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
 
 import expect-pausepoint tag=aa
-IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
 
 # Ensure table, database, and cluster full backups capture importing rows.
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/' WITH revision_history;
+BACKUP INTO 'nodelocal://1/cluster/' WITH revision_history;
 ----
 
 
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/database/' WITH revision_history;
+BACKUP DATABASE d INTO 'nodelocal://1/database/' WITH revision_history;
 ----
 
 exec-sql
-BACKUP TABLE d.* INTO 'nodelocal://0/table/' WITH revision_history;
+BACKUP TABLE d.* INTO 'nodelocal://1/table/' WITH revision_history;
 ----
 
 # Ensure incremental backups do NOT re-capture the importing rows while the tables are offline
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://0/cluster/' WITH revision_history;
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/' WITH revision_history;
 ----
 
 exec-sql
-BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' WITH revision_history;
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/' WITH revision_history;
 ----
 
 
 exec-sql
-BACKUP TABLE d.* INTO LATEST IN 'nodelocal://0/table/' WITH revision_history;
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/' WITH revision_history;
 ----
 
 
@@ -106,17 +106,17 @@ job tag=aa wait-for-state=succeeded
 
 
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://0/cluster/' WITH revision_history;
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/' WITH revision_history;
 ----
 
 
 exec-sql
-BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' WITH revision_history;
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/' WITH revision_history;
 ----
 
 
 exec-sql
-BACKUP TABLE d.* INTO LATEST IN 'nodelocal://0/table/' WITH revision_history;
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/' WITH revision_history;
 ----
 
 
@@ -132,7 +132,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/cluster/']
 WHERE
   object_name = 'foo' or object_name = 'foofoo'
 ORDER BY
@@ -149,7 +149,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/database/']
 WHERE
   object_name = 'foo' or object_name = 'foofoo'
 ORDER BY
@@ -167,7 +167,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/table/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/table/']
 WHERE
   object_name = 'foo' or object_name = 'foofoo'
 ORDER BY
@@ -187,7 +187,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 
 
 restore aost=t0
-RESTORE FROM LATEST IN 'nodelocal://0/cluster/' AS OF SYSTEM TIME t0;
+RESTORE FROM LATEST IN 'nodelocal://1/cluster/' AS OF SYSTEM TIME t0;
 ----
 
 
@@ -208,7 +208,7 @@ DROP DATABASE d;
 
 
 restore aost=t0
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' AS OF SYSTEM TIME t0;
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' AS OF SYSTEM TIME t0;
 ----
 
 query-sql
@@ -230,7 +230,7 @@ DROP TABLE d.baz;
 
 
 restore aost=t0
-RESTORE TABLE d.* FROM LATEST IN 'nodelocal://0/table/' AS OF SYSTEM TIME t0 WITH into_db='d';
+RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' AS OF SYSTEM TIME t0 WITH into_db='d';
 ----
 
 
@@ -251,7 +251,7 @@ new-cluster name=s3 share-io-dir=s1 allow-implicit-access
 
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/cluster/';
+RESTORE FROM LATEST IN 'nodelocal://1/cluster/';
 ----
 
 
@@ -274,7 +274,7 @@ DROP DATABASE d;
 
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/';
 ----
 
 
@@ -299,7 +299,7 @@ DROP TABLE d.baz;
 
 
 exec-sql
-RESTORE TABLE d.* FROM LATEST IN 'nodelocal://0/table/' WITH into_db= d;
+RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' WITH into_db= d;
 ----
 
 

@@ -43,8 +43,8 @@ func TestRejectedFilename(t *testing.T) {
 		},
 		{
 			name:     "nodelocal",
-			fname:    "nodelocal://0/file.csv",
-			rejected: "nodelocal://0/file.csv.rejected",
+			fname:    "nodelocal://1/file.csv",
+			rejected: "nodelocal://1/file.csv.rejected",
 		},
 	}
 	for _, tc := range tests {

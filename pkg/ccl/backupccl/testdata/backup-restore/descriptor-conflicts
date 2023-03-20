@@ -23,7 +23,7 @@ ALTER ROLE hamburger IN DATABASE foo SET application_name='helper';
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/conflicting-descriptors';
+BACKUP INTO 'nodelocal://1/conflicting-descriptors';
 ----
 
 new-cluster name=s2 share-io-dir=s1 disable-tenant
@@ -61,7 +61,7 @@ INSERT INTO system.crdb_internal_copy_107 VALUES ('tab_107', true, now(), 'b')
 ----
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/conflicting-descriptors';
+RESTORE FROM LATEST IN 'nodelocal://1/conflicting-descriptors';
 ----
 
 query-sql
