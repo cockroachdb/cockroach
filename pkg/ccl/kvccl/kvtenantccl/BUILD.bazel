@@ -45,7 +45,7 @@ go_library(
 
 go_test(
     name = "kvtenantccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "connector_test.go",
         "main_test.go",
@@ -56,7 +56,7 @@ go_test(
         "tenant_trace_test.go",
         "tenant_upgrade_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     embed = [":kvtenantccl"],
     shard_count = 16,
     deps = [

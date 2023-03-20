@@ -193,7 +193,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           style="tableTitle"
           content={<p>Date and time the job was last executed.</p>}
         >
-          {jobsColumnLabels.lastModifiedTime}
+          {jobsColumnLabels.lastExecutionTime}
         </Tooltip>
       ),
       cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),

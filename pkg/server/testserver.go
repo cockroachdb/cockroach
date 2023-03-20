@@ -1645,6 +1645,19 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
+// StartedDefaultTestTenant is part of the TestServerInterface.
+func (ts *TestServer) StartedDefaultTestTenant() bool {
+	return !ts.cfg.DisableDefaultTestTenant
+}
+
+// TenantOrServer is part of the TestServerInterface.
+func (ts *TestServer) TenantOrServer() serverutils.TestTenantInterface {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0]
+	}
+	return ts
+}
+
 // TracerI is part of the TestServerInterface.
 func (ts *TestServer) TracerI() interface{} {
 	return ts.Tracer()
