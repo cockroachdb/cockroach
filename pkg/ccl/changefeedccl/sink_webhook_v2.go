@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -60,6 +61,7 @@ func makeWebhookSinkClient(
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
 	batchCfg sinkBatchConfig,
+	parallelism int,
 ) (SinkClient, error) {
 	err := validateWebhookOpts(u, encodingOpts, opts)
 	if err != nil {
@@ -79,7 +81,7 @@ func makeWebhookSinkClient(
 	if opts.ClientTimeout != nil {
 		connTimeout = *opts.ClientTimeout
 	}
-	sinkClient.client, err = makeWebhookClient(u, connTimeout)
+	sinkClient.client, err = makeWebhookClient(u, connTimeout, parallelism)
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +102,14 @@ func makeWebhookSinkClient(
 	return sinkClient, nil
 }
 
-func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, error) {
+func makeWebhookClient(u sinkURL, timeout time.Duration, parallelism int) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				MaxConnsPerHost:     16, // This should probably be == to parallelism.
-				MaxIdleConnsPerHost: 16,
-				MaxIdleConns:        100,
+				DialContext:         (&net.Dialer{Timeout: timeout}).DialContext,
+				MaxConnsPerHost:     parallelism,
+				MaxIdleConnsPerHost: parallelism,
 				IdleConnTimeout:     time.Minute,
 				ForceAttemptHTTP2:   true,
 			},
@@ -190,7 +192,7 @@ func (wse *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, err
 	return req, nil
 }
 
-// EncodeResolvedMeessage implements the SinkClient interface
+// MakeResolvedPayload implements the SinkClient interface
 func (wse *webhookSinkClient) MakeResolvedPayload(
 	body []byte, topic string,
 ) (SinkPayload, error) {
@@ -259,15 +261,20 @@ type webhookCSVWriter struct {
 	sc           *webhookSinkClient
 }
 
+var _ BatchWriter = (*webhookCSVWriter)(nil)
+
+// AppendKV implements the BatchWriter interface
 func (cw *webhookCSVWriter) AppendKV(key []byte, value []byte, topic string) {
 	cw.bytes = append(cw.bytes, value...)
 	cw.messageCount += 1
 }
 
+// ShouldFlush implements the BatchWriter interface
 func (cw *webhookCSVWriter) ShouldFlush() bool {
 	return cw.sc.shouldFlush(len(cw.bytes), cw.messageCount)
 }
 
+// Close implements the BatchWriter interface
 func (cw *webhookCSVWriter) Close() (SinkPayload, error) {
 	return cw.sc.makePayloadForBytes(cw.bytes)
 }
@@ -278,11 +285,15 @@ type webhookJSONWriter struct {
 	sc         *webhookSinkClient
 }
 
+var _ BatchWriter = (*webhookJSONWriter)(nil)
+
+// AppendKV implements the BatchWriter interface
 func (jw *webhookJSONWriter) AppendKV(key []byte, value []byte, topic string) {
 	jw.payload = append(jw.payload, value)
 	jw.bytesCount += len(value)
 }
 
+// ShouldFlush implements the BatchWriter interface
 func (jw *webhookJSONWriter) ShouldFlush() bool {
 	return jw.sc.shouldFlush(jw.bytesCount, len(jw.payload))
 }
@@ -292,6 +303,7 @@ type webhookJsonEvent struct {
 	Length  int               `json:"length"`
 }
 
+// Close implements the BatchWriter interface
 func (jw *webhookJSONWriter) Close() (SinkPayload, error) {
 	body := &webhookJsonEvent{
 		Payload: jw.payload,
@@ -336,7 +348,7 @@ func makeWebhookSink(
 	u sinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
-	numWorkers int,
+	parallelism int,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
@@ -345,7 +357,7 @@ func makeWebhookSink(
 		return nil, err
 	}
 
-	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg)
+	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg, parallelism)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +368,7 @@ func makeWebhookSink(
 		sinkClient,
 		time.Duration(batchCfg.Frequency),
 		retryOpts,
-		numWorkers,
+		parallelism,
 		nil,
 		source,
 		mb(requiresResourceAccounting),

@@ -281,3 +281,19 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
 	false,
 )
+
+var NewWebhookSinkEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.new_webhook_sink_enabled",
+	"if enabled, this setting enables a new implementation of the webhook sink"+
+		" that allows for a much higher throughput",
+	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+)
+
+var SinkParallelism = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.sink_parallelism",
+	"the number of workers used by changefeeds when sending requests to the sink: <0 disables, "+
+		"0 assigns a reasonable default, >0 assigns the setting value.",
+	0,
+).WithPublic()

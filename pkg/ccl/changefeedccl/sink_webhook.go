@@ -11,10 +11,13 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -278,7 +281,7 @@ func makeDeprecatedWebhookSink(
 	}
 
 	// TODO(yevgeniy): Establish HTTP connection in Dial().
-	sink.client, err = makeWebhookClient(u, connTimeout)
+	sink.client, err = deprecatedMakeWebhookClient(u, connTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +300,73 @@ func makeDeprecatedWebhookSink(
 	sink.url = sinkURL{URL: sinkURLParsed}
 
 	return sink, nil
+}
+
+func deprecatedMakeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, error) {
+	client := &httputil.Client{
+		Client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
+			},
+		},
+	}
+
+	dialConfig := struct {
+		tlsSkipVerify bool
+		caCert        []byte
+		clientCert    []byte
+		clientKey     []byte
+	}{}
+
+	transport := client.Transport.(*http.Transport)
+
+	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+		return nil, err
+	}
+	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
+		return nil, err
+	}
+	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+		return nil, err
+	}
+	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+		return nil, err
+	}
+
+	transport.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: dialConfig.tlsSkipVerify,
+	}
+
+	if dialConfig.caCert != nil {
+		caCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not load system root CA pool")
+		}
+		if caCertPool == nil {
+			caCertPool = x509.NewCertPool()
+		}
+		if !caCertPool.AppendCertsFromPEM(dialConfig.caCert) {
+			return nil, errors.Errorf("failed to parse certificate data:%s", string(dialConfig.caCert))
+		}
+		transport.TLSClientConfig.RootCAs = caCertPool
+	}
+
+	if dialConfig.clientCert != nil && dialConfig.clientKey == nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamClientKey)
+	} else if dialConfig.clientKey != nil && dialConfig.clientCert == nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientKey, changefeedbase.SinkParamClientCert)
+	}
+
+	if dialConfig.clientCert != nil && dialConfig.clientKey != nil {
+		cert, err := tls.X509KeyPair(dialConfig.clientCert, dialConfig.clientKey)
+		if err != nil {
+			return nil, errors.Wrap(err, `invalid client certificate data provided`)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	return client, nil
 }
 
 // defaultWorkerCount() is the number of CPU's on the machine

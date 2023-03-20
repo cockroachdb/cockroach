@@ -1225,10 +1225,13 @@ func registerCDC(r registry.Registry) {
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true"); err != nil {
+				ct.t.Fatal(err)
+			}
+
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: webhookSink,
-				// sinkType: kafkaSink,
-				targets: allTpccTargets,
+				targets:  allTpccTargets,
 				opts: map[string]string{
 					"metrics_label": "'webhook'",
 					"initial_scan":  "'only'",

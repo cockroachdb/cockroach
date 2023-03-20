@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -211,14 +212,17 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
-			// return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-			// 	return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-			// 		defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
-			// })
-			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
-			})
+			if changefeedbase.NewWebhookSinkEnabled.Get(&serverCfg.Settings.SV) {
+				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+						sinkParallelism(serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+				})
+			} else {
+				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+					return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+						defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+				})
+			}
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
 			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered))
@@ -776,4 +780,20 @@ func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
 		}
 	}
 	return nil
+}
+
+func sinkParallelism(cfg *execinfra.ServerConfig) int {
+	numWorkers := changefeedbase.SinkParallelism.Get(&cfg.Settings.SV)
+	if numWorkers > 0 {
+		return int(numWorkers)
+	}
+
+	idealNumber := runtime.GOMAXPROCS(0)
+	if idealNumber < 1 {
+		return 1
+	}
+	if idealNumber > 32 {
+		return 32
+	}
+	return idealNumber
 }

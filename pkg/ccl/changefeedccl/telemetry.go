@@ -184,10 +184,6 @@ func (r *telemetryMetricsRecorder) recordSizeBasedFlush() {
 	r.inner.recordSizeBasedFlush()
 }
 
-func (r *telemetryMetricsRecorder) recordSinkInFlightCount(count int64) {
-	r.inner.recordSinkInFlightCount(count)
-}
-
 // ContinuousTelemetryInterval determines the interval at which each node emits telemetry events
 // during the lifespan of each enterprise changefeed.
 var ContinuousTelemetryInterval = settings.RegisterDurationSetting(

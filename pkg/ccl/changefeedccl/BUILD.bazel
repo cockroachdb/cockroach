@@ -21,6 +21,7 @@ go_library(
         "event_processing.go",
         "metrics.go",
         "name.go",
+        "parallel_io.go",
         "parquet_sink_cloudstorage.go",
         "retry.go",
         "scheduled_changefeed.go",
