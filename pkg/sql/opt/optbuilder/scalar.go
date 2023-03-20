@@ -776,13 +776,6 @@ func (b *Builder) buildUDF(
 	}
 	b.insideUDF = false
 
-	// For set-returning functions, we handle STRICT behavior in the routine
-	// execution logic. For scalar UDFs this is handled by a CASE statement - see
-	// below.
-	calledOnNullInput := true
-	if isSetReturning {
-		calledOnNullInput = o.CalledOnNullInput
-	}
 	out = b.factory.ConstructUDF(
 		args,
 		&memo.UDFPrivate{
@@ -792,7 +785,7 @@ func (b *Builder) buildUDF(
 			Typ:               f.ResolvedType(),
 			SetReturning:      isSetReturning,
 			Volatility:        o.Volatility,
-			CalledOnNullInput: calledOnNullInput,
+			CalledOnNullInput: o.CalledOnNullInput,
 		},
 	)
 
