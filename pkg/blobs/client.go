@@ -182,14 +182,20 @@ type BlobClientFactory func(ctx context.Context, dialing roachpb.NodeID) (BlobCl
 
 // NewBlobClientFactory returns a BlobClientFactory
 func NewBlobClientFactory(
-	localNodeIDContainer *base.NodeIDContainer, dialer *nodedialer.Dialer, externalIODir string,
+	localNodeIDContainer *base.SQLIDContainer,
+	dialer *nodedialer.Dialer,
+	externalIODir string,
+	allowLocalFastpath bool,
 ) BlobClientFactory {
 	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
-		localNodeID := localNodeIDContainer.Get()
-		if dialing == 0 {
+		localNodeID, ok := localNodeIDContainer.OptionalNodeID()
+		if ok && dialing == 0 {
 			dialing = localNodeID
+		} else if dialing == 0 {
+			return nil, errors.New("node ID 0 not supported")
 		}
-		if localNodeID == dialing {
+
+		if localNodeID == dialing && allowLocalFastpath {
 			return NewLocalClient(externalIODir)
 		}
 		conn, err := dialer.Dial(ctx, dialing, rpc.DefaultClass)

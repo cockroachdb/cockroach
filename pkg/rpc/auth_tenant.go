@@ -157,6 +157,13 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.ts.tspb.TimeSeries/Query":
 		return a.capabilitiesAuthorizer.HasTSDBQueryCapability(ctx, tenID)
 
+	case "/cockroach.blobs.Blob/List",
+		"/cockroach.blobs.Blob/Delete",
+		"/cockroach.blobs.Blob/Stat",
+		"/cockroach.blobs.Blob/GetStream",
+		"/cockroach.blobs.Blob/PutStream":
+		return a.capabilitiesAuthorizer.HasBlobStorageCapability(ctx, tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
