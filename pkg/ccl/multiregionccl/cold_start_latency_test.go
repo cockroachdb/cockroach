@@ -80,8 +80,8 @@ func TestColdStartLatency(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		args := base.TestServerArgs{
-			DisableDefaultTestTenant: true,
-			Locality:                 localities[i],
+			DefaultTestTenant: base.TestTenantDisabled,
+			Locality:          localities[i],
 		}
 		signalAfter[i] = make(chan struct{})
 		serverKnobs := &server.TestingKnobs{

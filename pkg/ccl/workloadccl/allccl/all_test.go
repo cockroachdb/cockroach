@@ -90,9 +90,9 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 				// The test tenant needs to be disabled for this test until
 				// we address #75449.
-				DisableDefaultTestTenant: true,
-				UseDatabase:              "d",
-				SQLMemoryPoolSize:        sqlMemoryPoolSize,
+				DefaultTestTenant: base.TestTenantDisabled,
+				UseDatabase:       "d",
+				SQLMemoryPoolSize: sqlMemoryPoolSize,
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
@@ -153,8 +153,8 @@ func TestAllRegisteredSetup(t *testing.T) {
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 				// Need to disable the test tenant here until we resolve
 				// #75449 as this test makes use of import through a fixture.
-				DisableDefaultTestTenant: true,
-				UseDatabase:              "d",
+				DefaultTestTenant: base.TestTenantDisabled,
+				UseDatabase:       "d",
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)

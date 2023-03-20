@@ -41,9 +41,7 @@ func TestScrubUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DisableDefaultTestTenant: false,
-	})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and row entries.

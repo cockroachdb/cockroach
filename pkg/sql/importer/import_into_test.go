@@ -60,7 +60,7 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			//  Test hangs within a test tenant. More investigation is required.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 1, args)
