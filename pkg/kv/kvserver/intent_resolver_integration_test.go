@@ -579,7 +579,8 @@ func TestReliableIntentCleanup(t *testing.T) {
 					require.Fail(t, "too many txn retries", "attempt %v errored: %v", attempt, err)
 				} else {
 					t.Logf("retrying unexpected txn error: %v", err)
-					require.True(t, txn.IsRetryableErrMeantForTxn(*retryErr))
+					// Sanity check the retry error is meant for our transaction.
+					require.Equal(t, retryErr.TxnID, txn.ID())
 				}
 			}
 
