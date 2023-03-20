@@ -99,7 +99,7 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 	database_id OID NOT NULL,
 	role_name STRING NOT NULL,
 	settings STRING[] NOT NULL,
-	role_id OID NULL,
+	role_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (database_id ASC, role_name ASC),
 	UNIQUE INDEX database_role_settings_database_id_role_id_key (database_id ASC, role_id ASC) STORING (settings)
 )`

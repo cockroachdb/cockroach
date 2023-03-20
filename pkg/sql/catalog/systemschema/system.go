@@ -234,7 +234,7 @@ CREATE TABLE system.web_sessions (
 	"revokedAt"    TIMESTAMP,
 	"lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
 	"auditInfo"    STRING,
-	user_id        OID,
+	user_id        OID        NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX ("expiresAt"),
 	INDEX ("createdAt"),
@@ -585,7 +585,7 @@ CREATE TABLE system.database_role_settings (
     database_id  OID NOT NULL,
     role_name    STRING NOT NULL,
     settings     STRING[] NOT NULL,
-    role_id      OID NULL,
+    role_id      OID NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (database_id, role_name),
     UNIQUE INDEX (database_id, role_id) STORING (settings),
 		FAMILY "primary" (
@@ -716,7 +716,7 @@ CREATE TABLE system.privileges (
 	path STRING NOT NULL,
 	privileges STRING[] NOT NULL,
 	grant_options STRING[] NOT NULL,
-	user_id OID,
+	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username, path),
 	UNIQUE INDEX (path, user_id) STORING (privileges, grant_options),
 	UNIQUE INDEX (path, username) STORING (privileges, grant_options),
@@ -731,7 +731,7 @@ CREATE TABLE system.external_connections (
 	connection_type STRING NOT NULL,
 	connection_details BYTES NOT NULL,
 	owner STRING NOT NULL,
-	owner_id OID,
+	owner_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (connection_name),
 	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
 );`
@@ -744,7 +744,7 @@ CREATE TABLE system.tenant_tasks (
 	created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
 	payload_id   STRING NOT NULL,
 	owner        STRING NOT NULL,
-	owner_id     OID,
+	owner_id     OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id, issuer, task_id),
 	FAMILY "primary" (tenant_id, issuer, task_id, created, payload_id, owner, owner_id)
 );`
@@ -754,7 +754,7 @@ CREATE TABLE system.task_payloads (
 	id           STRING NOT NULL,
 	created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
 	owner        STRING NOT NULL,
-	owner_id     OID,
+	owner_id     OID NOT NULL,
 	min_version  STRING NOT NULL,
 	description  STRING,
 	type         STRING NOT NULL,
@@ -1593,7 +1593,7 @@ var (
 				{Name: "revokedAt", ID: 6, Type: types.Timestamp, Nullable: true},
 				{Name: "lastUsedAt", ID: 7, Type: types.Timestamp, DefaultExpr: &nowString},
 				{Name: "auditInfo", ID: 8, Type: types.String, Nullable: true},
-				{Name: "user_id", ID: 9, Type: types.Oid, Nullable: true},
+				{Name: "user_id", ID: 9, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2646,7 +2646,7 @@ var (
 				{Name: "database_id", ID: 1, Type: types.Oid, Nullable: false},
 				{Name: "role_name", ID: 2, Type: types.String, Nullable: false},
 				{Name: "settings", ID: 3, Type: types.StringArray, Nullable: false},
-				{Name: "role_id", ID: 4, Type: types.Oid, Nullable: true},
+				{Name: "role_id", ID: 4, Type: types.Oid, Nullable: false},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2887,7 +2887,7 @@ var (
 				{Name: "path", ID: 2, Type: types.String},
 				{Name: "privileges", ID: 3, Type: types.StringArray},
 				{Name: "grant_options", ID: 4, Type: types.StringArray},
-				{Name: "user_id", ID: 5, Type: types.Oid, Nullable: true},
+				{Name: "user_id", ID: 5, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2943,7 +2943,7 @@ var (
 				{Name: "connection_type", ID: 4, Type: types.String},
 				{Name: "connection_details", ID: 5, Type: types.Bytes},
 				{Name: "owner", ID: 6, Type: types.String},
-				{Name: "owner_id", ID: 7, Type: types.Oid, Nullable: true},
+				{Name: "owner_id", ID: 7, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2976,7 +2976,7 @@ var (
 				{Name: "created", ID: 4, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 				{Name: "payload_id", ID: 5, Type: types.String},
 				{Name: "owner", ID: 6, Type: types.String},
-				{Name: "owner_id", ID: 7, Type: types.Oid, Nullable: true},
+				{Name: "owner_id", ID: 7, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -3005,7 +3005,7 @@ var (
 				{Name: "id", ID: 1, Type: types.String},
 				{Name: "created", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 				{Name: "owner", ID: 3, Type: types.String},
-				{Name: "owner_id", ID: 4, Type: types.Oid, Nullable: true},
+				{Name: "owner_id", ID: 4, Type: types.Oid},
 				{Name: "min_version", ID: 5, Type: types.String},
 				{Name: "description", ID: 6, Type: types.String, Nullable: true},
 				{Name: "type", ID: 7, Type: types.String},
