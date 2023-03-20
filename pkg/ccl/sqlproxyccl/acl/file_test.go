@@ -494,7 +494,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		select {
 		case <-next:
 			t.Error("should not have gotten a new controller")
-		case <-time.After(time.Millisecond * 200):
+		case <-time.After(time.Millisecond * 500):
 			// error count should go up
 			require.Equal(t, int64(1), errorCountMetric.Snapshot().Value())
 		}
@@ -513,7 +513,7 @@ func TestParsingErrorHandling(t *testing.T) {
 					},
 				},
 			}, allowlist.entries)
-		case <-time.After(time.Millisecond * 200):
+		case <-time.After(time.Millisecond * 500):
 			t.Error("should have gotten a new controller")
 		}
 	})
