@@ -108,7 +108,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Verify that backups can be created in various configurations. This is
 		// important to test because changes in system tables might cause backups to
 		// fail in mixed-version clusters.
-		dest := fmt.Sprintf("nodelocal://0/%d", timeutil.Now().UnixNano())
+		dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
 		return h.Exec(rng, `BACKUP TO $1`, dest)
 	})
 	mvt.InMixedVersion(

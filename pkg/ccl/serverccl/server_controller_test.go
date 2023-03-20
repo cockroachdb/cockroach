@@ -10,6 +10,7 @@ package serverccl
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,6 +35,80 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	nodeCount := 3
+
+	dirs := make([]string, nodeCount)
+	dirCleanups := make([]func(), nodeCount)
+	for i := 0; i < nodeCount; i++ {
+		dir, dirCleanupFn := testutils.TempDir(t)
+		dirs[i] = dir
+		dirCleanups[i] = dirCleanupFn
+	}
+
+	defer func() {
+		for _, fn := range dirCleanups {
+			fn()
+		}
+	}()
+
+	tc := serverutils.StartNewTestCluster(t, nodeCount, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            dirs[0],
+			},
+			1: {
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            dirs[1],
+			},
+			2: {
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            dirs[2],
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, "CREATE TENANT application; ALTER TENANT application START SERVICE SHARED")
+	// Wait for tenant to start up on all nodes.
+	tenantConns := make([]*sql.DB, nodeCount)
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < nodeCount; i++ {
+			if tenantConns[i] != nil {
+				continue
+			}
+
+			sqlAddr := tc.Server(i).ServingSQLAddr()
+			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:application", false, tc.Stopper())
+			if err != nil {
+				return err
+			}
+			if err := db.Ping(); err != nil {
+				return err
+			}
+			tenantConns[i] = db
+		}
+		return nil
+	})
+
+	for srcNodeIdx := 1; srcNodeIdx <= nodeCount; srcNodeIdx++ {
+		for destNodeIdx := 2; destNodeIdx <= nodeCount; destNodeIdx++ {
+			destURI := fmt.Sprintf("nodelocal://%d/from-%d-to-%d", destNodeIdx, srcNodeIdx, destNodeIdx)
+			query := fmt.Sprintf("SELECT crdb_internal.read_file('%s')", destURI)
+			t.Log(query)
+			_, err := tenantConns[srcNodeIdx-1].Exec(query)
+			require.NoError(t, err)
+		}
+	}
+}
 
 func TestServerControllerHTTP(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -10,10 +10,10 @@ GRANT admin TO bigboss
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 # Just verify that concurrent privilege checks don't panic.
 exec-sql
-SELECT * FROM [SHOW BACKUPS IN 'nodelocal://0/test'] UNION SELECT * FROM [SHOW BACKUPS IN 'nodelocal://0/test']
+SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/test'] UNION SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/test']
 ----

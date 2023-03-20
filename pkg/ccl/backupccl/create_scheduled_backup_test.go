@@ -310,7 +310,7 @@ CREATE TABLE other_db.t1(a int);
 			defer th.clearSchedules(t)
 			defer utilccl.TestingDisableEnterprise()()
 
-			destination := "nodelocal://0/backup/" + tc.name
+			destination := "nodelocal://1/backup/" + tc.name
 			schedules, err := th.createBackupSchedule(t, tc.query, destination)
 			require.NoError(t, err)
 
@@ -354,56 +354,56 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	}{
 		{
 			name:  "full-cluster",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=neverappears' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=neverappears' RECURRING '@hourly'",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH detached",
-					shownStmt:  "BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH detached",
+					shownStmt:  "BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster-with-name",
-			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'nodelocal://1/backup' RECURRING '@hourly'",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "my-backup",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://1/backup' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster-always",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly' FULL BACKUP ALWAYS",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' RECURRING '@hourly' FULL BACKUP ALWAYS",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://1/backup' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' RECURRING '@hourly'",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "BACKUP .*",
-					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -412,19 +412,19 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:  "full-cluster-with-name",
-			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'nodelocal://1/backup' RECURRING '@hourly'",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "my-backup",
-					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "my-backup",
-					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -433,31 +433,31 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:  "full-cluster-always",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history RECURRING '@hourly' FULL BACKUP ALWAYS",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history RECURRING '@hourly' FULL BACKUP ALWAYS",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt: "BACKUP INTO 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster-remote-incremental-location",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH incremental_location = 'nodelocal://1/incremental' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' WITH incremental_location = 'nodelocal://1/incremental' RECURRING '@hourly'",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "BACKUP .*",
-					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached, incremental_location = 'nodelocal://1/incremental'",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH detached, incremental_location = 'nodelocal://1/incremental'",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -468,13 +468,13 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "multiple-tables-with-revision-history",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup'
+		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://1/backup'
 		WITH revision_history RECURRING '@hourly'`,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe: "BACKUP .*",
 					backupStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO LATEST IN 'nodelocal://0/backup' WITH" +
+						"system.public.scheduled_jobs INTO LATEST IN 'nodelocal://1/backup' WITH" +
 						" revision_history = true, detached",
 					period:                        time.Hour,
 					paused:                        true,
@@ -483,7 +483,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				{
 					nameRe: "BACKUP .+",
 					backupStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -494,19 +494,19 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "database-with-revision-history",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP DATABASE system INTO 'nodelocal://0/backup'
+		CREATE SCHEDULE FOR BACKUP DATABASE system INTO 'nodelocal://1/backup'
 		WITH revision_history RECURRING '@hourly'`,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "BACKUP .*",
-					backupStmt:                    "BACKUP DATABASE system INTO LATEST IN 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP DATABASE system INTO LATEST IN 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP DATABASE system INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP DATABASE system INTO 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -517,19 +517,19 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "wildcard-with-revision-history",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP TABLE system.* INTO 'nodelocal://0/backup'
+		CREATE SCHEDULE FOR BACKUP TABLE system.* INTO 'nodelocal://1/backup'
 		WITH revision_history RECURRING '@hourly'`,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "BACKUP .*",
-					backupStmt:                    "BACKUP TABLE system.public.* INTO LATEST IN 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP TABLE system.public.* INTO LATEST IN 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP TABLE system.public.* INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP TABLE system.public.* INTO 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -538,38 +538,38 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:   "enterprise-license-required-for-incremental",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly' FULL BACKUP '@weekly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' RECURRING '@hourly' FULL BACKUP '@weekly'",
 			user:   freeUser,
 			errMsg: "use of BACKUP INTO LATEST requires an enterprise license",
 		},
 		{
 			name:   "enterprise-license-required-for-revision-history",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history RECURRING '@hourly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history RECURRING '@hourly'",
 			user:   freeUser,
 			errMsg: "use of BACKUP with revision_history requires an enterprise license",
 		},
 		{
 			name:   "enterprise-license-required-for-encryption",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup'  WITH encryption_passphrase = 'secret' RECURRING '@hourly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup'  WITH encryption_passphrase = 'secret' RECURRING '@hourly'",
 			user:   freeUser,
 			errMsg: "use of BACKUP with encryption requires an enterprise license",
 		},
 		{
 			name:      "full-cluster-with-name-arg",
-			query:     `CREATE SCHEDULE $1 FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached RECURRING '@hourly'`,
+			query:     `CREATE SCHEDULE $1 FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history, detached RECURRING '@hourly'`,
 			queryArgs: []interface{}{"my_backup_name"},
 			user:      enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "my_backup_name",
-					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "my_backup_name",
-					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -578,20 +578,20 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:      "full-cluster-with-revision-history-arg",
-			query:     `CREATE SCHEDULE my_backup_name FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history = $1 RECURRING '@hourly'`,
+			query:     `CREATE SCHEDULE my_backup_name FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history = $1 RECURRING '@hourly'`,
 			queryArgs: []interface{}{true},
 			user:      enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:                        "my_backup_name",
-					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        time.Hour,
 					paused:                        true,
 					chainProtectedTimestampRecord: true,
 				},
 				{
 					nameRe:                        "my_backup_name",
-					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH revision_history = true, detached",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -602,16 +602,16 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "multiple-tables-with-encryption",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup'
+		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://1/backup'
 		WITH revision_history, encryption_passphrase = 'secret' RECURRING '@weekly'`,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe: "BACKUP .*",
 					backupStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO 'nodelocal://0/backup' WITH" +
+						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH" +
 						" revision_history = true, encryption_passphrase = 'secret', detached",
 					shownStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO 'nodelocal://0/backup' WITH" +
+						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH" +
 						" revision_history = true, encryption_passphrase = '*****', detached",
 					period: 7 * 24 * time.Hour,
 				},
@@ -622,7 +622,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user: enterpriseUser,
 			query: `
 		CREATE SCHEDULE FOR BACKUP DATABASE system
-    INTO ('nodelocal://0/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://0/backup2?COCKROACH_LOCALITY=default')
+    INTO ('nodelocal://1/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://1/backup2?COCKROACH_LOCALITY=default')
 		WITH revision_history
     RECURRING '1 2 * * *'
     FULL BACKUP ALWAYS
@@ -633,7 +633,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				{
 					nameRe: "BACKUP .+",
 					backupStmt: "BACKUP DATABASE system INTO " +
-						"('nodelocal://0/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://0/backup2?COCKROACH_LOCALITY=default') " +
+						"('nodelocal://1/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://1/backup2?COCKROACH_LOCALITY=default') " +
 						"WITH revision_history = true, detached",
 					period: 24 * time.Hour,
 				},
@@ -756,7 +756,7 @@ INSERT INTO t1 values (1), (10), (100);
 
 	t.Run("on_previous_running=start", func(t *testing.T) {
 		schedule := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' WITH SCHEDULE OPTIONS on_previous_running = 'start'`
-		destination := "nodelocal://0/backup/"
+		destination := "nodelocal://1/backup/"
 		schedules, err := th.createBackupSchedule(t, schedule, destination)
 		require.NoError(t, err)
 		require.Len(t, schedules, 2)
@@ -765,7 +765,7 @@ INSERT INTO t1 values (1), (10), (100);
 
 	t.Run("on_previous_running=skip", func(t *testing.T) {
 		schedule := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' WITH SCHEDULE OPTIONS on_previous_running = 'skip'`
-		destination := "nodelocal://0/backup/"
+		destination := "nodelocal://1/backup/"
 		schedules, err := th.createBackupSchedule(t, schedule, destination)
 		require.NoError(t, err)
 		require.Len(t, schedules, 2)
@@ -774,7 +774,7 @@ INSERT INTO t1 values (1), (10), (100);
 
 	t.Run("on_previous_running=wait", func(t *testing.T) {
 		schedule := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' WITH SCHEDULE OPTIONS on_previous_running = 'wait'`
-		destination := "nodelocal://0/backup/"
+		destination := "nodelocal://1/backup/"
 		schedules, err := th.createBackupSchedule(t, schedule, destination)
 		require.NoError(t, err)
 		require.Len(t, schedules, 2)
@@ -873,7 +873,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 			testName := fmt.Sprintf("%s_chaining=%t", tc.name, enabled)
 			t.Run(testName, func(t *testing.T) {
 				th.sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING schedules.backup.gc_protection.enabled = %t`, enabled))
-				destination := "nodelocal://0/backup/" + testName
+				destination := "nodelocal://1/backup/" + testName
 				schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
 				require.NoError(t, err)
 				require.LessOrEqual(t, 1, len(schedules))
@@ -1091,7 +1091,7 @@ INSERT INTO t values (1), (10), (100);
 	createSchedules := func(t *testing.T, name string) (int64, int64, func()) {
 		schedules, err := th.createBackupSchedule(t,
 			"CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/5 * * * *'",
-			"nodelocal://0/backup/"+name)
+			"nodelocal://1/backup/"+name)
 		require.NoError(t, err)
 
 		// We expect full & incremental schedule to be created.
@@ -1345,7 +1345,7 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 			defer utilccl.TestingEnableEnterprise()()
 			defer th.clearSchedules(t)
 
-			destination := "nodelocal://0/" + tc.name
+			destination := "nodelocal://1/" + tc.name
 			createScheduleQuery := fmt.Sprintf(tc.query, destination)
 			schedules, err := th.createBackupSchedule(t, createScheduleQuery)
 			require.NoError(t, err)

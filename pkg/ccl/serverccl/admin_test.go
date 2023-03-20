@@ -130,7 +130,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://0/backup/1?AWS_SECRET_ACCESS_KEY=neverappears'`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/backup/1?AWS_SECRET_ACCESS_KEY=neverappears'`)
 
 	var jobsRes serverpb.JobsResponse
 	err := getAdminJSONProto(s, "jobs", &jobsRes)

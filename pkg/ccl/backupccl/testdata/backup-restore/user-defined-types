@@ -20,7 +20,7 @@ INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 # Start a new cluster with the same IO dir.
@@ -29,7 +29,7 @@ new-cluster name=s2 share-io-dir=s1
 
 # Restore into the new cluster.
 exec-sql cluster=s2
-RESTORE FROM LATEST IN 'nodelocal://0/test/'
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 # Check all of the tables have the right data.
@@ -129,7 +129,7 @@ CREATE TABLE d.expr (
 
 # Backup the database now.
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/test/'
+BACKUP DATABASE d INTO 'nodelocal://1/test/'
 ----
 
 exec-sql
@@ -137,7 +137,7 @@ DROP DATABASE d
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/test/';
 ----
 
 # Check the table data.

@@ -1247,7 +1247,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 		nodelocal.LocalRequiresExternalIOAccounting = true
 		defer func() { nodelocal.LocalRequiresExternalIOAccounting = false }()
 		before := testProvider.waitForConsumption(t)
-		r.Exec(t, "BACKUP t INTO 'nodelocal://0/backups/tenant'")
+		r.Exec(t, "BACKUP t INTO 'nodelocal://1/backups/tenant'")
 		c := testProvider.waitForConsumption(t)
 		c.Sub(&before)
 		require.NotEqual(t, uint64(0), c.ExternalIOEgressBytes)
@@ -1258,7 +1258,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 		nodelocal.LocalRequiresExternalIOAccounting = true
 		defer func() { nodelocal.LocalRequiresExternalIOAccounting = false }()
 		before := testProvider.waitForConsumption(t)
-		hostSQL.Exec(t, "BACKUP t INTO 'nodelocal://0/backups/host'")
+		hostSQL.Exec(t, "BACKUP t INTO 'nodelocal://1/backups/host'")
 		c := testProvider.waitForConsumption(t)
 		c.Sub(&before)
 		require.Equal(t, uint64(0), c.ExternalIOEgressBytes)

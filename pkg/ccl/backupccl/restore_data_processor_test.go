@@ -272,7 +272,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		},
 	}
 
-	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", username.RootUserName())
+	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://1/foo", username.RootUserName())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
