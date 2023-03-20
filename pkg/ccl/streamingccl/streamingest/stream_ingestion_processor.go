@@ -57,6 +57,27 @@ var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUni
 	nil, /* validateFn */
 )
 
+var maxKVBufferSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"bulkio.stream_ingestion.kv_buffer_size",
+	"the maximum size of the KV buffer allowed before a flush",
+	128<<20, // 128 MiB
+)
+
+var maxRangeKeyBufferSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"bulkio.stream_ingestion.range_key_buffer_size",
+	"the maximum size of the range key buffer allowed before a flush",
+	32<<20, // 32 MiB
+)
+
+var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"bulkio.stream_ingestion.ingest_range_keys_as_writes",
+	"size below which a range key SST will be ingested using normal writes",
+	400*1<<10, // 400 KiB
+)
+
 // checkForCutoverSignalFrequency is the frequency at which the resumer polls
 // the system.jobs table to check whether the stream ingestion job has been
 // signaled to cutover.
@@ -81,7 +102,8 @@ func (s mvccKeyValues) Less(i, j int) bool { return s[i].Key.Less(s[j].Key) }
 
 // Specialized SST batcher that is responsible for ingesting range tombstones.
 type rangeKeyBatcher struct {
-	db *kv.DB
+	db       *kv.DB
+	settings *cluster.Settings
 
 	// Functor that creates a new range key SST writer in case
 	// we need to operate on a new batch. The created SST writer
@@ -93,7 +115,8 @@ type rangeKeyBatcher struct {
 	rangeKeySSTFile *storage.MemObject
 	// curRangeKVBatch is the current batch of range KVs which will
 	// be ingested through 'flush' later.
-	curRangeKVBatch mvccRangeKeyValues
+	curRangeKVBatch     mvccRangeKeyValues
+	curRangeKVBatchSize int
 
 	// Minimum timestamp in the current batch. Used for metrics purpose.
 	minTimestamp hlc.Timestamp
@@ -111,13 +134,14 @@ func newRangeKeyBatcher(
 ) *rangeKeyBatcher {
 	batcher := &rangeKeyBatcher{
 		db:              db,
+		settings:        cs,
 		minTimestamp:    hlc.MaxTimestamp,
 		batchSummary:    kvpb.BulkOpSummary{},
 		rangeKeySSTFile: &storage.MemObject{},
 		onFlush:         onFlush,
 	}
 	batcher.rangeKeySSTWriterMaker = func() *storage.SSTWriter {
-		w := storage.MakeIngestionSSTWriter(ctx, cs, batcher.rangeKeySSTFile)
+		w := storage.MakeIngestionSSTWriter(ctx, batcher.settings, batcher.rangeKeySSTFile)
 		return &w
 	}
 	return batcher
@@ -137,7 +161,9 @@ type streamIngestionProcessor struct {
 	// TODO: This doesn't yet use a buffering adder since the current
 	// implementation is specific to ingesting KV pairs without timestamps rather
 	// than MVCCKeys.
-	curKVBatch mvccKeyValues
+	curKVBatch     mvccKeyValues
+	curKVBatchSize int
+
 	// batcher is used to flush KVs into SST to the storage layer.
 	batcher *bulk.SSTBatcher
 	// rangeBatcher is used to flush range KVs into SST to the storage layer.
@@ -203,6 +229,8 @@ type streamIngestionProcessor struct {
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
+
+	logBufferEvery log.EveryN
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -260,6 +288,7 @@ func newStreamIngestionDataProcessor(
 		closePoller:      make(chan struct{}),
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
+		logBufferEvery:   log.Every(30 * time.Second),
 	}
 	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -594,6 +623,17 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}
+
+			if sip.logBufferEvery.ShouldLog() {
+				log.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.curKVBatchSize, len(sip.curKVBatch))
+			}
+			resolvedSpan, err := sip.maybeSizeFlush()
+			if err != nil {
+				return nil, err
+			}
+			if resolvedSpan != nil {
+				return resolvedSpan, nil
+			}
 		case <-sip.cutoverCh:
 			// TODO(adityamaru): Currently, the cutover time can only be <= resolved
 			// ts written to the job progress and so there is no point flushing
@@ -612,6 +652,17 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 	// No longer running, we've closed our batcher.
 	return nil, nil
+}
+
+func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
+	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
+	if !ok {
+		return nil, errors.New("every key is expected to match tenant prefix")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rekey, nil
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error {
@@ -634,17 +685,6 @@ func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
 			return sip.bufferRangeKeyVal(rangeKeyVal)
 		})
-}
-
-func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
-	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
-	if !ok {
-		return nil, errors.New("every key is expected to match tenant prefix")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return rekey, nil
 }
 
 func (sip *streamIngestionProcessor) bufferDelRange(delRange *kvpb.RangeFeedDeleteRange) error {
@@ -686,6 +726,20 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 	return nil
 }
 
+func (sip *streamIngestionProcessor) maybeSizeFlush() (*jobspb.ResolvedSpans, error) {
+	sv := &sip.FlowCtx.Cfg.Settings.SV
+	kvBufMax := int(maxKVBufferSize.Get(sv))
+	rkBufMax := int(maxRangeKeyBufferSize.Get(sv))
+	if kvBufMax > 0 && sip.curKVBatchSize >= kvBufMax {
+		log.VInfof(sip.Ctx(), 2, "flushing because current KV batch based on size %d >= %d", sip.curKVBatchSize, kvBufMax)
+		return sip.flush()
+	} else if rkBufMax > 0 && sip.rangeBatcher.bufferSize() >= rkBufMax {
+		log.VInfof(sip.Ctx(), 2, "flushing beacuse current range key batch based on size %d >= %d", sip.rangeBatcher.bufferSize(), rkBufMax)
+		return sip.flush()
+	}
+	return nil, nil
+}
+
 func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 	// TODO: In addition to flushing when receiving a checkpoint event, we
 	// should also flush when we've buffered sufficient KVs. A buffering adder
@@ -705,12 +759,15 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 		kv.Value.InitChecksum(kv.Key)
 	}
 
-	mvccKey := storage.MVCCKey{
-		Key:       kv.Key,
-		Timestamp: kv.Value.Timestamp,
+	mvccKeyValue := storage.MVCCKeyValue{
+		Key: storage.MVCCKey{
+			Key:       kv.Key,
+			Timestamp: kv.Value.Timestamp,
+		},
+		Value: kv.Value.RawBytes,
 	}
-	sip.curKVBatch = append(sip.curKVBatch,
-		storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
+	sip.curKVBatchSize += len(mvccKeyValue.Value) + mvccKeyValue.Key.Len()
+	sip.curKVBatch = append(sip.curKVBatch, mvccKeyValue)
 	return nil
 }
 
@@ -742,17 +799,33 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 	return nil
 }
 
-// Write a batch of MVCC range keys into the SST batcher, and returns
-// the current size of all buffered range keys.
+// Write a batch of MVCC range keys into the SST batcher.
 func (r *rangeKeyBatcher) buffer(rangeKV storage.MVCCRangeKeyValue) {
+	r.curRangeKVBatchSize += len(rangeKV.RangeKey.StartKey) + len(rangeKV.RangeKey.EndKey) + len(rangeKV.Value)
 	r.curRangeKVBatch = append(r.curRangeKVBatch, rangeKV)
+}
+
+// Reeturns the current size of all buffered range keys.
+func (r *rangeKeyBatcher) bufferSize() int {
+	return r.curRangeKVBatchSize
+}
+
+type rangeKeySST struct {
+	start roachpb.Key
+	end   roachpb.Key
+	data  []byte
 }
 
 // Flush all the range keys buffered so far into storage as an SST.
 func (r *rangeKeyBatcher) flush(ctx context.Context) error {
+	_, sp := tracing.ChildSpan(ctx, "streamingest.rangeKeyBatcher.flush")
+	defer sp.Finish()
+
 	if len(r.curRangeKVBatch) == 0 {
 		return nil
 	}
+
+	log.VInfof(ctx, 2, "flushing %d range keys", len(r.curRangeKVBatch))
 
 	sstWriter := r.rangeKeySSTWriterMaker()
 	defer sstWriter.Close()
@@ -784,20 +857,213 @@ func (r *rangeKeyBatcher) flush(ctx context.Context) error {
 		return err
 	}
 
-	_, _, err := r.db.AddSSTable(ctx, start, end, r.rangeKeySSTFile.Data(),
-		false /* disallowConflicts */, false, /* disallowShadowing */
-		hlc.Timestamp{}, nil /* stats */, false, /* ingestAsWrites */
-		r.db.Clock().Now())
-	if err != nil {
-		return err
+	sstToFlush := &rangeKeySST{
+		data:  r.rangeKeySSTFile.Bytes(),
+		start: start,
+		end:   end.Next(),
 	}
-	r.batchSummary.SSTDataSize += int64(len(r.rangeKeySSTFile.Data()))
+
+	work := []*rangeKeySST{sstToFlush}
+	for len(work) > 0 {
+		item := work[0]
+		work = work[1:]
+
+		start := item.start
+		end := item.end
+		data := item.data
+
+		ingestAsWrites := false
+		asWritesMax := int(tooSmallRangeKeySize.Get(&r.settings.SV))
+		if asWritesMax > 0 && len(data) <= asWritesMax {
+			ingestAsWrites = true
+		}
+
+		log.Infof(ctx, "sending SSTable [%s, %s) of size %d (as write: %v)", start, end, len(data), ingestAsWrites)
+		_, _, err := r.db.AddSSTable(ctx, start, end, data,
+			false /* disallowConflicts */, false, /* disallowShadowing */
+			hlc.Timestamp{}, nil /* stats */, ingestAsWrites,
+			r.db.Clock().Now())
+		if err != nil {
+			if m := (*kvpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
+				mr, err := m.MismatchedRange()
+				if err != nil {
+					return err
+				}
+
+				split := mr.Desc.EndKey.AsRawKey()
+				log.Infof(ctx, "SSTable cannot be added spanning range bounds. Spliting at %v", split)
+				left, right, err := splitRangeKeySSTAtKey(ctx, r.settings, start, end, split, data)
+				if err != nil {
+					return err
+				}
+				work = append([]*rangeKeySST{left, right}, work...)
+			} else {
+				return err
+			}
+		} else {
+			r.batchSummary.SSTDataSize += int64(len(data))
+		}
+	}
 
 	if r.onFlush != nil {
 		r.onFlush(r.batchSummary)
 	}
 
 	return nil
+}
+
+// splitRangeKeySSTAtKey splits the given SST (passed as bytes) at the
+// given split key.
+//
+// The SST is assumed to only contain range keys. The function will
+// return an error if a point key is found.
+//
+// The caller should take care that the provided start and end key are
+// correct.
+//
+// This is similar to createSplitSSTable in pkg/kv/bulk/sst_batcher.go
+func splitRangeKeySSTAtKey(
+	ctx context.Context, st *cluster.Settings, start, end, splitKey roachpb.Key, data []byte,
+) (*rangeKeySST, *rangeKeySST, error) {
+	var (
+		// left and right are our output SSTs.
+		// Data less than the split key is written into left.
+		// Data greater than or equal to the split key is written into right.
+		left  = &storage.MemObject{}
+		right = &storage.MemObject{}
+
+		// We return these.
+		leftRet  *rangeKeySST
+		rightRet *rangeKeySST
+
+		// We track the first and last key written into each SST.  This
+		// avoids a situation where we have an SST with
+		//
+		//   a----c g-----h
+		//
+		// and a split key of d. Returning `d` as the start of the RHS
+		// SST would mean then we are are risk of getting another split
+		// point `f` when processing the RHS where the LHS of the split
+		// would be empty. Let's avoid empty SSTs.
+		first roachpb.Key
+		last  roachpb.Key
+
+		// reachedSplit tracks if we've already reached our split key.
+		reachedSplit = false
+
+		// We start writting into the left side. Eventualy
+		// we'll swap in the RHS writer.
+		leftWriter  = storage.MakeIngestionSSTWriter(ctx, st, left)
+		rightWriter = storage.MakeIngestionSSTWriter(ctx, st, right)
+		writer      = leftWriter
+	)
+	defer leftWriter.Close()
+	defer rightWriter.Close()
+
+	flushLHSAndSwitchToRHSWriter := func() error {
+		if err := writer.Finish(); err != nil {
+			return err
+		}
+		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
+		writer = rightWriter
+		last = nil
+		first = nil
+		reachedSplit = true
+		return nil
+	}
+
+	iter, err := storage.NewMemSSTIterator(data, true, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: start})
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, nil, err
+		} else if !ok {
+			break
+		}
+
+		if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
+			return nil, nil, errors.AssertionFailedf("unexpected point key in range key SST")
+		}
+
+		rangeKeys := iter.RangeKeys()
+		if !reachedSplit && rangeKeys.Bounds.Key.Compare(splitKey) >= 0 {
+			// The start of this range key is greater than or equal
+			// to our split key -- it should be written to the right
+			// side of the split.
+			if err := flushLHSAndSwitchToRHSWriter(); err != nil {
+				return nil, nil, err
+			}
+		} else if !reachedSplit && rangeKeys.Bounds.EndKey.Compare(splitKey) >= 0 {
+			// The end of this range key is greater than or equal to
+			// our split key. We need to write this range key to
+			// both sides.
+			// Truncate this range key to the split point and write
+			// it to the left side.
+			rangeKeys.Bounds.EndKey = splitKey
+			if len(first) == 0 {
+				first = append(first[:0], rangeKeys.Bounds.Key...)
+			}
+			// NB: We don't call Next() here because the
+			// split key is exclusive already.
+			last = append(last[:0], rangeKeys.Bounds.EndKey...)
+			for _, rk := range rangeKeys.AsRangeKeys() {
+				if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
+					return nil, nil, err
+				}
+			}
+
+			if err := flushLHSAndSwitchToRHSWriter(); err != nil {
+				return nil, nil, err
+			}
+
+			iter.SeekGE(storage.MVCCKey{Key: splitKey})
+			if ok, err := iter.Valid(); err != nil {
+				return nil, nil, err
+			} else if !ok {
+				break
+			}
+
+			if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
+				return nil, nil, errors.AssertionFailedf("unexpected point key in range key SST")
+			}
+
+			rangeKeys = iter.RangeKeys()
+			// The range key at this point may extend left,
+			// before the start of the new SST we want to
+			// build. Truncate it.
+			if rangeKeys.Bounds.Key.Compare(splitKey) < 0 {
+				rangeKeys.Bounds.Key = splitKey
+			}
+		}
+
+		if len(first) == 0 {
+			first = append(first[:0], rangeKeys.Bounds.Key...)
+		}
+		last = append(last[:0], rangeKeys.Bounds.EndKey...)
+		last.Next()
+		for _, rk := range rangeKeys.AsRangeKeys() {
+			if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
+				return nil, nil, err
+			}
+		}
+		iter.Next()
+	}
+
+	if err := writer.Finish(); err != nil {
+		return nil, nil, err
+	}
+	rightRet = &rangeKeySST{start: first, end: last, data: right.Data()}
+
+	return leftRet, rightRet, nil
 }
 
 // Reset all the states inside the batcher and needs to called after flush
@@ -809,6 +1075,7 @@ func (r *rangeKeyBatcher) reset() {
 	r.rangeKeySSTFile.Reset()
 	r.minTimestamp = hlc.MaxTimestamp
 	r.batchSummary.Reset()
+	r.curRangeKVBatchSize = 0
 	r.curRangeKVBatch = r.curRangeKVBatch[:0]
 }
 
@@ -846,6 +1113,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 		}
 
 		if err := sip.rangeBatcher.flush(ctx); err != nil {
+			log.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")
 		}
 	}
@@ -867,6 +1135,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	// Reset the current batch.
 	sip.lastFlushTime = timeutil.Now()
 	sip.curKVBatch = nil
+	sip.curKVBatchSize = 0
 	sip.rangeBatcher.reset()
 
 	return &flushedCheckpoints, sip.batcher.Reset(ctx)
