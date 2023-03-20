@@ -1400,17 +1400,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
 
-	// The transaction (from planner.txn) may already have been committed at this point,
-	// due to one-phase commit optimization or an error. Since we use that transaction
-	// on the optimizer, check if is still open before generating index recommendations.
-	if planner.txn.IsOpen() {
-		// Set index recommendations, so it can be saved on statement statistics.
-		// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
-		// to true for the internal executors.
-		isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
-		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
-	}
-
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
 	stmtFingerprintID = ex.recordStatementSummary(
@@ -1708,6 +1697,12 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	if flags.IsSet(planFlagIsDDL) {
 		ex.extraTxnState.numDDL++
 	}
+
+	// Set index recommendations, so it can be saved on statement statistics.
+	// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
+	// to true for the internal executors.
+	isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
+	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
 
 	return nil
 }
