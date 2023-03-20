@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,7 +33,7 @@ var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"server.telemetry.hot_ranges_stats.interval",
 	"the time interval to log hot ranges stats",
-	24*time.Hour,
+	4*time.Hour,
 	settings.NonNegativeDuration,
 )
 
@@ -56,23 +55,23 @@ var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
 // hotRangesLoggingScheduler is responsible for logging index usage stats
 // on a scheduled interval.
 type hotRangesLoggingScheduler struct {
-	ie sql.InternalExecutor
-	c  kvtenant.Connector
-	st *cluster.Settings
+	ie      sql.InternalExecutor
+	sServer serverpb.TenantStatusServer
+	st      *cluster.Settings
 }
 
 // StartHotRangesLoggingScheduler starts the capture index usage statistics logging scheduler.
 func StartHotRangesLoggingScheduler(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	tenantConnect kvtenant.Connector,
+	sServer serverpb.TenantStatusServer,
 	ie sql.InternalExecutor,
 	st *cluster.Settings,
 ) {
 	scheduler := hotRangesLoggingScheduler{
-		ie: ie,
-		c:  tenantConnect,
-		st: st,
+		ie:      ie,
+		sServer: sServer,
+		st:      st,
 	}
 	scheduler.start(ctx, stopper)
 }
@@ -82,6 +81,10 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 		ticker := time.NewTicker(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
 		defer ticker.Stop()
 
+		TelemetryHotRangesStatsInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
+			ticker.Reset(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
+		})
+
 		for {
 			select {
 			case <-stopper.ShouldQuiesce():
@@ -90,7 +93,7 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 				if !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
 					continue
 				}
-				resp, err := s.c.HotRangesV2(ctx, &serverpb.HotRangesRequest{PageSize: ReportTopHottestRanges})
+				resp, err := s.sServer.HotRangesV2(ctx, &serverpb.HotRangesRequest{PageSize: ReportTopHottestRanges})
 				if err != nil {
 					log.Warningf(ctx, "failed to get hot ranges: %s", err)
 					continue

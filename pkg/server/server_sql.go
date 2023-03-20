@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
@@ -120,6 +121,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -1672,6 +1674,9 @@ func startServeSQL(
 	serveConn func(ctx context.Context, conn net.Conn, preServeStatus pgwire.PreServeStatus) error,
 	pgL net.Listener,
 	socketFileCfg *string,
+	sServer serverpb.TenantStatusServer,
+	ie *sql.InternalExecutor,
+	cs *cluster.Settings,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
@@ -1760,6 +1765,10 @@ func startServeSQL(
 			}); err != nil {
 			return err
 		}
+	}
+
+	if logcrash.DiagnosticsReportingEnabled.Get(&cs.SV) {
+		structlogging.StartHotRangesLoggingScheduler(ctx, stopper, sServer, *ie, cs)
 	}
 
 	return nil

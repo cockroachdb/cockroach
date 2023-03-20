@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -62,7 +61,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
@@ -814,16 +812,15 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 			s.serveConn,
 			s.pgL,
 			&s.sqlServer.cfg.SocketFile,
+			s.sqlServer.tenantConnect,
+			s.sqlServer.internalExecutor,
+			s.ClusterSettings(),
 		); err != nil {
 			return err
 		}
 	}
 
 	s.sqlServer.isReady.Set(true)
-
-	if logcrash.DiagnosticsReportingEnabled.Get(&s.ClusterSettings().SV) {
-		structlogging.StartHotRangesLoggingScheduler(ctx, s.stopper, s.sqlServer.tenantConnect, *s.sqlServer.internalExecutor, s.ClusterSettings())
-	}
 
 	log.Event(ctx, "server ready")
 	return nil

@@ -7,7 +7,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/structlogging",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
