@@ -6,7 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce/testutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/cli",
         "//pkg/roachprod/vm/gce",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",

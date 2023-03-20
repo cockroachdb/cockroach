@@ -206,7 +206,7 @@ func (e *expander) maybeExpandPgHost(
 
 	switch strings.ToLower(m[1]) {
 	case ":lb":
-		services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
+		services, err := c.DiscoverServices(ctx, l, virtualClusterName, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
 		if err != nil {
 			return "", false, err
 		}
@@ -251,7 +251,7 @@ func (e *expander) maybeExpandPgPort(
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {
 				return s, false, err
 			}
@@ -276,7 +276,7 @@ func (e *expander) maybeExpandUIPort(
 		e.uiPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
 			// TODO(herko): Add support for separate-process services.
-			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */))
+			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, l, node, "" /* virtualClusterName */, 0 /* sqlInstance */))
 		}
 	}
 

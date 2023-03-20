@@ -31,7 +31,7 @@ func createTestDNSRecords(testRecords ...dnsTestRec) []vm.DNSRecord {
 
 func createTestDNSProvider(t *testing.T, testRecords ...dnsTestRec) vm.DNSProvider {
 	p := NewDNSProvider(t.TempDir(), "local-zone")
-	err := p.CreateRecords(context.Background(), createTestDNSRecords(testRecords...)...)
+	err := p.CreateRecords(context.Background(), nil, createTestDNSRecords(testRecords...)...)
 	require.NoError(t, err)
 	return p
 }
@@ -48,7 +48,7 @@ func TestLookupRecords(t *testing.T) {
 	}...)
 
 	t.Run("lookup system", func(t *testing.T) {
-		records, err := p.LookupSRVRecords(ctx, "_system-sql._tcp.local.local-zone")
+		records, err := p.LookupSRVRecords(ctx, nil, "_system-sql._tcp.local.local-zone")
 		require.NoError(t, err)
 		require.Equal(t, 3, len(records))
 		for _, r := range records {
@@ -58,7 +58,7 @@ func TestLookupRecords(t *testing.T) {
 	})
 
 	t.Run("parse SRV data", func(t *testing.T) {
-		records, err := p.LookupSRVRecords(ctx, "_tenant-1-sql._tcp.local.local-zone")
+		records, err := p.LookupSRVRecords(ctx, nil, "_tenant-1-sql._tcp.local.local-zone")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(records))
 		data, err := records[0].ParseSRVRecord()
