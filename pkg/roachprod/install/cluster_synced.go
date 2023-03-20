@@ -185,6 +185,10 @@ func scpWithRetry(l *logger.Logger, src, dest string) (*RunResultDetails, error)
 	return runWithMaybeRetry(l, defaultSCPRetry, func() (*RunResultDetails, error) { return scp(src, dest) })
 }
 
+func scpRemoteWithRetry(l *logger.Logger, target, src, dest string) (*RunResultDetails, error) {
+	return runWithMaybeRetry(l, defaultSCPRetry, func() (*RunResultDetails, error) { return scpRemote(target, src, dest) })
+}
+
 // Host returns the public IP of a node.
 func (c *SyncedCluster) Host(n Node) string {
 	return c.VMs[n-1].PublicIP
@@ -1714,9 +1718,25 @@ func (c *SyncedCluster) Put(
 		}
 	}
 
-	mkpath := func(i int, dest string) (string, error) {
+	mkSrcPath := func(i int, dest string) (string, string, error) {
 		if i == -1 {
-			return src, nil
+			return src, "", nil
+		}
+		// Expand the destination to allow, for example, putting directly
+		// into {store-dir}.
+		e := expander{
+			node: nodes[i],
+		}
+		dest, err := e.expand(ctx, l, c, dest)
+		if err != nil {
+			return "", "", err
+		}
+		return dest, fmt.Sprintf("%s@%s", c.user(nodes[i]), c.Host(nodes[i])), nil
+	}
+
+	mkDstPath := func(i int, dest string) (string, error) {
+		if i == -1 {
+			return "", errors.New("local file can't be destination")
 		}
 		// Expand the destination to allow, for example, putting directly
 		// into {store-dir}.
@@ -1780,7 +1800,7 @@ func (c *SyncedCluster) Put(
 			// achieving this approach is likely a generalization of the current
 			// code.
 			srcIndex := <-sources
-			from, err := mkpath(srcIndex, dest)
+			from, scpTarget, err := mkSrcPath(srcIndex, dest)
 			if err != nil {
 				results <- result{i, err}
 				return
@@ -1788,13 +1808,19 @@ func (c *SyncedCluster) Put(
 			// TODO(peter): For remote-to-remote copies, should the destination use
 			// the internal IP address? The external address works, but it might be
 			// slower.
-			to, err := mkpath(i, dest)
+			to, err := mkDstPath(i, dest)
 			if err != nil {
 				results <- result{i, err}
 				return
 			}
 
-			res, _ := scpWithRetry(l, from, to)
+			l.Printf("copying from %s to %s\n", from, to)
+			var res *RunResultDetails
+			if len(scpTarget) == 0 {
+				res, _ = scpWithRetry(l, from, to)
+			} else {
+				res, _ = scpRemoteWithRetry(l, scpTarget, from, to)
+			}
 			results <- result{i, res.Err}
 
 			if res.Err != nil {
@@ -2377,6 +2403,31 @@ func scp(src, dest string) (*RunResultDetails, error) {
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
+	cmd := exec.Command(args[0], args[1:]...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		err = errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
+	}
+
+	res := newRunResultDetails(-1, err)
+	res.CombinedOut = out
+	return res, nil
+}
+
+// scp return type conforms to what runWithMaybeRetry expects. A nil error
+// is always returned here since the only error that can happen is an scp error
+// which we do want to be able to retry.
+func scpRemote(remote, src, dest string) (*RunResultDetails, error) {
+	args := []string{
+		"ssh",
+		remote,
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+	}
+	args = append(args, sshAuthArgs()...)
+	args = append(args, "scp", "-r", "-C", "-o", "StrictHostKeyChecking=no")
+	args = append(args, src, dest)
+
 	cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
