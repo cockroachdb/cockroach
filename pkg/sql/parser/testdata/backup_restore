@@ -823,6 +823,14 @@ RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_secondary_tenants 
 RESTORE FROM '_' IN '_' WITH detached, include_all_secondary_tenants = _ -- literals removed
 RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = true -- identifiers removed
 
+parse
+RESTORE FROM LATEST IN 'bar' WITH unsafe_restore_incompatible_version, detached
+----
+RESTORE FROM 'latest' IN 'bar' WITH detached, unsafe_restore_incompatible_version -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, unsafe_restore_incompatible_version -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, unsafe_restore_incompatible_version -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, unsafe_restore_incompatible_version -- identifiers removed
+
 error
 BACKUP foo TO 'bar' WITH key1, key2 = 'value'
 ----
@@ -929,6 +937,14 @@ at or near "EOF": syntax error: include_all_secondary_tenants specified multiple
 DETAIL: source SQL:
 RESTORE FROM 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
                                                                                           ^
+
+error
+RESTORE FROM 'bar' WITH unsafe_restore_incompatible_version, unsafe_restore_incompatible_version
+----
+at or near "unsafe_restore_incompatible_version": syntax error: unsafe_restore_incompatible_version specified multiple times
+DETAIL: source SQL:
+RESTORE FROM 'bar' WITH unsafe_restore_incompatible_version, unsafe_restore_incompatible_version
+                                                             ^
 
 error
 BACKUP ROLE foo, bar TO 'baz'

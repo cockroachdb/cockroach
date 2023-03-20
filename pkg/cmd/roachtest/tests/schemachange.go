@@ -45,7 +45,8 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			m := c.NewMonitor(ctx, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
-				if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
+				if _, err := db.Exec(
+					`RESTORE DATABASE tpch FROM $1 WITH unsafe_restore_incompatible_version`, fixturePath); err != nil {
 					t.Fatal(err)
 				}
 				return nil
