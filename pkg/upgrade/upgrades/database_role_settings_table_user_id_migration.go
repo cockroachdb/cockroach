@@ -65,6 +65,11 @@ WHERE role_id IS NULL AND role_name = username
 LIMIT 1000
 `
 
+const setRoleIDColumnToNotNullDatabaseRoleSettingsTableStmt = `
+ALTER TABLE system.database_role_settings
+ALTER COLUMN role_id SET NOT NULL
+`
+
 func backfillDatabaseRoleSettingsTableRoleIDColumn(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
@@ -80,6 +85,20 @@ func backfillDatabaseRoleSettingsTableRoleIDColumn(
 		if rowsAffected == 0 {
 			break
 		}
+	}
+
+	// After we finish backfilling, we can set the role_id column to be NOT NULL
+	// since any existing rows will now have non-NULL values in the role_id column
+	// and any new rows inserted after the previous version (when the role_id column
+	// was added) will have had their role_id value populated at insertion time.
+	op := operation{
+		name:           "set-user-id-not-null-database-role-settings-table",
+		schemaList:     []string{"role_id"},
+		query:          setRoleIDColumnToNotNullDatabaseRoleSettingsTableStmt,
+		schemaExistsFn: columnExistsAndIsNotNull,
+	}
+	if err := migrateTable(ctx, cs, d, op, keys.DatabaseRoleSettingsTableID, systemschema.DatabaseRoleSettingsTable); err != nil {
+		return err
 	}
 
 	return nil
