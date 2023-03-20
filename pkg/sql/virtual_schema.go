@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -407,6 +408,10 @@ type VirtualSchemaHolder struct {
 	schemasByID   map[descpb.ID]*virtualSchemaEntry
 	defsByID      map[descpb.ID]*virtualDefEntry
 	orderedNames  []string
+
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	st *cluster.Settings
 }
 
 var _ VirtualTabler = (*VirtualSchemaHolder)(nil)
@@ -429,6 +434,18 @@ func (vs *VirtualSchemaHolder) GetVirtualObjectByID(id descpb.ID) (catalog.Virtu
 	if !ok {
 		return nil, false
 	}
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	switch {
+	// We only check the Enable condition after we know we're
+	// looking at the "interesting" ID because the Enable condition
+	// has side effects.
+	case id == catconstants.CrdbInternalRangesViewID && deprecatedshowranges.EnableDeprecatedBehavior(context.TODO(), vs.st, nil):
+		entry = vs.schemasByID[catconstants.CrdbInternalID].deprecatedRangesDef
+	case id == catconstants.CrdbInternalRangesNoLeasesTableID && deprecatedshowranges.EnableDeprecatedBehavior(context.TODO(), vs.st, nil):
+		entry = vs.schemasByID[catconstants.CrdbInternalID].deprecatedRangesNoLeasesDef
+	}
+
 	return entry, true
 }
 
@@ -439,6 +456,10 @@ func (vs *VirtualSchemaHolder) Visit(fn func(desc catalog.Descriptor, comment st
 			return iterutil.Map(err)
 		}
 		for _, def := range sc.defs {
+			// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+			// Remove in v23.2.
+			def = sc.compatSubstDef(def, nil /* ClientNoticeSender */)
+
 			if err := fn(def.desc, def.comment); err != nil {
 				return iterutil.Map(err)
 			}
@@ -455,6 +476,12 @@ type virtualSchemaEntry struct {
 	orderedDefNames []string
 	undefinedTables map[string]struct{}
 	containsTypes   bool
+
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	st                          *cluster.Settings
+	deprecatedRangesDef         *virtualDefEntry
+	deprecatedRangesNoLeasesDef *virtualDefEntry
 }
 
 func (v *virtualSchemaEntry) Desc() catalog.SchemaDescriptor {
@@ -467,7 +494,12 @@ func (v *virtualSchemaEntry) NumTables() int {
 
 func (v *virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
 	for _, name := range v.orderedDefNames {
-		f(v.defs[name])
+		def := v.defs[name]
+		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+		// Remove in v23.2.
+		def = v.compatSubstDef(def, nil /* ClientNoticeSender */)
+
+		f(def)
 	}
 }
 
@@ -504,6 +536,10 @@ func (v *virtualSchemaEntry) GetObjectByName(
 		fallthrough
 	case tree.TableObject:
 		if def, ok := v.defs[name]; ok {
+			// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+			// Remove in v23.2.
+			def = v.compatSubstDef(def, nil /* ClientNoticeSender */)
+
 			return def, nil
 		}
 		if _, ok := v.undefinedTables[name]; ok {
@@ -880,6 +916,10 @@ func NewVirtualSchemaHolder(
 		schemasByID:   make(map[descpb.ID]*virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames:  make([]string, len(virtualSchemas)),
 		defsByID:      make(map[descpb.ID]*virtualDefEntry, math.MaxUint32-catconstants.MinVirtualID),
+
+		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+		// Remove in v23.2.
+		st: st,
 	}
 
 	order := 0
@@ -895,24 +935,24 @@ func NewVirtualSchemaHolder(
 		defs := make(map[string]*virtualDefEntry, len(schema.tableDefs))
 		orderedDefNames := make([]string, 0, len(schema.tableDefs))
 
-		for id, def := range schema.tableDefs {
+		doTheWork := func(id descpb.ID, def virtualSchemaDef) (tb descpb.TableDescriptor, de *virtualDefEntry, err error) {
 			tableDesc, err := def.initVirtualTableDesc(ctx, st, scDesc, id)
 
 			if err != nil {
-				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				return tb, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to initialize %s", errors.Safe(def.getSchema()))
 			}
 
 			if schema.tableValidator != nil {
 				if err := schema.tableValidator(&tableDesc); err != nil {
-					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
+					return tb, nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
 			version := st.Version.ActiveVersionOrEmpty(ctx)
 			dvmp := catsessiondata.NewDescriptorSessionDataProvider(nil /* sd */)
 			if err := descs.ValidateSelf(td, version, dvmp); err != nil {
-				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				return tb, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}
 
@@ -923,6 +963,14 @@ func NewVirtualSchemaHolder(
 				comment:                    def.getComment(),
 				unimplemented:              def.isUnimplemented(),
 			}
+			return tableDesc, entry, nil
+		}
+
+		for id, def := range schema.tableDefs {
+			tableDesc, entry, err := doTheWork(id, def)
+			if err != nil {
+				return nil, err
+			}
 			defs[tableDesc.Name] = entry
 			vs.defsByID[tableDesc.ID] = entry
 			orderedDefNames = append(orderedDefNames, tableDesc.Name)
@@ -930,12 +978,27 @@ func NewVirtualSchemaHolder(
 
 		sort.Strings(orderedDefNames)
 
+		_, extra1, err := doTheWork(catconstants.CrdbInternalRangesViewID, crdbInternalRangesViewDEPRECATED)
+		if err != nil {
+			return nil, err
+		}
+		_, extra2, err := doTheWork(catconstants.CrdbInternalRangesNoLeasesTableID, crdbInternalRangesNoLeasesTableDEPRECATED)
+		if err != nil {
+			return nil, err
+		}
+
 		vse := &virtualSchemaEntry{
 			desc:            scDesc,
 			defs:            defs,
 			orderedDefNames: orderedDefNames,
 			undefinedTables: schema.undefinedTables,
 			containsTypes:   schema.containsTypes,
+
+			// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+			// Remove in v23.2.
+			st:                          st,
+			deprecatedRangesDef:         extra1,
+			deprecatedRangesNoLeasesDef: extra2,
 		}
 		vs.schemasByName[scDesc.GetName()] = vse
 		vs.schemasByID[scDesc.GetID()] = vse
@@ -972,15 +1035,39 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (*virtualSchem
 	return e, ok
 }
 
+// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+// Remove in v23.2.
+func (v *virtualSchemaEntry) compatSubstDef(
+	t *virtualDefEntry, ns eval.ClientNoticeSender,
+) *virtualDefEntry {
+	switch {
+	// We only check the Enable condition after we know we're
+	// looking at the "interesting" ID because the Enable condition
+	// has side effects.
+	case t.desc.GetID() == catconstants.CrdbInternalRangesViewID && deprecatedshowranges.EnableDeprecatedBehavior(context.TODO(), v.st, ns):
+		t = v.deprecatedRangesDef
+
+	case t.desc.GetID() == catconstants.CrdbInternalRangesNoLeasesTableID && deprecatedshowranges.EnableDeprecatedBehavior(context.TODO(), v.st, ns):
+		t = v.deprecatedRangesNoLeasesDef
+	}
+	return t
+}
+
 // getVirtualTableEntry checks if the provided name matches a virtual database/table
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
-func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error) {
+func (vs *VirtualSchemaHolder) getVirtualTableEntry(
+	tn *tree.TableName, ns eval.ClientNoticeSender,
+) (*virtualDefEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
 		tableName := tn.Table()
 		if t, ok := db.defs[tableName]; ok {
+			// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+			// Remove in v23.2.
+			t = db.compatSubstDef(t, ns)
+
 			sqltelemetry.IncrementGetVirtualTableEntry(tn.Schema(), tableName)
 			return t, nil
 		}
@@ -1000,8 +1087,8 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtua
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (catalog.TableDescriptor, error)
-	getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error)
+	getVirtualTableDesc(tn *tree.TableName, ns eval.ClientNoticeSender) (catalog.TableDescriptor, error)
+	getVirtualTableEntry(tn *tree.TableName, ns eval.ClientNoticeSender) (*virtualDefEntry, error)
 	getSchemas() map[string]*virtualSchemaEntry
 	getSchemaNames() []string
 }
@@ -1010,9 +1097,9 @@ type VirtualTabler interface {
 // pair, and returns its descriptor if it does.
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
-	tn *tree.TableName,
+	tn *tree.TableName, ns eval.ClientNoticeSender,
 ) (catalog.TableDescriptor, error) {
-	t, err := vs.getVirtualTableEntry(tn)
+	t, err := vs.getVirtualTableEntry(tn, ns)
 	if err != nil || t == nil {
 		return nil, err
 	}

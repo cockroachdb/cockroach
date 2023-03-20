@@ -192,7 +192,7 @@ var defaultRedactionOptions = redactionOptions{
 func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonSQLEventDetails {
 	redactableStmt := formatStmtKeyAsRedactableString(
 		p.extendedEvalCtx.VirtualSchemas, p.stmt.AST,
-		p.extendedEvalCtx.Context.Annotations, opt.toFlags(),
+		p.extendedEvalCtx.Context.Annotations, opt.toFlags(), p,
 	)
 	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
 		Statement:       redactableStmt,

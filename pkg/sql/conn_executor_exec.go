@@ -1278,7 +1278,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Finally, process the planning error from above.
 	if err != nil {
-		err = addPlanningErrorHints(err, &stmt)
+		err = addPlanningErrorHints(ctx, err, &stmt, ex.server.cfg.Settings, planner)
 		res.SetError(err)
 		return nil
 	}

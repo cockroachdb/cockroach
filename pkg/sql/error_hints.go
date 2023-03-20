@@ -11,16 +11,22 @@
 package sql
 
 import (
+	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
 
 // addPlanningErrorHints is responsible for enhancing the provided
 // error object with hints that inform the user about their options.
-func addPlanningErrorHints(err error, stmt *Statement) error {
+func addPlanningErrorHints(
+	ctx context.Context, err error, stmt *Statement, st *cluster.Settings, ns eval.ClientNoticeSender,
+) error {
 	pgCode := pgerror.GetPGCode(err)
 	switch pgCode {
 	case pgcode.UndefinedColumn:
@@ -29,7 +35,7 @@ func addPlanningErrorHints(err error, stmt *Statement) error {
 		// Changes introduced in v23.1.
 		extraRangeDoc := false
 		switch {
-		case strings.Contains(resolvedSQL, "SHOW RANGES"):
+		case strings.Contains(resolvedSQL, "SHOW RANGES") && !deprecatedshowranges.EnableDeprecatedBehavior(ctx, st, ns):
 			errS := err.Error()
 
 			// The following columns are not available when using SHOW
@@ -40,7 +46,8 @@ func addPlanningErrorHints(err error, stmt *Statement) error {
 				extraRangeDoc = true
 			}
 
-		case strings.Contains(resolvedSQL, "crdb_internal.ranges" /* also matches ranges_no_leases */):
+		case strings.Contains(resolvedSQL, "crdb_internal.ranges" /* also matches ranges_no_leases */) &&
+			!deprecatedshowranges.EnableDeprecatedBehavior(ctx, st, ns):
 			errS := err.Error()
 
 			// The following columns are not available when using SHOW

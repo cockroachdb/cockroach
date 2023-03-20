@@ -13,6 +13,7 @@ package delegate
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -98,6 +99,13 @@ func TryDelegate(
 		return d.delegateShowQueries(t)
 
 	case *tree.ShowRanges:
+		// Remove in v23.2.
+		//
+		// This chooses a different implementation of the SHOW statement
+		// depending on a run-time config setting.
+		if deprecatedshowranges.EnableDeprecatedBehavior(ctx, evalCtx.Settings, evalCtx.ClientNoticeSender) {
+			return d.delegateShowRangesDEPRECATED(t)
+		}
 		return d.delegateShowRanges(t)
 
 	case *tree.ShowRangeForRow:

@@ -31,7 +31,7 @@ func TestHideNonVirtualTableNameFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableNameFunc := hideNonVirtualTableNameFunc(vt)
+	tableNameFunc := hideNonVirtualTableNameFunc(vt, nil)
 
 	testData := []struct {
 		stmt     string
