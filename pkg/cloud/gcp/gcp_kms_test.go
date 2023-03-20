@@ -228,6 +228,6 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 		Settings:         gcpKMSTestSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err,
-		"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag"),
+		"implicit credentials disallowed for gcs due to --external-io-disable-implicit-credentials flag"),
 	)
 }
