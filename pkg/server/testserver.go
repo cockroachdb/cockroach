@@ -25,6 +25,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -1068,22 +1070,29 @@ func (ts *TestServer) StartTenant(
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
-	if _, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-		"ALTER TENANT [$1] GRANT CAPABILITY can_use_blob_storage", params.TenantID.ToUint64(),
-	); err != nil {
-		return nil, err
-	}
-	if err := testutils.SucceedsSoonError(func() error {
-		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
-		if !found {
-			return errors.Newf("capabilities not yet ready")
+	if st.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			"ALTER TENANT [$1] GRANT CAPABILITY can_use_blob_storage", params.TenantID.ToUint64())
+		if err != nil {
+			if params.SkipTenantCheck {
+				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
+			} else {
+				return nil, err
+			}
+		} else {
+			if err := testutils.SucceedsSoonError(func() error {
+				capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
+				if !found {
+					return errors.Newf("capabilities not yet ready")
+				}
+				if !capabilities.GetBool(tenantcapabilities.CanUseBlobStorage) {
+					return errors.Newf("capabilities not yet ready")
+				}
+				return nil
+			}); err != nil {
+				return nil, err
+			}
 		}
-		if !capabilities.GetBool(tenantcapabilities.CanUseBlobStorage) {
-			return errors.Newf("capabilities not yet ready")
-		}
-		return nil
-	}); err != nil {
-		return nil, err
 	}
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants

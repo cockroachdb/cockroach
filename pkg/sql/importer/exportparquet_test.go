@@ -278,7 +278,7 @@ func TestRandomParquetExports(t *testing.T) {
 		filePrefix: "outputfile",
 		dbName:     dbName,
 		dir:        dir,
-		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://0/outputfile' FROM SELECT * FROM %s",
+		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://1/outputfile' FROM SELECT * FROM %s",
 			tree.NameString(tableName)),
 	}
 	sqlDB.Exec(t, test.stmt)
@@ -320,22 +320,22 @@ INDEX (y))`)
 	tests := []parquetTest{
 		{
 			filePrefix: "basic",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/basic' FROM SELECT *
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/basic' FROM SELECT *
 							FROM foo WHERE y IS NOT NULL ORDER BY y ASC LIMIT 2 `,
 		},
 		{
 			filePrefix: "null_vals",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/null_vals' FROM SELECT *
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/null_vals' FROM SELECT *
 							FROM foo ORDER BY x ASC LIMIT 2`,
 		},
 		{
 			filePrefix: "colname",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/colname' FROM SELECT avg(z), min(y) AS baz
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/colname' FROM SELECT avg(z), min(y) AS baz
 							FROM foo`,
 		},
 		{
 			filePrefix: "nullable",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/nullable' FROM SELECT y,z,x
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/nullable' FROM SELECT y,z,x
 							FROM foo`,
 			colFieldRepType: []parquet.FieldRepetitionType{
 				parquet.FieldRepetitionType_OPTIONAL,
@@ -353,7 +353,7 @@ INDEX (y))`)
 				"CREATE TABLE atable (i INT PRIMARY KEY, x INT[])",
 				"INSERT INTO atable VALUES (1, ARRAY[1,2]), (2, ARRAY[2]), (3,ARRAY[1,13,5]),(4, NULL),(5, ARRAY[])",
 			},
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/arrays' FROM SELECT * FROM atable`,
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/arrays' FROM SELECT * FROM atable`,
 		},
 		{
 			filePrefix: "user_types",
@@ -362,7 +362,7 @@ INDEX (y))`)
 				"CREATE TABLE greeting_table (x greeting, y greeting)",
 				"INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi')",
 			},
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/user_types' FROM SELECT * FROM greeting_table`,
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/user_types' FROM SELECT * FROM greeting_table`,
 		},
 		{
 			filePrefix: "collate",
@@ -370,7 +370,7 @@ INDEX (y))`)
 				"CREATE TABLE de_names (name STRING COLLATE de PRIMARY KEY)",
 				"INSERT INTO de_names VALUES ('Backhaus' COLLATE de), ('Bär' COLLATE de), ('Baz' COLLATE de)",
 			},
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/collate' FROM SELECT * FROM de_names ORDER BY name`,
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/collate' FROM SELECT * FROM de_names ORDER BY name`,
 		},
 		{
 			filePrefix: "ints_floats",
@@ -378,23 +378,23 @@ INDEX (y))`)
 				"CREATE TABLE nums (int_2 INT2, int_4 INT4, int_8 INT8, real_0 FLOAT4, double_0 FLOAT8)",
 				"INSERT INTO nums VALUES (2, 2, 2, 2.107109308242798, 2.107109308242798)",
 			},
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/ints_floats' FROM SELECT * FROM nums`,
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/ints_floats' FROM SELECT * FROM nums`,
 		},
 		{
 			filePrefix: "compress_gzip",
 			fileSuffix: ".gz",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/compress_gzip' WITH compression = gzip
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/compress_gzip' WITH compression = gzip
 							FROM SELECT * FROM foo`,
 		},
 		{
 			filePrefix: "compress_snappy",
 			fileSuffix: ".snappy",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/compress_snappy' WITH compression = snappy
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/compress_snappy' WITH compression = snappy
 							FROM SELECT * FROM foo `,
 		},
 		{
 			filePrefix: "uncompress",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/uncompress'
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/uncompress'
 							FROM SELECT * FROM foo `,
 		},
 	}

@@ -28,7 +28,7 @@ ON sys.id = tbls.id;
 ----
 
 exec-sql
-EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz WHERE i = 1;
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz WHERE i = 1;
 ----
 
 exec-sql
@@ -36,7 +36,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 ----
 
 import expect-pausepoint tag=a
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
@@ -49,7 +49,7 @@ true
 # attempting another import on the table should fail, as there's already an in-progress import
 # on the table.
 exec-sql
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 pq: relation "foo" is offline: importing
 
@@ -68,7 +68,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = '';
 ----
 
 exec-sql
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 
 query-sql
@@ -79,7 +79,7 @@ SELECT * FROM import_time
 
 # ensure importing into an existing table also modifies the descriptor properly
 exec-sql
-EXPORT INTO CSV 'nodelocal://0/export2/' FROM SELECT * FROM baz WHERE i = 2;
+EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT * FROM baz WHERE i = 2;
 ----
 
 exec-sql
@@ -87,7 +87,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 ----
 
 import expect-pausepoint tag=b
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export2/export*-n*.0.csv')
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')
 ----
 job paused at pausepoint
 

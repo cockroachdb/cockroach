@@ -43,35 +43,35 @@ SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false;
 
 
 exec-sql
-EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz;
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz;
 ----
 
 
 # Pause the import job, in order to back up the importing data.
 import expect-pausepoint tag=a
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
 
 import expect-pausepoint tag=aa
-IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
 
 # Ensure table, database, and cluster full backups capture importing rows.
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/' with revision_history;
+BACKUP INTO 'nodelocal://1/cluster/' with revision_history;
 ----
 
 
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/database/' with revision_history;
+BACKUP DATABASE d INTO 'nodelocal://1/database/' with revision_history;
 ----
 
 exec-sql
-BACKUP TABLE d.* INTO 'nodelocal://0/table/' with revision_history;
+BACKUP TABLE d.* INTO 'nodelocal://1/table/' with revision_history;
 ----
 
 
@@ -117,7 +117,7 @@ CREATE TABLE foo_offline (i INT PRIMARY KEY, s STRING);
 ----
 
 import expect-pausepoint tag=never_unpause
-IMPORT INTO foo_offline (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo_offline (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
@@ -139,23 +139,23 @@ CREATE INDEX foo_new_idx ON foo (s);
 # import was rolled back via non-mvcc clear range. So, backup 0 rows from foo
 # (it was empty pre-import), and 1 row from foo (had 1 row pre-import);
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://0/cluster/' with revision_history;
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/' with revision_history;
 ----
 
 exec-sql
-BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' with revision_history;
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/' with revision_history;
 ----
 
 
 exec-sql
-BACKUP TABLE d.* INTO LATEST IN 'nodelocal://0/table/' with revision_history;
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/' with revision_history;
 ----
 
 query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/cluster/']
 WHERE
   object_name = 'foo' or object_name = 'foofoo'
 ORDER BY
@@ -170,7 +170,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/database/']
 WHERE
   object_name = 'foo' or object_name = 'foofoo'
 ORDER BY
@@ -186,7 +186,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/table/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/table/']
 WHERE
   object_name = 'foo' or object_name = 'foofoo'
 ORDER BY
@@ -202,7 +202,7 @@ d foofoo table 1 incremental
 # are in their pre-import state.
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' with new_db_name=d2;
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' with new_db_name=d2;
 ----
 
 
@@ -253,29 +253,29 @@ SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 
 # Pause the import job, in order to back up the importing data.
 import expect-pausepoint tag=b
-IMPORT INTO foo2 (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foo2 (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
 
 import expect-pausepoint tag=bb
-IMPORT INTO foofoo2 (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+IMPORT INTO foofoo2 (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
 
 # Ensure table, database, and cluster full backups capture importing rows.
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/';
+BACKUP INTO 'nodelocal://1/cluster/';
 ----
 
 
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/database/';
+BACKUP DATABASE d INTO 'nodelocal://1/database/';
 ----
 
 exec-sql
-BACKUP TABLE d.* INTO 'nodelocal://0/table/';
+BACKUP TABLE d.* INTO 'nodelocal://1/table/';
 ----
 
 
@@ -324,23 +324,23 @@ CREATE INDEX foo2_new_idx ON foo2 (s);
 #      not record this range as a "row" in the backup.
 
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://0/cluster/';
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/';
 ----
 
 exec-sql
-BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/';
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/';
 ----
 
 
 exec-sql
-BACKUP TABLE d.* INTO LATEST IN 'nodelocal://0/table/';
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/';
 ----
 
 query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/cluster/']
 WHERE
   object_name = 'foo2' or object_name = 'foofoo2'
 ORDER BY
@@ -355,7 +355,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/database/']
 WHERE
   object_name = 'foo2' or object_name = 'foofoo2'
 ORDER BY
@@ -371,7 +371,7 @@ query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
 FROM
-  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/table/']
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/table/']
 WHERE
   object_name = 'foo2' or object_name = 'foofoo2'
 ORDER BY
@@ -386,7 +386,7 @@ d foofoo2 table 7 incremental
 # are in their pre-import state.
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' with new_db_name=d2;
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' with new_db_name=d2;
 ----
 
 
