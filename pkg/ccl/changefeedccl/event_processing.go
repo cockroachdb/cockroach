@@ -183,6 +183,7 @@ func newEventConsumer(
 		spanFrontier: spanFrontier,
 	}
 	ss := sink
+	// Only webhook supports concurrent EmitRow calls
 	if sink.getConcreteType() != sinkTypeWebhook {
 		ss = &safeSink{wrapped: sink, beforeFlush: c.Flush}
 	}

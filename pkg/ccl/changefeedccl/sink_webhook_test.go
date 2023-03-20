@@ -594,6 +594,13 @@ func TestWebhookSinkConfig(t *testing.T) {
 		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, mt)
 		require.NoError(t, err)
 
+		batchingSink, ok := sinkSrc.(*batchingSink)
+		require.True(t, ok)
+		appendCount := 0
+		batchingSink.knobs.OnAppend = func(event *kvEvent) {
+			appendCount += 1
+		}
+
 		// send incomplete batch
 		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, pool.alloc()))
 		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1001},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, pool.alloc()))
@@ -602,11 +609,10 @@ func TestWebhookSinkConfig(t *testing.T) {
 		require.Equal(t, sinkDest.Latest(), "")
 
 		testutils.SucceedsSoon(t, func() error {
-			// wait for the timer in batch worker to be set (1 hour from now, as specified by config) before advancing time.
-			if len(mt.Timers()) == 1 && mt.Timers()[0] == mt.Now().Add(time.Hour) {
+			if appendCount >= 2 {
 				return nil
 			}
-			return errors.New("Waiting for timer to be created by batch worker")
+			return errors.New("Waiting for rows to be buffered")
 		})
 		mt.Advance(time.Hour)
 		require.NoError(t, sinkSrc.Flush(context.Background()))

@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"hash"
 	"sync"
 	"time"
@@ -23,18 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// SinkClient is the interface to an external sink, where batches of messages
-// can be encoded into a formatted payload that can be emitted to the sink, and
-// these payloads can be emitted.  Emitting is a separate step to Encoding to
-// allow for the same encoded payload to retry the Emitting.
+// SinkClient is an interface to an external sink, where messages are written
+// into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
 	MakeResolvedPayload(body []byte, topic string) (SinkPayload, error)
 	MakeBatchWriter() BatchWriter
 	Flush(context.Context, SinkPayload) error
-
 	Close() error
 }
 
+// BatchWriter is an interface to aggregate KVs into a payload that can be sent
+// to the sink.
 type BatchWriter interface {
 	AppendKV(key []byte, value []byte, topic string)
 	ShouldFlush() bool
@@ -45,19 +45,7 @@ type BatchWriter interface {
 // batch of messages that is ready to be emitted by its EmitRow method.
 type SinkPayload interface{}
 
-type flushReq struct {
-	waiter chan struct{}
-}
-
-type kvEvent struct {
-	key   []byte
-	val   []byte
-	topic string
-
-	alloc kvevent.Alloc
-	mvcc  hlc.Timestamp
-}
-
+// batchingSink
 type batchingSink struct {
 	client       SinkClient
 	topicNamer   *TopicNamer
@@ -78,6 +66,25 @@ type batchingSink struct {
 
 	wg     ctxgroup.Group
 	doneCh chan struct{}
+
+	knobs batchingSinkKnobs
+}
+
+type batchingSinkKnobs struct {
+	OnAppend func(*kvEvent)
+}
+
+type flushReq struct {
+	waiter chan struct{}
+}
+
+type kvEvent struct {
+	key   []byte
+	val   []byte
+	topic string
+
+	alloc kvevent.Alloc
+	mvcc  hlc.Timestamp
 }
 
 // Flush implements the Sink interface, returning the first error that has
@@ -259,7 +266,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		batch, _ := req.(*sinkBatch)
 		return bs.client.Flush(ctx, batch.payload)
 	}
-	ioEmitter := newParallelIO(ctx, bs.retryOpts, bs.ioWorkers, ioHandler)
+	ioEmitter := newParallelIO(ctx, bs.retryOpts, bs.ioWorkers, ioHandler, bs.metrics)
 	defer ioEmitter.Close()
 
 	inflight := 0
@@ -291,7 +298,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		if pendingBatch.isEmpty() {
 			return
 		}
-		// fmt.Printf("\x1b[35mbatchingSink flushBatch\x1b[0m\n")
+		fmt.Printf("\x1b[35mbatchingSink flushBatch\x1b[0m\n")
 		payload, err := pendingBatch.writer.Close()
 		if err != nil {
 			bs.handleError(err)
@@ -323,11 +330,11 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 
 	// defer fmt.Printf("\x1b[31mbatchingSink DONE runBatchingWorker\x1b[0m\n")
 	for {
-		// fmt.Printf("\x1b[31mbatchingSink FOR WAIT runBatchingWorker\x1b[0m\n")
+		fmt.Printf("\x1b[31mbatchingSink FOR WAIT runBatchingWorker\x1b[0m\n")
 		select {
 		case req := <-bs.eventCh:
 			if flush, isFlush := req.(flushReq); isFlush {
-				// fmt.Printf("\x1b[31mbatchingSink receive FlushReq <-eventCh\x1b[0m\n")
+				fmt.Printf("\x1b[31mbatchingSink receive FlushReq <-eventCh\x1b[0m\n")
 				if inflight == 0 {
 					close(flush.waiter)
 				} else {
@@ -335,13 +342,17 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 					tryFlushBatch()
 				}
 			} else if event, isKV := req.(*kvEvent); isKV {
-				// fmt.Printf("\x1b[31mbatchingSink receive KV <-eventCh\x1b[0m\n")
+				fmt.Printf("\x1b[31mbatchingSink receive KV <-eventCh\x1b[0m\n")
 				if pendingBatch.isEmpty() && bs.frequency > 0 {
+					fmt.Printf("\x1b[31mbatchingSink resetting (%+v)\x1b[0m\n", bs.frequency)
 					flushTimer.Reset(bs.frequency)
 				}
 				inflight += 1
 				bs.metrics.recordSinkInFlightCount(int64(inflight))
 				pendingBatch.Append(event)
+				if bs.knobs.OnAppend != nil {
+					bs.knobs.OnAppend(event)
+				}
 
 				// Event no longer needed
 				*event = kvEvent{}
@@ -355,7 +366,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		case result := <-ioEmitter.resultCh:
 			handleResult(result)
 		case <-flushTimer.Ch():
-			// fmt.Printf("\x1b[35mbatchingSink FLUSHTIMER FIRE runBatchingWorker\x1b[0m\n")
+			fmt.Printf("\x1b[35mbatchingSink FLUSHTIMER FIRE runBatchingWorker\x1b[0m\n")
 			flushTimer.MarkRead()
 			tryFlushBatch()
 		case <-ctx.Done():
@@ -380,6 +391,7 @@ type IOHandler func(context.Context, IORequest) error
 type parallelIO struct {
 	retryOpts retry.Options
 	wg        ctxgroup.Group
+	metrics   metricsRecorder
 	doneCh    chan struct{}
 
 	ioHandler IOHandler
@@ -402,11 +414,13 @@ func newParallelIO(
 	retryOpts retry.Options,
 	numWorkers int,
 	handler IOHandler,
+	metrics metricsRecorder,
 ) *parallelIO {
 	wg := ctxgroup.WithContext(ctx)
 	io := &parallelIO{
 		retryOpts: retryOpts,
 		wg:        wg,
+		metrics:   metrics,
 		ioHandler: handler,
 		requestCh: make(chan IORequest, flushQueueDepth),
 		resultCh:  make(chan ioResult, flushQueueDepth),
@@ -422,9 +436,12 @@ func newParallelIO(
 
 func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error {
 	emitWithRetries := func(ctx context.Context, payload IORequest) error {
-		// fmt.Printf("\x1b[32mparallelIO emitWithRetries\x1b[0m\n")
-		// defer fmt.Printf("\x1b[34mparallelIO SENT\x1b[0m\n")
+		initialSend := true
 		return retry.WithMaxAttempts(ctx, pe.retryOpts, pe.retryOpts.MaxRetries+1, func() error {
+			if !initialSend {
+				pe.metrics.recordInternalRetry(int64(payload.Keys().Len()), false)
+			}
+			initialSend = false
 			return pe.ioHandler(ctx, payload)
 		})
 	}
@@ -482,7 +499,6 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	var pending []IORequest
 
 	handleResult = func(res ioResult) {
-		// fmt.Printf("\x1b[32mparallelIO HANDLE RESULT\x1b[0m\n")
 		if res.err == nil {
 			// Clear out the completed keys
 			inflight.DifferenceWith(res.payload.Keys())
@@ -494,7 +510,6 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 					stillPending = append(stillPending, pendingReq)
 				} else {
 					inflight.UnionWith(pendingReq.Keys())
-					// fmt.Printf("\x1b[32mparallelIO resub\x1b[0m\n")
 					submitPayload(ctx, pendingReq)
 				}
 			}
@@ -546,7 +561,7 @@ func makeBatchingSink(
 		topicNamer:   topicNamer,
 		concreteType: concreteType,
 		frequency:    minFlushFrequency,
-		ioWorkers:    1,
+		ioWorkers:    numWorkers,
 		retryOpts:    retryOpts,
 		ts:           timeSource,
 		metrics:      metrics,

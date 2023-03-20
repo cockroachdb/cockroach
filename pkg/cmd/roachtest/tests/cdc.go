@@ -1233,7 +1233,7 @@ func registerCDC(r registry.Registry) {
 					"metrics_label": "'webhook'",
 					"initial_scan":  "'only'",
 					// Webhook sink without batching is currently too slow to handle even 1 warehouse
-					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+					// "webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
 					// "kafka_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
 				},
 			})

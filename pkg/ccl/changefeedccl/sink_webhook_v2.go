@@ -105,8 +105,8 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				MaxConnsPerHost:     100, // This should probably be == to parallelism.
-				MaxIdleConnsPerHost: 100,
+				MaxConnsPerHost:     16, // This should probably be == to parallelism.
+				MaxIdleConnsPerHost: 16,
 				MaxIdleConns:        100,
 				IdleConnTimeout:     time.Minute,
 				ForceAttemptHTTP2:   true,
@@ -316,22 +316,17 @@ func (wse *webhookSinkClient) MakeBatchWriter() BatchWriter {
 }
 
 func (wse *webhookSinkClient) shouldFlush(bytes int, messages int) bool {
-	// fmt.Printf("\x1b[33mwebhookSink shouldFlush\x1b[0m\n")
 	switch {
 	// all zero values is interpreted as flush every time
 	case wse.batchCfg.Messages == 0 && wse.batchCfg.Bytes == 0 && wse.batchCfg.Frequency == 0:
-		// fmt.Printf("\x1b[33m                        true\x1b[0m\n")
 		return true
 	// messages threshold has been reached
 	case wse.batchCfg.Messages > 0 && messages >= wse.batchCfg.Messages:
-		// fmt.Printf("\x1b[33m                        true\x1b[0m\n")
 		return true
 	// bytes threshold has been reached
 	case wse.batchCfg.Bytes > 0 && bytes >= wse.batchCfg.Bytes:
-		// fmt.Printf("\x1b[33m                        true\x1b[0m\n")
 		return true
 	default:
-		// fmt.Printf("\x1b[33m                        false\x1b[0m\n")
 		return false
 	}
 }
@@ -345,19 +340,16 @@ func makeWebhookSink(
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
-	// fmt.Printf("\x1b[33mwebhookSink makeWebhokoSink\x1b[0m\n")
 	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("\x1b[33mwebhookSink makeWebhookSinkClient\x1b[0m\n")
 
 	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// fmt.Printf("\x1b[33mwebhookSink makeBatchingSink\x1b[0m\n")
 	return makeBatchingSink(
 		ctx,
 		sinkTypeWebhook,
