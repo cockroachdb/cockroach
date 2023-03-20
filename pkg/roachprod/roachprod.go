@@ -594,6 +594,8 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	for _, v := range cloudCluster.VMs {
 		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
 
+		vm.MaybeLogCmd(l, cmd)
+
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			l.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
@@ -974,6 +976,8 @@ func urlGenerator(
 		if uConfig.openInBrowser {
 			cmd := exec.Command("python", "-m", "webbrowser", url)
 
+			vm.MaybeLogCmd(l, cmd)
+
 			if err := cmd.Run(); err != nil {
 				return nil, err
 			}
@@ -1112,6 +1116,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	}
 
 	if err != nil {
+
 		exit.WithCode(exit.UnspecifiedError())
 	}
 
@@ -1123,6 +1128,8 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 				"-http", fmt.Sprintf(":%d", port),
 				file)
 			waitCommands = append(waitCommands, cmd)
+
+			vm.MaybeLogCmd(l, cmd)
 
 			if err := cmd.Start(); err != nil {
 				return err

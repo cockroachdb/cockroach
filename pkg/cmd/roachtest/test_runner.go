@@ -1025,17 +1025,10 @@ fi'`
 	}
 }
 
-<<<<<<< HEAD
 func testTimeout(tc *registry.TestSpec) time.Duration {
 	// Default to 3 hours; otherwise, use specified timeout.
 	timeout := 3 * time.Hour
 	if d := tc.Timeout; d != 0 {
-=======
-func testTimeout(t *testImpl) time.Duration {
-	// Default to 3 hours; otherwise, use specified timeout.
-	timeout := 3 * time.Hour
-	if d := t.spec.Timeout; d != 0 {
->>>>>>> ab6bbfecd40 (roachtest: add optional PreSetup and PostSetup hooks)
 		timeout = d
 	}
 	return timeout
@@ -1208,26 +1201,7 @@ func (r *testRunner) runTest(
 	s := t.Spec().(*registry.TestSpec)
 	t.start = timeutil.Now()
 
-<<<<<<< HEAD
 	timeout := testTimeout(s)
-=======
-	//timeout := 3 * time.Hour
-	//if d := s.Timeout; d != 0 {
-	//	timeout = d
-	//}
-	//// Make sure the cluster has enough life left for the test plus enough headroom
-	//// after the test finishes so that the next test can be selected. If it
-	//// doesn't, extend it.
-	//minExp := timeutil.Now().Add(timeout + time.Hour)
-	//if c.expiration.Before(minExp) {
-	//	extend := minExp.Sub(c.expiration)
-	//	l.PrintfCtx(ctx, "cluster needs to survive until %s, but has expiration: %s. Extending.",
-	//		minExp, c.expiration)
-	//	if err := c.Extend(ctx, extend, l); err != nil {
-	//		return errors.Wrapf(err, "failed to extend cluster: %s", c.name)
-	//	}
-	//}
->>>>>>> ab6bbfecd40 (roachtest: add optional PreSetup and PostSetup hooks)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

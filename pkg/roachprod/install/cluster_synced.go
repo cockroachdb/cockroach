@@ -2003,6 +2003,8 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = &stderrBuf
 
+		vm.MaybeLogCmd(l, cmd)
+
 		if err := cmd.Run(); err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -2043,6 +2045,8 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = out
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
+
+		vm.MaybeLogCmd(l, cmd)
 
 		if err := cmd.Run(); err != nil && ctx.Err() == nil {
 			return errors.Wrapf(err, "failed to run cockroach debug merge-logs:\n%v", errBuf.String())
@@ -2437,6 +2441,8 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
 	cmd := exec.Command(args[0], args[1:]...)
+
+	vm.MaybeLogCmd(l, cmd)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

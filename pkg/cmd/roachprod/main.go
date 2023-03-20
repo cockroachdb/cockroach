@@ -1240,6 +1240,12 @@ Node specification
 		fmt.Printf("problem loading clusters: %s\n", err)
 	}
 
+	rootCmd.PersistentPreRun = func(_ *cobra.Command, _ []string) {
+		if config.DryRun {
+			config.Logger.Printf("Enabling [***Experimental***] --dry-run mode. No infra changes will be made!")
+		}
+	}
+
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
 		os.Exit(1)

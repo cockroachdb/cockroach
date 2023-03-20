@@ -13,7 +13,9 @@ package gce
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"io"
 	"os"
 	"os/exec"
@@ -29,6 +31,10 @@ const (
 	dnsProject = "cockroach-shared"
 	dnsZone    = "roachprod"
 )
+
+var cliProvider = vm.CLIProvider{
+	CLICommand: "gcloud",
+}
 
 // Subdomain is the DNS subdomain to in which to maintain cluster node names.
 var Subdomain = func() string {
@@ -55,23 +61,33 @@ mount_opts="defaults"
 
 use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
+local_nvme=()
 disks=()
 mount_prefix="/mnt/data"
 
+all_nvme_devices=$(nvme list)
+echo $all_nvme_devices
+
+# Enumerate all _local_ NVMe drives.
+for d in $(nvme list|grep nvme |awk '{print $1}'); do
+  if ! mount | grep ${d}; then
+    local_nvme+=("${d}")
+    echo "Local NVMe Disk ${d} not mounted, need to mount..."
+  else
+    echo "Local NVMe Disk  ${d} already mounted, skipping..."
+  fi
+done
+
+# Enumerate all non-NVMe drives.
 {{ if .Zfs }}
 apt-get update -q
 apt-get install -yq zfsutils-linux
 
-# For zfs, we use the device names under /dev instead of the device
-# links under /dev/disk/by-id/google-local* for local ssds, because
-# there is an issue where the links for the zfs partitions which are
-# created under /dev/disk/by-id/ when we run "zpool create ..." are
-# inaccurate.
-for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
+for d in $(ls /dev/disk/by-id/google-persistent-disk-[1-9]); do
   zpool list -v -P | grep ${d} > /dev/null
   if [ $? -ne 0 ]; then
 {{ else }}
-for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do
+for d in $(ls /dev/disk/by-id/google-persistent-disk-[1-9]); do
   if ! mount | grep ${d}; then
 {{ end }}
     disks+=("${d}")
@@ -81,15 +97,17 @@ for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-d
   fi
 done
 
+all_disks=( "${disks[@]}" "${local_nvme[@]}" "${ebs_nvme[@]}" )
+echo "All unmounted drives: ${all_disks[@]}"
 
-if [ "${#disks[@]}" -eq "0" ]; then
+if [ "${#all_disks[@]}" -eq "0" ]; then
   mountpoint="${mount_prefix}1"
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+elif [ "${#all_disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
   disknum=1
-  for disk in "${disks[@]}"
+  for disk in "${all_disks[@]}"
   do
     mountpoint="${mount_prefix}${disknum}"
     disknum=$((disknum + 1 ))
@@ -106,22 +124,30 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
 {{ end }}
     chmod 777 ${mountpoint}
   done
-else
+# N.B. RAID0 is supported only for _local_ NVMe drives.
+elif [ "${#local_nvme[@]}" -gt "1" ]; then
   mountpoint="${mount_prefix}1"
-  echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+  echo "${#local_nvme[@]} local NVMe disks unmounted, creating ${mountpoint} using RAID 0"
   mkdir -p ${mountpoint}
 {{ if .Zfs }}
-  zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
+  zpool create -f $(basename $mountpoint) -m ${mountpoint} ${local_nvme[@]}
   # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
 {{ else }}
   raiddisk="/dev/md0"
-  mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+  mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#local_nvme[@]} "${local_nvme[@]}"
   mkfs.ext4 -q -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
   tune2fs -m 0 ${raiddisk}
 {{ end }}
   chmod 777 ${mountpoint}
+fi
+
+if [ "${#disks[@]}" -gt "0" ] && [ ! -n "$use_multiple_disks" ]; then
+  warn_msg="WARNING: disks: ${disks[@]} will remain unmounted. Did you mean to use --enable-multiple-stores?"
+	echo $warn_msg
+	# Print the warning message to the console.
+  echo $warn_msg >> /etc/motd
 fi
 
 # Print the block device and FS usage output. This is useful for debugging.
@@ -279,11 +305,13 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 	defer f.Close()
 
 	// Keep imported zone file in dry run mode.
-	defer func() {
-		if err := os.Remove(f.Name()); err != nil {
-			l.Errorf("removing %s failed: %v", f.Name(), err)
-		}
-	}()
+	if !config.DryRun {
+		defer func() {
+			if err := os.Remove(f.Name()); err != nil {
+				l.Errorf("removing %s failed: %v", f.Name(), err)
+			}
+		}()
+	}
 
 	var zoneBuilder strings.Builder
 	for _, vm := range vms {
@@ -299,10 +327,12 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 
 	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
 		f.Name(), "-z", dnsZone, "--delete-all-existing", "--zone-file-format"}
-	cmd := exec.Command("gcloud", args...)
-	output, err := cmd.CombinedOutput()
+	_, err = cliProvider.RunCommand(context.Background(), l, args)
 
-	return errors.Wrapf(err, "Command: %s\nOutput: %s\nZone file contents:\n%s", cmd, output, zoneBuilder.String())
+	if err != nil {
+		return errors.Wrapf(err, "Zone file contents:\n%s", zoneBuilder.String())
+	}
+	return nil
 }
 
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
@@ -316,6 +346,8 @@ func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) 
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
+
+	vm.MaybeLogCmd(l, cmd)
 
 	if err := cmd.Run(); err != nil {
 		return nil, err

@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"math/rand"
 	"path/filepath"
 	"reflect"

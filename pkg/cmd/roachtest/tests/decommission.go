@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"math/rand"
 	"reflect"
 	"regexp"

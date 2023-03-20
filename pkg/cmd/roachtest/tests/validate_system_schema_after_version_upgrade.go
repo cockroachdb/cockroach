@@ -12,7 +12,6 @@ package tests
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"runtime"
 	"strings"
 

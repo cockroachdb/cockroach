@@ -11,16 +11,10 @@
 package aws
 
 import (
-	"bytes"
-	"encoding/json"
 	"os"
-	"os/exec"
-	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/errors"
 )
 
 // Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block
@@ -43,18 +37,43 @@ if [ -e /mnt/data1/.roachprod-initialized ]; then
 fi
 
 sudo apt-get update
-sudo apt-get install -qy --no-install-recommends mdadm
+sudo apt-get install -qy --no-install-recommends mdadm nvme-cli
 
 mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
 use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
+local_nvme=()
+ebs_nvme=()
 disks=()
 mount_prefix="/mnt/data"
 
-# On different machine types, the drives are either called nvme... or xvdd.
-for d in $(ls /dev/nvme?n1 /dev/xvdd); do
+all_nvme_devices=$(nvme list)
+echo $all_nvme_devices
+
+# Enumerate all _local_ NVMe drives.
+for d in $(nvme list|grep nvme |grep "Instance Storage" |awk '{print $1}'); do
+  if ! mount | grep ${d}; then
+    local_nvme+=("${d}")
+    echo "Local NVMe Disk ${d} not mounted, need to mount..."
+  else
+    echo "Local NVMe Disk  ${d} already mounted, skipping..."
+  fi
+done
+
+# Enumerate all EBS (non-local) NVMe drives.
+for d in $(nvme list|grep nvme |grep -v "Instance Storage" |awk '{print $1}'); do
+  if ! mount | grep ${d}; then
+    ebs_nvme+=("${d}")
+    echo "EBS NVMe Disk ${d} not mounted, need to mount..."
+  else
+    echo "EBS NVMe Disk  ${d} already mounted, skipping..."
+  fi
+done
+
+# Enumerate all non-NVMe drives.
+for d in $(ls /dev/xvdd); do
   if ! mount | grep ${d}; then
     disks+=("${d}")
     echo "Disk ${d} not mounted, need to mount..."
@@ -63,16 +82,17 @@ for d in $(ls /dev/nvme?n1 /dev/xvdd); do
   fi
 done
 
+all_disks=( "${disks[@]}" "${local_nvme[@]}" "${ebs_nvme[@]}" )
+echo "All unmounted drives: ${all_disks[@]}"
 
-if [ "${#disks[@]}" -eq "0" ]; then
+if [ "${#all_disks[@]}" -eq "0" ]; then
   mountpoint="${mount_prefix}1"
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+elif [ "${#all_disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
   disknum=1
-  for disk in "${disks[@]}"
-  do
+  for disk in "${all_disks[@]}"; do
     mountpoint="${mount_prefix}${disknum}"
     disknum=$((disknum + 1 ))
     echo "Mounting ${disk} at ${mountpoint}"
@@ -83,17 +103,32 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
     echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
     tune2fs -m 0 ${disk}
   done
-else
+# N.B. RAID0 is supported only for _local_ NVMe drives.
+elif [ "${#local_nvme[@]}" -gt "1" ]; then
   mountpoint="${mount_prefix}1"
-  echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+  echo "${#local_nvme[@]} local NVMe disks unmounted, creating ${mountpoint} using RAID 0"
   mkdir -p ${mountpoint}
   raiddisk="/dev/md0"
-  mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+  mdadm --create ${raiddisk} --level=0 --raid-devices=${#local_nvme[@]} "${local_nvme[@]}"
   mkfs.ext4 -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   chmod 777 ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
   tune2fs -m 0 ${raiddisk}
+fi
+
+if [ "${#ebs_nvme[@]}" -gt "0" ] && [ ! -n "$use_multiple_disks" ]; then
+  warn_msg="WARNING: EBS NVMe disks: ${ebs_nvme[@]} will remain unmounted. Did you mean to use --enable-multiple-stores?"
+	echo $warn_msg
+	# Print the warning message to the console.
+  echo $warn_msg >> /etc/motd
+fi
+
+if [ "${#disks[@]}" -gt "0" ] && [ ! -n "$use_multiple_disks" ]; then
+  warn_msg="WARNING: EBS disks: ${disks[@]} will remain unmounted. Did you mean to use --enable-multiple-stores?"
+	echo $warn_msg
+	# Print the warning message to the console.
+  echo $warn_msg >> /etc/motd
 fi
 
 # Print the block device and FS usage output. This is useful for debugging.
@@ -203,41 +238,6 @@ func writeStartupScript(
 		return "", err
 	}
 	return tmpfile.Name(), nil
-}
-
-// runCommand is used to invoke an AWS command.
-func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
-
-	if p.Profile != "" {
-		args = append(args[:len(args):len(args)], "--profile", p.Profile)
-	}
-	var stderrBuf bytes.Buffer
-	cmd := exec.Command("aws", args...)
-	cmd.Stderr = &stderrBuf
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-			l.Printf("%s", string(exitErr.Stderr))
-		}
-		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
-			strings.Join(args, " "), stderrBuf.String())
-	}
-	return output, nil
-}
-
-// runJSONCommand invokes an aws command and parses the json output.
-func (p *Provider) runJSONCommand(l *logger.Logger, args []string, parsed interface{}) error {
-	// Force json output in case the user has overridden the default behavior.
-	args = append(args[:len(args):len(args)], "--output", "json")
-	rawJSON, err := p.runCommand(l, args)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
-	}
-
-	return nil
 }
 
 // regionMap collates VM instances by their region.

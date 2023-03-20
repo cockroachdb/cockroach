@@ -83,8 +83,14 @@ func DeleteCluster(l *logger.Logger, name string) error {
 
 	for i := range c.VMs {
 		path := VMDir(c.Name, i+1)
-		if err := os.RemoveAll(path); err != nil {
-			return err
+
+		if config.DryRun || config.Verbose {
+			l.Printf("exec: rm -rf %s", path)
+		}
+		if !config.DryRun {
+			if err := os.RemoveAll(path); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -213,9 +219,15 @@ func (p *Provider) Create(
 			LocalClusterName: c.Name,
 		}
 		path := VMDir(c.Name, i+1)
-		err := os.MkdirAll(path, 0755)
-		if err != nil {
-			return err
+
+		if config.DryRun || config.Verbose {
+			l.Printf("exec: mkdir -p %s", path)
+		}
+		if !config.DryRun {
+			err := os.MkdirAll(path, 0755)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if err := p.storage.SaveCluster(l, c); err != nil {

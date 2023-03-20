@@ -117,6 +117,9 @@ func main() {
 		PersistentPreRun: validateAndConfigure,
 	}
 
+	rootCmd.PersistentFlags().BoolVarP(&config.DryRun, "dry-run", "d",
+                false, "dry-run mode (execute read-only operations; i.e., no infra changes are made)")
+
 	rootCmd.PersistentFlags().StringVarP(
 		&clusterName, "cluster", "c", "",
 		"Comma-separated list of names existing cluster to use for running tests. "+
@@ -295,8 +298,8 @@ runner itself.
 			&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
 		cmd.Flags().IntVar(
 			&count, "count", 1, "the number of times to run each test")
-		cmd.Flags().BoolVarP(
-			&debugOnFailure, "debug", "d", debugOnFailure, "don't wipe and destroy cluster if test fails")
+		cmd.Flags().BoolVar(
+			&debugOnFailure, "debug", debugOnFailure, "don't wipe and destroy cluster if test fails")
 		cmd.Flags().BoolVar(
 			&debugAlways, "debug-always", debugAlways, "never wipe and destroy the cluster")
 		cmd.Flags().BoolVar(
@@ -404,6 +407,8 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 	}
 	// Disable spinners and other fancy status messages since all IO is non-interactive.
 	config.Quiet = true
+	// Enable verbose mode.
+	config.Verbose = true
 }
 
 type cliCfg struct {
