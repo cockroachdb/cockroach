@@ -372,7 +372,7 @@ func setupRDSCluster(
 		rdsGroup, err := rdsCli.CreateDBClusterParameterGroup(
 			ctx,
 			&rds.CreateDBClusterParameterGroupInput{
-				DBParameterGroupFamily:      proto.String("aurora-postgresql14"),
+				DBParameterGroupFamily:      proto.String("aurora-postgresql13"),
 				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup(t.BuildVersion())),
 				Description:                 proto.String("roachtest awsdms parameter groups"),
 			},
@@ -407,6 +407,7 @@ func setupRDSCluster(
 			&rds.CreateDBClusterInput{
 				DBClusterIdentifier:         proto.String(awsdmsRoachtestRDSClusterName(t.BuildVersion())),
 				Engine:                      proto.String("aurora-postgresql"),
+				EngineVersion:               proto.String("13"),
 				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup(t.BuildVersion())),
 				MasterUsername:              proto.String(awsdmsUser),
 				MasterUserPassword:          proto.String(awsdmsPassword),
