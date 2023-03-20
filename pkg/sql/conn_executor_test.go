@@ -84,7 +84,7 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 	}
 
 	rUnsafe := errors.New("some error")
-	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST, vt)
+	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST, vt, nil /* ClientNoticeSender */)
 
 	const expMessage = "some error"
 	actMessage := safeErr.Error()

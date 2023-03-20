@@ -65,6 +65,7 @@ go_test(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/deprecatedshowranges",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
