@@ -105,7 +105,7 @@ INSERT INTO t1 values (1), (10), (100);
 `)
 
 	rows := th.sqlDB.Query(t,
-		`CREATE SCHEDULE FOR BACKUP t1 INTO 'nodelocal://0/backup/alter-schedule' RECURRING '@daily';`)
+		`CREATE SCHEDULE FOR BACKUP t1 INTO 'nodelocal://1/backup/alter-schedule' RECURRING '@daily';`)
 	require.NoError(t, rows.Err())
 
 	var scheduleID int64
@@ -136,8 +136,8 @@ INSERT INTO t1 values (1), (10), (100);
 	require.Equal(t, []string{"PAUSED: Waiting for initial backup to complete", "ACTIVE"}, statuses)
 	require.Equal(t, []string{"@daily", "@weekly"}, schedules)
 	require.Equal(t, []string{
-		"BACKUP TABLE mydb.public.t1 INTO LATEST IN 'nodelocal://0/backup/alter-schedule' WITH detached",
-		"BACKUP TABLE mydb.public.t1 INTO 'nodelocal://0/backup/alter-schedule' WITH detached",
+		"BACKUP TABLE mydb.public.t1 INTO LATEST IN 'nodelocal://1/backup/alter-schedule' WITH detached",
+		"BACKUP TABLE mydb.public.t1 INTO 'nodelocal://1/backup/alter-schedule' WITH detached",
 	},
 		backupStmts)
 

@@ -27,7 +27,7 @@ func BenchmarkDatabaseBackup(b *testing.B) {
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := bank.FromRows(b.N).Tables()[0]
-	loadURI := "nodelocal://0/load"
+	loadURI := "nodelocal://1/load"
 	if _, err := sampledataccl.ToBackup(b, bankData, dir, "load"); err != nil {
 		b.Fatalf("%+v", err)
 	}
@@ -66,7 +66,7 @@ func BenchmarkDatabaseRestore(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal://0/foo'`)
+	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal://1/foo'`)
 	b.StopTimer()
 }
 

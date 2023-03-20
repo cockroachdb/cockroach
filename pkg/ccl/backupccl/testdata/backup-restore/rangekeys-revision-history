@@ -40,7 +40,7 @@ save-cluster-ts tag=t2
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test-root/' with revision_history;
+BACKUP INTO 'nodelocal://1/test-root/' with revision_history;
 ----
 
 exec-sql
@@ -61,11 +61,11 @@ save-cluster-ts tag=t4
 ----
 
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://0/test-root/' with revision_history;
+BACKUP INTO LATEST IN 'nodelocal://1/test-root/' with revision_history;
 ----
 
 restore aost=t0
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t0 WITH new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' AS OF SYSTEM TIME t0 WITH new_db_name='orig1';
 ----
 
 query-sql
@@ -83,7 +83,7 @@ DROP DATABASE orig1 CASCADE
 ----
 
 restore aost=t1
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t1 WITH new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' AS OF SYSTEM TIME t1 WITH new_db_name='orig1';
 ----
 
 query-sql
@@ -101,7 +101,7 @@ DROP DATABASE orig1 CASCADE
 ----
 
 restore aost=t2
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t2 WITH new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' AS OF SYSTEM TIME t2 WITH new_db_name='orig1';
 ----
 
 query-sql
@@ -119,7 +119,7 @@ DROP DATABASE orig1 CASCADE
 ----
 
 restore aost=t3
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t3 WITH new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' AS OF SYSTEM TIME t3 WITH new_db_name='orig1';
 ----
 
 query-sql
@@ -137,7 +137,7 @@ DROP DATABASE orig1 CASCADE
 ----
 
 restore aost=t4
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t4 WITH new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' AS OF SYSTEM TIME t4 WITH new_db_name='orig1';
 ----
 
 query-sql

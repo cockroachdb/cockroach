@@ -49,7 +49,6 @@ go_test(
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
-        "//pkg/blobs",
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/kvccl/kvtenantccl",

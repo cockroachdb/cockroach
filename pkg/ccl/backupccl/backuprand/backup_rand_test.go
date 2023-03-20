@@ -54,7 +54,7 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 			ExternalIODir:            dir,
 		},
 	}
-	const localFoo = "nodelocal://0/foo/"
+	const localFoo = "nodelocal://1/foo/"
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, params)

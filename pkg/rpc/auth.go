@@ -134,7 +134,16 @@ func (a kvAuth) streamInterceptor(
 		// metadata in the context, but we need to get rid of it
 		// before we let the call go through KV. Any stray metadata
 		// could influence the execution on the KV-level handlers.
-		ctx = grpcutil.ClearIncomingContext(ctx)
+		//
+		// We have a single unfortunate quirk, the PutStream
+		// method of the blob service. That RPC uses incoming
+		// metadata to identify the filename of the file being
+		// uploaded.
+		if info.FullMethod == "/cockroach.blobs.Blob/PutStream" {
+			ctx = grpcutil.ClearIncomingContextExcept(ctx, "filename")
+		} else {
+			ctx = grpcutil.ClearIncomingContext(ctx)
+		}
 
 		origSS := ss
 		ss = &wrappedServerStream{

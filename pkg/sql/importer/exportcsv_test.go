@@ -171,18 +171,18 @@ func TestExportNullWithEmptyNullAs(t *testing.T) {
 	`)
 
 	// Case when `nullas` option is unspecified: expect error
-	const stmtWithoutNullas = "EXPORT INTO CSV 'nodelocal://0/t' FROM SELECT * FROM accounts"
+	const stmtWithoutNullas = "EXPORT INTO CSV 'nodelocal://1/t' FROM SELECT * FROM accounts"
 	db.ExpectErr(t, "NULL value encountered during EXPORT, "+
 		"use `WITH nullas` to specify the string representation of NULL", stmtWithoutNullas)
 
 	// Case when `nullas` option is specified: operation is successful and NULLs are encoded to "None"
-	const stmtWithNullas = `EXPORT INTO CSV 'nodelocal://0/t' WITH nullas="None" FROM SELECT * FROM accounts`
+	const stmtWithNullas = `EXPORT INTO CSV 'nodelocal://1/t' WITH nullas="None" FROM SELECT * FROM accounts`
 	db.Exec(t, stmtWithNullas)
 	contents := readFileByGlob(t, filepath.Join(dir, "t", exportFilePattern))
 	require.Equal(t, "1,None\n2,8\n", string(contents))
 
 	// Verify successful IMPORT statement `WITH nullif="None"` to complete round trip
-	const importStmt = `IMPORT INTO accounts2 CSV DATA ('nodelocal://0/t/export*-n*.0.csv') WITH nullif="None"`
+	const importStmt = `IMPORT INTO accounts2 CSV DATA ('nodelocal://1/t/export*-n*.0.csv') WITH nullif="None"`
 	db.Exec(t, `CREATE TABLE accounts2(id INT PRIMARY KEY, balance INT)`)
 	db.Exec(t, importStmt)
 	db.CheckQueryResults(t,
@@ -204,7 +204,7 @@ func TestMultiNodeExportStmt(t *testing.T) {
 	for tries := 0; tries < maxTries; tries++ {
 		chunkSize := 13
 		rows := db.Query(t,
-			`EXPORT INTO CSV 'nodelocal://0/t' WITH chunk_rows = $3 FROM SELECT * FROM bank WHERE id >= $1 and id < $2`,
+			`EXPORT INTO CSV 'nodelocal://1/t' WITH chunk_rows = $3 FROM SELECT * FROM bank WHERE id >= $1 and id < $2`,
 			10, 10+exportRows, chunkSize,
 		)
 
@@ -254,7 +254,7 @@ func TestExportJoin(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE TABLE t AS VALUES (1, 2)`)
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/join' FROM SELECT * FROM t, t as u`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/join' FROM SELECT * FROM t, t as u`)
 }
 
 func readFileByGlob(t *testing.T, pattern string) []byte {
@@ -282,7 +282,7 @@ func TestExportOrder(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' FROM SELECT * FROM foo ORDER BY y ASC LIMIT 2`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/order' FROM SELECT * FROM foo ORDER BY y ASC LIMIT 2`)
 	content := readFileByGlob(t, filepath.Join(dir, "order", exportFilePattern))
 
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
@@ -303,7 +303,7 @@ func TestExportUniqueness(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
-	const stmt = `EXPORT INTO CSV 'nodelocal://0/' WITH chunk_rows=$1 FROM SELECT * FROM foo`
+	const stmt = `EXPORT INTO CSV 'nodelocal://1/' WITH chunk_rows=$1 FROM SELECT * FROM foo`
 
 	sqlDB.Exec(t, stmt, 2)
 	dir1, err := os.ReadDir(dir)
@@ -342,15 +342,15 @@ INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi');
 		expected string
 	}{
 		{
-			stmt:     "EXPORT INTO CSV 'nodelocal://0/%s/' FROM (SELECT 'hello':::greeting, 'hi':::greeting)",
+			stmt:     "EXPORT INTO CSV 'nodelocal://1/%s/' FROM (SELECT 'hello':::greeting, 'hi':::greeting)",
 			expected: "hello,hi\n",
 		},
 		{
-			stmt:     "EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE greeting_table",
+			stmt:     "EXPORT INTO CSV 'nodelocal://1/%s/' FROM TABLE greeting_table",
 			expected: "hello,hello\nhi,hi\n",
 		},
 		{
-			stmt:     "EXPORT INTO CSV 'nodelocal://0/%s/' FROM (SELECT x, y, enum_first(x) FROM greeting_table)",
+			stmt:     "EXPORT INTO CSV 'nodelocal://1/%s/' FROM (SELECT x, y, enum_first(x) FROM greeting_table)",
 			expected: "hello,hello,hello\nhi,hi,hello\n",
 		},
 	}
@@ -386,7 +386,7 @@ func TestExportOrderCompressed(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' with compression = gzip from select * from foo order by y asc limit 2`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/order' with compression = gzip from select * from foo order by y asc limit 2`)
 	compressed := readFileByGlob(t, filepath.Join(dir, "order", exportFilePattern+".gz"))
 
 	gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
@@ -414,7 +414,7 @@ func TestExportShow(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT database_name, owner FROM [SHOW DATABASES] ORDER BY database_name`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/show' FROM SELECT database_name, owner FROM [SHOW DATABASES] ORDER BY database_name`)
 	content := readFileByGlob(t, filepath.Join(dir, "show", exportFilePattern))
 
 	if expected, got := "defaultdb,"+username.RootUser+"\npostgres,"+username.RootUser+"\nsystem,"+
@@ -455,11 +455,11 @@ func TestExportFeatureFlag(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = FALSE`)
 	sqlDB.Exec(t, `CREATE TABLE feature_flags (a INT PRIMARY KEY)`)
 	sqlDB.ExpectErr(t, `feature EXPORT was disabled by the database administrator`,
-		`EXPORT INTO CSV 'nodelocal://0/foo/' FROM TABLE feature_flags`)
+		`EXPORT INTO CSV 'nodelocal://1/foo/' FROM TABLE feature_flags`)
 
 	// Feature flag is on — test that EXPORT does not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo/' FROM TABLE feature_flags`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/foo/' FROM TABLE feature_flags`)
 }
 
 func TestExportPrivileges(t *testing.T) {
@@ -483,10 +483,10 @@ func TestExportPrivileges(t *testing.T) {
 		return testuser
 	}
 	testuser := startTestUser()
-	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
-	dest := "nodelocal://0/privs_placeholder"
+	dest := "nodelocal://1/privs_placeholder"
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 	testuser.Close()
@@ -499,7 +499,7 @@ func TestExportPrivileges(t *testing.T) {
 	testuser = startTestUser()
 	defer testuser.Close()
 
-	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,
 		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
@@ -508,7 +508,7 @@ func TestExportPrivileges(t *testing.T) {
 
 	sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
 
-	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.NoError(t, err)
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.NoError(t, err)
@@ -529,12 +529,12 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo' WITH chunk_size='10KB' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/foo' WITH chunk_size='10KB' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
 	files, err := os.ReadDir(filepath.Join(dir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, 14, len(files))
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo-compressed' WITH chunk_size='10KB',compression='gzip' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/foo-compressed' WITH chunk_size='10KB',compression='gzip' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
 	zipFiles, err := os.ReadDir(filepath.Join(dir, "foo-compressed"))
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(zipFiles), 6)

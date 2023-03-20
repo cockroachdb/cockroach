@@ -27,7 +27,6 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	// Imported to allow locality-related table mutations
@@ -876,20 +875,6 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 func addCloudStorageOptions(t *testing.T, options *feedTestOptions) (cleanup func()) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	options.externalIODir = dir
-	oldKnobsFn := options.knobsFn
-	options.knobsFn = func(knobs *base.TestingKnobs) {
-		if oldKnobsFn != nil {
-			oldKnobsFn(knobs)
-		}
-		blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(options.externalIODir)
-		if serverKnobs, ok := knobs.Server.(*server.TestingKnobs); ok {
-			serverKnobs.BlobClientFactory = blobClientFactory
-		} else {
-			knobs.Server = &server.TestingKnobs{
-				BlobClientFactory: blobClientFactory,
-			}
-		}
-	}
 	return dirCleanupFn
 }
 

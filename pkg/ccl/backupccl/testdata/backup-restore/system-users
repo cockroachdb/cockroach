@@ -25,7 +25,7 @@ SHOW GRANTS ON ROLE developer
 developer abbey false
 
 exec-sql
-BACKUP DATABASE system INTO 'nodelocal://0/test/'
+BACKUP DATABASE system INTO 'nodelocal://1/test/'
 ----
 
 # Start a new cluster with the same IO dir.
@@ -34,7 +34,7 @@ new-cluster name=s2 share-io-dir=s1
 
 # Restore into the new cluster.
 exec-sql cluster=s2
-RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://0/test/'
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 query-sql cluster=s2

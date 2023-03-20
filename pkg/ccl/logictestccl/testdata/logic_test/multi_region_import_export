@@ -72,7 +72,7 @@ id  name        likes                           dislikes
 2   otan        {"Sydney suburbs",cricket,vim}  {"flaky tests",onboarding}
 
 statement ok
-EXPORT INTO CSV 'nodelocal://0/team_export/' WITH DELIMITER = '|' FROM TABLE team
+EXPORT INTO CSV 'nodelocal://1/team_export/' WITH DELIMITER = '|' FROM TABLE team
 
 statement ok
 use multi_region_test_db;
@@ -85,7 +85,7 @@ CREATE TABLE team (
 )
 
 statement ok
-IMPORT INTO team CSV DATA ('nodelocal://0/team_export/export*.csv') WITH DELIMITER = '|'
+IMPORT INTO team CSV DATA ('nodelocal://1/team_export/export*.csv') WITH DELIMITER = '|'
 
 query ITTT colnames
 SELECT * FROM team

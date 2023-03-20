@@ -104,7 +104,7 @@ var LocalRequiresExternalIOAccounting = false
 // MakeLocalStorageURI converts a local path (should always be relative) to a
 // valid nodelocal URI.
 func MakeLocalStorageURI(path string) string {
-	return fmt.Sprintf("nodelocal://0/%s", path)
+	return fmt.Sprintf("nodelocal://1/%s", path)
 }
 
 func makeLocalFileStorage(

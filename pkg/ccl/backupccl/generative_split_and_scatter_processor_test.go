@@ -37,7 +37,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	const localFoo = "nodelocal://0/foo"
+	const localFoo = "nodelocal://1/foo"
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,

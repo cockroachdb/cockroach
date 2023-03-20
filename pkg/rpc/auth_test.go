@@ -950,6 +950,7 @@ type mockAuthorizer struct {
 	hasCapabilityForBatch              bool
 	hasNodestatusCapability            bool
 	hasTSDBQueryCapability             bool
+	hasNodelocalStorageCapability      bool
 	hasExemptFromRateLimiterCapability bool
 }
 
@@ -979,6 +980,15 @@ func (m mockAuthorizer) HasNodeStatusCapability(ctx context.Context, tenID roach
 
 func (m mockAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	if m.hasTSDBQueryCapability {
+		return nil
+	}
+	return errors.New("tenant does not have capability")
+}
+
+func (m mockAuthorizer) HasNodelocalStorageCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	if m.hasNodelocalStorageCapability {
 		return nil
 	}
 	return errors.New("tenant does not have capability")

@@ -29,7 +29,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant localit
 ----
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/';
 ----
 
 exec-sql
@@ -37,7 +37,7 @@ DROP DATABASE d;
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/';
 ----
 
 query-sql
@@ -54,13 +54,13 @@ new-cluster name=s3 share-io-dir=s1 allow-implicit-access disable-tenant localit
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/';
 ----
 pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
 HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/';
 ----
 pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
 HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option

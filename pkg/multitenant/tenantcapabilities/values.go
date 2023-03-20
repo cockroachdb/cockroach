@@ -44,6 +44,8 @@ func GetValueByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) (Value, err
 		return (*invertedBoolValue)(&t.DisableAdminSplit), nil
 	case CanAdminUnsplit:
 		return (*boolValue)(&t.CanAdminUnsplit), nil
+	case CanUseNodelocalStorage:
+		return (*boolValue)(&t.CanUseNodelocalStorage), nil
 	case CanViewNodeInfo:
 		return (*boolValue)(&t.CanViewNodeInfo), nil
 	case CanViewTSDBMetrics:

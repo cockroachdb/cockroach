@@ -35,6 +35,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -58,6 +59,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -74,6 +76,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -97,6 +100,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -120,6 +124,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -143,6 +148,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         true
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -159,6 +165,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
@@ -175,6 +182,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  true
@@ -191,6 +199,7 @@ can_admin_relocate_range   false
 can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
+can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
