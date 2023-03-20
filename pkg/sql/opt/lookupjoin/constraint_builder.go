@@ -188,16 +188,18 @@ func (b *ConstraintBuilder) Build(
 	// an equality with another column or a constant.
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
-	keyCols := make(opt.ColList, 0, numIndexKeyCols)
 	var derivedEquivCols opt.ColSet
-	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
+
+	colsAlloc := make(opt.ColList, numIndexKeyCols*2)
+	keyCols := colsAlloc[0:0:numIndexKeyCols]
+	rightSideCols := colsAlloc[numIndexKeyCols : numIndexKeyCols : numIndexKeyCols*2]
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
 	var allLookupFilters memo.FiltersExpr
 	var filterOrdsToExclude util.FastIntSet
 	foundLookupCols := false
 	lookupExprRequired := false
-	remainingFilters := make(memo.FiltersExpr, 0, len(onFilters))
+	var remainingFilters memo.FiltersExpr
 
 	// addEqualityColumns adds the given columns as an equality in keyCols if
 	// lookupExprRequired is false. Otherwise, the equality is added as an
@@ -360,6 +362,7 @@ func (b *ConstraintBuilder) Build(
 			allLookupFilters = append(allLookupFilters, allFilters[filterIdx])
 			filterOrdsToExclude.Add(filterIdx)
 			if remaining != nil {
+				remainingFilters = make(memo.FiltersExpr, 0, len(onFilters))
 				remainingFilters = append(remainingFilters, *remaining)
 			}
 		}
@@ -392,6 +395,9 @@ func (b *ConstraintBuilder) Build(
 	// Reduce the remaining filters.
 	for i := range onFilters {
 		if !filterOrdsToExclude.Contains(i) {
+			if remainingFilters == nil {
+				remainingFilters = make(memo.FiltersExpr, 0, len(onFilters))
+			}
 			remainingFilters = append(remainingFilters, onFilters[i])
 		}
 	}
