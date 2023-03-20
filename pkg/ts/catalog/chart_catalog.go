@@ -1546,6 +1546,12 @@ var charts = []sectionDescription{
 					"changefeed.schema_registry.retry_count",
 				},
 			},
+			{
+				Title: "Schema Registry Registrations",
+				Metrics: []string{
+					"changefeed.schema_registry.registrations",
+				},
+			},
 		},
 	},
 	{
