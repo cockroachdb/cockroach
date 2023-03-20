@@ -226,8 +226,8 @@ func restoreMidSchemaChange(
 				// it relies on TestingGetTableDescriptor which isn't supported
 				// in multi-tenancy. More work is required here. Tracked with
 				// #76378.
-				DisableDefaultTestTenant: true,
-				Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+				DefaultTestTenant: base.TestTenantDisabled,
+				Knobs:             base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			},
 		}
 		tc := testcluster.StartTestCluster(t, singleNode, params)

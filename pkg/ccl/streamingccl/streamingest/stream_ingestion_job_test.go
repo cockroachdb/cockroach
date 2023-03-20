@@ -61,7 +61,7 @@ func TestTenantStreaming(t *testing.T) {
 		// a secondary tenant, it won't be able to see the streaming job.
 		// This may also be impacted by the fact that we don't currently support
 		// tenant->tenant streaming. Tracked with #76378.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	}
@@ -103,7 +103,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms'
 		// is required. Tracked with #76378.
 		// TODO(ajstorm): This may be the right course of action here as the
 		//  replication is now being run inside a tenant.
-		base.TestServerArgs{DisableDefaultTestTenant: true})
+		base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
@@ -178,9 +178,9 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer srcServer.Stopper().Stop(ctx)
-	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer destServer.Stopper().Stop(ctx)
 
 	srcTenantID := serverutils.TestTenantID()
@@ -225,7 +225,7 @@ func TestCutoverBuiltin(t *testing.T) {
 			// Disable the test tenant as the test below looks for a
 			// streaming job assuming that it's within the system tenant.
 			// Tracked with #76378.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -413,7 +413,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 				},
 			},
 		},
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

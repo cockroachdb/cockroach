@@ -71,8 +71,8 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Settings:                 settings,
-				DisableDefaultTestTenant: true,
+				Settings:          settings,
+				DefaultTestTenant: base.TestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						BeforeExecute: func(ctx context.Context, sql string, descriptors *descs.Collection) {

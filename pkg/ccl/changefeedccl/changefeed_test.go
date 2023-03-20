@@ -160,8 +160,8 @@ func TestChangefeedReplanning(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			UseDatabase:              "d",
-			DisableDefaultTestTenant: true,
+			UseDatabase:       "d",
+			DefaultTestTenant: base.TestTenantDisabled,
 		}
 
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
@@ -2679,7 +2679,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -6012,10 +6012,10 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
-			DisableDefaultTestTenant: true,
-			UseDatabase:              "test",
-			Knobs:                    knobs,
-			ExternalIODir:            sinkDir,
+			DefaultTestTenant: base.TestTenantDisabled,
+			UseDatabase:       "test",
+			Knobs:             knobs,
+			ExternalIODir:     sinkDir,
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -6081,7 +6081,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 		perServerKnobs[i] = base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
 					DrainFast:  true,
@@ -8374,7 +8374,7 @@ func TestChangefeedExecLocality(t *testing.T) {
 			ExternalIODir: path.Join(dir, str(i)),
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
-			DisableDefaultTestTenant: true, // need nodelocal and splits.
+			DefaultTestTenant: base.TestTenantDisabled, // need nodelocal and splits.
 		}
 	}
 
