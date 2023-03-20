@@ -320,6 +320,9 @@ func TestCreateSession(t *testing.T) {
 	ts := s.(*TestServer)
 
 	username := username.TestUserName()
+	if err := ts.createAuthUser(username, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create an authentication, noting the time before and after creation. This
 	// lets us ensure that the timestamps created are accurate.
@@ -412,6 +415,9 @@ func TestVerifySession(t *testing.T) {
 	ts := s.(*TestServer)
 
 	sessionUsername := username.TestUserName()
+	if err := ts.createAuthUser(sessionUsername, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
 	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), sessionUsername)
 	if err != nil {
 		t.Fatal(err)

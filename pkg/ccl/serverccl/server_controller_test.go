@@ -83,8 +83,9 @@ func TestServerControllerHTTP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Copy the session entry to the test tenant.
-	_, err = db2.Exec(`INSERT INTO system.web_sessions(id, "hashedSecret", username, "createdAt", "expiresAt")
-VALUES($1, $2, $3, $4, $5)`, id, secret, username, created, expires)
+	_, err = db2.Exec(`INSERT INTO system.web_sessions(id, "hashedSecret", username, "createdAt", "expiresAt", user_id)
+VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3))`,
+		id, secret, username, created, expires)
 	require.NoError(t, err)
 
 	// From this point, we are expecting the ability to access both tenants using
