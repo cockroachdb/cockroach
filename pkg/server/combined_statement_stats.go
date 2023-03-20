@@ -142,7 +142,7 @@ func collectCombinedStatements(
 	orderAndLimit string,
 	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-	table := "crdb_internal.statement_statistics"
+	table := "crdb_internal.statement_statistics_persisted"
 	if !settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
 		table = "crdb_internal.statement_statistics_v22_1"
 	}
@@ -153,19 +153,16 @@ func collectCombinedStatements(
 				app_name,
 				max(aggregated_ts) as aggregated_ts,
 				metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) AS sampled_plan,
-				aggregation_interval
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
 		FROM %s %s
 		GROUP BY
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
-				metadata,
-				aggregation_interval
+				metadata
 		%s`, table, whereClause, orderAndLimit)
 
-	const expectedNumDatums = 8
+	const expectedNumDatums = 6
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
 		sessiondata.InternalExecutorOverride{
@@ -223,20 +220,10 @@ func collectCombinedStatements(
 			return nil, serverError(ctx, err)
 		}
 
-		planJSON := tree.MustBeDJSON(row[6]).JSON
-		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-
-		aggInterval := tree.MustBeDInterval(row[7]).Duration
-
 		stmt := serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
-				KeyData:             metadata.Key,
-				AggregatedTs:        aggregatedTs,
-				AggregationInterval: time.Duration(aggInterval.Nanos()),
+				KeyData:      metadata.Key,
+				AggregatedTs: aggregatedTs,
 			},
 			ID:    roachpb.StmtFingerprintID(statementFingerprintID),
 			Stats: metadata.Stats,
@@ -267,17 +254,15 @@ func collectCombinedTransactions(
 				max(aggregated_ts) as aggregated_ts,
 				fingerprint_id,
 				metadata,
-				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics,
-				aggregation_interval
-			FROM crdb_internal.transaction_statistics %s
+				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+			FROM crdb_internal.transaction_statistics_persisted %s
 			GROUP BY
 				app_name,
 				fingerprint_id,
-				metadata,
-				aggregation_interval
+				metadata
 			%s`, whereClause, orderAndLimit)
 
-	const expectedNumDatums = 6
+	const expectedNumDatums = 5
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-txns-by-interval", nil,
 		sessiondata.InternalExecutorOverride{
@@ -325,15 +310,12 @@ func collectCombinedTransactions(
 			return nil, serverError(ctx, err)
 		}
 
-		aggInterval := tree.MustBeDInterval(row[5]).Duration
-
 		txnStats := serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{
 			StatsData: roachpb.CollectedTransactionStatistics{
 				StatementFingerprintIDs:  metadata.StatementFingerprintIDs,
 				App:                      app,
 				Stats:                    metadata.Stats,
 				AggregatedTs:             aggregatedTs,
-				AggregationInterval:      time.Duration(aggInterval.Nanos()),
 				TransactionFingerprintID: roachpb.TransactionFingerprintID(fingerprintID),
 			},
 		}
@@ -381,7 +363,7 @@ func getStatementDetails(
 	}
 
 	withIndexRecs := settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations)
-	stmtsTable := "crdb_internal.statement_statistics"
+	stmtsTable := "crdb_internal.statement_statistics_persisted"
 
 	if !withIndexRecs {
 		stmtsTable = "crdb_internal.statement_statistics_v22_1"
@@ -508,18 +490,15 @@ func getTotalStatementDetails(
 	query := fmt.Sprintf(
 		`SELECT
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				aggregation_interval,
 				array_agg(app_name) as app_names,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
 				encode(fingerprint_id, 'hex') as fingerprint_id
 		FROM %s %s
 		GROUP BY
-				aggregation_interval,
 				fingerprint_id
 		LIMIT 1`, table, whereClause)
 
-	const expectedNumDatums = 6
+	const expectedNumDatums = 4
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
@@ -545,26 +524,17 @@ func getTotalStatementDetails(
 		return statement, serverError(ctx, err)
 	}
 
-	aggInterval := tree.MustBeDInterval(row[1]).Duration
-
-	apps := tree.MustBeDArray(row[2])
+	apps := tree.MustBeDArray(row[1])
 	var appNames []string
 	for _, s := range apps.Array {
 		appNames = util.CombineUniqueString(appNames, []string{string(tree.MustBeDString(s))})
 	}
 	aggregatedMetadata.AppNames = appNames
 
-	statsJSON := tree.MustBeDJSON(row[3]).JSON
+	statsJSON := tree.MustBeDJSON(row[2]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
 		return statement, serverError(ctx, err)
 	}
-
-	planJSON := tree.MustBeDJSON(row[4]).JSON
-	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-	if err != nil {
-		return statement, serverError(ctx, err)
-	}
-	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
 	queryTree, err := parser.ParseOne(aggregatedMetadata.Query)
 	if err != nil {
@@ -575,12 +545,11 @@ func getTotalStatementDetails(
 	cfg.LineWidth = tree.ConsoleLineWidth
 	aggregatedMetadata.FormattedQuery = cfg.Pretty(queryTree.AST)
 
-	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[5]))
+	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[3]))
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
-		Metadata:            aggregatedMetadata,
-		AggregationInterval: time.Duration(aggInterval.Nanos()),
-		Stats:               statistics.Stats,
+		Metadata: aggregatedMetadata,
+		Stats:    statistics.Stats,
 	}
 
 	return statement, nil
@@ -601,18 +570,15 @@ func getStatementDetailsPerAggregatedTs(
 		`SELECT
 				aggregated_ts,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
-				aggregation_interval
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
 		FROM %s %s
 		GROUP BY
-				aggregated_ts,
-				aggregation_interval
+				aggregated_ts
 		ORDER BY aggregated_ts ASC
 		LIMIT $%d`, table, whereClause, len(args)+1)
 
 	args = append(args, limit)
-	const expectedNumDatums = 5
+	const expectedNumDatums = 3
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
 		sessiondata.InternalExecutorOverride{
@@ -656,20 +622,10 @@ func getStatementDetailsPerAggregatedTs(
 			return nil, serverError(ctx, err)
 		}
 
-		planJSON := tree.MustBeDJSON(row[3]).JSON
-		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-
-		aggInterval := tree.MustBeDInterval(row[4]).Duration
-
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs{
-			AggregatedTs:        aggregatedTs,
-			AggregationInterval: time.Duration(aggInterval.Nanos()),
-			Stats:               metadata.Stats,
-			Metadata:            aggregatedMetadata,
+			AggregatedTs: aggregatedTs,
+			Stats:        metadata.Stats,
+			Metadata:     aggregatedMetadata,
 		}
 
 		statements = append(statements, stmt)
@@ -732,16 +688,13 @@ func getStatementDetailsPerPlanHash(
 				plan_hash,
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
-				aggregation_interval
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
 		FROM crdb_internal.statement_statistics_v22_1 %s
 		GROUP BY
 				plan_hash,
-				plan_gist,
-				aggregation_interval
+				plan_gist
 		LIMIT $%d`, whereClause, len(args)+1)
-	expectedNumDatums := 6
+	expectedNumDatums := 4
 
 	if withIndexRecs {
 		query = fmt.Sprintf(
@@ -750,17 +703,14 @@ func getStatementDetailsPerPlanHash(
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
-				aggregation_interval,
 				index_recommendations
-		FROM crdb_internal.statement_statistics %s
+		FROM crdb_internal.statement_statistics_persisted %s
 		GROUP BY
 				plan_hash,
 				plan_gist,
-				aggregation_interval,
 				index_recommendations
 		LIMIT $%d`, whereClause, len(args)+1)
-		expectedNumDatums = 7
+		expectedNumDatums = 5
 	}
 
 	args = append(args, limit)
@@ -815,17 +765,9 @@ func getStatementDetailsPerPlanHash(
 			return nil, serverError(ctx, err)
 		}
 
-		planJSON := tree.MustBeDJSON(row[4]).JSON
-		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-		aggInterval := tree.MustBeDInterval(row[5]).Duration
-
 		var idxRecommendations []string
 		if withIndexRecs {
-			recommendations := tree.MustBeDArray(row[6])
+			recommendations := tree.MustBeDArray(row[4])
 			for _, s := range recommendations.Array {
 				idxRecommendations = util.CombineUniqueString(idxRecommendations, []string{string(tree.MustBeDString(s))})
 			}
@@ -849,7 +791,6 @@ func getStatementDetailsPerPlanHash(
 		aggregatedMetadata.TotalCount = metadata.Stats.Count
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash{
-			AggregationInterval:  time.Duration(aggInterval.Nanos()),
 			ExplainPlan:          explainPlan,
 			PlanHash:             planHash,
 			Stats:                metadata.Stats,

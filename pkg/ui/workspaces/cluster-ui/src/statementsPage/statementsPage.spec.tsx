@@ -88,7 +88,6 @@ describe("StatementsPage", () => {
       aggregatedFingerprintID: "",
       aggregatedFingerprintHexID: "",
       aggregatedTs: 0,
-      aggregationInterval: 0,
       database: "",
       applicationName: "",
       fullScan: false,

@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export const aggregationIntervalAttr = "aggregation_interval";
 export const aggregatedTsAttr = "aggregated_ts";
 export const appAttr = "app";
 export const appNamesAttr = "appNames";
