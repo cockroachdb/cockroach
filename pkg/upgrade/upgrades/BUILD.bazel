@@ -87,6 +87,7 @@ go_test(
     size = "large",
     srcs = [
         "alter_jobs_add_job_type_test.go",
+        "alter_sql_instances_binary_version_test.go",
         "alter_sql_instances_sql_addr_test.go",
         "alter_table_statistics_partial_predicate_and_id_test.go",
         "backfill_jobs_info_table_migration_test.go",

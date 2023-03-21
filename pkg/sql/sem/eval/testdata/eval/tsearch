@@ -105,3 +105,312 @@ eval
 phraseto_tsquery('simple', 'hello the#re')
 ----
 'hello' <-> 'the' <-> 're'
+
+eval
+to_tsquery('english', 'qwe & sKies ')
+----
+'qwe' & 'sky'
+
+eval
+to_tsquery('simple', 'qwe & sKies ')
+----
+'qwe' & 'skies'
+
+eval
+to_tsquery('english', '''the wether'':dc & ''           sKies '':BC ')
+----
+'wether':CD & 'sky':BC
+
+eval
+to_tsquery('english', 'asd&(and|fghj)')
+----
+'asd' & 'fghj'
+
+eval
+to_tsquery('english', '(asd&and)|fghj')
+----
+'asd' | 'fghj'
+
+eval
+to_tsquery('english', '(asd&!and)|fghj')
+----
+'asd' | 'fghj'
+
+eval
+to_tsquery('english', '(the|and&(i&1))&fghj')
+----
+'1' & 'fghj'
+
+# Test english stemming and stopword elimination in to_tsvector
+eval
+to_tsvector('english', 'Here is a sentence with some stop words')
+----
+'sentenc':4 'stop':7 'word':8
+
+# Test stopword elimination in to_tsquery
+
+eval
+to_tsquery('english', '!(a & !b) & c')
+----
+!!'b' & 'c'
+
+eval
+to_tsquery('english', '!(a & !b)')
+----
+!!'b'
+
+eval
+to_tsquery('english', '(1 <-> 2) <-> a')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(1 <-> a) <-> 2')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '(a <-> 1) <-> 2')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', 'a <-> (1 <-> 2)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '1 <-> (a <-> 2)')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '1 <-> (2 <-> a)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(1 <-> 2) <3> a')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(1 <-> a) <3> 2')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '(a <-> 1) <3> 2')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', 'a <3> (1 <-> 2)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '1 <3> (a <-> 2)')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '1 <3> (2 <-> a)')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '(1 <3> 2) <-> a')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '(1 <3> a) <-> 2')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '(a <3> 1) <-> 2')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', 'a <-> (1 <3> 2)')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '1 <-> (a <3> 2)')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '1 <-> (2 <3> a)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '((a <-> 1) <-> 2) <-> s')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(2 <-> (a <-> 1)) <-> s')
+----
+'2' <2> '1'
+
+eval
+to_tsquery('english', '((1 <-> a) <-> 2) <-> s')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '(2 <-> (1 <-> a)) <-> s')
+----
+'2' <-> '1'
+
+eval
+to_tsquery('english', 's <-> ((a <-> 1) <-> 2)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', 's <-> (2 <-> (a <-> 1))')
+----
+'2' <2> '1'
+
+eval
+to_tsquery('english', 's <-> ((1 <-> a) <-> 2)')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', 's <-> (2 <-> (1 <-> a))')
+----
+'2' <-> '1'
+
+eval
+to_tsquery('english', '((a <-> 1) <-> s) <-> 2')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '(s <-> (a <-> 1)) <-> 2')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '((1 <-> a) <-> s) <-> 2')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '(s <-> (1 <-> a)) <-> 2')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '2 <-> ((a <-> 1) <-> s)')
+----
+'2' <2> '1'
+
+eval
+to_tsquery('english', '2 <-> (s <-> (a <-> 1))')
+----
+'2' <3> '1'
+
+eval
+to_tsquery('english', '2 <-> ((1 <-> a) <-> s)')
+----
+'2' <-> '1'
+
+eval
+to_tsquery('english', '2 <-> (s <-> (1 <-> a))')
+----
+'2' <2> '1'
+
+
+eval
+to_tsquery('english', 'foo <-> (a <-> (the <-> bar))')
+----
+'foo' <3> 'bar'
+
+eval
+to_tsquery('english', '((foo <-> a) <-> the) <-> bar')
+----
+'foo' <3> 'bar'
+
+eval
+to_tsquery('english', 'foo <-> a <-> the <-> bar')
+----
+'foo' <3> 'bar'
+
+# Test stemming and stopword elimination for supported languages.
+# search configurations for English, Danish, Dutch, Finnish, French,
+# German, Hungarian, Italian, Norwegian, Portuguese, Russian, Spanish,
+# Swedish, and Turkish.
+
+eval
+to_tsvector('danish', 'her er en sætning med nogle stopord')
+----
+'stopord':7 'sætning':4
+
+eval
+to_tsvector('dutch', 'hier is een zin met enkele stopwoorden')
+----
+'enkel':6 'stopwoord':7 'zin':4
+
+eval
+to_tsvector('finnish', 'tässä on lause, jossa on stop-sanoja')
+----
+'lause':3 'sano':7 'stop':6
+
+eval
+to_tsvector('french', 'voici une phrase avec quelques mots vides')
+----
+'mot':6 'phras':3 'quelqu':5 'vid':7 'voic':1
+
+eval
+to_tsvector('german', 'Hier ist ein Satz mit einigen Stoppwörtern')
+----
+'satz':4 'stoppwort':7
+
+eval
+to_tsvector('hungarian', 'itt van egy mondat néhány stop szóval')
+----
+'mon':4 'stop':6 'szó':7
+
+eval
+to_tsvector('italian', 'ecco una frase con alcune stop words')
+----
+'alcun':5 'ecco':1 'fras':3 'stop':6 'words':7
+
+eval
+to_tsvector('norwegian', 'her er en setning med noen stoppord')
+----
+'setning':4 'stoppord':7
+
+eval
+to_tsvector('portuguese', 'aqui está uma frase com algumas palavras de parada')
+----
+'algum':6 'aqu':1 'fras':4 'palavr':7 'par':9
+
+eval
+to_tsvector('russian', 'вот предложение с некоторыми стоп-словами')
+----
+'некотор':4 'предложен':2 'слов':6 'стоп':5
+
+eval
+to_tsvector('spanish', 'aquí hay una oración con algunas palabras vacías')
+----
+'aqu':1 'oracion':4 'palabr':7 'vac':8
+
+eval
+to_tsvector('swedish', 'här är en mening med några stoppord')
+----
+'mening':4 'stoppord':7
+
+eval
+to_tsvector('turkish', 'burada bazı durma sözcükleri olan bir cümle var')
+----
+'bir':6 'bura':1 'durma':3 'ola':5 'sözcük':4 'var':8 'ç':7

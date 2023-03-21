@@ -103,13 +103,14 @@ type Storage struct {
 
 // instancerow encapsulates data for a single row within the sql_instances table.
 type instancerow struct {
-	region     []byte
-	instanceID base.SQLInstanceID
-	sqlAddr    string
-	rpcAddr    string
-	sessionID  sqlliveness.SessionID
-	locality   roachpb.Locality
-	timestamp  hlc.Timestamp
+	region        []byte
+	instanceID    base.SQLInstanceID
+	sqlAddr       string
+	rpcAddr       string
+	sessionID     sqlliveness.SessionID
+	locality      roachpb.Locality
+	binaryVersion roachpb.Version
+	timestamp     hlc.Timestamp
 }
 
 // isAvailable returns true if the instance row hasn't been claimed by a SQL pod
@@ -165,9 +166,10 @@ func (s *Storage) CreateNodeInstance(
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
+	binaryVersion roachpb.Version,
 	nodeID roachpb.NodeID,
 ) (instance sqlinstance.InstanceInfo, _ error) {
-	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, nodeID)
+	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, binaryVersion, nodeID)
 }
 
 const noNodeID = 0
@@ -181,8 +183,9 @@ func (s *Storage) CreateInstance(
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
+	binaryVersion roachpb.Version,
 ) (instance sqlinstance.InstanceInfo, _ error) {
-	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, noNodeID)
+	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID)
 }
 
 func (s *Storage) createInstanceRow(
@@ -192,6 +195,7 @@ func (s *Storage) createInstanceRow(
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
+	binaryVersion roachpb.Version,
 	nodeID roachpb.NodeID,
 ) (instance sqlinstance.InstanceInfo, _ error) {
 	if len(sqlAddr) == 0 || len(rpcAddr) == 0 {
@@ -251,14 +255,14 @@ func (s *Storage) createInstanceRow(
 			b := txn.NewBatch()
 
 			rowCodec := s.getReadCodec(&version)
-			value, err := rowCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality)
+			value, err := rowCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality, binaryVersion)
 			if err != nil {
 				return err
 			}
 			b.Put(rowCodec.encodeKey(region, availableID), value)
 
 			if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-				dualValue, err := dualCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality)
+				dualValue, err := dualCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality, binaryVersion)
 				if err != nil {
 					return err
 				}
@@ -290,6 +294,7 @@ func (s *Storage) createInstanceRow(
 				InstanceSQLAddr: sqlAddr,
 				SessionID:       sessionID,
 				Locality:        locality,
+				BinaryVersion:   binaryVersion,
 			}, err
 		}
 		if !errors.Is(err, errNoPreallocatedRows) {

@@ -945,6 +945,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_blevesearch_snowballstem",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/blevesearch/snowballstem",
+        sha256 = "6640a408ddcec84810873cc678570717c02d5b7b932f37672c44caea33469506",
+        strip_prefix = "github.com/blevesearch/snowballstem@v0.9.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/blevesearch/snowballstem/com_github_blevesearch_snowballstem-v0.9.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_bmizerany_assert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/bmizerany/assert",

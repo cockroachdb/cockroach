@@ -2363,6 +2363,7 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderDeadlock(t)
 	skip.UnderShort(t)
 
 	ctx := context.Background()
