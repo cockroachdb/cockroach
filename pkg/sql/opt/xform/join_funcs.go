@@ -1333,7 +1333,8 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 			return nil, nil, false
 		}
 	}
-	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(private.Table)
 
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has
@@ -1358,7 +1359,9 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// Check whether the filter constrains the first column of the index
 	// to at least two constant values. We need at least two values so that one
 	// can target a local partition and one can target a remote partition.
-	col, vals, ok := filter.ScalarProps().Constraints.ExtractSingleColumnNonNullConstValues(c.e.evalCtx)
+	idx := md.Table(private.Table).Index(private.Index)
+	firstCol := private.Table.ColumnID(idx.Column(0).Ordinal())
+	vals, ok := filter.ScalarProps().Constraints.ExtractSingleColumnNonNullConstValues(c.e.evalCtx, firstCol)
 	if !ok || len(vals) < 2 {
 		return nil, nil, false
 	}
@@ -1381,7 +1384,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	c.e.f.DisableOptimizationsTemporarily(func() {
 		// Disable normalization rules when constructing the lookup expression
 		// so that it does not get normalized into a non-canonical expression.
-		localExpr[filterIdx] = c.e.f.ConstructConstFilter(col, localValues)
+		localExpr[filterIdx] = c.e.f.ConstructConstFilter(firstCol, localValues)
 	})
 
 	remoteExpr = make(memo.FiltersExpr, len(private.LookupExpr))
@@ -1389,7 +1392,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	c.e.f.DisableOptimizationsTemporarily(func() {
 		// Disable normalization rules when constructing the lookup expression
 		// so that it does not get normalized into a non-canonical expression.
-		remoteExpr[filterIdx] = c.e.f.ConstructConstFilter(col, remoteValues)
+		remoteExpr[filterIdx] = c.e.f.ConstructConstFilter(firstCol, remoteValues)
 	})
 
 	return localExpr, remoteExpr, true
