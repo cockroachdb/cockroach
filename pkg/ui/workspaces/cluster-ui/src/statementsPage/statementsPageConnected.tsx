@@ -15,7 +15,11 @@ import { Dispatch } from "redux";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";
-import { actions as localStorageActions } from "src/store/localStorage";
+import {
+  actions as localStorageActions,
+  updateStmtsPageLimitAction,
+  updateStmsPageReqSortAction,
+} from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as databasesListActions } from "src/store/databasesList";
 import { actions as nodesActions } from "../store/nodes";
@@ -38,7 +42,11 @@ import {
   selectSearch,
   selectStatementsLastUpdated,
 } from "./statementsPage.selectors";
-import { selectTimeScale } from "../store/utils/selectors";
+import {
+  selectTimeScale,
+  selectStmtsPageLimit,
+  selectStmtsPageReqSort,
+} from "../store/utils/selectors";
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
@@ -62,6 +70,7 @@ import {
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
+  SqlStatsSortType,
 } from "../api";
 
 type StateProps = {
@@ -102,6 +111,10 @@ export const ConnectedStatementsPage = withRouter(
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
         totalFingerprints: selectTotalFingerprints(state),
+        limit: selectStmtsPageLimit(state),
+        reqSortSetting: selectStmtsPageReqSort(state),
+        stmtsTotalRuntimeSecs:
+          state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
       },
       activePageProps: mapStateToRecentStatementsPageProps(state),
     }),
@@ -241,6 +254,10 @@ export const ConnectedStatementsPage = withRouter(
                 selectedColumns.length === 0 ? " " : selectedColumns.join(","),
             }),
           ),
+        onChangeLimit: (limit: number) =>
+          dispatch(updateStmtsPageLimitAction(limit)),
+        onChangeReqSort: (sort: SqlStatsSortType) =>
+          dispatch(updateStmsPageReqSortAction(sort)),
       },
       activePageProps: mapDispatchToRecentStatementsPageProps(dispatch),
     }),

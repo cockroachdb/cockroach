@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { fetchData } from "src/api";
+import { fetchData } from "src/api/fetchData";
 import {
   FixFingerprintHexValue,
   HexStringToInt64String,
@@ -18,6 +18,8 @@ import {
   stringToTimestamp,
 } from "src/util";
 import Long from "long";
+import moment from "moment";
+
 import { AggregateStatistics } from "../statementsTable";
 const STATEMENTS_PATH = "/_status/combinedstmts";
 const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
@@ -32,24 +34,84 @@ export type StatementDetailsResponseWithKey = {
   stmtResponse: StatementDetailsResponse;
   key: string;
 };
+
+export type SqlStatsResponse = cockroach.server.serverpb.StatementsResponse;
+export const SqlStatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
+export type SqlStatsSortType = cockroach.server.serverpb.StatsSortOptions;
+
+const FetchStatsMode =
+  cockroach.server.serverpb.CombinedStatementsStatsRequest.StatsType;
+
 export type ErrorWithKey = {
   err: Error;
   key: string;
 };
 
+export const DEFAULT_STATS_REQ_OPTIONS = {
+  limit: 100,
+  sort: SqlStatsSortOptions.SERVICE_LAT,
+};
+
+// The required fields to create a stmts request.
+type StmtReqFields = {
+  limit: number;
+  sort: SqlStatsSortType;
+  start: moment.Moment;
+  end: moment.Moment;
+};
+
+export function createCombinedStmtsRequest({
+  limit,
+  sort,
+  start,
+  end,
+}: StmtReqFields): StatementsRequest {
+  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
+    start: Long.fromNumber(start.unix()),
+    end: Long.fromNumber(end.unix()),
+    limit: Long.fromNumber(limit ?? DEFAULT_STATS_REQ_OPTIONS.limit),
+    fetch_mode:
+      new cockroach.server.serverpb.CombinedStatementsStatsRequest.FetchMode({
+        sort: sort,
+      }),
+  });
+}
+
 export const getCombinedStatements = (
   req: StatementsRequest,
-): Promise<cockroach.server.serverpb.StatementsResponse> => {
+): Promise<SqlStatsResponse> => {
   const queryStr = propsToQueryString({
     start: req.start.toInt(),
     end: req.end.toInt(),
+    "fetch_mode.stats_type": FetchStatsMode.StmtStatsOnly,
+    "fetch_mode.sort": req.fetch_mode?.sort,
+    limit: req.limit?.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
     `${STATEMENTS_PATH}?${queryStr}`,
     null,
     null,
-    "30M",
+    "10M",
+  );
+};
+
+export const getFlushedTxnStatsApi = (
+  req: StatementsRequest,
+): Promise<SqlStatsResponse> => {
+  const queryStr = propsToQueryString({
+    start: req.start?.toInt(),
+    end: req.end?.toInt(),
+    "fetch_mode.stats_type": FetchStatsMode.TxnStatsOnly,
+    "fetch_mode.sort": req.fetch_mode?.sort,
+    limit: req.limit?.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
+  });
+  return fetchData(
+    cockroach.server.serverpb.StatementsResponse,
+    `${STATEMENTS_PATH}?${queryStr}`,
+    null,
+    null,
+    "10M",
   );
 };
 

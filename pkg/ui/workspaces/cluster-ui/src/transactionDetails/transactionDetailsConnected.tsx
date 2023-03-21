@@ -16,6 +16,7 @@ import { Dispatch } from "redux";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as txnStatsActions } from "src/store/transactionStats";
 import { TxnInsightsRequest } from "../api";
 import {
   actions as transactionInsights,
@@ -37,14 +38,18 @@ import {
   selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "../store/utils/selectors";
+import {
+  selectTimeScale,
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+} from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 import { actions as analyticsActions } from "../store/analytics";
 
 export const selectTransaction = createSelector(
-  (state: AppState) => state.adminUI?.sqlStats,
+  (state: AppState) => state.adminUI?.transactions,
   (_state: AppState, props: RouteComponentProps) => props,
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;
@@ -99,6 +104,8 @@ const mapStateToProps = (
     transactionInsights: selectTxnInsightsByFingerprint(state, props),
     hasAdminRole: selectHasAdminRole(state),
     isDataValid: isValid,
+    limit: selectTxnsPageLimit(state),
+    reqSortSetting: selectTxnsPageReqSort(state),
   };
 };
 
@@ -106,7 +113,7 @@ const mapDispatchToProps = (
   dispatch: Dispatch,
 ): TransactionDetailsDispatchProps => ({
   refreshData: (req?: StatementsRequest) =>
-    dispatch(sqlStatsActions.refresh(req)),
+    dispatch(txnStatsActions.refresh(req)),
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   onTimeScaleChange: (ts: TimeScale) => {

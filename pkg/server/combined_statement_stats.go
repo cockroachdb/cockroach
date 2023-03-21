@@ -67,18 +67,36 @@ func getCombinedStatementStats(
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementsResponse, error) {
-	startTime := getTimeFromSeconds(req.Start)
-	endTime := getTimeFromSeconds(req.End)
-	limit := SQLStatsResponseMax.Get(&settings.SV)
 	showInternal := SQLStatsShowInternal.Get(&settings.SV)
 	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
-		startTime, endTime, limit, testingKnobs, showInternal)
-	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
+		req, testingKnobs, showInternal, settings)
+
+	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
+	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+	var err error
+
+	if req.FetchMode == nil || req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		transactions, err = collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit, testingKnobs)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+	}
+
+	if req.FetchMode != nil && req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		// Change the whereClause for the statements to those matching the txn_fingerprint_ids in the
+		// transactions response that are within the desired interval. We also don't need the order and
+		// limit anymore.
+		orderAndLimit = ""
+		whereClause, args = buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
+	}
+
+	statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit, testingKnobs)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	transactions, err := collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit)
+	stmtsRunTime, txnsRunTime, err := getTotalRuntimeSecs(ctx, req, ie, testingKnobs)
+
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -88,9 +106,186 @@ func getCombinedStatementStats(
 		Transactions:          transactions,
 		LastReset:             statsProvider.GetLastReset(),
 		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+		StmtsTotalRuntimeSecs: stmtsRunTime,
+		TxnsTotalRuntimeSecs:  txnsRunTime,
 	}
 
 	return response, nil
+}
+
+func getTotalRuntimeSecs(
+	ctx context.Context,
+	req *serverpb.CombinedStatementsStatsRequest,
+	ie *sql.InternalExecutor,
+	testingKnobs *sqlstats.TestingKnobs,
+) (stmtsRuntime float32, txnsRuntime float32, err error) {
+	var buffer strings.Builder
+	buffer.WriteString(testingKnobs.GetAOSTClause())
+	var args []interface{}
+	startTime := getTimeFromSeconds(req.Start)
+	endTime := getTimeFromSeconds(req.End)
+
+	buffer.WriteString(" WHERE true")
+
+	if startTime != nil {
+		args = append(args, *startTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts >= $%d", len(args)))
+	}
+
+	if endTime != nil {
+		args = append(args, *endTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)))
+	}
+
+	whereClause := buffer.String()
+
+	queryWithPlaceholders := `
+SELECT
+COALESCE(
+  sum(
+    (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+    (statistics-> 'statistics' ->> 'cnt')::FLOAT
+  )
+, 0)
+FROM crdb_internal.%s_statistics_persisted
+%s
+`
+
+	getRuntime := func(table string) (float32, error) {
+		it, err := ie.QueryIteratorEx(
+			ctx,
+			fmt.Sprintf(`%s-total-runtime`, table),
+			nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryWithPlaceholders, table, whereClause),
+			args...)
+
+		if err != nil {
+			return 0, err
+		}
+
+		defer func() {
+			closeErr := it.Close()
+			if closeErr != nil {
+				err = errors.CombineErrors(err, closeErr)
+			}
+		}()
+
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return 0, err
+		}
+
+		if !ok {
+			return 0, errors.New("expected one row but got none")
+		}
+
+		var row tree.Datums
+		if row = it.Cur(); row == nil {
+			return 0, errors.New("unexpected null row")
+		}
+
+		return float32(tree.MustBeDFloat(row[0])), nil
+
+	}
+
+	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		stmtsRuntime, err = getRuntime("statement")
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
+		txnsRuntime, err = getRuntime("transaction")
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	return stmtsRuntime, txnsRuntime, err
+}
+
+// Common stmt and txn columns to sort on.
+const (
+	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
+	sortCPUTimeDesc        = `(statistics -> 'statistics' -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
+	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
+	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
+	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
+)
+
+func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
+	switch sort {
+	case serverpb.StatsSortOptions_SERVICE_LAT:
+		return sortSvcLatDesc
+	case serverpb.StatsSortOptions_CPU_TIME:
+		return sortCPUTimeDesc
+	case serverpb.StatsSortOptions_EXECUTION_COUNT:
+		return sortExecCountDesc
+	case serverpb.StatsSortOptions_P99_STMTS_ONLY:
+		return `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
+	case serverpb.StatsSortOptions_CONTENTION_TIME:
+		return sortContentionTimeDesc
+	default:
+		return sortSvcLatDesc
+	}
+}
+
+func getTxnColumnFromSortOption(sort serverpb.StatsSortOptions) string {
+	switch sort {
+	case serverpb.StatsSortOptions_SERVICE_LAT:
+		return sortSvcLatDesc
+	case serverpb.StatsSortOptions_CPU_TIME:
+		return sortCPUTimeDesc
+	case serverpb.StatsSortOptions_EXECUTION_COUNT:
+		return sortExecCountDesc
+	case serverpb.StatsSortOptions_CONTENTION_TIME:
+		return sortContentionTimeDesc
+	case serverpb.StatsSortOptions_PCT_RUNTIME:
+		return sortPCTRuntimeDesc
+	default:
+		return sortSvcLatDesc
+	}
+}
+
+// buildWhereClauseForStmtsByTxn builds the where clause to get the statement
+// stats based on a list of transactions. The list of transactions provided must
+// contain no duplicate transaction fingerprint ids.
+func buildWhereClauseForStmtsByTxn(
+	req *serverpb.CombinedStatementsStatsRequest,
+	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
+	testingKnobs *sqlstats.TestingKnobs,
+) (whereClause string, args []interface{}) {
+	var buffer strings.Builder
+	buffer.WriteString(testingKnobs.GetAOSTClause())
+
+	buffer.WriteString(" WHERE true")
+
+	// Add start and end filters from request.
+	startTime := getTimeFromSeconds(req.Start)
+	endTime := getTimeFromSeconds(req.End)
+	if startTime != nil {
+		args = append(args, *startTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts >= $%d", len(args)))
+	}
+
+	if endTime != nil {
+		args = append(args, *endTime)
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)))
+	}
+
+	txnFingerprints := make([]string, 0, len(transactions))
+	for i := range transactions {
+		fingerprint := uint64(transactions[i].StatsData.TransactionFingerprintID)
+		txnFingerprints = append(txnFingerprints, fmt.Sprintf("\\x%016x", fingerprint))
+	}
+
+	args = append(args, txnFingerprints)
+	buffer.WriteString(fmt.Sprintf(" AND transaction_fingerprint_id = any $%d", len(args)))
+
+	return buffer.String(), args
 }
 
 // getCombinedStatementsQueryClausesAndArgs returns:
@@ -100,7 +295,10 @@ func getCombinedStatementStats(
 // The whereClause will be in the format `WHERE A = $1 AND B = $2` and
 // args will return the list of arguments in order that will replace the actual values.
 func getCombinedStatementsQueryClausesAndArgs(
-	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs, showInternal bool,
+	req *serverpb.CombinedStatementsStatsRequest,
+	testingKnobs *sqlstats.TestingKnobs,
+	showInternal bool,
+	settings *cluster.Settings,
 ) (whereClause string, orderAndLimitClause string, args []interface{}) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
@@ -115,17 +313,37 @@ func getCombinedStatementsQueryClausesAndArgs(
 			catconstants.DelegatedAppNamePrefix))
 	}
 
-	if start != nil {
+	// Add start and end filters from request.
+	startTime := getTimeFromSeconds(req.Start)
+	endTime := getTimeFromSeconds(req.End)
+	if startTime != nil {
 		buffer.WriteString(" AND aggregated_ts >= $1")
-		args = append(args, *start)
+		args = append(args, *startTime)
 	}
 
-	if end != nil {
-		args = append(args, *end)
+	if endTime != nil {
+		args = append(args, *endTime)
 		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)))
 	}
+
+	// Add LIMIT from request.
+	limit := req.Limit
+	if limit == 0 {
+		limit = SQLStatsResponseMax.Get(&settings.SV)
+	}
 	args = append(args, limit)
-	orderAndLimitClause = fmt.Sprintf(` ORDER BY aggregated_ts DESC LIMIT $%d`, len(args))
+
+	// Determine sort column.
+	var col string
+	if req.FetchMode == nil {
+		col = "fingerprint_id"
+	} else if req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
+		col = getStmtColumnFromSortOption(req.FetchMode.Sort)
+	} else if req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		col = getTxnColumnFromSortOption(req.FetchMode.Sort)
+	}
+
+	orderAndLimitClause = fmt.Sprintf(` ORDER BY %s LIMIT $%d`, col, len(args))
 
 	return buffer.String(), orderAndLimitClause, args
 }
@@ -136,23 +354,26 @@ func collectCombinedStatements(
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-
-	query := fmt.Sprintf(
-		`SELECT
-				fingerprint_id,
-				transaction_fingerprint_id,
-				app_name,
-				max(aggregated_ts) as aggregated_ts,
-				metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-		FROM crdb_internal.statement_statistics %s
-		GROUP BY
-				fingerprint_id,
-				transaction_fingerprint_id,
-				app_name,
-				metadata
-		%s`, whereClause, orderAndLimit)
+	aostClause := testingKnobs.GetAOSTClause()
+	query := fmt.Sprintf(`
+SELECT * FROM (
+SELECT
+    fingerprint_id,
+    transaction_fingerprint_id,
+    app_name,
+    max(aggregated_ts) as aggregated_ts,
+    metadata,
+    crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+FROM crdb_internal.statement_statistics_persisted %s
+GROUP BY
+    fingerprint_id,
+    transaction_fingerprint_id,
+    app_name,
+    metadata
+) %s
+%s`, whereClause, aostClause, orderAndLimit)
 
 	const expectedNumDatums = 6
 
@@ -236,21 +457,25 @@ func collectCombinedTransactions(
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
+	aostClause := testingKnobs.GetAOSTClause()
 
-	query := fmt.Sprintf(
-		`SELECT
-				app_name,
-				max(aggregated_ts) as aggregated_ts,
-				fingerprint_id,
-				metadata,
-				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-			FROM crdb_internal.transaction_statistics %s
-			GROUP BY
-				app_name,
-				fingerprint_id,
-				metadata
-			%s`, whereClause, orderAndLimit)
+	query := fmt.Sprintf(`
+SELECT * FROM (
+SELECT
+    app_name,
+    max(aggregated_ts) as aggregated_ts,
+    fingerprint_id,
+    metadata,
+    crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+FROM crdb_internal.transaction_statistics_persisted %s
+GROUP BY
+    app_name,
+    fingerprint_id,
+    metadata
+) %s
+%s`, whereClause, aostClause, orderAndLimit)
 
 	const expectedNumDatums = 5
 
@@ -463,18 +688,15 @@ func getTotalStatementDetails(
 	query := fmt.Sprintf(
 		`SELECT
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				aggregation_interval,
 				array_agg(app_name) as app_names,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
 				encode(fingerprint_id, 'hex') as fingerprint_id
-		FROM crdb_internal.statement_statistics %s
+		FROM crdb_internal.statement_statistics_persisted %s
 		GROUP BY
-				aggregation_interval,
 				fingerprint_id
 		LIMIT 1`, whereClause)
 
-	const expectedNumDatums = 6
+	const expectedNumDatums = 4
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
@@ -498,26 +720,17 @@ func getTotalStatementDetails(
 		return statement, serverError(ctx, err)
 	}
 
-	aggInterval := tree.MustBeDInterval(row[1]).Duration
-
-	apps := tree.MustBeDArray(row[2])
+	apps := tree.MustBeDArray(row[1])
 	var appNames []string
 	for _, s := range apps.Array {
 		appNames = util.CombineUniqueString(appNames, []string{string(tree.MustBeDString(s))})
 	}
 	aggregatedMetadata.AppNames = appNames
 
-	statsJSON := tree.MustBeDJSON(row[3]).JSON
+	statsJSON := tree.MustBeDJSON(row[2]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
 		return statement, serverError(ctx, err)
 	}
-
-	planJSON := tree.MustBeDJSON(row[4]).JSON
-	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-	if err != nil {
-		return statement, serverError(ctx, err)
-	}
-	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
 	queryTree, err := parser.ParseOne(aggregatedMetadata.Query)
 	if err != nil {
@@ -528,12 +741,11 @@ func getTotalStatementDetails(
 	cfg.LineWidth = tree.ConsoleLineWidth
 	aggregatedMetadata.FormattedQuery = cfg.Pretty(queryTree.AST)
 
-	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[5]))
+	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[3]))
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
-		Metadata:            aggregatedMetadata,
-		AggregationInterval: time.Duration(aggInterval.Nanos()),
-		Stats:               statistics.Stats,
+		Metadata: aggregatedMetadata,
+		Stats:    statistics.Stats,
 	}
 
 	return statement, nil
@@ -553,18 +765,15 @@ func getStatementDetailsPerAggregatedTs(
 		`SELECT
 				aggregated_ts,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
-				aggregation_interval
-		FROM crdb_internal.statement_statistics %s
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+		FROM crdb_internal.statement_statistics_persisted %s
 		GROUP BY
-				aggregated_ts,
-				aggregation_interval
+				aggregated_ts
 		ORDER BY aggregated_ts ASC
 		LIMIT $%d`, whereClause, len(args)+1)
 
 	args = append(args, limit)
-	const expectedNumDatums = 5
+	const expectedNumDatums = 3
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -606,20 +815,10 @@ func getStatementDetailsPerAggregatedTs(
 			return nil, serverError(ctx, err)
 		}
 
-		planJSON := tree.MustBeDJSON(row[3]).JSON
-		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-
-		aggInterval := tree.MustBeDInterval(row[4]).Duration
-
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs{
-			AggregatedTs:        aggregatedTs,
-			AggregationInterval: time.Duration(aggInterval.Nanos()),
-			Stats:               metadata.Stats,
-			Metadata:            aggregatedMetadata,
+			AggregatedTs: aggregatedTs,
+			Stats:        metadata.Stats,
+			Metadata:     aggregatedMetadata,
 		}
 
 		statements = append(statements, stmt)
@@ -709,17 +908,15 @@ func getStatementDetailsPerPlanHash(
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
-				aggregation_interval,
 				index_recommendations
-		FROM crdb_internal.statement_statistics %s
+		FROM crdb_internal.statement_statistics_persisted %s
 		GROUP BY
 				plan_hash,
 				plan_gist,
-				aggregation_interval,
 				index_recommendations
 		LIMIT $%d`, whereClause, len(args)+1)
-	expectedNumDatums := 7
+
+	expectedNumDatums := 5
 
 	args = append(args, limit)
 
@@ -771,15 +968,7 @@ func getStatementDetailsPerPlanHash(
 			return nil, serverError(ctx, err)
 		}
 
-		planJSON := tree.MustBeDJSON(row[4]).JSON
-		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-		aggInterval := tree.MustBeDInterval(row[5]).Duration
-
-		recommendations := tree.MustBeDArray(row[6])
+		recommendations := tree.MustBeDArray(row[4])
 		var idxRecommendations []string
 		for _, s := range recommendations.Array {
 			idxRecommendations = util.CombineUniqueString(idxRecommendations, []string{string(tree.MustBeDString(s))})
@@ -809,7 +998,6 @@ func getStatementDetailsPerPlanHash(
 		metadata.Stats.Indexes = indexes
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash{
-			AggregationInterval:  time.Duration(aggInterval.Nanos()),
 			ExplainPlan:          explainPlan,
 			PlanHash:             planHash,
 			Stats:                metadata.Stats,
