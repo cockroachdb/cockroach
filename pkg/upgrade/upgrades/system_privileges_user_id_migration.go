@@ -12,8 +12,10 @@ package upgrades
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -69,13 +71,18 @@ func alterSystemPrivilegesAddUserIDColumn(
 	return nil
 }
 
-const backfillUserIDColumnSystemPrivilegesStmt = `
+var backfillUserIDColumnSystemPrivilegesStmt = fmt.Sprintf(`
 UPDATE system.privileges AS p
-SET user_id = u.user_id
-FROM system.users AS u
-WHERE p.user_id is NULL AND p.username = u.username
+SET user_id = (
+	SELECT CASE p.username
+		WHEN '%s' THEN %d
+		ELSE (SELECT user_id FROM system.users AS u WHERE u.username = p.username)
+	END
+)
+WHERE p.user_id IS NULL
 LIMIT 1000
-`
+`,
+	username.PublicRole, username.PublicRoleID)
 
 const setUserIDColumnToNotNullSystemPrivilegesStmt = `
 ALTER TABLE system.privileges
