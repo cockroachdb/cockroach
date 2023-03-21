@@ -67,7 +67,7 @@ const (
 // If both the environment variable and the test flag are set, the environment
 // variable wins out.
 func ShouldStartDefaultTestTenant(t testing.TB) bool {
-	var defaultProbabilityOfStartingTestTenant = 0.5
+	var defaultProbabilityOfStartingTestTenant = 1.0 // NOTE(herko): forcing default test tenant for CI
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
