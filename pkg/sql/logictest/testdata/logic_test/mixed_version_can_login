@@ -21,7 +21,7 @@ SELECT crdb_internal.create_tenant(1001)
 upgrade 1
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
 true
 
@@ -34,7 +34,7 @@ SELECT crdb_internal.node_executable_version()
 user testuser nodeidx=0
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
 true
 
@@ -42,7 +42,7 @@ true
 user root nodeidx=1
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
 true
 
@@ -65,7 +65,7 @@ SELECT crdb_internal.node_executable_version()
 upgrade 2
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
 true
 
