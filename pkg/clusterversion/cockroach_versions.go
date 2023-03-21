@@ -498,6 +498,12 @@ const (
 	// config runner persistent job has been created.
 	V23_1_CreateAutoConfigRunnerJob
 
+	// V23_1AddSQLStatsComputedIndexes is the version at which Cockroach adds new
+	// computed columns and indexes to the statement_statistics and
+	// transaction_statistics system tables. These columns optimize persisted SQL
+	// statistics queries for observability.
+	V23_1AddSQLStatsComputedIndexes
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -862,6 +868,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_CreateAutoConfigRunnerJob,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 90},
+	},
+	{
+		Key:     V23_1AddSQLStatsComputedIndexes,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 92},
 	},
 
 	// *************************************************

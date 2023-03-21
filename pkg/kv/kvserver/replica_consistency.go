@@ -777,6 +777,10 @@ To inspect the checkpoints, one can use the cockroach debug range-data tool, and
 command line tools like diff. For example:
 
 $ cockroach debug range-data --replicated data/auxiliary/checkpoints/rN_at_M N
+
+Note that a directory that ends with "_pending" might not represent a valid
+checkpoint. Such directories can exist if the node fails during checkpoint
+creation. These directories should be deleted, or inspected with caution.
 `
 		attentionArgs := []any{r, desc.Replicas(), redact.Safe(auxDir), redact.Safe(path)}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)

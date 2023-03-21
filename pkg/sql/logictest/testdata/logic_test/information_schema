@@ -2411,7 +2411,10 @@ system         public        statement_diagnostics_requests   statement_fingerpr
 system         public        statement_statistics             agg_interval                                                                                              7
 system         public        statement_statistics             aggregated_ts                                                                                             1
 system         public        statement_statistics             app_name                                                                                                  5
+system         public        statement_statistics             contention_time                                                                                           17
+system         public        statement_statistics             cpu_sql_nanos                                                                                             16
 system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  11
+system         public        statement_statistics             execution_count                                                                                           14
 system         public        statement_statistics             fingerprint_id                                                                                            2
 system         public        statement_statistics             index_recommendations                                                                                     12
 system         public        statement_statistics             indexes_usage                                                                                             13
@@ -2419,7 +2422,9 @@ system         public        statement_statistics             metadata          
 system         public        statement_statistics             node_id                                                                                                   6
 system         public        statement_statistics             plan                                                                                                      10
 system         public        statement_statistics             plan_hash                                                                                                 4
+system         public        statement_statistics             service_latency                                                                                           15
 system         public        statement_statistics             statistics                                                                                                9
+system         public        statement_statistics             total_estimated_execution_time                                                                            18
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
 system         public        table_statistics                 avgSize                                                                                                   10
 system         public        table_statistics                 columnIDs                                                                                                 4
@@ -2475,11 +2480,16 @@ system         public        tenants                          service_mode      
 system         public        transaction_statistics           agg_interval                                                                                              5
 system         public        transaction_statistics           aggregated_ts                                                                                             1
 system         public        transaction_statistics           app_name                                                                                                  3
+system         public        transaction_statistics           contention_time                                                                                           12
+system         public        transaction_statistics           cpu_sql_nanos                                                                                             11
 system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       8
+system         public        transaction_statistics           execution_count                                                                                           9
 system         public        transaction_statistics           fingerprint_id                                                                                            2
 system         public        transaction_statistics           metadata                                                                                                  6
 system         public        transaction_statistics           node_id                                                                                                   4
+system         public        transaction_statistics           service_latency                                                                                           10
 system         public        transaction_statistics           statistics                                                                                                7
+system         public        transaction_statistics           total_estimated_execution_time                                                                            13
 system         public        ui                               key                                                                                                       1
 system         public        ui                               lastUpdated                                                                                               3
 system         public        ui                               value                                                                                                     2
