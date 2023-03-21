@@ -820,7 +820,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	r.traceMessageSends(outboundMsgs, "sending messages")
-	r.sendRaftMessages(ctx, outboundMsgs, pausedFollowers)
+	r.sendRaftMessages(ctx, outboundMsgs, pausedFollowers, true /* willDeliverLocal */)
 
 	// If the ready struct includes entries that have been committed, these
 	// entries will be applied to the Replica's replicated state machine down
@@ -937,7 +937,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 
 			// Send MsgStorageAppend's responses.
-			r.sendRaftMessages(ctx, msgStorageAppend.Responses, nil)
+			r.sendRaftMessages(ctx, msgStorageAppend.Responses, nil /* blocked */, true /* willDeliverLocal */)
 		} else {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if msgStorageAppend.Commit != 0 && !r.IsInitialized() {
@@ -1029,7 +1029,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 
 		// Send MsgStorageApply's responses.
-		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil)
+		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
 	}
 	stats.tApplicationEnd = timeutil.Now()
 	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
@@ -1487,11 +1487,25 @@ type replicaSyncCallback Replica
 
 func (r *replicaSyncCallback) OnLogSync(ctx context.Context, msgs []raftpb.Message) {
 	// Send MsgStorageAppend's responses.
-	(*Replica)(r).sendRaftMessages(ctx, msgs, nil /* blocked */)
+	(*Replica)(r).sendRaftMessages(ctx, msgs, nil /* blocked */, false /* willDeliverLocal */)
 }
 
+// sendRaftMessages sends a slice of Raft messages.
+//
+// blocked is a set of replicas to which replication traffic is currently
+// paused. Messages directed at a replica in this set will be dropped.
+//
+// willDeliverLocal, if true, indicates that the caller will ensure that any
+// local messages get delivered to the local raft state machine. This flag is
+// used to avoid unnecessary calls into the raft scheduler.
+//
+// When calling this method, the raftMu may be held, but it does not need to be.
+// The Replica mu must not be held.
 func (r *Replica) sendRaftMessages(
-	ctx context.Context, messages []raftpb.Message, blocked map[roachpb.ReplicaID]struct{},
+	ctx context.Context,
+	messages []raftpb.Message,
+	blocked map[roachpb.ReplicaID]struct{},
+	willDeliverLocal bool,
 ) {
 	var lastAppResp raftpb.Message
 	for _, message := range messages {
@@ -1514,7 +1528,7 @@ func (r *Replica) sendRaftMessages(
 			// replicaSyncCallback.OnLogSync. For other local storage work (log
 			// application and snapshot application), these messages come from
 			// Replica.handleRaftReadyRaftMuLocked.
-			r.sendLocalRaftMsg(message)
+			r.sendLocalRaftMsg(message, willDeliverLocal)
 		default:
 			_, drop := blocked[roachpb.ReplicaID(message.To)]
 			if drop {
@@ -1594,7 +1608,7 @@ func (r *Replica) sendRaftMessages(
 }
 
 // sendLocalRaftMsg sends a message to the local raft state machine.
-func (r *Replica) sendLocalRaftMsg(msg raftpb.Message) {
+func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
 	if msg.To != uint64(r.ReplicaID()) {
 		panic("incorrect message target")
 	}
@@ -1602,7 +1616,11 @@ func (r *Replica) sendLocalRaftMsg(msg raftpb.Message) {
 	wasEmpty := len(r.localMsgs.active) == 0
 	r.localMsgs.active = append(r.localMsgs.active, msg)
 	r.localMsgs.Unlock()
-	if wasEmpty {
+	// If this is the first local message and the caller will not deliver local
+	// messages itself, schedule a Raft update check to inform Raft processing
+	// about the new local message. Everyone else can rely on the call that added
+	// the first message having already scheduled a Raft update check.
+	if wasEmpty && !willDeliverLocal {
 		r.store.enqueueRaftUpdateCheck(r.RangeID)
 	}
 }
