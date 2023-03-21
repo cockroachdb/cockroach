@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -138,6 +139,7 @@ func backup(
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
+	execLocality roachpb.Locality,
 ) (roachpb.RowCount, error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
@@ -189,7 +191,9 @@ func backup(
 
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
+		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality,
+	)
 	if err != nil {
 		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
@@ -711,6 +715,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			p.ExecCfg().DistSQLSrv.ExternalStorage,
 			details.EncryptionOptions,
 			statsCache,
+			details.ExecutionLocality,
 		)
 		if err == nil {
 			break
