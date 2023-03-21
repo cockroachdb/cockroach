@@ -1756,6 +1756,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 type snapTruncationInfo struct {
 	index          uint64
 	recipientStore roachpb.StoreID
+	snapType       kvserverpb.SnapshotRequest_Type
 }
 
 // addSnapshotLogTruncation creates a log truncation record which will prevent
@@ -1772,7 +1773,10 @@ type snapTruncationInfo struct {
 // monotonically. The actual snapshot index, may preserve more from a log
 // truncation perspective.
 func (r *Replica) addSnapshotLogTruncationConstraint(
-	ctx context.Context, snapUUID uuid.UUID, recipientStore roachpb.StoreID,
+	ctx context.Context,
+	snapUUID uuid.UUID,
+	snapType kvserverpb.SnapshotRequest_Type,
+	recipientStore roachpb.StoreID,
 ) (uint64, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1794,6 +1798,7 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{
 		index:          appliedIndex,
 		recipientStore: recipientStore,
+		snapType:       snapType,
 	}
 
 	return appliedIndex, func() {
@@ -1819,43 +1824,53 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 // recipient or 0 if there isn't one. Passing 0 for recipientStore means any
 // recipient.
 func (r *Replica) getSnapshotLogTruncationConstraints(
-	recipientStore roachpb.StoreID,
-) (minSnapIndex uint64) {
+	recipientStore roachpb.StoreID, snapType kvserverpb.SnapshotRequest_Type,
+) (_ []snapTruncationInfo, minSnapIndex uint64) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.getSnapshotLogTruncationConstraintsRLocked(recipientStore)
+	return r.getSnapshotLogTruncationConstraintsRLocked(recipientStore, snapType)
 }
 
 func (r *Replica) getSnapshotLogTruncationConstraintsRLocked(
-	recipientStore roachpb.StoreID,
-) (minSnapIndex uint64) {
+	recipientStore roachpb.StoreID, snapType kvserverpb.SnapshotRequest_Type,
+) (_ []snapTruncationInfo, minSnapIndex uint64) {
+	var sl []snapTruncationInfo
 	for _, item := range r.mu.snapshotLogTruncationConstraints {
+		// A negative snapType matches all.
+		if snapType >= 0 && item.snapType != snapType {
+			continue
+		}
 		if recipientStore != 0 && item.recipientStore != recipientStore {
 			continue
 		}
 		if minSnapIndex == 0 || minSnapIndex > item.index {
 			minSnapIndex = item.index
 		}
+		sl = append(sl, item)
 	}
-	return minSnapIndex
+	return sl, minSnapIndex
 }
 
-// hasOutstandingLearnerSnapshotInFlight returns true if there is a snapshot in
+// errOnOutstandingLearnerSnapshotInflight returns true if there is a snapshot in
 // progress from this replica to a learner replica for this range.
-func (r *Replica) hasOutstandingLearnerSnapshotInFlight() bool {
+func (r *Replica) errOnOutstandingLearnerSnapshotInflight() error {
 	learners := r.Desc().Replicas().LearnerDescriptors()
 	for _, repl := range learners {
-		if r.hasOutstandingSnapshotInFlightToStore(repl.StoreID) {
-			return true
+		sl, _ := r.hasOutstandingSnapshotInFlightToStore(repl.StoreID, kvserverpb.SnapshotRequest_INITIAL)
+		if len(sl) > 0 {
+			return errors.Errorf("INITIAL snapshots in flight to s%d: %v", repl.StoreID, sl)
 		}
 	}
-	return false
+	return nil
 }
 
 // hasOutstandingSnapshotInFlightToStore returns true if there is a snapshot in
 // flight from this replica to the store with the given ID.
-func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID) bool {
-	return r.getSnapshotLogTruncationConstraints(storeID) > 0
+func (r *Replica) hasOutstandingSnapshotInFlightToStore(
+	storeID roachpb.StoreID, snapType kvserverpb.SnapshotRequest_Type,
+) ([]snapTruncationInfo, bool) {
+	sl, idx := r.getSnapshotLogTruncationConstraints(storeID, snapType)
+	return sl, idx > 0
 }
 
 // HasRaftLeader returns true if the raft group has a raft leader currently.
