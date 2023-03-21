@@ -1225,6 +1225,7 @@ func registerCDC(r registry.Registry) {
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
+			// The deprecated webhook sink is unable to handle the throughput required for 100 warehouses
 			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true;"); err != nil {
 				ct.t.Fatal(err)
 			}
@@ -1234,7 +1235,6 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts: map[string]string{
 					"metrics_label":       "'webhook'",
-					"initial_scan":        "'only'",
 					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
 				},
 			})

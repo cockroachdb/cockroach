@@ -10,7 +10,11 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
+	"math"
 	"net/url"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,13 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -146,6 +156,16 @@ func getAndDialSink(
 	return sink, sink.Dial()
 }
 
+// NewWebhookSinkEnabled determines whether or not the refactored Webhook sink
+// or the deprecated sink should be used.
+var NewWebhookSinkEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.new_webhook_sink_enabled",
+	"if enabled, this setting enables a new implementation of the webhook sink"+
+		" that allows for a much higher throughput",
+	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+)
+
 func getSink(
 	ctx context.Context,
 	serverCfg *execinfra.ServerConfig,
@@ -207,10 +227,17 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
-			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
-			})
+			if changefeedbase.NewWebhookSinkEnabled.Get(&serverCfg.Settings.SV) {
+				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+						numSinkIOWorkers(serverCfg), sinkPacer(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+				})
+			} else {
+				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+					return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+						defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+				})
+			}
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
 			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered))
@@ -606,12 +633,10 @@ func (n *nullSink) Dial() error {
 }
 
 // safeSink wraps an EventSink in a mutex so it's methods are
-// thread safe. It also has a beforeFlush hook which is called
-// at the beginning of safeSink.Flush().
+// thread safe.
 type safeSink struct {
 	syncutil.Mutex
-	beforeFlush func(ctx context.Context) error
-	wrapped     EventSink
+	wrapped EventSink
 }
 
 var _ EventSink = (*safeSink)(nil)
@@ -645,9 +670,6 @@ func (s *safeSink) EmitRow(
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {
-	if err := s.beforeFlush(ctx); err != nil {
-		return err
-	}
 	s.Lock()
 	defer s.Unlock()
 	return s.wrapped.Flush(ctx)
@@ -672,4 +694,146 @@ type SinkWithEncoder interface {
 	) error
 
 	Flush(ctx context.Context) error
+}
+
+// proper JSON schema for sink config:
+//
+//	{
+//	  "Flush": {
+//		   "Messages":  ...,
+//		   "Bytes":     ...,
+//		   "Frequency": ...,
+//	  },
+//		 "Retry": {
+//		   "Max":     ...,
+//		   "Backoff": ...,
+//	  }
+//	}
+type sinkJSONConfig struct {
+	Flush sinkBatchConfig `json:",omitempty"`
+	Retry sinkRetryConfig `json:",omitempty"`
+}
+
+type sinkBatchConfig struct {
+	Bytes, Messages int          `json:",omitempty"`
+	Frequency       jsonDuration `json:",omitempty"`
+}
+
+// wrapper structs to unmarshal json, retry.Options will be the actual config
+type sinkRetryConfig struct {
+	Max     jsonMaxRetries `json:",omitempty"`
+	Backoff jsonDuration   `json:",omitempty"`
+}
+
+func defaultRetryConfig() retry.Options {
+	opts := retry.Options{
+		InitialBackoff: 500 * time.Millisecond,
+		MaxRetries:     3,
+		Multiplier:     2,
+	}
+	// max backoff should be initial * 2 ^ maxRetries
+	opts.MaxBackoff = opts.InitialBackoff * time.Duration(int(math.Pow(2.0, float64(opts.MaxRetries))))
+	return opts
+}
+
+func getSinkConfigFromJson(
+	jsonStr changefeedbase.SinkSpecificJSONConfig, base sinkJSONConfig,
+) (batchCfg sinkBatchConfig, retryCfg retry.Options, err error) {
+	retryCfg = defaultRetryConfig()
+
+	var cfg = base
+	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
+	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
+	if jsonStr != `` {
+		// set retry defaults to be overridden if included in JSON
+		if err = json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
+			return batchCfg, retryCfg, errors.Wrapf(err, "error unmarshalling json")
+		}
+	}
+
+	// don't support negative values
+	if cfg.Flush.Messages < 0 || cfg.Flush.Bytes < 0 || cfg.Flush.Frequency < 0 ||
+		cfg.Retry.Max < 0 || cfg.Retry.Backoff < 0 {
+		return batchCfg, retryCfg, errors.Errorf("invalid option value %s, all config values must be non-negative", changefeedbase.OptWebhookSinkConfig)
+	}
+
+	// errors if other batch values are set, but frequency is not
+	if (cfg.Flush.Messages > 0 || cfg.Flush.Bytes > 0) && cfg.Flush.Frequency == 0 {
+		return batchCfg, retryCfg, errors.Errorf("invalid option value %s, flush frequency is not set, messages may never be sent", changefeedbase.OptWebhookSinkConfig)
+	}
+
+	retryCfg.MaxRetries = int(cfg.Retry.Max)
+	retryCfg.InitialBackoff = time.Duration(cfg.Retry.Backoff)
+	return cfg.Flush, retryCfg, nil
+}
+
+type jsonMaxRetries int
+
+func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
+	var i int64
+	// try to parse as int
+	i, err := strconv.ParseInt(string(b), 10, 64)
+	if err == nil {
+		if i <= 0 {
+			return errors.Errorf("max retry count must be a positive integer. use 'inf' for infinite retries.")
+		}
+		*j = jsonMaxRetries(i)
+	} else {
+		// if that fails, try to parse as string (only accept 'inf')
+		var s string
+		// using unmarshal here to remove quotes around the string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		if strings.ToLower(s) == "inf" {
+			// if used wants infinite retries, set to zero as retry.Options interprets this as infinity
+			*j = 0
+		} else if n, err := strconv.Atoi(s); err == nil { // also accept ints as strings
+			*j = jsonMaxRetries(n)
+		} else {
+			return errors.Errorf("max retries must be either a positive int or 'inf' for infinite retries.")
+		}
+	}
+	return nil
+}
+
+func numSinkIOWorkers(cfg *execinfra.ServerConfig) int {
+	numWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
+	if numWorkers > 0 {
+		return int(numWorkers)
+	}
+
+	idealNumber := runtime.GOMAXPROCS(0)
+	if idealNumber < 1 {
+		return 1
+	}
+	if idealNumber > 32 {
+		return 32
+	}
+	return idealNumber
+}
+
+func sinkPacer(ctx context.Context, cfg *execinfra.ServerConfig) *admission.Pacer {
+	pacerRequestUnit := changefeedbase.SinkPacerRequestSize.Get(&cfg.Settings.SV)
+	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
+
+	var pacer *admission.Pacer = nil
+	if enablePacer {
+		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+
+		pacer = cfg.AdmissionPacerFactory.NewPacer(
+			pacerRequestUnit,
+			admission.WorkInfo{
+				TenantID:        tenantID,
+				Priority:        admissionpb.BulkNormalPri,
+				CreateTime:      timeutil.Now().UnixNano(),
+				BypassAdmission: false,
+			},
+		)
+	}
+
+	return pacer
 }

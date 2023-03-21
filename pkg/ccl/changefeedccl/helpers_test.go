@@ -854,6 +854,9 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 	for _, weight := range sinkWeights {
 		weightTotal += weight
 	}
+	if weightTotal == 0 {
+		return "skip"
+	}
 	p := rand.Float32() * float32(weightTotal)
 	var sum float32 = 0
 	for sink, weight := range sinkWeights {
@@ -862,7 +865,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 			return sink
 		}
 	}
-	return "kafka" // unreachable
+	return "skip" // should never occur
 }
 
 // addCloudStorageOptions adds the options necessary to enable a server to run a
@@ -982,6 +985,9 @@ func cdcTestNamedWithSystem(
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
 
 	sinkType := randomSinkTypeWithOptions(options)
+	if sinkType == "skip" {
+		return
+	}
 	testLabel := sinkType
 	if name != "" {
 		testLabel = fmt.Sprintf("%s/%s", sinkType, name)
