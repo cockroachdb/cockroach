@@ -12,9 +12,11 @@ package upgrades
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -57,13 +59,18 @@ func alterDatabaseRoleSettingsTableAddRoleIDColumn(
 	return nil
 }
 
-const backfillRoleIDColumnDatabaseRoleSettingsTableStmt = `
+var backfillRoleIDColumnDatabaseRoleSettingsTableStmt = fmt.Sprintf(`
 UPDATE system.database_role_settings
-SET role_id = user_id
-FROM system.users
-WHERE role_id IS NULL AND role_name = username
+SET role_id = (
+	SELECT CASE role_name
+		WHEN '%s' THEN %d
+		ELSE (SELECT user_id FROM system.users WHERE username = role_name)
+	END
+)
+WHERE role_id IS NULL
 LIMIT 1000
-`
+`,
+	username.EmptyRole, username.EmptyRoleID)
 
 const setRoleIDColumnToNotNullDatabaseRoleSettingsTableStmt = `
 ALTER TABLE system.database_role_settings
@@ -92,7 +99,7 @@ func backfillDatabaseRoleSettingsTableRoleIDColumn(
 	// and any new rows inserted after the previous version (when the role_id column
 	// was added) will have had their role_id value populated at insertion time.
 	op := operation{
-		name:           "set-user-id-not-null-database-role-settings-table",
+		name:           "set-role-id-not-null-database-role-settings-table",
 		schemaList:     []string{"role_id"},
 		query:          setRoleIDColumnToNotNullDatabaseRoleSettingsTableStmt,
 		schemaExistsFn: columnExistsAndIsNotNull,
