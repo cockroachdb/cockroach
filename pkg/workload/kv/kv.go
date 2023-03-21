@@ -369,6 +369,7 @@ func (w *kv) Ops(
 		MaxConnLifetimeJitter: w.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   w.connFlags.Concurrency + 1,
 		MinConns:              w.connFlags.MinConns,
+		WarmupConns:           w.connFlags.WarmupConns,
 	}
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {

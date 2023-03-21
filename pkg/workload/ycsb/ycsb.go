@@ -467,6 +467,7 @@ func (g *ycsb) Ops(
 		MaxConnLifetimeJitter: g.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   g.connFlags.Concurrency, // We want number of connections = number of workers.
 		MinConns:              g.connFlags.MinConns,
+		WarmupConns:           g.connFlags.WarmupConns,
 	}, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err

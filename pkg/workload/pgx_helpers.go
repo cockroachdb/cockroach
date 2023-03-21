@@ -52,12 +52,6 @@ type MultiConnPoolCfg struct {
 	// connections which still applies).
 	MaxConnsPerPool int
 
-	// WarmupConns specifies the number of connections to prewarm when
-	// initializing a MultiConnPool.  A value of 0 automatically initialize the
-	// max number of connections per pool.  A value less than 0 skips the
-	// connection warmup phase.
-	WarmupConns int
-
 	// ConnHealthCheckPeriod specifies the amount of time between connection
 	// health checks.  Defaults to 10% of MaxConnLifetime.
 	ConnHealthCheckPeriod time.Duration
@@ -80,6 +74,12 @@ type MultiConnPoolCfg struct {
 	// attempt to keep.  Connection count may dip below this value periodically,
 	// see pgxpool documentation for details.
 	MinConns int
+
+	// WarmupConns specifies the number of connections to prewarm when
+	// initializing a MultiConnPool.  A value of 0 automatically initialize the
+	// max number of connections per pool.  A value less than 0 skips the
+	// connection warmup phase.
+	WarmupConns int
 
 	// LogLevel specifies the log level (default: warn)
 	LogLevel tracelog.LogLevel

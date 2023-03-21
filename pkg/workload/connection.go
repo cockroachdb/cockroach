@@ -33,6 +33,7 @@ type ConnFlags struct {
 	MaxConnLifetime       time.Duration
 	MaxConnLifetimeJitter time.Duration
 	MinConns              int
+	WarmupConns           int
 }
 
 // NewConnFlags returns an initialized ConnFlags.
@@ -49,6 +50,7 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 	c.DurationVar(&c.MaxConnIdleTime, `max-conn-idle-time`, 150*time.Second, `Max time an idle connection will be kept around`)
 	c.DurationVar(&c.MaxConnLifetime, `max-conn-lifetime`, 300*time.Second, `Max connection lifetime`)
 	c.DurationVar(&c.MaxConnLifetimeJitter, `max-conn-lifetime-jitter`, 150*time.Second, `Jitter max connection lifetime by this amount`)
+	c.IntVar(&c.WarmupConns, `warmup-conns`, 0, `Number of connections to warmup in each connection pool`)
 	genFlags.AddFlagSet(c.FlagSet)
 	if genFlags.Meta == nil {
 		genFlags.Meta = make(map[string]FlagMeta)

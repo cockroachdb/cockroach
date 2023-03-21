@@ -771,6 +771,7 @@ func (w *tpcc) Ops(
 		// at startup can be slow).
 		MaxConnsPerPool: w.connFlags.Concurrency,
 		MinConns:        w.connFlags.MinConns,
+		WarmupConns:     w.connFlags.WarmupConns,
 	}
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
