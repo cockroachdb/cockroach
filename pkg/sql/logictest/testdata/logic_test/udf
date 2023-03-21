@@ -588,13 +588,13 @@ subtest disallow_udf_in_views_and_udf
 statement ok
 CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 
-statement error pq: unknown function: test_vf_f\(\): function undefined
+statement error pq: unknown function: test_vf_f\(\): function undefined\nHINT:.*intention was to use a user-defined function in the function body, which is currently not supported.
 CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT test_vf_f() $$;
 
 statement ok
 CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 
-statement error pq: unknown function: test_vf_f\(\): function undefined
+statement error pq: unknown function: test_vf_f\(\): function undefined\nHINT:.*intention was to use a user-defined function in the view query, which is currently not supported.
 CREATE VIEW v AS SELECT test_vf_f();
 
 statement ok

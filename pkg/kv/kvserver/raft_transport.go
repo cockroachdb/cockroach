@@ -623,7 +623,7 @@ func (t *RaftTransport) SendSnapshot(
 	storePool *storepool.StorePool,
 	header kvserverpb.SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
-	newBatch func() storage.Batch,
+	newWriteBatch func() storage.WriteBatch,
 	sent func(),
 	recordBytesSent snapshotRecordMetrics,
 ) error {
@@ -644,7 +644,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, t.tracer, stream, storePool, header, snap, newBatch, sent, recordBytesSent)
+	return sendSnapshot(ctx, t.st, t.tracer, stream, storePool, header, snap, newWriteBatch, sent, recordBytesSent)
 }
 
 // DelegateSnapshot sends a DelegateSnapshotRequest to a remote store

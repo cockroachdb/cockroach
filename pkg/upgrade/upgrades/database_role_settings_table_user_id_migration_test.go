@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -79,12 +80,16 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 	// before the role_id column was added.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.DatabaseRoleSettingsTable, getTableDescForDatabaseRoleSettingsTableBeforeRoleIDCol)
 
-	// Create test users.
+	// Create test users and add rows for each user to system.database_role_settings.
 	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
 		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
 		txRunner.Exec(t, fmt.Sprintf(`ALTER USER testuser%d SET application_name = 'roach sql'`, i))
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers)}})
+
+	// Create a row in system.database_role_settings for the empty role.
+	tdb.Exec(t, "ALTER ROLE ALL SET timezone = 'America/New_York'")
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers + 1)}})
 
 	// Run migrations.
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
@@ -110,8 +115,12 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 
 	// Check that the backfill was successful and correct.
 	tdb.CheckQueryResults(t, "SELECT * FROM system.database_role_settings WHERE role_id IS NULL", [][]string{})
-	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers)}})
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers + 1)}})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings AS a JOIN system.users AS b ON a.role_name = b.username AND a.role_id <> b.user_id", [][]string{{"0"}})
+	tdb.CheckQueryResults(t,
+		fmt.Sprintf("SELECT count(*) FROM system.privileges WHERE username = '%s' AND user_id <> %d",
+			username.EmptyRole, username.EmptyRoleID),
+		[][]string{{"0"}})
 }
 
 func getTableDescForDatabaseRoleSettingsTableBeforeRoleIDCol() *descpb.TableDescriptor {

@@ -1748,7 +1748,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 			readOwnWrites:    true,
 		},
 		"UnindexedBatch": {
-			makeReader:       func(e Engine) Reader { return e.NewUnindexedBatch(false) },
+			makeReader:       func(e Engine) Reader { return e.NewUnindexedBatch() },
 			expectConsistent: true,
 			canWrite:         true,
 			readOwnWrites:    false,
