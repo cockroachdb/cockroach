@@ -83,12 +83,16 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	// user_id column was added.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.SystemPrivilegeTable, getTableDescForSystemPrivilegesTableBeforeUserIDCol)
 
-	// Create test users.
+	// Create test users and add rows for each user to system.privileges.
 	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
 		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
 		txRunner.Exec(t, fmt.Sprintf("GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser%d", i))
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.privileges", [][]string{{strconv.Itoa(numUsers)}})
+
+	// Create a row in system.privileges for the "public" role.
+	tdb.Exec(t, "REVOKE SELECT ON crdb_internal.tables FROM public")
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.privileges", [][]string{{strconv.Itoa(numUsers + 1)}})
 
 	// Run migrations.
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
@@ -115,8 +119,12 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 
 	// Check that the backfill was successful and correct.
 	tdb.CheckQueryResults(t, "SELECT * FROM system.privileges WHERE user_id IS NULL", [][]string{})
-	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.privileges", [][]string{{strconv.Itoa(numUsers)}})
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.privileges", [][]string{{strconv.Itoa(numUsers + 1)}})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.privileges AS a JOIN system.users AS b ON a.username = b.username AND a.user_id <> b.user_id", [][]string{{"0"}})
+	tdb.CheckQueryResults(t,
+		fmt.Sprintf("SELECT count(*) FROM system.privileges WHERE username = '%s' AND user_id <> %d",
+			username.PublicRole, username.PublicRoleID),
+		[][]string{{"0"}})
 }
 
 func getTableDescForSystemPrivilegesTableBeforeUserIDCol() *descpb.TableDescriptor {
