@@ -37,12 +37,16 @@ export function getSortLabel(sort: SqlStatsSortType): string {
   }
 }
 
-export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions).map(
-  sortVal => ({
+export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
+  .map(sortVal => ({
     value: sortVal as SqlStatsSortType,
     label: getSortLabel(sortVal as SqlStatsSortType),
-  }),
-);
+  }))
+  .sort((a, b) => {
+    if (a.label < b.label) return -1;
+    if (a.label > b.label) return 1;
+    return 0;
+  });
 
 export const txnRequestSortOptions = stmtRequestSortOptions.filter(
   option =>

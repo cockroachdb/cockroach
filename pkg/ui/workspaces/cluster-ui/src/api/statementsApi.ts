@@ -49,7 +49,8 @@ export type ErrorWithKey = {
 
 export const DEFAULT_STATS_REQ_OPTIONS = {
   limit: 100,
-  sort: SqlStatsSortOptions.SERVICE_LAT,
+  sortStmt: SqlStatsSortOptions.PCT_RUNTIME,
+  sortTxn: SqlStatsSortOptions.SERVICE_LAT,
 };
 
 // The required fields to create a stmts request.
