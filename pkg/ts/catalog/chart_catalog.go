@@ -1570,6 +1570,7 @@ var charts = []sectionDescription{
 					"changefeed.checkpoint_hist_nanos",
 					"changefeed.flush_hist_nanos",
 					"changefeed.sink_batch_hist_nanos",
+					"changefeed.parallel_io_queue_nanos",
 				},
 			},
 			{
@@ -1592,6 +1593,12 @@ var charts = []sectionDescription{
 					"changefeed.bytes.messages_pushback_nanos",
 					"changefeed.messages.messages_pushback_nanos",
 					"changefeed.flush.messages_pushback_nanos",
+				},
+			},
+			{
+				Title: "Sink IO",
+				Metrics: []string{
+					"changefeed.sink_io_inflight",
 				},
 			},
 			{

@@ -97,6 +97,7 @@ var histogramMetricsNames = map[string]struct{}{
 	"changefeed.message_size_hist":              {},
 	"changefeed.commit_latency":                 {},
 	"changefeed.sink_batch_hist_nanos":          {},
+	"changefeed.parallel_io_queue_nanos":        {},
 	"replication.admit_latency":                 {},
 	"replication.commit_latency":                {},
 	"replication.flush_hist_nanos":              {},

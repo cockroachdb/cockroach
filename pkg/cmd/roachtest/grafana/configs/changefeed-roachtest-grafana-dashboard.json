@@ -1141,7 +1141,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 24
+            "y": 40
           },
           "id": 18,
           "options": {
@@ -1260,7 +1260,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 24
+            "y": 40
           },
           "id": 57,
           "options": {
@@ -1353,7 +1353,7 @@
             "h": 7,
             "w": 5,
             "x": 12,
-            "y": 24
+            "y": 40
           },
           "id": 72,
           "options": {
@@ -1459,7 +1459,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 27
+            "y": 43
           },
           "id": 35,
           "options": {
@@ -1564,7 +1564,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 27
+            "y": 43
           },
           "id": 33,
           "options": {
@@ -1657,7 +1657,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 27
+            "y": 43
           },
           "id": 39,
           "options": {
@@ -1748,8 +1748,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1765,7 +1764,7 @@
             "h": 6,
             "w": 4,
             "x": 0,
-            "y": 20
+            "y": 36
           },
           "id": 63,
           "options": {
@@ -1868,8 +1867,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1885,7 +1883,7 @@
             "h": 6,
             "w": 4,
             "x": 4,
-            "y": 20
+            "y": 36
           },
           "id": 64,
           "options": {
@@ -1988,8 +1986,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2005,7 +2002,7 @@
             "h": 6,
             "w": 4,
             "x": 8,
-            "y": 20
+            "y": 36
           },
           "id": 65,
           "options": {
@@ -2084,8 +2081,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2101,7 +2097,7 @@
             "h": 6,
             "w": 4,
             "x": 12,
-            "y": 20
+            "y": 36
           },
           "id": 75,
           "options": {
@@ -2179,8 +2175,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2196,7 +2191,7 @@
             "h": 6,
             "w": 4,
             "x": 16,
-            "y": 20
+            "y": 36
           },
           "id": 19,
           "options": {
@@ -2233,7 +2228,7 @@
       "type": "row"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2241,474 +2236,660 @@
         "y": 20
       },
       "id": 14,
-      "panels": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "localprom"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "ns"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 6,
-            "x": 0,
-            "y": 21
-          },
-          "id": 54,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "9.2.3",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.50, sum(rate(changefeed_sink_batch_hist_nanos_bucket[$__rate_interval])) by (le))",
-              "hide": false,
-              "legendFormat": "p50 {{label_name}}",
-              "range": true,
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.75, sum(rate(changefeed_sink_batch_hist_nanos_bucket[$__rate_interval])) by (le))",
-              "hide": false,
-              "legendFormat": "p75 {{label_name}}",
-              "range": true,
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(changefeed_sink_batch_hist_nanos_bucket[$__rate_interval])) by (le))",
-              "hide": false,
-              "legendFormat": "p95 {{label_name}}",
-              "range": true,
-              "refId": "E"
-            }
-          ],
-          "title": "Sink Buffer Time Batched",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "localprom"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "ns"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 5,
-            "x": 6,
-            "y": 21
-          },
-          "id": 55,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "9.2.3",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.50, sum(rate(changefeed_flush_hist_nanos_bucket[$__rate_interval])) by (le))",
-              "hide": false,
-              "legendFormat": "p50 {{label_name}}",
-              "range": true,
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.75, sum(rate(changefeed_flush_hist_nanos_bucket[$__rate_interval])) by (le))",
-              "hide": false,
-              "legendFormat": "p75 {{label_name}}",
-              "range": true,
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(changefeed_flush_hist_nanos_bucket[$__rate_interval])) by (le))",
-              "hide": false,
-              "legendFormat": "p95 {{label_name}}",
-              "range": true,
-              "refId": "E"
-            }
-          ],
-          "title": "Sink Flush Time",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "localprom"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "cps"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 5,
-            "x": 11,
-            "y": 21
-          },
-          "id": 60,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "9.2.3",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "sum(rate(changefeed_flushes[$__rate_interval]))",
-              "hide": false,
-              "legendFormat": "total_flushes",
-              "range": true,
-              "refId": "E"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "sum(rate(changefeed_size_based_flushes[$__rate_interval]))",
-              "hide": false,
-              "legendFormat": "size_based_flushes",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Sink Flush Rate",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "localprom"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "ns"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 5,
-            "x": 16,
-            "y": 21
-          },
-          "id": 25,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "9.2.3",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.50, sum(rate(changefeed_checkpoint_hist_nanos_bucket[5m])) by (le))",
-              "hide": false,
-              "legendFormat": "p50 {{label_name}}",
-              "range": true,
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.75, sum(rate(changefeed_checkpoint_hist_nanos_bucket[5m])) by (le))",
-              "hide": false,
-              "legendFormat": "p75 {{label_name}}",
-              "range": true,
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "localprom"
-              },
-              "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum(rate(changefeed_checkpoint_hist_nanos_bucket[5m])) by (le))",
-              "hide": false,
-              "legendFormat": "p95 {{label_name}}",
-              "range": true,
-              "refId": "E"
-            }
-          ],
-          "title": "Time Spent Checkpointing",
-          "type": "timeseries"
-        }
-      ],
+      "panels": [],
       "title": "Sink",
       "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "localprom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 21
+      },
+      "id": 54,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(changefeed_sink_batch_hist_nanos_bucket[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "p50 {{label_name}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.75, sum(rate(changefeed_sink_batch_hist_nanos_bucket[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "p75 {{label_name}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(changefeed_sink_batch_hist_nanos_bucket[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "p95 {{label_name}}",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Sink Buffer Time Batched",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "localprom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 5,
+        "x": 6,
+        "y": 21
+      },
+      "id": 55,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(changefeed_flush_hist_nanos_bucket[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "p50 {{label_name}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.75, sum(rate(changefeed_flush_hist_nanos_bucket[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "p75 {{label_name}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(changefeed_flush_hist_nanos_bucket[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "p95 {{label_name}}",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Sink Flush Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "localprom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "cps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 5,
+        "x": 11,
+        "y": 21
+      },
+      "id": 60,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(changefeed_flushes[$__rate_interval]))",
+          "hide": false,
+          "legendFormat": "total_flushes",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(changefeed_size_based_flushes[$__rate_interval]))",
+          "hide": false,
+          "legendFormat": "size_based_flushes",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sink Flush Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "localprom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 5,
+        "x": 16,
+        "y": 21
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(changefeed_checkpoint_hist_nanos_bucket[5m])) by (le))",
+          "hide": false,
+          "legendFormat": "p50 {{label_name}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.75, sum(rate(changefeed_checkpoint_hist_nanos_bucket[5m])) by (le))",
+          "hide": false,
+          "legendFormat": "p75 {{label_name}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(changefeed_checkpoint_hist_nanos_bucket[5m])) by (le))",
+          "hide": false,
+          "legendFormat": "p95 {{label_name}}",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Time Spent Checkpointing",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "localprom"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 27
+      },
+      "id": 77,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "sum by(scope) (rate(changefeed_sink_io_inflight{scope!=\"\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Batches currently in IO",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "localprom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 5,
+        "x": 6,
+        "y": 27
+      },
+      "id": 80,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "localprom"
+          },
+          "editorMode": "code",
+          "expr": "sum by (scope) ((rate(changefeed_parallel_io_queue_nanos_sum{scope!=\"\"}[5m]) / rate(changefeed_parallel_io_queue_nanos_count{scope!=\"\"}[5m])))",
+          "legendFormat": "{{scope}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Parallel IO Average Queue Time",
+      "type": "timeseries"
     },
     {
       "collapsed": true,
@@ -2716,7 +2897,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 34
       },
       "id": 16,
       "panels": [
@@ -2766,8 +2947,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2783,7 +2963,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 22
+            "y": 38
           },
           "id": 22,
           "options": {
@@ -2860,8 +3040,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2877,7 +3056,7 @@
             "h": 8,
             "w": 10,
             "x": 8,
-            "y": 22
+            "y": 38
           },
           "id": 24,
           "options": {
@@ -2954,8 +3133,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -2971,7 +3149,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 30
+            "y": 46
           },
           "id": 23,
           "options": {
@@ -3048,8 +3226,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -3065,7 +3242,7 @@
             "h": 8,
             "w": 5,
             "x": 8,
-            "y": 30
+            "y": 46
           },
           "id": 50,
           "options": {
@@ -3141,8 +3318,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -3158,7 +3334,7 @@
             "h": 8,
             "w": 5,
             "x": 13,
-            "y": 30
+            "y": 46
           },
           "id": 51,
           "options": {
@@ -3200,7 +3376,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 35
       },
       "id": 59,
       "panels": [],
@@ -3213,7 +3389,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 36
       },
       "id": 27,
       "panels": [
@@ -3262,8 +3438,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -3278,7 +3453,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 24
+            "y": 40
           },
           "id": 31,
           "options": {
