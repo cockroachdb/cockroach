@@ -78,6 +78,12 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	_, err = db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
 	require.NoError(b, err)
 
+	// Exempt the tenant from rate limiting. We expect most
+	// shared-process tenants will run without rate limiting in
+	// the near term.
+	_, err = db.Exec(`ALTER TENANT benchtenant GRANT CAPABILITY exempt_from_rate_limiting`)
+	require.NoError(b, err)
+
 	_, err = tenantDB.Exec(`CREATE DATABASE bench`)
 	require.NoError(b, err)
 
