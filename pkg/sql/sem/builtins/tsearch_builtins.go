@@ -103,9 +103,25 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSVector{TSVector: vector}, nil
 			},
-			Info: "Converts text to a tsvector, normalizing words according to the specified or default configuration. " +
+			Info: "Converts text to a tsvector, normalizing words according to the specified configuration. " +
 				"Position information is included in the result.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.TSVector),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				document := string(tree.MustBeDString(args[0]))
+				vector, err := tsearch.DocumentToTSVector(config, document)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSVector{TSVector: vector}, nil
+			},
+			Info: "Converts text to a tsvector, normalizing words according to the default configuration. " +
+				"Position information is included in the result.",
+			Volatility: volatility.Stable,
 		},
 	),
 	"to_tsquery": makeBuiltin(
@@ -123,9 +139,26 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				return &tree.DTSQuery{TSQuery: query}, nil
 			},
 			Info: "Converts the input text into a tsquery by normalizing each word in the input according to " +
-				"the specified or default configuration. The input must already be formatted like a tsquery, in other words, " +
+				"the specified configuration. The input must already be formatted like a tsquery, in other words, " +
 				"subsequent tokens must be connected by a tsquery operator (&, |, <->, !).",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.TSQuery),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				input := string(tree.MustBeDString(args[0]))
+				query, err := tsearch.ToTSQuery(config, input)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSQuery{TSQuery: query}, nil
+			},
+			Info: "Converts the input text into a tsquery by normalizing each word in the input according to " +
+				"the default configuration. The input must already be formatted like a tsquery, in other words, " +
+				"subsequent tokens must be connected by a tsquery operator (&, |, <->, !).",
+			Volatility: volatility.Stable,
 		},
 	),
 	"plainto_tsquery": makeBuiltin(
@@ -142,9 +175,25 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSQuery{TSQuery: query}, nil
 			},
-			Info: "Converts text to a tsquery, normalizing words according to the specified or default configuration." +
+			Info: "Converts text to a tsquery, normalizing words according to the specified configuration." +
 				" The & operator is inserted between each token in the input.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.TSQuery),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				input := string(tree.MustBeDString(args[0]))
+				query, err := tsearch.PlainToTSQuery(config, input)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSQuery{TSQuery: query}, nil
+			},
+			Info: "Converts text to a tsquery, normalizing words according to the default configuration." +
+				" The & operator is inserted between each token in the input.",
+			Volatility: volatility.Stable,
 		},
 	),
 	"phraseto_tsquery": makeBuiltin(
@@ -161,9 +210,25 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSQuery{TSQuery: query}, nil
 			},
-			Info: "Converts text to a tsquery, normalizing words according to the specified or default configuration." +
+			Info: "Converts text to a tsquery, normalizing words according to the specified configuration." +
 				" The <-> operator is inserted between each token in the input.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.TSQuery),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				input := string(tree.MustBeDString(args[0]))
+				query, err := tsearch.PhraseToTSQuery(config, input)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSQuery{TSQuery: query}, nil
+			},
+			Info: "Converts text to a tsquery, normalizing words according to the default configuration." +
+				" The <-> operator is inserted between each token in the input.",
+			Volatility: volatility.Stable,
 		},
 	),
 }
