@@ -1756,6 +1756,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 type snapTruncationInfo struct {
 	index          uint64
 	recipientStore roachpb.StoreID
+	initial        bool
 }
 
 // addSnapshotLogTruncation creates a log truncation record which will prevent
@@ -1771,8 +1772,10 @@ type snapTruncationInfo struct {
 // a possibly stale value here is harmless since the values increases
 // monotonically. The actual snapshot index, may preserve more from a log
 // truncation perspective.
+// If initial is true, the snapshot is marked as being sent by the replicate
+// queue to a new replica; some callers only care about these snapshots.
 func (r *Replica) addSnapshotLogTruncationConstraint(
-	ctx context.Context, snapUUID uuid.UUID, recipientStore roachpb.StoreID,
+	ctx context.Context, snapUUID uuid.UUID, initial bool, recipientStore roachpb.StoreID,
 ) (uint64, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1794,6 +1797,7 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{
 		index:          appliedIndex,
 		recipientStore: recipientStore,
+		initial:        initial,
 	}
 
 	return appliedIndex, func() {
@@ -1814,48 +1818,53 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 	}
 }
 
-// getSnapshotLogTruncationConstraints returns the minimum index of any
+// getSnapshotLogTruncationConstraintsRLocked returns the minimum index of any
 // currently outstanding snapshot being sent from this replica to the specified
 // recipient or 0 if there isn't one. Passing 0 for recipientStore means any
-// recipient.
-func (r *Replica) getSnapshotLogTruncationConstraints(
-	recipientStore roachpb.StoreID,
-) (minSnapIndex uint64) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getSnapshotLogTruncationConstraintsRLocked(recipientStore)
-}
-
+// recipient. If initialOnly is set, only snapshots sent by the replicate queue
+// to new replicas are considered.
 func (r *Replica) getSnapshotLogTruncationConstraintsRLocked(
-	recipientStore roachpb.StoreID,
-) (minSnapIndex uint64) {
+	recipientStore roachpb.StoreID, initialOnly bool,
+) (_ []snapTruncationInfo, minSnapIndex uint64) {
+	var sl []snapTruncationInfo
 	for _, item := range r.mu.snapshotLogTruncationConstraints {
+		if initialOnly && !item.initial {
+			continue
+		}
 		if recipientStore != 0 && item.recipientStore != recipientStore {
 			continue
 		}
 		if minSnapIndex == 0 || minSnapIndex > item.index {
 			minSnapIndex = item.index
 		}
+		sl = append(sl, item)
 	}
-	return minSnapIndex
+	return sl, minSnapIndex
 }
 
-// hasOutstandingLearnerSnapshotInFlight returns true if there is a snapshot in
-// progress from this replica to a learner replica for this range.
-func (r *Replica) hasOutstandingLearnerSnapshotInFlight() bool {
+// errOnOutstandingLearnerSnapshotInflight returns an error if there is a
+// snapshot in progress from this replica to a learner replica for this range.
+func (r *Replica) errOnOutstandingLearnerSnapshotInflight() error {
 	learners := r.Desc().Replicas().LearnerDescriptors()
 	for _, repl := range learners {
-		if r.hasOutstandingSnapshotInFlightToStore(repl.StoreID) {
-			return true
+		sl, _ := r.hasOutstandingSnapshotInFlightToStore(repl.StoreID, true /* initialOnly */)
+		if len(sl) > 0 {
+			return errors.Errorf("INITIAL snapshots in flight to s%d: %v", repl.StoreID, sl)
 		}
 	}
-	return false
+	return nil
 }
 
 // hasOutstandingSnapshotInFlightToStore returns true if there is a snapshot in
-// flight from this replica to the store with the given ID.
-func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID) bool {
-	return r.getSnapshotLogTruncationConstraints(storeID) > 0
+// flight from this replica to the store with the given ID. If initialOnly is
+// true, only snapshots sent by the replicate queue to new replicas are considered.
+func (r *Replica) hasOutstandingSnapshotInFlightToStore(
+	storeID roachpb.StoreID, initialOnly bool,
+) ([]snapTruncationInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	sl, idx := r.getSnapshotLogTruncationConstraintsRLocked(storeID, initialOnly)
+	return sl, idx > 0
 }
 
 // HasRaftLeader returns true if the raft group has a raft leader currently.
