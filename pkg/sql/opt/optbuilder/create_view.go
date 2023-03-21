@@ -36,12 +36,17 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	b.insideViewDef = true
 	b.trackSchemaDeps = true
 	b.qualifyDataSourceNamesInAST = true
+	if b.sourceViews == nil {
+		b.sourceViews = make(map[string]bool)
+	}
+	b.sourceViews[viewName.FQString()] = true
 	defer func() {
 		b.insideViewDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
+		b.sourceViews[viewName.FQString()] = false
 
 		b.semaCtx.FunctionResolver = preFuncResolver
 		switch recErr := recover().(type) {
