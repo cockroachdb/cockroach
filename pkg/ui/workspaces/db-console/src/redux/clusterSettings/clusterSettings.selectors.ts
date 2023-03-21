@@ -23,7 +23,7 @@ export const selectClusterSettings = createSelector(
 export const selectTimezoneSetting = createSelector(
     selectClusterSettings,
     (settings) => {
-        return settings["ui.display_timezone"] || "UTC";
+        return settings["ui.display_timezone"]?.value || "UTC";
     }
 )
 
