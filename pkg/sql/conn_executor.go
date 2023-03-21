@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1072,6 +1073,12 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
+
+	enableMultipleActivePortals.SetOnChange(&s.cfg.Settings.SV, func(ctx context.Context) {
+		if enableMultipleActivePortals.Get(&s.cfg.Settings.SV) {
+			telemetry.Inc(sqltelemetry.MultipleActivePortalCounter)
+		}
+	})
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
