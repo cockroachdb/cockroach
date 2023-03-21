@@ -348,13 +348,13 @@ BACKUP DATABASE foo TO ($1, $1) INCREMENTAL FROM '_' -- literals removed
 BACKUP DATABASE _ TO ($1, $2) INCREMENTAL FROM 'baz' -- identifiers removed
 
 parse
-BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, coordinator_locality = 'a=b'
+BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, execution locality = 'a=b'
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = '*****', coordinator_locality = 'a=b' -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), encryption_passphrase = '*****', coordinator_locality = ('a=b') -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history = _, encryption_passphrase = '*****', coordinator_locality = '_' -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history = true, encryption_passphrase = '*****', coordinator_locality = 'a=b' -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = 'secret', coordinator_locality = 'a=b' -- passwords exposed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b' -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), encryption_passphrase = '*****', execution locality = ('a=b') -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = _, encryption_passphrase = '*****', execution locality = '_' -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b' -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = 'secret', execution locality = 'a=b' -- passwords exposed
 
 parse
 BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
@@ -776,12 +776,12 @@ BACKUP TABLE foo TO '_' WITH revision_history = _, detached -- literals removed
 BACKUP TABLE _ TO 'bar' WITH revision_history = true, detached -- identifiers removed
 
 parse
-BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached, coordinator_locality = $2
+BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached, execution locality = $2
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached, coordinator_locality = $2
-BACKUP TABLE (foo) TO ('bar') WITH revision_history = ($1), detached, coordinator_locality = ($2) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history = $1, detached, coordinator_locality = $1 -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history = $1, detached, coordinator_locality = $2 -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached, execution locality = $2
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = ($1), detached, execution locality = ($2) -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = $1, detached, execution locality = $1 -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = $1, detached, execution locality = $2 -- identifiers removed
 
 parse
 RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached

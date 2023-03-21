@@ -46,7 +46,7 @@ type BackupOptions struct {
 	Detached                   *DBool
 	EncryptionKMSURI           StringOrPlaceholderOptList
 	IncrementalStorage         StringOrPlaceholderOptList
-	CoordinatorLocality        Expr
+	ExecutionLocality          Expr
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -298,10 +298,10 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
 
-	if o.CoordinatorLocality != nil {
+	if o.ExecutionLocality != nil {
 		maybeAddSep()
-		ctx.WriteString("coordinator_locality = ")
-		ctx.FormatNode(o.CoordinatorLocality)
+		ctx.WriteString("execution locality = ")
+		ctx.FormatNode(o.ExecutionLocality)
 	}
 
 	if o.IncludeAllSecondaryTenants != nil {
@@ -348,10 +348,10 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("incremental_location option specified multiple times")
 	}
 
-	if o.CoordinatorLocality == nil {
-		o.CoordinatorLocality = other.CoordinatorLocality
-	} else if other.CoordinatorLocality != nil {
-		return errors.New("coordinator_locality option specified multiple times")
+	if o.ExecutionLocality == nil {
+		o.ExecutionLocality = other.ExecutionLocality
+	} else if other.ExecutionLocality != nil {
+		return errors.New("execution locality option specified multiple times")
 	}
 
 	if o.IncludeAllSecondaryTenants != nil {
@@ -373,7 +373,7 @@ func (o BackupOptions) IsDefault() bool {
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
-		o.CoordinatorLocality == options.CoordinatorLocality &&
+		o.ExecutionLocality == options.ExecutionLocality &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants
 }
 

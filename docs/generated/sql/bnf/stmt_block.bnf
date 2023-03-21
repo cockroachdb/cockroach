@@ -1063,7 +1063,6 @@ unreserved_keyword ::=
 	| 'CONTROLJOB'
 	| 'CONVERSION'
 	| 'CONVERT'
-	| 'COORDINATOR_LOCALITY'
 	| 'COPY'
 	| 'COST'
 	| 'COVERING'
@@ -2297,7 +2296,7 @@ backup_options ::=
 	| 'DETACHED' '=' 'FALSE'
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
-	| 'COORDINATOR_LOCALITY' '=' string_or_placeholder
+	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| 'INCLUDE_ALL_SECONDARY_TENANTS'
 	| 'INCLUDE_ALL_SECONDARY_TENANTS' '=' a_expr
 
@@ -3541,7 +3540,6 @@ bare_label_keywords ::=
 	| 'CONTROLJOB'
 	| 'CONVERSION'
 	| 'CONVERT'
-	| 'COORDINATOR_LOCALITY'
 	| 'COPY'
 	| 'COST'
 	| 'COVERING'
