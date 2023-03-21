@@ -1,3 +1,6 @@
+skip issue-num=89861
+----
+
 # This test checks the expected behavior of logical plan sampling.
 # Given a tuple of (db_name, implicitTxn, fingerprint string), the logical plan
 # is only sampled if and only if no logical plan has been sampled for the given
