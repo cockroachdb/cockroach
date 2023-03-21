@@ -81,7 +81,7 @@ var useSimpleImportSpans = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.restore.use_simple_import_spans",
 	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
-	true,
+	false,
 )
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
