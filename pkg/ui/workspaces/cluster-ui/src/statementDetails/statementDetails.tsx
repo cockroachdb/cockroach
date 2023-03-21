@@ -16,7 +16,7 @@ import "antd/lib/tabs/style";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import _, { isNil } from "lodash";
+import { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
@@ -191,7 +191,6 @@ export class StatementDetails extends React.Component<
   StatementDetailsState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
-  refreshDataTimeout: NodeJS.Timeout;
 
   constructor(props: StatementDetailsProps) {
     super(props);
@@ -218,29 +217,11 @@ export class StatementDetails extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
   };
-
-  clearRefreshDataTimeout() {
-    if (this.refreshDataTimeout !== null) {
-      clearTimeout(this.refreshDataTimeout);
-    }
-  }
-
-  resetPolling(key: string) {
-    this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
-      this.refreshDataTimeout = setTimeout(
-        this.refreshStatementDetails,
-        300000, // 5 minutes
-      );
-    }
-  }
 
   refreshStatementDetails = (): void => {
     const req = getStatementDetailsRequestFromProps(this.props);
     this.props.refreshStatementDetails(req);
-    this.resetPolling(this.props.timeScale.key);
   };
 
   handleResize = (): void => {
@@ -256,7 +237,10 @@ export class StatementDetails extends React.Component<
   };
 
   componentDidMount(): void {
-    this.refreshStatementDetails();
+    if (!this.props.statementDetails) {
+      this.refreshStatementDetails();
+    }
+
     window.addEventListener("resize", this.handleResize);
     this.handleResize();
     // For the first data fetch for this page, we refresh if there are:
@@ -287,9 +271,9 @@ export class StatementDetails extends React.Component<
   componentDidUpdate(prevProps: StatementDetailsProps): void {
     this.handleResize();
     if (
-      prevProps.timeScale != this.props.timeScale ||
-      prevProps.statementFingerprintID != this.props.statementFingerprintID ||
-      prevProps.location != this.props.location
+      prevProps.timeScale !== this.props.timeScale ||
+      prevProps.statementFingerprintID !== this.props.statementFingerprintID ||
+      prevProps.location !== this.props.location
     ) {
       this.refreshStatementDetails();
     }
