@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -33,6 +35,13 @@ type InfoStorage struct {
 // InfoStorage returns a new InfoStorage with the passed in job and txn.
 func (j *Job) InfoStorage(txn isql.Txn) InfoStorage {
 	return InfoStorage{j: j, txn: txn}
+}
+
+// InfoStorageForJobID returns a new InfoStorage with the passed in
+// job ID and txn. It avoids loading the job record. The resulting
+// job_info writes will not check the job session ID.
+func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
+	return InfoStorage{j: &Job{id: jobID}, txn: txn}
 }
 
 func (i InfoStorage) checkClaimSession(ctx context.Context) error {
@@ -94,6 +103,36 @@ func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 }
 
 func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
+	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
+		// First clear out any older revisions of this info.
+		_, err := txn.ExecEx(
+			ctx, "write-job-info-delete", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
+			j.ID(), infoKey,
+		)
+		if err != nil {
+			return err
+		}
+
+		if value == nil {
+			// Nothing else to do.
+			return nil
+		}
+		// Write the new info, using the same transaction.
+		_, err = txn.ExecEx(
+			ctx, "write-job-info-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
+			j.ID(), infoKey, value,
+		)
+		return err
+	})
+}
+
+func (i InfoStorage) doWrite(
+	ctx context.Context, fn func(ctx context.Context, job *Job, txn isql.Txn) error,
+) error {
 	if i.txn == nil {
 		return errors.New("cannot write to the job info table without an associated txn")
 	}
@@ -111,43 +150,41 @@ func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
 		log.VInfof(ctx, 1, "job %d: writing to the system.job_info with no session ID", j.ID())
 	}
 
-	// First clear out any older revisions of this info.
-	_, err := i.txn.ExecEx(
-		ctx, "write-job-info-delete", i.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
-		j.ID(), infoKey,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Write the new info, using the same transaction.
-	_, err = i.txn.ExecEx(
-		ctx, "write-job-info-insert", i.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
-		j.ID(), infoKey, value,
-	)
-	return err
+	return fn(ctx, j, i.txn)
 }
 
 func (i InfoStorage) iterate(
-	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
+	ctx context.Context,
+	iterMode iterateMode,
+	infoPrefix []byte,
+	fn func(infoKey, value []byte) error,
 ) (retErr error) {
 	if i.txn == nil {
 		return errors.New("cannot iterate over the job info table without an associated txn")
 	}
 
-	// TODO(dt): verify this predicate hits the index.
+	var iterConfig string
+	switch iterMode {
+	// Note: the ORDER BY clauses below are tuned to ensure that the
+	// query uses the index directly, without additional plan stages. If
+	// you change this, verify the structure of the resulting plan with
+	// EXPLAIN and tweak index use accordingly.
+	case iterateAll:
+		iterConfig = `ORDER BY info_key ASC, written DESC` // with no LIMIT.
+	case getLast:
+		iterConfig = `ORDER BY info_key DESC, written ASC LIMIT 1`
+	default:
+		return errors.AssertionFailedf("unhandled iteration mode %v", iterMode)
+	}
+
 	rows, err := i.txn.QueryIteratorEx(
 		ctx, "job-info-iter", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT info_key, value 
-		FROM system.job_info 
-		WHERE job_id = $1 AND substring(info_key for $2) = $3 
-		ORDER BY info_key ASC, written DESC`,
-		i.j.ID(), len(infoPrefix), infoPrefix,
+		`SELECT info_key, value
+		FROM system.job_info
+		WHERE job_id = $1 AND info_key >= $2 AND info_key < $3
+		`+iterConfig,
+		i.j.ID(), infoPrefix, roachpb.Key(infoPrefix).PrefixEnd(),
 	)
 	if err != nil {
 		return err
@@ -195,15 +232,52 @@ func (i InfoStorage) Get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 // using the same transaction, effectively replacing any older row with a row
 // with the new value.
 func (i InfoStorage) Write(ctx context.Context, infoKey, value []byte) error {
+	if value == nil {
+		return errors.AssertionFailedf("missing value (infoKey %q)", string(infoKey))
+	}
 	return i.write(ctx, infoKey, value)
+}
+
+// Delete removes the info record for the provided infoKey.
+func (i InfoStorage) Delete(ctx context.Context, infoKey []byte) error {
+	return i.write(ctx, infoKey, nil /* value */)
+}
+
+// DeleteRange removes the info records between the provided
+// start key (inclusive) and end key (exclusive).
+func (i InfoStorage) DeleteRange(ctx context.Context, startInfoKey, endInfoKey []byte) error {
+	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
+		_, err := txn.ExecEx(
+			ctx, "write-job-info-delete", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+			j.ID(), startInfoKey, endInfoKey,
+		)
+		return err
+	})
 }
 
 // Iterate iterates though the info records for a given job and info key prefix.
 func (i InfoStorage) Iterate(
 	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
 ) (retErr error) {
-	return i.iterate(ctx, infoPrefix, fn)
+	return i.iterate(ctx, iterateAll, infoPrefix, fn)
 }
+
+// GetLast calls fn on the last info record whose key matches the
+// given prefix.
+func (i InfoStorage) GetLast(
+	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
+) (retErr error) {
+	return i.iterate(ctx, getLast, infoPrefix, fn)
+}
+
+type iterateMode bool
+
+const (
+	iterateAll iterateMode = false
+	getLast    iterateMode = true
+)
 
 const (
 	legacyPayloadKey  = "legacy_payload"

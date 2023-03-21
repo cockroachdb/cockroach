@@ -56,8 +56,8 @@ func TestJobInfoAccessors(t *testing.T) {
 	job1 := createJob(1)
 	job2 := createJob(2)
 	job3 := createJob(3)
-	kPrefix, kA, kB, kC := []byte("🔑"), []byte("🔑A"), []byte("🔑B"), []byte("🔑C")
-	v1, v2 := []byte("val1"), []byte("val2")
+	kPrefix, kA, kB, kC, kD := []byte("🔑"), []byte("🔑A"), []byte("🔑B"), []byte("🔑C"), []byte("🔑D")
+	v1, v2, v3 := []byte("val1"), []byte("val2"), []byte("val3")
 
 	// Key doesn't exist yet.
 	getJobInfo := func(j *jobs.Job, key []byte) (v []byte, ok bool, err error) {
@@ -76,6 +76,11 @@ func TestJobInfoAccessors(t *testing.T) {
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job1.InfoStorage(txn)
 		return infoStorage.Write(ctx, kA, v1)
+	}))
+	// Write kD = v2.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.Write(ctx, kD, v2)
 	}))
 
 	// Check that key is now found with value v1.
@@ -123,8 +128,13 @@ func TestJobInfoAccessors(t *testing.T) {
 		infoStorage := job2.InfoStorage(txn)
 		return infoStorage.Write(ctx, kA, v2)
 	}))
+	// Also delete the info key d.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.Delete(ctx, kD)
+	}))
 
-	// Iterate the common prefix of a, b and c.
+	// Iterate the common prefix of a, b, c and d.
 	var i int
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job2.InfoStorage(txn)
@@ -144,6 +154,23 @@ func TestJobInfoAccessors(t *testing.T) {
 	}))
 	require.Equal(t, 3, i)
 
+	// Add a new revision to kC.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.Write(ctx, kC, v3)
+	}))
+	i = 0
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.GetLast(ctx, kPrefix, func(key, value []byte) error {
+			i++
+			require.Equal(t, key, kC)
+			require.Equal(t, v3, value)
+			return nil
+		})
+	}))
+	require.Equal(t, 1, i)
+
 	// Iterate the specific prefix of just a.
 	found := false
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -156,6 +183,23 @@ func TestJobInfoAccessors(t *testing.T) {
 		})
 	}))
 	require.True(t, found)
+
+	// Delete kA-kB.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.DeleteRange(ctx, kA, kC)
+	}))
+	// Verify only kC remains.
+	i = 0
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.Iterate(ctx, kPrefix, func(key, value []byte) error {
+			i++
+			require.Equal(t, key, kC)
+			return nil
+		})
+	}))
+	require.Equal(t, 1, i)
 
 	// Iterate a different job.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
