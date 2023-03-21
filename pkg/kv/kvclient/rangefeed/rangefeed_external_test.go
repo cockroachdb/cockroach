@@ -907,8 +907,11 @@ func TestUnrecoverableErrors(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
+		if mu.internalErr == nil {
+			return errors.New("no error yet")
+		}
 		if !errors.HasType(mu.internalErr, &kvpb.BatchTimestampBeforeGCError{}) {
-			return errors.New("expected internal error")
+			return errors.Wrap(mu.internalErr, "unexpected error")
 		}
 		return nil
 	})

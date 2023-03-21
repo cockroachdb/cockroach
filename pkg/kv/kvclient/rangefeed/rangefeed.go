@@ -311,6 +311,9 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
+			if ts.WallTime == 1 && ts.Logical == 0 {
+				return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			}
 			return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
 		}
 		processEventsTask := func(ctx context.Context) error {
