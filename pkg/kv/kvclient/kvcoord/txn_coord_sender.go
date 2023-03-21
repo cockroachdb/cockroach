@@ -475,12 +475,16 @@ func (tc *TxnCoordSender) Send(
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
-	// here, and unlock at the botton of the interceptor stack, in the
-	// txnLockGatekeeper. The we lock again in that interceptor when the response
+	// here, and unlock at the bottom of the interceptor stack, in the
+	// txnLockGatekeeper. Then we lock again in that interceptor when the response
 	// comes, and unlock again in the defer below.
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.mu.active = true
+
+	if pErr := tc.maybeIncompatibleWithRequest(ctx, ba); pErr != nil {
+		return nil, pErr
+	}
 
 	if pErr := tc.maybeRejectClientLocked(ctx, ba); pErr != nil {
 		return nil, pErr
@@ -664,6 +668,18 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) er
 	after := tc.clock.PhysicalTime()
 	log.VEventf(ctx, 2, "completed commit-wait sleep, took %s", after.Sub(before))
 	tc.metrics.CommitWaits.Inc(1)
+	return nil
+}
+
+// maybeIncompatibleWithRequest checks if the TxnCoordSender is compatible with a given BatchRequest
+// specifically, a Leaf TxnCoordSender is not compatible with locking requests
+func (tc *TxnCoordSender) maybeIncompatibleWithRequest(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) *kvpb.Error {
+	if ba.IsLocking() && tc.typ == kv.LeafTxn {
+		return kvpb.NewError(errors.WithContextTags(errors.AssertionFailedf(
+			"LeafTxn %s incompatible with locking request %s", tc.mu.txn, ba.Summary()), ctx))
+	}
 	return nil
 }
 
