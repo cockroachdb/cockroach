@@ -370,18 +370,18 @@ func TestHasSingleColumnNonNullConstValues(t *testing.T) {
 	cases := []testCase{
 		{[]string{`/1: [/10 - /10]`}, 1, true},
 		{[]string{`/-1: [/10 - /10]`}, 1, true},
-		{[]string{`/1: [/10 - /11]`}, 0, false},
+		{[]string{`/1: [/10 - /11]`}, 1, false},
 		{[]string{`/1: [/10 - /10] [/11 - /11]`}, 1, true},
 		{[]string{`/1: [/10 - /10] [/11 - /11] [/12 - /12]`}, 1, true},
-		{[]string{`/1: [/10 - /10] [/11 - /11] [/12 - /13]`}, 0, false},
-		{[]string{`/1: [/NULL - /NULL]`}, 0, false},
-		{[]string{`/1: [/NULL - /NULL] [/10 - /10] [/11 - /11]`}, 0, false},
-		{[]string{`/1/2: [/10/2 - /10/4]`}, 0, false},
-		{[]string{`/1/2: [/10/2 - /10/2]`}, 0, false},
-		{[]string{`/1: [/10 - /10]`, `/2: [/8 - /8]`}, 0, false},
-		{[]string{`/1: [/10 - /10]`, `/2: [/8 - /8]`}, 0, false},
-		{[]string{`/1: [/10 - /10]`, `/1/2: [/10/8 - /10/8]`}, 0, false},
-		{[]string{`/1: [/10 - /10]`, `/1/2: [/10/8 - /10/8]`}, 0, false},
+		{[]string{`/1: [/10 - /10] [/11 - /11] [/12 - /13]`}, 1, false},
+		{[]string{`/1: [/NULL - /NULL]`}, 1, false},
+		{[]string{`/1: [/NULL - /NULL] [/10 - /10] [/11 - /11]`}, 1, false},
+		{[]string{`/1/2: [/10/2 - /10/4]`}, 1, false},
+		{[]string{`/1/2: [/10/2 - /10/2]`}, 2, false},
+		{[]string{`/1: [/10 - /10]`, `/2: [/8 - /8]`}, 1, false},
+		{[]string{`/1: [/10 - /10]`, `/2: [/8 - /8]`}, 2, false},
+		{[]string{`/1: [/10 - /10]`, `/1/2: [/10/8 - /10/8]`}, 1, false},
+		{[]string{`/1: [/10 - /10]`, `/1/2: [/10/8 - /10/8]`}, 2, false},
 	}
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
@@ -391,10 +391,9 @@ func TestHasSingleColumnNonNullConstValues(t *testing.T) {
 			constraint := ParseConstraint(evalCtx, constraint)
 			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
 		}
-		col, res := cs.HasSingleColumnNonNullConstValues(evalCtx)
-		if res != tc.expected || col != tc.col {
-			t.Errorf("%s: expected %t,%d got %t,%d", cs, tc.expected, tc.col, res, col)
-
+		res := cs.HasSingleColumnNonNullConstValues(evalCtx, tc.col)
+		if res != tc.expected {
+			t.Errorf("%s: expected %t got %t", cs, tc.expected, res)
 		}
 	}
 }
@@ -439,13 +438,13 @@ func TestExtractSingleColumnNonNullConstValues(t *testing.T) {
 			constraint := ParseConstraint(evalCtx, constraint)
 			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
 		}
-		col, vals, _ := cs.ExtractSingleColumnNonNullConstValues(evalCtx)
+		vals, _ := cs.ExtractSingleColumnNonNullConstValues(evalCtx, tc.col)
 		var intVals []int
 		for _, val := range vals {
 			intVals = append(intVals, int(*val.(*tree.DInt)))
 		}
-		if tc.col != col || !reflect.DeepEqual(tc.vals, intVals) {
-			t.Errorf("%s: expected %d,%d got %d,%d", cs, tc.col, tc.vals, col, intVals)
+		if !reflect.DeepEqual(tc.vals, intVals) {
+			t.Errorf("%s: expected %d got %d", cs, tc.vals, intVals)
 		}
 	}
 }
