@@ -237,6 +237,14 @@ func TestSystemTableLiterals(t *testing.T) {
 			gen.TableDescriptor.NextIndexID = 3
 		}
 
+		genIndexes := gen.TableDesc().GetIndexes()
+		for indexPos := range genIndexes {
+			// System tables are currently created with old index versions.
+			// In functions such as maybeUpgradePrimaryIndexFormatVersion,
+			// the index version is bumped up.
+			genIndexes[indexPos].Version = descpb.StrictIndexColumnIDGuaranteesVersion
+		}
+
 		if desc.TableDesc().Equal(gen.TableDesc()) {
 			return
 		}
