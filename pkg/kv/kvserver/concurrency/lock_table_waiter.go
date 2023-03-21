@@ -855,7 +855,7 @@ const tagContentionTracer = "contention_tracer"
 const tagWaitKey = "lock_wait_key"
 
 // tagWaitStart is the tracing span tag indicating when the request started
-// waiting on the lock it's currently waiting on.
+// waiting on the lock (a unique key,txn pair) it's currently waiting on.
 const tagWaitStart = "lock_wait_start"
 
 // tagLockHolderTxn is the tracing span tag indicating the ID of the txn holding
@@ -903,15 +903,18 @@ type contentionTag struct {
 		waiting bool
 
 		// waitStart represents the timestamp when the request started waiting on
-		// locks in the current iteration of the contentionEventTracer. The wait
-		// time in previous iterations is accumulated in lockWait. When not waiting
-		// any more, timeutil.Since(waitStart) is added to lockWait.
+		// a lock, as defined by a unique (key,txn) pair, in the current iteration
+		// of the contentionEventTracer. The wait time in previous iterations is
+		// accumulated in lockWait. When not waiting anymore or when waiting on a
+		// new (key,txn), timeutil.Since(waitStart) is added to lockWait.
 		waitStart time.Time
 
-		// curState is the current wait state, if any. It is overwritten every time
-		// the lock table notify()s the contentionEventTracer of a new state. It is
-		// not set if waiting is false.
-		curState waitingState
+		// curStateKey and curStateTxn are the current waitingState's key and txn,
+		// if any. They are overwritten every time the lock table notify()s the
+		// contentionEventTracer of a new state. They are not set if waiting is
+		// false.
+		curStateKey roachpb.Key
+		curStateTxn *enginepb.TxnMeta
 
 		// numLocks counts the number of locks this contentionEventTracer has seen so
 		// far, including the one we're currently waiting on (if any).
@@ -1002,9 +1005,9 @@ func (tag *contentionTag) generateEventLocked() *roachpb.ContentionEvent {
 	}
 
 	return &roachpb.ContentionEvent{
-		Key:      tag.mu.curState.key,
-		TxnMeta:  *tag.mu.curState.txn,
-		Duration: tag.clock.PhysicalTime().Sub(tag.mu.curState.lockWaitStart),
+		Key:      tag.mu.curStateKey,
+		TxnMeta:  *tag.mu.curStateTxn,
+		Duration: tag.clock.PhysicalTime().Sub(tag.mu.waitStart),
 	}
 }
 
@@ -1021,33 +1024,35 @@ func (tag *contentionTag) notify(ctx context.Context, s waitingState) *roachpb.C
 		// If we're tracking an event and see a different txn/key, the event is
 		// done and we initialize the new event tracking the new txn/key.
 		//
-		// NB: we're guaranteed to have `s.{txn,key}` populated here.
-		var differentLock bool
-		if !tag.mu.waiting {
-			differentLock = true
-		} else {
-			curLockHolder, curKey := tag.mu.curState.txn.ID, tag.mu.curState.key
-			differentLock = !curLockHolder.Equal(s.txn.ID) || !curKey.Equal(s.key)
+		// NB: we're guaranteed to have `curState{Txn,Key}` populated here.
+		if tag.mu.waiting {
+			curLockTxn, curLockKey := tag.mu.curStateTxn.ID, tag.mu.curStateKey
+			differentLock := !curLockTxn.Equal(s.txn.ID) || !curLockKey.Equal(s.key)
+			if !differentLock {
+				return nil
+			}
 		}
-		var res *roachpb.ContentionEvent
-		if differentLock {
-			res = tag.generateEventLocked()
-		}
-		tag.mu.curState = s
+		res := tag.generateEventLocked()
 		tag.mu.waiting = true
-		if differentLock {
-			tag.mu.waitStart = tag.clock.PhysicalTime()
-			tag.mu.numLocks++
-			return res
+		tag.mu.curStateKey = s.key
+		tag.mu.curStateTxn = s.txn
+		// Accumulate the wait time.
+		now := tag.clock.PhysicalTime()
+		if !tag.mu.waitStart.IsZero() {
+			tag.mu.lockWait += now.Sub(tag.mu.waitStart)
 		}
-		return nil
+		tag.mu.waitStart = now
+		tag.mu.numLocks++
+		return res
 	case doneWaiting, waitQueueMaxLengthExceeded:
 		// There will be no more state updates; we're done waiting.
 		res := tag.generateEventLocked()
 		tag.mu.waiting = false
-		tag.mu.curState = waitingState{}
-		tag.mu.lockWait += tag.clock.PhysicalTime().Sub(tag.mu.waitStart)
+		tag.mu.curStateKey = nil
+		tag.mu.curStateTxn = nil
 		// Accumulate the wait time.
+		now := tag.clock.PhysicalTime()
+		tag.mu.lockWait += now.Sub(tag.mu.waitStart)
 		tag.mu.waitStart = time.Time{}
 		return res
 	default:
@@ -1084,15 +1089,15 @@ func (tag *contentionTag) Render() []attribute.KeyValue {
 	if tag.mu.waiting {
 		tags = append(tags, attribute.KeyValue{
 			Key:   tagWaitKey,
-			Value: attribute.StringValue(tag.mu.curState.key.String()),
+			Value: attribute.StringValue(tag.mu.curStateKey.String()),
 		})
 		tags = append(tags, attribute.KeyValue{
 			Key:   tagLockHolderTxn,
-			Value: attribute.StringValue(tag.mu.curState.txn.ID.String()),
+			Value: attribute.StringValue(tag.mu.curStateTxn.ID.String()),
 		})
 		tags = append(tags, attribute.KeyValue{
 			Key:   tagWaitStart,
-			Value: attribute.StringValue(tag.mu.curState.lockWaitStart.Format("15:04:05.123")),
+			Value: attribute.StringValue(tag.mu.waitStart.Format("15:04:05.123")),
 		})
 	}
 	return tags
