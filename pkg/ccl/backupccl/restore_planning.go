@@ -761,10 +761,15 @@ func resolveTargetDB(
 // This is done, for instance, to use the newer 19.2-style foreign key
 // representation, if they are not already upgraded.
 //
-// if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
+// If skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
 // the set provided are omitted during the upgrade, instead of causing an error
 // to be returned.
-func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool) error {
+//
+// If skipMissingSequences is set, missing sequences will be ignored
+// rather than causing an error.
+func maybeUpgradeDescriptors(
+	descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool, skipMissingSequences bool,
+) error {
 	// A data structure for efficient descriptor lookup by ID or by name.
 	descCatalog := &nstree.MutableCatalog{}
 	for _, d := range descs {
@@ -774,7 +779,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 	for j, desc := range descs {
 		var b catalog.DescriptorBuilder
 		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
-			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
+			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable, skipMissingSequences)
 		} else {
 			b = desc.NewBuilder()
 		}
@@ -803,6 +808,7 @@ func maybeUpgradeDescriptorsInBackupManifests(
 	backupManifests []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	skipFKsWithNoMatchingTable bool,
+	skipMissingSequences bool,
 ) error {
 	if len(backupManifests) == 0 {
 		return nil
@@ -829,7 +835,7 @@ func maybeUpgradeDescriptorsInBackupManifests(
 		descriptors = append(descriptors, descs...)
 	}
 
-	err := maybeUpgradeDescriptors(descriptors, skipFKsWithNoMatchingTable)
+	err := maybeUpgradeDescriptors(descriptors, skipFKsWithNoMatchingTable, skipMissingSequences)
 	if err != nil {
 		return err
 	}
@@ -1664,7 +1670,7 @@ func doRestorePlan(
 
 	sqlDescs = append(sqlDescs, newTypeDescs...)
 
-	if err := maybeUpgradeDescriptors(sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeDescriptors(sqlDescs, restoreStmt.Options.SkipMissingFKs, restoreStmt.Options.SkipMissingSequences); err != nil {
 		return err
 	}
 
