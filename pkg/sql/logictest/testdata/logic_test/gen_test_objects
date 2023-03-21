@@ -192,26 +192,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-"comm%pents"  " object_%2cid"   bigint
-"comm%pents"  "%vcommEnt"       text
-"comm%pents"  rowid             bigint
-"comm%pents"  sub_id            bigint
-"comm%pents"  "typ(e"           bigint
-migrations    completed_at      timestamp with time zone
-migrations    internal          bigint
-migrations    "majo,r"          bigint
-migrations    "mino*😫r"         bigint
-migrations    patch             bigint
-migrations    rowid             bigint
-role_members  """member"        text
-role_members  "isA!dmin"        boolean
-role_members  "mem b"" er_id "  oid
-role_members  "role"            text
-role_members  role_id           oid
-role_members  rowid             bigint
-role_options  """user_id"       oid
-role_options  "op tion"         text
-role_options  rowid             bigint
+"comm%pents"  "'sub__i😌d"         bigint
+"comm%pents"  "Typ'e"             bigint
+"comm%pents"  "commen t"          text
+"comm%pents"  "objec\\u6EEFt_id"  bigint
+"comm%pents"  rowid               bigint
+migrations    "Patch"             bigint
+migrations    completed_at        timestamp with time zone
+migrations    internal            bigint
+migrations    major               bigint
+migrations    minor               bigint
+migrations    rowid               bigint
+role_members  " member_id"        oid
+role_members  """ role_ id"       oid
+role_members  "isAdmin%p"         boolean
+role_members  member              text
+role_members  "roLe"              text
+role_members  rowid               bigint
+role_options  "o""ption"          text
+role_options  rowid               bigint
+role_options  user_id             oid
 
 subtest templates/different_templates_in_each_db
 
