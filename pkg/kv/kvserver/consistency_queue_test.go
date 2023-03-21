@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -390,8 +389,6 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// VFS to verify its contents.
 		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
 		require.NoError(t, err)
-		// Copy the min-version file so we can open the checkpoint as a store.
-		require.NoError(t, vfs.Copy(fs, storage.MinVersionFilename, fs.PathJoin(cps[0], storage.MinVersionFilename)))
 		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(),
 			storage.ForTesting, storage.MustExist, storage.ReadOnly, storage.CacheSize(1<<20))
 		defer cpEng.Close()
