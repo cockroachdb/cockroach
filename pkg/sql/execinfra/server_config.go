@@ -155,7 +155,6 @@ type ServerConfig struct {
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
-	ExternalIODirConfig    base.ExternalIODirConfig
 
 	// ProtectedTimestampProvider maintains the state of the protected timestamp
 	// subsystem. It is queried during the GC process and in the handling of

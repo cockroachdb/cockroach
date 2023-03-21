@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -76,13 +75,6 @@ import (
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
 // tables we process in a single txn when restoring their table statistics.
 var restoreStatsInsertBatchSize = 10
-
-var useSimpleImportSpans = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.restore.use_simple_import_spans",
-	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
-	false,
-)
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
 // splitting up the target key-space to send out the actual work of restoring.
@@ -264,6 +256,15 @@ func restore(
 		return emptyRowCount, nil
 	}
 
+	mu := struct {
+		syncutil.Mutex
+		highWaterMark     int
+		res               roachpb.RowCount
+		requestsCompleted []bool
+	}{
+		highWaterMark: -1,
+	}
+
 	backupLocalityMap, err := makeBackupLocalityMap(backupLocalityInfo, user)
 	if err != nil {
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
@@ -282,71 +283,44 @@ func restore(
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(restoreCtx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, backupManifests, encryption, kmsEnv)
-	if err != nil {
-		return roachpb.RowCount{}, err
+	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests,
+		backupLocalityMap, introducedSpanFrontier, highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+
+	if len(importSpans) == 0 {
+		// There are no files to restore.
+		return emptyRowCount, nil
 	}
 
-	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
-
-	mu := struct {
-		syncutil.Mutex
-		highWaterMark int64
-		ceiling       int64
-		res           roachpb.RowCount
-		// As part of job progress tracking, inFlightImportSpans tracks all the
-		// spans that have been generated are being processed by the processors in
-		// distRestore. requestsCompleleted tracks the spans from
-		// inFlightImportSpans that have completed its processing. Once all spans up
-		// to index N have been processed (and appear in requestsCompleted), then
-		// any spans with index < N will be removed from both inFlightImportSpans
-		// and requestsCompleted maps.
-		inFlightImportSpans map[int64]roachpb.Span
-		requestsCompleted   map[int64]bool
-	}{
-		highWaterMark:       -1,
-		ceiling:             0,
-		inFlightImportSpans: make(map[int64]roachpb.Span),
-		requestsCompleted:   make(map[int64]bool),
+	for i := range importSpans {
+		importSpans[i].ProgressIdx = int64(i)
 	}
+	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
-	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
-	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
-		defer close(spanCh)
-		return generateAndSendImportSpans(
-			ctx,
-			dataToRestore.getSpans(),
-			backupManifests,
-			layerToIterFactory,
-			backupLocalityMap,
-			introducedSpanFrontier,
-			highWaterMark,
-			targetSize,
-			spanCh,
-			simpleImportSpans,
-		)
+	// TODO(pbardea): This not super principled. I just wanted something that
+	// wasn't a constant and grew slower than linear with the length of
+	// importSpans. It seems to be working well for BenchmarkRestore2TB but
+	// worth revisiting.
+	// It tries to take the cluster size into account so that larger clusters
+	// distribute more chunks amongst them so that after scattering there isn't
+	// a large varience in the distribution of entries.
+	chunkSize := int(math.Sqrt(float64(len(importSpans)))) / numNodes
+	if chunkSize == 0 {
+		chunkSize = 1
 	}
-
-	// Count number of import spans.
-	var numImportSpans int
-	var countTasks []func(ctx context.Context) error
-	spanCountTask := func(ctx context.Context) error {
-		for range countSpansCh {
-			numImportSpans++
+	importSpanChunks := make([][]execinfrapb.RestoreSpanEntry, 0, len(importSpans)/chunkSize)
+	for start := 0; start < len(importSpans); {
+		importSpanChunk := importSpans[start:]
+		end := start + chunkSize
+		if end < len(importSpans) {
+			importSpanChunk = importSpans[start:end]
 		}
-		return nil
-	}
-	countTasks = append(countTasks, spanCountTask)
-	countTasks = append(countTasks, func(ctx context.Context) error {
-		return genSpan(ctx, countSpansCh)
-	})
-	if err := ctxgroup.GoAndWait(restoreCtx, countTasks...); err != nil {
-		return emptyRowCount, errors.Wrapf(err, "counting number of import spans")
+		importSpanChunks = append(importSpanChunks, importSpanChunk)
+		start = end
 	}
 
-	importSpanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
-	requestFinishedCh := make(chan struct{}, numImportSpans) // enough buffer to never block
+	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
+	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+
 	// tasks are the concurrent tasks that are run during the restore.
 	var tasks []func(ctx context.Context) error
 	if dataToRestore.isMainBundle() {
@@ -355,13 +329,13 @@ func restore(
 		// cluster restores) may be restored first. When restoring that data, we
 		// don't want to update the high-water mark key, so instead progress is just
 		// defined on the main data bundle (of which there should only be one).
-		progressLogger := jobs.NewChunkProgressLogger(job, numImportSpans, job.FractionCompleted(),
+		progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
 			func(progressedCtx context.Context, details jobspb.ProgressDetails) {
 				switch d := details.(type) {
 				case *jobspb.Progress_Restore:
 					mu.Lock()
 					if mu.highWaterMark >= 0 {
-						d.Restore.HighWater = mu.inFlightImportSpans[mu.highWaterMark].Key
+						d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
 					}
 					mu.Unlock()
 				default:
@@ -377,10 +351,10 @@ func restore(
 		tasks = append(tasks, jobProgressLoop)
 	}
 
-	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-
-	generativeCheckpointLoop := func(ctx context.Context) error {
+	jobCheckpointLoop := func(ctx context.Context) error {
 		defer close(requestFinishedCh)
+		// When a processor is done importing a span, it will send a progress update
+		// to progCh.
 		for progress := range progCh {
 			mu.Lock()
 			var progDetails backuppb.RestoreProgress
@@ -391,36 +365,16 @@ func restore(
 			mu.res.Add(progDetails.Summary)
 			idx := progDetails.ProgressIdx
 
-			if idx >= mu.ceiling {
-				for i := mu.ceiling; i <= idx; i++ {
-					importSpan, ok := <-importSpanCh
-					if !ok {
-						// The channel has been closed, there is nothing left to do.
-						log.Infof(ctx, "exiting restore checkpoint loop as the import span channel has been closed")
-						return nil
-					}
-					mu.inFlightImportSpans[i] = importSpan.Span
-				}
-				mu.ceiling = idx + 1
+			// Assert that we're actually marking the correct span done. See #23977.
+			if !importSpans[progDetails.ProgressIdx].Span.Key.Equal(progDetails.DataSpan.Key) {
+				mu.Unlock()
+				return errors.Newf("request %d for span %v does not match import span for same idx: %v",
+					idx, progDetails.DataSpan, importSpans[idx],
+				)
 			}
-
-			if sp, ok := mu.inFlightImportSpans[idx]; ok {
-				// Assert that we're actually marking the correct span done. See #23977.
-				if !sp.Key.Equal(progDetails.DataSpan.Key) {
-					mu.Unlock()
-					return errors.Newf("request %d for span %v does not match import span for same idx: %v",
-						idx, progDetails.DataSpan, sp,
-					)
-				}
-				mu.requestsCompleted[idx] = true
-				prevHighWater := mu.highWaterMark
-				for j := mu.highWaterMark + 1; j < mu.ceiling && mu.requestsCompleted[j]; j++ {
-					mu.highWaterMark = j
-				}
-				for j := prevHighWater; j < mu.highWaterMark; j++ {
-					delete(mu.requestsCompleted, j)
-					delete(mu.inFlightImportSpans, j)
-				}
+			mu.requestsCompleted[idx] = true
+			for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+				mu.highWaterMark = j
 			}
 			mu.Unlock()
 
@@ -430,16 +384,14 @@ func restore(
 		}
 		return nil
 	}
-	tasks = append(tasks, generativeCheckpointLoop)
-	tasks = append(tasks, func(ctx context.Context) error {
-		return genSpan(ctx, importSpanCh)
-	})
+	tasks = append(tasks, jobCheckpointLoop)
 
 	runRestore := func(ctx context.Context) error {
 		return distRestore(
 			ctx,
 			execCtx,
 			int64(job.ID()),
+			importSpanChunks,
 			dataToRestore.getPKIDs(),
 			encryption,
 			kmsEnv,
@@ -447,14 +399,6 @@ func restore(
 			dataToRestore.getTenantRekeys(),
 			endTime,
 			dataToRestore.isValidateOnly(),
-			details.URIs,
-			dataToRestore.getSpans(),
-			backupLocalityInfo,
-			highWaterMark,
-			targetSize,
-			numNodes,
-			numImportSpans,
-			simpleImportSpans,
 			progCh,
 		)
 	}
@@ -464,7 +408,7 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", numImportSpans)
+		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
 	return mu.res, nil
@@ -493,13 +437,7 @@ func loadBackupSQLDescs(
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
-	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage,
-		backupManifests, encryption, kmsEnv)
-	if err != nil {
-		return nil, backuppb.BackupManifest{}, nil, 0, err
-	}
-
-	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToBackupManifestFileIterFactory, details.EndTime)
+	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
@@ -1649,7 +1587,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
-		log.Infof(ctx, "finished restoring the pre-data bundle")
 	}
 
 	if !preValidateData.isEmpty() {
@@ -1670,7 +1607,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.Add(res)
-		log.Infof(ctx, "finished restoring the validate data bundle")
 	}
 	{
 		// Restore the main data bundle. We notably only restore the system tables
@@ -1692,7 +1628,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.Add(res)
-		log.Infof(ctx, "finished restoring the main data bundle")
 	}
 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
