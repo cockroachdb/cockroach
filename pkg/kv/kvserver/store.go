@@ -3084,8 +3084,15 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	checkpointBase := s.checkpointsDir()
 	_ = s.TODOEngine().MkdirAll(checkpointBase)
+	// Create the checkpoint in a "pending" directory first. If we fail midway, it
+	// should be clear that the directory contains an incomplete checkpoint.
+	pendingDir := filepath.Join(checkpointBase, tag+"_pending")
+	if err := s.TODOEngine().CreateCheckpoint(pendingDir, spans); err != nil {
+		return "", err
+	}
+	// Atomically rename the directory when it represents a complete checkpoint.
 	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.TODOEngine().CreateCheckpoint(checkpointDir, spans); err != nil {
+	if err := s.TODOEngine().Rename(pendingDir, checkpointDir); err != nil {
 		return "", err
 	}
 	return checkpointDir, nil

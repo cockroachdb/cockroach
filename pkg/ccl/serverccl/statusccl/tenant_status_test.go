@@ -1290,8 +1290,6 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges pagination", func(t *testing.T) {
-		skip.WithIssue(t, 92979,
-			"flaky test, difficult to reproduce locally. Skip until resolved.")
 		ctx := context.Background()
 		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit: 1,
@@ -1302,18 +1300,34 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 			require.Len(t, ranges.Ranges, 1)
 		}
 
-		resp2, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
-			Limit:  1,
-			Offset: resp1.Next,
+		sql := helper.TestCluster().TenantConn(0)
+		// Wait for the split queue to process some before requesting the 2nd range.
+		// We expect an offset for the 3rd range, so wait until at least 3 ranges exist.
+		testutils.SucceedsSoon(t, func() error {
+			res := sql.QueryStr(t, "SELECT count(*) FROM crdb_internal.ranges")
+			require.Equal(t, len(res), 1)
+			require.Equal(t, len(res[0]), 1)
+			rangeCount, err := strconv.Atoi(res[0][0])
+			require.NoError(t, err)
+			if rangeCount < 3 {
+				return errors.Newf("expected >= 3 ranges, got %d", rangeCount)
+			}
+
+			resp2, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
+				Limit:  1,
+				Offset: resp1.Next,
+			})
+			require.NoError(t, err)
+			require.Equal(t, 2, int(resp2.Next))
+			for locality, ranges := range resp2.RangesByLocality {
+				require.Len(t, ranges.Ranges, 1)
+				// Verify pagination functions based on ascending RangeID order.
+				require.True(t,
+					resp1.RangesByLocality[locality].Ranges[0].RangeID < ranges.Ranges[0].RangeID)
+			}
+			return nil
 		})
-		require.NoError(t, err)
-		require.Equal(t, 2, int(resp2.Next))
-		for locality, ranges := range resp2.RangesByLocality {
-			require.Len(t, ranges.Ranges, 1)
-			// Verify pagination functions based on ascending RangeID order.
-			require.True(t,
-				resp1.RangesByLocality[locality].Ranges[0].RangeID < ranges.Ranges[0].RangeID)
-		}
+
 	})
 }
 
