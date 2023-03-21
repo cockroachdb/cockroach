@@ -14,6 +14,7 @@ import { actions } from "./localStorage.reducer";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as stmtInsightActions } from "src/store/insights/statementInsights";
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
+import { actions as txnStatsActions } from "src/store/transactionStats";
 
 export function* updateLocalStorageItemSaga(action: AnyAction) {
   const { key, value } = action.payload;
@@ -29,6 +30,7 @@ export function* updateTimeScale(action: AnyAction) {
     put(sqlStatsActions.invalidated()),
     put(stmtInsightActions.invalidated()),
     put(txnInsightActions.invalidated()),
+    put(txnStatsActions.invalidated()),
   ]);
 }
 

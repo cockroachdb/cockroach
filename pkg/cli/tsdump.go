@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -74,7 +74,7 @@ output.
 			// Buffer the writes to os.Stdout since we're going to
 			// be writing potentially a lot of data to it.
 			w := bufio.NewWriter(os.Stdout)
-			if err := ts.DumpRawTo(stream, w); err != nil {
+			if err := tsutil.DumpRawTo(stream, w); err != nil {
 				return err
 			}
 			return w.Flush()

@@ -6,7 +6,7 @@
   }
 
   &__btn {
-    height: $line-height--large;
+    height: $line-height--larger;
     width: 67px;
     font-size: $font-size--small;
   }
@@ -36,9 +36,10 @@
   }
 }
 
-.float {
+.btn-area {
   float: left;
   margin-right: 7px;
+  font-size: $font-size--medium;
 }
 
 .label {

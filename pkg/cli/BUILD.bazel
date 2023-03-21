@@ -179,6 +179,7 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/ts",
         "//pkg/ts/tspb",
+        "//pkg/ts/tsutil",
         "//pkg/upgrade/upgrades",
         "//pkg/util",
         "//pkg/util/cgroups",

@@ -29,6 +29,7 @@ import {
   invalidateExecutionInsights,
   invalidateTxnInsights,
   invalidateStatements,
+  invalidateTxns,
 } from "./apiReducers";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
@@ -234,6 +235,7 @@ export function* timeScaleSaga() {
       put(invalidateStatements()),
       put(invalidateExecutionInsights()),
       put(invalidateTxnInsights()),
+      put(invalidateTxns()),
     ]);
   });
 }

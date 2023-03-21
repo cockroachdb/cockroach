@@ -17,7 +17,7 @@ import {
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
 import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
-import { generateStmtDetailsToID } from "../../util";
+import { generateStmtDetailsToID } from "src/util/appStats";
 
 export function* refreshSQLDetailsStatsSaga(
   action: PayloadAction<StatementDetailsRequest>,

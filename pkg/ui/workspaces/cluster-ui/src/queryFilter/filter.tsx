@@ -29,6 +29,7 @@ import {
 } from "./filterClasses";
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { syncHistory } from "../util";
+import { selectCustomStyles } from "../common";
 
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
@@ -417,33 +418,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       showWorkloadInsightTypes,
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
-    const customStyles = {
-      container: (provided: any) => ({
-        ...provided,
-        border: "none",
-      }),
-      option: (provided: any, state: any) => ({
-        ...provided,
-        backgroundColor: state.isSelected
-          ? "#DEEBFF"
-          : provided.backgroundColor,
-        color: "#394455",
-      }),
-      control: (provided: any) => ({
-        ...provided,
-        width: "100%",
-        borderColor: "#C0C6D9",
-      }),
-      dropdownIndicator: (provided: any) => ({
-        ...provided,
-        color: "#C0C6D9",
-      }),
-      singleValue: (provided: any) => ({
-        ...provided,
-        color: "#475872",
-      }),
-    };
-    const customStylesSmall = { ...customStyles };
+    const customStylesSmall = { ...selectCustomStyles };
     customStylesSmall.container = (provided: any) => ({
       ...provided,
       width: "141px",

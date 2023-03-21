@@ -103,6 +103,9 @@ message Query {
   // An optional list of sources to restrict the time series query. If no
   // sources are provided, all available sources will be queried.
   repeated string sources = 5;
+  // An optional tenant ID to restrict the time series query. If no tenant ID 
+  // is provided, time series will be aggregated across all available tenants.
+  optional roachpb.TenantID tenant_id = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
 }
 
 // TimeSeriesQueryRequest is the standard incoming time series query request

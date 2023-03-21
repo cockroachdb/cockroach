@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshNodes,
-  refreshStatements,
+  refreshTxns,
   refreshTxnInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
@@ -22,8 +22,10 @@ import { txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
+  reqSortSetting,
   selectData,
   selectLastError,
+  limitSetting,
 } from "src/views/transactions/transactionsPage";
 import {
   TransactionDetailsStateProps,
@@ -37,7 +39,7 @@ import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelec
 import { selectHasAdminRole } from "src/redux/user";
 
 export const selectTransaction = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;
@@ -92,10 +94,12 @@ export default withRouter(
         transactionInsights: selectTxnInsightsByFingerprint(state, props),
         hasAdminRole: selectHasAdminRole(state),
         isDataValid: isValid,
+        limit: limitSetting.selector(state),
+        reqSortSetting: reqSortSetting.selector(state),
       };
     },
     {
-      refreshData: refreshStatements,
+      refreshData: refreshTxns,
       refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,

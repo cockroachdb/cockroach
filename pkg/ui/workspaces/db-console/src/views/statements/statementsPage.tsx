@@ -47,6 +47,7 @@ import {
   RecentStatementsViewDispatchProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
+  api,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -268,7 +269,7 @@ export const statementColumnsLocalSetting = new LocalSetting(
 );
 
 export const sortSettingLocalSetting = new LocalSetting(
-  "sortSetting/StatementsPage",
+  "tableSortSetting/StatementsPage",
   (state: AdminUIState) => state.localSettings,
   { ascending: false, columnTitle: "executionCount" },
 );
@@ -283,6 +284,18 @@ export const searchLocalSetting = new LocalSetting(
   "search/StatementsPage",
   (state: AdminUIState) => state.localSettings,
   null,
+);
+
+export const reqSortSetting = new LocalSetting(
+  "reqSortSetting/StatementsPage",
+  (state: AdminUIState) => state.localSettings,
+  api.DEFAULT_STATS_REQ_OPTIONS.sort,
+);
+
+export const limitSetting = new LocalSetting(
+  "reqLimitSetting/StatementsPage",
+  (state: AdminUIState) => state.localSettings,
+  api.DEFAULT_STATS_REQ_OPTIONS.limit,
 );
 
 const fingerprintsPageActions = {
@@ -348,6 +361,8 @@ const fingerprintsPageActions = {
     statementColumnsLocalSetting.set(
       value.length === 0 ? " " : value.join(","),
     ),
+  onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
+  onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
 };
 
 type StateProps = {
@@ -387,6 +402,10 @@ export default withRouter(
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
+        limit: limitSetting.selector(state),
+        reqSortSetting: reqSortSetting.selector(state),
+        stmtsTotalRuntimeSecs:
+          state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
       },
       activePageProps: mapStateToRecentStatementViewProps(state),
     }),
