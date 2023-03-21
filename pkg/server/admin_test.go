@@ -2220,6 +2220,9 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE "sp'ec\ch""ars"`)
 	sqlDB.Exec(t, `CREATE TABLE "sp'ec\ch""ars"."more\spec'chars" (id INT PRIMARY KEY)`)
 
+	// Make sure secondary tenants don't cause the endpoint to error.
+	sqlDB.Exec(t, "CREATE TENANT 'app'")
+
 	// Verify that we see their replicas in the DataDistribution response, evenly spread
 	// across the test cluster's three nodes.
 
