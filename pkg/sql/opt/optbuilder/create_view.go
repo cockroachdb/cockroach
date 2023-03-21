@@ -31,12 +31,17 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	b.insideViewDef = true
 	b.trackViewDeps = true
 	b.qualifyDataSourceNamesInAST = true
+	if b.sourceViews == nil {
+		b.sourceViews = make(map[string]struct{})
+	}
+	b.sourceViews[viewName.FQString()] = struct{}{}
 	defer func() {
 		b.insideViewDef = false
 		b.trackViewDeps = false
 		b.viewDeps = nil
 		b.viewTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
+		delete(b.sourceViews, viewName.FQString())
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)

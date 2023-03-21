@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -248,6 +249,9 @@ type planner struct {
 	// the type resolution steps will disallow resolution of types that have a
 	// parentID != contextDatabaseID when it is set.
 	contextDatabaseID descpb.ID
+
+	// trackDependency is used to track circular dependencies when dropping views.
+	trackDependency map[catid.DescID]bool
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {

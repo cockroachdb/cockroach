@@ -234,8 +234,9 @@ func (p *planner) accumulateAllObjectsToDelete(
 	ctx context.Context, objects []toDelete,
 ) ([]*tabledesc.Mutable, map[descpb.ID]*tabledesc.Mutable, error) {
 	implicitDeleteObjects := make(map[descpb.ID]*tabledesc.Mutable)
+	visited := make(map[descpb.ID]struct{})
 	for _, toDel := range objects {
-		err := p.accumulateCascadingViews(ctx, implicitDeleteObjects, toDel.desc)
+		err := p.accumulateCascadingViews(ctx, implicitDeleteObjects, visited, toDel.desc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -292,8 +293,12 @@ func (p *planner) accumulateOwnedSequences(
 // references, which means this list can't be constructed by simply scanning
 // the namespace table.
 func (p *planner) accumulateCascadingViews(
-	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
+	ctx context.Context,
+	dependentObjects map[descpb.ID]*tabledesc.Mutable,
+	visited map[descpb.ID]struct{},
+	desc *tabledesc.Mutable,
 ) error {
+	visited[desc.ID] = struct{}{}
 	for _, ref := range desc.DependedOnBy {
 		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
 		if err != nil {
@@ -302,8 +307,15 @@ func (p *planner) accumulateCascadingViews(
 		if !dependentDesc.IsView() {
 			continue
 		}
+
+		_, seen := visited[ref.ID]
+		if dependentObjects[ref.ID] == dependentDesc || seen {
+			// This view's dependencies are already added.
+			continue
+		}
 		dependentObjects[ref.ID] = dependentDesc
-		if err := p.accumulateCascadingViews(ctx, dependentObjects, dependentDesc); err != nil {
+
+		if err := p.accumulateCascadingViews(ctx, dependentObjects, visited, dependentDesc); err != nil {
 			return err
 		}
 	}

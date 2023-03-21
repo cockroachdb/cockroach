@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,8 +33,9 @@ type dropViewNode struct {
 
 // DropView drops a view.
 // Privileges: DROP on view.
-//   Notes: postgres allows only the view owner to DROP a view.
-//          mysql requires the DROP privilege on the view.
+//
+//	Notes: postgres allows only the view owner to DROP a view.
+//	       mysql requires the DROP privilege on the view.
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -138,6 +140,18 @@ func (p *planner) canRemoveDependentView(
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
+	if p.trackDependency == nil {
+		p.trackDependency = make(map[catid.DescID]bool)
+	}
+	if p.trackDependency[ref.ID] {
+		// This table's dependencies are already tracked.
+		return nil
+	}
+	p.trackDependency[ref.ID] = true
+	defer func() {
+		p.trackDependency[ref.ID] = false
+	}()
+
 	return p.canRemoveDependentViewGeneric(ctx, string(from.DescriptorType()), from.Name, from.ParentID, ref, behavior)
 }
 
