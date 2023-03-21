@@ -3689,7 +3689,11 @@ func isClusterVersionLessThan(
 	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
 ) (bool, error) {
 	var clusterVersionStr string
-	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
+	// Directly querying the cluster version with SHOW CLUSTER
+	// SETTING version isn't safe, since it will wait for any
+	// upgrade to finish. So, instead show all cluster settings,
+	// which will bypass this strict requirement.
+	row := tx.QueryRow(ctx, `SELECT value FROM [SHOW CLUSTER SETTINGS] WHERE variable='version'`)
 	if err := row.Scan(&clusterVersionStr); err != nil {
 		return false, err
 	}
