@@ -136,6 +136,8 @@ type telemetryMetricsRecorder struct {
 	inner           metricsRecorder
 }
 
+var _ metricsRecorder = (*telemetryMetricsRecorder)(nil)
+
 func (r *telemetryMetricsRecorder) close() {
 	r.telemetryLogger.close()
 }
@@ -182,6 +184,14 @@ func (r *telemetryMetricsRecorder) getBackfillRangeCallback() func(int64) (func(
 
 func (r *telemetryMetricsRecorder) recordSizeBasedFlush() {
 	r.inner.recordSizeBasedFlush()
+}
+
+func (r *telemetryMetricsRecorder) recordParallelIOQueueLatency(latency time.Duration) {
+	r.inner.recordParallelIOQueueLatency(latency)
+}
+
+func (r *telemetryMetricsRecorder) recordSinkIOInflightChange(delta int64) {
+	r.inner.recordSinkIOInflightChange(delta)
 }
 
 // ContinuousTelemetryInterval determines the interval at which each node emits telemetry events
