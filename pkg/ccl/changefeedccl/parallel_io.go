@@ -154,31 +154,35 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 		// Clear out the completed keys to check for newly valid pending requests
 		inflight.DifferenceWith(req.Keys())
 
-		var stillPending = pending[:0] // Reuse underlying space
-		for _, pendingReq := range pending {
-			// If no intersection, nothing changed for this request's validity
-			if !req.Keys().Intersects(pendingReq.Keys()) {
-				stillPending = append(stillPending, pendingReq)
-				continue
-			}
-
-			// If it is now free to send, send it
-			if !inflight.Intersects(pendingReq.Keys()) {
+		pendingKeys := intsets.Fast{}
+		for i, pendingReq := range pending {
+			if !inflight.Intersects(pendingReq.Keys()) && !pendingKeys.Intersects(pendingReq.Keys()) {
+				inflight.UnionWith(pendingReq.Keys())
+				pending = append(pending[:i], pending[i+1:]...)
 				sendToWorker(ctx, pendingReq)
-			} else {
-				stillPending = append(stillPending, pendingReq)
+				break
 			}
 
-			// Re-add whatever keys in the pending request that were removed
-			inflight.UnionWith(pendingReq.Keys())
+			pendingKeys.UnionWith(pendingReq.Keys())
 		}
-		pending = stillPending
 
 		select {
 		case <-ctx.Done():
 		case <-pe.doneCh:
 		case pe.resultCh <- req:
 		}
+	}
+
+	keysInFlight := func(keys intsets.Fast) bool {
+		if inflight.Intersects(keys) {
+			return true
+		}
+		for _, pendingReq := range pending {
+			if pendingReq.Keys().Intersects(keys) {
+				return true
+			}
+		}
+		return false
 	}
 
 	for {
@@ -195,16 +199,11 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 
 		select {
 		case req := <-pe.requestCh:
-			if !inflight.Intersects(req.Keys()) {
+			if keysInFlight(req.Keys()) {
+				pending = append(pending, req)
+			} else {
 				inflight.UnionWith(req.Keys())
 				sendToWorker(ctx, req)
-			} else {
-				// Even if the request isn't going to be immediately sent out, it must
-				// still be considered "inflight" as future incoming events overlapping
-				// its keys must not be sent until this event is removed from the queue
-				// and successfully emitted.
-				inflight.UnionWith(req.Keys())
-				pending = append(pending, req)
 			}
 		case res := <-emitSuccessCh:
 			handleSuccess(res)

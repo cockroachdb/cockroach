@@ -552,7 +552,7 @@ func (ct *cdcTester) startGrafana() {
 
 	ct.promCfg = cfg
 
-	if !ct.t.SkipInit() {
+	if true || !ct.t.SkipInit() {
 		err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
 		if err != nil {
 			ct.t.Errorf("error starting prometheus/grafana: %s", err)
