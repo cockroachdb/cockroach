@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -373,6 +374,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	for i := 0; i < numStores; i++ {
 		cps := onDiskCheckpointPaths(i)
 		require.Len(t, cps, 1)
+		t.Logf("found a checkpoint at %s", cps[0])
+		// The checkpoint must have been finalized.
+		require.False(t, strings.HasSuffix(cps[0], "_pending"))
+
 		metric := tc.GetFirstStoreFromServer(t, i).Metrics().RdbCheckpoints
 		testutils.SucceedsSoon(t, func() error {
 			if got, want := metric.Value(), int64(1); got != want {
@@ -387,7 +392,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		require.NoError(t, err)
 		// Copy the min-version file so we can open the checkpoint as a store.
 		require.NoError(t, vfs.Copy(fs, storage.MinVersionFilename, fs.PathJoin(cps[0], storage.MinVersionFilename)))
-		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(), storage.CacheSize(1<<20))
+		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(),
+			storage.ForTesting, storage.MustExist, storage.ReadOnly, storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
 		// Find the problematic range in the storage.
