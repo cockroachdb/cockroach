@@ -1785,6 +1785,9 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
 		return err
 	}
+	if ts.WallTime == 1 && ts.Logical == 0 {
+		log.Infof(ctx, "XXX RangeFeed passed")
+	}
 	return nil
 }
 
@@ -1805,6 +1808,9 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
+	if ts.WallTime == 1 && ts.Logical == 0 {
+		log.Infof(context.Background(), "XXX impliedThreshold=%s ts=%s", threshold, ts)
+	}
 	if threshold.Less(ts) {
 		return nil
 	}
