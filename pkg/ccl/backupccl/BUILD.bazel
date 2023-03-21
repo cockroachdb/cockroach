@@ -154,6 +154,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_lib_pq//oid",
         "@com_github_robfig_cron_v3//:cron",
     ],
 )

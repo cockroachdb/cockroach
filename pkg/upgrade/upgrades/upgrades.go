@@ -292,6 +292,18 @@ var upgrades = []upgradebase.Upgrade{
 		createAutoConfigRunnerJob,
 		"create auto config runner job",
 	),
+	upgrade.NewTenantUpgrade(
+		"add owner_id column to system.scheduled_jobs table",
+		toCV(clusterversion.V23_1ScheduledJobsTableHasOwnerIDColumn),
+		upgrade.NoPrecondition,
+		alterScheduledJobsTableAddOwnerIDColumn,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill owner_id column in system.scheduled_jobs table",
+		toCV(clusterversion.V23_1ScheduledJobsTableOwnerIDColumnBackfilled),
+		upgrade.NoPrecondition,
+		backfillScheduledJobsTableOwnerIDColumn,
+	),
 }
 
 func init() {

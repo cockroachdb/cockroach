@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/lib/pq/oid"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -109,6 +111,7 @@ type PlanHookState interface {
 	LeaseMgr() *lease.Manager
 	ExprEvaluator(op string) exprutil.Evaluator
 	User() username.SQLUsername
+	UserID(ctx context.Context) (oid.Oid, error)
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
@@ -131,6 +134,7 @@ type PlanHookState interface {
 	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*mtinfopb.TenantInfo, error)
 	GetAvailableTenantID(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)
 	InternalSQLTxn() descs.Txn
+	IsActive(ctx context.Context, key clusterversion.Key) bool
 }
 
 var _ jobsauth.AuthorizationAccessor = PlanHookState(nil)

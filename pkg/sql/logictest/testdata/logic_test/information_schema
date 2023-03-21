@@ -2352,6 +2352,7 @@ system         public        scheduled_jobs                   execution_args    
 system         public        scheduled_jobs                   executor_type                                                                                             9
 system         public        scheduled_jobs                   next_run                                                                                                  5
 system         public        scheduled_jobs                   owner                                                                                                     4
+system         public        scheduled_jobs                   owner_id                                                                                                  11
 system         public        scheduled_jobs                   schedule_details                                                                                          8
 system         public        scheduled_jobs                   schedule_expr                                                                                             7
 system         public        scheduled_jobs                   schedule_id                                                                                               1

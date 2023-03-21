@@ -24,6 +24,7 @@ go_library(
         "precondition_before_starting_an_upgrade.go",
         "role_members_ids_migration.go",
         "sampled_stmt_diagnostics_requests.go",
+        "scheduled_jobs_table_user_id_migration.go",
         "schema_changes.go",
         "schemachanger_elements.go",
         "system_external_connections.go",

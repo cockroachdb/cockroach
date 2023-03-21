@@ -279,6 +279,9 @@ func CreateSchemaTelemetrySchedule(
 
 	scheduledJob.SetScheduleLabel(SchemaTelemetryScheduleName)
 	scheduledJob.SetOwner(username.NodeUserName())
+	if st.Version.IsActive(ctx, clusterversion.V23_1ScheduledJobsTableHasOwnerIDColumn) {
+		scheduledJob.SetOwnerID(username.NodeUserID)
+	}
 
 	args, err := pbtypes.MarshalAny(&ScheduledSchemaTelemetryExecutionArgs{})
 	if err != nil {

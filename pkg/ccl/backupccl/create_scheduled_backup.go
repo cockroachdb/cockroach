@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/lib/pq/oid"
 	cron "github.com/robfig/cron/v3"
 )
 
@@ -304,6 +306,14 @@ func doCreateBackupSchedules(
 	var inc *jobs.ScheduledJob
 	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	var incScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
+	var ownerID oid.Oid
+	if p.IsActive(ctx, clusterversion.V23_1ScheduledJobsTableHasOwnerIDColumn) {
+		var err error
+		ownerID, err = p.UserID(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	if incRecurrence != nil {
 		incrementalScheduleDetails := details
 		// An incremental backup schedule must always wait if there is a running job
@@ -332,7 +342,7 @@ func doCreateBackupSchedules(
 			}
 		}
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
-			env, p.User(), scheduleLabel, incRecurrence, incrementalScheduleDetails, unpauseOnSuccessID,
+			env, p.User(), ownerID, scheduleLabel, incRecurrence, incrementalScheduleDetails, unpauseOnSuccessID,
 			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
 		if err != nil {
 			return err
@@ -356,7 +366,7 @@ func doCreateBackupSchedules(
 	backupNode.Options.IncrementalStorage = nil
 	var fullScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	full, fullScheduledBackupArgs, err := makeBackupSchedule(
-		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
+		env, p.User(), ownerID, scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
 		updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
 	if err != nil {
 		return err
@@ -457,6 +467,7 @@ func checkForExistingBackupsInCollection(
 func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
 	owner username.SQLUsername,
+	ownerID oid.Oid,
 	label string,
 	recurrence *schedulebase.ScheduleRecurrence,
 	details jobspb.ScheduleDetails,
@@ -468,6 +479,7 @@ func makeBackupSchedule(
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
 	sj.SetOwner(owner)
+	sj.SetOwnerID(ownerID)
 
 	// Prepare arguments for scheduled backup execution.
 	args := &backuppb.ScheduledBackupExecutionArgs{

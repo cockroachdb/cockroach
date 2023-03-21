@@ -75,6 +75,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//types",
+        "@com_github_lib_pq//oid",
         "@com_github_prometheus_client_model//go",
         "@com_github_robfig_cron_v3//:cron",
         "@io_opentelemetry_go_otel//attribute",
