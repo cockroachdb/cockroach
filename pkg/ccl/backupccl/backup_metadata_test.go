@@ -36,8 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMetadataSST has to be in backupccl_test in order to be sure that the
-// BACKUP planhook is registered.
 func TestMetadataSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -114,8 +112,14 @@ func checkMetadata(
 	}
 
 	checkManifest(t, m, bm)
-	checkDescriptorChanges(ctx, t, m, bm)
-	checkDescriptors(ctx, t, m, bm)
+	// If there are descriptor changes, we only check those as they should have
+	// all changes as well as existing descriptors
+	if len(m.DescriptorChanges) > 0 {
+		checkDescriptorChanges(ctx, t, m, bm)
+	} else {
+		checkDescriptors(ctx, t, m, bm)
+	}
+
 	checkSpans(ctx, t, m, bm)
 	// Don't check introduced spans on the first backup.
 	if m.StartTime != (hlc.Timestamp{}) {
@@ -143,17 +147,16 @@ func checkDescriptors(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaDescs []descpb.Descriptor
+	var desc descpb.Descriptor
 
-	it := bm.NewDescIter(ctx)
+	it := bm.DescIter(ctx)
 	defer it.Close()
-	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
+	for it.Next(&desc) {
+		metaDescs = append(metaDescs, desc)
+	}
 
-		metaDescs = append(metaDescs, *it.Value())
+	if it.Err() != nil {
+		t.Fatal(it.Err())
 	}
 
 	require.Equal(t, m.Descriptors, metaDescs)
@@ -163,16 +166,15 @@ func checkDescriptorChanges(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaRevs []backuppb.BackupManifest_DescriptorRevision
-	it := bm.NewDescriptorChangesIter(ctx)
+	var rev backuppb.BackupManifest_DescriptorRevision
+	it := bm.DescriptorChangesIter(ctx)
 	defer it.Close()
 
-	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-		metaRevs = append(metaRevs, *it.Value())
+	for it.Next(&rev) {
+		metaRevs = append(metaRevs, rev)
+	}
+	if it.Err() != nil {
+		t.Fatal(it.Err())
 	}
 
 	// Descriptor Changes are sorted by time in the manifest.
@@ -187,22 +189,15 @@ func checkFiles(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaFiles []backuppb.BackupManifest_File
-	it, err := bm.NewFileIter(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	var file backuppb.BackupManifest_File
+	it := bm.FileIter(ctx)
 	defer it.Close()
 
-	for ; ; it.Next() {
-		ok, err := it.Valid()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !ok {
-			break
-		}
-
-		metaFiles = append(metaFiles, *it.Value())
+	for it.Next(&file) {
+		metaFiles = append(metaFiles, file)
+	}
+	if it.Err() != nil {
+		t.Fatal(it.Err())
 	}
 
 	require.Equal(t, m.Files, metaFiles)
@@ -212,17 +207,15 @@ func checkSpans(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaSpans []roachpb.Span
-	it := bm.NewSpanIter(ctx)
+	var span roachpb.Span
+	it := bm.SpanIter(ctx)
 	defer it.Close()
 
-	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-
-		metaSpans = append(metaSpans, it.Value())
+	for it.Next(&span) {
+		metaSpans = append(metaSpans, span)
+	}
+	if it.Err() != nil {
+		t.Fatal(it.Err())
 	}
 
 	require.Equal(t, m.Spans, metaSpans)
@@ -232,16 +225,14 @@ func checkIntroducedSpans(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaSpans []roachpb.Span
-	it := bm.NewIntroducedSpanIter(ctx)
+	var span roachpb.Span
+	it := bm.IntroducedSpanIter(ctx)
 	defer it.Close()
-
-	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-		metaSpans = append(metaSpans, it.Value())
+	for it.Next(&span) {
+		metaSpans = append(metaSpans, span)
+	}
+	if it.Err() != nil {
+		t.Fatal(it.Err())
 	}
 
 	require.Equal(t, m.IntroducedSpans, metaSpans)
@@ -251,17 +242,15 @@ func checkTenants(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaTenants []descpb.TenantInfoWithUsage
-	it := bm.NewTenantIter(ctx)
+	var tenant descpb.TenantInfoWithUsage
+	it := bm.TenantIter(ctx)
 	defer it.Close()
 
-	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-
-		metaTenants = append(metaTenants, it.Value())
+	for it.Next(&tenant) {
+		metaTenants = append(metaTenants, tenant)
+	}
+	if it.Err() != nil {
+		t.Fatal(it.Err())
 	}
 
 	require.Equal(t, m.Tenants, metaTenants)
@@ -279,23 +268,18 @@ func checkStats(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(expectedStats) == 0 {
-		expectedStats = nil
-	}
 
-	it := bm.NewStatsIter(ctx)
+	var metaStats = make([]*stats.TableStatisticProto, 0)
+	var s *stats.TableStatisticProto
+	it := bm.StatsIter(ctx)
 	defer it.Close()
-	var metaStats []*stats.TableStatisticProto
 
-	for ; ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-		metaStats = append(metaStats, it.Value())
+	for it.Next(&s) {
+		metaStats = append(metaStats, s)
 	}
-
+	if it.Err() != nil {
+		t.Fatal(it.Err())
+	}
 	require.Equal(t, expectedStats, metaStats)
 }
 

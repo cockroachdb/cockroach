@@ -348,10 +348,8 @@ func fullClusterTargetsBackup(
 // mainBackupManifests are sorted by Endtime and this check only applies to
 // backups with a start time that is less than the restore AOST.
 func checkMissingIntroducedSpans(
-	ctx context.Context,
 	restoringDescs []catalog.Descriptor,
 	mainBackupManifests []backuppb.BackupManifest,
-	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
 ) error {
@@ -376,29 +374,10 @@ func checkMissingIntroducedSpans(
 
 		// Gather the _online_ tables included in the previous backup.
 		prevOnlineTables := make(map[descpb.ID]struct{})
-		prevDescIt := layerToIterFactory[i-1].NewDescIter(ctx)
-		defer prevDescIt.Close()
-		for ; ; prevDescIt.Next() {
-			if ok, err := prevDescIt.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-
-			if table, _, _, _, _ := descpb.GetDescriptors(prevDescIt.Value()); table != nil && table.Public() {
+		for _, desc := range mainBackupManifests[i-1].Descriptors {
+			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
 				prevOnlineTables[table.GetID()] = struct{}{}
 			}
-		}
-
-		prevDescRevIt := layerToIterFactory[i-1].NewDescriptorChangesIter(ctx)
-		defer prevDescRevIt.Close()
-		for ; ; prevDescRevIt.Next() {
-			if ok, err := prevDescRevIt.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-
 		}
 
 		// Gather the tables that were reintroduced in the current backup (i.e.
@@ -451,19 +430,10 @@ that was running an IMPORT at the time of the previous incremental in this chain
 			})
 		}
 
-		descIt := layerToIterFactory[i].NewDescIter(ctx)
-		defer descIt.Close()
-
-		for ; ; descIt.Next() {
-			if ok, err := descIt.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-
+		for _, desc := range mainBackupManifests[i].Descriptors {
 			// Check that all online tables at backup time were either introduced or
 			// in the previous backup.
-			if table, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); table != nil && table.Public() {
+			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
@@ -474,17 +444,8 @@ that was running an IMPORT at the time of the previous incremental in this chain
 		// where a descriptor may appear in manifest.DescriptorChanges but not
 		// manifest.Descriptors. If a descriptor switched from offline to online at
 		// any moment during the backup interval, it needs to be reintroduced.
-		descRevIt := layerToIterFactory[i].NewDescriptorChangesIter(ctx)
-		defer descRevIt.Close()
-
-		for ; ; descRevIt.Next() {
-			if ok, err := descRevIt.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-
-			if table, _, _, _, _ := descpb.GetDescriptors(descRevIt.Value().Desc); table != nil && table.Public() {
+		for _, desc := range mainBackupManifests[i].DescriptorChanges {
+			if table, _, _, _, _ := descpb.GetDescriptors(desc.Desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
@@ -509,7 +470,6 @@ func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
 	backupManifests []backuppb.BackupManifest,
-	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	targets tree.BackupTargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
@@ -522,7 +482,7 @@ func selectTargets(
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.selectTargets")
 	defer span.Finish()
-	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToIterFactory, asOf)
+	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
