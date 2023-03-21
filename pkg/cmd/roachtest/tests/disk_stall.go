@@ -128,7 +128,6 @@ func runDiskStalledDetection(
 	require.NoError(t, err)
 	adminURL := adminUIAddrs[0]
 
-	c.Run(ctx, c.Node(4), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 	// Open SQL connections—one to n1, the node that will be stalled, and one to
 	// n2 that should remain open and active for the remainder.
 	n1Conn := c.Conn(ctx, t.L(), 1)
@@ -136,11 +135,14 @@ func runDiskStalledDetection(
 	n2conn := c.Conn(ctx, t.L(), 2)
 	defer n2conn.Close()
 	require.NoError(t, n1Conn.PingContext(ctx))
-	_, err = n2conn.ExecContext(ctx, `USE kv;`)
-	require.NoError(t, err)
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, n2conn))
+
+	c.Run(ctx, c.Node(4), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+
+	_, err = n2conn.ExecContext(ctx, `USE kv;`)
+	require.NoError(t, err)
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
