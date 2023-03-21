@@ -81,8 +81,8 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}
-			p.curPlan.flags.Set(planFlagExecDone)
-			p.curPlan.close(ctx)
+			defer p.curPlan.close(ctx)
+			p.curPlan.savePlanInfo()
 			if d.Cmd == "plan-string" {
 				ob := ih.emitExplainAnalyzePlanToOutputBuilder(
 					explain.Flags{Verbose: true, ShowTypes: true},

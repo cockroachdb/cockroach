@@ -1510,3 +1510,22 @@ func TestFinishGetRecordingRace(t *testing.T) {
 		root.Finish()
 	}
 }
+
+// TestWithEventListenersAndVerboseParent verifies that if the parent has
+// verbose recording and the child uses WithEventListeners option but without
+// explicitly specifying the recording type, the child still has verbose
+// recording.
+func TestWithEventListenersAndVerboseParent(t *testing.T) {
+	tr := NewTracer()
+	parent := tr.StartSpan("parent", WithRecording(tracingpb.RecordingVerbose))
+	defer parent.Finish()
+	_, child := EnsureChildSpan(context.Background(), tr, "child", WithParent(parent), WithEventListeners())
+	defer child.Finish()
+	child.Record("foo")
+	require.NoError(t, CheckRecording(parent.GetConfiguredRecording(), `
+     === operation:parent _unfinished:1 _verbose:1
+     [child]
+         === operation:child _unfinished:1 _verbose:1
+         event:foo
+`))
+}

@@ -309,7 +309,7 @@ func (t *Tracer) runPeriodicSnapshotsLoop(
 // such automatic snapshots are available to be searched and if so at what
 // granularity.
 func (sp *Span) MaybeRecordStackHistory(since time.Time) {
-	if sp == nil || !sp.i.hasVerboseSink() {
+	if sp == nil || sp.RecordingType() == tracingpb.RecordingOff {
 		return
 	}
 

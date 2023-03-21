@@ -23,12 +23,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/errors"
 	_ "github.com/go-sql-driver/mysql" // registers the MySQL driver to gosql
 	_ "github.com/lib/pq"              // registers the pg driver to gosql
 	"github.com/stretchr/testify/require"
@@ -76,6 +79,27 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
 	// if hitting this limit is expected.
 	_, err = db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
+	require.NoError(b, err)
+
+	// Exempt the tenant from rate limiting. We expect most
+	// shared-process tenants will run without rate limiting in
+	// the near term.
+	_, err = db.Exec(`ALTER TENANT benchtenant GRANT CAPABILITY exempt_from_rate_limiting`)
+	require.NoError(b, err)
+
+	var tenantID uint64
+	require.NoError(b, db.QueryRow(`SELECT id FROM [SHOW TENANT benchtenant]`).Scan(&tenantID))
+
+	err = testutils.SucceedsSoonError(func() error {
+		capabilities, found := s.(*server.TestServer).Server.TenantCapabilitiesReader().GetCapabilities(roachpb.MustMakeTenantID(tenantID))
+		if !found {
+			return errors.Newf("capabilities not yet ready")
+		}
+		if !capabilities.GetBool(tenantcapabilities.ExemptFromRateLimiting) {
+			return errors.Newf("capabilities not yet ready")
+		}
+		return nil
+	})
 	require.NoError(b, err)
 
 	_, err = tenantDB.Exec(`CREATE DATABASE bench`)

@@ -79,9 +79,15 @@ type spanOptions struct {
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
-	// not set, recordingType() looks at the parent.
+	// not set, recordingType() looks at the parent, subject to
+	// minRecordingTypeOpt.
 	recordingTypeExplicit bool
 	recordingTypeOpt      tracingpb.RecordingType
+	// minRecordingTypeOpt, if set, indicates the "minimum" recording type of
+	// this span (if it doesn't contradict recordingTypeOpt). If the parent has
+	// a more "verbose" recording type, than that type is used by
+	// recordingType().
+	minRecordingTypeOpt tracingpb.RecordingType
 }
 
 func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
@@ -107,11 +113,14 @@ func (opts *spanOptions) recordingType() tracingpb.RecordingType {
 		return opts.recordingTypeOpt
 	}
 
-	recordingType := tracingpb.RecordingOff
+	var recordingType tracingpb.RecordingType
 	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if !opts.RemoteParent.Empty() {
 		recordingType = opts.RemoteParent.recordingType
+	}
+	if recordingType < opts.minRecordingTypeOpt {
+		recordingType = opts.minRecordingTypeOpt
 	}
 	return recordingType
 }
@@ -472,13 +481,8 @@ var _ SpanOption = eventListenersOption{}
 
 func (ev eventListenersOption) apply(opts spanOptions) spanOptions {
 	// Applying an EventListener span option implies the span has at least
-	// `RecordingStructured` recording type. If the span explicitly specifies a
-	// `RecordingVerbose` recording type via the `WithRecording(...)` option, that
-	// will be respected instead.
-	if !opts.recordingTypeExplicit {
-		opts.recordingTypeExplicit = true
-		opts.recordingTypeOpt = tracingpb.RecordingStructured
-	}
+	// `RecordingStructured` recording type.
+	opts.minRecordingTypeOpt = tracingpb.RecordingStructured
 	eventListeners := ([]EventListener)(ev)
 	opts.EventListeners = eventListeners
 	return opts

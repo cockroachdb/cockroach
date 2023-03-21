@@ -11,8 +11,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -46,7 +44,23 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.qualifyDataSourceNamesInAST = false
 
 		b.semaCtx.FunctionResolver = preFuncResolver
-		maybePanicOnUnknownFunction("view query")
+		switch recErr := recover().(type) {
+		case nil:
+			// No error.
+		case error:
+			if errors.Is(recErr, tree.ErrFunctionUndefined) {
+				panic(
+					errors.WithHint(
+						recErr,
+						"There is probably a typo in function name. Or the intention was to use a user-defined "+
+							"function in the view query, which is currently not supported.",
+					),
+				)
+			}
+			panic(recErr)
+		default:
+			panic(recErr)
+		}
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
@@ -101,26 +115,4 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		},
 	)
 	return outScope
-}
-
-func maybePanicOnUnknownFunction(target string) {
-	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in view and
-	// we will need to lift this hack when we plan to allow it.
-	switch recErr := recover().(type) {
-	case nil:
-		// No error.
-	case error:
-		if errors.Is(recErr, tree.ErrFunctionUndefined) {
-			panic(
-				errors.WithHint(
-					recErr,
-					fmt.Sprintf("There is probably a typo in function name. Or the intention was to use a user-defined "+
-						"function in the %s, which is currently not supported.", target),
-				),
-			)
-		}
-		panic(recErr)
-	default:
-		panic(recErr)
-	}
 }

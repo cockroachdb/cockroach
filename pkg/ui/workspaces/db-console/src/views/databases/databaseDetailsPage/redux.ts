@@ -130,7 +130,7 @@ export const mapStateToProps = createSelector(
       nodeRegions: nodeRegions,
       isTenant: isTenant,
       tables: _.map(
-        databaseDetails[database]?.data?.results.tables_resp.tables,
+        databaseDetails[database]?.data?.results.tablesResp.tables,
         table => {
           const tableId = generateTableID(database, table);
           const details = tableDetails[tableId];

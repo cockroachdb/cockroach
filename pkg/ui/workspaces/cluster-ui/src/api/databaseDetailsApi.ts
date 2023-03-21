@@ -33,20 +33,20 @@ type ZoneConfigType = cockroach.config.zonepb.ZoneConfig;
 type ZoneConfigLevelType = cockroach.server.serverpb.ZoneConfigurationLevel;
 
 export type DatabaseDetailsResponse = {
-  id_resp: SqlApiQueryResponse<DatabaseIdRow>;
-  grants_resp: SqlApiQueryResponse<DatabaseGrantsResponse>;
-  tables_resp: SqlApiQueryResponse<DatabaseTablesResponse>;
-  zone_config_resp: SqlApiQueryResponse<DatabaseZoneConfigResponse>;
+  idResp: SqlApiQueryResponse<DatabaseIdRow>;
+  grantsResp: SqlApiQueryResponse<DatabaseGrantsResponse>;
+  tablesResp: SqlApiQueryResponse<DatabaseTablesResponse>;
+  zoneConfigResp: SqlApiQueryResponse<DatabaseZoneConfigResponse>;
   stats?: DatabaseDetailsStats;
   error?: SqlExecutionErrorMessage;
 };
 
 function newDatabaseDetailsResponse(): DatabaseDetailsResponse {
   return {
-    id_resp: { database_id: "" },
-    grants_resp: { grants: [] },
-    tables_resp: { tables: [] },
-    zone_config_resp: {
+    idResp: { database_id: "" },
+    grantsResp: { grants: [] },
+    tablesResp: { tables: [] },
+    zoneConfigResp: {
       zone_config: new ZoneConfig({
         inherited_constraints: true,
         inherited_lease_preferences: true,
@@ -54,18 +54,17 @@ function newDatabaseDetailsResponse(): DatabaseDetailsResponse {
       zone_config_level: ZoneConfigurationLevel.CLUSTER,
     },
     stats: {
-      ranges_data: {
-        range_count: 0,
+      spanStats: {
+        approximate_disk_bytes: 0,
         live_bytes: 0,
         total_bytes: 0,
-        // Note: we are currently populating this with replica ids which do not map 1 to 1
-        node_ids: [],
+        range_count: 0,
+      },
+      replicaData: {
+        replicas: [],
         regions: [],
       },
-      pebble_data: {
-        approximate_disk_bytes: 0,
-      },
-      index_stats: { num_index_recommendations: 0 },
+      indexStats: { num_index_recommendations: 0 },
     },
   };
 }
@@ -88,10 +87,10 @@ const getDatabaseId: DatabaseDetailsQuery<DatabaseIdRow> = {
   ) => {
     // Check that txn_result.rows[0].database_id is not null
     if (!txnResultIsEmpty(txn_result) && txn_result.rows[0].database_id) {
-      resp.id_resp.database_id = txn_result.rows[0].database_id;
+      resp.idResp.database_id = txn_result.rows[0].database_id;
     }
     if (txn_result.error) {
-      resp.id_resp.error = txn_result.error;
+      resp.idResp.error = txn_result.error;
     }
   },
 };
@@ -109,9 +108,12 @@ type DatabaseGrantsRow = {
 const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
   createStmt: dbName => {
     return {
-      sql: `SELECT grantee as user, array_agg(privilege_type) as privileges
-            FROM crdb_internal.cluster_database_privileges
+      sql: Format(
+        `SELECT grantee as user, array_agg(privilege_type) as privileges
+            FROM %1.crdb_internal.cluster_database_privileges
             WHERE database_name = $1 group by grantee`,
+        [new Identifier(dbName)],
+      ),
       arguments: [dbName],
     };
   },
@@ -120,9 +122,9 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
     resp: DatabaseDetailsResponse,
   ) => {
     if (!txnResultIsEmpty(txn_result)) {
-      resp.grants_resp.grants = txn_result.rows;
+      resp.grantsResp.grants = txn_result.rows;
       if (txn_result.error) {
-        resp.grants_resp.error = txn_result.error;
+        resp.grantsResp.error = txn_result.error;
       }
     }
   },
@@ -155,7 +157,7 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
     resp: DatabaseDetailsResponse,
   ) => {
     if (!txnResultIsEmpty(txn_result)) {
-      resp.tables_resp.tables = txn_result.rows.map(row => {
+      resp.tablesResp.tables = txn_result.rows.map(row => {
         const escTableName = new QualifiedIdentifier([
           row.table_schema,
           row.table_name,
@@ -164,7 +166,7 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
       });
     }
     if (txn_result.error) {
-      resp.tables_resp.error = txn_result.error;
+      resp.tablesResp.error = txn_result.error;
     }
   },
 };
@@ -209,46 +211,31 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
         // Parse the bytes from the hex string.
         const zoneConfigBytes = fromHexString(zoneConfigHexString);
         // Decode the bytes using ZoneConfig protobuf.
-        resp.zone_config_resp.zone_config = ZoneConfig.decode(
+        resp.zoneConfigResp.zone_config = ZoneConfig.decode(
           new Uint8Array(zoneConfigBytes),
         );
-        resp.zone_config_resp.zone_config_level =
-          ZoneConfigurationLevel.DATABASE;
+        resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.DATABASE;
       } catch (e) {
         console.error(
           `Database Details API - encountered an error decoding zone config string: ${zoneConfigHexString}`,
         );
         // Catch and assign the error if we encounter one decoding.
-        resp.zone_config_resp.error = e;
-        resp.zone_config_resp.zone_config_level =
-          ZoneConfigurationLevel.UNKNOWN;
+        resp.zoneConfigResp.error = e;
+        resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.UNKNOWN;
       }
     }
     if (txn_result.error) {
-      resp.id_resp.error = txn_result.error;
+      resp.idResp.error = txn_result.error;
     }
   },
 };
 
 // Database Stats
 type DatabaseDetailsStats = {
-  pebble_data: DatabasePebbleData;
-  ranges_data: DatabaseRangesData;
-  index_stats: DatabaseIndexUsageStatsResponse;
+  spanStats: SqlApiQueryResponse<DatabaseSpanStatsRow>;
+  replicaData: SqlApiQueryResponse<DatabaseReplicasRegionsRow>;
+  indexStats: SqlApiQueryResponse<DatabaseIndexUsageStatsResponse>;
 };
-
-type DatabasePebbleData = {
-  approximate_disk_bytes: number;
-};
-
-type DatabaseRangesData = SqlApiQueryResponse<{
-  range_count: number;
-  live_bytes: number;
-  total_bytes: number;
-  // Note: we are currently populating this with replica ids which do not map 1 to 1
-  node_ids: number[];
-  regions: string[];
-}>;
 
 type DatabaseSpanStatsRow = {
   approximate_disk_bytes: number;
@@ -274,20 +261,19 @@ const getDatabaseSpanStats: DatabaseDetailsQuery<DatabaseSpanStatsRow> = {
     resp: DatabaseDetailsResponse,
   ) => {
     if (txn_result && txn_result.error) {
-      resp.stats.ranges_data.error = txn_result.error;
+      resp.stats.spanStats.error = txn_result.error;
     }
     if (txnResultIsEmpty(txn_result)) {
       return;
     }
     if (txn_result.rows.length === 1) {
       const row = txn_result.rows[0];
-      resp.stats.pebble_data.approximate_disk_bytes =
-        row.approximate_disk_bytes;
-      resp.stats.ranges_data.range_count = row.range_count;
-      resp.stats.ranges_data.live_bytes = row.live_bytes;
-      resp.stats.ranges_data.total_bytes = row.total_bytes;
+      resp.stats.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
+      resp.stats.spanStats.range_count = row.range_count;
+      resp.stats.spanStats.live_bytes = row.live_bytes;
+      resp.stats.spanStats.total_bytes = row.total_bytes;
     } else {
-      resp.stats.ranges_data.error = new Error(
+      resp.stats.spanStats.error = new Error(
         `DatabaseDetails - Span Stats, expected 1 row, got ${txn_result.rows.length}`,
       );
     }
@@ -327,18 +313,18 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
       resp: DatabaseDetailsResponse,
     ) => {
       if (!txnResultIsEmpty(txn_result)) {
-        resp.stats.ranges_data.regions = txn_result.rows[0].regions;
-        resp.stats.ranges_data.node_ids = txn_result.rows[0].replicas;
+        resp.stats.replicaData.regions = txn_result.rows[0].regions;
+        resp.stats.replicaData.replicas = txn_result.rows[0].replicas;
       }
       if (txn_result.error) {
-        resp.stats.ranges_data.error = txn_result.error;
+        resp.stats.replicaData.error = txn_result.error;
       }
     },
   };
 
-type DatabaseIndexUsageStatsResponse = SqlApiQueryResponse<{
+type DatabaseIndexUsageStatsResponse = {
   num_index_recommendations?: number;
-}>;
+};
 
 const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
   createStmt: dbName => {
@@ -374,11 +360,11 @@ const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
     txn_result.rows?.forEach(row => {
       const rec = recommendDropUnusedIndex(row);
       if (rec.recommend) {
-        resp.stats.index_stats.num_index_recommendations += 1;
+        resp.stats.indexStats.num_index_recommendations += 1;
       }
     });
     if (txn_result.error) {
-      resp.stats.index_stats.error = txn_result.error;
+      resp.stats.indexStats.error = txn_result.error;
     }
   },
 };
@@ -414,6 +400,7 @@ export function createDatabaseDetailsReq(dbName: string): SqlExecutionRequest {
   return {
     execute: true,
     statements: databaseDetailQueries.map(query => query.createStmt(dbName)),
+    database: dbName,
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
   };
