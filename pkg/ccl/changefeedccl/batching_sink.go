@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -73,14 +72,11 @@ type batchingSink struct {
 	// to the batching routine.  Messages can either be a flushReq or a kvEvent.
 	eventCh chan interface{}
 
-	mu struct {
-		syncutil.Mutex
-		termErr error
-	}
-	wg     ctxgroup.Group
-	hasher hash.Hash32
-	pacer  *admission.Pacer
-	doneCh chan struct{}
+	termErr error
+	wg      ctxgroup.Group
+	hasher  hash.Hash32
+	pacer   *admission.Pacer
+	doneCh  chan struct{}
 }
 
 type batchingSinkKnobs struct {
@@ -116,9 +112,7 @@ func (bs *batchingSink) Flush(ctx context.Context) error {
 	case <-bs.doneCh:
 		return nil
 	case <-flushWaiter:
-		bs.mu.Lock()
-		defer bs.mu.Unlock()
-		return bs.mu.termErr
+		return bs.termErr
 	}
 }
 
@@ -255,10 +249,8 @@ func (sb *sinkBatchBuffer) Append(e *kvEvent) {
 }
 
 func (bs *batchingSink) handleError(err error) {
-	bs.mu.Lock()
-	defer bs.mu.Unlock()
-	if bs.mu.termErr == nil {
-		bs.mu.termErr = err
+	if bs.termErr == nil {
+		bs.termErr = err
 	}
 }
 
@@ -284,7 +276,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	ioEmitter := newParallelIO(ctx, bs.retryOpts, bs.ioWorkers, ioHandler, bs.metrics)
 	defer ioEmitter.Close()
 
-	var handleResult func(result ioResult)
+	var handleResult func(result *ioResult)
 
 	tryFlushBatch := func() {
 		if batchBuffer.isEmpty() {
@@ -320,13 +312,8 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	inflight := 0
 	var sinkFlushWaiter chan struct{}
 
-	handleResult = func(result ioResult) {
+	handleResult = func(result *ioResult) {
 		batch, _ := result.request.(*sinkBatchBuffer)
-		defer func() {
-			batch.alloc.Release(ctx)
-			*batch = sinkBatchBuffer{}
-			bs.batchPool.Put(batch)
-		}()
 
 		if result.err != nil {
 			bs.handleError(result.err)
@@ -342,6 +329,10 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 			close(sinkFlushWaiter)
 			sinkFlushWaiter = nil
 		}
+
+		batch.alloc.Release(ctx)
+		*batch = sinkBatchBuffer{}
+		bs.batchPool.Put(batch)
 	}
 
 	flushTimer := bs.ts.NewTimer()
@@ -398,6 +389,10 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-bs.doneCh:
+			return
+		}
+
+		if bs.termErr != nil {
 			return
 		}
 	}

@@ -32,7 +32,7 @@ type parallelIO struct {
 	ioHandler IOHandler
 
 	requestCh chan IORequest
-	resultCh  chan ioResult
+	resultCh  chan *ioResult
 }
 
 // IORequest represents an abstract unit of IO that has a set of keys upon which
@@ -65,7 +65,7 @@ func newParallelIO(
 		metrics:   metrics,
 		ioHandler: handler,
 		requestCh: make(chan IORequest, numWorkers),
-		resultCh:  make(chan ioResult, numWorkers),
+		resultCh:  make(chan *ioResult, numWorkers),
 		doneCh:    make(chan struct{}),
 	}
 
@@ -99,7 +99,7 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	// Multiple worker routines handle the IO operations, retrying when necessary.
 	emitCh := make(chan IORequest, numEmitWorkers)
 	defer close(emitCh)
-	emitResultCh := make(chan ioResult, numEmitWorkers)
+	emitResultCh := make(chan *ioResult, numEmitWorkers)
 
 	for i := 0; i < numEmitWorkers; i++ {
 		pe.wg.GoCtx(func(ctx context.Context) error {
@@ -109,7 +109,7 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 					return ctx.Err()
 				case <-pe.doneCh:
 					return nil
-				case emitResultCh <- ioResult{
+				case emitResultCh <- &ioResult{
 					err:     emitWithRetries(ctx, req),
 					request: req,
 				}:
@@ -119,7 +119,8 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 		})
 	}
 
-	var handleResult func(ioResult)
+	var handleResult func(*ioResult)
+	var pendingResults []*ioResult
 
 	sendToWorker := func(ctx context.Context, req IORequest) {
 		for {
@@ -132,8 +133,8 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 				return
 			case res := <-emitResultCh:
 				// Must also handle results to avoid the above emit being able to block
-				// forever on all workers being busy trying to emit results
-				handleResult(res)
+				// forever on all workers being busy trying to emit results.
+				pendingResults = append(pendingResults, res)
 			}
 		}
 	}
@@ -145,29 +146,32 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	var inflight intsets.Fast
 	var pending []IORequest
 
-	handleResult = func(res ioResult) {
+	// do pending keys
+
+	handleResult = func(res *ioResult) {
 		if res.err == nil {
-			// Clear out the completed keys
+			// Clear out the completed keys to check for newly valid pending requests
 			inflight.DifferenceWith(res.request.Keys())
 
-			// Submit any now-compliant pending work
 			var stillPending = pending[:0] // Reuse underlying space
 			for _, pendingReq := range pending {
-				if !pendingReq.Keys().Intersects(res.request.Keys()) {
+				overlap := res.request.Keys().Intersection(pendingReq.Keys())
+
+				// If no overlap, nothing changed for this request
+				if overlap.Empty() {
 					stillPending = append(stillPending, pendingReq)
 					continue
 				}
 
+				// If it is now free to send, send it
 				if !inflight.Intersects(pendingReq.Keys()) {
 					sendToWorker(ctx, pendingReq)
 				} else {
 					stillPending = append(stillPending, pendingReq)
 				}
 
-				// Even though this pending request was already union'd, it must be
-				// re-added as one or more of its keys have been removed from the
-				// intset due to an overlapping completed request's DifferenceWith
-				inflight.UnionWith(pendingReq.Keys())
+				// Re-add whatever keys in the pending request that were removed
+				inflight.UnionWith(overlap)
 			}
 			pending = stillPending
 		}
@@ -183,6 +187,17 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	}
 
 	for {
+		// Results read from sendToWorker need to be first added to a pendingResults
+		// list and then handled separately here rather than calling handleResult
+		// inside sendtoWorker, as having a re-entrant sendToWorker -> handleResult
+		// -> sendToWorker -> handleResult chain creates complexity with managing
+		// pending requests
+		unhandledResults := pendingResults
+		pendingResults = nil
+		for _, res := range unhandledResults {
+			handleResult(res)
+		}
+
 		select {
 		case req := <-pe.requestCh:
 			if !inflight.Intersects(req.Keys()) {
