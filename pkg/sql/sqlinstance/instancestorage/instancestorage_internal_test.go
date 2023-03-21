@@ -98,6 +98,7 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 				sqlliveness.SessionID([]byte{}),
 				sessionExpiry,
 				roachpb.Locality{},
+				roachpb.Version{},
 			))
 		}
 
@@ -345,6 +346,7 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 				sqlliveness.SessionID([]byte{}),
 				sessionExpiry,
 				roachpb.Locality{},
+				roachpb.Version{},
 			))
 		}
 		for _, i := range []int{2, 3} {
@@ -477,6 +479,6 @@ func claim(
 	require.NoError(t, err)
 	require.NoError(t, slStorage.Insert(ctx, sessionID, sessionExpiration))
 	require.NoError(t, storage.CreateInstanceDataForTest(
-		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID, sessionExpiration, roachpb.Locality{},
+		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID, sessionExpiration, roachpb.Locality{}, roachpb.Version{},
 	))
 }

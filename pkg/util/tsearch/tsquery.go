@@ -369,32 +369,17 @@ func (p *tsQueryParser) parseTSExpr(minBindingPower int) (*tsNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		t, ok := p.nextTerm()
-		if !ok || t.operator != rparen {
+		nextTerm, ok := p.nextTerm()
+		if !ok || nextTerm.operator != rparen {
 			return p.syntaxError()
 		}
 		lExpr = expr
 	case not:
-		t, ok := p.nextTerm()
-		if !ok {
-			return p.syntaxError()
+		expr, err := p.parseTSExpr(t.operator.precedence())
+		if err != nil {
+			return nil, err
 		}
-		switch t.operator {
-		case invalid:
-			lExpr = &tsNode{op: not, l: &tsNode{term: *t}}
-		case lparen:
-			expr, err := p.parseTSExpr(0)
-			if err != nil {
-				return nil, err
-			}
-			lExpr = &tsNode{op: not, l: expr}
-			t, ok := p.nextTerm()
-			if !ok || t.operator != rparen {
-				return p.syntaxError()
-			}
-		default:
-			return p.syntaxError()
-		}
+		lExpr = &tsNode{op: not, l: expr}
 	default:
 		return p.syntaxError()
 	}
@@ -453,17 +438,12 @@ func PhraseToTSQuery(config string, input string) (TSQuery, error) {
 // query. If the interpose operator is not invalid, it's interposed between each
 // token in the input.
 func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, error) {
-	switch config {
-	case "simple":
-	default:
-		return TSQuery{}, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
-	}
-
 	vector, err := lexTSQuery(input)
 	if err != nil {
 		return TSQuery{}, err
 	}
 	tokens := make(TSVector, 0, len(vector))
+	foundStopwords := false
 	for i := range vector {
 		tok := vector[i]
 
@@ -519,15 +499,153 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 				}
 				tokens = append(tokens, term)
 			}
-			lexeme, err := TSLexize(config, lexemeTokens[j])
+			lexeme, ok, err := TSLexize(config, lexemeTokens[j])
 			if err != nil {
 				return TSQuery{}, err
 			}
-			tokens = append(tokens, tsTerm{lexeme: lexeme})
+			if !ok {
+				foundStopwords = true
+			}
+			tokens = append(tokens, tsTerm{lexeme: lexeme, positions: tok.positions})
 		}
 	}
 
 	// Now create the operator tree.
 	queryParser := tsQueryParser{terms: tokens, input: input}
-	return queryParser.parse()
+	query, err := queryParser.parse()
+	if err != nil {
+		return query, err
+	}
+
+	if foundStopwords {
+		return cleanupStopwords(query)
+	}
+	return query, nil
+}
+
+func cleanupStopwords(query TSQuery) (TSQuery, error) {
+	query.root, _, _ = cleanupStopword(query.root)
+	if query.root == nil {
+		return TSQuery{}, nil
+	}
+	return query, nil
+}
+
+// cleanupStopword cleans up a query tree by removing stop words and adjusting
+// the width of the followedby operators to account for removed stop words.
+// It returns the new root of the tree, and the amount to add to a followedBy
+// distance to the left and right of the input node.
+//
+// This function parallels the clean_stopword_intree function in Postgres.
+// What follows is a reproduction of the explanation of this function in
+// Postgres.
+
+// When we remove a phrase operator due to removing one or both of its
+// arguments, we might need to adjust the distance of a parent phrase
+// operator.  For example, 'a' is a stopword, so:
+//
+//	(b <-> a) <-> c  should become	b <2> c
+//	b <-> (a <-> c)  should become	b <2> c
+//	(b <-> (a <-> a)) <-> c  should become	b <3> c
+//	b <-> ((a <-> a) <-> c)  should become	b <3> c
+//
+// To handle that, we define two output parameters:
+//
+//	ladd: amount to add to a phrase distance to the left of this node
+//	radd: amount to add to a phrase distance to the right of this node
+//
+// We need two outputs because we could need to bubble up adjustments to two
+// different parent phrase operators. Consider
+//
+//	w <-> (((a <-> x) <2> (y <3> a)) <-> z)
+//
+// After we've removed the two a's and are considering the <2> node (which is
+// now just x <2> y), we have an ladd distance of 1 that needs to propagate
+// up to the topmost (leftmost) <->, and an radd distance of 3 that needs to
+// propagate to the rightmost <->, so that we'll end up with
+//
+//	w <2> ((x <2> y) <4> z)
+//
+// Near the bottom of the tree, we may have subtrees consisting only of
+// stopwords.  The distances of any phrase operators within such a subtree are
+// summed and propagated to both ladd and radd, since we don't know which side
+// of the lowest surviving phrase operator we are in.  The rule is that any
+// subtree that degenerates to NULL must return equal values of ladd and radd,
+// and the parent node dealing with it should incorporate only one of those.
+//
+// Currently, we only implement this adjustment for adjacent phrase operators.
+// Thus for example 'x <-> ((a <-> y) | z)' will become 'x <-> (y | z)', which
+// isn't ideal, but there is no way to represent the really desired semantics
+// without some redesign of the tsquery structure.  Certainly it would not be
+// any better to convert that to 'x <2> (y | z)'.  Since this is such a weird
+// corner case, let it go for now.  But we can fix it in cases where the
+// intervening non-phrase operator also gets removed, for example
+// '((x <-> a) | a) <-> y' will become 'x <2> y'.
+func cleanupStopword(node *tsNode) (ret *tsNode, lAdd int, rAdd int) {
+	if node.op == invalid {
+		if node.term.lexeme == "" {
+			// Found a stop word.
+			return nil, 0, 0
+		}
+		return node, 0, 0
+	}
+	if node.op == not {
+		// Not doesn't change the pattern width, so just report child distances.
+		node.l, lAdd, rAdd = cleanupStopword(node.l)
+		if node.l == nil {
+			return nil, lAdd, rAdd
+		}
+		return node, lAdd, rAdd
+	}
+
+	var llAdd, lrAdd, rlAdd, rrAdd int
+	node.l, llAdd, lrAdd = cleanupStopword(node.l)
+	node.r, rlAdd, rrAdd = cleanupStopword(node.r)
+	isPhrase := node.op == followedby
+	followedN := node.followedN
+	if node.l == nil && node.r == nil {
+		// Removing an entire node. Propagate its distance into both lAdd and rAdd;
+		// it is the responsibility of the parent to count it only once.
+		if isPhrase {
+			// If we're a followed by, sum up the children lengths and propagate.
+			// Distances coming from children are summed and propagated up to the
+			// parent (we assume llAdd == lrAdd and rlAdd == rrAdd, else rule was
+			// broken at a lower level).
+			lAdd = llAdd + int(followedN) + rlAdd
+			rAdd = lAdd
+		} else {
+			// If not, we take the max. This corresponds to the logic in evalWithinFollowedBy.
+			lAdd = llAdd
+			if rlAdd > lAdd {
+				lAdd = rlAdd
+			}
+			rAdd = lAdd
+		}
+		return nil, lAdd, rAdd
+	} else if node.l == nil {
+		// Remove this operator and the left node.
+		if isPhrase {
+			// Operator's own distance must propagate to the left.
+			return node.r, llAdd + int(followedN) + rlAdd, rrAdd
+		} else {
+			// At non-followedby op, just forget the left node entirely.
+			return node.r, rlAdd, rrAdd
+		}
+	} else if node.r == nil {
+		// Remove this operator and the right node.
+		if isPhrase {
+			// Operator's own distance must propagate to the right.
+			return node.l, llAdd, lrAdd + int(followedN) + rrAdd
+		} else {
+			// At non-followedby op, just forget the right node entirely.
+			return node.l, llAdd, lrAdd
+		}
+	} else if isPhrase {
+		// Add the adjusted values to this operator.
+		node.followedN += uint16(lrAdd + rlAdd)
+		// Continue to propagate unaccounted-for adjustments.
+		return node, llAdd, rrAdd
+	}
+	// Otherwise we found a non-phrase operator; keep it as-is.
+	return node, 0, 0
 }
