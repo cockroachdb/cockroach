@@ -2686,6 +2686,8 @@ func TestSystemZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 98905)
+
 	// This test is relatively slow and resource intensive. When run under
 	// stressrace on a loaded machine (as in the nightly tests), sometimes the
 	// SucceedsSoon conditions below take longer than the allotted time (#25273).
