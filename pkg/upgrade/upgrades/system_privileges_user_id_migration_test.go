@@ -104,7 +104,7 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	path STRING NOT NULL,
 	privileges STRING[] NOT NULL,
 	grant_options STRING[] NOT NULL,
-	user_id OID NULL,
+	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username ASC, path ASC),
 	UNIQUE INDEX privileges_path_user_id_key (path ASC, user_id ASC) STORING (privileges, grant_options)
 )`

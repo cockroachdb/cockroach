@@ -53,6 +53,11 @@ WHERE w.user_id IS NULL AND w.username = u.username
 LIMIT 1000
 `
 
+const setUserIDColumnToNotNullWebSessionsTableStmt = `
+ALTER TABLE system.web_sessions
+ALTER COLUMN user_id SET NOT NULL
+`
+
 func backfillWebSessionsTableUserIDColumn(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
@@ -68,6 +73,20 @@ func backfillWebSessionsTableUserIDColumn(
 		if rowsAffected == 0 {
 			break
 		}
+	}
+
+	// After we finish backfilling, we can set the user_id column to be NOT NULL
+	// since any existing rows will now have non-NULL values in the user_id column
+	// and any new rows inserted after the previous version (when the user_id column
+	// was added) will have had their user_id value populated at insertion time.
+	op := operation{
+		name:           "set-user-id-not-null-web-sessions-table",
+		schemaList:     []string{"user_id"},
+		query:          setUserIDColumnToNotNullWebSessionsTableStmt,
+		schemaExistsFn: columnExistsAndIsNotNull,
+	}
+	if err := migrateTable(ctx, cs, d, op, keys.WebSessionsTableID, systemschema.WebSessionsTable); err != nil {
+		return err
 	}
 
 	return nil

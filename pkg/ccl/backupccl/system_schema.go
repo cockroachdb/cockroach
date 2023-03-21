@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -362,6 +363,165 @@ func roleOptionsRestoreFunc(
 	return nil
 }
 
+func systemPrivilegesRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn) {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	hasUserIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "user_id")
+	if err != nil {
+		return err
+	}
+	if hasUserIDColumn {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
+
+	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	systemPrivilegesRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	restoreQuery := fmt.Sprintf(`
+INSERT INTO system.%s (username, path, privileges, grant_options, user_id)
+VALUES ($1, $2, $3, $4, (
+    SELECT CASE $1
+		WHEN '%s' THEN %d
+		ELSE (SELECT user_id FROM system.users WHERE username = $1)
+	END
+))`,
+		systemTableName, username.PublicRole, username.PublicRoleID)
+	for _, row := range systemPrivilegesRows {
+		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+			txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			restoreQuery, row[0], row[1], row[2], row[3],
+		); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	return nil
+}
+
+func systemDatabaseRoleSettingsRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn) {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	hasRoleIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "role_id")
+	if err != nil {
+		return err
+	}
+	if hasRoleIDColumn {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
+
+	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	databaseRoleSettingsRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	restoreQuery := fmt.Sprintf(`
+INSERT INTO system.%s (database_id, role_name, settings, role_id)
+VALUES ($1, $2, $3, (
+	SELECT CASE $2
+		WHEN '%s' THEN %d
+		ELSE (SELECT user_id FROM system.users WHERE username = $2)
+	END
+))`,
+		systemTableName, username.EmptyRole, username.EmptyRoleID)
+	for _, row := range databaseRoleSettingsRows {
+		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+			txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			restoreQuery, row[0], row[1], row[2],
+		); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	return nil
+}
+
+func systemExternalConnectionsRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	hasOwnerIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "owner_id")
+	if err != nil {
+		return err
+	}
+	if hasOwnerIDColumn {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
+
+	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	externalConnectionsRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	restoreQuery := fmt.Sprintf(`
+INSERT INTO system.%s (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
+VALUES ($1, $2, $3, $4, $5, $6, (SELECT user_id FROM system.users WHERE username = $6))`, systemTableName)
+	for _, row := range externalConnectionsRows {
+		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+			txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			restoreQuery, row[0], row[1], row[2], row[3], row[4], row[5],
+		); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	return nil
+}
+
 func tableHasColumnName(
 	ctx context.Context, txn isql.Txn, tableName string, columnName string,
 ) (bool, error) {
@@ -570,6 +730,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.DatabaseRoleSettingsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "database_id".
 		migrationFunc:                rekeySystemTable("database_id"),
+		customRestoreFunc:            systemDatabaseRoleSettingsRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.TenantUsageTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
@@ -596,9 +758,13 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.SystemPrivilegeTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            systemPrivilegesRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.SystemExternalConnectionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            systemExternalConnectionsRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.RoleIDSequence.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,

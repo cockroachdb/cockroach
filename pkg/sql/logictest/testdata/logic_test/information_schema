@@ -1526,6 +1526,7 @@ system              public             primary                                  
 system              public             29_44_1_not_null                                                                                                system         public        database_role_settings           CHECK            NO             NO
 system              public             29_44_2_not_null                                                                                                system         public        database_role_settings           CHECK            NO             NO
 system              public             29_44_3_not_null                                                                                                system         public        database_role_settings           CHECK            NO             NO
+system              public             29_44_4_not_null                                                                                                system         public        database_role_settings           CHECK            NO             NO
 system              public             primary                                                                                                         system         public        database_role_settings           PRIMARY KEY      NO             NO
 system              public             database_role_settings_database_id_role_id_key                                                                  system         public        database_role_settings           UNIQUE           NO             NO
 system              public             29_3_1_not_null                                                                                                 system         public        descriptor                       CHECK            NO             NO
@@ -1544,6 +1545,7 @@ system              public             29_52_3_not_null                         
 system              public             29_52_4_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             29_52_5_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             29_52_6_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
+system              public             29_52_7_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        external_connections             PRIMARY KEY      NO             NO
 system              public             29_53_1_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
 system              public             29_53_2_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
@@ -1583,6 +1585,7 @@ system              public             29_51_1_not_null                         
 system              public             29_51_2_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             29_51_3_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             29_51_4_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
+system              public             29_51_5_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             primary                                                                                                         system         public        privileges                       PRIMARY KEY      NO             NO
 system              public             privileges_path_user_id_key                                                                                     system         public        privileges                       UNIQUE           NO             NO
 system              public             privileges_path_username_key                                                                                    system         public        privileges                       UNIQUE           NO             NO
@@ -1722,6 +1725,7 @@ system              public             primary                                  
 system              public             29_58_1_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
 system              public             29_58_2_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
 system              public             29_58_3_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
+system              public             29_58_4_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
 system              public             29_58_5_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
 system              public             29_58_7_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
 system              public             29_58_8_not_null                                                                                                system         public        task_payloads                    CHECK            NO             NO
@@ -1738,6 +1742,7 @@ system              public             29_59_3_not_null                         
 system              public             29_59_4_not_null                                                                                                system         public        tenant_tasks                     CHECK            NO             NO
 system              public             29_59_5_not_null                                                                                                system         public        tenant_tasks                     CHECK            NO             NO
 system              public             29_59_6_not_null                                                                                                system         public        tenant_tasks                     CHECK            NO             NO
+system              public             29_59_7_not_null                                                                                                system         public        tenant_tasks                     CHECK            NO             NO
 system              public             primary                                                                                                         system         public        tenant_tasks                     PRIMARY KEY      NO             NO
 system              public             29_45_1_not_null                                                                                                system         public        tenant_usage                     CHECK            NO             NO
 system              public             29_45_2_not_null                                                                                                system         public        tenant_usage                     CHECK            NO             NO
@@ -1772,6 +1777,7 @@ system              public             29_19_3_not_null                         
 system              public             29_19_4_not_null                                                                                                system         public        web_sessions                     CHECK            NO             NO
 system              public             29_19_5_not_null                                                                                                system         public        web_sessions                     CHECK            NO             NO
 system              public             29_19_7_not_null                                                                                                system         public        web_sessions                     CHECK            NO             NO
+system              public             29_19_9_not_null                                                                                                system         public        web_sessions                     CHECK            NO             NO
 system              public             primary                                                                                                         system         public        web_sessions                     PRIMARY KEY      NO             NO
 system              public             29_5_1_not_null                                                                                                 system         public        zones                            CHECK            NO             NO
 system              public             primary                                                                                                         system         public        zones                            PRIMARY KEY      NO             NO
@@ -1820,6 +1826,7 @@ system              public             29_19_3_not_null                         
 system              public             29_19_4_not_null                                                                                                createdAt IS NOT NULL
 system              public             29_19_5_not_null                                                                                                expiresAt IS NOT NULL
 system              public             29_19_7_not_null                                                                                                lastUsedAt IS NOT NULL
+system              public             29_19_9_not_null                                                                                                user_id IS NOT NULL
 system              public             29_20_10_not_null                                                                                               avgSize IS NOT NULL
 system              public             29_20_1_not_null                                                                                                tableID IS NOT NULL
 system              public             29_20_2_not_null                                                                                                statisticID IS NOT NULL
@@ -1927,6 +1934,7 @@ system              public             29_43_7_not_null                         
 system              public             29_44_1_not_null                                                                                                database_id IS NOT NULL
 system              public             29_44_2_not_null                                                                                                role_name IS NOT NULL
 system              public             29_44_3_not_null                                                                                                settings IS NOT NULL
+system              public             29_44_4_not_null                                                                                                role_id IS NOT NULL
 system              public             29_45_1_not_null                                                                                                tenant_id IS NOT NULL
 system              public             29_45_2_not_null                                                                                                instance_id IS NOT NULL
 system              public             29_45_3_not_null                                                                                                next_instance_id IS NOT NULL
@@ -1949,12 +1957,14 @@ system              public             29_51_1_not_null                         
 system              public             29_51_2_not_null                                                                                                path IS NOT NULL
 system              public             29_51_3_not_null                                                                                                privileges IS NOT NULL
 system              public             29_51_4_not_null                                                                                                grant_options IS NOT NULL
+system              public             29_51_5_not_null                                                                                                user_id IS NOT NULL
 system              public             29_52_1_not_null                                                                                                connection_name IS NOT NULL
 system              public             29_52_2_not_null                                                                                                created IS NOT NULL
 system              public             29_52_3_not_null                                                                                                updated IS NOT NULL
 system              public             29_52_4_not_null                                                                                                connection_type IS NOT NULL
 system              public             29_52_5_not_null                                                                                                connection_details IS NOT NULL
 system              public             29_52_6_not_null                                                                                                owner IS NOT NULL
+system              public             29_52_7_not_null                                                                                                owner_id IS NOT NULL
 system              public             29_53_1_not_null                                                                                                job_id IS NOT NULL
 system              public             29_53_2_not_null                                                                                                info_key IS NOT NULL
 system              public             29_53_3_not_null                                                                                                written IS NOT NULL
@@ -1971,6 +1981,7 @@ system              public             29_57_2_not_null                         
 system              public             29_58_1_not_null                                                                                                id IS NOT NULL
 system              public             29_58_2_not_null                                                                                                created IS NOT NULL
 system              public             29_58_3_not_null                                                                                                owner IS NOT NULL
+system              public             29_58_4_not_null                                                                                                owner_id IS NOT NULL
 system              public             29_58_5_not_null                                                                                                min_version IS NOT NULL
 system              public             29_58_7_not_null                                                                                                type IS NOT NULL
 system              public             29_58_8_not_null                                                                                                value IS NOT NULL
@@ -1980,6 +1991,7 @@ system              public             29_59_3_not_null                         
 system              public             29_59_4_not_null                                                                                                created IS NOT NULL
 system              public             29_59_5_not_null                                                                                                payload_id IS NOT NULL
 system              public             29_59_6_not_null                                                                                                owner IS NOT NULL
+system              public             29_59_7_not_null                                                                                                owner_id IS NOT NULL
 system              public             29_5_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL

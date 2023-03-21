@@ -110,7 +110,7 @@ func runTestExternalConnectionsUserIDMigration(t *testing.T, numUsers int) {
 	connection_type STRING NOT NULL,
 	connection_details BYTES NOT NULL,
 	owner STRING NOT NULL,
-	owner_id OID NULL,
+	owner_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (connection_name ASC)
 )`
 	r := tdb.QueryRow(t, "SELECT create_statement FROM [SHOW CREATE TABLE system.external_connections]")

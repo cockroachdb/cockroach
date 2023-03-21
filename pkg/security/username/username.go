@@ -62,6 +62,18 @@ type SQLUsername struct {
 	u string
 }
 
+// EmptyRole is a pseudo-role that's used in system tables.
+const EmptyRole = ""
+
+// EmptyRoleID is the ID for EmptyRole.
+const EmptyRoleID = 0
+
+// EmptyRoleName is the SQLUsername for EmptyRole.
+func EmptyRoleName() SQLUsername { return SQLUsername{EmptyRole} }
+
+// IsEmptyRole is true iff the username designates the empty user.
+func (s SQLUsername) IsEmptyRole() bool { return s.u == EmptyRole }
+
 // NodeUser is used by nodes for intra-cluster traffic.
 const NodeUser = "node"
 
@@ -107,6 +119,12 @@ const PublicRole = "public"
 // PublicRoleID is the ID for public role.
 const PublicRoleID = 4
 
+// PublicRoleName is the SQLUsername for PublicRole.
+func PublicRoleName() SQLUsername { return SQLUsername{PublicRole} }
+
+// IsPublicRole is true iff the username designates the public role.
+func (s SQLUsername) IsPublicRole() bool { return s.u == PublicRole }
+
 // This map is immutable and should always hold.
 // Right now this should always hold as we cannot rename any of the
 // roles defined in this map.
@@ -129,12 +147,6 @@ const NoneRole = "none"
 
 // IsNoneRole is true iff the username designates the none role.
 func (s SQLUsername) IsNoneRole() bool { return s.u == NoneRole }
-
-// PublicRoleName is the SQLUsername for PublicRole.
-func PublicRoleName() SQLUsername { return SQLUsername{PublicRole} }
-
-// IsPublicRole is true iff the username designates the public role.
-func (s SQLUsername) IsPublicRole() bool { return s.u == PublicRole }
 
 // IsReserved is true if the given username is reserved.
 // Matches Postgres and also includes crdb_internal_.
