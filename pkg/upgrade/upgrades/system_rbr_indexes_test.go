@@ -158,7 +158,7 @@ func patchDescriptor(desc catalog.TableDescriptor) catalog.TableDescriptor {
 		KeyColumnIDs:        append([]catid.ColumnID{crdbRegionColumn.ID}, originalIndex.KeyColumnIDs...),
 		KeyColumnDirections: append([]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC}, originalIndex.KeyColumnDirections...),
 		ConstraintID:        table.NextConstraintID,
-		Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+		Version:             descpb.JSONCompositeColumnsVersion,
 		EncodingType:        catenumpb.PrimaryIndexEncoding,
 	})
 	table.NextIndexID += 1

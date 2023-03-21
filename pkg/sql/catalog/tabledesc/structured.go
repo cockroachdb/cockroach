@@ -1084,25 +1084,28 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
 	idx.EncodingType = catenumpb.PrimaryIndexEncoding
-	if idx.Version <= descpb.PrimaryIndexWithStoredColumnsVersion {
-		idx.Version = descpb.JSONCompositeColumnsVersion
-	}
-	// Populate store columns.
-	names := make(map[string]struct{})
-	for _, name := range idx.KeyColumnNames {
-		names[name] = struct{}{}
-	}
-	cols := desc.DeletableColumns()
-	idx.StoreColumnNames = make([]string, 0, len(cols))
-	for _, col := range cols {
-		if _, found := names[col.GetName()]; found || col.IsVirtual() {
-			continue
+	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
+		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		// Populate store columns.
+		names := make(map[string]struct{})
+		for _, name := range idx.KeyColumnNames {
+			names[name] = struct{}{}
 		}
-		names[col.GetName()] = struct{}{}
-		idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+		cols := desc.DeletableColumns()
+		idx.StoreColumnNames = make([]string, 0, len(cols))
+		for _, col := range cols {
+			if _, found := names[col.GetName()]; found || col.IsVirtual() {
+				continue
+			}
+			names[col.GetName()] = struct{}{}
+			idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+		}
+		if len(idx.StoreColumnNames) == 0 {
+			idx.StoreColumnNames = nil
+		}
 	}
-	if len(idx.StoreColumnNames) == 0 {
-		idx.StoreColumnNames = nil
+	if idx.Version < descpb.JSONCompositeColumnsVersion {
+		idx.Version = descpb.JSONCompositeColumnsVersion
 	}
 	desc.SetPrimaryIndex(idx)
 	return nil

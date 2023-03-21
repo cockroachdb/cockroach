@@ -604,6 +604,9 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	switch desc.PrimaryIndex.Version {
 	case descpb.JSONCompositeColumnsVersion:
 		return false
+	case descpb.StrictIndexColumnIDGuaranteesVersion:
+		desc.PrimaryIndex.Version = descpb.JSONCompositeColumnsVersion
+		return true
 	default:
 		break
 	}
@@ -662,9 +665,6 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	default:
 		return false
 	}
-	//if idx.Version > 5 {
-	//	return false
-	//}
 	slice := make([]descpb.ColumnID, 0, len(idx.KeyColumnIDs)+len(idx.KeySuffixColumnIDs)+len(idx.StoreColumnIDs))
 	slice = append(slice, idx.KeyColumnIDs...)
 	slice = append(slice, idx.KeySuffixColumnIDs...)
@@ -674,9 +674,6 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		return false
 	}
 	if set.Contains(0) {
-		return false
-	}
-	if idx.Version == descpb.JSONCompositeColumnsVersion {
 		return false
 	}
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
