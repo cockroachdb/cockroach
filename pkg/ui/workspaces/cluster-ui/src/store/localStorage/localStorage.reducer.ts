@@ -139,7 +139,7 @@ const initialState: LocalStorageState = {
     ) || DEFAULT_STATS_REQ_OPTIONS.limit,
   [LocalStorageKeys.STMT_FINGERPRINTS_SORT]:
     JSON.parse(localStorage.getItem(LocalStorageKeys.STMT_FINGERPRINTS_SORT)) ||
-    DEFAULT_STATS_REQ_OPTIONS.sort,
+    DEFAULT_STATS_REQ_OPTIONS.sortStmt,
   "showColumns/ActiveTransactionsPage":
     JSON.parse(localStorage.getItem("showColumns/ActiveTransactionsPage")) ??
     null,
@@ -152,7 +152,7 @@ const initialState: LocalStorageState = {
     DEFAULT_STATS_REQ_OPTIONS.limit,
   [LocalStorageKeys.TXN_FINGERPRINTS_SORT]:
     JSON.parse(localStorage.getItem(LocalStorageKeys.TXN_FINGERPRINTS_SORT)) ||
-    DEFAULT_STATS_REQ_OPTIONS.sort,
+    DEFAULT_STATS_REQ_OPTIONS.sortTxn,
   "showColumns/SessionsPage":
     JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
   "showColumns/StatementInsightsPage":
