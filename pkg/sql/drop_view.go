@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -170,6 +171,18 @@ func (p *planner) canRemoveDependentFromTable(
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
+	if p.trackDependency == nil {
+		p.trackDependency = make(map[catid.DescID]bool)
+	}
+	if p.trackDependency[ref.ID] {
+		// This table's dependencies are already tracked.
+		return nil
+	}
+	p.trackDependency[ref.ID] = true
+	defer func() {
+		p.trackDependency[ref.ID] = false
+	}()
+
 	return p.canRemoveDependent(ctx, string(from.DescriptorType()), from.Name, from.ParentID, ref, behavior)
 }
 
