@@ -673,7 +673,7 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	if set.Contains(0) {
 		return false
 	}
-	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	idx.Version = descpb.JSONCompositeColumnsVersion
 	return true
 }
 

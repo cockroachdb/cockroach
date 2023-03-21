@@ -1627,6 +1627,7 @@ func NewTableDesc(
 		} else {
 			// If it is a non-primary index that is implicitly created, ensure
 			// partitioning for PARTITION ALL BY.
+			implicitColumnDefIdx.idx.Version = descpb.JSONCompositeColumnsVersion
 			if desc.PartitionAllBy {
 				var err error
 				newImplicitCols, newPartitioning, err := CreatePartitioning(
@@ -1866,6 +1867,7 @@ func NewTableDesc(
 				return nil, err
 			}
 
+			idx.Version = descpb.JSONCompositeColumnsVersion
 			if err := desc.AddSecondaryIndex(idx); err != nil {
 				return nil, err
 			}
@@ -1980,6 +1982,7 @@ func NewTableDesc(
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
 			} else {
+				idx.Version = descpb.JSONCompositeColumnsVersion
 				if err := desc.AddSecondaryIndex(idx); err != nil {
 					return nil, err
 				}
