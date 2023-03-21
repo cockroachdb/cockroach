@@ -276,27 +276,26 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 
 	warmupConns := make(chan struct{}, numWarmupConns)
 
-	for _, p := range m.Pools {
-		p := p
-		for j := 0; j < int(p.Config().MaxConns); j++ {
-			g.Go(func() error {
-				if err := sem.Acquire(warmupCtx, 1); err != nil {
-					warmupConns <- struct{}{}
-					return err
-				}
-				conn, err := p.Acquire(warmupCtx)
-				if err != nil {
-					sem.Release(1)
-					warmupConns <- struct{}{}
-					return err
-				}
+	for i := 0; i < numWarmupConns; i++ {
+		p := m.Get()
+
+		g.Go(func() error {
+			if err := sem.Acquire(warmupCtx, 1); err != nil {
+				warmupConns <- struct{}{}
+				return err
+			}
+			conn, err := p.Acquire(warmupCtx)
+			if err != nil {
 				sem.Release(1)
 				warmupConns <- struct{}{}
-				<-warmupCtx.Done()
-				conn.Release()
 				return err
-			})
-		}
+			}
+			sem.Release(1)
+			warmupConns <- struct{}{}
+			<-warmupCtx.Done()
+			conn.Release()
+			return err
+		})
 	}
 	for i := 0; i < numWarmupConns; i++ {
 		<-warmupConns
