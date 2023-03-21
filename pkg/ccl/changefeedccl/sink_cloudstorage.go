@@ -65,14 +65,15 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created      time.Time
-	codec        io.WriteCloser
-	rawSize      int
-	numMessages  int
-	buf          bytes.Buffer
-	alloc        kvevent.Alloc
-	oldestMVCC   hlc.Timestamp
-	parquetCodec *parquetFileWriter
+	created       time.Time
+	codec         io.WriteCloser
+	rawSize       int
+	numMessages   int
+	buf           bytes.Buffer
+	alloc         kvevent.Alloc
+	oldestMVCC    hlc.Timestamp
+	parquetCodec  *parquetFileWriter
+	parquetCodec2 *ParquetWriter
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -693,6 +694,14 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 			return err
 		}
 		file.rawSize = len(file.buf.Bytes())
+	}
+	if file.parquetCodec2 != nil {
+		if err := file.parquetCodec2.Close(); err != nil {
+			return err
+		}
+		// TODO rawsize.
+		file.rawSize = file.buf.Len()
+		file.parquetCodec2 = nil
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
