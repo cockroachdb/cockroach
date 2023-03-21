@@ -716,6 +716,12 @@ func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
 	// DisableBuffering is not supported by the InternalExecutor
 	// which uses streamingCommandResults.
 	sd.LocalOnlySessionData.AvoidBuffering = false
+	// Rewrite rules should not be disabled for internal SQL. This is mainly a
+	// flag for testing foreground SQL. Disrupting the behavior of internal SQL,
+	// which may rely on rewrite rules for proper behavior, could potentially make
+	// the cluster unstable and may make randomized tests more noisy with
+	// difficult to debug behavior.
+	sd.LocalOnlySessionData.TestingOptimizerDisableRuleProbability = 0
 }
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.

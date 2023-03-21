@@ -108,3 +108,16 @@ ALTER INDEX a_pk3 RENAME TO a_pk4
 # But qualification resolves the problem.
 statement ok
 ALTER INDEX public.a_pk3 RENAME TO a_pk4
+
+statement ok
+SET testing_optimizer_disable_rule_probability=1.0
+
+# A cast which relies on an internal executor should not flake with rewrite
+# rules disabled.
+query T
+select regnamespace(101)::REGNAMESPACE;
+----
+public
+
+statement ok
+RESET testing_optimizer_disable_rule_probability
