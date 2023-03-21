@@ -2011,3 +2011,19 @@ SHOW TENANT ALL WITH REPLICATION STATUS
 SHOW TENANT ALL WITH REPLICATION STATUS -- fully parenthesized
 SHOW TENANT ALL WITH REPLICATION STATUS -- literals removed
 SHOW TENANT ALL WITH REPLICATION STATUS -- identifiers removed
+
+parse
+SHOW TENANT foo WITH REPLICATION STATUS, CAPABILITIES
+----
+SHOW TENANT foo WITH REPLICATION STATUS, CAPABILITIES
+SHOW TENANT (foo) WITH REPLICATION STATUS, CAPABILITIES -- fully parenthesized
+SHOW TENANT foo WITH REPLICATION STATUS, CAPABILITIES -- literals removed
+SHOW TENANT _ WITH REPLICATION STATUS, CAPABILITIES -- identifiers removed
+
+parse
+SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst
+----
+SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst
+SHOW BACKUP ('family') IN (('string'), ('placeholder'), ('placeholder'), ('placeholder'), ('string'), ('placeholder'), ('string'), ('placeholder')) WITH incremental_location = ('nullif'), privileges, debug_dump_metadata_sst -- fully parenthesized
+SHOW BACKUP '_' IN ('_', '_', '_', '_', '_', '_', '_', '_') WITH incremental_location = '_', privileges, debug_dump_metadata_sst -- literals removed
+SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst -- identifiers removed

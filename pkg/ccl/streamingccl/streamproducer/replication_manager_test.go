@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReplicationManagerRequiresAdminRole(t *testing.T) {
+func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -37,17 +37,22 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
-	var sessionData sessiondatapb.SessionData
-	{
-		var sessionSerialized []byte
-		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	testTenants := s.TestTenants()
+	if len(testTenants) > 0 {
+		kvDB = testTenants[0].DB()
+		execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
 	}
+
+	var sessionData sessiondatapb.SessionData
+	var sessionSerialized []byte
+	tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 
 	getManagerForUser := func(u string) (eval.ReplicationStreamManager, error) {
 		sqlUser, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 		require.NoError(t, err)
-		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		txn := kvDB.NewTxn(ctx, "test")
 		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sessionData)
 
@@ -61,6 +66,9 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, pi.InternalSQLTxn())
 	}
 
+	tDB.Exec(t, "CREATE ROLE somebody")
+	tDB.Exec(t, "GRANT SYSTEM REPLICATION TO somebody")
+
 	for _, tc := range []struct {
 		user         string
 		expErr       string
@@ -68,10 +76,13 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 	}{
 		{user: "admin", expErr: "", isEnterprise: true},
 		{user: "root", expErr: "", isEnterprise: true},
-		{user: "nobody", expErr: "replication restricted to ADMIN role", isEnterprise: true},
+		{user: "somebody", expErr: "", isEnterprise: true},
+		{user: "nobody", expErr: "user nobody does not have REPLICATION privilege on global", isEnterprise: true},
+
 		{user: "admin", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "root", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "nobody", expErr: "replication restricted to ADMIN role", isEnterprise: false},
+		{user: "root", expErr: " use of REPLICATION requires an enterprise license", isEnterprise: false},
+		{user: "somebody", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
+		{user: "nobody", expErr: "user nobody does not have REPLICATION privilege on global", isEnterprise: false},
 	} {
 		t.Run(fmt.Sprintf("%s/ent=%t", tc.user, tc.isEnterprise), func(t *testing.T) {
 			if tc.isEnterprise {

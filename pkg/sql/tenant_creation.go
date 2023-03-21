@@ -75,6 +75,16 @@ type createTenantConfig struct {
 func (p *planner) createTenantInternal(
 	ctx context.Context, ctcfg createTenantConfig, configTemplate *mtinfopb.TenantInfoWithUsage,
 ) (tid roachpb.TenantID, err error) {
+	if p.EvalContext().TxnReadOnly {
+		return tid, readOnlyError("create_tenant()")
+	}
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create"); err != nil {
+		return tid, err
+	}
+	if err := CanManageTenant(ctx, p); err != nil {
+		return tid, err
+	}
+
 	var tenantID uint64
 	if ctcfg.ID != nil {
 		tenantID = *ctcfg.ID
@@ -90,18 +100,6 @@ func (p *planner) createTenantInternal(
 			return tid, pgerror.Newf(pgcode.Syntax, "unknown service mode: %q", *ctcfg.ServiceMode)
 		}
 		serviceMode = v
-	}
-
-	// tenantID uint64, name roachpb.TenantName,
-	if p.EvalContext().TxnReadOnly {
-		return tid, readOnlyError("create_tenant()")
-	}
-	const op = "create tenant"
-	if err := p.RequireAdminRole(ctx, op); err != nil {
-		return tid, err
-	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create"); err != nil {
-		return tid, err
 	}
 
 	info := configTemplate

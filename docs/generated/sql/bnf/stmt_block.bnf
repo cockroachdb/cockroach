@@ -66,7 +66,7 @@ analyze_stmt ::=
 copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' opt_with_copy_options
-	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' opt_with_copy_options
+	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' opt_with_copy_options
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -331,6 +331,13 @@ opt_with_copy_options ::=
 opt_where_clause ::=
 	where_clause
 	| 
+
+copy_to_stmt ::=
+	delete_stmt
+	| insert_stmt
+	| select_stmt
+	| update_stmt
+	| upsert_stmt
 
 database_name ::=
 	name

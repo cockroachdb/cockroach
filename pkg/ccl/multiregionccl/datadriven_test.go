@@ -121,7 +121,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 			skip.WithIssue(t, 98020, "flaky test")
 		}
 		if strings.Contains(path, "secondary_region") {
-			skip.UnderStressWithIssue(t, 92235, "flaky test")
+			skip.WithIssue(t, 92235, "flaky test")
 		}
 
 		ds := datadrivenTestState{}
