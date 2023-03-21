@@ -999,6 +999,20 @@ func (r *subqueryHoister) constructGroupByAny(
 	aggVar := r.f.ConstructVariable(aggColID)
 	caseColID := r.f.Metadata().AddColumn("case", types.Bool)
 
+	var scalarNotNull opt.ScalarExpr
+	if scalar.DataType().Family() == types.TupleFamily {
+		scalarNotNull = r.f.ConstructIsTupleNotNull(scalar)
+	} else {
+		scalarNotNull = r.f.ConstructIsNot(scalar, memo.NullSingleton)
+	}
+
+	var inputNotNull opt.ScalarExpr
+	if inputVar.DataType().Family() == types.TupleFamily {
+		inputNotNull = r.f.ConstructIsTupleNotNull(inputVar)
+	} else {
+		inputNotNull = r.f.ConstructIsNot(inputVar, memo.NullSingleton)
+	}
+
 	return r.f.ConstructProject(
 		r.f.ConstructScalarGroupBy(
 			r.f.ConstructProject(
@@ -1012,7 +1026,7 @@ func (r *subqueryHoister) constructGroupByAny(
 					)},
 				),
 				memo.ProjectionsExpr{r.f.ConstructProjectionsItem(
-					r.f.ConstructIsNot(inputVar, memo.NullSingleton),
+					inputNotNull,
 					notNullColID,
 				)},
 				opt.ColSet{},
@@ -1032,7 +1046,7 @@ func (r *subqueryHoister) constructGroupByAny(
 					r.f.ConstructWhen(
 						r.f.ConstructAnd(
 							aggVar,
-							r.f.ConstructIsNot(scalar, memo.NullSingleton),
+							scalarNotNull,
 						),
 						r.f.ConstructTrue(),
 					),
