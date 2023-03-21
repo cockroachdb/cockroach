@@ -201,6 +201,8 @@ type sinkBatchBuffer struct {
 
 	alloc  kvevent.Alloc
 	hasher hash.Hash32
+
+	flushErr error
 }
 
 // FinalizePayload closes the writer to produce a payload that is ready to be
@@ -217,6 +219,11 @@ func (sb *sinkBatchBuffer) FinalizePayload() error {
 // Keys implements the IORequest interface.
 func (sb *sinkBatchBuffer) Keys() intsets.Fast {
 	return sb.keys
+}
+
+// SetError implements the IORequest interface.
+func (sb *sinkBatchBuffer) SetError(err error) {
+	sb.flushErr = err
 }
 
 func (sb *sinkBatchBuffer) isEmpty() bool {
@@ -276,7 +283,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	ioEmitter := newParallelIO(ctx, bs.retryOpts, bs.ioWorkers, ioHandler, bs.metrics)
 	defer ioEmitter.Close()
 
-	var handleResult func(result *ioResult)
+	var handleResult func(result IORequest)
 
 	tryFlushBatch := func() {
 		if batchBuffer.isEmpty() {
@@ -312,11 +319,11 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 	inflight := 0
 	var sinkFlushWaiter chan struct{}
 
-	handleResult = func(result *ioResult) {
-		batch, _ := result.request.(*sinkBatchBuffer)
+	handleResult = func(result IORequest) {
+		batch, _ := result.(*sinkBatchBuffer)
 
-		if result.err != nil {
-			bs.handleError(result.err)
+		if batch.flushErr != nil {
+			bs.handleError(batch.flushErr)
 		} else {
 			bs.metrics.recordEmittedBatch(
 				batch.bufferTime, batch.numMessages, batch.mvcc, batch.numKVBytes, sinkDoesNotCompress,
@@ -325,7 +332,7 @@ func (bs *batchingSink) runBatchingWorker(ctx context.Context) {
 
 		inflight -= batch.numMessages
 
-		if (result.err != nil || inflight == 0) && sinkFlushWaiter != nil {
+		if (batch.flushErr != nil || inflight == 0) && sinkFlushWaiter != nil {
 			close(sinkFlushWaiter)
 			sinkFlushWaiter = nil
 		}

@@ -21,8 +21,9 @@ import (
 // which ordering is preserved.
 // Example: if the events [[a,b], [b,c], [c,d], [e,f]] are all submitted in that
 // order, [a,b] and [e,f] can be emitted concurrentyl while [b,c] will block
-// until [a,b] completes, then [c,d] will block until [b,c] completes.
-// If [c,d] errored, [b,c] would never be sent.
+// until [a,b] completes, then [c,d] will block until [b,c] completes. If [c,d]
+// errored, [b,c] would never be sent, and SetError would be called on [c,d]
+// prior to it being returned on resultCh.
 type parallelIO struct {
 	retryOpts retry.Options
 	wg        ctxgroup.Group
@@ -32,24 +33,19 @@ type parallelIO struct {
 	ioHandler IOHandler
 
 	requestCh chan IORequest
-	resultCh  chan *ioResult
+	resultCh  chan IORequest
 }
 
 // IORequest represents an abstract unit of IO that has a set of keys upon which
-// sequential ordering of fulfillment must be enforced.
+// sequential ordering of fulfillment must be enforced, and allows the storing
+// of an error if one is encountered during handling.
 type IORequest interface {
 	Keys() intsets.Fast
+	SetError(error)
 }
 
 // IOHandler performs a blocking IO operation on an IORequest
 type IOHandler func(context.Context, IORequest) error
-
-// ioResult contains a completed request along with the error from IOHandler if
-// despite retries the request could not be handled.
-type ioResult struct {
-	request IORequest
-	err     error
-}
 
 func newParallelIO(
 	ctx context.Context,
@@ -65,7 +61,7 @@ func newParallelIO(
 		metrics:   metrics,
 		ioHandler: handler,
 		requestCh: make(chan IORequest, numWorkers),
-		resultCh:  make(chan *ioResult, numWorkers),
+		resultCh:  make(chan IORequest, numWorkers),
 		doneCh:    make(chan struct{}),
 	}
 
@@ -77,8 +73,7 @@ func newParallelIO(
 }
 
 // Close stops all workers immediately and returns once they shut down. Inflight
-// requests sent to requestCh may never result in their corresponding ioResult
-// being sent to resultCh.
+// requests sent to requestCh may never result in being sent to resultCh.
 func (pe *parallelIO) Close() {
 	close(pe.doneCh)
 	_ = pe.wg.Wait()
@@ -99,28 +94,37 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	// Multiple worker routines handle the IO operations, retrying when necessary.
 	emitCh := make(chan IORequest, numEmitWorkers)
 	defer close(emitCh)
-	emitResultCh := make(chan *ioResult, numEmitWorkers)
+	emitSuccessCh := make(chan IORequest, numEmitWorkers)
 
 	for i := 0; i < numEmitWorkers; i++ {
 		pe.wg.GoCtx(func(ctx context.Context) error {
 			for req := range emitCh {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-pe.doneCh:
-					return nil
-				case emitResultCh <- &ioResult{
-					err:     emitWithRetries(ctx, req),
-					request: req,
-				}:
+				err := emitWithRetries(ctx, req)
+				if err != nil {
+					req.SetError(err)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-pe.doneCh:
+						return nil
+					case pe.resultCh <- req:
+					}
+				} else {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-pe.doneCh:
+						return nil
+					case emitSuccessCh <- req:
+					}
 				}
 			}
 			return nil
 		})
 	}
 
-	var handleResult func(*ioResult)
-	var pendingResults []*ioResult
+	var handleSuccess func(IORequest)
+	var pendingResults []IORequest
 
 	sendToWorker := func(ctx context.Context, req IORequest) {
 		for {
@@ -131,7 +135,7 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 				return
 			case emitCh <- req:
 				return
-			case res := <-emitResultCh:
+			case res := <-emitSuccessCh:
 				// Must also handle results to avoid the above emit being able to block
 				// forever on all workers being busy trying to emit results.
 				pendingResults = append(pendingResults, res)
@@ -146,43 +150,34 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 	var inflight intsets.Fast
 	var pending []IORequest
 
-	// do pending keys
+	handleSuccess = func(req IORequest) {
+		// Clear out the completed keys to check for newly valid pending requests
+		inflight.DifferenceWith(req.Keys())
 
-	handleResult = func(res *ioResult) {
-		if res.err == nil {
-			// Clear out the completed keys to check for newly valid pending requests
-			inflight.DifferenceWith(res.request.Keys())
-
-			var stillPending = pending[:0] // Reuse underlying space
-			for _, pendingReq := range pending {
-				overlap := res.request.Keys().Intersection(pendingReq.Keys())
-
-				// If no overlap, nothing changed for this request
-				if overlap.Empty() {
-					stillPending = append(stillPending, pendingReq)
-					continue
-				}
-
-				// If it is now free to send, send it
-				if !inflight.Intersects(pendingReq.Keys()) {
-					sendToWorker(ctx, pendingReq)
-				} else {
-					stillPending = append(stillPending, pendingReq)
-				}
-
-				// Re-add whatever keys in the pending request that were removed
-				inflight.UnionWith(overlap)
+		var stillPending = pending[:0] // Reuse underlying space
+		for _, pendingReq := range pending {
+			// If no intersection, nothing changed for this request's validity
+			if !req.Keys().Intersects(pendingReq.Keys()) {
+				stillPending = append(stillPending, pendingReq)
+				continue
 			}
-			pending = stillPending
-		}
 
-		// If res.err != nil, inflight remains unchanged thereby blocking any
-		// further conflicting requests from ever being processed.
+			// If it is now free to send, send it
+			if !inflight.Intersects(pendingReq.Keys()) {
+				sendToWorker(ctx, pendingReq)
+			} else {
+				stillPending = append(stillPending, pendingReq)
+			}
+
+			// Re-add whatever keys in the pending request that were removed
+			inflight.UnionWith(pendingReq.Keys())
+		}
+		pending = stillPending
 
 		select {
 		case <-ctx.Done():
 		case <-pe.doneCh:
-		case pe.resultCh <- res:
+		case pe.resultCh <- req:
 		}
 	}
 
@@ -192,10 +187,10 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 		// inside sendtoWorker, as having a re-entrant sendToWorker -> handleResult
 		// -> sendToWorker -> handleResult chain creates complexity with managing
 		// pending requests
-		unhandledResults := pendingResults
+		unhandled := pendingResults
 		pendingResults = nil
-		for _, res := range unhandledResults {
-			handleResult(res)
+		for _, res := range unhandled {
+			handleSuccess(res)
 		}
 
 		select {
@@ -211,8 +206,8 @@ func (pe *parallelIO) runWorkers(ctx context.Context, numEmitWorkers int) error 
 				inflight.UnionWith(req.Keys())
 				pending = append(pending, req)
 			}
-		case res := <-emitResultCh:
-			handleResult(res)
+		case res := <-emitSuccessCh:
+			handleSuccess(res)
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-pe.doneCh:

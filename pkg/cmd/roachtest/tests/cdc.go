@@ -1225,7 +1225,7 @@ func registerCDC(r registry.Registry) {
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
-			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true"); err != nil {
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true;"); err != nil {
 				ct.t.Fatal(err)
 			}
 
@@ -1233,11 +1233,9 @@ func registerCDC(r registry.Registry) {
 				sinkType: webhookSink,
 				targets:  allTpccTargets,
 				opts: map[string]string{
-					"metrics_label": "'webhook'",
-					"initial_scan":  "'only'",
-					// Webhook sink without batching is currently too slow to handle even 1 warehouse
+					"metrics_label":       "'webhook'",
+					"initial_scan":        "'only'",
 					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
-					// "kafka_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
 				},
 			})
 

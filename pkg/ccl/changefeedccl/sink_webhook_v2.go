@@ -305,7 +305,7 @@ func (jw *webhookJSONWriter) Close() (SinkPayload, error) {
 	suffix := fmt.Sprintf("],\"length\":%d}", len(jw.messages))
 
 	// Grow all at once to avoid reallocations
-	buffer.Grow(len(prefix) + jw.numBytes + len(jw.messages) + len(suffix))
+	buffer.Grow(len(prefix) + jw.numBytes /* kvs */ + len(jw.messages) /* commas */ + len(suffix))
 
 	buffer.WriteString(prefix)
 	for i, msg := range jw.messages {

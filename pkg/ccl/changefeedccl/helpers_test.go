@@ -830,11 +830,11 @@ func randomSinkType(opts ...feedTestOption) string {
 
 func randomSinkTypeWithOptions(options feedTestOptions) string {
 	sinkWeights := map[string]int{
-		"kafka":        0,
-		"enterprise":   0,
+		"kafka":        3,
+		"enterprise":   1,
 		"webhook":      1,
-		"pubsub":       0,
-		"sinkless":     0,
+		"pubsub":       1,
+		"sinkless":     2,
 		"cloudstorage": 0,
 	}
 	if options.externalIODir != "" {
