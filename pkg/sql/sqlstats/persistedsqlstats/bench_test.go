@@ -37,57 +37,59 @@ func BenchmarkConcurrentSelect1(b *testing.B) {
 	ctx := context.Background()
 
 	for _, numOfConcurrentConn := range []int{24, 48, 64} {
-		b.Run(fmt.Sprintf("concurrentConn=%d", numOfConcurrentConn), func(b *testing.B) {
-			s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-			sqlServer := s.SQLServer().(*sql.Server)
-			defer s.Stopper().Stop(ctx)
+		b.Run(fmt.Sprintf("concurrentConn=%d", numOfConcurrentConn),
+			func(b *testing.B) {
+				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+				sqlServer := s.SQLServer().(*sql.Server)
+				defer s.Stopper().Stop(ctx)
 
-			starter := make(chan struct{})
-			latencyChan := make(chan float64, numOfConcurrentConn)
-			defer close(latencyChan)
+				starter := make(chan struct{})
+				latencyChan := make(chan float64, numOfConcurrentConn)
+				defer close(latencyChan)
 
-			var wg sync.WaitGroup
-			for connIdx := 0; connIdx < numOfConcurrentConn; connIdx++ {
-				sqlConn, err := db.Conn(ctx)
-				if err != nil {
-					b.Fatalf("unexpected error creating db conn: %s", err)
-				}
-				wg.Add(1)
-
-				go func(conn *gosql.Conn, idx int) {
-					defer wg.Done()
-					runner := sqlutils.MakeSQLRunner(conn)
-					<-starter
-
-					start := timeutil.Now()
-					for i := 0; i < b.N; i++ {
-						runner.Exec(b, "SELECT 1")
+				var wg sync.WaitGroup
+				for connIdx := 0; connIdx < numOfConcurrentConn; connIdx++ {
+					sqlConn, err := db.Conn(ctx)
+					if err != nil {
+						b.Fatalf("unexpected error creating db conn: %s", err)
 					}
-					duration := timeutil.Since(start)
-					latencyChan <- float64(duration.Milliseconds()) / float64(b.N)
-				}(sqlConn, connIdx)
-			}
+					wg.Add(1)
 
-			close(starter)
-			wg.Wait()
+					go func(conn *gosql.Conn, idx int) {
+						defer wg.Done()
+						runner := sqlutils.MakeSQLRunner(conn)
+						<-starter
 
-			var totalLat float64
-			for i := 0; i < numOfConcurrentConn; i++ {
-				totalLat += <-latencyChan
-			}
-			b.ReportMetric(
-				sqlServer.ServerMetrics.
-					StatsMetrics.
-					SQLTxnStatsCollectionOverhead.
-					Mean(),
-				"overhead(ns/op)")
-		})
+						start := timeutil.Now()
+						for i := 0; i < b.N; i++ {
+							runner.Exec(b, "SELECT 1")
+						}
+						duration := timeutil.Since(start)
+						latencyChan <- float64(duration.Milliseconds()) / float64(b.N)
+					}(sqlConn, connIdx)
+				}
+
+				close(starter)
+				wg.Wait()
+
+				var totalLat float64
+				for i := 0; i < numOfConcurrentConn; i++ {
+					totalLat += <-latencyChan
+				}
+				b.ReportMetric(
+					sqlServer.ServerMetrics.
+						StatsMetrics.
+						SQLTxnStatsCollectionOverhead.
+						Mean(),
+					"overhead(ns/op)")
+			})
 	}
 }
 
 // runBenchmarkPersistedSqlStatsFlush benchmarks the persisted stats
 func runBenchmarkPersistedSqlStatsFlush(
-	b *testing.B, tc *testcluster.TestCluster, db *sqlutils.SQLRunner, ctx context.Context,
+	b *testing.B, tc *testcluster.TestCluster, db *sqlutils.SQLRunner,
+	ctx context.Context,
 ) {
 	rng := randutil.NewTestRandWithSeed(0)
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -106,7 +108,8 @@ func runBenchmarkPersistedSqlStatsFlush(
 }
 
 // runBenchmarkPersistedSqlStatsSelects benchmarks select statements
-func runBenchmarkPersistedSqlStatsSelects(b *testing.B, db *sqlutils.SQLRunner, query string) {
+func runBenchmarkPersistedSqlStatsSelects(b *testing.B,
+	db *sqlutils.SQLRunner, query string) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
@@ -119,7 +122,8 @@ func runBenchmarkPersistedSqlStatsSelects(b *testing.B, db *sqlutils.SQLRunner, 
 	}
 }
 
-// BenchmarkSqlStatsPersisted tests measures the performance of persisted statistics.
+// BenchmarkSqlStatsPersisted tests measures the performance of persisted
+// statistics.
 func BenchmarkSqlStatsPersisted(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
@@ -141,7 +145,8 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 							SQLMemoryPoolSize: 512 << 20,
 						},
 					})
-				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2])
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0],
+					tc.Conns[1], tc.Conns[2])
 				return sqlRunner, tc
 			},
 		},
@@ -156,7 +161,8 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 							SQLMemoryPoolSize: 512 << 20,
 						},
 					})
-				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2], tc.Conns[3],
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0],
+					tc.Conns[1], tc.Conns[2], tc.Conns[3],
 					tc.Conns[4], tc.Conns[5])
 				return sqlRunner, tc
 			},
@@ -168,44 +174,79 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 				computedColumns []string
 			}
 			for _, test := range []testSpec{
-				{computedColumns: []string{"execution_count", "service_latency", "cpu_sql_nanos", "contention_time", "total_estimated_execution_time"}},
-				{computedColumns: []string{"execution_count", "service_latency", "cpu_sql_nanos", "contention_time", "total_estimated_execution_time"}},
-				{computedColumns: []string{"execution_count", "service_latency", "cpu_sql_nanos", "contention_time"}},
-				{computedColumns: []string{"execution_count", "service_latency", "cpu_sql_nanos", "contention_time"}},
-				{computedColumns: []string{"execution_count", "service_latency", "cpu_sql_nanos"}},
+				{computedColumns: []string{"execution_count", "service_latency",
+					"cpu_sql_nanos", "contention_time",
+					"total_estimated_execution_time", "p99_latency"}},
+				{computedColumns: []string{"execution_count", "service_latency",
+					"cpu_sql_nanos", "contention_time", "total_estimated_execution_time"}},
+				{computedColumns: []string{"execution_count", "service_latency",
+					"cpu_sql_nanos", "contention_time"}},
+				{computedColumns: []string{"execution_count", "service_latency",
+					"cpu_sql_nanos"}},
 				{computedColumns: []string{"execution_count", "service_latency"}},
 				{computedColumns: []string{"execution_count"}},
 				{computedColumns: []string{}},
 			} {
 
 				// compute expressions
-				executionCount := "((statistics->'statistics'->'cnt')::INT8)"
-				serviceLatency := "((statistics->'statistics'->'svcLat'->'mean')::FLOAT)"
-				cpuSqlNanos := "((statistics->'execution_statistics'->'cpuSQLNanos'->'mean')::FLOAT)"
-				contentionTime := "((statistics->'execution_statistics'->'contentionTime'->'mean')::FLOAT)"
-				totalEstimatedExecutionTime := "(statistics->'statistics'->>'cnt')::FLOAT * (statistics->'statistics'->'svcLat'->>'mean')::FLOAT"
-				computeExpressions := []string{executionCount, serviceLatency, cpuSqlNanos, contentionTime, totalEstimatedExecutionTime}
+				executionCount :=
+					"((statistics->'statistics'->'cnt')::INT8)"
+				serviceLatency :=
+					"((statistics->'statistics'->'svcLat'->'mean')::FLOAT)"
+				cpuSqlNanos :=
+					"((statistics->'execution_statistics'->'cpuSQLNanos'->'mean')::FLOAT)"
+				contentionTime :=
+					"((statistics->'execution_statistics'->'contentionTime'->'mean')::FLOAT)"
+				totalEstimatedExecutionTime :=
+					"(statistics->'statistics'->>'cnt')::FLOAT * (statistics->'statistics'->'svcLat'->>'mean')::FLOAT"
+				p99Latency :=
+					"((statistics->'statistics'->'latencyInfo'->'p99')::FLOAT)"
+				computeExpressions := []string{executionCount, serviceLatency,
+					cpuSqlNanos, contentionTime, totalEstimatedExecutionTime, p99Latency}
 
 				// Indexes
 				executionCountIdx := "execution_count_idx"
 				serviceLatencyIdx := "service_latency_idx"
 				sqlCpuNanosIdx := "cpu_sql_nanos_idx"
 				contentionTimeIdx := "contention_time_idx"
+				p99LatencyIdx := "p99_latency_idx"
 				totalEstimatedExecutionTimeIdx := "total_estimated_execution_time_idx"
 
 				// DROP INDEX queries
-				dropExecutionCountIdx := fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; DROP INDEX system.statement_statistics@%s;", executionCountIdx, executionCountIdx)
-				dropServiceLatencyIdx := fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; DROP INDEX system.statement_statistics@%s;", serviceLatencyIdx, serviceLatencyIdx)
-				dropSqlCpuNanosIdx := fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; DROP INDEX system.statement_statistics@%s;", sqlCpuNanosIdx, sqlCpuNanosIdx)
-				dropContentionTimeIdx := fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; DROP INDEX system.statement_statistics@%s;", contentionTimeIdx, contentionTimeIdx)
-				dropTotalEstimatedExecutionTimeIdx := fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; DROP INDEX system.statement_statistics@%s;", totalEstimatedExecutionTimeIdx, totalEstimatedExecutionTimeIdx)
-				dropQueries := []string{dropExecutionCountIdx, dropServiceLatencyIdx, dropSqlCpuNanosIdx, dropContentionTimeIdx, dropTotalEstimatedExecutionTimeIdx}
+				dropExecutionCountIdx :=
+					fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; "+
+						"DROP INDEX system.statement_statistics@%s;", executionCountIdx,
+						executionCountIdx)
+				dropServiceLatencyIdx :=
+					fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; "+
+						"DROP INDEX system.statement_statistics@%s;", serviceLatencyIdx,
+						serviceLatencyIdx)
+				dropSqlCpuNanosIdx :=
+					fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; "+
+						"DROP INDEX system.statement_statistics@%s;", sqlCpuNanosIdx,
+						sqlCpuNanosIdx)
+				dropContentionTimeIdx :=
+					fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; "+
+						"DROP INDEX system.statement_statistics@%s;", contentionTimeIdx,
+						contentionTimeIdx)
+				dropTotalEstimatedExecutionTimeIdx :=
+					fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; "+
+						"DROP INDEX system.statement_statistics@%s;",
+						totalEstimatedExecutionTimeIdx, totalEstimatedExecutionTimeIdx)
+				dropP99LatencyIdx :=
+					fmt.Sprintf("DROP INDEX system.transaction_statistics@%s; "+
+						"DROP INDEX system.statement_statistics@%s;", p99LatencyIdx,
+						p99LatencyIdx)
+				dropQueries := []string{dropExecutionCountIdx, dropServiceLatencyIdx,
+					dropSqlCpuNanosIdx, dropContentionTimeIdx,
+					dropTotalEstimatedExecutionTimeIdx, dropP99LatencyIdx}
 
 				var name strings.Builder
 				if test.computedColumns == nil {
 					name.WriteString("computedColumns=none")
 				} else {
-					name.WriteString(fmt.Sprintf("computedColumns=%d", len(test.computedColumns)))
+					name.WriteString(fmt.Sprintf("computedColumns=%d",
+						len(test.computedColumns)))
 				}
 				for i, val := range test.computedColumns {
 					if i > len(dropQueries) {
@@ -217,7 +258,8 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 				}
 				var selectQueries []string
 				for i := range computeExpressions {
-					orderClause := fmt.Sprintf(" ORDER BY %s DESC LIMIT 500", computeExpressions[i])
+					orderClause := fmt.Sprintf(" ORDER BY %s DESC LIMIT 500",
+						computeExpressions[i])
 					baseQuery := fmt.Sprintf(`SELECT
 										app_name,
 										aggregated_ts,
@@ -227,24 +269,30 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 										%s,
 										%s,
 										%s,
+										%s,
 										metadata,
 										statistics
 									FROM system.transaction_statistics
-									WHERE app_name NOT LIKE '$ internal%%' AND aggregated_ts > (now() - INTERVAL '1 hour') %s`,
+									WHERE app_name NOT LIKE '$ internal%%' AND 
+										aggregated_ts > (now() - INTERVAL '1 hour') %s`,
 						computeExpressions[0],
 						computeExpressions[1],
 						computeExpressions[2],
 						computeExpressions[3],
 						computeExpressions[4],
+						computeExpressions[5],
 						orderClause)
 					selectQueries = append(selectQueries, baseQuery)
 				}
-				txnStatsQuery := fmt.Sprintf("SELECT * FROM ((%s) UNION (%s) UNION (%s) UNION (%s) UNION (%s))",
-					selectQueries[0], selectQueries[1], selectQueries[2], selectQueries[3], selectQueries[4])
+				txnStatsQuery := fmt.Sprintf(`SELECT * FROM 
+								((%s) UNION (%s) UNION (%s) UNION (%s) UNION (%s) UNION (%s))`,
+					selectQueries[0], selectQueries[1], selectQueries[2],
+					selectQueries[3], selectQueries[4], selectQueries[5])
 
 				selectQueries = []string{}
 				for i := range computeExpressions {
-					orderClause := fmt.Sprintf(" ORDER BY %s DESC LIMIT 500", computeExpressions[i])
+					orderClause := fmt.Sprintf(" ORDER BY %s DESC LIMIT 500",
+						computeExpressions[i])
 					baseQuery := fmt.Sprintf(`SELECT
 										app_name,
 										aggregated_ts,
@@ -255,31 +303,38 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 										%s,
 										%s,
 										%s,
+										%s,
 										metadata,
 										statistics
 									FROM system.statement_statistics
-									WHERE app_name NOT LIKE '$ internal%%' AND aggregated_ts > (now() - INTERVAL '1 hour') %s`,
+									WHERE app_name NOT LIKE '$ internal%%' AND 
+										aggregated_ts > (now() - INTERVAL '1 hour') %s`,
 						computeExpressions[0],
 						computeExpressions[1],
 						computeExpressions[2],
 						computeExpressions[3],
 						computeExpressions[4],
+						computeExpressions[5],
 						orderClause)
 					selectQueries = append(selectQueries, baseQuery)
 				}
-				stmtStatsQuery := fmt.Sprintf("SELECT * FROM ((%s) UNION (%s) UNION (%s) UNION (%s) UNION (%s))",
-					selectQueries[0], selectQueries[1], selectQueries[2], selectQueries[3], selectQueries[4])
+				stmtStatsQuery := fmt.Sprintf(`SELECT * FROM
+								((%s) UNION (%s) UNION (%s) UNION (%s) UNION (%s) UNION (%s))`,
+					selectQueries[0], selectQueries[1], selectQueries[2],
+					selectQueries[3], selectQueries[4], selectQueries[5])
 				b.Run(name.String(), func(b *testing.B) {
 					ctx := context.Background()
 					sqlRunner, tc := cluster.create()
 					defer tc.Stopper().Stop(ctx)
-					sqlRunner.Exec(b, `INSERT INTO system.users VALUES ('node', NULL, true, 3)`)
+					sqlRunner.Exec(b, `INSERT INTO system.users VALUES ('node', NULL, 
+							true, 3)`)
 					sqlRunner.Exec(b, `GRANT node TO root`)
 					sqlRunner.Exec(b, `CREATE DATABASE IF NOT EXISTS bench`)
 					for _, query := range dropQueries {
 						sqlRunner.Exec(b, query)
 					}
-					sqlRunner.Exec(b, "CREATE TABLE bench.t1 (id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid())")
+					sqlRunner.Exec(b, "CREATE TABLE bench.t1 ("+
+						"id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid())")
 
 					// Insert 10000 rows
 					var buf bytes.Buffer
@@ -299,14 +354,16 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 					})
 
 					// Run flush benchmark first to initialize stats tables
-					b.Run("BenchmarkPersistedSqlStatsSelectStatements", func(b *testing.B) {
-						runBenchmarkPersistedSqlStatsSelects(b, sqlRunner, stmtStatsQuery)
-					})
+					b.Run("BenchmarkPersistedSqlStatsSelectStatements",
+						func(b *testing.B) {
+							runBenchmarkPersistedSqlStatsSelects(b, sqlRunner, stmtStatsQuery)
+						})
 
 					// Run flush benchmark first to initialize stats tables
-					b.Run("BenchmarkPersistedSqlStatsSelectTransactions", func(b *testing.B) {
-						runBenchmarkPersistedSqlStatsSelects(b, sqlRunner, txnStatsQuery)
-					})
+					b.Run("BenchmarkPersistedSqlStatsSelectTransactions",
+						func(b *testing.B) {
+							runBenchmarkPersistedSqlStatsSelects(b, sqlRunner, txnStatsQuery)
+						})
 				})
 			}
 		})
