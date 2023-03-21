@@ -1084,7 +1084,7 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
 	idx.EncodingType = catenumpb.PrimaryIndexEncoding
-	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
+	if idx.Version <= descpb.PrimaryIndexWithStoredColumnsVersion {
 		idx.Version = descpb.JSONCompositeColumnsVersion
 	}
 	// Populate store columns.

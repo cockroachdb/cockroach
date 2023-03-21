@@ -602,7 +602,7 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	desc.PrimaryIndex.EncodingType = catenumpb.PrimaryIndexEncoding
 	// Check if primary index needs updating.
 	switch desc.PrimaryIndex.Version {
-	case descpb.PrimaryIndexWithStoredColumnsVersion:
+	case descpb.JSONCompositeColumnsVersion:
 		return false
 	default:
 		break
@@ -641,10 +641,7 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	}
 	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
 	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
-	if desc.PrimaryIndex.Version == descpb.JSONCompositeColumnsVersion {
-		return false
-	}
-	desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	desc.PrimaryIndex.Version = descpb.JSONCompositeColumnsVersion
 	return true
 }
 
@@ -677,6 +674,9 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		return false
 	}
 	if set.Contains(0) {
+		return false
+	}
+	if idx.Version == descpb.JSONCompositeColumnsVersion {
 		return false
 	}
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
