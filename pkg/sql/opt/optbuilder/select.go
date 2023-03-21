@@ -280,6 +280,18 @@ func (b *Builder) buildDataSource(
 func (b *Builder) buildView(
 	view cat.View, viewName *tree.TableName, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
+	if b.sourceViews == nil {
+		b.sourceViews = make(map[cat.View]bool)
+	}
+	// Check whether there is a circular dependency among views if we are not
+	// currently creating a view.
+	if b.sourceViews[view] {
+		panic(pgerror.Newf(pgcode.InvalidRecursion, "infinite recursion detected in rules for relation %s", viewName))
+	}
+	b.sourceViews[view] = true
+	defer func() {
+		b.sourceViews[view] = false
+	}()
 	// Cache the AST so that multiple references won't need to reparse.
 	if b.views == nil {
 		b.views = make(map[cat.View]*tree.Select)
