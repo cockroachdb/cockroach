@@ -42,7 +42,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	oracle replicaoracle.Oracle,
 	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	if dsp.codec.ForSystemTenant() && !localityFilter.NonEmpty() {
+	if dsp.codec.ForSystemTenant() {
 		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter)
 	}
 	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter)

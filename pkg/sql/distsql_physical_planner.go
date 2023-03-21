@@ -1579,7 +1579,7 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	if dsp.useGossipPlanning(ctx, planCtx) {
 		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
 	}
-	resolver, _, err := dsp.makeInstanceResolver(ctx, roachpb.Locality{})
+	resolver, _, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
 	if err != nil {
 		return 0, err
 	}
