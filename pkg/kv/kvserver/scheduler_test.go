@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -247,10 +248,15 @@ func TestSchedulerLoop(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1)
-
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1)
 	s.Start(stopper)
-	s.EnqueueRaftTicks(1, 2, 3)
+
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
+	batch.Add(1)
+	batch.Add(2)
+	batch.Add(3)
+	s.EnqueueRaftTicks(batch)
 
 	testutils.SucceedsSoon(t, func() error {
 		const expected = "ready=[] request=[] tick=[1:1,2:1,3:1]"
@@ -277,7 +283,7 @@ func TestSchedulerBuffering(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 5)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 5)
 	s.Start(stopper)
 
 	testCases := []struct {
@@ -312,7 +318,12 @@ func TestSchedulerBuffering(t *testing.T) {
 
 		const id = roachpb.RangeID(1)
 		if c.flag != 0 {
-			s.signal(s.enqueueN(c.flag, id, id, id, id, id))
+			batch := s.NewEnqueueBatch()
+			for i := 0; i < 5; i++ {
+				batch.Add(id)
+			}
+			s.enqueueBatch(c.flag, batch)
+			batch.Close()
 			if started != nil {
 				<-started // wait until slow Ready processing has started
 				// NB: this is necessary to work around the race between the subsequent
@@ -321,11 +332,9 @@ func TestSchedulerBuffering(t *testing.T) {
 			}
 		}
 
-		cnt := 0
 		for t := c.ticks; t > 0; t-- {
-			cnt += s.enqueue1(stateRaftTick, id)
+			s.enqueue1(stateRaftTick, id)
 		}
-		s.signal(cnt)
 		if done != nil {
 			close(done) // finish slow Ready processing to unblock progress
 		}
@@ -336,5 +345,132 @@ func TestSchedulerBuffering(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+func TestNewSchedulerShards(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := []struct {
+		workers      int
+		shardSize    int
+		expectShards []int
+	}{
+		// NB: We balance workers across shards instead of filling up shards. We
+		// assume ranges are evenly distributed across shards, and want ranges to
+		// have about the same number of workers available on average.
+		{0, 0, []int{0}},
+		{1, -1, []int{1}},
+		{1, 0, []int{1}},
+		{1, 1, []int{1}},
+		{1, 2, []int{1}},
+		{2, 2, []int{2}},
+		{3, 2, []int{2, 1}},
+		{1, 3, []int{1}},
+		{2, 3, []int{2}},
+		{3, 3, []int{3}},
+		{4, 3, []int{2, 2}},
+		{5, 3, []int{3, 2}},
+		{6, 3, []int{3, 3}},
+		{7, 3, []int{3, 2, 2}},
+		{8, 3, []int{3, 3, 2}},
+		{9, 3, []int{3, 3, 3}},
+		{10, 3, []int{3, 3, 2, 2}},
+		{11, 3, []int{3, 3, 3, 2}},
+		{12, 3, []int{3, 3, 3, 3}},
+
+		// Typical examples, using 8 workers per CPU core. Note that we cap workers
+		// at 96 by default.
+		{1 * 8, 16, []int{8}},
+		{2 * 8, 16, []int{16}},
+		{3 * 8, 16, []int{12, 12}},
+		{4 * 8, 16, []int{16, 16}},
+		{6 * 8, 16, []int{16, 16, 16}},
+		{8 * 8, 16, []int{16, 16, 16, 16}},
+		{12 * 8, 16, []int{16, 16, 16, 16, 16, 16}}, // 96 workers
+		{16 * 8, 16, []int{16, 16, 16, 16, 16, 16, 16, 16}},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
+			m := newStoreMetrics(metric.TestSampleInterval)
+			p := newTestProcessor()
+			s := newRaftScheduler(log.MakeTestingAmbientContext(nil), m, p, tc.workers, tc.shardSize, 5)
+
+			var shardWorkers []int
+			for _, shard := range s.shards {
+				shardWorkers = append(shardWorkers, shard.numWorkers)
+			}
+			require.Equal(t, tc.expectShards, shardWorkers)
+		})
+	}
+}
+
+// BenchmarkSchedulerEnqueueRaftTicks benchmarks the performance of enqueueing
+// Raft ticks in the scheduler. This does *not* take contention into account,
+// and does not run any workers that pull work off of the queue: it enqueues the
+// messages in a single thread and then resets the queue.
+func BenchmarkSchedulerEnqueueRaftTicks(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	skip.UnderShort(b)
+
+	ctx := context.Background()
+
+	for _, collect := range []bool{false, true} {
+		for _, numRanges := range []int{1, 10, 100, 1000, 10000, 100000} {
+			for _, numWorkers := range []int{8, 16, 32, 64, 128} {
+				b.Run(fmt.Sprintf("collect=%t/ranges=%d/workers=%d", collect, numRanges, numWorkers),
+					func(b *testing.B) {
+						runSchedulerEnqueueRaftTicks(ctx, b, collect, numRanges, numWorkers)
+					},
+				)
+			}
+		}
+	}
+}
+
+func runSchedulerEnqueueRaftTicks(
+	ctx context.Context, b *testing.B, collect bool, numRanges, numWorkers int,
+) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	a := log.MakeTestingAmbientContext(stopper.Tracer())
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(a, m, p, numWorkers, storeSchedulerShardSize, 5)
+
+	// raftTickLoop keeps unquiesced ranges in a map, so we do the same.
+	ranges := make(map[roachpb.RangeID]struct{})
+	for id := 1; id <= numRanges; id++ {
+		ranges[roachpb.RangeID(id)] = struct{}{}
+	}
+
+	// Collect range IDs in the same way as raftTickLoop does, such that the
+	// performance is comparable.
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
+	getRangeIDs := func() raftSchedulerBatch {
+		batch.Reset()
+		for id := range ranges {
+			batch.Add(id)
+		}
+		return batch
+	}
+	ids := getRangeIDs()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if collect {
+			ids = getRangeIDs()
+		}
+		s.EnqueueRaftTicks(ids)
+
+		// Flush the queue. We haven't started any workers that pull from it, so we
+		// just clear it out.
+		for _, shard := range s.shards {
+			shard.queue = rangeIDQueue{}
+		}
 	}
 }

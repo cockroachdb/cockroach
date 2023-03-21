@@ -226,7 +226,8 @@ func (s *Store) uncoalesceBeats(
 		log.Infof(ctx, "uncoalescing %d beats of type %v: %+v", len(beats), msgT, beats)
 	}
 	beatReqs := make([]kvserverpb.RaftMessageRequest, len(beats))
-	var toEnqueue []roachpb.RangeID
+	batch := s.scheduler.NewEnqueueBatch()
+	defer batch.Close()
 	for i, beat := range beats {
 		msg := raftpb.Message{
 			Type:   msgT,
@@ -257,10 +258,10 @@ func (s *Store) uncoalesceBeats(
 
 		enqueue := s.HandleRaftUncoalescedRequest(ctx, &beatReqs[i], respStream)
 		if enqueue {
-			toEnqueue = append(toEnqueue, beat.RangeID)
+			batch.Add(beat.RangeID)
 		}
 	}
-	s.scheduler.EnqueueRaftRequests(toEnqueue...)
+	s.scheduler.EnqueueRaftRequests(batch)
 }
 
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
@@ -752,12 +753,12 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.RaftTickInterval)
 	defer ticker.Stop()
 
-	var rangeIDs []roachpb.RangeID
+	batch := s.scheduler.NewEnqueueBatch()
+	defer batch.Close() // reuse the same batch until done
 
 	for {
 		select {
 		case <-ticker.C:
-			rangeIDs = rangeIDs[:0]
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
 				s.updateLivenessMap()
@@ -770,12 +771,13 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			// then a single bad/slow Replica can disrupt tick processing for every
 			// Replica on the store which cascades into Raft elections and more
 			// disruption.
+			batch.Reset()
 			for rangeID := range s.unquiescedReplicas.m {
-				rangeIDs = append(rangeIDs, rangeID)
+				batch.Add(rangeID)
 			}
 			s.unquiescedReplicas.Unlock()
 
-			s.scheduler.EnqueueRaftTicks(rangeIDs...)
+			s.scheduler.EnqueueRaftTicks(batch)
 			s.metrics.RaftTicks.Inc(1)
 
 		case <-s.stopper.ShouldQuiesce():
