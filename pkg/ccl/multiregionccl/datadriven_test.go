@@ -131,6 +131,11 @@ func TestMultiRegionDataDriven(t *testing.T) {
 		var recCh chan tracingpb.Recording
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "skip":
+				var issue int
+				d.ScanArgs(t, "issue-num", &issue)
+				skip.WithIssue(t, issue)
+				return ""
 			case "sleep-for-follower-read":
 				time.Sleep(time.Second)
 			case "new-cluster":
