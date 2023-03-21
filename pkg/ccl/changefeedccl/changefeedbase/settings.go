@@ -262,9 +262,9 @@ var EventConsumerPacerRequestSize = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-// EventConsumerElasticCPUControlEnabled determines whether changefeed event
+// PerEventElasticCPUControlEnabled determines whether changefeed event
 // processing integrates with elastic CPU control.
-var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
+var PerEventElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.cpu.per_event_elastic_control.enabled",
 	"determines whether changefeed event processing integrates with elastic CPU control",
@@ -280,4 +280,30 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 		" to create changefeeds with external connection sinks only."+
 		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
 	false,
+)
+
+var NewWebhookSinkEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.new_webhook_sink_enabled",
+	"if enabled, this setting enables a new implementation of the webhook sink"+
+		" that allows for a much higher throughput",
+	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+)
+
+var SinkIOWorkers = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.sink_io_workers",
+	"the number of workers used by changefeeds when sending requests to the sink: <0 disables, "+
+		"0 assigns a reasonable default, >0 assigns the setting value.",
+	0,
+).WithPublic()
+
+var SinkPacerRequestSize = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.cpu.sink_encoding_allocation",
+	"an event consumer worker will perform a blocking request for CPU time "+
+		"before consuming events. after fully utilizing this CPU time, it will "+
+		"request more",
+	50*time.Millisecond,
+	settings.PositiveDuration,
 )
