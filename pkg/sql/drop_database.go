@@ -327,6 +327,12 @@ func (p *planner) accumulateCascadingViews(
 		if !dependentDesc.IsView() {
 			continue
 		}
+
+		if dependentObjects[ref.ID] == dependentDesc {
+			// This view's dependencies are already added.
+			continue
+		}
+
 		dependentObjects[ref.ID] = dependentDesc
 		if err := p.accumulateCascadingViews(ctx, dependentObjects, dependentDesc); err != nil {
 			return err
