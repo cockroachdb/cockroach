@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -304,6 +306,23 @@ func (s *Storage) deleteOrFetchSessionSingleFlightLocked(
 	return resChan
 }
 
+// txn wraps around s.db.TxnWithAdmissionControl, annotating it with the
+// appropriate AC metadata for SQL liveness work.
+func (s *Storage) txn(ctx context.Context, retryable func(context.Context, *kv.Txn) error) error {
+	// We use AdmissionHeader_OTHER to bypass AC if we're the system tenant
+	// (only system tenants are allowed to bypass it altogether,
+	// AdmissionHeader_OTHER is ignored for non-system tenants further down the
+	// stack), and admissionpb.HighPri for secondary tenants to avoid the kind
+	// of starvation we see in #97448.
+	return s.db.TxnWithAdmissionControl(
+		ctx,
+		kvpb.AdmissionHeader_OTHER,
+		admissionpb.HighPri,
+		kv.SteppingDisabled,
+		retryable,
+	)
+}
+
 // deleteOrFetchSession returns whether the query session currently exists by
 // reading from the database. If the record exists but is expired, this method
 // will delete the record transactionally, moving it to from alive to dead. The
@@ -314,7 +333,7 @@ func (s *Storage) deleteOrFetchSession(
 	var deleted bool
 	var prevExpiration hlc.Timestamp
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Reset captured variable in case of retry.
 		deleted, expiration, prevExpiration = false, hlc.Timestamp{}, hlc.Timestamp{}
 
@@ -464,7 +483,7 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 	}
 
 	var result []sqlliveness.SessionID
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		version, err := s.versionGuard(ctx, txn)
 		if err != nil {
 			return err
@@ -486,7 +505,7 @@ func (s *Storage) Insert(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
 		version, err := s.versionGuard(ctx, txn)
@@ -526,7 +545,7 @@ func (s *Storage) Update(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (sessionExists bool, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		version, err := s.versionGuard(ctx, txn)
 		if err != nil {
 			return err

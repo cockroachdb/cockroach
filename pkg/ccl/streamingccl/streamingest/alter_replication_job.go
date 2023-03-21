@@ -125,10 +125,6 @@ func alterReplicationJobHook(
 		)
 	}
 
-	if err := p.RequireAdminRole(ctx, "ALTER TENANT REPLICATION"); err != nil {
-		return nil, nil, nil, false, err
-	}
-
 	if !p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can alter tenant")
@@ -161,6 +157,10 @@ func alterReplicationJobHook(
 			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			"ALTER TENANT REPLICATION",
 		); err != nil {
+			return err
+		}
+
+		if err := sql.CanManageTenant(ctx, p); err != nil {
 			return err
 		}
 

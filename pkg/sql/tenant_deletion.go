@@ -32,7 +32,15 @@ import (
 func (p *planner) DropTenantByID(
 	ctx context.Context, tenID uint64, synchronousImmediateDrop, ignoreServiceMode bool,
 ) error {
-	if err := p.validateDropTenant(ctx); err != nil {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("DROP TENANT")
+	}
+
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop"); err != nil {
+		return err
+	}
+
+	if err := CanManageTenant(ctx, p); err != nil {
 		return err
 	}
 
@@ -40,6 +48,7 @@ func (p *planner) DropTenantByID(
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
+
 	return dropTenantInternal(
 		ctx,
 		p.ExecCfg().Settings,
@@ -51,18 +60,6 @@ func (p *planner) DropTenantByID(
 		synchronousImmediateDrop,
 		ignoreServiceMode,
 	)
-}
-
-func (p *planner) validateDropTenant(ctx context.Context) error {
-	if p.EvalContext().TxnReadOnly {
-		return readOnlyError("DROP TENANT")
-	}
-
-	const op = "drop"
-	if err := p.RequireAdminRole(ctx, "drop tenant"); err != nil {
-		return err
-	}
-	return rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op)
 }
 
 func dropTenantInternal(

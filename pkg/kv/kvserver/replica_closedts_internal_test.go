@@ -567,10 +567,13 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			cfg.ClosedTimestampReceiver = &r
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
 			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
-			tc.repl.mu.Unlock()
-			require.Equal(t, test.expClosed, tc.repl.GetCurrentClosedTimestamp(ctx))
+			// NB: don't release the mutex to make this test a bit more resilient to
+			// problems that could arise should something propose a command to this
+			// replica whose LeaseAppliedIndex we've mutated.
+			require.Equal(t, test.expClosed, tc.repl.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */))
 		})
 	}
 }

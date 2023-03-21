@@ -94,6 +94,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:comment.bnf",
     "//docs/generated/sql/bnf:commit_transaction.bnf",
     "//docs/generated/sql/bnf:copy_stmt.bnf",
+    "//docs/generated/sql/bnf:copy_to_stmt.bnf",
     "//docs/generated/sql/bnf:create_as_col_qual_list.bnf",
     "//docs/generated/sql/bnf:create_as_constraint_def.bnf",
     "//docs/generated/sql/bnf:create_changefeed_stmt.bnf",
