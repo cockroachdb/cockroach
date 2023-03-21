@@ -16,18 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/stretchr/testify/require"
 )
 
-// TestScanRangeDescriptors is an integration test to ensure that tenants can
-// scan range descriptors iff they correspond to tenant owned ranges.
-func TestScanRangeDescriptors(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
+func setup(
+	t *testing.T, ctx context.Context,
+) (*testcluster.TestCluster, serverutils.TestTenantInterface, rangedesc.IteratorFactory) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DisableDefaultTestTenant: true, // we're going to manually add tenants
@@ -38,16 +36,26 @@ func TestScanRangeDescriptors(t *testing.T) {
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
 
 	ten2ID := roachpb.MustMakeTenantID(2)
 	tenant2, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
 		TenantID: ten2ID,
 	})
 	require.NoError(t, err)
+	return tc, tenant2, tenant2.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
+}
+
+// TestScanRangeDescriptors is an integration test to ensure that tenants can
+// scan range descriptors iff they correspond to tenant owned ranges.
+func TestScanRangeDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc, tenant2, iteratorFactory := setup(t, ctx)
+	defer tc.Stopper().Stop(ctx)
 
 	// Split some ranges within tenant2 that we'll scan over.
-	ten2Codec := keys.MakeSQLCodec(ten2ID)
+	ten2Codec := tenant2.Codec()
 	ten2Split1 := append(ten2Codec.TenantPrefix(), 'a')
 	ten2Split2 := append(ten2Codec.TenantPrefix(), 'b')
 	{
@@ -56,7 +64,6 @@ func TestScanRangeDescriptors(t *testing.T) {
 		tc.SplitRangeOrFatal(t, ten2Codec.TenantPrefix().PrefixEnd()) // Last range
 	}
 
-	iteratorFactory := tenant2.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
 	iter, err := iteratorFactory.NewIterator(ctx, ten2Codec.TenantSpan())
 	require.NoError(t, err)
 
@@ -111,4 +118,15 @@ func TestScanRangeDescriptors(t *testing.T) {
 		keys.MustAddr(ten2Codec.TenantPrefix().PrefixEnd()),
 		rangeDescs[numRanges-1].StartKey,
 	)
+}
+
+func TestScanRangeDescriptorsOutsideTenantKeyspace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc, _, iteratorFactory := setup(t, ctx)
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := iteratorFactory.NewIterator(ctx, keys.EverythingSpan)
+	require.ErrorContains(t, err, "requested key span /M{in-ax} not fully contained in tenant keyspace /Tenant/{2-3}")
 }
