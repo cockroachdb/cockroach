@@ -256,7 +256,10 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 	skip.UnderShort(t)
 
 	ctx := context.Background()
-	_, sqlDB, p, cleanup := initTestProber(t, base.TestingKnobs{})
+	// Disable split and merge queue just in case.
+	_, sqlDB, p, cleanup := initTestProber(t, base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{DisableSplitQueue: true, DisableMergeQueue: true},
+	})
 	defer cleanup()
 
 	rangeIDToTimesWouldBeProbed := make(map[int64]int)
@@ -290,7 +293,7 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 				}
 			}
 			return true
-		}, time.Second, time.Millisecond)
+		}, testutils.DefaultSucceedsSoonDuration, 20*time.Millisecond)
 	}
 	for i := 0; i < 20; i++ {
 		test(i)
