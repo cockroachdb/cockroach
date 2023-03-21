@@ -44,7 +44,8 @@ type Values struct {
 		syncutil.Mutex
 		// NB: any in place modification to individual slices must also hold the
 		// lock, e.g. if we ever add RemoveOnChange or something.
-		onChange [MaxSettings][]func(ctx context.Context)
+		onChange   [MaxSettings][]func(ctx context.Context)
+		onChangeCh [MaxSettings][]chan struct{}
 	}
 	// opaque is an arbitrary object that can be set by a higher layer to make it
 	// accessible from certain callbacks (like state machine transformers).
@@ -141,6 +142,13 @@ func (sv *Values) Opaque() interface{} {
 
 func (sv *Values) settingChanged(ctx context.Context, slot slotIdx) {
 	sv.changeMu.Lock()
+	for _, ch := range sv.changeMu.onChangeCh[slot] {
+		// Do a non-blocking send on each channel.
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
 	funcs := sv.changeMu.onChange[slot]
 	sv.changeMu.Unlock()
 	for _, fn := range funcs {
@@ -191,6 +199,34 @@ func (sv *Values) getGeneric(slot slotIdx) interface{} {
 // goroutine which handles all settings updates.
 func (sv *Values) setOnChange(slot slotIdx, fn func(ctx context.Context)) {
 	sv.changeMu.Lock()
+	defer sv.changeMu.Unlock()
+
 	sv.changeMu.onChange[slot] = append(sv.changeMu.onChange[slot], fn)
-	sv.changeMu.Unlock()
+}
+
+// addOnChangeCh adds a channel on which a non-blocking send will be performed
+// whenever the setting's value changes.
+func (sv *Values) addOnChangeCh(ch chan struct{}, slots ...slotIdx) {
+	sv.changeMu.Lock()
+	defer sv.changeMu.Unlock()
+
+	for _, slot := range slots {
+		sv.changeMu.onChangeCh[slot] = append(sv.changeMu.onChangeCh[slot], ch)
+	}
+}
+
+// removeOnChangeCh removes a channel added by addOnChangeCh.
+func (sv *Values) removeOnChangeCh(ch chan struct{}, slots ...slotIdx) {
+	sv.changeMu.Lock()
+	defer sv.changeMu.Unlock()
+
+	for _, slot := range slots {
+		onChangeCh := sv.changeMu.onChangeCh[slot]
+		for i, iCh := range onChangeCh {
+			if iCh == ch {
+				sv.changeMu.onChangeCh[slot] = append(onChangeCh[:i], onChangeCh[i+1:]...)
+				break
+			}
+		}
+	}
 }

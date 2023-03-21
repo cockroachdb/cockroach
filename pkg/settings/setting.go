@@ -79,6 +79,10 @@ type NonMaskedSetting interface {
 	// ErrorHint returns a hint message to be displayed to the user when there's
 	// an error.
 	ErrorHint() (bool, string)
+
+	// slotIdx is an internal method to get the assigned slot for the Values
+	// container.
+	slotIdx() slotIdx
 }
 
 // Class describes the scope of a setting in multi-tenant scenarios. While all
