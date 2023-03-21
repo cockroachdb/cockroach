@@ -1835,3 +1835,45 @@ CREATE VIEW pg_comedies AS
 
 statement error pq: cannot drop columns from view
 CREATE OR REPLACE VIEW comedies AS SELECT ARRAY[films.*]::string FROM films;
+
+subtest circular_dependency
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT);
+
+statement ok
+CREATE VIEW v1 AS SELECT a, b FROM t;
+
+statement ok
+CREATE VIEW v2 AS SELECT a, b FROM v1;
+
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a, b FROM v2;
+
+# Return an error when there is a dependency from v2 -> v1 -> v2
+statement error pq: infinite recursion detected in rules for relation test.public.v2
+SELECT * FROM v2;
+
+statement error pq: infinite recursion detected in rules for relation test.public.v1
+SELECT * FROM v1;
+
+# TODO(harding): Creating a view does not result in a circular dependency error
+# in postgres.
+statement error pq: infinite recursion detected in rules for relation test.public.v2
+CREATE VIEW v3 AS SELECT a, b FROM v2;
+
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a, b FROM t;
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS SELECT a, b FROM v2;
+
+statement ok
+SELECT * FROM v3;
+
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a, b FROM v3;
+
+# Return an error when there is a dependency from v3 -> v2 -> v1 -> v3
+statement error pq: infinite recursion detected in rules for relation test.public.v3
+SELECT * FROM v3;
