@@ -30,6 +30,7 @@ CREATE INDEX execution_count_idx ON system.statement_statistics (
 aggregated_ts, app_name, execution_count DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addServiceLatencyComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
 ADD COLUMN IF NOT EXISTS "service_latency" FLOAT 
@@ -41,6 +42,7 @@ CREATE INDEX service_latency_idx ON system.statement_statistics (
 aggregated_ts, app_name, service_latency DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addCpuSqlNanosComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
 ADD COLUMN IF NOT EXISTS "cpu_sql_nanos" FLOAT 
@@ -52,6 +54,7 @@ CREATE INDEX cpu_sql_nanos_idx ON system.statement_statistics (
 aggregated_ts, app_name, cpu_sql_nanos DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addContentionTimeComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
 ADD COLUMN IF NOT EXISTS "contention_time" FLOAT 
@@ -63,6 +66,7 @@ CREATE INDEX contention_time_idx ON system.statement_statistics (
 aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addTotalEstimatedExecutionTimeComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
 ADD COLUMN IF NOT EXISTS "total_estimated_execution_time" FLOAT 
@@ -72,6 +76,18 @@ AS ((statistics->'statistics'->>'cnt')::FLOAT * (statistics->'statistics'->'svcL
 const addIndexOnTotalEstimatedExecutionTimeComputedColStmtStats = `
 CREATE INDEX total_estimated_execution_time_idx ON system.statement_statistics (
 aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE 
+'$ internal%'
+`
+
+const addP99LatencyComputedColStmtStats = `
+ALTER TABLE system.statement_statistics
+ADD COLUMN IF NOT EXISTS "p99_latency" FLOAT 
+AS ((statistics->'statistics'->'latencyInfo'->'p99')::FLOAT) STORED
+`
+
+const addIndexOnP99LatencyComputedColStmtStats = `
+CREATE INDEX p99_latency_idx ON system.statement_statistics (
+aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
 
@@ -87,6 +103,7 @@ CREATE INDEX execution_count_idx ON system.transaction_statistics (
 aggregated_ts, app_name, execution_count DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addServiceLatencyComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
 ADD COLUMN IF NOT EXISTS "service_latency" FLOAT 
@@ -98,6 +115,7 @@ CREATE INDEX service_latency_idx ON system.transaction_statistics (
 aggregated_ts, app_name, service_latency DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addCpuSqlNanosComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
 ADD COLUMN IF NOT EXISTS "cpu_sql_nanos" FLOAT 
@@ -109,6 +127,7 @@ CREATE INDEX cpu_sql_nanos_idx ON system.transaction_statistics (
 aggregated_ts, app_name, cpu_sql_nanos DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
+
 const addContentionTimeComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
 ADD COLUMN IF NOT EXISTS "contention_time" FLOAT 
@@ -130,6 +149,18 @@ statistics->'statistics'->'svcLat'->>'mean')::FLOAT) STORED
 const addIndexOnTotalEstimatedExecutionTimeComputedColTxnStats = `
 CREATE INDEX total_estimated_execution_time_idx ON system.transaction_statistics (
 aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE 
+'$ internal%'
+`
+
+const addP99LatencyComputedColTxnStats = `
+ALTER TABLE system.transaction_statistics
+ADD COLUMN IF NOT EXISTS "p99_latency" FLOAT 
+AS ((statistics->'statistics'->'latencyInfo'->'p99')::FLOAT) STORED
+`
+
+const addIndexOnP99LatencyComputedColTxnStats = `
+CREATE INDEX p99_latency_idx ON system.transaction_statistics (
+aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE 
 '$ internal%'
 `
 
@@ -197,6 +228,18 @@ func createComputedIndexesOnSystemSQLStatistics(
 			query:          addIndexOnTotalEstimatedExecutionTimeComputedColStmtStats,
 			schemaExistsFn: hasIndex,
 		},
+		{
+			name:           "create-p99-latency-computed-col-stmt-stats",
+			schemaList:     []string{"p99_latency"},
+			query:          addP99LatencyComputedColStmtStats,
+			schemaExistsFn: hasColumn,
+		},
+		{
+			name:           "create-p99-latency-idx-stmt-stats",
+			schemaList:     []string{"p99_latency_idx"},
+			query:          addIndexOnP99LatencyComputedColStmtStats,
+			schemaExistsFn: hasIndex,
+		},
 	} {
 		if err := migrateTable(ctx, cs, d, op, keys.StatementStatisticsTableID, systemschema.StatementStatisticsTable); err != nil {
 			return err
@@ -262,6 +305,18 @@ func createComputedIndexesOnSystemSQLStatistics(
 			name:           "create-total-estimated-execution-time-idx-txn-stats",
 			schemaList:     []string{"total_estimated_execution_time_idx"},
 			query:          addIndexOnTotalEstimatedExecutionTimeComputedColTxnStats,
+			schemaExistsFn: hasIndex,
+		},
+		{
+			name:           "create-p99-latency-computed-col-txn-stats",
+			schemaList:     []string{"p99_latency"},
+			query:          addP99LatencyComputedColTxnStats,
+			schemaExistsFn: hasColumn,
+		},
+		{
+			name:           "create-p99-latency-idx-txn-stats",
+			schemaList:     []string{"p99_latency_idx"},
+			query:          addIndexOnP99LatencyComputedColTxnStats,
 			schemaExistsFn: hasIndex,
 		},
 	} {

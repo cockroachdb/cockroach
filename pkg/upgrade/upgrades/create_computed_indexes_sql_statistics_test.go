@@ -62,6 +62,8 @@ func TestCreateComputedIndexesOnSystemSQLStatistics(t *testing.T) {
 			{Name: "contention_time_idx", ValidationFn: upgrades.HasIndex},
 			{Name: "total_estimated_execution_time", ValidationFn: upgrades.HasColumn},
 			{Name: "total_estimated_execution_time_idx", ValidationFn: upgrades.HasIndex},
+			{Name: "p99_latency", ValidationFn: upgrades.HasColumn},
+			{Name: "p99_latency_idx", ValidationFn: upgrades.HasIndex},
 		}
 	)
 
