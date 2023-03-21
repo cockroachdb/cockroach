@@ -10972,7 +10972,7 @@ func TestBackupInLocality(t *testing.T) {
 		{node: 3, filter: "region=central,dc=1", err: "no instances found"},
 	} {
 		db := sqlutils.MakeSQLRunner(cluster.ServerConn(tc.node - 1))
-		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH coordinator_locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
+		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH execution locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
 	}
 }
 
