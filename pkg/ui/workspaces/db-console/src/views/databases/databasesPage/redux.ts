@@ -81,16 +81,17 @@ const selectDatabases = createSelector(
     (databases?.databases || []).map(database => {
       const details = databaseDetails[database];
       const stats = details?.data?.results.stats;
-      const sizeInBytes = stats?.pebble_data?.approximate_disk_bytes || 0;
-      const rangeCount = stats?.ranges_data.range_count || 0;
-      const nodes = stats?.ranges_data.node_ids || [];
+      const sizeInBytes = stats?.spanStats?.approximate_disk_bytes || 0;
+      const rangeCount = stats?.spanStats.range_count || 0;
+      // TODO(thomas): Eventually, we should populate this will real node IDs.
+      const nodes = stats?.replicaData.replicas || [];
       const nodesByRegionString = getNodesByRegionString(
         nodes,
         nodeRegions,
         isTenant,
       );
       const numIndexRecommendations =
-        stats?.index_stats.num_index_recommendations || 0;
+        stats?.indexStats.num_index_recommendations || 0;
 
       const combinedErr = combineLoadingErrors(
         details?.lastError,
@@ -104,7 +105,7 @@ const selectDatabases = createSelector(
         lastError: combinedErr,
         name: database,
         sizeInBytes: sizeInBytes,
-        tableCount: details?.data?.results.tables_resp.tables?.length || 0,
+        tableCount: details?.data?.results.tablesResp.tables?.length || 0,
         rangeCount: rangeCount,
         nodes: nodes,
         nodesByRegionString,

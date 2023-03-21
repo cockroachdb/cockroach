@@ -297,14 +297,22 @@ export class CachedDataReducer<
       return this.apiEndpoint(req, this.requestTimeout)
         .then(
           data => {
-            // Dispatch the results to the store.
-            if (this.pendingRequestStarted !== pendingRequestStarted) {
+            // Check if we are replacing requests. If so, do not update the reducer
+            // state if this is not the latest request.
+            if (
+              this.allowReplacementRequests &&
+              this.pendingRequestStarted !== pendingRequestStarted
+            ) {
               return;
             }
+            // Dispatch the results to the store.
             dispatch(this.receiveData(data, req));
           },
           (error: Error) => {
-            if (this.pendingRequestStarted !== pendingRequestStarted) {
+            if (
+              this.allowReplacementRequests &&
+              this.pendingRequestStarted !== pendingRequestStarted
+            ) {
               return;
             }
 
@@ -328,7 +336,10 @@ export class CachedDataReducer<
           },
         )
         .then(() => {
-          if (this.pendingRequestStarted !== pendingRequestStarted) {
+          if (
+            this.allowReplacementRequests &&
+            this.pendingRequestStarted !== pendingRequestStarted
+          ) {
             return;
           }
           // Invalidate data after the invalidation period if one exists.
