@@ -46,6 +46,7 @@ type operationGeneratorParams struct {
 	enumPct            int
 	rng                *rand.Rand
 	ops                *deck
+	declarativeOps     *deck
 	maxSourceTables    int
 	sequenceOwnedByPct int
 	fkParentInvalidPct int
@@ -74,6 +75,9 @@ type operationGenerator struct {
 
 	// opGenLog log of statement used to generate the current statement.
 	opGenLog []interface{}
+
+	//useDeclarativeSchemaChanger indices if the declarative schema changer is used.
+	useDeclarativeSchemaChanger bool
 }
 
 // OpGenLogQuery a query with a single value result.
@@ -131,8 +135,9 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 }
 
 // Reset internal state used per operation within a transaction
-func (og *operationGenerator) resetOpState() {
+func (og *operationGenerator) resetOpState(useDeclarativeSchemaChanger bool) {
 	og.candidateExpectedCommitErrors.reset()
+	og.useDeclarativeSchemaChanger = useDeclarativeSchemaChanger
 }
 
 // Reset internal state used per transaction
@@ -282,6 +287,45 @@ var opWeights = []int{
 	validate:                2, // validate twice more often
 }
 
+var opDeclarative = []bool{
+	addColumn:               true,
+	addConstraint:           false,
+	addForeignKeyConstraint: true,
+	addRegion:               false,
+	addUniqueConstraint:     true,
+	alterTableLocality:      false,
+	createIndex:             true,
+	createSequence:          false,
+	createTable:             false,
+	createTableAs:           false,
+	createView:              false,
+	createEnum:              false,
+	createSchema:            false,
+	dropColumn:              true,
+	dropColumnDefault:       true,
+	dropColumnNotNull:       true,
+	dropColumnStored:        true,
+	dropConstraint:          true,
+	dropIndex:               true,
+	dropSequence:            true,
+	dropTable:               true,
+	dropView:                true,
+	dropSchema:              true,
+	primaryRegion:           false,
+	renameColumn:            false,
+	renameIndex:             false,
+	renameSequence:          false,
+	renameTable:             false,
+	renameView:              false,
+	setColumnDefault:        false,
+	setColumnNotNull:        false,
+	setColumnType:           false,
+	survive:                 false,
+	insertRow:               false,
+	selectStmt:              false,
+	validate:                false,
+}
+
 // adjustOpWeightsForActiveVersion adjusts the weights for the active cockroach
 // version, allowing us to disable certain operations in mixed version scenarios.
 func adjustOpWeightsForCockroachVersion(
@@ -311,10 +355,18 @@ func adjustOpWeightsForCockroachVersion(
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
+func (og *operationGenerator) randOp(
+	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger bool,
+) (stmt *opStmt, err error) {
 	for {
-		op := opType(og.params.ops.Int())
-		og.resetOpState()
+		var op opType
+		// The declarative schema changer has a more limited deck of operations.
+		if useDeclarativeSchemaChanger {
+			op = opType(og.params.declarativeOps.Int())
+		} else {
+			op = opType(og.params.ops.Int())
+		}
+		og.resetOpState(useDeclarativeSchemaChanger)
 		stmt, err = opFuncs[op](og, ctx, tx)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -2657,13 +2709,14 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 // ErrorState wraps schemachange workload errors to have state information for
 // the purpose of dumping in our JSON log.
 type ErrorState struct {
-	cause                      error
-	ExpectedErrors             []string      `json:"expectedErrors,omitempty"`
-	PotentialErrors            []string      `json:"potentialErrors,omitempty"`
-	ExpectedCommitErrors       []string      `json:"expectedCommitErrors,omitempty"`
-	PotentialCommitErrors      []string      `json:"potentialCommitErrors,omitempty"`
-	QueriesForGeneratingErrors []interface{} `json:"queriesForGeneratingErrors,omitempty"`
-	PreviousStatements         []string      `json:"previousStatements,omitempty"`
+	cause                        error
+	ExpectedErrors               []string      `json:"expectedErrors,omitempty"`
+	PotentialErrors              []string      `json:"potentialErrors,omitempty"`
+	ExpectedCommitErrors         []string      `json:"expectedCommitErrors,omitempty"`
+	PotentialCommitErrors        []string      `json:"potentialCommitErrors,omitempty"`
+	QueriesForGeneratingErrors   []interface{} `json:"queriesForGeneratingErrors,omitempty"`
+	PreviousStatements           []string      `json:"previousStatements,omitempty"`
+	UsesDeclarativeSchemaChanger bool          `json:"usesDeclarativeSchemaChanger,omitempty"`
 }
 
 func (es *ErrorState) Unwrap() error {
@@ -2681,13 +2734,14 @@ func (og *operationGenerator) WrapWithErrorState(err error, op *opStmt) error {
 		previousStmts = append(previousStmts, stmt.sql)
 	}
 	return &ErrorState{
-		cause:                      err,
-		ExpectedErrors:             op.expectedExecErrors.StringSlice(),
-		PotentialErrors:            op.potentialExecErrors.StringSlice(),
-		ExpectedCommitErrors:       og.expectedCommitErrors.StringSlice(),
-		PotentialCommitErrors:      og.potentialCommitErrors.StringSlice(),
-		QueriesForGeneratingErrors: og.GetOpGenLog(),
-		PreviousStatements:         previousStmts,
+		cause:                        err,
+		ExpectedErrors:               op.expectedExecErrors.StringSlice(),
+		PotentialErrors:              op.potentialExecErrors.StringSlice(),
+		ExpectedCommitErrors:         og.expectedCommitErrors.StringSlice(),
+		PotentialCommitErrors:        og.potentialCommitErrors.StringSlice(),
+		QueriesForGeneratingErrors:   og.GetOpGenLog(),
+		PreviousStatements:           previousStmts,
+		UsesDeclarativeSchemaChanger: og.useDeclarativeSchemaChanger,
 	}
 }
 
@@ -2714,6 +2768,15 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		}
 		if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return err
+		}
+		// TODO(fqazi): For the short term we are going to ignore any not implemented,
+		// errors in the declarative schema changer. Supported operations have edge
+		// cases, but later we should mark some of these are fully supported.
+		if og.useDeclarativeSchemaChanger && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+			strings.Contains(pgErr.Message, " not implemented in the new schema changer") {
+			return errors.Mark(errors.Wrap(err, "ROLLBACK; Ignoring declarative schema changer not implemented error."),
+				errRunInTxnRbkSentinel,
+			)
 		}
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
