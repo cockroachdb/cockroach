@@ -348,12 +348,12 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		assert.Empty(t, onDiskCheckpointPaths(i))
 	}
 
-	// Write some arbitrary data only to store 1. Inconsistent key "e"!
-	store1 := tc.GetFirstStoreFromServer(t, 1)
+	// Write some arbitrary data only to store on n2. Inconsistent key "e"!
+	s2 := tc.GetFirstStoreFromServer(t, 1)
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
-	require.NoError(t, storage.MVCCPut(context.Background(), store1.TODOEngine(), nil,
+	require.NoError(t, storage.MVCCPut(context.Background(), s2.TODOEngine(), nil,
 		roachpb.Key("e"), tc.Server(0).Clock().Now(), hlc.ClockTimestamp{}, val, nil))
 
 	// Run consistency check again, this time it should find something.
@@ -369,6 +369,24 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
 	assert.Contains(t, resp.Result[0].Detail, `stats`)
 
+	// Make sure that all the stores started creating a checkpoint. The metric
+	// measures the number of checkpoint directories, but a directory can
+	// represent an incomplete checkpoint that is still being populated.
+	for i := 0; i < numStores; i++ {
+		metric := tc.GetFirstStoreFromServer(t, i).Metrics().RdbCheckpoints
+		testutils.SucceedsSoon(t, func() error {
+			if got, want := metric.Value(), int64(1); got != want {
+				return errors.Errorf("%s is %d, want %d", metric.Name, got, want)
+			}
+			return nil
+		})
+	}
+	// As discussed in https://github.com/cockroachdb/cockroach/issues/81819, it
+	// is possible that the check completes while there are still checkpoints in
+	// flight. Waiting for the server termination makes sure that checkpoints are
+	// fully created.
+	tc.Stopper().Stop(context.Background())
+
 	// Checkpoints should have been created on all stores.
 	hashes := make([][]byte, numStores)
 	for i := 0; i < numStores; i++ {
@@ -377,14 +395,6 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		t.Logf("found a checkpoint at %s", cps[0])
 		// The checkpoint must have been finalized.
 		require.False(t, strings.HasSuffix(cps[0], "_pending"))
-
-		metric := tc.GetFirstStoreFromServer(t, i).Metrics().RdbCheckpoints
-		testutils.SucceedsSoon(t, func() error {
-			if got, want := metric.Value(), int64(1); got != want {
-				return errors.Errorf("%s is %d, want %d", metric.Name, got, want)
-			}
-			return nil
-		})
 
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
@@ -417,8 +427,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.Equal(t, hashes[0], hashes[2])    // s1 and s3 agree
 	assert.NotEqual(t, hashes[0], hashes[1]) // s2 diverged
 
-	// A death rattle should have been written on s2 (store index 1).
-	eng := store1.TODOEngine()
+	// A death rattle should have been written on s2.
+	eng := s2.TODOEngine()
 	f, err := eng.Open(base.PreventedStartupFile(eng.GetAuxiliaryDir()))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
