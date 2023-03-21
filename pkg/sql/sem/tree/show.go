@@ -344,7 +344,7 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	}
 
 	o.CheckConnectionConcurrency, err = combineExpr(o.CheckConnectionConcurrency, other.CheckConnectionConcurrency,
-		"time")
+		"concurrently")
 	if err != nil {
 		return err
 	}
