@@ -126,6 +126,7 @@ CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 	cpuSqlNanosComputeExpr          = `(((statistics->'execution_statistics':::STRING)->'cpuSQLNanos':::STRING)->'mean':::STRING)::FLOAT8`
 	contentionTimeComputeExpr       = `(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8`
 	totalEstimatedExecutionTimeExpr = `((statistics->'statistics':::STRING)->'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8`
+	p99LatencyComputeExpr           = `(((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8`
 )
 
 var indexUsageComputeExprStr = indexUsageComputeExpr
@@ -134,6 +135,7 @@ var serviceLatencyComputeExprStr = serviceLatencyComputeExpr
 var cpuSqlNanosComputeExprStr = cpuSqlNanosComputeExpr
 var contentionTimeComputeExprStr = contentionTimeComputeExpr
 var totalEstimatedExecutionTimeExprStr = totalEstimatedExecutionTimeExpr
+var p99LatencyComputeExprStr = p99LatencyComputeExpr
 
 // These system tables are not part of the system config.
 const (
@@ -543,6 +545,7 @@ CREATE TABLE system.statement_statistics (
     cpu_sql_nanos FLOAT AS (` + cpuSqlNanosComputeExpr + `) STORED,
     contention_time FLOAT AS (` + contentionTimeComputeExpr + `) STORED,
     total_estimated_execution_time FLOAT AS (` + totalEstimatedExecutionTimeExpr + `) STORED,
+    p99_latency FLOAT8 AS (` + p99LatencyComputeExpr + `) STORED,
 
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH (bucket_count=8),
@@ -553,6 +556,7 @@ CREATE TABLE system.statement_statistics (
     INDEX "cpu_sql_nanos_idx" (aggregated_ts, app_name, cpu_sql_nanos DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "contention_time_idx" (aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "total_estimated_execution_time_idx" (aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE '$ internal%',
+    INDEX "p99_latency_idx" (aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE '$ internal%',
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
 			aggregated_ts,
@@ -570,7 +574,8 @@ CREATE TABLE system.statement_statistics (
 			service_latency,
 			cpu_sql_nanos,
 			contention_time,
-			total_estimated_execution_time
+			total_estimated_execution_time,
+			p99_latency
 		)
 )
 `
@@ -594,6 +599,7 @@ CREATE TABLE system.transaction_statistics (
     cpu_sql_nanos FLOAT AS (` + cpuSqlNanosComputeExpr + `) STORED,
     contention_time FLOAT AS (` + contentionTimeComputeExpr + `) STORED,
     total_estimated_execution_time FLOAT AS (` + totalEstimatedExecutionTimeExpr + `) STORED,
+    p99_latency FLOAT8 AS (` + p99LatencyComputeExpr + `) STORED,
 
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
       USING HASH WITH (bucket_count=8),
@@ -603,6 +609,7 @@ CREATE TABLE system.transaction_statistics (
     INDEX "cpu_sql_nanos_idx" (aggregated_ts, app_name, cpu_sql_nanos DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "contention_time_idx" (aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "total_estimated_execution_time_idx" (aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE '$ internal%',
+    INDEX "p99_latency_idx" (aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE '$ internal%',
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
 			aggregated_ts,
@@ -616,7 +623,8 @@ CREATE TABLE system.transaction_statistics (
 			service_latency,
 			cpu_sql_nanos,
 			contention_time,
-			total_estimated_execution_time
+			total_estimated_execution_time,
+			p99_latency
 		)
 );
 `
@@ -2484,6 +2492,7 @@ var (
 				{Name: "cpu_sql_nanos", ID: 16, Type: types.Float, Nullable: true, ComputeExpr: &cpuSqlNanosComputeExprStr},
 				{Name: "contention_time", ID: 17, Type: types.Float, Nullable: true, ComputeExpr: &contentionTimeComputeExprStr},
 				{Name: "total_estimated_execution_time", ID: 18, Type: types.Float, Nullable: true, ComputeExpr: &totalEstimatedExecutionTimeExprStr},
+				{Name: "p99_latency", ID: 19, Type: types.Float, Nullable: true, ComputeExpr: &p99LatencyComputeExprStr},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2494,8 +2503,9 @@ var (
 						"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
 						"agg_interval", "metadata", "statistics", "plan", "index_recommendations", "execution_count",
 						"service_latency", "cpu_sql_nanos", "contention_time", "total_estimated_execution_time",
+						"p99_latency",
 					},
-					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18},
+					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 19},
 					DefaultColumnID: 0,
 				},
 			},
@@ -2668,6 +2678,26 @@ var (
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
 			},
+			descpb.IndexDescriptor{
+				Name:   "p99_latency_idx",
+				ID:     9,
+				Unique: false,
+				KeyColumnNames: []string{
+					"aggregated_ts",
+					"app_name",
+					"p99_latency",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_DESC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{1, 5, 19},
+				KeySuffixColumnIDs: []descpb.ColumnID{11, 2, 3, 4, 6},
+				CompositeColumnIDs: []descpb.ColumnID{19},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
+			},
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
@@ -2709,6 +2739,7 @@ var (
 				{Name: "cpu_sql_nanos", ID: 11, Type: types.Float, Nullable: true, ComputeExpr: &cpuSqlNanosComputeExprStr},
 				{Name: "contention_time", ID: 12, Type: types.Float, Nullable: true, ComputeExpr: &contentionTimeComputeExprStr},
 				{Name: "total_estimated_execution_time", ID: 13, Type: types.Float, Nullable: true, ComputeExpr: &totalEstimatedExecutionTimeExprStr},
+				{Name: "p99_latency", ID: 14, Type: types.Float, Nullable: true, ComputeExpr: &p99LatencyComputeExprStr},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2718,9 +2749,9 @@ var (
 						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 						"aggregated_ts", "fingerprint_id", "app_name", "node_id",
 						"agg_interval", "metadata", "statistics", "execution_count", "service_latency", "cpu_sql_nanos",
-						"contention_time", "total_estimated_execution_time",
+						"contention_time", "total_estimated_execution_time", "p99_latency",
 					},
-					ColumnIDs:       []descpb.ColumnID{8, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13},
+					ColumnIDs:       []descpb.ColumnID{8, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14},
 					DefaultColumnID: 0,
 				},
 			},
@@ -2866,6 +2897,26 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{1, 3, 13},
 				KeySuffixColumnIDs: []descpb.ColumnID{8, 2, 4},
 				CompositeColumnIDs: []descpb.ColumnID{13},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
+			},
+			descpb.IndexDescriptor{
+				Name:   "p99_latency_idx",
+				ID:     8,
+				Unique: false,
+				KeyColumnNames: []string{
+					"aggregated_ts",
+					"app_name",
+					"p99_latency",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_DESC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{1, 3, 14},
+				KeySuffixColumnIDs: []descpb.ColumnID{8, 2, 4},
+				CompositeColumnIDs: []descpb.ColumnID{14},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
 			},
