@@ -19,10 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,7 +97,60 @@ func migrations(codec keys.SQLCodec) (result []rbrMigration) {
 }
 
 func sqlLivenessMigration(codec keys.SQLCodec) rbrMigration {
-	descriptor := systemschema.SqllivenessTable()
+	descriptor := &descpb.TableDescriptor{
+		Name:     string(catconstants.SqllivenessTableName),
+		ID:       keys.SqllivenessID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
+			{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
+			{Name: "crdb_region", ID: 3, Type: types.Bytes, Nullable: false},
+		},
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"crdb_region", "session_id", "expiration"},
+				ColumnIDs:       []descpb.ColumnID{3, 1, 2},
+				DefaultColumnID: 2,
+			},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "primary",
+			ID:                  2,
+			Unique:              true,
+			KeyColumnNames:      []string{"crdb_region", "session_id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+			KeyColumnIDs:        []descpb.ColumnID{3, 1},
+			StoreColumnNames:    []string{"expiration"},
+			StoreColumnIDs:      []descpb.ColumnID{2},
+			ConstraintID:        1,
+			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+			EncodingType:        catenumpb.PrimaryIndexEncoding,
+		},
+		Privileges: &catpb.PrivilegeDescriptor{
+			Users: []catpb.UserPrivileges{{
+				UserProto:       username.AdminRoleName().EncodeProto(),
+				Privileges:      480,
+				WithGrantOption: 480,
+			}, {
+				UserProto:       username.RootUserName().EncodeProto(),
+				Privileges:      480,
+				WithGrantOption: 480,
+			}},
+			OwnerProto: username.NodeUserName().EncodeProto(),
+			Version:    catpb.Version21_2,
+		},
+		FormatVersion:           descpb.InterleavedFormatVersion,
+		Indexes:                 []descpb.IndexDescriptor{},
+		NextColumnID:            4,
+		NextConstraintID:        2,
+		NextFamilyID:            1,
+		NextIndexID:             3,
+		NextMutationID:          1,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
+	}
 	return rbrMigration{
 		tableName:       "sqlliveness",
 		keyMapper:       makeKeyMapper(codec, descriptor, 1),
@@ -102,7 +159,64 @@ func sqlLivenessMigration(codec keys.SQLCodec) rbrMigration {
 }
 
 func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
-	descriptor := systemschema.SQLInstancesTable()
+	descriptor := &descpb.TableDescriptor{
+		Name:     string(catconstants.SQLInstancesTableName),
+		ID:       keys.SQLInstancesTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int, Nullable: false},
+			{Name: "addr", ID: 2, Type: types.String, Nullable: true},
+			{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+			{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
+			{Name: "sql_addr", ID: 5, Type: types.String, Nullable: true},
+			{Name: "crdb_region", ID: 6, Type: types.Bytes, Nullable: false},
+			{Name: "binary_version", ID: 7, Type: types.String, Nullable: true},
+		},
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+				DefaultColumnID: 0,
+			},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "primary",
+			ID:                  2,
+			Unique:              true,
+			KeyColumnNames:      []string{"crdb_region", "id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+			KeyColumnIDs:        []descpb.ColumnID{6, 1},
+			StoreColumnNames:    []string{"addr", "session_id", "locality", "sql_addr", "binary_version"},
+			StoreColumnIDs:      []descpb.ColumnID{2, 3, 4, 5, 7},
+			ConstraintID:        1,
+			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+			EncodingType:        catenumpb.PrimaryIndexEncoding,
+		},
+		Privileges: &catpb.PrivilegeDescriptor{
+			Users: []catpb.UserPrivileges{{
+				UserProto:       username.AdminRoleName().EncodeProto(),
+				Privileges:      480,
+				WithGrantOption: 480,
+			}, {
+				UserProto:       username.RootUserName().EncodeProto(),
+				Privileges:      480,
+				WithGrantOption: 480,
+			}},
+			OwnerProto: username.NodeUserName().EncodeProto(),
+			Version:    catpb.Version21_2,
+		},
+		FormatVersion:           descpb.InterleavedFormatVersion,
+		Indexes:                 []descpb.IndexDescriptor{},
+		NextColumnID:            8,
+		NextConstraintID:        2,
+		NextFamilyID:            1,
+		NextIndexID:             3,
+		NextMutationID:          1,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
+	}
 	return rbrMigration{
 		tableName:       "sql_instances",
 		keyMapper:       makeKeyMapper(codec, descriptor, 1),
@@ -111,7 +225,62 @@ func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
 }
 
 func leaseMigration(codec keys.SQLCodec) rbrMigration {
-	descriptor := systemschema.LeaseTable()
+	descriptor := &descpb.TableDescriptor{
+		Name:     string(catconstants.LeaseTableName),
+		ID:       keys.LeaseTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "descID", ID: 1, Type: types.Int},
+			{Name: "version", ID: 2, Type: types.Int},
+			{Name: "nodeID", ID: 3, Type: types.Int},
+			{Name: "expiration", ID: 4, Type: types.Timestamp},
+			{Name: "crdb_region", ID: 5, Type: types.Bytes},
+		},
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"descID", "version", "nodeID", "expiration", "crdb_region"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+			},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:           "primary",
+			ID:             2,
+			Unique:         true,
+			KeyColumnNames: []string{"crdb_region", "descID", "version", "expiration", "nodeID"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+				catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
+			},
+			KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
+			ConstraintID: 1,
+			Version:      descpb.PrimaryIndexWithStoredColumnsVersion,
+			EncodingType: catenumpb.PrimaryIndexEncoding,
+		},
+		Privileges: &catpb.PrivilegeDescriptor{
+			Users: []catpb.UserPrivileges{{
+				UserProto:       username.AdminRoleName().EncodeProto(),
+				Privileges:      480,
+				WithGrantOption: 480,
+			}, {
+				UserProto:       username.RootUserName().EncodeProto(),
+				Privileges:      480,
+				WithGrantOption: 480,
+			}},
+			OwnerProto: username.NodeUserName().EncodeProto(),
+			Version:    catpb.Version21_2,
+		},
+		FormatVersion:           descpb.InterleavedFormatVersion,
+		Indexes:                 []descpb.IndexDescriptor{},
+		NextColumnID:            6,
+		NextConstraintID:        2,
+		NextFamilyID:            1,
+		NextIndexID:             3,
+		NextMutationID:          1,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
+	}
 	return rbrMigration{
 		tableName:       "lease",
 		keyMapper:       makeKeyMapper(codec, descriptor, 1),
@@ -122,7 +291,7 @@ func leaseMigration(codec keys.SQLCodec) rbrMigration {
 type rbrMigration struct {
 	tableName       string
 	keyMapper       prefixKeyMapper
-	finalDescriptor catalog.TableDescriptor
+	finalDescriptor *descpb.TableDescriptor
 }
 
 type batchMigrator func(ctx context.Context, txn *kv.Txn, rows []kv.KeyValue) error
@@ -210,7 +379,7 @@ func migrateTableToRbrIndex(
 
 	// Replace the stored descriptor with the bootstrap descriptor.
 	err = deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		expectedDesc := migration.finalDescriptor.TableDesc()
+		expectedDesc := migration.finalDescriptor
 
 		mutableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, expectedDesc.GetID())
 		if err != nil {
@@ -267,9 +436,9 @@ type prefixKeyMapper struct {
 }
 
 func makeKeyMapper(
-	codec keys.SQLCodec, newDescriptor catalog.TableDescriptor, oldIndex uint32,
+	codec keys.SQLCodec, newDescriptor *descpb.TableDescriptor, oldIndex uint32,
 ) prefixKeyMapper {
-	newPrefix := codec.IndexPrefix(uint32(newDescriptor.GetID()), uint32(newDescriptor.GetPrimaryIndexID()))
+	newPrefix := codec.IndexPrefix(uint32(newDescriptor.GetID()), uint32(newDescriptor.PrimaryIndex.ID))
 	newPrefix = encoding.EncodeBytesAscending(newPrefix, enum.One)
 	return prefixKeyMapper{
 		codec:     codec,
