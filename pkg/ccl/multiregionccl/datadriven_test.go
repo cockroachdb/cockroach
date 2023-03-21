@@ -117,6 +117,9 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 
+		if strings.Contains(path, "regional_by_table") {
+			skip.WithIssue(t, 98020, "flaky test")
+		}
 		if strings.Contains(path, "secondary_region") {
 			skip.UnderStressWithIssue(t, 92235, "flaky test")
 		}
