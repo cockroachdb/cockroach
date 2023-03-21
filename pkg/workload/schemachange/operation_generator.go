@@ -46,6 +46,7 @@ type operationGeneratorParams struct {
 	enumPct            int
 	rng                *rand.Rand
 	ops                *deck
+	declarativeOps     *deck
 	maxSourceTables    int
 	sequenceOwnedByPct int
 	fkParentInvalidPct int
@@ -74,6 +75,9 @@ type operationGenerator struct {
 
 	// opGenLog log of statement used to generate the current statement.
 	opGenLog []interface{}
+
+	//useDeclarative indices if the declarative schema changer is used.
+	useDeclarative bool
 }
 
 // OpGenLogQuery a query with a single value result.
@@ -131,8 +135,9 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 }
 
 // Reset internal state used per operation within a transaction
-func (og *operationGenerator) resetOpState() {
+func (og *operationGenerator) resetOpState(useDeclarative bool) {
 	og.candidateExpectedCommitErrors.reset()
+	og.useDeclarative = useDeclarative
 }
 
 // Reset internal state used per transaction
@@ -282,6 +287,45 @@ var opWeights = []int{
 	validate:                2, // validate twice more often
 }
 
+var opDeclarative = []bool{
+	addColumn:               true,
+	addConstraint:           false, // TODO(spaskob): unimplemented
+	addForeignKeyConstraint: true,  // Disabled and tracked with #91195
+	addRegion:               false,
+	addUniqueConstraint:     true,
+	alterTableLocality:      false,
+	createIndex:             true,
+	createSequence:          false,
+	createTable:             false,
+	createTableAs:           false,
+	createView:              false,
+	createEnum:              false,
+	createSchema:            false,
+	dropColumn:              true,
+	dropColumnDefault:       true,
+	dropColumnNotNull:       true,
+	dropColumnStored:        true,
+	dropConstraint:          true,
+	dropIndex:               true,
+	dropSequence:            true,
+	dropTable:               true,
+	dropView:                true,
+	dropSchema:              true,
+	primaryRegion:           false, // Disabled and tracked with #83831
+	renameColumn:            false,
+	renameIndex:             false,
+	renameSequence:          false,
+	renameTable:             false,
+	renameView:              false,
+	setColumnDefault:        false,
+	setColumnNotNull:        false,
+	setColumnType:           false, // Disabled and tracked with #66662.
+	survive:                 false, // Disabled and tracked with #83831
+	insertRow:               false, // Disabled and tracked with #91863
+	selectStmt:              false,
+	validate:                false, // validate twice more often
+}
+
 // adjustOpWeightsForActiveVersion adjusts the weights for the active cockroach
 // version, allowing us to disable certain operations in mixed version scenarios.
 func adjustOpWeightsForCockroachVersion(
@@ -311,10 +355,17 @@ func adjustOpWeightsForCockroachVersion(
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
+func (og *operationGenerator) randOp(
+	ctx context.Context, tx pgx.Tx, useDeclarative bool,
+) (stmt *opStmt, err error) {
 	for {
-		op := opType(og.params.ops.Int())
-		og.resetOpState()
+		var op opType
+		if useDeclarative {
+			op = opType(og.params.declarativeOps.Int())
+		} else {
+			op = opType(og.params.ops.Int())
+		}
+		og.resetOpState(useDeclarative)
 		stmt, err = opFuncs[op](og, ctx, tx)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -2715,8 +2766,19 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return err
 		}
+		if og.useDeclarative && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+			strings.Contains(pgErr.Message, " not implemented in the new schema changer") {
+			return errors.Mark(errors.Wrap(err, "ROLLBACK; Ignoring declarative schema changer not implemented error."),
+				errRunInTxnRbkSentinel,
+			)
+		}
+		if og.useDeclarative {
+			fmt.Printf("====FOUND MESSAGE %v", pgErr.Message)
+		}
+
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+			fmt.Printf("FATAL: %v", og.useDeclarative)
 			return errors.Mark(
 				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Received an unexpected execution error."),
 					s),

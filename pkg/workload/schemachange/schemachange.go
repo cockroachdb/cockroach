@@ -168,6 +168,16 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
+	// A separate deck is constructed of only schema changes supported
+	// by the declarative schema changer.
+	declarativeOpWeights := make([]int, len(opWeights))
+	for idx, weight := range opWeights {
+		if opDeclarative[idx] {
+			declarativeOpWeights[idx] = weight
+		}
+	}
+	declarativeOps := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), declarativeOpWeights...)
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
 	stdoutLog := makeAtomicLog(os.Stdout)
@@ -190,6 +200,7 @@ func (s *schemaChange) Ops(
 			enumPct:            s.enumPct,
 			rng:                rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 			ops:                ops,
+			declarativeOps:     declarativeOps,
 			maxSourceTables:    s.maxSourceTables,
 			sequenceOwnedByPct: s.sequenceOwnedByPct,
 			fkParentInvalidPct: s.fkParentInvalidPct,
@@ -326,10 +337,13 @@ func (w *schemaChangeWorker) WrapWithErrorState(err error) error {
 	}
 }
 
-func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
+func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx, useDeclarative bool) error {
 	w.logger.startLog(w.id)
 	w.logger.writeLog("BEGIN")
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
+	if useDeclarative {
+		opsNum = 1
+	}
 
 	for i := 0; i < opsNum; i++ {
 		// Terminating this loop early if there are expected commit errors prevents unexpected commit behavior from being
@@ -343,7 +357,7 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 			break
 		}
 
-		op, err := w.opGen.randOp(ctx, tx)
+		op, err := w.opGen.randOp(ctx, tx, useDeclarative)
 		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
 			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
@@ -391,7 +405,26 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 }
 
 func (w *schemaChangeWorker) run(ctx context.Context) error {
-	tx, err := w.pool.Get().Begin(ctx)
+	conn, err := w.pool.Get().Acquire(ctx)
+	defer conn.Release()
+	if err != nil {
+		return errors.Wrap(err, "cannot get a connection")
+	}
+
+	chooseSchemaChanger := w.opGen.randIntn(100)
+	useDeclarative := false
+	if chooseSchemaChanger < 20 {
+		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='unsafe_always';"); err != nil {
+			return err
+		}
+		useDeclarative = true
+
+	} else {
+		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='off';"); err != nil {
+			return err
+		}
+	}
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
@@ -407,7 +440,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
-	err = w.runInTxn(ctx, tx)
+	err = w.runInTxn(ctx, tx, useDeclarative)
 
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
