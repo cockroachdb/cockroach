@@ -104,7 +104,7 @@ func newEventConsumer(
 	}
 
 	pacerRequestUnit := changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV)
-	enablePacer := changefeedbase.EventConsumerElasticCPUControlEnabled.Get(&cfg.Settings.SV)
+	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
@@ -182,7 +182,11 @@ func newEventConsumer(
 		workerChSize: changefeedbase.EventConsumerWorkerQueueSize.Get(&cfg.Settings.SV),
 		spanFrontier: spanFrontier,
 	}
-	ss := &safeSink{wrapped: sink, beforeFlush: c.Flush}
+	ss := sink
+	// Only webhook supports concurrent EmitRow calls
+	if sink.getConcreteType() != sinkTypeWebhook {
+		ss = &safeSink{wrapped: sink}
+	}
 	c.makeConsumer = func() (eventConsumer, error) {
 		return makeConsumer(ss, c)
 	}
