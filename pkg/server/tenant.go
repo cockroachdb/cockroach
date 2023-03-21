@@ -150,6 +150,8 @@ func (s *SQLServerWrapper) Drain(
 	return s.drainServer.runDrain(ctx, verbose)
 }
 
+type costControllerFactory func(*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider) (multitenant.TenantSideCostController, error)
+
 // NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
 // server against a KV backend, with defaults appropriate for a
 // SQLServer that is not located in the same process as a KVServer.
@@ -164,7 +166,8 @@ func NewSeparateProcessTenantServer(
 	tenantNameContainer *roachpb.TenantNameContainer,
 ) (*SQLServerWrapper, error) {
 	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance()
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer)
+	costControllerBuilder := NewTenantSideCostController
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer, costControllerBuilder)
 }
 
 // NewSharedProcessTenantServer creates a tenant-specific, SQL-only
@@ -184,7 +187,15 @@ func NewSharedProcessTenantServer(
 		return nil, errors.AssertionFailedf("programming error: NewSharedProcessTenantServer called before NodeID was assigned.")
 	}
 	instanceIDContainer := base.NewSQLIDContainerForNode(baseCfg.IDContainer)
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer)
+	// TODO(ssd): The cost controller should instead be able to
+	// read from the capability system and return immediately if
+	// the tenant is exempt. For now we are turning off the
+	// tenant-side cost controller for shared-memory tenants until
+	// we have the abilility to read capabilities tenant-side.
+	//
+	// https://github.com/cockroachdb/cockroach/issues/84586
+	costControllerBuilder := NewNoopTenantSideCostController
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer, costControllerBuilder)
 }
 
 // newTenantServer constructs a SQLServerWrapper.
@@ -197,6 +208,7 @@ func newTenantServer(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	instanceIDContainer *base.SQLIDContainer,
+	costControllerFactory costControllerFactory,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -208,7 +220,7 @@ func newTenantServer(
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer, costControllerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -894,6 +906,7 @@ func makeTenantSQLServerArgs(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	instanceIDContainer *base.SQLIDContainer,
+	costControllerFactory costControllerFactory,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -986,7 +999,7 @@ func makeTenantSQLServerArgs(
 		tenantKnobs.OverrideTokenBucketProvider != nil {
 		provider = tenantKnobs.OverrideTokenBucketProvider(provider)
 	}
-	costController, err := NewTenantSideCostController(st, sqlCfg.TenantID, provider)
+	costController, err := costControllerFactory(st, sqlCfg.TenantID, provider)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
@@ -1218,8 +1231,12 @@ func makeNextLiveInstanceIDFn(
 
 // NewTenantSideCostController is a hook for CCL code which implements the
 // controller.
-var NewTenantSideCostController = func(
-	st *cluster.Settings, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
+var NewTenantSideCostController costControllerFactory = NewNoopTenantSideCostController
+
+// NewNoopTenantSideCostController returns a noop cost
+// controller. Used by shared-process tenants.
+func NewNoopTenantSideCostController(
+	*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider,
 ) (multitenant.TenantSideCostController, error) {
 	// Return a no-op implementation.
 	return noopTenantSideCostController{}, nil
