@@ -883,6 +883,18 @@ func makeInternalClientAdapter(
 			// the outer RPC.
 			ctx = grpcutil.NewLocalRequestContext(ctx, clientTenantID)
 
+			// Clear any leftover gRPC incoming metadata, if this call
+			// is originating from a RPC handler function called as
+			// a result of a tenant call. This is this case:
+			//
+			//    tenant -(rpc)-> tenant -(rpc)-> KV
+			//                            ^ YOU ARE HERE
+			//
+			// at this point, the left side RPC has left some incoming
+			// metadata in the context, but we need to get rid of it
+			// before we let the call go through KV.
+			ctx = grpcutil.ClearIncomingContext(ctx)
+
 			// If the caller and callee use separate tracers, we make things
 			// look closer to a remote call from the tracing point of view.
 			if separateTracers {
