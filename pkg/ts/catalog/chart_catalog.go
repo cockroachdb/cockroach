@@ -771,8 +771,17 @@ var charts = []sectionDescription{
 		},
 		Charts: []chartDescription{
 			{
-				Title:   "KVSubscriber",
-				Metrics: []string{"spanconfig.kvsubscriber.update_behind_nanos"},
+				Title: "KVSubscriber Lag Metrics",
+				Metrics: []string{
+					"spanconfig.kvsubscriber.oldest_protected_record_nanos",
+					"spanconfig.kvsubscriber.update_behind_nanos",
+				},
+			},
+			{
+				Title: "KVSubscriber Protected Record Count",
+				Metrics: []string{
+					"spanconfig.kvsubscriber.protected_record_count",
+				},
 			},
 		},
 	},
