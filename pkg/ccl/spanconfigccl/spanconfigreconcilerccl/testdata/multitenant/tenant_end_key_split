@@ -9,18 +9,18 @@ mutations discard
 
 # Initialize a new tenant, tenant=11, that DOES NOT have a pre-existing tenant,
 # tenant=12, next to it.
-initialize tenant=12
+initialize tenant=11
 ----
 
 # A record IS written for a key that logically belongs to the next tenant,
 # tenant=12, because tenant=12 DOES NOT exist.
-state offset=59 limit=3
+state offset=59
 ----
 ...
 /Table/6{0-1}                              database system (host)
 /Table/6{1-2}                              database system (host)
 /Tenant/11{-\x00}                          database system (tenant)
-...
+/Tenant/12{-\x00}                          database system (tenant)
 
 # Start the reconciliation loop for the tenant=11. It'll first clear out its own
 # first-key record and install span configs for its SQL state. It won't touch
@@ -33,24 +33,24 @@ reconcile tenant=11
 # Peek near the start of the span_configurations table where tenant=11's records
 # are stored. The first one is from the start of its keyspace to start of
 # table with ID=4: /Tenant/11{-/Table/4}.
-state offset=58 limit=3
+state offset=60 limit=3
 ----
 ...
-/Table/{59-60}                             database system (host)
-/Table/6{0-1}                              database system (host)
 /Table/6{1-2}                              database system (host)
+/Tenant/11{-/Table/4}                      database system (tenant)
+/Tenant/11/Table/{4-5}                     database system (tenant)
 ...
 
 # Peek near the end of the span_configurations table where tenant=11's records
-# are stored. The last one is for its last system table:
-# /Tenant/11/Table/5{7-8}. Right now the split is at /Tenant/12. Which is fine.
-state offset=101 limit=3
+# are stored. The last one is for its last system table. Right now the split is
+# at /Tenant/12. Which is fine.
+state offset=103
 ----
 ...
-/Tenant/11/Table/5{5-6}                    database system (tenant)
-/Tenant/11/Table/5{6-7}                    database system (tenant)
 /Tenant/11/Table/5{7-8}                    database system (tenant)
-...
+/Tenant/11/Table/5{8-9}                    database system (tenant)
+/Tenant/11/Table/{59-60}                   database system (tenant)
+/Tenant/12{-\x00}                          database system (tenant)
 
 # Just another view of what the tenant's reconciler actually did. It got rid of
 # the original, single-key /Tenant/11{-\x00} record, and replaced it with
@@ -112,10 +112,12 @@ initialize tenant=10
 
 # A record IS NOT written for a key that logically belongs to the next tenant,
 # tenant=11, because tenant=11 DOES exist.
-state offset=59 limit=3
+state offset=59 limit=5
 ----
 ...
 /Table/6{0-1}                              database system (host)
 /Table/6{1-2}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
+/Tenant/11{-/Table/4}                      database system (tenant)
+/Tenant/11/Table/{4-5}                     database system (tenant)
 ...
