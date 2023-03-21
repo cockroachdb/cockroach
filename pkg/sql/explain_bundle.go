@@ -41,6 +41,7 @@ import (
 )
 
 const noPlan = "no plan"
+const stmtBundleOpName = "stmtEnvCollector"
 
 // setExplainBundleResult sets the result of an EXPLAIN ANALYZE (DEBUG)
 // statement. warnings will be printed out as is in the CLI.
@@ -521,7 +522,7 @@ func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvColl
 func (c *stmtEnvCollector) query(query string) (string, error) {
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
-		"stmtEnvCollector",
+		stmtBundleOpName,
 		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
 		query,
@@ -553,7 +554,7 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 func (c *stmtEnvCollector) queryRows(query string) ([]string, error) {
 	rows, err := c.ie.QueryBufferedEx(
 		c.ctx,
-		"stmtEnvCollector",
+		stmtBundleOpName,
 		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
 		query,
@@ -746,7 +747,7 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
 
 	rows, err := c.ie.QueryBufferedEx(
 		c.ctx,
-		"stmtEnvCollector",
+		stmtBundleOpName,
 		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
 		"SELECT variable, value, description FROM [ SHOW ALL CLUSTER SETTINGS ]",

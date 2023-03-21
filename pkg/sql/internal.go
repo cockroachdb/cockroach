@@ -709,13 +709,21 @@ func (ie *InternalExecutor) QueryIteratorEx(
 // applyInternalExecutorSessionExceptions overrides values from
 // the session data that may have been set from a user-session but
 // which don't make sense to use in the InternalExecutor.
-func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
+func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData, forStmtBundle bool) {
 	// Even if session queries are told to error on non-home region accesses,
 	// internal queries spawned from the same context should never do so.
 	sd.LocalOnlySessionData.EnforceHomeRegion = false
 	// DisableBuffering is not supported by the InternalExecutor
 	// which uses streamingCommandResults.
 	sd.LocalOnlySessionData.AvoidBuffering = false
+	// Rewrite rules should not be disabled for internal SQL. This is mainly a
+	// flag for testing foreground SQL. Disrupting the behavior of internal SQL,
+	// which may rely on rewrite rules for proper behavior, could potentially make
+	// the cluster unstable and may make randomized tests more noisy with
+	// difficult to debug behavior.
+	if !forStmtBundle {
+		sd.LocalOnlySessionData.TestingOptimizerDisableRuleProbability = 0
+	}
 }
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
@@ -795,7 +803,7 @@ func (ie *InternalExecutor) execInternal(
 		sd = newSessionData(SessionArgs{})
 	}
 
-	applyInternalExecutorSessionExceptions(sd)
+	applyInternalExecutorSessionExceptions(sd, opName == stmtBundleOpName)
 	applyOverrides(sessionDataOverride, sd)
 	sd.Internal = true
 	if sd.User().Undefined() {
