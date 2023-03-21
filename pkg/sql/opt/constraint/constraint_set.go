@@ -314,46 +314,51 @@ func (s *Set) ExtractValueForConstCol(evalCtx *eval.Context, col opt.ColumnID) t
 	return nil
 }
 
-// HasSingleColumnNonNullConstValues returns the single column constrained by
-// the Set if it is constrained to one or more non-ranging constant values. If
-// any of the constant values are NULL, or the Set does not constraint a single
-// column to one or more non-ranging values, then ok=false is returned.
-func (s *Set) HasSingleColumnNonNullConstValues(evalCtx *eval.Context) (col opt.ColumnID, ok bool) {
+// HasSingleColumnNonNullConstValues returns true if all of the following are
+// true:
+//   - The given column is the only constrained column.
+//   - The column is constrained to a set of constant values.
+//   - None of the values are NULL.
+func (s *Set) HasSingleColumnNonNullConstValues(evalCtx *eval.Context, col opt.ColumnID) bool {
 	if s.Length() != 1 {
-		return 0, false
+		return false
 	}
 	c := s.Constraint(0)
 	if c.Columns.Count() != 1 {
-		return 0, false
+		return false
+	}
+	if c.Columns.Get(0).ID() != col {
+		return false
 	}
 	for i, n := 0, c.Spans.Count(); i < n; i++ {
 		sp := c.Spans.Get(i)
 		start := sp.StartKey()
 		end := sp.EndKey()
 		if start.Length() < 1 || end.Length() < 1 {
-			return 0, false
+			return false
 		}
 		startVal := start.Value(0)
 		if startVal == tree.DNull {
-			return 0, false
+			return false
 		}
 		if startVal.Compare(evalCtx, end.Value(0)) != 0 {
-			return 0, false
+			return false
 		}
 	}
-	return c.Columns.Get(0).ID(), true
+	return true
 }
 
-// ExtractSingleColumnNonNullConstValues returns the single column constrained by the
-// Set and a slice of constant values it is constrained to. If any of the
-// constant values are NULL, or the Set does not constraint a single column to
-// one or more non-ranging values, then ok=false is returned.
+// ExtractSingleColumnNonNullConstValues returns the constant values that the
+// given column is constrained to. It returns ok=false if any of the following
+// are not true:
+//   - The given column is the only constrained column.
+//   - The column is constrained to a set of constant values.
+//   - None of the values are NULL.
 func (s *Set) ExtractSingleColumnNonNullConstValues(
-	evalCtx *eval.Context,
-) (col opt.ColumnID, constValues tree.Datums, ok bool) {
-	col, ok = s.HasSingleColumnNonNullConstValues(evalCtx)
-	if !ok {
-		return 0, nil, false
+	evalCtx *eval.Context, col opt.ColumnID,
+) (constValues tree.Datums, ok bool) {
+	if ok := s.HasSingleColumnNonNullConstValues(evalCtx, col); !ok {
+		return nil, false
 	}
 	c := s.Constraint(0)
 	numSpans := c.Spans.Count()
@@ -362,7 +367,7 @@ func (s *Set) ExtractSingleColumnNonNullConstValues(
 		val := c.Spans.Get(i).StartKey().Value(0)
 		constValues[i] = val
 	}
-	return col, constValues, true
+	return constValues, true
 }
 
 // allocConstraint allocates space for a new constraint in the set and returns
