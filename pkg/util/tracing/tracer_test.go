@@ -969,32 +969,48 @@ func TestTracerStackHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tr := NewTracer()
 
-	sp := tr.StartSpan("test", WithRecording(tracingpb.RecordingVerbose))
-	ch := make(chan struct{})
-	defer close(ch)
-	go func() {
-		for range ch {
-			tr.SaveAutomaticSnapshot()
-			<-ch // read again to unpark func.
+	for _, verbose := range []bool{true, false} {
+		sp := tr.StartSpan("test", WithRecording(tracingpb.RecordingStructured))
+		if verbose {
+			sp = tr.StartSpan("test", WithRecording(tracingpb.RecordingVerbose))
 		}
-	}()
+		ch := make(chan struct{})
+		defer close(ch)
+		go func() {
+			for range ch {
+				tr.SaveAutomaticSnapshot()
+				<-ch // read again to unpark func.
+			}
+		}()
 
-	blockingFunc1(ch)
-	started := timeutil.Now()
-	blockingFunc2(ch)
-	blockingFunc3(ch)
-	blockingCaller(ch)
+		blockingFunc1(ch)
+		started := timeutil.Now()
+		blockingFunc2(ch)
+		blockingFunc3(ch)
+		blockingCaller(ch)
 
-	sp.MaybeRecordStackHistory(started)
+		sp.MaybeRecordStackHistory(started)
 
-	rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)[0]
-	require.Len(t, rec.StructuredRecords, 3)
-	require.Len(t, rec.Logs, 3)
-	require.Len(t, rec.StructuredRecords, 3)
-	for i := range rec.Logs {
-		require.NotContains(t, rec.Logs[i].Message, "tracing.blockingFunc1")
+		rec := sp.FinishAndGetConfiguredRecording()[0]
+		require.Len(t, rec.StructuredRecords, 3)
+		stacks := make([]string, 3)
+		for i, rec := range rec.StructuredRecords {
+			var stack tracingpb.CapturedStack
+			require.NoError(t, types.UnmarshalAny(rec.Payload, &stack))
+			stacks[i] = stack.Stack
+		}
+		require.Contains(t, stacks[0], "tracing.blockingFunc2")
+		require.Contains(t, stacks[1], "tracing.blockingFunc3")
+		require.Contains(t, stacks[2], "tracing.blockingCaller")
+
+		if verbose {
+			require.Len(t, rec.Logs, 3)
+			for i := range rec.Logs {
+				require.NotContains(t, rec.Logs[i].Message, "tracing.blockingFunc1")
+			}
+			require.Contains(t, rec.Logs[0].Message, "tracing.blockingFunc2")
+			require.Contains(t, rec.Logs[1].Message, "tracing.blockingFunc3")
+			require.Contains(t, rec.Logs[2].Message, "tracing.blockingCaller")
+		}
 	}
-	require.Contains(t, rec.Logs[0].Message, "tracing.blockingFunc2")
-	require.Contains(t, rec.Logs[1].Message, "tracing.blockingFunc3")
-	require.Contains(t, rec.Logs[2].Message, "tracing.blockingCaller")
 }
