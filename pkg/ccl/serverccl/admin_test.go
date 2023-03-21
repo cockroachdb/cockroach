@@ -47,13 +47,14 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Need to disable the test tenant because this test fails
+	// when run through a tenant (with internal server error).
+	// More investigation is required. Tracked with #76387.
+	disableDefaultTestTenant := true
 	testCluster := serverutils.StartNewTestCluster(t, 3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Need to disable the test tenant because this test fails
-				// when run through a tenant (with internal server error).
-				// More investigation is required. Tracked with #76387.
-				DisableDefaultTestTenant: true,
+				DisableDefaultTestTenant: disableDefaultTestTenant,
 			},
 		})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -80,6 +81,11 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	// Would use locality constraints except this test cluster hasn't been started up with localities.
 	sqlDB.Exec(t, `ALTER PARTITION us OF TABLE comments CONFIGURE ZONE USING gc.ttlseconds = 9001`)
 	sqlDB.Exec(t, `ALTER PARTITION eu OF TABLE comments CONFIGURE ZONE USING gc.ttlseconds = 9002`)
+
+	if disableDefaultTestTenant {
+		// Make sure secondary tenants don't cause the endpoint to error.
+		sqlDB.Exec(t, "CREATE TENANT 'app'")
+	}
 
 	// Assert that we get all roachblog zone configs back.
 	expectedZoneConfigNames := map[string]struct{}{
