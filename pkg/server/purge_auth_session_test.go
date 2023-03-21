@@ -34,6 +34,9 @@ func TestPurgeSession(t *testing.T) {
 
 	ts := s.(*TestServer)
 	userName := username.TestUserName()
+	if err := ts.createAuthUser(userName, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
 
 	_, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -51,8 +54,8 @@ func TestPurgeSession(t *testing.T) {
 	)
 
 	insertSessionStmt := `
-INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt", "revokedAt")
-VALUES($1, $2, $3, $4)
+INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt", "revokedAt", user_id)
+VALUES($1, $2, $3, $4, (SELECT user_id FROM system.users WHERE username = $2))
 `
 	// Inserts three seemingly-old sessions.
 	// Each iteration of the loop inserts a session, rewinding the age of

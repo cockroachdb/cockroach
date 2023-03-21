@@ -77,6 +77,11 @@ WHERE p.user_id is NULL AND p.username = u.username
 LIMIT 1000
 `
 
+const setUserIDColumnToNotNullSystemPrivilegesStmt = `
+ALTER TABLE system.privileges
+ALTER COLUMN user_id SET NOT NULL
+`
+
 func backfillSystemPrivilegesUserIDColumn(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
@@ -92,6 +97,31 @@ func backfillSystemPrivilegesUserIDColumn(
 		if rowsAffected == 0 {
 			break
 		}
+	}
+
+	// Query the table ID for the system.privileges table since it is dynamically
+	// assigned.
+	idRow, err := ie.QueryRowEx(ctx, "get-table-id", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT 'system.privileges'::regclass::oid`,
+	)
+	if err != nil {
+		return err
+	}
+	tableID := descpb.ID(tree.MustBeDOid(idRow[0]).Oid)
+
+	// After we finish backfilling, we can set the user_id column to be NOT NULL
+	// since any existing rows will now have non-NULL values in the user_id column
+	// and any new rows inserted after the previous version (when the user_id column
+	// was added) will have had their user_id value populated at insertion time.
+	op := operation{
+		name:           "set-user-id-not-null-system-privileges",
+		schemaList:     []string{"user_id"},
+		query:          setUserIDColumnToNotNullSystemPrivilegesStmt,
+		schemaExistsFn: columnExistsAndIsNotNull,
+	}
+	if err := migrateTable(ctx, cs, d, op, tableID, systemschema.SystemPrivilegeTable); err != nil {
+		return err
 	}
 
 	return nil

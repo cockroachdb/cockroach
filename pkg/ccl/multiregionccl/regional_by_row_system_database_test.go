@@ -57,7 +57,7 @@ UNION ALL SELECT create_statement FROM [SHOW CREATE TABLE system.namespace]
 	"revokedAt" TIMESTAMP NULL,
 	"lastUsedAt" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
 	"auditInfo" STRING NULL,
-	user_id OID NULL,
+	user_id OID NOT NULL,
 	crdb_region system.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::system.public.crdb_internal_region,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX "web_sessions_expiresAt_idx" ("expiresAt" ASC),

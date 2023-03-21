@@ -119,7 +119,7 @@ VALUES (
 	"revokedAt" TIMESTAMP NULL,
 	"lastUsedAt" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
 	"auditInfo" STRING NULL,
-	user_id OID NULL,
+	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX "web_sessions_expiresAt_idx" ("expiresAt" ASC),
 	INDEX "web_sessions_createdAt_idx" ("createdAt" ASC),
