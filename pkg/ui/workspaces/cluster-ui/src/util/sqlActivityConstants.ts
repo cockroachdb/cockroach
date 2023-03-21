@@ -27,7 +27,7 @@ export function getSortLabel(sort: SqlStatsSortType): string {
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "Contention Time";
     case SqlStatsSortOptions.PCT_RUNTIME:
-      return "% Of All Run Time";
+      return "% Of All Runtime";
     default:
       return "";
   }
