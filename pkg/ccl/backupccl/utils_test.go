@@ -83,7 +83,7 @@ func backupRestoreTestSetupWithParams(
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]
-			param.ExternalIODir = dir
+			param.ExternalIODir = dir + param.ExternalIODir
 			param.UseDatabase = "data"
 			params.ServerArgsPerNode[i] = param
 		}
