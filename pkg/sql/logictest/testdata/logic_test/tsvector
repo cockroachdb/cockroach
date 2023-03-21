@@ -275,3 +275,26 @@ SELECT * FROM to_tsquery('simple', 'a | b & c <-> d')
 
 query error syntax
 SELECT * FROM to_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+
+# Test default variants of the to_ts* functions.
+
+query T
+SHOW default_text_search_config
+----
+pg_catalog.english
+
+query T
+SELECT to_tsvector('Hello I am a potato')
+----
+'hello':1 'potato':5
+
+statement error text search configuration \"blah\" does not exist
+SET default_text_search_config = 'blah'
+
+statement ok
+SET default_text_search_config = 'spanish'
+
+query T
+SELECT to_tsvector('Hello I am a potato')
+----
+'am':3 'hell':1 'i':2 'potat':5
