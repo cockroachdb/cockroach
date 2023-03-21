@@ -277,9 +277,7 @@ export class StatementDetails extends React.Component<
   };
 
   componentDidMount(): void {
-    if (!this.props.statementDetails) {
-      this.refreshStatementDetails();
-    }
+    this.refreshStatementDetails();
 
     window.addEventListener("resize", this.handleResize);
     this.handleResize();
