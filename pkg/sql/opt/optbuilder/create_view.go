@@ -37,12 +37,17 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	b.insideViewDef = true
 	b.trackSchemaDeps = true
 	b.qualifyDataSourceNamesInAST = true
+	if b.sourceViews == nil {
+		b.sourceViews = make(map[string]struct{})
+	}
+	b.sourceViews[viewName.FQString()] = struct{}{}
 	defer func() {
 		b.insideViewDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
+		delete(b.sourceViews, viewName.FQString())
 
 		b.semaCtx.FunctionResolver = preFuncResolver
 		maybePanicOnUnknownFunction("view query")

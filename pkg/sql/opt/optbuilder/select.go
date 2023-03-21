@@ -250,6 +250,17 @@ func (b *Builder) buildDataSource(
 func (b *Builder) buildView(
 	view cat.View, viewName *tree.TableName, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
+	if b.sourceViews == nil {
+		b.sourceViews = make(map[string]struct{})
+	}
+	// Check whether there is a circular dependency between views.
+	if _, ok := b.sourceViews[viewName.FQString()]; ok {
+		panic(pgerror.Newf(pgcode.InvalidObjectDefinition, "cyclic view dependency for relation %s", viewName))
+	}
+	b.sourceViews[viewName.FQString()] = struct{}{}
+	defer func() {
+		delete(b.sourceViews, viewName.FQString())
+	}()
 	// Cache the AST so that multiple references won't need to reparse.
 	if b.views == nil {
 		b.views = make(map[cat.View]*tree.Select)
