@@ -22,7 +22,11 @@ type RangeUsageInfo struct {
 	LogicalBytes             int64
 	QueriesPerSecond         float64
 	WritesPerSecond          float64
+	ReadsPerSecond           float64
+	WriteBytesPerSecond      float64
+	ReadBytesPerSecond       float64
 	RequestCPUNanosPerSecond float64
+	RequestsPerSecond        float64
 	RaftCPUNanosPerSecond    float64
 	RequestLocality          *RangeRequestLocalityInfo
 }
