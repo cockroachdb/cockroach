@@ -225,20 +225,20 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 	}
 
 	// The following are only used in connection-check SHOW.
-	if o.CheckConnectionTransferSize != nil {
+	if o.CheckConnectionConcurrency != nil {
 		maybeAddSep()
-		ctx.WriteString("TRANSFER = ")
-		ctx.FormatNode(o.CheckConnectionTransferSize)
+		ctx.WriteString("CONCURRENTLY = ")
+		ctx.FormatNode(o.CheckConnectionConcurrency)
 	}
 	if o.CheckConnectionDuration != nil {
 		maybeAddSep()
 		ctx.WriteString("TIME = ")
 		ctx.FormatNode(o.CheckConnectionDuration)
 	}
-	if o.CheckConnectionConcurrency != nil {
+	if o.CheckConnectionTransferSize != nil {
 		maybeAddSep()
-		ctx.WriteString("CONCURRENTLY = ")
-		ctx.FormatNode(o.CheckConnectionConcurrency)
+		ctx.WriteString("TRANSFER = ")
+		ctx.FormatNode(o.CheckConnectionTransferSize)
 	}
 }
 
