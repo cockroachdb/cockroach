@@ -1031,7 +1031,6 @@ func TestMetricsMetadata(t *testing.T) {
 
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 98619, "flaky test")
 	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
@@ -1064,9 +1063,9 @@ func TestHotRangesResponse(t *testing.T) {
 					t.Errorf("unexpected empty/unpopulated range descriptor: %+v", r.Desc)
 				}
 				if r.QueriesPerSecond > 0 {
-					if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 {
-						t.Errorf("qps %.2f > 0, expected either reads=%.2f or writes=%.2f to be non-zero",
-							r.QueriesPerSecond, r.ReadsPerSecond, r.WritesPerSecond)
+					if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
+							r.QueriesPerSecond, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
 					}
 					// If the architecture doesn't support sampling CPU, it
 					// will also be zero.
@@ -1088,7 +1087,6 @@ func TestHotRangesResponse(t *testing.T) {
 
 func TestHotRanges2Response(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 98619, "flaky test")
 	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
@@ -1106,9 +1104,9 @@ func TestHotRanges2Response(t *testing.T) {
 			t.Errorf("unexpected empty range id: %d", r.RangeID)
 		}
 		if r.QPS > 0 {
-			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 {
-				t.Errorf("qps %.2f > 0, expected either reads=%.2f or writes=%.2f to be non-zero",
-					r.QPS, r.ReadsPerSecond, r.WritesPerSecond)
+			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
+					r.QPS, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
 			}
 			// If the architecture doesn't support sampling CPU, it
 			// will also be zero.

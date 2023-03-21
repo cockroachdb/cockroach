@@ -2164,8 +2164,12 @@ func RangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 		LogicalBytes:             repl.GetMVCCStats().Total(),
 		QueriesPerSecond:         loadStats.QueriesPerSecond,
 		WritesPerSecond:          loadStats.WriteKeysPerSecond,
+		ReadsPerSecond:           loadStats.ReadKeysPerSecond,
+		WriteBytesPerSecond:      loadStats.WriteBytesPerSecond,
+		ReadBytesPerSecond:       loadStats.ReadBytesPerSecond,
 		RaftCPUNanosPerSecond:    loadStats.RaftCPUNanosPerSecond,
 		RequestCPUNanosPerSecond: loadStats.RequestCPUNanosPerSecond,
+		RequestsPerSecond:        loadStats.RequestsPerSecond,
 		RequestLocality: &allocator.RangeRequestLocalityInfo{
 			Counts:   localityInfo.LocalityCounts,
 			Duration: localityInfo.Duration,
