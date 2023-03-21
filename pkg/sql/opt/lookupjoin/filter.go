@@ -25,8 +25,7 @@ func HasJoinFilterConstants(
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
-			constCol, ok := props.Constraints.HasSingleColumnNonNullConstValues(evalCtx)
-			if ok && constCol == col {
+			if ok := props.Constraints.HasSingleColumnNonNullConstValues(evalCtx, col); ok {
 				return true
 			}
 		}
@@ -48,8 +47,8 @@ func FindJoinFilterConstants(
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
-			constCol, constVals, ok := props.Constraints.ExtractSingleColumnNonNullConstValues(evalCtx)
-			if !ok || constCol != col {
+			constVals, ok := props.Constraints.ExtractSingleColumnNonNullConstValues(evalCtx, col)
+			if !ok {
 				continue
 			}
 			if bestValues == nil || len(bestValues) > len(constVals) {
