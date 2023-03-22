@@ -536,9 +536,12 @@ func (c *Connector) NewIterator(
 						curIdx:     0,
 					}, nil
 				}
-				// TODO(arul): We probably don't want to treat all errors here as "soft".
-				// Soft RPC error. Drop client and retry.
 				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
+				if grpcutil.IsAuthError(err) {
+					// Authentication or authorization error. Propagate.
+					return nil, err
+				}
+				// Soft RPC error. Drop client and retry.
 				c.tryForgetClient(ctx, client)
 				break
 			}
