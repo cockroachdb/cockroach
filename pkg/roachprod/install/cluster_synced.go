@@ -1106,7 +1106,8 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 			ip, err = c.GetInternalIP(l, ctx, node)
 			if err != nil {
 				res.Err = errors.Wrapf(err, "pgurls")
-				return res, res.Err
+				// By returning a nil error here, we'll retry the command.
+				return res, nil
 			}
 			time.Sleep(time.Second)
 		}
@@ -1541,7 +1542,7 @@ func (c *SyncedCluster) createNodeCertArguments(
 
 			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
-			return res, errors.Wrapf(res.Err, "IPs")
+			return res, nil
 		}, DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
@@ -2291,9 +2292,9 @@ func (c *SyncedCluster) pghosts(
 		res := &RunResultDetails{Node: node}
 		res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 		ips[i] = res.Stdout
-		return res, errors.Wrapf(res.Err, "pghosts")
+		return res, nil
 	}, DefaultSSHRetryOpts); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "pghosts")
 	}
 
 	m := make(map[Node]string, len(ips))
@@ -2409,6 +2410,9 @@ type ParallelResult struct {
 // cluster. If any of the commands fail, Parallel will log an error
 // and exit the program.
 //
+// A user may also pass in a RunRetryOpts to control how the function is retried
+// in the case of a failure.
+//
 // See ParallelE for more information.
 func (c *SyncedCluster) Parallel(
 	l *logger.Logger,
@@ -2437,7 +2441,12 @@ func (c *SyncedCluster) Parallel(
 // 0, then it defaults to `count`.
 //
 // The function returns a pointer to RunResultDetails as we may enrich
-// the result with retry information (attempt number, wrapper error)
+// the result with retry information (attempt number, wrapper error).
+//
+// RunRetryOpts controls the retry behavior in the case that
+// the function fails, but returns a nil error. A non-nil error returned by the
+// function denotes a roachprod error and will not be retried regardless of the
+// retry options.
 //
 // If err is non-nil, the slice of ParallelResults will contain the
 // results from any of the failed invocations.
