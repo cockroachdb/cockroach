@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -185,7 +186,15 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 	}
 	col.Nullable.Nullability = s.randNullability()
 	if s.coin() {
-		col.DefaultExpr.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, nil)}
+		// Find a type that can be assignment-casted to the column's type.
+		var defaultType *types.T
+		for {
+			defaultType = randgen.RandColumnType(s.rnd)
+			if cast.ValidCast(defaultType, t, cast.ContextAssignment) {
+				break
+			}
+		}
+		col.DefaultExpr.Expr = &tree.ParenExpr{Expr: makeScalar(s, defaultType, nil)}
 	} else if s.coin() {
 		col.Computed.Computed = true
 		col.Computed.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, colRefs)}
