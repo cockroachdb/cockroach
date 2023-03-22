@@ -286,7 +286,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
 %type <plpgsqltree.PLpgSQLStatement>	for_control
 
 %type <str>		any_identifier opt_block_label opt_loop_label opt_label query_options
-//%type <str>		option_value
+//%type <str>	option_value
 
 %type <[]plpgsqltree.PLpgSQLStatement> proc_sect
 %type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
@@ -962,10 +962,61 @@ return_variable	: IDENT
           }
 				;
 
-stmt_raise		: RAISE
-					{
-					}
-				;
+stmt_raise		: RAISE error_level ';'
+  {
+  }
+;
+
+error_level :
+    {
+      return unimplemented(plpgsqllex, "raise")
+    }
+  | EXCEPTION raise_cond option_expr
+    {
+     return unimplemented(plpgsqllex, "raise exception")
+    }
+  | DEBUG raise_cond option_expr
+    {
+      return unimplemented(plpgsqllex, "raise debug")
+    }
+  | LOG raise_cond option_expr
+    {
+      return unimplemented(plpgsqllex, "raise log")
+    }
+  | INFO raise_cond option_expr
+    {
+      return unimplemented(plpgsqllex, "raise info")
+    }
+  | WARNING raise_cond option_expr
+    {
+      return unimplemented(plpgsqllex, "raise warning")
+    }
+   ;
+
+raise_cond:
+    {}
+  | SCONST
+    {}
+  | SQLSTATE
+    {}
+  | IDENT
+    {}
+  ;
+
+
+option_expr :
+    {}
+  | USING MESSAGE assign_operator expr_until_semi
+    {}
+  | USING DETAIL assign_operator expr_until_semi
+    {}
+  | USING HINT assign_operator expr_until_semi
+    {}
+  | USING ERRCODE assign_operator expr_until_semi
+    {}
+
+
+
 
 stmt_assert		: ASSERT assert_cond ';'
 {

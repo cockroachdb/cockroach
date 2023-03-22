@@ -285,6 +285,12 @@ func (l *lexer) ReadSqlExpressionStr2(
 	return l.ReadSqlConstruct(terminator1, terminator2, 0)
 }
 
+func (l *lexer) ReadSqlExpressionStr3(
+	terminator1 int, terminator2 int, terminator3 int,
+) (sqlStr string, terminatorMet int) {
+	return l.ReadSqlConstruct(terminator1, terminator2, terminator3)
+}
+
 func (l *lexer) ReadSqlConstruct(
 	terminator1 int, terminator2 int, terminator3 int,
 ) (sqlStr string, terminatorMet int) {
