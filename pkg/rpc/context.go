@@ -883,6 +883,18 @@ func makeInternalClientAdapter(
 			// the outer RPC.
 			ctx = grpcutil.NewLocalRequestContext(ctx, clientTenantID)
 
+			// Clear any leftover gRPC incoming metadata, if this call
+			// is originating from a RPC handler function called as
+			// a result of a tenant call. This is this case:
+			//
+			//    tenant -(rpc)-> tenant -(rpc)-> KV
+			//                            ^ YOU ARE HERE
+			//
+			// at this point, the left side RPC has left some incoming
+			// metadata in the context, but we need to get rid of it
+			// before we let the call go through KV.
+			ctx = grpcutil.ClearIncomingContext(ctx)
+
 			// If the caller and callee use separate tracers, we make things
 			// look closer to a remote call from the tracing point of view.
 			if separateTracers {
@@ -1105,8 +1117,31 @@ func (a internalClientAdapter) RangeFeed(
 		// create a child span with its different Tracer, which is not allowed.
 		serverCtx = tracing.ContextWithSpan(ctx, nil)
 	}
+
+	// Create a new context from the existing one with the "local request"
+	// field set. This tells the handler that this is an in-process request,
+	// bypassing ctx.Peer checks. This call also overwrites any possibly
+	// existing info in the context. This is important in situations where a
+	// shared-process tenant calls into the local KV node, and that local RPC
+	// ends up performing another RPC to the local node. The inner RPC must
+	// carry the identity of the system tenant, not the one of the client of
+	// the outer RPC.
+	serverCtx = grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID)
+
+	// Clear any leftover gRPC incoming metadata, if this call
+	// is originating from a RPC handler function called as
+	// a result of a tenant call. This is this case:
+	//
+	//    tenant -(rpc)-> tenant -(rpc)-> KV
+	//                            ^ YOU ARE HERE
+	//
+	// at this point, the left side RPC has left some incoming
+	// metadata in the context, but we need to get rid of it
+	// before we let the call go through KV.
+	serverCtx = grpcutil.ClearIncomingContext(serverCtx)
+
 	rawServerStream := &serverStream{
-		ctx: grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID),
+		ctx: serverCtx,
 		// RangeFeed is a server-streaming RPC, so the server does not receive
 		// anything.
 		receiver: pipeReader{},
@@ -1229,8 +1264,30 @@ func (a internalClientAdapter) MuxRangeFeed(
 		// create a child span with its different Tracer, which is not allowed.
 		serverCtx = tracing.ContextWithSpan(ctx, nil)
 	}
+	// Create a new context from the existing one with the "local request"
+	// field set. This tells the handler that this is an in-process request,
+	// bypassing ctx.Peer checks. This call also overwrites any possibly
+	// existing info in the context. This is important in situations where a
+	// shared-process tenant calls into the local KV node, and that local RPC
+	// ends up performing another RPC to the local node. The inner RPC must
+	// carry the identity of the system tenant, not the one of the client of
+	// the outer RPC.
+	serverCtx = grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID)
+
+	// Clear any leftover gRPC incoming metadata, if this call
+	// is originating from a RPC handler function called as
+	// a result of a tenant call. This is this case:
+	//
+	//    tenant -(rpc)-> tenant -(rpc)-> KV
+	//                            ^ YOU ARE HERE
+	//
+	// at this point, the left side RPC has left some incoming
+	// metadata in the context, but we need to get rid of it
+	// before we let the call go through KV.
+	serverCtx = grpcutil.ClearIncomingContext(serverCtx)
+
 	rawServerStream := &serverStream{
-		ctx:      grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID),
+		ctx:      serverCtx,
 		receiver: requestReader,
 		sender:   eventWriter,
 	}
