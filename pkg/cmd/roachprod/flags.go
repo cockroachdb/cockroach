@@ -109,8 +109,9 @@ func initFlags() {
 			vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
+	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,
-		"label", make(map[string]string),
+		"label", map[string]string{"usage": "roachprod"},
 		"The label(s) to be used when creating new vm instances, must be in '--label name=value' format "+
 			"and value can't be empty string after trimming space, a value that has space must be quoted by single "+
 			"quotes, gce label name only allows hyphens (-), underscores (_), lowercase characters, numbers and "+

@@ -823,6 +823,9 @@ func createFlagsOverride(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 		if flags.Changed("geo") {
 			opts.GeoDistributed = overrideOpts.GeoDistributed
 		}
+		if flags.Changed("label") {
+			opts.CustomLabels = overrideOpts.CustomLabels
+		}
 	}
 }
 

@@ -193,6 +193,8 @@ func (s *ClusterSpec) RoachprodOpts(
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
 
 	createVMOpts := vm.DefaultCreateOpts()
+	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
+	createVMOpts.CustomLabels = map[string]string{"usage": "roachtest"}
 	createVMOpts.ClusterName = clusterName
 	if s.Lifetime != 0 {
 		createVMOpts.Lifetime = s.Lifetime
