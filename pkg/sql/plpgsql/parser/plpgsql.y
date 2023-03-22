@@ -1009,13 +1009,15 @@ stmt_null: NULL ';'
   }
 ;
 
-stmt_commit: COMMIT opt_transaction_chain ';'
+stmt_commit		: COMMIT opt_transaction_chain ';'
   {
+    return unimplemented(plpgsqllex, "commit")
   }
 ;
 
-stmt_rollback: ROLLBACK opt_transaction_chain ';'
+stmt_rollback	: ROLLBACK opt_transaction_chain ';'
   {
+    return unimplemented(plpgsqllex, "rollback")
   }
 ;
 
