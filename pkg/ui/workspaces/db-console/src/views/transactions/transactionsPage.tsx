@@ -106,7 +106,7 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 export const reqSortSetting = new LocalSetting(
   "reqSortSetting/TransactionsPage",
   (state: AdminUIState) => state.localSettings,
-  api.DEFAULT_STATS_REQ_OPTIONS.sort,
+  api.DEFAULT_STATS_REQ_OPTIONS.sortTxn,
 );
 
 export const limitSetting = new LocalSetting(

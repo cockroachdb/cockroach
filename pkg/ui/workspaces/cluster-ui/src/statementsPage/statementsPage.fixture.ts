@@ -590,7 +590,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   // of 'statementKey' in appStats.ts changes.
   statementsError: null,
   limit: DEFAULT_STATS_REQ_OPTIONS.limit,
-  reqSortSetting: DEFAULT_STATS_REQ_OPTIONS.sort,
+  reqSortSetting: DEFAULT_STATS_REQ_OPTIONS.sortStmt,
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),

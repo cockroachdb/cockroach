@@ -305,6 +305,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Restarted Ranges",
+				Metrics: []string{
+					"distsender.rangefeed.restart_ranges",
+				},
+			},
+			{
 				Title: "RPCs",
 				Metrics: []string{
 					"distsender.rpc.sent.local",
@@ -1603,6 +1609,12 @@ var charts = []sectionDescription{
 				Title: "Schema Registry Retries",
 				Metrics: []string{
 					"changefeed.schema_registry.retry_count",
+				},
+			},
+			{
+				Title: "Schema Registry Registrations",
+				Metrics: []string{
+					"changefeed.schema_registry.registrations",
 				},
 			},
 		},

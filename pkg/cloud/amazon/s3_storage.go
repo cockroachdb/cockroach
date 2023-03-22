@@ -425,7 +425,7 @@ func MakeS3Storage(
 	case cloud.AuthParamImplicit:
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
-				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
+				"implicit credentials disallowed for s3 due to --external-io-disable-implicit-credentials flag")
 		}
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)

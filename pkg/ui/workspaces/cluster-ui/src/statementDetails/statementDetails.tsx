@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode, useContext, useMemo } from "react";
+import React, { ReactNode, useContext } from "react";
 import { Col, Row, Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -81,7 +81,6 @@ import {
 } from "../api";
 import {
   getStmtInsightRecommendations,
-  InsightNameEnum,
   InsightType,
   StmtInsightEvent,
 } from "../insights";
@@ -217,7 +216,6 @@ export class StatementDetails extends React.Component<
   StatementDetailsState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
-  refreshDataTimeout: NodeJS.Timeout;
 
   constructor(props: StatementDetailsProps) {
     super(props);
@@ -247,33 +245,15 @@ export class StatementDetails extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
   };
 
-  clearRefreshDataTimeout() {
-    if (this.refreshDataTimeout !== null) {
-      clearTimeout(this.refreshDataTimeout);
-    }
-  }
-
-  resetPolling(key: string) {
-    this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
-      this.refreshDataTimeout = setTimeout(
-        this.refreshStatementDetails,
-        300000, // 5 minutes
-      );
-    }
-  }
-
-  refreshStatementDetails = () => {
+  refreshStatementDetails = (): void => {
     const req = getStatementDetailsRequestFromProps(this.props);
     this.props.refreshStatementDetails(req);
     this.refreshStatementInsights();
-    this.resetPolling(this.props.timeScale.key);
   };
 
-  refreshStatementInsights = () => {
+  refreshStatementInsights = (): void => {
     const [startTime, endTime] = toRoundedDateRange(this.props.timeScale);
     const id = BigInt(this.props.statementFingerprintID).toString(16);
     const req: StmtInsightsReq = {
@@ -298,6 +278,7 @@ export class StatementDetails extends React.Component<
 
   componentDidMount(): void {
     this.refreshStatementDetails();
+
     window.addEventListener("resize", this.handleResize);
     this.handleResize();
     // For the first data fetch for this page, we refresh if there are:
@@ -328,9 +309,9 @@ export class StatementDetails extends React.Component<
   componentDidUpdate(prevProps: StatementDetailsProps): void {
     this.handleResize();
     if (
-      prevProps.timeScale != this.props.timeScale ||
-      prevProps.statementFingerprintID != this.props.statementFingerprintID ||
-      prevProps.location != this.props.location
+      prevProps.timeScale !== this.props.timeScale ||
+      prevProps.statementFingerprintID !== this.props.statementFingerprintID ||
+      prevProps.location !== this.props.location
     ) {
       this.refreshStatementDetails();
     }
@@ -758,7 +739,7 @@ export class StatementDetails extends React.Component<
               </SummaryCard>
             </Col>
           </Row>
-          {tableData != null && tableData?.length > 0 && (
+          {tableData?.length > 0 && (
             <>
               <p
                 className={summaryCardStylesCx("summary--card__divider--large")}

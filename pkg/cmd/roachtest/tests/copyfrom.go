@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -60,22 +59,12 @@ CREATE INDEX  l_sk_pk ON lineitem (l_suppkey, l_partkey);
 `
 
 func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
-	if runtime.GOOS == "linux" {
-		if err := repeatRunE(
-			ctx, t, c, c.All(), "update apt-get", `sudo apt-get -qq update`,
-		); err != nil {
+	if !c.IsLocal() {
+		if err := c.Install(ctx, t.L(), c.All(), "postgresql"); err != nil {
 			t.Fatal(err)
 		}
-		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			c.All(),
-			"install dependencies",
-			`sudo apt-get install -qq postgresql`,
-		); err != nil {
-			t.Fatal(err)
-		}
+	} else {
+		t.L().Printf("when running locally, ensure that psql is installed")
 	}
 	csv := fmt.Sprintf(tpchLineitemFmt, sf)
 	c.Run(ctx, c.Node(1), "rm -f /tmp/lineitem-table.csv")
