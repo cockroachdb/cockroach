@@ -283,7 +283,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
 %type <*tree.NumVal>	foreach_slice
 %type <plpgsqltree.PLpgSQLStatement>	for_control
 
-%type <str>		any_identifier opt_block_label opt_loop_label opt_label
+%type <str>		any_identifier opt_block_label opt_loop_label opt_label query_options
 
 %type <[]plpgsqltree.PLpgSQLStatement> proc_sect
 %type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
@@ -891,47 +891,94 @@ stmt_return : RETURN return_variable ';'
   {
     return unimplemented(plpgsqllex, "return")
   }
- | RETURN_NEXT NEXT return_variable ';'
+| RETURN_NEXT NEXT return_variable ';'
   {
     return unimplemented(plpgsqllex, "return next")
   }
- | RETURN_QUERY QUERY query_options ';'
-   {
-     return unimplemented (plpgsqllex, "return query")
-   }
-  ;
+| RETURN_QUERY QUERY query_options ';'
+ {
+   return unimplemented (plpgsqllex, "return query")
+ }
 ;
 
-query_options :
-   {
+
+query_options:
+  {
     _, terminator := plpgsqllex.(*lexer).ReadSqlExpressionStr2(EXECUTE, ';')
-      if terminator == EXECUTE {
-           return unimplemented (plpgsqllex, "return dynamic sql query")
-      }
+    if terminator == EXECUTE {
+      return unimplemented (plpgsqllex, "return dynamic sql query")
+    }
+    plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+  }
+;
 
-      plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
-   }
-  ;
 
+return_variable: IDENT
+  {
+    return unimplemented(plpgsqllex, "return identifier")
+  }
+| expr_until_semi
+  {
+    return unimplemented(plpgsqllex, "return expression")
+  }
+| '(' expr_until_paren
+  {
+    return unimplemented(plpgsqllex, "return composite type")
+  }
+;
 
-return_variable	: IDENT
-					{
-              return unimplemented(plpgsqllex, "return identifier")
-					}
-				| expr_until_semi
-					{
-					    return unimplemented(plpgsqllex, "return expression")
-					}
-				| '(' expr_until_paren
-				  {
-          	  return unimplemented(plpgsqllex, "return composite type")
-          }
-				;
-
-stmt_raise: RAISE
+stmt_raise: RAISE error_level ';'
   {
   }
 ;
+
+error_level:
+  {
+    return unimplemented(plpgsqllex, "raise")
+  }
+| EXCEPTION raise_cond option_expr
+  {
+    return unimplemented(plpgsqllex, "raise exception")
+  }
+| DEBUG raise_cond option_expr
+  {
+    return unimplemented(plpgsqllex, "raise debug")
+  }
+| LOG raise_cond option_expr
+  {
+    return unimplemented(plpgsqllex, "raise log")
+  }
+| INFO raise_cond option_expr
+  {
+    return unimplemented(plpgsqllex, "raise info")
+  }
+| WARNING raise_cond option_expr
+  {
+    return unimplemented(plpgsqllex, "raise warning")
+  }
+;
+
+raise_cond:
+  {}
+| SCONST
+  {}
+| SQLSTATE
+  {}
+| IDENT
+  {}
+;
+
+
+option_expr:
+  {}
+| USING MESSAGE assign_operator expr_until_semi
+  {}
+| USING DETAIL assign_operator expr_until_semi
+  {}
+| USING HINT assign_operator expr_until_semi
+  {}
+| USING ERRCODE assign_operator expr_until_semi
+  {}
 
 stmt_assert: ASSERT assert_cond ';'
   {
