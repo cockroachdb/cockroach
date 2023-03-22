@@ -21,15 +21,10 @@ import {
   TransactionsPageDispatchProps,
 } from "./transactionsPage";
 import {
-  selectTransactionsData,
-  selectTransactionsLastError,
   selectTxnColumns,
   selectSortSetting,
   selectFilters,
   selectSearch,
-  selectTransactionsDataValid,
-  selectTransactionsLastUpdated,
-  selectTransactionsDataInFlight,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -81,12 +76,8 @@ export const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...props,
         columns: selectTxnColumns(state),
-        data: selectTransactionsData(state),
-        isDataValid: selectTransactionsDataValid(state),
-        isReqInFlight: selectTransactionsDataInFlight(state),
-        lastUpdated: selectTransactionsLastUpdated(state),
+        txnsResp: state.adminUI?.transactions,
         timeScale: selectTimeScale(state),
-        error: selectTransactionsLastError(state),
         filters: selectFilters(state),
         isTenant: selectIsTenant(state),
         nodeRegions: nodeRegionsByIDSelector(state),
