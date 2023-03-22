@@ -787,22 +787,24 @@ func (p *Provider) Create(
 	for key, value := range m {
 		fmt.Fprintf(&sb, "%s=%s,", key, value)
 	}
-	s := sb.String()
-	args = append(args, "--labels", s[:len(s)-1])
-
+	labels := sb.String()
+	args = append(args, "--labels", labels)
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
 	args = append(args, fmt.Sprintf("--boot-disk-size=%dGB", opts.OsVolumeSize))
 	var g errgroup.Group
 
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
-	zoneHostNames := make([][]string, min(len(zones), len(names)))
+	// N.B. when len(zones) > len(names), we don't need to map unused zones
+	zoneToHostNames := make(map[string][]string, min(len(zones), len(names)))
 	for i, name := range names {
-		zoneIdx := nodeZones[i]
-		zoneHostNames[zoneIdx] = append(zoneHostNames[zoneIdx], name)
+		zone := zones[nodeZones[i]]
+		zoneToHostNames[zone] = append(zoneToHostNames[zone], name)
 	}
-	for zoneIdx, zoneHosts := range zoneHostNames {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", zones[zoneIdx])
+	l.Printf("Creating %d instances, distributed across [%s]", len(names), strings.Join(zones, ", "))
+
+	for zone, zoneHosts := range zoneToHostNames {
+		argsWithZone := append(args[:len(args):len(args)], "--zone", zone)
 		argsWithZone = append(argsWithZone, zoneHosts...)
 		g.Go(func() error {
 			cmd := exec.Command("gcloud", argsWithZone...)
@@ -814,6 +816,59 @@ func (p *Provider) Create(
 			return nil
 		})
 
+	}
+	err = g.Wait()
+	if err != nil {
+		return err
+	}
+
+	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
+}
+
+// N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
+// Hence, we must propagate them. See: https://cloud.google.com/compute/docs/labeling-resources#labeling_boot_disks
+func propagateDiskLabels(l *logger.Logger, project string, labels string, zoneToHostNames map[string][]string,
+	opts *vm.CreateOpts) error {
+	var g errgroup.Group
+
+	l.Printf("Propagating labels across all disks")
+
+	for zone, zoneHosts := range zoneToHostNames {
+		zoneArg := []string{"--zone", zone}
+
+		for _, host := range zoneHosts {
+			args := []string{"compute", "disks", "update"}
+			args = append(args, "--update-labels", labels[:len(labels)-1])
+			args = append(args, "--project", project)
+			args = append(args, zoneArg...)
+			host := host
+
+			g.Go(func() error {
+				// N.B. boot disk has the same name as the host.
+				bootDiskArgs := append(args, fmt.Sprintf("%s", host))
+				cmd := exec.Command("gcloud", bootDiskArgs...)
+
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", bootDiskArgs, output)
+				}
+				return nil
+			})
+
+			if !opts.SSDOpts.UseLocalSSD {
+				g.Go(func() error {
+					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
+					persistentDiskArgs := append(args, fmt.Sprintf("%s-1", host))
+					cmd := exec.Command("gcloud", persistentDiskArgs...)
+
+					output, err := cmd.CombinedOutput()
+					if err != nil {
+						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
+					}
+					return nil
+				})
+			}
+		}
 	}
 	return g.Wait()
 }
