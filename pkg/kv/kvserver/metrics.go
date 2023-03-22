@@ -416,7 +416,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// RocksDB/Pebble metrics.
+	// Pebble metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
 		Help:        "Count of block cache hits",
@@ -616,6 +616,60 @@ Raft applied index at which this checkpoint was taken.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaBlockBytes = metric.Metadata{
+		Name:        "storage.iterator.block-load.bytes",
+		Help:        "Bytes loaded by storage engine iterators (possibly cached). See storage.AggregatedIteratorStats for details.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBlockBytesInCache = metric.Metadata{
+		Name:        "storage.iterator.block-load.cached-bytes",
+		Help:        "Bytes loaded by storage engine iterators from the block cache. See storage.AggregatedIteratorStats for details.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBlockReadDuration = metric.Metadata{
+		Name:        "storage.iterator.block-load.read-duration",
+		Help:        "Cumulative time storage engine iterators spent loading blocks from durable storage. See storage.AggregatedIteratorStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaIterExternalSeeks = metric.Metadata{
+		Name:        "storage.iterator.external.seeks",
+		Help:        "Cumulative count of seeks performed on storage engine iterators. See storage.AggregatedIteratorStats for details.",
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaIterExternalSteps = metric.Metadata{
+		Name:        "storage.iterator.external.steps",
+		Help:        "Cumulative count of steps performed on storage engine iterators. See storage.AggregatedIteratorStats for details.",
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaIterInternalSeeks = metric.Metadata{
+		Name: "storage.iterator.internal.seeks",
+		Help: `Cumulative count of seeks performed internally within storage engine iterators.
+
+A value high relative to 'storage.iterator.external.seeks'
+is a good indication that there's an accumulation of garbage
+internally within the storage engine.
+
+See storage.AggregatedIteratorStats for details.`,
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaIterInternalSteps = metric.Metadata{
+		Name: "storage.iterator.internal.steps",
+		Help: `Cumulative count of steps performed internally within storage engine iterators.
+
+A value high relative to 'storage.iterator.external.steps'
+is a good indication that there's an accumulation of garbage
+internally within the storage engine.
+
+See storage.AggregatedIteratorStats for more details.`,
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSharedStorageBytesWritten = metric.Metadata{
 		Name:        "storage.shared-storage.write",
 		Help:        "Bytes written to external storage",
@@ -1843,9 +1897,17 @@ type StoreMetrics struct {
 	// before pebble, and this name is kept for backwards compatibility despite
 	// the backing metrics now originating from pebble.
 	//
-	// All of these are cumulative values. They are maintained by pebble and
+	// All of these are cumulative values. Most are maintained by pebble and
 	// so we have to expose them as gauges (lest we start tracking deltas from
 	// the respective last stats we got from pebble).
+	//
+	// There's a bit of a semantic mismatch here because the mechanism of
+	// updating these metrics is a gauge (eg, we're reading the current value,
+	// not incrementing) but semantically some of them are monotonically
+	// increasing counters.
+	//
+	// TODO(jackson): Reconcile this mismatch so that metrics that are
+	// semantically counters are exported as such to Prometheus. See #99922.
 	RdbBlockCacheHits           *metric.Gauge
 	RdbBlockCacheMisses         *metric.Gauge
 	RdbBlockCacheUsage          *metric.Gauge
@@ -1876,6 +1938,13 @@ type StoreMetrics struct {
 	RdbWriteStallNanos          *metric.Gauge
 	SharedStorageBytesRead      *metric.Gauge
 	SharedStorageBytesWritten   *metric.Gauge
+	IterBlockBytes              *metric.Gauge
+	IterBlockBytesInCache       *metric.Gauge
+	IterBlockReadDuration       *metric.Gauge
+	IterExternalSeeks           *metric.Gauge
+	IterExternalSteps           *metric.Gauge
+	IterInternalSeeks           *metric.Gauge
+	IterInternalSteps           *metric.Gauge
 	FlushableIngestCount        *metric.Gauge
 	FlushableIngestTableCount   *metric.Gauge
 	FlushableIngestTableSize    *metric.Gauge
@@ -2393,7 +2462,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess: metric.NewCounter(metaReadWithinUncertaintyIntervalErrorServerSideRetrySuccess),
 		ReadWithinUncertaintyIntervalErrorServerSideRetryFailure: metric.NewCounter(metaReadWithinUncertaintyIntervalErrorServerSideRetryFailure),
 
-		// RocksDB/Pebble metrics.
+		// Pebble metrics.
+		//
+		// These are all gauges today because almost all of them are cumulative
+		// metrics recorded within Pebble. Internally within Pebble some of
+		// these are monotonically increasing counters. There's a bit of a
+		// semantic mismatch here because the mechanism of updating the metric
+		// is a gauge (eg, we're reading the current value, not incrementing)
+		// but the meaning of the metric itself is a counter.
+		// TODO(jackson): Reconcile this mismatch so that metrics that are
+		// semantically counters are exported as such to Prometheus. See #99922.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
 		RdbBlockCacheMisses:         metric.NewGauge(metaRdbBlockCacheMisses),
 		RdbBlockCacheUsage:          metric.NewGauge(metaRdbBlockCacheUsage),
@@ -2422,6 +2500,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbLevelScore:               rdbLevelScore,
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
+		IterBlockBytes:              metric.NewGauge(metaBlockBytes),
+		IterBlockBytesInCache:       metric.NewGauge(metaBlockBytesInCache),
+		IterBlockReadDuration:       metric.NewGauge(metaBlockReadDuration),
+		IterExternalSeeks:           metric.NewGauge(metaIterExternalSeeks),
+		IterExternalSteps:           metric.NewGauge(metaIterExternalSteps),
+		IterInternalSeeks:           metric.NewGauge(metaIterInternalSeeks),
+		IterInternalSteps:           metric.NewGauge(metaIterInternalSteps),
 		SharedStorageBytesRead:      metric.NewGauge(metaSharedStorageBytesRead),
 		SharedStorageBytesWritten:   metric.NewGauge(metaSharedStorageBytesWritten),
 		FlushableIngestCount:        metric.NewGauge(metaFlushableIngestCount),
@@ -2755,6 +2840,13 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbWriteStallNanos.Update(m.WriteStallDuration.Nanoseconds())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
+	sm.IterBlockBytes.Update(int64(m.Iterator.BlockBytes))
+	sm.IterBlockBytesInCache.Update(int64(m.Iterator.BlockBytesInCache))
+	sm.IterBlockReadDuration.Update(int64(m.Iterator.BlockReadDuration))
+	sm.IterExternalSeeks.Update(int64(m.Iterator.ExternalSeeks))
+	sm.IterExternalSteps.Update(int64(m.Iterator.ExternalSteps))
+	sm.IterInternalSeeks.Update(int64(m.Iterator.InternalSeeks))
+	sm.IterInternalSteps.Update(int64(m.Iterator.InternalSteps))
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
