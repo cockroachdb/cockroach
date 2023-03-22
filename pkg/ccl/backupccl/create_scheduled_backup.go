@@ -85,6 +85,7 @@ type scheduledBackupSpec struct {
 	kmsURIs                    []string
 	incrementalStorage         []string
 	includeAllSecondaryTenants *bool
+	execLoc                    *string
 }
 
 func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
@@ -232,6 +233,10 @@ func doCreateBackupSchedules(
 		} else {
 			backupNode.Options.IncludeAllSecondaryTenants = tree.DBoolFalse
 		}
+	}
+
+	if eval.execLoc != nil && *eval.execLoc != "" {
+		backupNode.Options.ExecutionLocality = tree.NewStrVal(*eval.execLoc)
 	}
 
 	// Evaluate encryption KMS URIs if set.
@@ -688,6 +693,17 @@ func makeScheduledBackupSpec(
 		}
 		spec.captureRevisionHistory = &capture
 	}
+
+	if schedule.BackupOptions.ExecutionLocality != nil {
+		loc, err := exprEval.String(
+			ctx, schedule.BackupOptions.ExecutionLocality,
+		)
+		if err != nil {
+			return nil, err
+		}
+		spec.execLoc = &loc
+	}
+
 	if schedule.BackupOptions.IncludeAllSecondaryTenants != nil {
 		includeSecondary, err := exprEval.Bool(ctx,
 			schedule.BackupOptions.IncludeAllSecondaryTenants)
@@ -761,6 +777,7 @@ func createBackupScheduleTypeCheck(
 		schedule.ScheduleLabelSpec.Label,
 		schedule.Recurrence,
 		schedule.BackupOptions.EncryptionPassphrase,
+		schedule.BackupOptions.ExecutionLocality,
 	}
 	if schedule.FullBackup != nil {
 		stringExprs = append(stringExprs, schedule.FullBackup.Recurrence)

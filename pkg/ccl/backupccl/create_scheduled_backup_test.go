@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -97,6 +98,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	}
 
 	args := base.TestServerArgs{
+		Locality:      roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "of-france"}}},
 		Settings:      cluster.MakeClusterSettings(),
 		ExternalIODir: dir,
 		// Some scheduled backup tests fail when run within a tenant. More
@@ -635,6 +637,27 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					backupStmt: "BACKUP DATABASE system INTO " +
 						"('nodelocal://0/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://0/backup2?COCKROACH_LOCALITY=default') " +
 						"WITH revision_history = true, detached",
+					period: 24 * time.Hour,
+				},
+			},
+		},
+		{
+			name: "exec-loc",
+			user: enterpriseUser,
+			query: `
+		CREATE SCHEDULE FOR BACKUP DATABASE system
+    INTO 'nodelocal://0/backup'
+		WITH revision_history, execution locality = 'region=of-france'
+    RECURRING '1 2 * * *'
+    FULL BACKUP ALWAYS
+		WITH SCHEDULE OPTIONS first_run=$1
+		`,
+			queryArgs: []interface{}{th.env.Now().Add(time.Minute)},
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe: "BACKUP .+",
+					backupStmt: "BACKUP DATABASE system INTO 'nodelocal://0/backup' " +
+						"WITH revision_history = true, detached, execution locality = 'region=of-france'",
 					period: 24 * time.Hour,
 				},
 			},
