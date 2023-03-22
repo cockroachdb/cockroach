@@ -1,0 +1,60 @@
+parse
+DECLARE
+BEGIN
+  RAISE;
+END
+----
+expected parse error: at or near ";": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  RAISE EXCEPTION USING MESSAGE = "why is this so involved?";
+END
+----
+expected parse error: at or near "why is this so involved?": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  RAISE LOG USING HINT = "Insert HINT";
+END
+----
+expected parse error: at or near "Insert HINT": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+  RAISE LOG 'Nonexistent ID --> %', user_id;
+END
+----
+expected parse error: at or near ",": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+  RAISE LOG 'Nonexistent ID --> %', user_id
+  USING HINT = "check...userid?" ;
+END
+----
+expected parse error: at or near ",": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  RAISE SQLSTATE '222222' USING HINT = "hm";
+END
+----
+expected parse error: at or near "sqlstate": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  RAISE internal_screaming;
+END
+----
+expected parse error: at or near "internal_screaming": syntax error: unimplemented: this syntax
