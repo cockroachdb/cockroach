@@ -283,6 +283,10 @@ type TestServerInterface interface {
 	// TenantOrServer returns the default test tenant, if it was started or this
 	// server if not.
 	TenantOrServer() TestTenantInterface
+
+	// BinaryVersionOverride returns the value of an override if set using
+	// TestingKnobs.
+	BinaryVersionOverride() roachpb.Version
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -318,17 +322,26 @@ func StartServer(
 		}
 	}
 
-	server, err := NewServer(params)
+	s, err := NewServer(params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 
-	if err := server.Start(context.Background()); err != nil {
+	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
-		t, server.ServingSQLAddr(), params.UseDatabase, params.Insecure, server.Stopper())
-	return server, goDB, server.DB()
+		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+
+	// Now that we have started the server on the bootstrap version, let us run
+	// the migrations up to the overridden BinaryVersion.
+	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
+		if _, err := goDB.Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return s, goDB, s.DB()
 }
 
 // NewServer creates a test server.
