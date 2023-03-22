@@ -53,7 +53,7 @@ func TestRouteToNode(t *testing.T) {
 			sourceServerID:          1,
 			nodeIDRequestedInCookie: "local",
 			expectStatusCode:        200,
-			expectRegex:             regexp.MustCompile(`ranges_underreplicated{store="2"}`),
+			expectRegex:             regexp.MustCompile(`ranges_underreplicated{store="2",node_id="2"}`),
 		},
 		{
 			name:                    "remote _status/vars on node 2 from node 1 using cookie",
@@ -61,7 +61,7 @@ func TestRouteToNode(t *testing.T) {
 			sourceServerID:          0,
 			nodeIDRequestedInCookie: "2",
 			expectStatusCode:        200,
-			expectRegex:             regexp.MustCompile(`ranges_underreplicated{store="2"}`),
+			expectRegex:             regexp.MustCompile(`ranges_underreplicated{store="2",node_id="2"}`),
 		},
 		{
 			name:                    "remote _status/vars on node 1 from node 2 using cookie",
@@ -69,7 +69,7 @@ func TestRouteToNode(t *testing.T) {
 			sourceServerID:          1,
 			nodeIDRequestedInCookie: "1",
 			expectStatusCode:        200,
-			expectRegex:             regexp.MustCompile(`ranges_underreplicated{store="1"}`),
+			expectRegex:             regexp.MustCompile(`ranges_underreplicated{store="1",node_id="1"}`),
 		},
 		{
 			name:                        "remote _status/vars on node 2 from node 1 using query param",
@@ -77,7 +77,7 @@ func TestRouteToNode(t *testing.T) {
 			sourceServerID:              0,
 			nodeIDRequestedInQueryParam: "2",
 			expectStatusCode:            200,
-			expectRegex:                 regexp.MustCompile(`ranges_underreplicated{store="2"}`),
+			expectRegex:                 regexp.MustCompile(`ranges_underreplicated{store="2",node_id="2"}`),
 		},
 		{
 			name:                        "query param overrides cookie",
@@ -86,7 +86,7 @@ func TestRouteToNode(t *testing.T) {
 			nodeIDRequestedInCookie:     "local",
 			nodeIDRequestedInQueryParam: "2",
 			expectStatusCode:            200,
-			expectRegex:                 regexp.MustCompile(`ranges_underreplicated{store="2"}`),
+			expectRegex:                 regexp.MustCompile(`ranges_underreplicated{store="2",node_id="2"}`),
 		},
 		{
 			name:                    "remote / root HTML on node 2 from node 1 using cookie",
