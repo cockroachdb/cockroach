@@ -867,6 +867,11 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 		ctx, output, err, func(context.Context, execinfra.RowReceiver) {} /* pushTrailingMeta */, sp.input)
 }
 
+// Resume is part of the execinfra.Processor interface.
+func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
+	panic("not implemented")
+}
+
 func init() {
 	rowexec.NewParquetWriterProcessor = newParquetWriterProcessor
 }
