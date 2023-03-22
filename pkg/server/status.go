@@ -2144,7 +2144,7 @@ func (s *systemStatusServer) rangesHelper(
 				RequestsPerSecond:   loadStats.RequestsPerSecond,
 				WritesPerSecond:     loadStats.WriteKeysPerSecond,
 				ReadsPerSecond:      loadStats.ReadKeysPerSecond,
-				WriteBytesPerSecond: loadStats.WriteKeysPerSecond,
+				WriteBytesPerSecond: loadStats.WriteBytesPerSecond,
 				ReadBytesPerSecond:  loadStats.ReadBytesPerSecond,
 				CPUTimePerSecond:    loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond,
 			},
