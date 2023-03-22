@@ -3241,6 +3241,29 @@ var charts = []sectionDescription{
 				Title:   "WAL Fsync Latency",
 				Metrics: []string{"storage.wal.fsync.latency"},
 			},
+			{
+				Title: "Iterator Block Loads",
+				Metrics: []string{
+					"storage.iterator.block-load.bytes",
+					"storage.iterator.block-load.cached-bytes",
+				},
+				AxisLabel: "Bytes",
+			},
+			{
+				Title:     "Iterator I/O",
+				Metrics:   []string{"storage.iterator.block-load.read-duration"},
+				AxisLabel: "Duration (nanos)",
+			},
+			{
+				Title: "Iterator Operations",
+				Metrics: []string{
+					"storage.iterator.external.seeks",
+					"storage.iterator.external.steps",
+					"storage.iterator.internal.seeks",
+					"storage.iterator.internal.steps",
+				},
+				AxisLabel: "Ops",
+			},
 		},
 	},
 	{
