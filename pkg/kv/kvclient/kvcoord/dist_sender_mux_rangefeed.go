@@ -426,6 +426,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			if threshold := stuckThreshold(); threshold > 0 {
 				if _, err := ms.eachStream(func(id int64, a *activeMuxRangeFeed) error {
 					if !a.startAfter.IsEmpty() && timeutil.Since(a.startAfter.GoTime()) > stuckThreshold() {
+						log.Infof(ctx, "XXX delete stuck stream")
 						ms.streams.Delete(id)
 						return m.restartActiveRangeFeed(ctx, a, errRestartStuckRange)
 					}
