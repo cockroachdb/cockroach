@@ -1,0 +1,44 @@
+parse
+DECLARE
+BEGIN
+  RETURN 1+2;
+END
+----
+expected parse error: at or near "2": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+  x := 1 + 2;
+  RETURN x;
+END
+----
+expected parse error: at or near "x": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  RETURN (1, 'string');
+END
+----
+expected parse error: at or near "string": syntax error: unimplemented: this syntax
+
+
+
+parse
+DECLARE
+BEGIN
+  RETURN QUERY SELECT 1 + 1;
+END
+----
+expected parse error: at or near ";": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  RETURN QUERY EXECUTE a dynamic command;
+END
+----
+expected parse error: at or near "query": syntax error: unimplemented: this syntax
