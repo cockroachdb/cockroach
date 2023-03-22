@@ -2518,6 +2518,7 @@ system         public        statement_statistics             index_recommendati
 system         public        statement_statistics             indexes_usage                                                                                             13
 system         public        statement_statistics             metadata                                                                                                  8
 system         public        statement_statistics             node_id                                                                                                   6
+system         public        statement_statistics             p99_latency                                                                                               19
 system         public        statement_statistics             plan                                                                                                      10
 system         public        statement_statistics             plan_hash                                                                                                 4
 system         public        statement_statistics             service_latency                                                                                           15
@@ -2600,6 +2601,7 @@ system         public        transaction_statistics           execution_count   
 system         public        transaction_statistics           fingerprint_id                                                                                            2
 system         public        transaction_statistics           metadata                                                                                                  6
 system         public        transaction_statistics           node_id                                                                                                   4
+system         public        transaction_statistics           p99_latency                                                                                               14
 system         public        transaction_statistics           service_latency                                                                                           10
 system         public        transaction_statistics           statistics                                                                                                7
 system         public        transaction_statistics           total_estimated_execution_time                                                                            13

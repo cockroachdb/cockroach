@@ -122,10 +122,13 @@ SELECT * FROM ((SELECT
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.statement_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour') ORDER BY execution_count DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY execution_count DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   transaction_fingerprint_id,
@@ -135,10 +138,13 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.statement_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY service_latency DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY service_latency DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   transaction_fingerprint_id,
@@ -148,10 +154,13 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.statement_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY cpu_sql_nanos DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY cpu_sql_nanos DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   transaction_fingerprint_id,
@@ -161,10 +170,13 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.statement_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY contention_time DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY contention_time DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   transaction_fingerprint_id,
@@ -174,123 +186,164 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.statement_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY total_estimated_execution_time DESC LIMIT 500))
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY total_estimated_execution_time DESC LIMIT 500)
+ UNION (SELECT
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  app_name,
+  execution_count,
+  service_latency,
+  cpu_sql_nanos,
+  contention_time,
+  total_estimated_execution_time,
+  p99_latency,
+  metadata,
+  statistics
+FROM system.statement_statistics
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY p99_latency DESC LIMIT 500))
 ----
 distribution: local
 vectorized: true
 ·
 • union
-│ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │ estimated row count: 2
 │
 ├── • union
-│   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
-│   │ estimated row count: 1
+│   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
+│   │ estimated row count: 2
 │   │
 │   ├── • union
-│   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │ estimated row count: 1
 │   │   │
 │   │   ├── • union
-│   │   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │   │ estimated row count: 1
 │   │   │   │
-│   │   │   ├── • index join
-│   │   │   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
-│   │   │   │   │ estimated row count: 0
-│   │   │   │   │ table: statement_statistics@primary
-│   │   │   │   │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+│   │   │   ├── • union
+│   │   │   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
+│   │   │   │   │ estimated row count: 1
 │   │   │   │   │
-│   │   │   │   └── • top-k
-│   │   │   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count)
-│   │   │   │       │ ordering: -execution_count
+│   │   │   │   ├── • index join
+│   │   │   │   │   │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
+│   │   │   │   │   │ estimated row count: 0
+│   │   │   │   │   │ table: statement_statistics@primary
+│   │   │   │   │   │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+│   │   │   │   │   │
+│   │   │   │   │   └── • top-k
+│   │   │   │   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count)
+│   │   │   │   │       │ ordering: -execution_count
+│   │   │   │   │       │ estimated row count: 0
+│   │   │   │   │       │ order: -execution_count
+│   │   │   │   │       │ k: 500
+│   │   │   │   │       │
+│   │   │   │   │       └── • scan
+│   │   │   │   │             columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count)
+│   │   │   │   │             estimated row count: 0 (33% of the table; stats collected <hidden> ago)
+│   │   │   │   │             table: statement_statistics@execution_count_idx (partial index)
+│   │   │   │   │             spans: /2023-03-21T14:05:00.000001Z-
+│   │   │   │   │
+│   │   │   │   └── • index join
+│   │   │   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │   │       │ estimated row count: 0
-│   │   │   │       │ order: -execution_count
-│   │   │   │       │ k: 500
+│   │   │   │       │ table: statement_statistics@primary
+│   │   │   │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 │   │   │   │       │
-│   │   │   │       └── • scan
-│   │   │   │             columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count)
-│   │   │   │             estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│   │   │   │             table: statement_statistics@execution_count_idx (partial index)
-│   │   │   │             spans: /2023-03-21T14:05:00.000001Z-
+│   │   │   │       └── • top-k
+│   │   │   │           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, service_latency)
+│   │   │   │           │ ordering: -service_latency
+│   │   │   │           │ estimated row count: 0
+│   │   │   │           │ order: -service_latency
+│   │   │   │           │ k: 500
+│   │   │   │           │
+│   │   │   │           └── • scan
+│   │   │   │                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, service_latency)
+│   │   │   │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
+│   │   │   │                 table: statement_statistics@service_latency_idx (partial index)
+│   │   │   │                 spans: /2023-03-21T14:05:00.000001Z-
 │   │   │   │
 │   │   │   └── • index join
-│   │   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │       │ estimated row count: 0
 │   │   │       │ table: statement_statistics@primary
 │   │   │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 │   │   │       │
 │   │   │       └── • top-k
-│   │   │           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, service_latency)
-│   │   │           │ ordering: -service_latency
+│   │   │           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, cpu_sql_nanos)
+│   │   │           │ ordering: -cpu_sql_nanos
 │   │   │           │ estimated row count: 0
-│   │   │           │ order: -service_latency
+│   │   │           │ order: -cpu_sql_nanos
 │   │   │           │ k: 500
 │   │   │           │
 │   │   │           └── • scan
-│   │   │                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, service_latency)
+│   │   │                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, cpu_sql_nanos)
 │   │   │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│   │   │                 table: statement_statistics@service_latency_idx (partial index)
+│   │   │                 table: statement_statistics@cpu_sql_nanos_idx (partial index)
 │   │   │                 spans: /2023-03-21T14:05:00.000001Z-
 │   │   │
 │   │   └── • index join
-│   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │       │ estimated row count: 0
 │   │       │ table: statement_statistics@primary
 │   │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 │   │       │
 │   │       └── • top-k
-│   │           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, cpu_sql_nanos)
-│   │           │ ordering: -cpu_sql_nanos
+│   │           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, contention_time)
+│   │           │ ordering: -contention_time
 │   │           │ estimated row count: 0
-│   │           │ order: -cpu_sql_nanos
+│   │           │ order: -contention_time
 │   │           │ k: 500
 │   │           │
 │   │           └── • scan
-│   │                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, cpu_sql_nanos)
+│   │                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, contention_time)
 │   │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│   │                 table: statement_statistics@cpu_sql_nanos_idx (partial index)
+│   │                 table: statement_statistics@contention_time_idx (partial index)
 │   │                 spans: /2023-03-21T14:05:00.000001Z-
 │   │
 │   └── • index join
-│       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│       │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │       │ estimated row count: 0
 │       │ table: statement_statistics@primary
 │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 │       │
 │       └── • top-k
-│           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, contention_time)
-│           │ ordering: -contention_time
+│           │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, total_estimated_execution_time)
+│           │ ordering: -total_estimated_execution_time
 │           │ estimated row count: 0
-│           │ order: -contention_time
+│           │ order: -total_estimated_execution_time
 │           │ k: 500
 │           │
 │           └── • scan
-│                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, contention_time)
+│                 columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, total_estimated_execution_time)
 │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│                 table: statement_statistics@contention_time_idx (partial index)
+│                 table: statement_statistics@total_estimated_execution_time_idx (partial index)
 │                 spans: /2023-03-21T14:05:00.000001Z-
 │
 └── • index join
-    │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+    │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
     │ estimated row count: 0
     │ table: statement_statistics@primary
     │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
     │
     └── • top-k
-        │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, total_estimated_execution_time)
-        │ ordering: -total_estimated_execution_time
+        │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, p99_latency)
+        │ ordering: -p99_latency
         │ estimated row count: 0
-        │ order: -total_estimated_execution_time
+        │ order: -p99_latency
         │ k: 500
         │
         └── • scan
-              columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, total_estimated_execution_time)
+              columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, p99_latency)
               estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-              table: statement_statistics@total_estimated_execution_time_idx (partial index)
+              table: statement_statistics@p99_latency_idx (partial index)
               spans: /2023-03-21T14:05:00.000001Z-
 
 statement ok
@@ -307,10 +360,13 @@ SELECT * FROM ((SELECT
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.transaction_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY execution_count DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY execution_count DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   app_name,
@@ -319,10 +375,13 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.transaction_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY service_latency DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY service_latency DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   app_name,
@@ -331,10 +390,13 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.transaction_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY cpu_sql_nanos DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY cpu_sql_nanos DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   app_name,
@@ -343,10 +405,13 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.transaction_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')  ORDER BY contention_time DESC LIMIT 500) UNION (SELECT
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
+ORDER BY contention_time DESC LIMIT 500)
+UNION (SELECT
   aggregated_ts,
   fingerprint_id,
   app_name,
@@ -355,121 +420,161 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
   cpu_sql_nanos,
   contention_time,
   total_estimated_execution_time,
+  p99_latency,
   metadata,
   statistics
 FROM system.transaction_statistics
-WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')  ORDER BY total_estimated_execution_time DESC LIMIT 500))
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')
+ORDER BY total_estimated_execution_time DESC LIMIT 500)
+UNION (SELECT
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  execution_count,
+  service_latency,
+  cpu_sql_nanos,
+  contention_time,
+  total_estimated_execution_time,
+  p99_latency,
+  metadata,
+  statistics
+FROM system.transaction_statistics
+WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')
+ORDER BY p99_latency DESC LIMIT 500))
 ----
 distribution: local
 vectorized: true
 ·
 • union
-│ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │ estimated row count: 2
 │
 ├── • union
-│   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
-│   │ estimated row count: 1
+│   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
+│   │ estimated row count: 2
 │   │
 │   ├── • union
-│   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │ estimated row count: 1
 │   │   │
 │   │   ├── • union
-│   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │   │ estimated row count: 1
 │   │   │   │
-│   │   │   ├── • index join
-│   │   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
-│   │   │   │   │ estimated row count: 0
-│   │   │   │   │ table: transaction_statistics@primary
-│   │   │   │   │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
+│   │   │   ├── • union
+│   │   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
+│   │   │   │   │ estimated row count: 1
 │   │   │   │   │
-│   │   │   │   └── • top-k
-│   │   │   │       │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count)
-│   │   │   │       │ ordering: -execution_count
+│   │   │   │   ├── • index join
+│   │   │   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
+│   │   │   │   │   │ estimated row count: 0
+│   │   │   │   │   │ table: transaction_statistics@primary
+│   │   │   │   │   │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
+│   │   │   │   │   │
+│   │   │   │   │   └── • top-k
+│   │   │   │   │       │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count)
+│   │   │   │   │       │ ordering: -execution_count
+│   │   │   │   │       │ estimated row count: 0
+│   │   │   │   │       │ order: -execution_count
+│   │   │   │   │       │ k: 500
+│   │   │   │   │       │
+│   │   │   │   │       └── • scan
+│   │   │   │   │             columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count)
+│   │   │   │   │             estimated row count: 0 (33% of the table; stats collected <hidden> ago)
+│   │   │   │   │             table: transaction_statistics@execution_count_idx (partial index)
+│   │   │   │   │             spans: /2023-03-21T14:05:00.000001Z-
+│   │   │   │   │
+│   │   │   │   └── • index join
+│   │   │   │       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │   │       │ estimated row count: 0
-│   │   │   │       │ order: -execution_count
-│   │   │   │       │ k: 500
+│   │   │   │       │ table: transaction_statistics@primary
+│   │   │   │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
 │   │   │   │       │
-│   │   │   │       └── • scan
-│   │   │   │             columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count)
-│   │   │   │             estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│   │   │   │             table: transaction_statistics@execution_count_idx (partial index)
-│   │   │   │             spans: /2023-03-21T14:05:00.000001Z-
+│   │   │   │       └── • top-k
+│   │   │   │           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, service_latency)
+│   │   │   │           │ ordering: -service_latency
+│   │   │   │           │ estimated row count: 0
+│   │   │   │           │ order: -service_latency
+│   │   │   │           │ k: 500
+│   │   │   │           │
+│   │   │   │           └── • scan
+│   │   │   │                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, service_latency)
+│   │   │   │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
+│   │   │   │                 table: transaction_statistics@service_latency_idx (partial index)
+│   │   │   │                 spans: /2023-03-21T14:05:00.000001Z-
 │   │   │   │
 │   │   │   └── • index join
-│   │   │       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │   │       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │   │       │ estimated row count: 0
 │   │   │       │ table: transaction_statistics@primary
 │   │   │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
 │   │   │       │
 │   │   │       └── • top-k
-│   │   │           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, service_latency)
-│   │   │           │ ordering: -service_latency
+│   │   │           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, cpu_sql_nanos)
+│   │   │           │ ordering: -cpu_sql_nanos
 │   │   │           │ estimated row count: 0
-│   │   │           │ order: -service_latency
+│   │   │           │ order: -cpu_sql_nanos
 │   │   │           │ k: 500
 │   │   │           │
 │   │   │           └── • scan
-│   │   │                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, service_latency)
+│   │   │                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, cpu_sql_nanos)
 │   │   │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│   │   │                 table: transaction_statistics@service_latency_idx (partial index)
+│   │   │                 table: transaction_statistics@cpu_sql_nanos_idx (partial index)
 │   │   │                 spans: /2023-03-21T14:05:00.000001Z-
 │   │   │
 │   │   └── • index join
-│   │       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│   │       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │   │       │ estimated row count: 0
 │   │       │ table: transaction_statistics@primary
 │   │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
 │   │       │
 │   │       └── • top-k
-│   │           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, cpu_sql_nanos)
-│   │           │ ordering: -cpu_sql_nanos
+│   │           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, contention_time)
+│   │           │ ordering: -contention_time
 │   │           │ estimated row count: 0
-│   │           │ order: -cpu_sql_nanos
+│   │           │ order: -contention_time
 │   │           │ k: 500
 │   │           │
 │   │           └── • scan
-│   │                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, cpu_sql_nanos)
+│   │                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, contention_time)
 │   │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│   │                 table: transaction_statistics@cpu_sql_nanos_idx (partial index)
+│   │                 table: transaction_statistics@contention_time_idx (partial index)
 │   │                 spans: /2023-03-21T14:05:00.000001Z-
 │   │
 │   └── • index join
-│       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+│       │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
 │       │ estimated row count: 0
 │       │ table: transaction_statistics@primary
 │       │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
 │       │
 │       └── • top-k
-│           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, contention_time)
-│           │ ordering: -contention_time
+│           │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, total_estimated_execution_time)
+│           │ ordering: -total_estimated_execution_time
 │           │ estimated row count: 0
-│           │ order: -contention_time
+│           │ order: -total_estimated_execution_time
 │           │ k: 500
 │           │
 │           └── • scan
-│                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, contention_time)
+│                 columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, total_estimated_execution_time)
 │                 estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-│                 table: transaction_statistics@contention_time_idx (partial index)
+│                 table: transaction_statistics@total_estimated_execution_time_idx (partial index)
 │                 spans: /2023-03-21T14:05:00.000001Z-
 │
 └── • index join
-    │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, metadata, statistics)
+    │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
     │ estimated row count: 0
     │ table: transaction_statistics@primary
     │ key columns: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id
     │
     └── • top-k
-        │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, total_estimated_execution_time)
-        │ ordering: -total_estimated_execution_time
+        │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, p99_latency)
+        │ ordering: -p99_latency
         │ estimated row count: 0
-        │ order: -total_estimated_execution_time
+        │ order: -p99_latency
         │ k: 500
         │
         └── • scan
-              columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, total_estimated_execution_time)
+              columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, p99_latency)
               estimated row count: 0 (33% of the table; stats collected <hidden> ago)
-              table: transaction_statistics@total_estimated_execution_time_idx (partial index)
+              table: transaction_statistics@p99_latency_idx (partial index)
               spans: /2023-03-21T14:05:00.000001Z-
