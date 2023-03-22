@@ -638,6 +638,9 @@ func (sr *txnSpanRefresher) forwardRefreshTimestampOnResponse(
 	return nil
 }
 
+const RefreshSpansAtInvalidTimestampMsg = "attempting to append refresh spans after the tracked " +
+	"timestamp has moved forward. batchTimestamp: %s refreshedTimestamp: %s"
+
 // assertRefreshSpansAtInvalidTimestamp returns an error if the timestamp at
 // which a set of reads was performed is below the largest timestamp that this
 // transaction has already refreshed to.
@@ -647,8 +650,7 @@ func (sr *txnSpanRefresher) assertRefreshSpansAtInvalidTimestamp(
 	if readTimestamp.Less(sr.refreshedTimestamp) {
 		// This can happen with (illegal) concurrent txn use, but that's supposed to
 		// be detected by the gatekeeper interceptor.
-		return errors.AssertionFailedf("attempting to append refresh spans after the tracked"+
-			" timestamp has moved forward. batchTimestamp: %s refreshedTimestamp: %s",
+		return errors.AssertionFailedf(RefreshSpansAtInvalidTimestampMsg,
 			errors.Safe(readTimestamp), errors.Safe(sr.refreshedTimestamp))
 	}
 	return nil
@@ -686,9 +688,9 @@ func (sr *txnSpanRefresher) populateLeafFinalState(tfs *roachpb.LeafTxnFinalStat
 // importLeafFinalState is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) importLeafFinalState(
 	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
-) {
+) error {
 	if err := sr.assertRefreshSpansAtInvalidTimestamp(tfs.Txn.ReadTimestamp); err != nil {
-		log.Fatalf(ctx, "%s", err)
+		return err
 	}
 	if tfs.RefreshInvalid {
 		sr.refreshInvalid = true
@@ -698,6 +700,7 @@ func (sr *txnSpanRefresher) importLeafFinalState(
 		// Check whether we should condense the refresh spans.
 		sr.maybeCondenseRefreshSpans(ctx, &tfs.Txn)
 	}
+	return nil
 }
 
 // epochBumpedLocked implements the txnInterceptor interface.
