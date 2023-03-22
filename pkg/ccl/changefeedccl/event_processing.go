@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,9 +107,16 @@ func newEventConsumer(
 	pacerRequestUnit := changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV)
 	enablePacer := changefeedbase.EventConsumerElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
+	var sharedCache SharedCache
+	if spec.JobID != catpb.InvalidJobID {
+		sharedCache = sharedCacheForJob(spec.JobID, cfg.DB)
+	} else {
+		sharedCache = newSharedCacheForCore()
+	}
+
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
-		encoder, err := getEncoder(encodingOpts, feed.Targets, makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
+		encoder, err := getEncoder(encodingOpts, feed.Targets, makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics, sharedCache)
 		if err != nil {
 			return nil, err
 		}

@@ -46,12 +46,13 @@ func getEncoder(
 	targets changefeedbase.Targets,
 	p externalConnectionProvider,
 	sliMetrics *sliMetrics,
+	sharedMetadataCache SharedCache,
 ) (Encoder, error) {
 	switch opts.Format {
 	case changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
-		return newConfluentAvroEncoder(opts, targets, p, sliMetrics)
+		return newConfluentAvroEncoder(opts, targets, p, sliMetrics, sharedMetadataCache)
 	case changefeedbase.OptFormatCSV:
 		return newCSVEncoder(opts), nil
 	case changefeedbase.OptFormatParquet:

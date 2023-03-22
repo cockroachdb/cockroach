@@ -236,7 +236,7 @@ func TestEncoders(t *testing.T) {
 				return
 			}
 			require.NoError(t, o.Validate())
-			e, err := getEncoder(o, targets, nil, nil)
+			e, err := getEncoder(o, targets, nil, nil, nil)
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -382,7 +382,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
-			e, err := getEncoder(opts, targets, nil, nil)
+			e, err := getEncoder(opts, targets, nil, nil, nil)
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -414,7 +414,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer noCertReg.Close()
 			opts.SchemaRegistryURI = noCertReg.URL()
 
-			enc, err := getEncoder(opts, targets, nil, nil)
+			enc, err := getEncoder(opts, targets, nil, nil, nil)
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, "x509", err)
@@ -427,7 +427,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer wrongCertReg.Close()
 			opts.SchemaRegistryURI = wrongCertReg.URL()
 
-			enc, err = getEncoder(opts, targets, nil, nil)
+			enc, err = getEncoder(opts, targets, nil, nil, nil)
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
@@ -917,7 +917,7 @@ func BenchmarkEncoders(b *testing.B) {
 		b.ReportAllocs()
 		b.StopTimer()
 
-		encoder, err := getEncoder(opts, targets, nil, nil)
+		encoder, err := getEncoder(opts, targets, nil, nil, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

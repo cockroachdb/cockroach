@@ -26,12 +26,12 @@ func TestConfluentSchemaRegistry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	t.Run("errors with no scheme", func(t *testing.T) {
-		_, err := newConfluentSchemaRegistry("justsomestring", nil, nil)
+		_, err := newConfluentSchemaRegistry("justsomestring", nil, nil, newSharedCacheForCore())
 		require.Error(t, err)
 	})
 	t.Run("errors with unsupported scheme", func(t *testing.T) {
 		url := "gopher://myhost"
-		_, err := newConfluentSchemaRegistry(url, nil, nil)
+		_, err := newConfluentSchemaRegistry(url, nil, nil, newSharedCacheForCore())
 		require.Error(t, err)
 	})
 }
@@ -58,16 +58,16 @@ func TestConfluentSchemaRegistryExternalConnection(t *testing.T) {
 		"bad_endpoint":  "http://bad",
 	}
 
-	reg, err := newConfluentSchemaRegistry("external://good_endpoint", m, nil)
+	reg, err := newConfluentSchemaRegistry("external://good_endpoint", m, nil, newSharedCacheForCore())
 	require.NoError(t, err)
 	require.NoError(t, reg.Ping(context.Background()))
 
 	// We can load a bad endpoint, but ping should fail.
-	reg, err = newConfluentSchemaRegistry("external://bad_endpoint", m, nil)
+	reg, err = newConfluentSchemaRegistry("external://bad_endpoint", m, nil, newSharedCacheForCore())
 	require.NoError(t, err)
 	require.Error(t, reg.Ping(context.Background()))
 
-	_, err = newConfluentSchemaRegistry("external://no_endpoint", m, nil)
+	_, err = newConfluentSchemaRegistry("external://no_endpoint", m, nil, newSharedCacheForCore())
 	require.Error(t, err)
 
 }
@@ -80,17 +80,17 @@ func TestConfluentSchemaRegistryPing(t *testing.T) {
 	defer regServer.Close()
 
 	t.Run("ping works when all is well", func(t *testing.T) {
-		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil, newSharedCacheForCore())
 		require.NoError(t, err)
 		require.NoError(t, reg.Ping(context.Background()))
 	})
 	t.Run("ping does not error from HTTP 404", func(t *testing.T) {
-		reg, err := newConfluentSchemaRegistry(regServer.URL()+"/path-does-not-exist-but-we-do-not-care", nil, nil)
+		reg, err := newConfluentSchemaRegistry(regServer.URL()+"/path-does-not-exist-but-we-do-not-care", nil, nil, newSharedCacheForCore())
 		require.NoError(t, err)
 		require.NoError(t, reg.Ping(context.Background()), "Ping")
 	})
 	t.Run("Ping errors with bad host", func(t *testing.T) {
-		reg, err := newConfluentSchemaRegistry("http://host-does-exist-and-we-care", nil, nil)
+		reg, err := newConfluentSchemaRegistry("http://host-does-exist-and-we-care", nil, nil, newSharedCacheForCore())
 		require.NoError(t, err)
 		require.Error(t, reg.Ping(context.Background()))
 	})
@@ -109,7 +109,7 @@ func TestConfluentSchemaRegistryRetryMetrics(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("ping works when all is well", func(t *testing.T) {
-		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, sliMetrics)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, sliMetrics, newSharedCacheForCore())
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {

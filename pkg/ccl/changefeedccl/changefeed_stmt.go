@@ -567,7 +567,7 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := getEncoder(encodingOpts, AllTargets(details), makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
+	if _, err := getEncoder(encodingOpts, AllTargets(details), makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, nil); err != nil {
 		return nil, err
 	}
 
