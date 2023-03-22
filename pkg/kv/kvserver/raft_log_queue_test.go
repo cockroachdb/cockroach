@@ -651,7 +651,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 
 	r.mu.state.RaftAppliedIndex = index1
 	// Add first constraint.
-	_, cleanup1 := r.addSnapshotLogTruncationConstraint(ctx, id1, storeID)
+	_, cleanup1 := r.addSnapshotLogTruncationConstraint(ctx, id1, false /* initial */, storeID)
 	exp1 := map[uuid.UUID]snapTruncationInfo{id1: {index: index1}}
 
 	// Make sure it registered.
@@ -661,7 +661,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	// Add another constraint with the same id. Extremely unlikely in practice
 	// but we want to make sure it doesn't blow anything up. Collisions are
 	// handled by ignoring the colliding update.
-	_, cleanup2 := r.addSnapshotLogTruncationConstraint(ctx, id1, storeID)
+	_, cleanup2 := r.addSnapshotLogTruncationConstraint(ctx, id1, false /* initial */, storeID)
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
 
 	// Helper that grabs the min constraint index (which can trigger GC as a
@@ -669,7 +669,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin := func(exp uint64, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
-		if maxIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore); maxIndex != exp {
+		if _, maxIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore, false /* initialOnly */); maxIndex != exp {
 			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}
@@ -681,7 +681,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	r.mu.state.RaftAppliedIndex = index2
 	// Add another, higher, index. We're not going to notice it's around
 	// until the lower one disappears.
-	_, cleanup3 := r.addSnapshotLogTruncationConstraint(ctx, id2, storeID)
+	_, cleanup3 := r.addSnapshotLogTruncationConstraint(ctx, id2, false /* initial */, storeID)
 
 	now := timeutil.Now()
 	// The colliding snapshot comes back. Or the original, we can't tell.
