@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -60,7 +59,7 @@ CREATE INDEX  l_sk_pk ON lineitem (l_suppkey, l_partkey);
 `
 
 func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
-	if runtime.GOOS == "linux" {
+	if !c.IsLocal() {
 		if err := repeatRunE(
 			ctx, t, c, c.All(), "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
