@@ -29,10 +29,6 @@ import {
   TransactionDetailsStateProps,
 } from "./transactionDetails";
 import {
-  selectTransactionsData,
-  selectTransactionsLastError,
-} from "../transactionsPage/transactionsPage.selectors";
-import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
@@ -102,10 +98,8 @@ const mapStateToProps = (
   );
   return {
     timeScale: selectTimeScale(state),
-    error: selectTransactionsLastError(state),
     isTenant: selectIsTenant(state),
     nodeRegions: nodeRegionsByIDSelector(state),
-    statements: selectTransactionsData(state)?.statements,
     transaction,
     transactionFingerprintId: getMatchParamByName(
       props.match,
