@@ -46,6 +46,11 @@ type pebbleIterator struct {
 	// Buffer used to store MVCCRangeKeyVersions returned by RangeKeys(). Lazily
 	// initialized the first time an iterator's RangeKeys() method is called.
 	mvccRangeKeyVersions []MVCCRangeKeyVersion
+	// reportStats is a function that should be invoked when the iterator is
+	// closed or its stats reset. It's intended to be used with
+	// Pebble.aggregateIterStats to sum iterator stats across all the iterators
+	// during the lifetime of the Engine.
+	reportStats func(IteratorStats)
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -82,11 +87,14 @@ var pebbleIterPool = sync.Pool{
 
 // newPebbleIterator creates a new Pebble iterator for the given Pebble reader.
 func newPebbleIterator(
-	handle pebble.Reader, opts IterOptions, durability DurabilityRequirement,
+	handle pebble.Reader,
+	opts IterOptions,
+	durability DurabilityRequirement,
+	reportStats func(IteratorStats),
 ) *pebbleIterator {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability)
+	p.init(nil, opts, durability, reportStats)
 	p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
 	return p
 }
@@ -94,13 +102,13 @@ func newPebbleIterator(
 // newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
 // iterator and reconfiguring it.
 func newPebbleIteratorByCloning(
-	iter pebbleiter.Iterator, opts IterOptions, durability DurabilityRequirement,
+	cloneCtx CloneContext, opts IterOptions, durability DurabilityRequirement,
 ) *pebbleIterator {
 	var err error
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability)
-	p.iter, err = iter.Clone(pebble.CloneOptions{
+	p.init(nil, opts, durability, cloneCtx.reportStats)
+	p.iter, err = cloneCtx.rawIter.Clone(pebble.CloneOptions{
 		IterOptions:      &p.options,
 		RefreshBatchView: true,
 	})
@@ -117,7 +125,7 @@ func newPebbleSSTIterator(
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, StandardDurability)
+	p.init(nil, opts, StandardDurability, func(IteratorStats) {})
 
 	var externalIterOpts []pebble.ExternalIterOption
 	if forwardOnly {
@@ -138,7 +146,10 @@ func newPebbleSSTIterator(
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
 // p.iter using p.options, to avoid redundant reconfiguration via SetOptions().
 func (p *pebbleIterator) init(
-	iter pebbleiter.Iterator, opts IterOptions, durability DurabilityRequirement,
+	iter pebbleiter.Iterator,
+	opts IterOptions,
+	durability DurabilityRequirement,
+	reportStats func(IteratorStats),
 ) {
 	*p = pebbleIterator{
 		iter:               iter,
@@ -146,6 +157,7 @@ func (p *pebbleIterator) init(
 		lowerBoundBuf:      p.lowerBoundBuf,
 		upperBoundBuf:      p.upperBoundBuf,
 		rangeKeyMaskingBuf: p.rangeKeyMaskingBuf,
+		reportStats:        reportStats,
 		reusable:           p.reusable,
 	}
 	p.setOptions(opts, durability)
@@ -164,13 +176,14 @@ func (p *pebbleIterator) initReuseOrCreate(
 	clone bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
+	reportStats func(IteratorStats),
 ) {
 	if iter != nil && !clone {
-		p.init(iter, opts, durability)
+		p.init(iter, opts, durability, reportStats)
 		return
 	}
 
-	p.init(nil, opts, durability)
+	p.init(nil, opts, durability, reportStats)
 	if iter == nil {
 		p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
 	} else if clone {
@@ -285,6 +298,12 @@ func (p *pebbleIterator) Close() {
 		panic("closing idle iterator")
 	}
 	p.inuse = false
+
+	// Report the iterator's stats so they can be accumulated and exposed
+	// through time-series metrics.
+	if p.iter != nil {
+		p.reportStats(p.Stats())
+	}
 
 	if p.reusable {
 		p.iter.ResetStats()
@@ -889,7 +908,7 @@ func (p *pebbleIterator) IsPrefix() bool {
 
 // CloneContext is part of the EngineIterator interface.
 func (p *pebbleIterator) CloneContext() CloneContext {
-	return CloneContext{rawIter: p.iter}
+	return CloneContext{rawIter: p.iter, reportStats: p.reportStats}
 }
 
 func (p *pebbleIterator) getBlockPropertyFilterMask() pebble.BlockPropertyFilterMask {

@@ -616,6 +616,48 @@ Raft applied index at which this checkpoint was taken.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaBlockBytes = metric.Metadata{
+		Name:        "storage.iterator.block-load.bytes",
+		Help:        "Bytes loaded by storage engine iterators (possibly cached).",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBlockBytesInCache = metric.Metadata{
+		Name:        "storage.iterator.block-load.cached-bytes",
+		Help:        "Bytes loaded by storage engine iterators from the block cache.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBlockReadDuration = metric.Metadata{
+		Name:        "storage.iterator.block-load.read-duration",
+		Help:        "Cumulative time storage engine iterators spent loading blocks from durable storage.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaIterExternalSeeks = metric.Metadata{
+		Name:        "storage.iterator.external.seeks",
+		Help:        "Cumulative count of seeks performed on storage engine iterators.",
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaIterExternalSteps = metric.Metadata{
+		Name:        "storage.iterator.external.steps",
+		Help:        "Cumulative count of steps performed on storage engine iterators.",
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaIterInternalSeeks = metric.Metadata{
+		Name:        "storage.iterator.internal.seeks",
+		Help:        "Cumulative count of seeks performed internally within storage engine iterators.",
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaIterInternalSteps = metric.Metadata{
+		Name:        "storage.iterator.internal.steps",
+		Help:        "Cumulative count of steps performed internally within storage engine iterators.",
+		Measurement: "Iterator Ops",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSharedStorageBytesWritten = metric.Metadata{
 		Name:        "storage.shared-storage.write",
 		Help:        "Bytes written to external storage",
@@ -1876,6 +1918,13 @@ type StoreMetrics struct {
 	RdbWriteStallNanos          *metric.Gauge
 	SharedStorageBytesRead      *metric.Gauge
 	SharedStorageBytesWritten   *metric.Gauge
+	IterBlockBytes              *metric.Gauge
+	IterBlockBytesInCache       *metric.Gauge
+	IterBlockReadDuration       *metric.Gauge
+	IterExternalSeeks           *metric.Gauge
+	IterExternalSteps           *metric.Gauge
+	IterInternalSeeks           *metric.Gauge
+	IterInternalSteps           *metric.Gauge
 	FlushableIngestCount        *metric.Gauge
 	FlushableIngestTableCount   *metric.Gauge
 	FlushableIngestTableSize    *metric.Gauge
@@ -2421,6 +2470,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbLevelScore:               rdbLevelScore,
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
+		IterBlockBytes:              metric.NewGauge(metaBlockBytes),
+		IterBlockBytesInCache:       metric.NewGauge(metaBlockBytesInCache),
+		IterBlockReadDuration:       metric.NewGauge(metaBlockReadDuration),
+		IterExternalSeeks:           metric.NewGauge(metaIterExternalSeeks),
+		IterExternalSteps:           metric.NewGauge(metaIterExternalSteps),
+		IterInternalSeeks:           metric.NewGauge(metaIterInternalSeeks),
+		IterInternalSteps:           metric.NewGauge(metaIterInternalSteps),
 		SharedStorageBytesRead:      metric.NewGauge(metaSharedStorageBytesRead),
 		SharedStorageBytesWritten:   metric.NewGauge(metaSharedStorageBytesWritten),
 		FlushableIngestCount:        metric.NewGauge(metaFlushableIngestCount),
@@ -2753,6 +2809,13 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbWriteStallNanos.Update(m.WriteStallDuration.Nanoseconds())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
+	sm.IterBlockBytes.Update(int64(m.Iterator.BlockBytes))
+	sm.IterBlockBytesInCache.Update(int64(m.Iterator.BlockBytesInCache))
+	sm.IterBlockReadDuration.Update(int64(m.Iterator.BlockReadDuration))
+	sm.IterExternalSeeks.Update(int64(m.Iterator.ExternalSeeks))
+	sm.IterExternalSteps.Update(int64(m.Iterator.ExternalSteps))
+	sm.IterInternalSeeks.Update(int64(m.Iterator.InternalSeeks))
+	sm.IterInternalSteps.Update(int64(m.Iterator.InternalSteps))
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))

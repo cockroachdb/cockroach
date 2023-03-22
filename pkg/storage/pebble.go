@@ -768,6 +768,10 @@ type Pebble struct {
 	diskStallCount       int64
 	sharedBytesRead      int64
 	sharedBytesWritten   int64
+	iterStats            struct {
+		syncutil.Mutex
+		AggregatedIteratorStats
+	}
 
 	// Relevant options copied over from pebble.Options.
 	unencryptedFS vfs.FS
@@ -1306,6 +1310,21 @@ func (p *Pebble) Close() {
 	}
 }
 
+// aggregateIterStats is propagated to all of an engine's iterators, aggregating
+// iterator stats when an iterator is closed or its stats are reset. These
+// aggregated stats are exposed through GetMetrics.
+func (p *Pebble) aggregateIterStats(stats IteratorStats) {
+	p.iterStats.Lock()
+	defer p.iterStats.Unlock()
+	p.iterStats.BlockBytes += stats.Stats.InternalStats.BlockBytes
+	p.iterStats.BlockBytesInCache += stats.Stats.InternalStats.BlockBytesInCache
+	p.iterStats.BlockReadDuration += stats.Stats.InternalStats.BlockReadDuration
+	p.iterStats.ExternalSeeks += stats.Stats.ForwardSeekCount[pebble.InterfaceCall] + stats.Stats.ReverseSeekCount[pebble.InterfaceCall]
+	p.iterStats.ExternalSteps += stats.Stats.ForwardStepCount[pebble.InterfaceCall] + stats.Stats.ReverseStepCount[pebble.InterfaceCall]
+	p.iterStats.InternalSeeks += stats.Stats.ForwardSeekCount[pebble.InternalIterCall] + stats.Stats.ReverseSeekCount[pebble.InternalIterCall]
+	p.iterStats.InternalSteps += stats.Stats.ForwardStepCount[pebble.InternalIterCall] + stats.Stats.ReverseStepCount[pebble.InternalIterCall]
+}
+
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
 	return p.closed
@@ -1338,13 +1357,13 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		return maybeWrapInUnsafeIter(iter)
 	}
 
-	iter := newPebbleIterator(p.db, opts, StandardDurability)
+	iter := newPebbleIterator(p.db, opts, StandardDurability, p.aggregateIterStats)
 	return maybeWrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
-	return newPebbleIterator(p.db, opts, StandardDurability)
+	return newPebbleIterator(p.db, opts, StandardDurability, p.aggregateIterStats)
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -1834,7 +1853,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings, p.aggregateIterStats)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1844,12 +1863,12 @@ func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), false /* writeOnly */, p.settings)
+	return newPebbleBatch(p.db, p.db.NewBatch(), false /* writeOnly */, p.settings, p.aggregateIterStats)
 }
 
 // NewWriteBatch implements the Engine interface.
 func (p *Pebble) NewWriteBatch() WriteBatch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), true /* writeOnly */, p.settings)
+	return newPebbleBatch(p.db, p.db.NewBatch(), true /* writeOnly */, p.settings, p.aggregateIterStats)
 }
 
 // NewSnapshot implements the Engine interface.
@@ -2158,13 +2177,16 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		iter = &p.prefixIter
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(p.iter, opts, p.durability)
+		return newPebbleIteratorByCloning(CloneContext{
+			rawIter:     p.iter,
+			reportStats: p.parent.aggregateIterStats,
+		}, opts, p.durability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability)
+		iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent.aggregateIterStats)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -2188,13 +2210,16 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(p.iter, opts, p.durability)
+		return newPebbleIteratorByCloning(CloneContext{
+			rawIter:     p.iter,
+			reportStats: p.parent.aggregateIterStats,
+		}, opts, p.durability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability)
+		iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent.aggregateIterStats)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -2383,13 +2408,13 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		return maybeWrapInUnsafeIter(iter)
 	}
 
-	iter := MVCCIterator(newPebbleIterator(p.snapshot, opts, StandardDurability))
+	iter := MVCCIterator(newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent.aggregateIterStats))
 	return maybeWrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
-	return newPebbleIterator(p.snapshot, opts, StandardDurability)
+	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent.aggregateIterStats)
 }
 
 // ConsistentIterators implements the Reader interface.
