@@ -1,0 +1,41 @@
+parse
+DECLARE
+BEGIN
+IF x THEN
+  COMMIT;
+END IF;
+END
+----
+expected parse error: at or near ";": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+IF x THEN
+  ROLLBACK;
+END IF;
+END
+----
+expected parse error: at or near ";": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+IF x THEN
+  COMMIT;
+ELSIF y THEN
+  ROLLBACK;
+END IF;
+END
+----
+expected parse error: at or near ";": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
+  COMMIT;
+END
+----
+expected parse error: at or near ";": syntax error: unimplemented: this syntax
