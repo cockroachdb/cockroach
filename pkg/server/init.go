@@ -624,12 +624,23 @@ func newInitServerConfig(
 	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
+	binaryMinSupportedVersion := cfg.Settings.Version.BinaryMinSupportedVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
+		// If BinaryVersionOverride is set, and our `binaryMinSupportedVersion` is
+		// at its default value, we must bootstrap the cluster at
+		// `binaryMinSupportedVersion`. This cluster will then run the necessary
+		// upgrades until `BinaryVersionOverride` before being ready to use in the
+		// test.
+		//
+		// Refer to the header comment on BinaryVersionOverride for more details.
 		if ov := knobs.(*TestingKnobs).BinaryVersionOverride; ov != (roachpb.Version{}) {
-			binaryVersion = ov
+			if binaryMinSupportedVersion.Equal(clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
+				binaryVersion = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+			} else {
+				binaryVersion = ov
+			}
 		}
 	}
-	binaryMinSupportedVersion := cfg.Settings.Version.BinaryMinSupportedVersion()
 	if binaryVersion.Less(binaryMinSupportedVersion) {
 		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
 			binaryVersion, binaryMinSupportedVersion)

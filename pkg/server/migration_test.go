@@ -254,11 +254,13 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 		clusterversion.TestingBinaryMinSupportedVersion,
 		false, /* initializeVersion */
 	)
+	automaticUpgrade := make(chan struct{})
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				BinaryVersionOverride: clusterversion.TestingBinaryMinSupportedVersion,
+				DisableAutomaticVersionUpgrade: automaticUpgrade,
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				AfterRunPermanentUpgrades: func() {
@@ -272,6 +274,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 			},
 		},
 	})
+	close(automaticUpgrade)
 	sqlutils.MakeSQLRunner(db).
 		CheckQueryResultsRetry(t, `
 SELECT version = crdb_internal.node_executable_version()

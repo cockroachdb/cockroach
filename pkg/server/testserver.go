@@ -1749,6 +1749,15 @@ func (ts *TestServer) RangeDescIteratorFactory() interface{} {
 	return ts.sqlServer.execCfg.RangeDescIteratorFactory
 }
 
+// BinaryVersionOverride is part of the TestServerInterface.
+func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
+	knobs := ts.TestingKnobs().Server
+	if knobs == nil {
+		return roachpb.Version{}
+	}
+	return knobs.(*TestingKnobs).BinaryVersionOverride
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
