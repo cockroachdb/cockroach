@@ -138,7 +138,6 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
         "//pkg/keys",
-        "//pkg/keyvisualizer",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
