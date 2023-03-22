@@ -630,7 +630,7 @@ func TestSecKeyLatestIndexDescriptorVersion(t *testing.T) {
 
 	// The primary index should have its version bumped and its stored column
 	// slices properly set.
-	require.Equal(t, descpb.JSONCompositeColumnsVersion, newDesc.PrimaryIndex.Version)
+	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.PrimaryIndex.Version)
 	require.Equal(t, []string{"c2", "c3"}, newDesc.PrimaryIndex.StoreColumnNames)
 	require.Equal(t, []descpb.ColumnID{2, 3}, newDesc.PrimaryIndex.StoreColumnIDs)
 	// The public secondary index should not have its version bumped, because its
