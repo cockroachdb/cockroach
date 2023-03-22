@@ -275,8 +275,9 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"zones"/4/1
  /Tenant/5/Table/48/1/0/0
-1 splits:
+2 splits:
  /Tenant/5
+ /Tenant/6
 
 initial-keys tenant=999
 ----
@@ -377,5 +378,6 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"zones"/4/1
  /Tenant/999/Table/48/1/0/0
-1 splits:
+2 splits:
  /Tenant/999
+ /Tenant/1000

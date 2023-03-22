@@ -96,7 +96,7 @@ var TenantDataStateValues = map[string]TenantDataState{
 
 // TenantInfo captures both a ProtoInfo and the SQLInfo columns that
 // go alongside it, sufficient to represent an entire row in
-// system.tenans.
+// system.tenants.
 type TenantInfo struct {
 	ProtoInfo
 	SQLInfo
