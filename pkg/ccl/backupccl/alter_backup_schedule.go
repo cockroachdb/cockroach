@@ -340,6 +340,10 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 		outOpts.CaptureRevisionHistory = inOpts.CaptureRevisionHistory
 	}
 
+	if inOpts.ExecutionLocality != nil {
+		outOpts.ExecutionLocality = inOpts.ExecutionLocality
+	}
+
 	if inOpts.IncludeAllSecondaryTenants != nil {
 		outOpts.IncludeAllSecondaryTenants = inOpts.IncludeAllSecondaryTenants
 	}
@@ -350,6 +354,13 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 			outOpts.EncryptionPassphrase = nil
 		} else {
 			outOpts.EncryptionPassphrase = inOpts.EncryptionPassphrase
+		}
+	}
+	if inOpts.ExecutionLocality != nil {
+		if tree.AsStringWithFlags(inOpts.ExecutionLocality, tree.FmtBareStrings) == "" {
+			outOpts.ExecutionLocality = nil
+		} else {
+			outOpts.ExecutionLocality = inOpts.ExecutionLocality
 		}
 	}
 	if inOpts.EncryptionKMSURI != nil {
