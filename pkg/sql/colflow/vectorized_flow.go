@@ -12,6 +12,7 @@ package colflow
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -343,7 +344,7 @@ func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	tempDirName := f.GetID().String()
 	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
 	log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
-	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
+	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path, os.ModePerm); err != nil {
 		colexecerror.InternalError(errors.Wrap(err, "unable to create temporary storage directory"))
 	}
 	// We have just created the temporary directory which will be used for all

@@ -19,10 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/time/rate"
 )
 
@@ -82,7 +82,7 @@ func WriteFileSyncing(
 	ctx context.Context,
 	filename string,
 	data []byte,
-	fs fs.FS,
+	fs vfs.FS,
 	perm os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,
