@@ -359,6 +359,12 @@ message LocalOnlySessionData {
   // of a role membership which the transaction relied on has successfully been
   // committed and acknowledged to the user.
   bool allow_role_memberships_to_change_during_transaction = 96;
+  // PreparedStatementsCacheSize, when not equal to 0, causes the LRU prepared
+  // statements in a session to be automatically deallocated when total prepared
+  // statement memory usage for that session is more than the cache size.
+  // Execution of these deallocated prepared statements will fail until they are
+  // prepared again.
+  int64 prepared_statements_cache_size = 97;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

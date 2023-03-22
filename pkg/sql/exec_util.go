@@ -733,7 +733,7 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-var enableMultipleActivePortals = settings.RegisterBoolSetting(
+var EnableMultipleActivePortals = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.pgwire.multiple_active_portals.enabled",
 	"if true, portals with read-only SELECT query without sub/post queries "+
@@ -3492,6 +3492,10 @@ func (m *sessionDataMutator) SetAllowRoleMembershipsToChangeDuringTransaction(va
 
 func (m *sessionDataMutator) SetDefaultTextSearchConfig(val string) {
 	m.data.DefaultTextSearchConfig = val
+}
+
+func (m *sessionDataMutator) SetPreparedStatementsCacheSize(val int64) {
+	m.data.PreparedStatementsCacheSize = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

@@ -249,6 +249,7 @@ go_library(
         "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/sql/sqltelemetry",
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/syntheticprivilege",

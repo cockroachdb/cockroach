@@ -1419,6 +1419,14 @@ func (t *logicTest) newCluster(
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
+	// Disable stats collection on system tables before the cluster is started,
+	// otherwise there is a race condition where stats may be collected before we
+	// can disable them with `SET CLUSTER SETTING`. We disable stats collection on
+	// system tables in order to have deterministic tests.
+	stats.AutomaticStatisticsOnSystemTables.Override(
+		context.Background(), &params.ServerArgs.TempStorageConfig.Settings.SV, false,
+	)
+
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
 	if cfg.UseFakeSpanResolver {
 		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
@@ -1604,11 +1612,6 @@ func (t *logicTest) newCluster(
 		// See #37751 for details.
 		if _, err := conn.Exec(
 			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-		); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := conn.Exec(
-			"SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = false",
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -470,8 +470,8 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 			r.reachedLimit = true
 			return sql.ErrPortalLimitHasBeenReached
 		} else {
-			// TODO(janexing): we keep this part as for general portals, we would like
-			// to keep the execution logic to avoid bring too many bugs. Eventually
+			// TODO(janexing): we keep using the logic from before we added
+			// multiple-active-portals support to avoid bring too many bugs. Eventually
 			// we should remove them and use the "return the control to connExecutor"
 			// logic for all portals.
 			r.seenTuples = 0

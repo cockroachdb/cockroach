@@ -310,6 +310,11 @@ func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
 		ctx, output, err, func(context.Context, execinfra.RowReceiver) {} /* pushTrailingMeta */, sp.input)
 }
 
+// Resume is part of the execinfra.Processor interface.
+func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
+	panic("not implemented")
+}
+
 func init() {
 	rowexec.NewCSVWriterProcessor = newCSVWriterProcessor
 }
