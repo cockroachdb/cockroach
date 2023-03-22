@@ -119,7 +119,7 @@ func TestIndexInterface(t *testing.T) {
 	require.True(t, pk.Primary())
 	require.True(t, pk.Public())
 	require.Equal(t, catenumpb.PrimaryIndexEncoding, pk.GetEncodingType())
-	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, pk.GetVersion())
+	require.Equal(t, descpb.JSONCompositeColumnsVersion, pk.GetVersion())
 
 	// Check that ActiveIndexes returns the same indexes in the same order.
 	require.Equal(t, indexes, tableI.ActiveIndexes())
@@ -453,7 +453,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 
 	test := func(desc catalog.TableDescriptor) {
 		require.Equal(t, catenumpb.PrimaryIndexEncoding, desc.GetPrimaryIndex().GetEncodingType())
-		require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, desc.GetPrimaryIndex().GetVersion())
+		require.Equal(t, descpb.JSONCompositeColumnsVersion, desc.GetPrimaryIndex().GetVersion())
 		for _, index := range desc.PublicNonPrimaryIndexes() {
 			require.Equal(t, catenumpb.SecondaryIndexEncoding, index.GetEncodingType())
 		}
@@ -630,7 +630,7 @@ func TestSecKeyLatestIndexDescriptorVersion(t *testing.T) {
 
 	// The primary index should have its version bumped and its stored column
 	// slices properly set.
-	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.PrimaryIndex.Version)
+	require.Equal(t, descpb.JSONCompositeColumnsVersion, newDesc.PrimaryIndex.Version)
 	require.Equal(t, []string{"c2", "c3"}, newDesc.PrimaryIndex.StoreColumnNames)
 	require.Equal(t, []descpb.ColumnID{2, 3}, newDesc.PrimaryIndex.StoreColumnIDs)
 	// The public secondary index should not have its version bumped, because its
