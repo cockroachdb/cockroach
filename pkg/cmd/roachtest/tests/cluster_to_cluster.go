@@ -614,6 +614,23 @@ func (sp *replicationTestSpec) main(ctx context.Context, t test.Test, c cluster.
 	)
 	lv.assertValid(t)
 }
+func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
+	if !c.IsLocal() {
+		t.Fatal("acceptance tests should only run on a local cluster")
+	}
+	sp := replicationTestSpec{
+		srcNodes: 1,
+		dstNodes: 1,
+		// The timeout field ensures the c2c roachtest driver behaves properly.
+		timeout:            5 * time.Minute,
+		workload:           replicateKV{readPercent: 0, debugRunDurationMinutes: 1},
+		additionalDuration: 0 * time.Minute,
+		cutover:            30 * time.Second,
+	}
+	sp.setupC2C(ctx, t, c)
+	sp.main(ctx, t, c)
+}
+
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationTestSpec{
 		{
@@ -664,7 +681,7 @@ func registerClusterToCluster(r registry.Registry) {
 			cpus:               4,
 			pdSize:             10,
 			workload:           replicateKV{readPercent: 0, debugRunDurationMinutes: 1},
-			timeout:            20 * time.Minute,
+			timeout:            5 * time.Minute,
 			additionalDuration: 0 * time.Minute,
 			cutover:            30 * time.Second,
 			skip:               "for local ad hoc testing",
@@ -683,7 +700,9 @@ func registerClusterToCluster(r registry.Registry) {
 	} {
 		sp := sp
 		clusterOps := make([]spec.Option, 0)
-		clusterOps = append(clusterOps, spec.CPU(sp.cpus))
+		if sp.cpus != 0 {
+			clusterOps = append(clusterOps, spec.CPU(sp.cpus))
+		}
 		if sp.pdSize != 0 {
 			clusterOps = append(clusterOps, spec.VolumeSize(sp.pdSize))
 		}

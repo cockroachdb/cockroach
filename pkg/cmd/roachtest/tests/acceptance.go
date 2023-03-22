@@ -68,6 +68,14 @@ func registerAcceptance(r registry.Registry) {
 				timeout: 30 * time.Minute,
 			},
 		},
+		registry.OwnerDisasterRecovery: {
+			{
+				name:     "c2c",
+				fn:       runAcceptanceClusterReplication,
+				numNodes: 3,
+				timeout:  5 * time.Minute,
+			},
+		},
 	}
 	tags := []string{"default", "quick"}
 	specTemplate := registry.TestSpec{
