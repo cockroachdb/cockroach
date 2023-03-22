@@ -613,8 +613,9 @@ proc_stmt:
 						{ }
 				;
 
-stmt_perform	: PERFORM
+stmt_perform	: PERFORM expr_until_semi ';'
 					{
+            return unimplemented(plpgsqllex, "perform")
 					}
 				;
 
