@@ -504,6 +504,12 @@ const (
 	// statistics queries for observability.
 	V23_1AddSQLStatsComputedIndexes
 
+	// V23_1AddSystemActivityTables is the version at which Cockroach adds system
+	// tables statement_activity and transaction_activity. These tables will
+	// contain a subset of data from statement_statistics and transaction_statistics
+	// that are optimized for the console.
+	V23_1AddSystemActivityTables
+
 	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
 	V23_1
 
@@ -879,6 +885,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AddSQLStatsComputedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 92},
+	},
+	{
+		Key:     V23_1AddSystemActivityTables,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
 	},
 	{
 		Key:     V23_1,

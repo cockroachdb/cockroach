@@ -21,7 +21,7 @@ popd() { builtin popd "$@" > /dev/null; }
 # Cockroach branch name (i.e. release-22.2, etc.), and corresponding Pebble
 # branch name (e.g. crl-release-21.2, etc.).
 BRANCH=master
-PEBBLE_BRANCH=crl-release-23.1
+PEBBLE_BRANCH=master
 
 # The script can only be run from a specific branch.
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then

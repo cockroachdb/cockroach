@@ -1813,3 +1813,25 @@ SELECT * FROM v;
 
 statement ok
 SET DATABASE = test;
+
+# When replacing a view with fewer columns, an error about dropping columns from
+# views preempts any errors about dependencies.
+subtest regression_99000
+
+statement ok
+CREATE TABLE films (id int PRIMARY KEY, title text, kind text, classification CHAR(1));
+
+statement ok
+CREATE VIEW comedies AS
+    SELECT *
+    FROM films
+    WHERE kind = 'Comedy';
+
+statement ok
+CREATE VIEW pg_comedies AS
+    SELECT *
+    FROM comedies
+    WHERE classification = 'PG';
+
+statement error pq: cannot drop columns from view
+CREATE OR REPLACE VIEW comedies AS SELECT ARRAY[films.*]::string FROM films;

@@ -108,6 +108,10 @@ message SessionData {
   // format should be used for ScanRequests and ReverseScanRequests whenever
   // possible.
   bool direct_columnar_scans_enabled = 25;
+  // DefaultTextSearchConfig configures the default text search configuration
+  // that is used for builtins like to_tsvector and to_tsquery if no
+  // text search configuration is explicitly passed in.
+  string default_text_search_config = 26;
 }
 
 // DataConversionConfig contains the parameters that influence the output

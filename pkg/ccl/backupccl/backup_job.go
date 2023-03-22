@@ -458,7 +458,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	if err := b.maybeRelocateJobExecution(ctx, p, details.CoordinatorLocation); err != nil {
+	if err := b.maybeRelocateJobExecution(ctx, p, details.ExecutionLocality); err != nil {
 		return err
 	}
 

@@ -78,7 +78,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -1182,6 +1181,13 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int) *gosql.DB {
 	pgUser := strings.TrimPrefix(user, "host-cluster-")
 	if t.cfg.UseCockroachGoTestserver {
 		pgURL = *t.testserverCluster.PGURLForNode(nodeIdx)
+		_, port, err := net.SplitHostPort(pgURL.Host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The host needs to use 127.0.0.1 instead of localhost, since if the node
+		// is listening on port 0, then macs only listen on ipv4 and not ipv6.
+		pgURL.Host = net.JoinHostPort("127.0.0.1", port)
 		pgURL.User = url.User(pgUser)
 	} else {
 		addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
@@ -1239,24 +1245,6 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	return gosql.OpenDB(connector)
 }
 
-// getFreePort finds a port that is available for a server to listen on.
-func getFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	err = l.Close()
-	if err != nil {
-		return 0, err
-	}
-	return port, err
-}
-
 // Prevent a lint failure "this value is never used" in
 // `(*logicTest).setup` when bazel.BuiltWithBazel returns false.
 var _ = ((*logicTest)(nil)).newTestServerCluster
@@ -1266,56 +1254,35 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
 func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
-	// We have seen issues with ports being claimed for use (probably by a
-	// different test) after the call to getFreePort, so the cluster startup
-	// is in a retry loop to minimize the chance of hitting a transient issue.
-	err := retry.WithMaxAttempts(context.Background(), retry.Options{}, 3, func() error {
-		// During config initialization, NumNodes is required to be 3.
-		ports := make([]int, t.cfg.NumNodes)
-		for i := 0; i < len(ports); i++ {
-			port, err := getFreePort()
-			if err != nil {
-				return err
-			}
-			ports[i] = port
-		}
+	// During config initialization, NumNodes is required to be 3.
+	opts := []testserver.TestServerOpt{
+		testserver.ThreeNodeOpt(),
+		testserver.StoreOnDiskOpt(),
+		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
+		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
+		testserver.PollListenURLTimeoutOpt(120),
+	}
+	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
+		// If we're using a cockroach-short binary, that means it was locally
+		// built, so we need to opt-in to development upgrades.
+		opts = append(opts, testserver.EnvVarOpt([]string{
+			"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
+		}))
+	}
 
-		opts := []testserver.TestServerOpt{
-			testserver.ThreeNodeOpt(),
-			testserver.StoreOnDiskOpt(),
-			testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
-			testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
-			testserver.PollListenURLTimeoutOpt(120),
-			testserver.AddListenAddrPortOpt(ports[0]),
-			testserver.AddListenAddrPortOpt(ports[1]),
-			testserver.AddListenAddrPortOpt(ports[2]),
-		}
-		if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-			// If we're using a cockroach-short binary, that means it was locally
-			// built, so we need to opt-in to development upgrades.
-			opts = append(opts, testserver.EnvVarOpt([]string{
-				"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
-			}))
-		}
-
-		ts, err := testserver.NewTestServer(opts...)
-		if err != nil {
-			return err
-		}
-		for i := 0; i < t.cfg.NumNodes; i++ {
-			// Wait for each node to be reachable.
-			if err := ts.WaitForInitFinishForNode(i); err != nil {
-				return err
-			}
-		}
-
-		t.testserverCluster = ts
-		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
-		return nil
-	})
+	ts, err := testserver.NewTestServer(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
+	for i := 0; i < t.cfg.NumNodes; i++ {
+		// Wait for each node to be reachable.
+		if err := ts.WaitForInitFinishForNode(i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.testserverCluster = ts
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
 }
@@ -1810,7 +1777,7 @@ func (t *logicTest) setup(
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
 	if cfg.UseCockroachGoTestserver {
-		skip.WithIssue(t.t(), 98594, "flakes with 'empty connection string'")
+		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
@@ -3042,24 +3009,27 @@ func (t *logicTest) processSubtest(
 			if err != nil {
 				t.Fatal(err)
 			}
-			// If an upgrade fails, retry it to make sure that it was not
-			// a transient issue (e.g. an unavailable port).
-			if err := retry.WithMaxAttempts(context.Background(), retry.Options{}, 3, func() error {
-				if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
-					return err
-				}
-				for i := 0; i < t.cfg.NumNodes; i++ {
-					// Wait for each node to be reachable, since UpgradeNode uses `kill`
-					// to terminate nodes, and may introduce temporary unavailability in
-					// the system range.
-					if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
-						return err
-					}
-				}
-				return nil
-			}); err != nil {
+			if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
 				t.Fatal(err)
 			}
+			for i := 0; i < t.cfg.NumNodes; i++ {
+				// Wait for each node to be reachable, since UpgradeNode uses `kill`
+				// to terminate nodes, and may introduce temporary unavailability in
+				// the system range.
+				if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The port may have changed, so we must remove all the cached connections
+			// to this node.
+			for _, m := range t.clients {
+				if c, ok := m[nodeIdx]; ok {
+					_ = c.Close()
+				}
+				delete(m, nodeIdx)
+			}
+			db := t.getOrOpenClient(t.user, nodeIdx)
+			t.db = db
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
