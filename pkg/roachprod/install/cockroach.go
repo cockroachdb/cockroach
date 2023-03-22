@@ -592,7 +592,7 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 		// The flag and path were provided together. Strip the flag prefix.
 		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
-	} else {
+	} else if len(startOpts.ExtraArgs) > idx+1 {
 		// Else, the store flag and path were specified as separate arguments. The
 		// path is the subsequent arg.
 		storeDirs = append(storeDirs, startOpts.ExtraArgs[idx+1])
