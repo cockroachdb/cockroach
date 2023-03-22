@@ -19,16 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
 
 type fdCountingFSFile struct {
-	fs.File
+	vfs.File
 	onCloseCb func()
 }
 
@@ -41,7 +41,7 @@ func (f *fdCountingFSFile) Close() error {
 }
 
 type fdCountingFS struct {
-	fs.FS
+	vfs.FS
 	writeFDs int
 	readFDs  int
 }
@@ -58,7 +58,7 @@ func (f *fdCountingFS) assertOpenFDs(
 	require.Equal(t, expectedReadFDs, f.readFDs)
 }
 
-func (f *fdCountingFS) Create(name string) (fs.File, error) {
+func (f *fdCountingFS) Create(name string) (vfs.File, error) {
 	file, err := f.FS.Create(name)
 	if err != nil {
 		return nil, err
@@ -67,16 +67,7 @@ func (f *fdCountingFS) Create(name string) (fs.File, error) {
 	return &fdCountingFSFile{File: file, onCloseCb: func() { f.writeFDs-- }}, nil
 }
 
-func (f *fdCountingFS) CreateWithSync(name string, bytesPerSync int) (fs.File, error) {
-	file, err := f.FS.CreateWithSync(name, bytesPerSync)
-	if err != nil {
-		return nil, err
-	}
-	f.writeFDs++
-	return &fdCountingFSFile{File: file, onCloseCb: func() { f.writeFDs-- }}, nil
-}
-
-func (f *fdCountingFS) Open(name string) (fs.File, error) {
+func (f *fdCountingFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
 	file, err := f.FS.Open(name)
 	if err != nil {
 		return nil, err

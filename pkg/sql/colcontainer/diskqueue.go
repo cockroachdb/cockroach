@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/golang/snappy"
 )
 
@@ -181,7 +183,7 @@ type diskQueue struct {
 	// written before a compress and flush.
 	writeBufferLimit  int
 	writeFileIdx      int
-	writeFile         fs.File
+	writeFile         vfs.File
 	deserializerState struct {
 		*colserde.FileDeserializer
 		curBatch int
@@ -189,7 +191,7 @@ type diskQueue struct {
 	// readFileIdx is an index into the current file in files the deserializer is
 	// reading from.
 	readFileIdx                  int
-	readFile                     fs.File
+	readFile                     vfs.File
 	scratchDecompressedReadBytes []byte
 
 	diskAcc         *mon.BoundAccount
@@ -298,7 +300,7 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
-	FS fs.FS
+	FS vfs.FS
 	// GetPather returns where the temporary directory that will contain this
 	// DiskQueue's files has been created. The directory name will be a UUID.
 	// Note that the directory is created lazily on the first call to GetPath.
@@ -411,7 +413,7 @@ func newDiskQueue(
 	if d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
 		d.writeBufferLimit = d.cfg.BufferSizeBytes / 2
 	}
-	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
+	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName), os.ModePerm); err != nil {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
@@ -492,7 +494,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 // to write to.
 func (d *diskQueue) rotateFile(ctx context.Context) error {
 	fName := filepath.Join(d.cfg.GetPather.GetPath(ctx), d.dirName, strconv.Itoa(d.seqNo))
-	f, err := d.cfg.FS.CreateWithSync(fName, bytesPerSync)
+	f, err := fs.CreateWithSync(d.cfg.FS, fName, bytesPerSync)
 	if err != nil {
 		return err
 	}
@@ -527,7 +529,7 @@ func (d *diskQueue) rotateFile(ctx context.Context) error {
 	return nil
 }
 
-func (d *diskQueue) resetWriters(f fs.File) error {
+func (d *diskQueue) resetWriters(f vfs.File) error {
 	d.writer.reset(f)
 	return d.serializer.Reset(d.writer)
 }
