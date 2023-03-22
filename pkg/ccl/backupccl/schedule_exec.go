@@ -91,8 +91,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
 
-	log.Infof(ctx, "Starting scheduled backup %d: %s",
-		sj.ScheduleID(), tree.AsString(backupStmt))
+	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
 
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
@@ -142,10 +141,10 @@ func planBackup(
 ) (sql.PlanHookRowFn, error) {
 	fn, cols, _, _, err := backupPlanHook(ctx, backupStmt, p)
 	if err != nil {
-		return nil, errors.Wrapf(err, "backup eval: %q", tree.AsString(backupStmt))
+		return nil, errors.Wrapf(err, "failed to evaluate backup stmt")
 	}
 	if fn == nil {
-		return nil, errors.Newf("backup eval: %q", tree.AsString(backupStmt))
+		return nil, errors.Newf("failed to evaluate backup stmt")
 	}
 	if len(cols) != len(jobs.DetachedJobExecutionResultHeader) {
 		return nil, errors.Newf("unexpected result columns")
