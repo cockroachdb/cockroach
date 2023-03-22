@@ -1466,9 +1466,6 @@ func (t *logicTest) newCluster(
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
-			if err := tenant.WaitForTenantEndKeySplit(context.Background()); err != nil {
-				t.rootT.Fatalf("%+v", err)
-			}
 			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
