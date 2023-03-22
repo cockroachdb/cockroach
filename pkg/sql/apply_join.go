@@ -320,6 +320,10 @@ func runPlanInsidePlan(
 	// Make a copy of the EvalContext so it can be safely modified.
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	plannerCopy := *params.p
+	// If we reach this part when re-executing a pausable portal, we won't want to
+	// resume the flow bound to it. The inner-plan should have its own lifecycle
+	// for its flow.
+	plannerCopy.pausablePortal = nil
 	distributePlan := getPlanDistribution(
 		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
 		plannerCopy.SessionData().DistSQLMode, plan.main,
