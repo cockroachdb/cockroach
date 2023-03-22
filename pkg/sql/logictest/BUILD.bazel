@@ -65,7 +65,6 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/version",

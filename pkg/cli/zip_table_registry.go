@@ -928,6 +928,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
  * 	- system.statement_statistics: historical data, usually too much to
  *    download.
  * 	- system.transaction_statistics: ditto
+ *  - system.statement_activity: ditto
+ *  - system.transaction_activity: ditto
  *
  * A test makes this assertion in pkg/cli/zip_table_registry.go:TestNoForbiddenSystemTablesInDebugZip
  */

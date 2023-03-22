@@ -58,6 +58,8 @@ translate database=system
 /Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/5{8-9}                              database system (host)
 /Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              database system (host)
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -120,6 +122,8 @@ translate database=system
 /Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/5{8-9}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{59-60}                             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -188,3 +192,5 @@ full-translate
 /Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/5{8-9}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{59-60}                             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true

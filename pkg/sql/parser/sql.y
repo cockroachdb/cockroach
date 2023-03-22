@@ -11917,6 +11917,7 @@ returning_clause:
 // UPDATE <tablename> [[AS] <name>]
 //        SET ...
 //        [WHERE <expr>]
+//        [FROM <table_ref>]
 //        [ORDER BY <exprs...>]
 //        [LIMIT <expr>]
 //        [RETURNING <exprs...>]

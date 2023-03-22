@@ -78,6 +78,8 @@ const (
 	JoinTokensTableName                    SystemTableName = "join_tokens"
 	StatementStatisticsTableName           SystemTableName = "statement_statistics"
 	TransactionStatisticsTableName         SystemTableName = "transaction_statistics"
+	StatementActivityTableName             SystemTableName = "statement_activity"
+	TransactionActivityTableName           SystemTableName = "transaction_activity"
 	DatabaseRoleSettingsTableName          SystemTableName = "database_role_settings"
 	TenantUsageTableName                   SystemTableName = "tenant_usage"
 	SQLInstancesTableName                  SystemTableName = "sql_instances"

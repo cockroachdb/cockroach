@@ -40,6 +40,7 @@ SELECT * FROM system.namespace
 1    29  span_stats_unique_keys           54
 1    29  sql_instances                    46
 1    29  sqlliveness                      39
+1    29  statement_activity               60
 1    29  statement_bundle_chunks          34
 1    29  statement_diagnostics            36
 1    29  statement_diagnostics_requests   35
@@ -50,6 +51,7 @@ SELECT * FROM system.namespace
 1    29  tenant_tasks                     59
 1    29  tenant_usage                     45
 1    29  tenants                          8
+1    29  transaction_activity             61
 1    29  transaction_statistics           43
 1    29  ui                               14
 1    29  users                            4
@@ -104,11 +106,13 @@ SELECT * FROM system.namespace
 1    29  span_stats_unique_keys           54
 1    29  sql_instances                    46
 1    29  sqlliveness                      39
+1    29  statement_activity               58
 1    29  statement_bundle_chunks          34
 1    29  statement_diagnostics            36
 1    29  statement_diagnostics_requests   35
 1    29  statement_statistics             42
 1    29  table_statistics                 20
+1    29  transaction_activity             59
 1    29  transaction_statistics           43
 1    29  ui                               14
 1    29  users                            4

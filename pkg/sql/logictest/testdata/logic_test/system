@@ -45,6 +45,7 @@ public  span_stats_tenant_boundaries     table     NULL  NULL
 public  span_stats_unique_keys           table     NULL  NULL
 public  sql_instances                    table     NULL  NULL
 public  sqlliveness                      table     NULL  NULL
+public  statement_activity               table     NULL  NULL
 public  statement_bundle_chunks          table     NULL  NULL
 public  statement_diagnostics            table     NULL  NULL
 public  statement_diagnostics_requests   table     NULL  NULL
@@ -55,6 +56,7 @@ public  tenant_settings                  table     NULL  NULL
 public  tenant_tasks                     table     NULL  NULL
 public  tenant_usage                     table     NULL  NULL
 public  tenants                          table     NULL  NULL
+public  transaction_activity             table     NULL  NULL
 public  transaction_statistics           table     NULL  NULL
 public  ui                               table     NULL  NULL
 public  users                            table     NULL  NULL
@@ -98,11 +100,13 @@ public  span_stats_tenant_boundaries     table     NULL  NULL
 public  span_stats_unique_keys           table     NULL  NULL
 public  sql_instances                    table     NULL  NULL
 public  sqlliveness                      table     NULL  NULL
+public  statement_activity               table     NULL  NULL
 public  statement_bundle_chunks          table     NULL  NULL
 public  statement_diagnostics            table     NULL  NULL
 public  statement_diagnostics_requests   table     NULL  NULL
 public  statement_statistics             table     NULL  NULL
 public  table_statistics                 table     NULL  NULL
+public  transaction_activity             table     NULL  NULL
 public  transaction_statistics           table     NULL  NULL
 public  ui                               table     NULL  NULL
 public  users                            table     NULL  NULL
@@ -165,6 +169,8 @@ SELECT id FROM system.descriptor ORDER BY 1
 57
 58
 59
+60
+61
 100
 101
 102
@@ -220,6 +226,8 @@ SELECT id FROM system.descriptor ORDER BY 1
 55
 56
 57
+58
+59
 100
 101
 102
@@ -582,6 +590,8 @@ system  public  sqlliveness                      root    DELETE  true
 system  public  sqlliveness                      root    INSERT  true
 system  public  sqlliveness                      root    SELECT  true
 system  public  sqlliveness                      root    UPDATE  true
+system  public  statement_activity               admin   SELECT  true
+system  public  statement_activity               root    SELECT  true
 system  public  statement_bundle_chunks          admin   DELETE  true
 system  public  statement_bundle_chunks          admin   INSERT  true
 system  public  statement_bundle_chunks          admin   SELECT  true
@@ -650,6 +660,8 @@ system  public  tenant_usage                     root    SELECT  true
 system  public  tenant_usage                     root    UPDATE  true
 system  public  tenants                          admin   SELECT  true
 system  public  tenants                          root    SELECT  true
+system  public  transaction_activity             admin   SELECT  true
+system  public  transaction_activity             root    SELECT  true
 system  public  transaction_statistics           admin   SELECT  true
 system  public  transaction_statistics           root    SELECT  true
 system  public  ui                               admin   DELETE  true
@@ -922,6 +934,8 @@ system  public  sqlliveness                      root    DELETE  true
 system  public  sqlliveness                      root    INSERT  true
 system  public  sqlliveness                      root    SELECT  true
 system  public  sqlliveness                      root    UPDATE  true
+system  public  statement_activity               admin   SELECT  true
+system  public  statement_activity               root    SELECT  true
 system  public  statement_bundle_chunks          admin   DELETE  true
 system  public  statement_bundle_chunks          admin   INSERT  true
 system  public  statement_bundle_chunks          admin   SELECT  true
@@ -956,6 +970,8 @@ system  public  table_statistics                 root    DELETE  true
 system  public  table_statistics                 root    INSERT  true
 system  public  table_statistics                 root    SELECT  true
 system  public  table_statistics                 root    UPDATE  true
+system  public  transaction_activity             admin   SELECT  true
+system  public  transaction_activity             root    SELECT  true
 system  public  transaction_statistics           admin   SELECT  true
 system  public  transaction_statistics           root    SELECT  true
 system  public  ui                               admin   DELETE  true

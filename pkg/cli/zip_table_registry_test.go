@@ -93,6 +93,8 @@ func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
 		"system.statement_bundle_chunks",
 		"system.statement_statistics",
 		"system.transaction_statistics",
+		"system.statement_activity",
+		"system.transaction_activity",
 	}
 	for _, forbiddenTable := range forbiddenSysTables {
 		query, err := zipSystemTables.QueryForTable(forbiddenTable, false /* redact */)
