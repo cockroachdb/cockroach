@@ -655,6 +655,16 @@ func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatu
 	r.commandResult.Close(ctx, t)
 }
 
+// Err is part of the sql.RestrictedCommandResult interface.
+func (r *limitedCommandResult) Err() error {
+	return r.err
+}
+
+// SetError is part of the sql.RestrictedCommandResult interface.
+func (r *limitedCommandResult) SetError(err error) {
+	r.err = err
+}
+
 // Get the column index for job id based on the result header defined in
 // jobs.BulkJobExecutionResultHeader and jobs.DetachedJobExecutionResultHeader.
 func init() {
