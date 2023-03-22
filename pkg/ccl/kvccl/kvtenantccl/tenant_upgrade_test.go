@@ -403,7 +403,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 // is too low.
 func TestTenantUpgradeInterlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 98987)
 	// Times out under stress race
 	skip.UnderStressRace(t)
 	// Test takes 30s to run
