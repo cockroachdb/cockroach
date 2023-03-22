@@ -231,14 +231,16 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// boundaries. In fact, if we tried to split at table boundaries, those
 	// splits would quickly be merged away. The only enforced split points are
 	// between secondary tenants (e.g. between /tenant/<id> and /tenant/<id+1>).
-	// So we drop all descriptor split points and replace it with a single split
-	// point at the beginning of this tenant's keyspace.
+	// So we drop all descriptor split points and replace them with split points
+	// at the beginning and end of this tenant's keyspace.
 	if ms.codec.ForSystemTenant() {
 		for _, id := range ms.otherSplitIDs {
 			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
 		}
 	} else {
-		splits = []roachpb.RKey{roachpb.RKey(ms.codec.TenantPrefix())}
+		tenantStartKey := roachpb.RKey(ms.codec.TenantPrefix())
+		tenantEndKey := tenantStartKey.PrefixEnd()
+		splits = []roachpb.RKey{tenantStartKey, tenantEndKey}
 	}
 
 	// Other key/value generation that doesn't fit into databases and
