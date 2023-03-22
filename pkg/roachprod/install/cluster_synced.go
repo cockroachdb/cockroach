@@ -1106,7 +1106,8 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 			ip, err = c.GetInternalIP(l, ctx, node)
 			if err != nil {
 				res.Err = errors.Wrapf(err, "pgurls")
-				return res, res.Err
+				// By returning a nil error here, we'll retry the command.
+				return res, nil
 			}
 			time.Sleep(time.Second)
 		}
@@ -1541,7 +1542,7 @@ func (c *SyncedCluster) createNodeCertArguments(
 
 			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
-			return res, errors.Wrapf(res.Err, "IPs")
+			return res, nil
 		}, DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
@@ -2291,9 +2292,9 @@ func (c *SyncedCluster) pghosts(
 		res := &RunResultDetails{Node: node}
 		res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 		ips[i] = res.Stdout
-		return res, errors.Wrapf(res.Err, "pghosts")
+		return res, nil
 	}, DefaultSSHRetryOpts); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "pghosts")
 	}
 
 	m := make(map[Node]string, len(ips))
