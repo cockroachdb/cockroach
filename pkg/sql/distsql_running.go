@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -859,6 +860,7 @@ func (dsp *DistSQLPlanner) Run(
 			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 		)
 		if i != nil {
+			// TODO(yuzefovich): add a check that this flow runs in a single goroutine.
 			i.flow = flow
 			i.outputTypes = plan.GetResultTypes()
 		}
@@ -1603,7 +1605,15 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	planner *planner,
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
-) error {
+) (retErr error) {
+	defer func() {
+		if ppInfo := planCtx.getPortalPauseInfo(); ppInfo != nil && !ppInfo.flowCleanup.isComplete {
+			ppInfo.flowCleanup.isComplete = true
+		}
+		if retErr != nil && planCtx.getPortalPauseInfo() != nil {
+			planCtx.getPortalPauseInfo().flowCleanup.run()
+		}
+	}()
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
@@ -1628,11 +1638,45 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
 	func() {
 		finishedSetupFn, cleanup := getFinishedSetupFn(planner)
-		defer cleanup()
+		defer func() {
+			if ppInfo := planCtx.getPortalPauseInfo(); ppInfo != nil {
+				if !ppInfo.flowCleanup.isComplete {
+					ppInfo.flowCleanup.appendFunc(namedFunc{
+						fName: "cleanup inner plan",
+						f:     cleanup,
+					})
+				}
+			} else {
+				cleanup()
+			}
+		}()
 		dsp.PlanAndRun(
 			ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, finishedSetupFn,
 		)
 	}()
+
+	if p := planCtx.getPortalPauseInfo(); p != nil {
+		if buildutil.CrdbTestBuild && p.flow == nil {
+			checkErr := errors.AssertionFailedf("flow for portal %s cannot be found", planner.pausablePortal.Name)
+			if recv.commErr != nil {
+				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
+			} else {
+				return checkErr
+			}
+		}
+		if recv.commErr != nil {
+			p.flow.Cleanup(ctx)
+		} else if !p.flowCleanup.isComplete {
+			flow := p.flow
+			p.flowCleanup.appendFunc(namedFunc{
+				fName: "cleanup flow", f: func() {
+					flow.Cleanup(ctx)
+				},
+			})
+			p.flowCleanup.isComplete = true
+		}
+	}
+
 	if recv.commErr != nil || recv.getError() != nil {
 		return recv.commErr
 	}
