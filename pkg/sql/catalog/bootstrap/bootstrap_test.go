@@ -117,25 +117,18 @@ schema has changed. Assuming that this is expected:
 
 func TestRoundTripInitialValuesStringRepresentation(t *testing.T) {
 	t.Run("system", func(t *testing.T) {
-		roundTripInitialValuesStringRepresentation(t, 0 /* tenantID */)
+		roundTripInitialValuesStringRepresentation(t, roachpb.SystemTenantID)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		const dummyTenantID = 54321
+		dummyTenantID := roachpb.MustMakeTenantID(54321)
 		roundTripInitialValuesStringRepresentation(t, dummyTenantID)
-	})
-	t.Run("tenants", func(t *testing.T) {
-		const dummyTenantID1, dummyTenantID2 = 54321, 12345
-		require.Equal(t,
-			InitialValuesToString(makeMetadataSchema(dummyTenantID1)),
-			InitialValuesToString(makeMetadataSchema(dummyTenantID2)),
-		)
 	})
 }
 
-func roundTripInitialValuesStringRepresentation(t *testing.T, tenantID uint64) {
+func roundTripInitialValuesStringRepresentation(t *testing.T, tenantID roachpb.TenantID) {
 	ms := makeMetadataSchema(tenantID)
 	expectedKVs, expectedSplits := ms.GetInitialValues()
-	actualKVs, actualSplits, err := InitialValuesFromString(ms.codec, InitialValuesToString(ms))
+	actualKVs, actualSplits, err := InitialValuesFromString(InitialValuesToString(ms))
 	require.NoError(t, err)
 	require.Len(t, actualKVs, len(expectedKVs))
 	require.Len(t, actualSplits, len(expectedSplits))
@@ -149,10 +142,7 @@ func roundTripInitialValuesStringRepresentation(t *testing.T, tenantID uint64) {
 	}
 }
 
-func makeMetadataSchema(tenantID uint64) MetadataSchema {
-	codec := keys.SystemSQLCodec
-	if tenantID > 0 {
-		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
-	}
+func makeMetadataSchema(tenantID roachpb.TenantID) MetadataSchema {
+	codec := keys.MakeSQLCodec(tenantID)
 	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 }

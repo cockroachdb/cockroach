@@ -13,7 +13,6 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -262,7 +261,7 @@ type initialValueStrings struct {
 }
 
 // InitialValuesToString returns a string representation of the return values
-// of MetadataSchema.GetInitialValues. The tenant prefix is stripped.
+// of MetadataSchema.GetInitialValues.
 func InitialValuesToString(ms MetadataSchema) string {
 	kvs, splits := ms.GetInitialValues()
 	// Collect the records.
@@ -275,14 +274,6 @@ func InitialValuesToString(ms MetadataSchema) string {
 	}
 	for _, s := range splits {
 		records = append(records, record{k: s})
-	}
-	// Strip the tenant prefix if there is one.
-	p := []byte(ms.codec.TenantPrefix())
-	for i, r := range records {
-		if !bytes.Equal(p, r.k[:len(p)]) {
-			panic("unexpected prefix")
-		}
-		records[i].k = r.k[len(p):]
 	}
 	// Build the string representation.
 	s := make([]initialValueStrings, len(records))
@@ -314,10 +305,7 @@ func InitialValuesToString(ms MetadataSchema) string {
 
 // InitialValuesFromString is the reciprocal to InitialValuesToString and
 // appends the tenant prefix from the given codec.
-func InitialValuesFromString(
-	codec keys.SQLCodec, str string,
-) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
-	p := codec.TenantPrefix()
+func InitialValuesFromString(str string) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
 	var s []initialValueStrings
 	if err := json.Unmarshal([]byte(str), &s); err != nil {
 		return nil, nil, err
@@ -329,9 +317,8 @@ func InitialValuesFromString(
 		}
 		v, err := hex.DecodeString(r.Value)
 		if err != nil {
-			return nil, nil, errors.Errorf("failed to decode hex value %s fo record #%d", r.Value, i+1)
+			return nil, nil, errors.Errorf("failed to decode hex value %s for record #%d", r.Value, i+1)
 		}
-		k = append(p[:len(p):len(p)], k...)
 		if len(v) == 0 {
 			splits = append(splits, k)
 		} else {

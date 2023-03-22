@@ -105,7 +105,7 @@ func initialValuesForSystemV222(
 		return nil, nil, errors.AssertionFailedf("expected %s, got %s", system222SHA256, actualHash)
 	}
 	var initialKVs []roachpb.KeyValue
-	initialKVs, splits, err := InitialValuesFromString(codec, system222)
+	initialKVs, splits, err := InitialValuesFromString(system222)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -135,7 +135,7 @@ func initialValuesForTenantV222(
 		return nil, nil, errors.AssertionFailedf("expected %s, got %s", nonSystem222SHA256, actualHash)
 	}
 	var initialKVs []roachpb.KeyValue
-	initialKVs, splits, err := InitialValuesFromString(codec, nonSystem222)
+	initialKVs, splits, err := InitialValuesFromString(nonSystem222)
 	if err != nil {
 		return nil, nil, err
 	}
