@@ -197,6 +197,11 @@ func (r *commandResult) Err() error {
 	return r.err
 }
 
+// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) ErrAllowReleased() error {
+	return r.err
+}
+
 // SetError is part of the sql.RestrictedCommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
