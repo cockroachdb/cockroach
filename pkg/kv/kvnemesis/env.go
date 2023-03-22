@@ -69,10 +69,9 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 		if err := rows.Scan(&rangeID, &key, &status, &detail); err != nil {
 			return []error{err}
 		}
-		// TODO(erikgrinaker): There's a known issue that can result in a 10-byte
-		// discrepancy in SysBytes. This hasn't been investigated, but it's not
-		// critical so we ignore it for now. See:
-		// https://github.com/cockroachdb/cockroach/issues/93896
+		// TODO(erikgrinaker): There's a known issue that can result in a SysBytes
+		// discrepancy due to lease requests racing with merges. Ignore them for
+		// now, see: https://github.com/cockroachdb/cockroach/issues/93896
 		if status == kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT.String() {
 			m := regexp.MustCompile(`.*\ndelta \(stats-computed\): \{(.*)\}`).FindStringSubmatch(detail)
 			if len(m) > 1 {
@@ -80,7 +79,7 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 				// Strip out LastUpdateNanos and all zero-valued fields.
 				delta = regexp.MustCompile(`LastUpdateNanos:\d+`).ReplaceAllString(delta, "")
 				delta = regexp.MustCompile(`\S+:0\b`).ReplaceAllString(delta, "")
-				if regexp.MustCompile(`^\s*SysBytes:10\s*$`).MatchString(delta) {
+				if regexp.MustCompile(`^\s*SysBytes:\S+(\s+SysCount:\S+)?\s*$`).MatchString(delta) {
 					continue
 				}
 			}
