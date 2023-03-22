@@ -248,12 +248,13 @@ func makeImportSpans(
 	spans []roachpb.Span,
 	backups []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
+	highWaterMark []byte,
 	targetSize int64,
 	introducedSpanFrontier *spanUtils.Frontier,
 	completedSpans []jobspb.RestoreProgress_FrontierEntry,
 	useSimpleImportSpans bool,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
-	var cover []execinfrapb.RestoreSpanEntry
+	cover := make([]execinfrapb.RestoreSpanEntry, 0)
 	spanCh := make(chan execinfrapb.RestoreSpanEntry)
 	g := ctxgroup.WithContext(context.Background())
 	g.Go(func() error {
@@ -270,7 +271,7 @@ func makeImportSpans(
 
 	filter, err := makeSpanCoveringFilter(
 		checkpointFrontier,
-		nil,
+		highWaterMark,
 		introducedSpanFrontier,
 		targetSize,
 		true)
@@ -398,6 +399,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
+			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
 			emptyCompletedSpans,
@@ -420,6 +422,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
+			nil,
 			2<<20,
 			emptySpanFrontier,
 			emptyCompletedSpans,
@@ -444,6 +447,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
+			nil,
 			noSpanTargetSize,
 			introducedSpanFrontier,
 			emptyCompletedSpans,
@@ -473,6 +477,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
+			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
 			persistFrontier(frontier, 0),
@@ -859,6 +864,7 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 				restoreSpans,
 				backups,
 				layerToIterFactory,
+				nil,
 				0,
 				introducedSpanFrontier,
 				[]jobspb.RestoreProgress_FrontierEntry{},
@@ -919,6 +925,29 @@ func TestRestoreEntryCover(t *testing.T) {
 	defer cleanupFn()
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 
+	// getRandomCompletedSpans randomly gets up to maxNumSpans completed
+	// spans from the cover. A completed span can cover 1 or more
+	// RestoreSpanEntry in the cover.
+	getRandomCompletedSpans := func(cover []execinfrapb.RestoreSpanEntry, maxNumSpans int) []roachpb.Span {
+		var completedSpans []roachpb.Span
+		for i := 0; i < maxNumSpans; i++ {
+			start := rand.Intn(len(cover) + 1)
+			length := rand.Intn(len(cover) + 1 - start)
+			if length == 0 {
+				continue
+			}
+
+			sp := roachpb.Span{
+				Key:    cover[start].Span.Key,
+				EndKey: cover[start+length-1].Span.EndKey,
+			}
+			completedSpans = append(completedSpans, sp)
+		}
+
+		merged, _ := roachpb.MergeSpans(&completedSpans)
+		return merged
+	}
+
 	for _, numBackups := range []int{1, 2, 3, 5, 9, 10, 11, 12} {
 		for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
 			for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
@@ -942,6 +971,7 @@ func TestRestoreEntryCover(t *testing.T) {
 									backups[numBackups-1].Spans,
 									backups,
 									layerToIterFactory,
+									nil,
 									target<<20,
 									introducedSpanFrontier,
 									[]jobspb.RestoreProgress_FrontierEntry{},
@@ -949,6 +979,57 @@ func TestRestoreEntryCover(t *testing.T) {
 								require.NoError(t, err)
 								require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
 									cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
+
+								// Check that the correct import spans are created if the job is
+								// resumed after the completion of some random entries in the cover.
+								if len(cover) > 0 {
+									for n := 1; n <= 5; n++ {
+										var completedSpans []roachpb.Span
+										var highWater []byte
+										if simpleImportSpans {
+											idx := r.Intn(len(cover))
+											completedSpans = append(completedSpans, roachpb.Span{
+												Key:    cover[0].Span.Key,
+												EndKey: cover[idx].Span.EndKey,
+											})
+											highWater = cover[idx].Span.EndKey
+										} else {
+											completedSpans = getRandomCompletedSpans(cover, n)
+										}
+
+										var frontierEntries []jobspb.RestoreProgress_FrontierEntry
+										for _, sp := range completedSpans {
+											frontierEntries = append(frontierEntries, jobspb.RestoreProgress_FrontierEntry{
+												Span:      sp,
+												Timestamp: completedSpanTime,
+											})
+										}
+
+										resumeCover, err := makeImportSpans(
+											ctx,
+											backups[numBackups-1].Spans,
+											backups,
+											layerToIterFactory,
+											highWater,
+											target<<20,
+											introducedSpanFrontier,
+											frontierEntries,
+											simpleImportSpans)
+										require.NoError(t, err)
+
+										// Compute the spans that are required on resume by subtracting
+										// completed spans from the original required spans.
+										var resumedRequiredSpans roachpb.Spans
+										for _, origReq := range backups[numBackups-1].Spans {
+											resumeReq := roachpb.SubtractSpans([]roachpb.Span{origReq}, completedSpans)
+											resumedRequiredSpans = append(resumedRequiredSpans, resumeReq...)
+										}
+
+										require.NoError(t, checkRestoreCovering(ctx, backups, resumedRequiredSpans,
+											resumeCover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage),
+											"high water: %v and completed spans: %v", highWater, completedSpans)
+									}
+								}
 							})
 						}
 					}
