@@ -165,6 +165,12 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedRestartRanges = metric.Metadata{
+		Name:        "distsender.rangefeed.restart_ranges",
+		Help:        `Number of ranges that were restarted due to transient errors`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderRangefeedRestartStuck = metric.Metadata{
 		Name: "distsender.rangefeed.restart_stuck",
 		Help: `Number of times a rangefeed was restarted due to not receiving ` +
@@ -239,6 +245,7 @@ type DistSenderMetrics struct {
 	RangefeedRanges         *metric.Gauge
 	RangefeedCatchupRanges  *metric.Gauge
 	RangefeedErrorCatchup   *metric.Counter
+	RangefeedRestartRanges  *metric.Counter
 	RangefeedRestartStuck   *metric.Counter
 	MethodCounts            [kvpb.NumMethods]*metric.Counter
 	ErrCounts               [kvpb.NumErrors]*metric.Counter
@@ -260,6 +267,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
 		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
 		RangefeedErrorCatchup:   metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartRanges:  metric.NewCounter(metaDistSenderRangefeedRestartRanges),
 		RangefeedRestartStuck:   metric.NewCounter(metaDistSenderRangefeedRestartStuck),
 	}
 	for i := range m.MethodCounts {

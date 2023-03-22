@@ -17,6 +17,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// HasJoinFilterConstants returns true if the filter constrains the given column
+// to a constant, non-NULL value or set of constant, non-NULL values.
+func HasJoinFilterConstants(
+	filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
+) bool {
+	for filterIdx := range filters {
+		props := filters[filterIdx].ScalarProps()
+		if props.TightConstraints {
+			if ok := props.Constraints.HasSingleColumnNonNullConstValues(evalCtx, col); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // FindJoinFilterConstants tries to find a filter that is exactly equivalent to
 // constraining the given column to a constant value or a set of constant
 // values. If successful, the constant values and the index of the constraining
@@ -31,18 +47,11 @@ func FindJoinFilterConstants(
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
-			constCol, constVals, ok := props.Constraints.HasSingleColumnConstValues(evalCtx)
-			if !ok || constCol != col {
+			constVals, ok := props.Constraints.ExtractSingleColumnNonNullConstValues(evalCtx, col)
+			if !ok {
 				continue
 			}
-			hasNull := false
-			for i := range constVals {
-				if constVals[i] == tree.DNull {
-					hasNull = true
-					break
-				}
-			}
-			if !hasNull && (bestValues == nil || len(bestValues) > len(constVals)) {
+			if bestValues == nil || len(bestValues) > len(constVals) {
 				bestValues = constVals
 				bestFilterIdx = filterIdx
 			}

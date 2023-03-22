@@ -250,7 +250,7 @@ func makeAzureStorage(
 	case cloudpb.AzureAuth_IMPLICIT:
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
-				"implicit credentials disallowed for azure due to --external-io-implicit-credentials flag")
+				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
 		}
 		// The Default credential supports env vars and managed identity magic.
 		// We rely on the former for testing and the latter in prod.

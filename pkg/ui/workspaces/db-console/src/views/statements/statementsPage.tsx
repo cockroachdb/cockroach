@@ -289,7 +289,7 @@ export const searchLocalSetting = new LocalSetting(
 export const reqSortSetting = new LocalSetting(
   "reqSortSetting/StatementsPage",
   (state: AdminUIState) => state.localSettings,
-  api.DEFAULT_STATS_REQ_OPTIONS.sort,
+  api.DEFAULT_STATS_REQ_OPTIONS.sortStmt,
 );
 
 export const limitSetting = new LocalSetting(

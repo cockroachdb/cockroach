@@ -147,11 +147,13 @@ func init() {
 		if !ok {
 			return
 		}
+		distSQLBlockList := toType.Family() == types.OidFamily
 		if _, ok := castBuiltins[toOID]; !ok {
 			castBuiltins[toOID] = &builtinDefinition{
 				props: tree.FunctionProperties{
-					Category:     builtinconstants.CategoryCast,
-					Undocumented: true,
+					Category:         builtinconstants.CategoryCast,
+					Undocumented:     true,
+					DistsqlBlocklist: distSQLBlockList,
 				},
 			}
 		}
