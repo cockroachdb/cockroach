@@ -272,13 +272,14 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
 %type <plpgsqltree.PLpgSQLDatum>	decl_cursor_args
 
 %type <*plpgsqltree.PLpgSQLStmtOpen> open_stmt_processor
-%type <str>	expr_until_semi
+%type <str>	expr_until_semi expr_until_paren
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
 
 %type <plpgsqltree.PLpgSQLScalarVar>		cursor_variable
 %type <plpgsqltree.PLpgSQLDatum>	decl_cursor_arg
 %type <forvariable>	for_variable
+%type <returnvariable>	return_variable
 %type <*tree.NumVal>	foreach_slice
 %type <plpgsqltree.PLpgSQLStatement>	for_control
 
@@ -879,19 +880,52 @@ exit_type: EXIT
   }
 ;
 
-stmt_return:
   // TODO handle variable names
   // 1. verify if the first token is a variable (this means that we need to track variable scope during parsing)
   // 2. if yes, check next token is ';'
   // 3. if no, expecting a sql expression "read_sql_expression"
   //    we can just read until a ';', then do the sql expression validation during compile time.
-RETURN
+
+stmt_return : RETURN return_variable ';'
   {
+    return unimplemented(plpgsqllex, "return")
   }
-| RETURN_NEXT NEXT
-  {}
-| RETURN_QUERY QUERY
-  {}
+ | RETURN_NEXT NEXT return_variable ';'
+  {
+    return unimplemented(plpgsqllex, "return next")
+  }
+ | RETURN_QUERY QUERY query_options ';'
+   {
+     return unimplemented (plpgsqllex, "return query")
+   }
+  ;
+;
+
+query_options :
+   {
+    _, terminator := plpgsqllex.(*lexer).ReadSqlExpressionStr2(EXECUTE, ';')
+      if terminator == EXECUTE {
+           return unimplemented (plpgsqllex, "return dynamic sql query")
+      }
+
+      plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+   }
+  ;
+
+
+return_variable	: IDENT
+					{
+              return unimplemented(plpgsqllex, "return identifier")
+					}
+				| expr_until_semi
+					{
+					    return unimplemented(plpgsqllex, "return expression")
+					}
+				| '(' expr_until_paren
+				  {
+          	  return unimplemented(plpgsqllex, "return composite type")
+          }
+				;
 
 stmt_raise: RAISE
   {
@@ -1060,7 +1094,13 @@ expr_until_loop:
   }
 ;
 
-opt_block_label:
+expr_until_paren :
+  {
+    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(')')
+  }
+;
+
+opt_block_label	:
   {
     $$ = ""
   }
