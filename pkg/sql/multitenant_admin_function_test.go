@@ -258,7 +258,6 @@ func (tc testCase) runTest(
 		testServer.Stopper(),
 	)
 
-	var secondaryTenants []serverutils.TestTenantInterface
 	createSecondaryDB := func(
 		tenantID roachpb.TenantID,
 		clusterSettings ...*settings.BoolSetting,
@@ -270,13 +269,12 @@ func (tc testCase) runTest(
 				clusterSetting.Override(ctx, &testingClusterSettings.SV, true)
 			}
 		}
-		tenant, db := serverutils.StartTenant(
+		_, db := serverutils.StartTenant(
 			t, testServer, base.TestTenantArgs{
 				Settings: testingClusterSettings,
 				TenantID: tenantID,
 			},
 		)
-		secondaryTenants = append(secondaryTenants, tenant)
 		return db
 	}
 
@@ -337,12 +335,6 @@ func (tc testCase) runTest(
 	// Wait for cluster settings to propagate async.
 	for _, fn := range waitForTenantCapabilitiesFns {
 		fn()
-	}
-
-	// Wait for splits after starting all tenants to make test start up faster.
-	for _, tenant := range secondaryTenants {
-		err := tenant.WaitForTenantEndKeySplit(ctx)
-		require.NoError(t, err)
 	}
 
 	execQueries(testCluster, systemDB, "system", tc.system)
