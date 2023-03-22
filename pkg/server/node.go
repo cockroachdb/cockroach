@@ -1442,6 +1442,7 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
+		log.Infof(ctx, "XXX node rangefeed future error: %s", err)
 		var event kvpb.RangeFeedEvent
 		event.SetValue(&kvpb.RangeFeedError{
 			Error: *kvpb.NewError(err),
@@ -1520,6 +1521,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		f.WhenReady(func(err error) {
 			if err != nil {
 				var event kvpb.RangeFeedEvent
+				log.Infof(context.TODO(), "XXX rangefeed sending error %s", err)
 				event.SetValue(&kvpb.RangeFeedError{
 					Error: *kvpb.NewError(err),
 				})

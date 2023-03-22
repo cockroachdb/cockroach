@@ -306,6 +306,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 	mux, err := client.MuxRangeFeed(ctx)
 	if err != nil {
+		log.Infof(ctx, "XXX client MuxRangeFeed err: %s", err)
 		return future.MustSet(stream, muxStreamOrError{err: err})
 	}
 
@@ -319,6 +320,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	defer stuckWatcher.stop()
 
 	if recvErr := m.receiveEventsFromNode(ctx, mux, stuckWatcher, &ms); recvErr != nil {
+		log.Infof(ctx, "XXX client MuxRangeFeed recvErr: %s", recvErr)
 		// Clear out this client, and restart all streams on this node.
 		// Note: there is a race here where we may delete this muxClient, while
 		// another go routine loaded it.  That's fine, since we would not
@@ -395,7 +397,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 				active.startAfter.Forward(t.ResolvedTS)
 			}
 		case *kvpb.RangeFeedError:
-			log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+			log.Infof(ctx, "RangeFeedError: %s", t.Error.GoError())
 			if active.catchupRes != nil {
 				m.ds.metrics.RangefeedErrorCatchup.Inc(1)
 			}
@@ -440,7 +442,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	if log.V(1) {
+	if true || log.V(1) {
 		log.Infof(ctx, "RangeFeed %s@%s disconnected with last checkpoint %s ago: %v",
 			active.Span, active.StartAfter, timeutil.Since(active.Resolved.GoTime()), reason)
 	}

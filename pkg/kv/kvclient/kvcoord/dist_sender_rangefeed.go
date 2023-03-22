@@ -762,7 +762,7 @@ func (ds *DistSender) singleRangeFeed(
 					args.Timestamp.Forward(t.ResolvedTS)
 				}
 			case *kvpb.RangeFeedError:
-				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+				log.Infof(ctx, "XXX RangeFeedError: %s", t.Error.GoError())
 				if catchupRes != nil {
 					ds.metrics.RangefeedErrorCatchup.Inc(1)
 				}

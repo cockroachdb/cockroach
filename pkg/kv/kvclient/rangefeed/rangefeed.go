@@ -311,23 +311,20 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
-			if ts.WallTime == 1 && ts.Logical == 0 {
-				return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
-			}
-			return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			return errors.Wrapf(f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...), "rangefeed impl %T", f.client)
 		}
 		processEventsTask := func(ctx context.Context) error {
-			return f.processEvents(ctx, frontier, eventCh)
+			return errors.Wrap(f.processEvents(ctx, frontier, eventCh), "process")
 		}
 
 		err := ctxgroup.GoAndWait(ctx, rangeFeedTask, processEventsTask)
 		if errors.HasType(err, &kvpb.BatchTimestampBeforeGCError{}) ||
 			errors.HasType(err, &kvpb.MVCCHistoryMutationError{}) {
+			log.Infof(ctx, "XXX exiting rangefeed due to internal error: %v", err)
 			if errCallback := f.onUnrecoverableError; errCallback != nil {
 				errCallback(ctx, err)
 			}
 
-			log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
 			return
 		}
 		if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {

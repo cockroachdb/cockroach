@@ -892,7 +892,9 @@ func TestUnrecoverableErrors(t *testing.T) {
 	})
 
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, preGCThresholdTS,
-		func(context.Context, *kvpb.RangeFeedValue) {},
+		func(_ context.Context, v *kvpb.RangeFeedValue) {
+			t.Logf("rangefeed: %v", v)
+		},
 		rangefeed.WithDiff(true),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
 			mu.Lock()

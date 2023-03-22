@@ -4116,6 +4116,9 @@ func TestTransferRaftLeadership(t *testing.T) {
 
 	// Verify leadership is transferred.
 	testutils.SucceedsSoon(t, func() error {
+		if lease, _ := repl0.GetLease(); lease.Replica.StoreID != 2 {
+			return errors.Errorf("expected leaseholder %d; got %d", 2, lease.Replica.StoreID)
+		}
 		if a, e := repl0.RaftStatus().Lead, uint64(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
