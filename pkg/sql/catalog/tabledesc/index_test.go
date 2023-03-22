@@ -476,7 +476,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 				case "t_a_key":
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.JSONCompositeColumnsVersion, np.GetVersion())
+					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
 
 				case "new_primary_key":
 					require.True(t, np.IsMutation())
@@ -486,32 +486,32 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 				case "tsec_rewrite_for_primary_key_change":
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.JSONCompositeColumnsVersion, np.GetVersion())
+					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
 
 				case "t_c_key_rewrite_for_primary_key_change":
 					require.True(t, np.IsMutation())
 					require.True(t, np.IsUnique())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.JSONCompositeColumnsVersion, np.GetVersion())
+					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
 
 				case "t_a_crdb_internal_dpe_key":
 					// Temporary index for new index based on old primary index (t_a_key)
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.JSONCompositeColumnsVersion, np.GetVersion())
+					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
 
 				case "t_b_crdb_internal_dpe_idx":
 					// Temporary index for tsec_rewrite_for_primary_key_change
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.JSONCompositeColumnsVersion, np.GetVersion())
+					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
 
 				case "t_c_crdb_internal_dpe_key":
 					// Temporary index for t_c_key_rewrite_for_primary_key_change
 					require.True(t, np.IsMutation())
 					require.True(t, np.IsUnique())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.JSONCompositeColumnsVersion, np.GetVersion())
+					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
 
 				case "t_d_crdb_internal_dpe_key":
 					// Temporary index for new_primary_key
@@ -630,12 +630,12 @@ func TestSecKeyLatestIndexDescriptorVersion(t *testing.T) {
 
 	// The primary index should have its version bumped and its stored column
 	// slices properly set.
-	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.PrimaryIndex.Version)
+	require.Equal(t, descpb.JSONCompositeColumnsVersion, newDesc.PrimaryIndex.Version)
 	require.Equal(t, []string{"c2", "c3"}, newDesc.PrimaryIndex.StoreColumnNames)
 	require.Equal(t, []descpb.ColumnID{2, 3}, newDesc.PrimaryIndex.StoreColumnIDs)
 	// The public secondary index should not have its version bumped, because its
 	// key and store column sets intersect.
 	require.Equal(t, descpb.EmptyArraysInInvertedIndexesVersion, newDesc.Indexes[0].Version)
 	// The index mutation should have its version bumped.
-	require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, newDesc.Mutations[0].GetIndex().Version)
+	require.Equal(t, descpb.JSONCompositeColumnsVersion, newDesc.Mutations[0].GetIndex().Version)
 }
