@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
 
@@ -240,11 +239,18 @@ func (a *Authorizer) elideCapabilityChecks(ctx context.Context, tenID roachpb.Te
 // IsExemptFromRateLimiting returns true if the tenant is not subject to rate limiting.
 func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool {
 	if a.elideCapabilityChecks(ctx, tenID) {
+		// By default, the system tenant is exempt from rate
+		// limiting and secondary tenants are not.
 		return tenID.IsSystem()
 	}
 
+	// Because tenant limiters are constructed based on the range
+	// bounds of the replica, requests from the system tenant that
+	// touch a tenant span will result in a query to this
+	// capability before we have a capability reader. We do not
+	// want to panic in that case since it is currently expected.
 	if a.capabilitiesReader == nil {
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "trying to perform capability check when no reader exists")
+		log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming rate limit applies", tenID.String())
 		return false
 	}
 	if cp, found := a.capabilitiesReader.GetCapabilities(tenID); found {
