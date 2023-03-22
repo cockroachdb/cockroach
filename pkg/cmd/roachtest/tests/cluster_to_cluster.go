@@ -67,6 +67,7 @@ type c2cSetup struct {
 	src          clusterInfo
 	dst          clusterInfo
 	workloadNode option.NodeListOption
+	promCfg      *prometheus.Config
 }
 
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
@@ -372,6 +373,22 @@ func (sp *replicationTestSpec) setupC2C(ctx context.Context, t test.Test, c clus
 	sp.t = t
 	sp.c = c
 	sp.metrics = &c2cMetrics{}
+	if !c.IsLocal() {
+		// TODO(msbutler): pass a proper cluster replication dashboard and figure out why we need to
+		// pass a grafana dashboard for this to work
+		sp.setup.promCfg = (&prometheus.Config{}).
+			WithPrometheusNode(sp.setup.workloadNode.InstallNodes()[0]).
+			WithCluster(sp.setup.dst.nodes.InstallNodes()).
+			WithNodeExporter(sp.setup.dst.nodes.InstallNodes()).
+			WithGrafanaDashboard("https://go.crdb.dev/p/changefeed-roachtest-grafana-dashboard")
+
+		require.NoError(sp.t, sp.c.StartGrafana(ctx, sp.t.L(), sp.setup.promCfg))
+		sp.t.L().Printf("Prom has started")
+	}
+}
+
+func (sp *replicationTestSpec) crdbNodes() option.NodeListOption {
+	return sp.setup.src.nodes.Merge(sp.setup.dst.nodes)
 }
 
 func (sp *replicationTestSpec) startStatsCollection(
@@ -385,18 +402,8 @@ func (sp *replicationTestSpec) startStatsCollection(
 			return map[string]float64{}
 		}
 	}
-	// TODO(msbutler): pass a proper cluster replication dashboard and figure out why we need to
-	// pass a grafana dashboard for this to work
-	cfg := (&prometheus.Config{}).
-		WithPrometheusNode(sp.setup.workloadNode.InstallNodes()[0]).
-		WithCluster(sp.setup.dst.nodes.InstallNodes()).
-		WithNodeExporter(sp.setup.dst.nodes.InstallNodes()).
-		WithGrafanaDashboard("https://go.crdb.dev/p/changefeed-roachtest-grafana-dashboard")
 
-	require.NoError(sp.t, sp.c.StartGrafana(ctx, sp.t.L(), cfg))
-	sp.t.L().Printf("Prom has started")
-
-	client, err := clusterstats.SetupCollectorPromClient(ctx, sp.c, sp.t.L(), cfg)
+	client, err := clusterstats.SetupCollectorPromClient(ctx, sp.c, sp.t.L(), sp.setup.promCfg)
 	require.NoError(sp.t, err, "error creating prometheus client for stats collector")
 	collector := clusterstats.NewStatsCollector(ctx, client)
 
@@ -528,6 +535,83 @@ AS OF SYSTEM TIME '%s'`, startTimeStr, aost)
 	require.Equal(sp.t, srcFingerprint, destFingerprint)
 }
 
+func (sp *replicationTestSpec) main(ctx context.Context, t test.Test, c cluster.Cluster) {
+	metricSnapper := sp.startStatsCollection(ctx)
+	sp.preStreamingWorkload(ctx)
+
+	t.L().Printf("begin workload on src cluster")
+	m := c.NewMonitor(ctx, sp.crdbNodes())
+	// The roachtest driver can use the workloadCtx to cancel the workload.
+	workloadCtx, workloadCancel := context.WithCancel(ctx)
+	defer workloadCancel()
+
+	workloadDoneCh := make(chan struct{})
+	m.Go(func(ctx context.Context) error {
+		defer close(workloadDoneCh)
+		err := sp.runWorkload(workloadCtx)
+		// The workload should only return an error if the roachtest driver cancels the
+		// workloadCtx after sp.additionalDuration has elapsed after the initial scan completes.
+		if err != nil && workloadCtx.Err() == nil {
+			// Implies the workload context was not cancelled and the workload cmd returned a
+			// different error.
+			return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
+		}
+		t.L().Printf("workload successfully finished")
+		return nil
+	})
+
+	t.Status("starting replication stream")
+	sp.metrics.initalScanStart = newMetricSnapshot(metricSnapper, timeutil.Now())
+	ingestionJobID := sp.startReplicationStream()
+
+	lv := makeLatencyVerifier("stream-ingestion", 0, 2*time.Minute, t.L(), getStreamIngestionJobInfo, t.Status, false)
+	defer lv.maybeLogLatencyHist()
+
+	m.Go(func(ctx context.Context) error {
+		return lv.pollLatency(ctx, sp.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
+	})
+
+	t.L().Printf("waiting for replication stream to finish ingesting initial scan")
+	sp.waitForHighWatermark(ingestionJobID, sp.timeout/2)
+	sp.metrics.initialScanEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
+	t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
+		sp.additionalDuration))
+
+	select {
+	case <-workloadDoneCh:
+		t.L().Printf("workload finished on its own")
+	case <-time.After(sp.getWorkloadTimeout()):
+		workloadCancel()
+		t.L().Printf("workload has cancelled after %s", sp.additionalDuration)
+	case <-ctx.Done():
+		t.L().Printf(`roachtest context cancelled while waiting for workload duration to complete`)
+		return
+	}
+	var currentTime time.Time
+	sp.setup.dst.sysSQL.QueryRow(sp.t, "SELECT clock_timestamp()").Scan(&currentTime)
+	cutoverTime := currentTime.Add(-sp.cutover)
+	sp.t.Status("cutover time chosen: ", cutoverTime.String())
+
+	retainedTime := sp.getReplicationRetainedTime()
+
+	sp.metrics.cutoverTo = newMetricSnapshot(metricSnapper, cutoverTime)
+	sp.metrics.cutoverStart = newMetricSnapshot(metricSnapper, timeutil.Now())
+
+	sp.t.Status(fmt.Sprintf("waiting for replication stream to cutover to %s",
+		cutoverTime.String()))
+	sp.stopReplicationStream(ingestionJobID, cutoverTime)
+	sp.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
+
+	sp.metrics.export(sp.t, len(sp.setup.src.nodes))
+
+	t.Status("comparing fingerprints")
+	sp.compareTenantFingerprintsAtTimestamp(
+		ctx,
+		retainedTime,
+		cutoverTime,
+	)
+	lv.assertValid(t)
+}
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationTestSpec{
 		{
@@ -611,89 +695,16 @@ func registerClusterToCluster(r registry.Registry) {
 			RequiresLicense: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				sp.setupC2C(ctx, t, c)
-				m := c.NewMonitor(ctx, sp.setup.src.nodes.Merge(sp.setup.dst.nodes))
-				hc := roachtestutil.NewHealthChecker(t, c, sp.setup.src.nodes.Merge(sp.setup.dst.nodes))
 
+				m := c.NewMonitor(ctx, sp.crdbNodes())
+				hc := roachtestutil.NewHealthChecker(t, c, sp.crdbNodes())
 				m.Go(func(ctx context.Context) error {
 					require.NoError(t, hc.Runner(ctx))
 					return nil
 				})
 				defer hc.Done()
 
-				metricSnapper := sp.startStatsCollection(ctx)
-				sp.preStreamingWorkload(ctx)
-
-				t.L().Printf("begin workload on src cluster")
-				// The roachtest driver can use the workloadCtx to cancel the workload.
-				workloadCtx, workloadCancel := context.WithCancel(ctx)
-				defer workloadCancel()
-
-				workloadDoneCh := make(chan struct{})
-				m.Go(func(ctx context.Context) error {
-					defer close(workloadDoneCh)
-					err := sp.runWorkload(workloadCtx)
-					// The workload should only return an error if the roachtest driver cancels the
-					// workloadCtx after sp.additionalDuration has elapsed after the initial scan completes.
-					if err != nil && workloadCtx.Err() == nil {
-						// Implies the workload context was not cancelled and the workload cmd returned a
-						// different error.
-						return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
-					}
-					t.L().Printf("workload successfully finished")
-					return nil
-				})
-
-				t.Status("starting replication stream")
-				sp.metrics.initalScanStart = newMetricSnapshot(metricSnapper, timeutil.Now())
-				ingestionJobID := sp.startReplicationStream()
-
-				lv := makeLatencyVerifier("stream-ingestion", 0, 2*time.Minute, t.L(), getStreamIngestionJobInfo, t.Status, false)
-				defer lv.maybeLogLatencyHist()
-
-				m.Go(func(ctx context.Context) error {
-					return lv.pollLatency(ctx, sp.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
-				})
-
-				t.L().Printf("waiting for replication stream to finish ingesting initial scan")
-				sp.waitForHighWatermark(ingestionJobID, sp.timeout/2)
-				sp.metrics.initialScanEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
-				t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
-					sp.additionalDuration))
-
-				select {
-				case <-workloadDoneCh:
-					t.L().Printf("workload finished on its own")
-				case <-time.After(sp.getWorkloadTimeout()):
-					workloadCancel()
-					t.L().Printf("workload has cancelled after %s", sp.additionalDuration)
-				case <-ctx.Done():
-					t.L().Printf(`roachtest context cancelled while waiting for workload duration to complete`)
-					return
-				}
-				var currentTime time.Time
-				sp.setup.dst.sysSQL.QueryRow(sp.t, "SELECT clock_timestamp()").Scan(&currentTime)
-				cutoverTime := currentTime.Add(-sp.cutover)
-				sp.t.Status("cutover time chosen: ", cutoverTime.String())
-
-				retainedTime := sp.getReplicationRetainedTime()
-
-				sp.metrics.cutoverTo = newMetricSnapshot(metricSnapper, cutoverTime)
-				sp.metrics.cutoverStart = newMetricSnapshot(metricSnapper, timeutil.Now())
-
-				sp.t.Status(fmt.Sprintf("waiting for replication stream to cutover to %s",
-					cutoverTime.String()))
-				sp.stopReplicationStream(ingestionJobID, cutoverTime)
-				sp.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
-
-				sp.metrics.export(sp.t, len(sp.setup.src.nodes))
-
-				t.Status("comparing fingerprints")
-				sp.compareTenantFingerprintsAtTimestamp(
-					ctx,
-					retainedTime,
-					cutoverTime,
-				)
-				lv.assertValid(t)
+				sp.main(ctx, t, c)
 			},
 		})
 	}
