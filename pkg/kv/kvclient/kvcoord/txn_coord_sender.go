@@ -144,6 +144,11 @@ type TxnCoordSender struct {
 		// caller of DeferCommitWait has assumed responsibility for performing
 		// the commit-wait.
 		commitWaitDeferred bool
+
+		// leafRefCount is a reference count of the outstanding LeafTxn instances
+		// forked from this RootTxn. The RootTxn cannot be used to send requests
+		// while this reference count is greater than 0.
+		leafRefCount int
 	}
 
 	// A pointer member to the creating factory provides access to
@@ -481,6 +486,12 @@ func (tc *TxnCoordSender) Send(
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.mu.active = true
+
+	if tc.mu.leafRefCount > 0 {
+		return nil, kvpb.NewError(errors.AssertionFailedf(
+			"txn used with outstanding leafRefCount=%d: txn=%v, ba=%v",
+			tc.mu.leafRefCount, tc.mu.txn, ba.Summary()))
+	}
 
 	if pErr := tc.maybeRejectClientLocked(ctx, ba); pErr != nil {
 		return nil, pErr
@@ -1152,8 +1163,18 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
+	if tc.typ != kv.RootTxn {
+		panic("unexpected")
+	}
+
 	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
 		return nil, err
+	}
+
+	if opt == kv.OnlyPending {
+		// NOTE: ignore calls to txn.GetLeafTxnInputState, only reference count on
+		// calls to txn.GetLeafTxnInputStateOrRejectClient.
+		tc.mu.leafRefCount++
 	}
 
 	// Copy mutable state so access is safe for the caller.
@@ -1232,6 +1253,10 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 		return
 	}
 
+	if tc.typ != kv.RootTxn {
+		panic("unexpected")
+	}
+
 	// If the LeafTxnFinalState is telling us the transaction has been
 	// aborted, it's better if we don't ingest it. Ingesting it would
 	// possibly put us in an inconsistent state, with an ABORTED proto
@@ -1248,6 +1273,11 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 	// qualms about what error comes first.
 	if tfs.Txn.Status != roachpb.PENDING {
 		return
+	}
+
+	tc.mu.leafRefCount--
+	if tc.mu.leafRefCount < 0 {
+		panic("leafRefCount unexpectedly negative")
 	}
 
 	tc.mu.txn.Update(&tfs.Txn)
