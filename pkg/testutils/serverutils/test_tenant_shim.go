@@ -185,14 +185,6 @@ type TestTenantInterface interface {
 	// Tracer returns a reference to the tenant's Tracer.
 	Tracer() *tracing.Tracer
 
-	// WaitForTenantEndKeySplit blocks until the tenant's initial range is split
-	// at the end key. For example, this will wait until tenant 10 has a split at
-	// /Tenant/11.
-	//
-	// Tests that use crdb_internal.ranges, crdb_internal.ranges_no_leases, or
-	// SHOW RANGES from a secondary tenant should call this to avoid races.
-	WaitForTenantEndKeySplit(ctx context.Context) error
-
 	// MigrationServer returns the tenant's migration server, which is used in
 	// upgrade testing.
 	MigrationServer() interface{}
