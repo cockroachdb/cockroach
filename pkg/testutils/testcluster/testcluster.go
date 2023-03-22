@@ -406,6 +406,14 @@ func (tc *TestCluster) Start(t testing.TB) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].Gossip())
 	}
 
+	// Now that we have started all the servers on the bootstrap version, let us
+	// run the migrations up to the overridden BinaryVersion.
+	if v := tc.Servers[0].BinaryVersionOverride(); v != (roachpb.Version{}) {
+		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// No need to disable the merge queue for SQL servers, as they don't have
 	// access to that cluster setting (and ALTER TABLE ... SPLIT AT is not
 	// supported in SQL servers either).
