@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // PreparedStatementOrigin is an enum representing the source of where
@@ -206,16 +208,68 @@ func (p *PreparedPortal) close(
 ) {
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
+	if p.pauseInfo != nil {
+		p.pauseInfo.cleanupAll()
+		p.pauseInfo = nil
+	}
 }
 
 func (p *PreparedPortal) size(portalName string) int64 {
 	return int64(uintptr(len(portalName)) + unsafe.Sizeof(p))
 }
 
+func (p *PreparedPortal) isPausable() bool {
+	return p.pauseInfo != nil
+}
+
+// cleanupFuncStack stores cleanup functions for a portal. The clean-up
+// functions are added during the first-time execution of a portal. When the
+// first-time execution is finished, we mark isComplete to true.
+type cleanupFuncStack struct {
+	stack      []namedFunc
+	isComplete bool
+}
+
+func (n *cleanupFuncStack) appendFunc(f namedFunc) {
+	n.stack = append(n.stack, f)
+}
+
+func (n *cleanupFuncStack) run() {
+	for i := 0; i < len(n.stack); i++ {
+		n.stack[i].f()
+	}
+	*n = cleanupFuncStack{}
+}
+
+// namedFunc is function with name, which makes the debugging easier. It is
+// used just for clean up functions of a pausable portal.
+type namedFunc struct {
+	fName string
+	f     func()
+}
+
+// instrumentationHelperWrapper wraps the instrumentation helper.
+// We need to maintain it for a paused portal.
+type instrumentationHelperWrapper struct {
+	ctx context.Context
+	ih  instrumentationHelper
+}
+
 // portalPauseInfo stores info that enables the pause of a portal. After pausing
 // the portal, execute any other statement, and come back to re-execute it or
 // close it.
 type portalPauseInfo struct {
+	// rowsAffected is the number of rows queried with this portal. It is
+	// accumulated from each portal execution, and will be logged when this portal
+	// is closed.
+	rowsAffected int
+	// curRes is the result channel of the current (or last, if the portal is
+	// closing) portal execution.
+	curRes RestrictedCommandResult
+	// sp stores the tracing span of the underlying statement. It is closed when
+	// the portal finishes.
+	sp    *tracing.Span
+	spCtx context.Context
 	// outputTypes are the types of the result columns produced by the physical plan.
 	// We need this as when re-executing the portal, we are reusing the flow
 	// with the new receiver, but not re-generating the physical plan.
@@ -224,4 +278,51 @@ type portalPauseInfo struct {
 	// continue from the previous execution. It lives along with the portal, and
 	// will be cleaned-up when the portal is closed.
 	flow flowinfra.Flow
+	// queryID stores the id of the query that this portal bound to. When we re-execute
+	// an existing portal, we should use the same query id.
+	queryID clusterunique.ID
+	// ihWrapper stores the instrumentation helper that should be reused for
+	// each execution of the portal.
+	ihWrapper *instrumentationHelperWrapper
+	// cancelQueryFunc will be called to cancel the context of the query when
+	// the portal is closed.
+	cancelQueryFunc context.CancelFunc
+	// cancelQueryCtx is the context to be canceled when closing the portal.
+	cancelQueryCtx context.Context
+	// planTop collects the properties of the current plan being prepared.
+	// We reuse it when re-executing the portal.
+	// TODO(yuzefovich): consider refactoring distSQLFlowInfos from planTop to
+	// avoid storing the planTop here.
+	planTop planTop
+	// queryStats stores statistics on query execution. It is incremented for
+	// each execution of the portal.
+	queryStats *topLevelQueryStats
+	// The following 4 stacks store functions to call when close the portal.
+	// They should be called in this order:
+	// flowCleanup -> dispatchToExecEngCleanup -> execStmtInOpenStateCleanup ->
+	// exhaustPortal.
+	// Each stack is defined in the closure of its corresponding function.
+	// When encounter an error in any of these function, we run cleanup of this
+	// layer and its children layers and propagate the error to the parent layer.
+	// For example, when encounter an error in execStmtInOpenStateCleanup(),
+	// run flowCleanup -> dispatchToExecEngCleanup -> execStmtInOpenStateCleanup
+	// when exiting connExecutor.execStmtInOpenState(), and finally run
+	// exhaustPortal in connExecutor.execPortal().
+	exhaustPortal              cleanupFuncStack
+	execStmtInOpenStateCleanup cleanupFuncStack
+	dispatchToExecEngCleanup   cleanupFuncStack
+	flowCleanup                cleanupFuncStack
+}
+
+// cleanupAll is to run all the cleanup layers.
+func (pm *portalPauseInfo) cleanupAll() {
+	pm.flowCleanup.run()
+	pm.dispatchToExecEngCleanup.run()
+	pm.execStmtInOpenStateCleanup.run()
+	pm.exhaustPortal.run()
+}
+
+// isQueryIDSet returns true if the query id for the portal is set.
+func (pm *portalPauseInfo) isQueryIDSet() bool {
+	return !pm.queryID.Equal(clusterunique.ID{}.Uint128)
 }
