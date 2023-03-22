@@ -120,7 +120,7 @@ func TestAllocateIDs(t *testing.T) {
 			StoreColumnIDs:   descpb.ColumnIDs{3},
 			StoreColumnNames: []string{"c"},
 			EncodingType:     catenumpb.PrimaryIndexEncoding,
-			Version:          descpb.PrimaryIndexWithStoredColumnsVersion,
+			Version:          descpb.JSONCompositeColumnsVersion,
 			ConstraintID:     1,
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -130,7 +130,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnNames:      []string{"b", "a"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			{
 				ID:                  3,
@@ -139,7 +139,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"b"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 			{
 				ID:                  4,
@@ -148,7 +148,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"c"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				EncodingType:        catenumpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.JSONCompositeColumnsVersion,
 			},
 		},
 		Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
@@ -569,7 +569,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 					EncodingType:        catenumpb.PrimaryIndexEncoding,
-					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					Version:             descpb.JSONCompositeColumnsVersion,
 					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
@@ -580,7 +580,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnNames:      []string{"foo"},
 						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 						EncodingType:        catenumpb.SecondaryIndexEncoding,
-						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+						Version:             descpb.JSONCompositeColumnsVersion,
 					},
 					{
 						ID:                  descpb.IndexID(3),
@@ -589,7 +589,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnNames:      []string{"bar"},
 						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 						EncodingType:        catenumpb.SecondaryIndexEncoding,
-						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+						Version:             descpb.JSONCompositeColumnsVersion,
 					},
 				},
 				Privileges:     catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
