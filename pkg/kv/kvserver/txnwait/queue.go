@@ -719,9 +719,8 @@ func (q *Queue) waitForPush(
 				// Break the deadlock if the pusher has higher priority.
 				p1, p2 := pusheePriority, pusherPriority
 				if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
-					log.VEventf(
+					log.Infof(
 						ctx,
-						1,
 						"%s breaking deadlock by force push of %s; dependencies=%s",
 						req.PusherTxn.ID.Short(),
 						req.PusheeTxn.ID.Short(),
