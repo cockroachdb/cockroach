@@ -12,6 +12,7 @@ package rangefeed_test
 
 import (
 	"context"
+	"runtime"
 	"runtime/pprof"
 	"sync"
 	"testing"
@@ -903,11 +904,19 @@ func TestUnrecoverableErrors(t *testing.T) {
 	require.NoError(t, err)
 	defer r.Close()
 
+	ch := time.After(10 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		mu.Lock()
 		defer mu.Unlock()
 
 		if mu.internalErr == nil {
+			select {
+			case <-ch:
+				buf := make([]byte, 1<<20)
+				buf = buf[:runtime.Stack(buf, true)]
+				t.Logf("%s", buf)
+			default:
+			}
 			return errors.New("no error yet")
 		}
 		if !errors.HasType(mu.internalErr, &kvpb.BatchTimestampBeforeGCError{}) {
