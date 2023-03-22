@@ -1138,6 +1138,14 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		txnEvType = txnRollback
 	}
 
+	// Close all portals, otherwise there will be leftover bytes.
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
+	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
+
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
@@ -1760,6 +1768,15 @@ func (ns *prepStmtNamespace) touchLRUEntry(name string) {
 	ns.addLRUEntry(name, 0)
 }
 
+func (ns prepStmtNamespace) closeAllPortals(
+	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+) {
+	for name, p := range ns.portals {
+		p.close(ctx, prepStmtsNamespaceMemAcc, name)
+		delete(ns.portals, name)
+	}
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
 func (ns *prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
@@ -1836,10 +1853,7 @@ func (ns *prepStmtNamespace) resetTo(
 	for name := range ns.prepStmtsLRU {
 		delete(ns.prepStmtsLRU, name)
 	}
-	for name, p := range ns.portals {
-		p.close(ctx, prepStmtsNamespaceMemAcc, name)
-		delete(ns.portals, name)
-	}
+	ns.closeAllPortals(ctx, prepStmtsNamespaceMemAcc)
 
 	for name, ps := range to.prepStmts {
 		ps.incRef(ctx)
@@ -1880,10 +1894,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	}
 
 	// Close all portals.
-	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
-		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
-		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
-	}
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
 
 	// Close all cursors.
 	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
@@ -1894,10 +1907,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
-		for name, p := range ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals {
-			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
-			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
-		}
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
+			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		)
 		ex.extraTxnState.savepoints.clear()
 		ex.onTxnFinish(ctx, ev)
 	case txnRestart:
@@ -2044,7 +2056,6 @@ func (ex *connExecutor) run(
 			return err
 		}
 	}
-
 }
 
 // errDrainingComplete is returned by execCmd when the connExecutor previously got
@@ -2116,7 +2127,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				(tcmd.LastInBatchBeforeShowCommitTimestamp ||
 					tcmd.LastInBatch || !implicitTxnForBatch)
 			ev, payload, err = ex.execStmt(
-				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
+				ctx, tcmd.Statement, nil /* portal */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)
 
 			return err
@@ -2186,6 +2197,9 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				ex.implicitTxn(),
 				portal.portalPausablity,
 			)
+			if portal.pauseInfo != nil {
+				portal.pauseInfo.curRes = stmtRes
+			}
 			res = stmtRes
 
 			// In the extended protocol, autocommit is not always allowed. The postgres
@@ -2204,6 +2218,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
+		// TODO(sql-sessions): fix the phase time for pausable portals.
+		// https://github.com/cockroachdb/cockroach/issues/99410
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
@@ -3605,8 +3621,15 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		fallthrough
-	case txnRestart, txnRollback:
+	case txnRestart:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+	case txnRollback:
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+		// Since we're doing a complete rollback, there's no need to keep the
+		// prepared stmts for a txn rewind.
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
+			ex.Ctx(), &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		)
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))

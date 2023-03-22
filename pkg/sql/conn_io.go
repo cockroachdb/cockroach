@@ -808,6 +808,10 @@ type RestrictedCommandResult interface {
 	// This is currently used for sinkless changefeeds.
 	DisableBuffering()
 
+	// IsReleased returns true if the result has been released. This method is
+	// only implemented by pgwire.commandResult.
+	IsReleased() bool
+
 	// GetBulkJobId returns the id of the job for the query, if the query is
 	// IMPORT, BACKUP or RESTORE.
 	GetBulkJobId() uint64
@@ -1033,6 +1037,11 @@ func (r *streamingCommandResult) GetBulkJobId() uint64 {
 // Err is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) Err() error {
 	return r.err
+}
+
+// IsReleased is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) IsReleased() bool {
+	return false
 }
 
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
