@@ -46,8 +46,18 @@ type Processor interface {
 	// and the vectorized engines).
 	MustBeStreaming() bool
 
-	// Run is the main loop of the processor.
+	// Run is the main loop of the processor. It can be called only once
+	// throughout the processor's lifetime.
 	Run(context.Context, RowReceiver)
+
+	// Resume resumes the execution of the processor with the new receiver. It
+	// can be called many times but after Run() has already been called.
+	//
+	// Currently only used by the pausable portals.
+	//
+	// NB: this method doesn't take the context as parameter because the context
+	// was already captured on Run().
+	Resume(output RowReceiver)
 }
 
 // DoesNotUseTxn is an interface implemented by some processors to mark that
@@ -724,6 +734,14 @@ func (pb *ProcessorBaseNoHelper) Run(ctx context.Context, output RowReceiver) {
 		panic("processor output is not provided for emitting rows")
 	}
 	pb.self.Start(ctx)
+	Run(pb.ctx, pb.self, output)
+}
+
+// Resume is part of the Processor interface.
+func (pb *ProcessorBaseNoHelper) Resume(output RowReceiver) {
+	if output == nil {
+		panic("processor output is not provided for emitting rows")
+	}
 	Run(pb.ctx, pb.self, output)
 }
 
