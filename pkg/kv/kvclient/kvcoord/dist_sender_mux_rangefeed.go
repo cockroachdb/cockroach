@@ -362,6 +362,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			event, err = receiver.Recv()
 			return err
 		}); err != nil {
+			log.Infof(ctx, "XXX stuckwatcher fired: %s", err)
 			return err
 		}
 
@@ -375,8 +376,8 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		// which one executes is a coin flip) and so it is possible that we may see
 		// additional event(s) arriving for a stream that is no longer active.
 		if active == nil {
-			if log.V(1) {
-				log.Infof(ctx, "received stray event stream %d: %v", event.StreamID, event)
+			if true || log.V(1) {
+				log.Infof(ctx, "XXX received stray event stream %d: %v", event.StreamID, event)
 			}
 			continue
 		}
