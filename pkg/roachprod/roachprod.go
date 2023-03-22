@@ -469,13 +469,12 @@ func IP(
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		var err error
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
 			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
-			return res, err
+			return res, nil
 		}, install.DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
@@ -895,13 +894,12 @@ func PgURL(
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		var err error
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
 			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
-			return res, err
+			return res, nil
 		}, install.DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
