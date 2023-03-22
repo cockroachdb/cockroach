@@ -130,7 +130,7 @@ func TestIndexInterface(t *testing.T) {
 		require.False(t, idx.Primary())
 		require.True(t, idx.Public())
 		require.Equal(t, catenumpb.SecondaryIndexEncoding, idx.GetEncodingType())
-		require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, idx.GetVersion())
+		require.Equal(t, descpb.JSONCompositeColumnsVersion, idx.GetVersion())
 	}
 
 	// Check that ForEachActiveIndex visits indexes in the same order as well.
