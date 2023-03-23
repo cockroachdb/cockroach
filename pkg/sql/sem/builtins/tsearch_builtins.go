@@ -217,7 +217,7 @@ var tsearchBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.TSQuery),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
 				input := string(tree.MustBeDString(args[0]))
 				query, err := tsearch.PhraseToTSQuery(config, input)
