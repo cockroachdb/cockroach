@@ -64,3 +64,20 @@
     )
     $private
 )
+
+# ApplyBindingRowCountToCTE makes sure to 
+[ApplyBindingRowCountToCTE, Normalize]
+(RecursiveCTE
+    $binding:*
+    $initial:*
+    $recursive:*
+    $private:*
+)
+=>
+(RecursiveCTE
+    (ApplyBindingRowCount $binding $initial) 
+    $initial
+    $recursive
+    $private
+)
+    
