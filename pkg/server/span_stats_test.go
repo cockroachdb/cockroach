@@ -14,17 +14,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -190,12 +190,14 @@ func BenchmarkSpanStats(b *testing.B) {
 					b.ReportAllocs()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						_, err := tenant.TenantStatusServer().(serverpb.TenantStatusServer).SpanStats(ctx,
-							&roachpb.SpanStatsRequest{
-								NodeID: "0", // 0 indicates we want stats from all nodes.
-								Spans:  spans,
-							})
-						require.NoError(b, err)
+						for _, span := range spans {
+							_, err := tenant.TenantStatusServer().(serverpb.TenantStatusServer).SpanStats(ctx,
+								&roachpb.SpanStatsRequest{
+									NodeID: "0", // 0 indicates we want stats from all nodes.
+									Spans:  []roachpb.Span{span},
+								})
+							require.NoError(b, err)
+						}
 					}
 					b.StopTimer()
 				})

@@ -13,6 +13,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -24,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"strconv"
 )
 
 const InvalidRequestPayloadMsg = "span stats request payload cannot populate both the key fields and spans field"
@@ -126,8 +127,6 @@ func (s *systemStatusServer) getLocalStats(
 
 	// For each span
 	for _, span := range req.Spans {
-		//spanStart := time.Now()
-
 		rSpan, err := keys.SpanAddr(span)
 		if err != nil {
 			return nil, err
@@ -362,10 +361,7 @@ func isLegacyRequest(req *roachpb.SpanStatsRequest) bool {
 type legacyNodeFnResponse = map[string]*roachpb.SpanStatsResponse
 
 func legacyNodeFn(
-	ctx context.Context,
-	client interface{},
-	nodeID roachpb.NodeID,
-	spans []roachpb.Span,
+	ctx context.Context, client interface{}, nodeID roachpb.NodeID, spans []roachpb.Span,
 ) (legacyNodeFnResponse, error) {
 	// We're on a version less than 23.1, loop through each span. Call span stats for each span individually.
 	resps := make(map[string]*roachpb.SpanStatsResponse, len(spans))
@@ -409,10 +405,7 @@ func legacyResponseFn(res *roachpb.SpanStatsResponse, resp interface{}) {
 }
 
 func currNodeFn(
-	ctx context.Context,
-	client interface{},
-	nodeID roachpb.NodeID,
-	spans []roachpb.Span,
+	ctx context.Context, client interface{}, nodeID roachpb.NodeID, spans []roachpb.Span,
 ) (*roachpb.SpanStatsResponse, error) {
 	return client.(serverpb.StatusClient).SpanStats(ctx,
 		&roachpb.SpanStatsRequest{

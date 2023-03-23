@@ -176,6 +176,13 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 			return bytes.Join(keys, nil)
 		}
 
+		controlStats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID: "0", // 0 indicates we want stats from all nodes.
+				Spans:  []roachpb.Span{aSpan},
+			})
+		require.NoError(t, err)
+
 		// Create a new range in this tenant.
 		_, _, err = helper.HostCluster().Server(0).SplitRange(makeKey(tPrefix, roachpb.Key("c")))
 		require.NoError(t, err)

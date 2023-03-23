@@ -2950,10 +2950,7 @@ type tableSpanStatsIterator struct {
 }
 
 func newTableSpanStatsIterator(
-	eval *eval.Context,
-	dbId int,
-	tableId int,
-	spanBatchLimit int,
+	eval *eval.Context, dbId int, tableId int, spanBatchLimit int,
 ) *tableSpanStatsIterator {
 	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, argDbId: dbId, argTableId: tableId, spanStatsBatchLimit: spanBatchLimit}
 }
