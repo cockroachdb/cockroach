@@ -500,7 +500,7 @@ func registerTPCC(r registry.Registry) {
 		// running with the max supported warehouses.
 		Name:              "tpcc/headroom/" + headroomSpec.String(),
 		Owner:             registry.OwnerTestEng,
-		Tags:              []string{`default`, `release_qualification`},
+		Tags:              []string{`default`, `release_qualification`, `aws`},
 		Cluster:           headroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -834,6 +834,7 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
 		EstimatedMax:   gceOrAws(cloud, 2900, 3500),
+		Tags:           []string{`aws`},
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,

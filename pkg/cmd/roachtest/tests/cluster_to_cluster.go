@@ -299,6 +299,9 @@ type replicationTestSpec struct {
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
 
+	// tags are used to categorize the test.
+	tags []string
+
 	// fields below are instantiated at runtime
 	setup   *c2cSetup
 	t       test.Test
@@ -570,6 +573,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
+			tags:               []string{"aws"},
 		},
 		{
 			name:               "c2c/UnitTest",
@@ -608,6 +612,7 @@ func registerClusterToCluster(r registry.Registry) {
 			Cluster:         r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
 			Timeout:         sp.timeout,
 			Skip:            sp.skip,
+			Tags:            sp.tags,
 			RequiresLicense: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				sp.setupC2C(ctx, t, c)
