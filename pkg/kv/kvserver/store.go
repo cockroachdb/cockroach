@@ -3167,7 +3167,10 @@ func (s *Store) ComputeMetricsPeriodically(
 		if err != nil {
 			return m, err
 		}
-		windowFsyncLatency = subtractPrometheusMetrics(windowFsyncLatency, prevFsync)
+		metric.SubtractPrometheusHistograms(
+			windowFsyncLatency.GetHistogram(),
+			prevFsync.GetHistogram(),
+		)
 
 		s.metrics.FsyncLatency.Update(m.LogWriter.FsyncLatency, windowFsyncLatency.Histogram)
 	}
@@ -3200,24 +3203,6 @@ func (s *Store) ComputeMetricsPeriodically(
 		log.StructuredEvent(ctx, &e)
 	}
 	return m, nil
-}
-
-func subtractPrometheusMetrics(
-	curFsync *prometheusgo.Metric, prevFsync prometheusgo.Metric,
-) *prometheusgo.Metric {
-	prevBuckets := prevFsync.Histogram.GetBucket()
-	curBuckets := curFsync.Histogram.GetBucket()
-
-	*curFsync.Histogram.SampleCount -= prevFsync.Histogram.GetSampleCount()
-	*curFsync.Histogram.SampleSum -= prevFsync.Histogram.GetSampleSum()
-
-	for idx, v := range prevBuckets {
-		if *curBuckets[idx].UpperBound != *v.UpperBound {
-			panic("Bucket Upperbounds don't match")
-		}
-		*curBuckets[idx].CumulativeCount -= *v.CumulativeCount
-	}
-	return curFsync
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which

@@ -217,6 +217,7 @@ func TestManualWindowHistogram(t *testing.T) {
 	h := NewManualWindowHistogram(
 		Metadata{},
 		buckets,
+		false, /* withRotate */
 	)
 
 	// should return 0 if no observations are made
@@ -253,6 +254,11 @@ func TestManualWindowHistogram(t *testing.T) {
 	if !reflect.DeepEqual(act, exp) {
 		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
 	}
+
+	// Rotate and RecordValue are not supported when using Update. See comment on
+	// NewManualWindowHistogram.
+	require.Panics(t, func() { h.RecordValue(0) })
+	require.Panics(t, func() { _ = h.Rotate() })
 
 	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
 	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10))
