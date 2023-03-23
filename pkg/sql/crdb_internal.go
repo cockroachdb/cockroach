@@ -6393,7 +6393,13 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
           statistics,
           plan,
           index_recommendations,
-          indexes_usage
+          indexes_usage,
+          execution_count,
+          service_latency,
+          cpu_sql_nanos,
+          contention_time,
+          total_estimated_execution_time,
+          p99_latency
       FROM
           system.statement_statistics`,
 	resultColumns: colinfo.ResultColumns{
@@ -6409,6 +6415,12 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 		{Name: "plan", Typ: types.Jsonb},
 		{Name: "index_recommendations", Typ: types.StringArray},
 		{Name: "indexes_usage", Typ: types.Jsonb},
+		{Name: "execution_count", Typ: types.Int},
+		{Name: "service_latency", Typ: types.Float},
+		{Name: "cpu_sql_nanos", Typ: types.Float},
+		{Name: "contention_time", Typ: types.Float},
+		{Name: "total_estimated_execution_time", Typ: types.Float},
+		{Name: "p99_latency", Typ: types.Float},
 	},
 }
 
@@ -6623,7 +6635,13 @@ CREATE VIEW crdb_internal.transaction_statistics_persisted AS
         node_id,
         agg_interval,
         metadata,
-        statistics
+        statistics,
+        execution_count,
+        service_latency,
+        cpu_sql_nanos,
+        contention_time,
+        total_estimated_execution_time,
+        p99_latency
       FROM
         system.transaction_statistics`,
 	resultColumns: colinfo.ResultColumns{
@@ -6634,6 +6652,12 @@ CREATE VIEW crdb_internal.transaction_statistics_persisted AS
 		{Name: "agg_interval", Typ: types.Interval},
 		{Name: "metadata", Typ: types.Jsonb},
 		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "execution_count", Typ: types.Int},
+		{Name: "service_latency", Typ: types.Float},
+		{Name: "cpu_sql_nanos", Typ: types.Float},
+		{Name: "contention_time", Typ: types.Float},
+		{Name: "total_estimated_execution_time", Typ: types.Float},
+		{Name: "p99_latency", Typ: types.Float},
 	},
 }
 
