@@ -78,12 +78,21 @@ type kvBatchFetcherResponse struct {
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
 	// SetupNextFetch prepares the fetch of the next set of spans.
+	//
+	// spansCanOverlap indicates whether spans might be unordered and
+	// overlapping. If true, then spanIDs must be non-nil.
+	//
+	// NOTE: if spansCanOverlap is true and a single span can touch multiple
+	// ranges, then fetched rows from different spans can be interspersed with
+	// one another. See the comment on txnKVFetcher.SetupNextFetch for more
+	// details.
 	SetupNextFetch(
 		ctx context.Context,
 		spans roachpb.Spans,
 		spanIDs []int,
 		batchBytesLimit rowinfra.BytesLimit,
 		firstBatchKeyLimit rowinfra.KeyLimit,
+		spansCanOverlap bool,
 	) error
 
 	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
@@ -475,7 +484,7 @@ func (rf *Fetcher) StartScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, spanIDs, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint),
+		ctx, spans, spanIDs, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint), rf.args.SpansCanOverlap,
 	); err != nil {
 		return err
 	}
@@ -575,7 +584,8 @@ func (rf *Fetcher) StartInconsistentScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, nil /* spanIDs */, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint),
+		ctx, spans, nil, batchBytesLimit,
+		rf.rowLimitToKeyLimit(rowLimitHint), false, /* spansCanOverlap */
 	); err != nil {
 		return err
 	}

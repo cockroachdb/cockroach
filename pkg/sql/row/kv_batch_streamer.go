@@ -65,6 +65,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	spanIDs []int,
 	bytesLimit rowinfra.BytesLimit,
 	_ rowinfra.KeyLimit,
+	_ bool,
 ) error {
 	if bytesLimit != rowinfra.NoBytesLimit {
 		return errors.AssertionFailedf("unexpected non-zero bytes limit for txnKVStreamer")
