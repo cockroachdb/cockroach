@@ -71,7 +71,10 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, s.NodeID())
-	leafInputState := txn.GetLeafTxnInputState(ctx)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := &execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
