@@ -16,5 +16,5 @@ if tc_release_branch; then
 fi
 
 $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=cinolint -c fastbuild \
-                                  //pkg:small_non_ccl_tests //pkg:medium_non_ccl_tests //pkg:large_non_ccl_tests //pkg:enormous_non_ccl_tests \
+                                  //pkg:ccl_tests \
                                    --profile=/artifacts/profile.gz $EXTRA_PARAMS

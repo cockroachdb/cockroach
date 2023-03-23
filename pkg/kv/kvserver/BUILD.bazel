@@ -335,7 +335,7 @@ go_test(
     args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
-    shard_count = 8,
+    shard_count = 48,
     tags = ["cpu:2"],
     deps = [
         "//pkg/base",

@@ -17,8 +17,11 @@ go_test(
         "//pkg/sql/schemachanger:testdata",
     ],
     embed = [":schemachangerccl"],
-    shard_count = 16,
-    tags = ["cpu:3"],
+    shard_count = 48,
+    tags = [
+        "ccl_test",
+        "cpu:3",
+    ],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
