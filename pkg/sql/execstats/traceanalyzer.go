@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 type streamStats struct {
@@ -297,7 +298,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	}
 	var errs error
 
-	var allContentionEvents []kvpb.ContentionEvent
 	// Process processorStats.
 	for _, stats := range a.processorStats {
 		if stats == nil {
@@ -324,7 +324,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
 		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(stats.Exec.ConsumedRU.Value())
 		a.nodeLevelStats.CPUTimeGroupedByNode[instanceID] += stats.Exec.CPUTime.Value()
-		allContentionEvents = append(allContentionEvents, stats.KV.ContentionEvents...)
 	}
 
 	// Process streamStats.
@@ -500,8 +499,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.queryLevelStats.CPUTime += cpuTime
 	}
 
-	a.queryLevelStats.ContentionEvents = allContentionEvents
-
 	return errs
 }
 
@@ -557,6 +554,25 @@ func (a *TraceAnalyzer) GetQueryLevelStats() QueryLevelStats {
 	return a.queryLevelStats
 }
 
+// getAllContentionEvents returns all contention events that are found in the
+// given trace.
+func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEvent {
+	var contentionEvents []kvpb.ContentionEvent
+	var ev kvpb.ContentionEvent
+	for i := range trace {
+		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
+			if !pbtypes.Is(any, &ev) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+			contentionEvents = append(contentionEvents, ev)
+		})
+	}
+	return contentionEvents
+}
+
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats
 // struct. GetQueryLevelStats tries to process as many stats as possible. If
 // errors occur while processing stats, GetQueryLevelStats returns the combined
@@ -579,5 +595,6 @@ func GetQueryLevelStats(
 		}
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
+	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
 	return queryLevelStats, errs
 }
