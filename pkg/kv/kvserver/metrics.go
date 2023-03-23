@@ -628,6 +628,24 @@ Raft applied index at which this checkpoint was taken.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaFlushableIngestCount = metric.Metadata{
+		Name:        "storage.flush.ingest.count",
+		Help:        "Flushes performing an ingest (flushable ingestions)",
+		Measurement: "Flushes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaFlushableIngestTableCount = metric.Metadata{
+		Name:        "storage.flush.ingest.table.count",
+		Help:        "Tables ingested via flushes (flushable ingestions)",
+		Measurement: "Tables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaFlushableIngestTableBytes = metric.Metadata{
+		Name:        "storage.flush.ingest.table.bytes",
+		Help:        "Bytes ingested via flushes (flushable ingestions)",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 var (
@@ -1858,6 +1876,9 @@ type StoreMetrics struct {
 	RdbWriteStallNanos          *metric.Gauge
 	SharedStorageBytesRead      *metric.Gauge
 	SharedStorageBytesWritten   *metric.Gauge
+	FlushableIngestCount        *metric.Gauge
+	FlushableIngestTableCount   *metric.Gauge
+	FlushableIngestTableSize    *metric.Gauge
 
 	RdbCheckpoints *metric.Gauge
 
@@ -2402,6 +2423,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
 		SharedStorageBytesRead:      metric.NewGauge(metaSharedStorageBytesRead),
 		SharedStorageBytesWritten:   metric.NewGauge(metaSharedStorageBytesWritten),
+		FlushableIngestCount:        metric.NewGauge(metaFlushableIngestCount),
+		FlushableIngestTableCount:   metric.NewGauge(metaFlushableIngestTableCount),
+		FlushableIngestTableSize:    metric.NewGauge(metaFlushableIngestTableBytes),
 
 		RdbCheckpoints: metric.NewGauge(metaRdbCheckpoints),
 
@@ -2734,6 +2758,9 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
 	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))
+	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
+	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
+	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))

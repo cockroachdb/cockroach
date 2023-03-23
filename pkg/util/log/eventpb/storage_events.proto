@@ -71,6 +71,9 @@ message StoreStats {
 
   // flush_count is the number of flushes (counter).
   int64 flush_count = 17 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 flush_ingest_count = 35 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 flush_ingest_table_count = 36 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 flush_ingest_table_bytes = 37 [(gogoproto.jsontag) = ",omitempty"];
 
   // Memtable stats.
 
@@ -123,6 +126,8 @@ message StoreStats {
   // range_key_sets_count is the approximate count of internal range key sets in
   // the store.
   uint64 range_key_sets_count = 33 [(gogoproto.jsontag) = ",omitempty"];
+
+  // NEXT: 38.
 }
 
 // LevelStats contains per-level statistics for an LSM.
