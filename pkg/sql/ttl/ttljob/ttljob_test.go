@@ -577,7 +577,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	for _, typ := range types.Scalar {
 		// TODO(#76419): DateFamily has a broken `-infinity` case.
 		// TODO(#99432): JsonFamily has broken cases. This is because the test is wrapping JSON
-		// objects in multiple single quotes which causes parsing errors.
+		//  objects in multiple single quotes which causes parsing errors.
 		if colinfo.ColumnTypeIsIndexable(typ) && typ.Family() != types.DateFamily &&
 			typ.Family() != types.JsonFamily {
 			indexableTyps = append(indexableTyps, typ)
