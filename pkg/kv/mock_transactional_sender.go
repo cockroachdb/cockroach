@@ -48,14 +48,14 @@ func (m *MockTransactionalSender) Send(
 
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
-	context.Context, TxnStatusOpt,
+	context.Context,
 ) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
 // GetLeafTxnFinalState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnFinalState(
-	context.Context, TxnStatusOpt,
+	context.Context,
 ) (*roachpb.LeafTxnFinalState, error) {
 	panic("unimplemented")
 }

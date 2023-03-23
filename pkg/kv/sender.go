@@ -100,15 +100,12 @@ type TxnSender interface {
 
 	// GetLeafTxnInputState retrieves the input state necessary and
 	// sufficient to initialize a LeafTxn from the current RootTxn.
-	//
-	// If AnyTxnStatus is passed, then this function never returns
-	// errors.
-	GetLeafTxnInputState(context.Context, TxnStatusOpt) (*roachpb.LeafTxnInputState, error)
+	GetLeafTxnInputState(context.Context) (*roachpb.LeafTxnInputState, error)
 
 	// GetLeafTxnFinalState retrieves the final state of a LeafTxn
 	// necessary and sufficient to update a RootTxn with progress made
 	// on its behalf by the LeafTxn.
-	GetLeafTxnFinalState(context.Context, TxnStatusOpt) (*roachpb.LeafTxnFinalState, error)
+	GetLeafTxnFinalState(context.Context) (*roachpb.LeafTxnFinalState, error)
 
 	// UpdateRootWithLeafFinalState updates a RootTxn using the final
 	// state of a LeafTxn.
@@ -373,21 +370,6 @@ type SavepointToken interface {
 	// forwarded without a refresh.
 	Initial() bool
 }
-
-// TxnStatusOpt represents options for TxnSender.GetMeta().
-type TxnStatusOpt int
-
-const (
-	// AnyTxnStatus means GetMeta() will return the info without
-	// checking the txn's status.
-	AnyTxnStatus TxnStatusOpt = iota
-	// OnlyPending means GetMeta() will return an error if the
-	// transaction is not in the pending state.
-	// This is used when sending the txn from root to leaves so that we
-	// don't create leaves that start up in an aborted state - which is
-	// not allowed.
-	OnlyPending
-)
 
 // TxnSenderFactory is the interface used to create new instances
 // of TxnSender.
