@@ -48,14 +48,14 @@ func (m *MockTransactionalSender) Send(
 
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
-	context.Context, TxnStatusOpt,
+	context.Context,
 ) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
 // GetLeafTxnFinalState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnFinalState(
-	context.Context, TxnStatusOpt,
+	context.Context,
 ) (*roachpb.LeafTxnFinalState, error) {
 	panic("unimplemented")
 }
@@ -193,6 +193,9 @@ func (m *MockTransactionalSender) Step(_ context.Context) error {
 	// and that requires a non-panicky Step().
 	return nil
 }
+
+// GetReadSeqNum is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetReadSeqNum() enginepb.TxnSeq { return 0 }
 
 // SetReadSeqNum is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetReadSeqNum(_ enginepb.TxnSeq) error { return nil }
