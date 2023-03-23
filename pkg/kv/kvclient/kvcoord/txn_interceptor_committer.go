@@ -539,7 +539,9 @@ func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 func (*txnCommitter) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // importLeafFinalState is part of the txnInterceptor interface.
-func (*txnCommitter) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
+func (*txnCommitter) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) error {
+	return nil
+}
 
 // epochBumpedLocked implements the txnInterceptor interface.
 func (tc *txnCommitter) epochBumpedLocked() {}

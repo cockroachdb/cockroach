@@ -63,7 +63,7 @@ func (m *MockTransactionalSender) GetLeafTxnFinalState(
 // UpdateRootWithLeafFinalState is part of the TxnSender interface.
 func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
 	context.Context, *roachpb.LeafTxnFinalState,
-) {
+) error {
 	panic("unimplemented")
 }
 
