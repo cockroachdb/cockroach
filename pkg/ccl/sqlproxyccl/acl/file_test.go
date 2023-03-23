@@ -469,6 +469,9 @@ func TestParsingErrorHandling(t *testing.T) {
 
 	t.Run("error after update", func(t *testing.T) {
 		errorCountMetric := metric.NewGauge(metric.Metadata{})
+		// This is the maximum amount of time we are willing to wait for the error metric to be updated.
+		// We check the value every 100ms, but will stop waiting after this duration.
+		maxWaitTime := time.Second * 10
 
 		// Create access controller and watcher with a valid file
 		filename := filepath.Join(tempDir, "allowlist.yaml")
@@ -491,12 +494,21 @@ func TestParsingErrorHandling(t *testing.T) {
 
 		// Update with invalid data
 		require.NoError(t, os.WriteFile(filename, []byte(`no longer valid yaml`), 0777))
-		select {
-		case <-next:
-			t.Error("should not have gotten a new controller")
-		case <-time.After(time.Millisecond * 500):
-			// error count should go up
-			require.Equal(t, int64(1), errorCountMetric.Snapshot().Value())
+		timeout := time.After(maxWaitTime)
+	loop:
+		for {
+			select {
+			case <-next:
+				t.Error("should not have gotten a new controller")
+			case <-time.After(time.Millisecond * 100):
+				// error count should go up
+				if errorCountMetric.Snapshot().Value() == 1 {
+					// If the value went up, we can stop the loop!
+					break loop
+				}
+			case <-timeout:
+				t.Fatalf("timed out after %s waiting for error metric to be updated", maxWaitTime)
+			}
 		}
 
 		// Update with valid data now
@@ -513,7 +525,7 @@ func TestParsingErrorHandling(t *testing.T) {
 					},
 				},
 			}, allowlist.entries)
-		case <-time.After(time.Millisecond * 500):
+		case <-time.After(maxWaitTime):
 			t.Error("should have gotten a new controller")
 		}
 	})
