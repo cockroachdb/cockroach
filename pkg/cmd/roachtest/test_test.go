@@ -55,15 +55,24 @@ func TestMatchOrSkip(t *testing.T) {
 		expected registry.MatchType
 	}{
 		{nil, "foo", nil, registry.Matched},
-		{nil, "foo", []string{"bar"}, registry.FailedTags},
-		{[]string{"tag:b"}, "foo", []string{"bar"}, registry.Matched},
+		{nil, "foo", []string{"bar"}, registry.Matched},
+		{[]string{"tag:bar"}, "foo", []string{"bar"}, registry.Matched},
+		// Partial tag match is not supported
+		{[]string{"tag:b"}, "foo", []string{"bar"}, registry.FailedTags},
 		{[]string{"tag:b"}, "foo", nil, registry.FailedTags},
-		{[]string{"tag:default"}, "foo", nil, registry.Matched},
 		{[]string{"tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
-		{[]string{"f"}, "foo", []string{"bar"}, registry.FailedTags},
+		// Specifying no tag filters matches all tags.
+		{[]string{"f"}, "foo", []string{"bar"}, registry.Matched},
 		{[]string{"f"}, "bar", []string{"bar"}, registry.FailedFilter},
-		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, registry.Matched},
+		{[]string{"f", "tag:bar"}, "foo", []string{"bar"}, registry.Matched},
+		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, registry.FailedTags},
 		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
+		// Match tests that have both tags 'abc' and 'bar'
+		{[]string{"f", "tag:abc,bar"}, "foo", []string{"abc", "bar"}, registry.Matched},
+		{[]string{"f", "tag:abc,bar"}, "foo", []string{"abc"}, registry.FailedTags},
+		// Match tests that have tag 'abc' but not 'bar'
+		{[]string{"f", "tag:abc,!bar"}, "foo", []string{"abc"}, registry.Matched},
+		{[]string{"f", "tag:abc,!bar"}, "foo", []string{"abc", "bar"}, registry.FailedTags},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

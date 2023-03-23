@@ -328,6 +328,9 @@ type replicationSpec struct {
 
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
+
+	// tags are used to categorize the test.
+	tags []string
 }
 
 // replicationDriver manages c2c roachtest execution.
@@ -747,6 +750,7 @@ func c2cRegisterWrapper(
 		Leases:          registry.MetamorphicLeases,
 		Timeout:         sp.timeout,
 		Skip:            sp.skip,
+		Tags:            sp.tags,
 		RequiresLicense: true,
 		Run:             run,
 	})
@@ -819,6 +823,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
+			tags:               []string{"aws"},
 		},
 		{
 			name:     "c2c/UnitTest",
