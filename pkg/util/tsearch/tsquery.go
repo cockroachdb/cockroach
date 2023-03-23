@@ -505,7 +505,6 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 			}
 			if stopWord {
 				foundStopwords = true
-				//continue
 			}
 			tokens = append(tokens, tsTerm{lexeme: lexeme, positions: tok.positions})
 		}
