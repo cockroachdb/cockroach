@@ -852,7 +852,9 @@ func (s *TestState) Validate(ctx context.Context) error {
 		} else {
 			s.LogSideEffectf("upsert comment %s(objID: %d, subID: %d) -> %q",
 				key.CommentType, key.ObjectID, key.SubID, cmt)
-			s.uncommittedInMemory.UpsertComment(key, cmt)
+			if err := s.uncommittedInMemory.UpsertComment(key, cmt); err != nil {
+				return err
+			}
 		}
 	}
 	ve := s.uncommittedInMemory.Validate(
