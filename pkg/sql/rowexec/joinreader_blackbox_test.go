@@ -61,7 +61,7 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 	// non-streamer code path.
 	// TODO(yuzefovich): remove the test altogether when the corresponding
 	// cluster setting is removed (i.e. only the streamer code path remains).
-	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = false;")
+	_, err := sqlDB.Exec("SET streamer_enabled = false;")
 	require.NoError(t, err)
 
 	// We're going to create a table with enough rows to exceed a batch's memory

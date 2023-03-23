@@ -750,8 +750,28 @@ func (dsp *DistSQLPlanner) Run(
 			// TODO(yuzefovich): fix the propagation of the lock spans with the
 			// leaf txns and remove this check. See #94290.
 			containsNonDefaultLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking)
-			if !containsNonDefaultLocking {
-				if execinfra.CanUseStreamer(dsp.st) {
+
+			// We also currently disable the usage of the Streamer API whenever
+			// we have a wrapped planNode. This is done to prevent scenarios
+			// where some of planNodes will use the RootTxn (via the internal
+			// executor) which prohibits the usage of the LeafTxn for this flow.
+			//
+			// Note that we're disallowing the Streamer API in more cases than
+			// strictly necessary (i.e. there are planNodes that don't use the
+			// txn at all), but auditing each planNode implementation to see
+			// which are using the internal executor is error-prone, so we just
+			// disable the Streamer API for the "super-set" of problematic
+			// cases.
+			mustUseRootTxn := func() bool {
+				for _, p := range plan.Processors {
+					if p.Spec.Core.LocalPlanNode != nil {
+						return true
+					}
+				}
+				return false
+			}()
+			if !containsNonDefaultLocking && !mustUseRootTxn {
+				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
 						if jr := proc.Spec.Core.JoinReader; jr != nil {
 							// Both index and lookup joins, with and without
