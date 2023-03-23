@@ -195,7 +195,7 @@ type txnInterceptor interface {
 
 	// importLeafFinalState updates any internal state held inside the
 	// interceptor from the given LeafTxn final state.
-	importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState)
+	importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) error
 
 	// epochBumpedLocked resets the interceptor in the case of a txn epoch
 	// increment.
@@ -1243,7 +1243,7 @@ func (tc *TxnCoordSender) checkTxnStatusLocked(ctx context.Context, opt kv.TxnSt
 // UpdateRootWithLeafFinalState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
-) {
+) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -1253,7 +1253,7 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 
 	// Sanity check: don't combine if the tfs is for a different txn ID.
 	if tc.mu.txn.ID != tfs.Txn.ID {
-		return
+		return errors.AssertionFailedf("mismatched root id %s and leaf id %s", tc.mu.txn.ID, tfs.Txn.ID)
 	}
 
 	// If the LeafTxnFinalState is telling us the transaction has been
@@ -1271,13 +1271,17 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 	// as any error is received from DistSQL, which would eliminate
 	// qualms about what error comes first.
 	if tfs.Txn.Status != roachpb.PENDING {
-		return
+		return nil
 	}
 
 	tc.mu.txn.Update(&tfs.Txn)
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.importLeafFinalState(ctx, tfs)
+		err := reqInt.importLeafFinalState(ctx, tfs)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // TestingCloneTxn is part of the client.TxnSender interface.
