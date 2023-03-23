@@ -229,7 +229,12 @@ func (p *planner) dropTableImpl(
 	behavior tree.DropBehavior,
 ) ([]string, error) {
 	var droppedViews []string
-
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change, before we try to get job IDs and update job statuses later. See
+	// createOrUpdateSchemaChangeJob.
+	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
+		return nil, scerrors.ConcurrentSchemaChangeError(tableDesc)
+	}
 	// Remove foreign key back references from tables that this table has foreign
 	// keys to.
 	// Copy out the set of outbound fks as it may be overwritten in the loop.
@@ -351,13 +356,6 @@ func (p *planner) initiateDropTable(
 ) error {
 	if tableDesc.Dropped() {
 		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
-	}
-
-	// Exit early with an error if the table is undergoing a declarative schema
-	// change, before we try to get job IDs and update job statuses later. See
-	// createOrUpdateSchemaChangeJob.
-	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
-		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
 	// Use the delayed GC mechanism to schedule usage of the more efficient
