@@ -321,6 +321,8 @@ message LocalOnlySessionData {
   // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
   // always uses histograms to calculate statistics if available.
   bool optimizer_always_use_histograms = 94;
+  // StreamerEnabled controls whether the Streamer API can be used.
+  bool streamer_enabled = 98;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

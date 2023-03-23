@@ -2835,6 +2835,7 @@ show_primary_key_constraint_on_not_visible_columns    on                  NULL  
 sql_safe_updates                                      off                 NULL      NULL        NULL        string
 standard_conforming_strings                           on                  NULL      NULL        NULL        string
 statement_timeout                                     0                   NULL      NULL        NULL        string
+streamer_enabled                                      on                  NULL      NULL        NULL        string
 stub_catalog_tables                                   on                  NULL      NULL        NULL        string
 synchronize_seqscans                                  on                  NULL      NULL        NULL        string
 synchronous_commit                                    on                  NULL      NULL        NULL        string
@@ -2977,6 +2978,7 @@ show_primary_key_constraint_on_not_visible_columns    on                  NULL  
 sql_safe_updates                                      off                 NULL  user     NULL      off                 off
 standard_conforming_strings                           on                  NULL  user     NULL      on                  on
 statement_timeout                                     0                   NULL  user     NULL      0s                  0s
+streamer_enabled                                      on                  NULL  user     NULL      on                  on
 stub_catalog_tables                                   on                  NULL  user     NULL      on                  on
 synchronize_seqscans                                  on                  NULL  user     NULL      on                  on
 synchronous_commit                                    on                  NULL  user     NULL      on                  on
@@ -3118,6 +3120,7 @@ show_primary_key_constraint_on_not_visible_columns    NULL    NULL     NULL     
 sql_safe_updates                                      NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings                           NULL    NULL     NULL     NULL        NULL
 statement_timeout                                     NULL    NULL     NULL     NULL        NULL
+streamer_enabled                                      NULL    NULL     NULL     NULL        NULL
 stub_catalog_tables                                   NULL    NULL     NULL     NULL        NULL
 synchronize_seqscans                                  NULL    NULL     NULL     NULL        NULL
 synchronous_commit                                    NULL    NULL     NULL     NULL        NULL
