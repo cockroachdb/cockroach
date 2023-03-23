@@ -268,6 +268,22 @@ SELECT * FROM phraseto_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4
 ----
 'hello' <-> 'this' <-> 'is' <-> 'a' <-> 'parsi' <-> 'ng' <-> 't' <-> 'est' <-> '1' <-> '234' <-> '4' <-> 'case324'
 
+
+query T
+SELECT phraseto_tsquery('No hardcoded configuration')
+----
+'hardcod' <-> 'configur'
+
+query T
+SELECT plainto_tsquery('No hardcoded configuration')
+----
+'hardcod' & 'configur'
+
+query T
+SELECT to_tsquery('No | hardcoded | configuration')
+----
+'hardcod' | 'configur'
+
 query T
 SELECT * FROM to_tsquery('simple', 'a | b & c <-> d')
 ----
