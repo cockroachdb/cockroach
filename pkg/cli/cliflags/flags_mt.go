@@ -81,6 +81,14 @@ var (
 		Description: "If true, proxy will not attempt to rebalance connections.",
 	}
 
+	RequireProxyProtocol = FlagInfo{
+		Name: "require-proxy-protocol",
+		Description: `Requires PROXY protocol on the SQL listener. The HTTP
+listener will support the protocol on a best-effort basis. If this is set to
+true, the PROXY info from upstream will be trusted on both SQL and HTTP
+listeners, if the headers are allowed.`,
+	}
+
 	RatelimitBaseDelay = FlagInfo{
 		Name:        "ratelimit-base-delay",
 		Description: "Initial backoff after a failed login attempt. Set to 0 to disable rate limiting.",

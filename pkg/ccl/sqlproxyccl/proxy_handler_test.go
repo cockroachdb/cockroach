@@ -55,6 +55,7 @@ import (
 	"github.com/jackc/pgconn"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	pgx "github.com/jackc/pgx/v4"
+	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -71,6 +72,138 @@ const backendError = "Backend error!"
 // notFoundTenantID is used to trigger a NotFound error when it is requested in
 // the test directory server.
 const notFoundTenantID = 99
+
+func TestProxyProtocol(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	te := newTester()
+	defer te.Close()
+
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: false,
+		// Need to disable the test tenant here because it appears as though
+		// we're not able to establish the necessary connections from within
+		// it. More investigation required (tracked with #76378).
+		DisableDefaultTestTenant: true,
+	})
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingEnableAuthLogging()
+	defer sql.Stopper().Stop(ctx)
+
+	// Create a default user.
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
+
+	var validateFn func(h *proxyproto.Header) error
+	withProxyProtocol := func(p bool) (server *Server, addr, httpAddr string) {
+		options := &ProxyOptions{
+			RoutingRule:          sql.ServingSQLAddr(),
+			SkipVerify:           true,
+			RequireProxyProtocol: p,
+		}
+		options.testingKnobs.validateProxyHeader = func(h *proxyproto.Header) error {
+			return validateFn(h)
+		}
+		return newSecureProxyServer(ctx, t, sql.Stopper(), options)
+	}
+
+	timeout := 3 * time.Second
+	proxyDialer := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := (&net.Dialer{Timeout: timeout}).Dial(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		header := &proxyproto.Header{
+			Version:           2,
+			Command:           proxyproto.PROXY,
+			TransportProtocol: proxyproto.TCPv4,
+			SourceAddr: &net.TCPAddr{
+				// Use a dummy address so we can check on that.
+				IP:   net.ParseIP("10.20.30.40"),
+				Port: 4242,
+			},
+			DestinationAddr: conn.RemoteAddr(),
+		}
+		if err := conn.SetWriteDeadline(timeutil.Now().Add(timeout)); err != nil {
+			return nil, err
+		}
+		_, err = header.WriteTo(conn)
+		if err != nil {
+			return nil, err
+		}
+		return conn, nil
+	}
+
+	makeHttpReq := func(t *testing.T, client *http.Client, addr string, success bool) {
+		resp, err := client.Get(fmt.Sprintf("http://%s/_status/healthz/", addr))
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		if success {
+			require.Equal(t, "200 OK", resp.Status)
+		} else {
+			require.Equal(t, "400 Bad Request", resp.Status)
+		}
+	}
+
+	t.Run("allow=true", func(t *testing.T) {
+		s, sqlAddr, httpAddr := withProxyProtocol(true)
+
+		defer testutils.TestingHook(&validateFn, func(h *proxyproto.Header) error {
+			if h.SourceAddr.String() != "10.20.30.40:4242" {
+				return errors.Newf("got source addr %s, expected 10.20.30.40:4242", h.SourceAddr)
+			}
+			return nil
+		})()
+
+		// Test SQL. Only request with PROXY should go through.
+		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", sqlAddr)
+		te.TestConnectWithPGConfig(
+			ctx, t, url,
+			func(c *pgx.ConnConfig) {
+				c.DialFunc = proxyDialer
+			},
+			func(conn *pgx.Conn) {
+				require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+				require.NoError(t, runTestQuery(ctx, conn))
+			},
+		)
+		_ = te.TestConnectErr(ctx, t, url, codeClientReadFailed, "tls error")
+
+		// Test HTTP. Should support with or without PROXY.
+		client := http.Client{Timeout: timeout}
+		makeHttpReq(t, &client, httpAddr, true)
+		client.Transport = &http.Transport{DialContext: proxyDialer}
+		makeHttpReq(t, &client, httpAddr, true)
+	})
+
+	t.Run("allow=false", func(t *testing.T) {
+		s, sqlAddr, httpAddr := withProxyProtocol(false)
+
+		// Test SQL. Only request without PROXY should go through.
+		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", sqlAddr)
+		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+			require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+			require.NoError(t, runTestQuery(ctx, conn))
+		})
+		_ = te.TestConnectErrWithPGConfig(
+			ctx, t, url,
+			func(c *pgx.ConnConfig) {
+				c.DialFunc = proxyDialer
+			},
+			codeClientReadFailed,
+			"tls error",
+		)
+
+		// Test HTTP.
+		client := http.Client{Timeout: timeout}
+		makeHttpReq(t, &client, httpAddr, true)
+		client.Transport = &http.Transport{DialContext: proxyDialer}
+		makeHttpReq(t, &client, httpAddr, false)
+	})
+}
 
 func TestLongDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2293,6 +2426,16 @@ func (te *tester) setErrToClient(codeErr error) {
 // established connection. Use TestConnectErr if connection establishment isn't
 // expected to succeed.
 func (te *tester) TestConnect(ctx context.Context, t *testing.T, url string, fn func(*pgx.Conn)) {
+	te.TestConnectWithPGConfig(ctx, t, url, nil, fn)
+}
+
+// TestConnectWithPGConfig connects to the given URL and invokes the given
+// callbacks with the established connection. Unlike TestConnect, this takes in
+// a custom callback function that allows callers to modify the PG config before
+// making the connection.
+func (te *tester) TestConnectWithPGConfig(
+	ctx context.Context, t *testing.T, url string, configFn func(*pgx.ConnConfig), fn func(*pgx.Conn),
+) {
 	t.Helper()
 	te.setAuthenticated(false)
 	te.setErrToClient(nil)
@@ -2301,6 +2444,9 @@ func (te *tester) TestConnect(ctx context.Context, t *testing.T, url string, fn 
 	if !strings.EqualFold(connConfig.Host, "127.0.0.1") {
 		connConfig.TLSConfig.ServerName = connConfig.Host
 		connConfig.Host = "127.0.0.1"
+	}
+	if configFn != nil {
+		configFn(connConfig)
 	}
 	conn, err := pgx.ConnectConfig(ctx, connConfig)
 	require.NoError(t, err)
@@ -2315,6 +2461,20 @@ func (te *tester) TestConnect(ctx context.Context, t *testing.T, url string, fn 
 func (te *tester) TestConnectErr(
 	ctx context.Context, t *testing.T, url string, expCode errorCode, expErr string,
 ) error {
+	return te.TestConnectErrWithPGConfig(ctx, t, url, nil, expCode, expErr)
+}
+
+// TestConnectErrWithPGConfig is similar to TestConnectErr, but takes in a
+// custom callback to modify connection config parameters before establishing
+// the connection.
+func (te *tester) TestConnectErrWithPGConfig(
+	ctx context.Context,
+	t *testing.T,
+	url string,
+	configFn func(*pgx.ConnConfig),
+	expCode errorCode,
+	expErr string,
+) error {
 	t.Helper()
 	te.setAuthenticated(false)
 	te.setErrToClient(nil)
@@ -2326,6 +2486,9 @@ func (te *tester) TestConnectErr(
 	if !strings.EqualFold(cfg.Host, "127.0.0.1") && cfg.TLSConfig != nil {
 		cfg.TLSConfig.ServerName = cfg.Host
 		cfg.Host = "127.0.0.1"
+	}
+	if configFn != nil {
+		configFn(cfg)
 	}
 	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err == nil {

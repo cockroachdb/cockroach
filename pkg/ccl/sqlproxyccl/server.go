@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	proxyproto "github.com/pires/go-proxyproto"
 )
 
 var (
@@ -162,9 +163,23 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 // a health check endpoint at /_status/healthz, and pprof debug
 // endpoints at /debug/pprof.
 func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
-	srv := http.Server{
-		Handler: s.mux,
+	if s.handler.RequireProxyProtocol {
+		ln = &proxyproto.Listener{
+			Listener: ln,
+			Policy: func(upstream net.Addr) (proxyproto.Policy, error) {
+				// There is a possibility where components doing healthchecking
+				// (e.g. Kubernetes) do not support the PROXY protocol directly.
+				// We use the `USE` policy here (which is also the default) to
+				// optionally allow the PROXY protocol to be supported. If a
+				// connection doesn't have the proxy headers, it'll just be
+				// treated as a regular one.
+				return proxyproto.USE, nil
+			},
+			ValidateHeader: s.handler.testingKnobs.validateProxyHeader,
+		}
 	}
+
+	srv := http.Server{Handler: s.mux}
 
 	go func() {
 		<-ctx.Done()
@@ -198,6 +213,18 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // Incoming client connections are taken through the Postgres handshake and
 // relayed to the configured backend server.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	if s.handler.RequireProxyProtocol {
+		ln = &proxyproto.Listener{
+			Listener: ln,
+			Policy: func(upstream net.Addr) (proxyproto.Policy, error) {
+				// REQUIRE enforces the connection to send a PROXY header.
+				// The connection will be rejected if one was not present.
+				return proxyproto.REQUIRE, nil
+			},
+			ValidateHeader: s.handler.testingKnobs.validateProxyHeader,
+		}
+	}
+
 	err := s.Stopper.RunAsyncTask(ctx, "listen-quiesce", func(ctx context.Context) {
 		<-s.Stopper.ShouldQuiesce()
 		if err := ln.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
