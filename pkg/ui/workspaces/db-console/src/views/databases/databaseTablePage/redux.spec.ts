@@ -226,7 +226,7 @@ describe("Database Table Page", function () {
           ],
         },
         // Table create statement query
-        { rows: [{ statement: "CREATE TABLE foo" }] },
+        { rows: [{ create_statement: "CREATE TABLE foo" }] },
         // Table zone config statement query
         {},
         // Table heuristics query

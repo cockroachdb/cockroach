@@ -35,7 +35,7 @@ type ZoneConfigLevelType = cockroach.server.serverpb.ZoneConfigurationLevel;
 export function newTableDetailsResponse(): TableDetailsResponse {
   return {
     idResp: { table_id: "" },
-    createStmtResp: { statement: "" },
+    createStmtResp: { create_statement: "" },
     grantsResp: { grants: [] },
     schemaDetails: { columns: [], indexes: [] },
     zoneConfigResp: {
@@ -110,7 +110,7 @@ const getTableId: TableDetailsQuery<TableIdRow> = {
 };
 
 // Table create statement.
-type TableCreateStatementRow = { statement: string };
+type TableCreateStatementRow = { create_statement: string };
 
 const getTableCreateStatement: TableDetailsQuery<TableCreateStatementRow> = {
   createStmt: (dbName, tableName) => {
@@ -129,7 +129,7 @@ const getTableCreateStatement: TableDetailsQuery<TableCreateStatementRow> = {
     resp: TableDetailsResponse,
   ) => {
     if (!txnResultIsEmpty(txn_result)) {
-      resp.createStmtResp.statement = txn_result.rows[0].statement;
+      resp.createStmtResp.create_statement = txn_result.rows[0].create_statement;
     } else {
       txn_result.error = new Error(
         "getTableCreateStatement: unexpected empty results",
