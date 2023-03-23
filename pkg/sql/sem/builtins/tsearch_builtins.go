@@ -337,7 +337,7 @@ func getWeights(arr *tree.DArray) ([]float32, error) {
 	if arr.Len() < len(ret) {
 		return ret, pgerror.New(pgcode.ArraySubscript, "array of weight is too short (must be at least 4)")
 	}
-	for i, d := range arr.Array {
+	for i, d := range arr.Array[:len(ret)] {
 		if d == tree.DNull {
 			return ret, pgerror.New(pgcode.NullValueNotAllowed, "array of weight must not contain null")
 		}
