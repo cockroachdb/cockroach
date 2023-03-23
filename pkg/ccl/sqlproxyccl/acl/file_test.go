@@ -11,6 +11,7 @@ package acl
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -491,30 +493,43 @@ func TestParsingErrorHandling(t *testing.T) {
 
 		// Update with invalid data
 		require.NoError(t, os.WriteFile(filename, []byte(`no longer valid yaml`), 0777))
-		select {
-		case <-next:
-			t.Error("should not have gotten a new controller")
-		case <-time.After(time.Millisecond * 500):
-			// error count should go up
-			require.Equal(t, int64(1), errorCountMetric.Snapshot().Value())
-		}
+
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case <-next:
+				t.Fatal("should not have gotten a new controller")
+				// We need to return something to make the compiler happy, but t.Fatal will end execution.
+				return nil
+			default:
+				errorCount := errorCountMetric.Snapshot().Value()
+				// If error count isn't one, then it hasn't happened yet.
+				if errorCount != 1 {
+					return fmt.Errorf("Expected error count to be 1 but got %d", errorCount)
+				}
+
+				return nil
+			}
+		})
 
 		// Update with valid data now
 		require.NoError(t, os.WriteFile(filename, []byte(`{"allowlist":{"tenant":{"ips": ["2.2.2.2/32"]}}}`), 0777))
-		select {
-		case controller := <-next:
-			// error count should go down
-			require.Equal(t, int64(0), errorCountMetric.Snapshot().Value())
-			allowlist := controller.(*Allowlist)
-			require.Equal(t, map[string]AllowEntry{
-				"tenant": {
-					ips: []*net.IPNet{
-						parseIPNet("2.2.2.2/32"),
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case controller := <-next:
+				// error count should go down
+				require.Equal(t, int64(0), errorCountMetric.Snapshot().Value())
+				allowlist := controller.(*Allowlist)
+				require.Equal(t, map[string]AllowEntry{
+					"tenant": {
+						ips: []*net.IPNet{
+							parseIPNet("2.2.2.2/32"),
+						},
 					},
-				},
-			}, allowlist.entries)
-		case <-time.After(time.Millisecond * 500):
-			t.Error("should have gotten a new controller")
-		}
+				}, allowlist.entries)
+				return nil
+			default:
+				return errors.New("new controller not created yet")
+			}
+		})
 	})
 }
