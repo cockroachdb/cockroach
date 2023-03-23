@@ -1,6 +1,6 @@
 dep
 ----
-debug declarative-print-rules 1000022.2-94 dep
+debug declarative-print-rules 1000023.1-2 dep
 deprules
 ----
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'

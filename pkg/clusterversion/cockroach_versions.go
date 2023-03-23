@@ -510,6 +510,13 @@ const (
 	// that are optimized for the console.
 	V23_1AddSystemActivityTables
 
+	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
+	V23_1
+
+	// V23_2_Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from previous supported releases to 23.2.
+	V23_2Start
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -883,6 +890,14 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1AddSystemActivityTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
 	},
+	{
+		Key:     V23_1,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 0},
+	},
+	{
+		Key:     V23_2Start,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
+	},
 
 	// *************************************************
 	// Step (2): Add new versions here.
@@ -952,13 +967,13 @@ var versionsSingleton = func() keyedVersions {
 	return rawVersionsSingleton
 }()
 
-// V23_1 is a placeholder that will eventually be replaced by the actual 23.1
+// V23_2 is a placeholder that will eventually be replaced by the actual 23.2
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 23.1 and has completed all associated migrations; most
+// a cluster is running 23.2 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if all
-// simply need to check is that the cluster has upgraded to 23.1.
-var V23_1 = versionsSingleton[len(versionsSingleton)-1].Key
+// simply need to check is that the cluster has upgraded to 23.2.
+var V23_2 = versionsSingleton[len(versionsSingleton)-1].Key
 
 const (
 	BinaryMinSupportedVersionKey = V22_2
@@ -975,7 +990,7 @@ var (
 	// comment).
 	binaryMinSupportedVersion = ByKey(BinaryMinSupportedVersionKey)
 
-	BinaryVersionKey = V23_1
+	BinaryVersionKey = V23_2
 	// binaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.
