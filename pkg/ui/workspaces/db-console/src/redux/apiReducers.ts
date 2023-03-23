@@ -325,6 +325,7 @@ const queriesReducerObj = new CachedDataReducer(
   "statements",
   null,
   moment.duration(30, "m"),
+  true, // Allow new requests to replace in flight ones.
 );
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
@@ -411,6 +412,8 @@ const transactionInsightsReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
 );
 export const refreshTransactionInsights = transactionInsightsReducerObj.refresh;
+export const invalidateTxnInsights =
+  transactionInsightsReducerObj.invalidateData;
 
 const statementInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getStatementInsightsApi,
@@ -419,6 +422,8 @@ const statementInsightsReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
 );
 export const refreshStatementInsights = statementInsightsReducerObj.refresh;
+export const invalidateStmtInsights =
+  statementInsightsReducerObj.invalidateData;
 
 export const transactionInsightRequestKey = (
   req: clusterUiApi.TransactionInsightEventDetailsRequest,

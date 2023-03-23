@@ -44,8 +44,9 @@ export const selectTransaction = createSelector(
     const transactions = transactionState.data?.transactions;
     if (!transactions) {
       return {
-        isLoading: true,
+        isLoading: transactionState.inFlight,
         transaction: null,
+        isValid: transactionState.valid,
       };
     }
     const txnFingerprintId = getMatchParamByName(
@@ -59,9 +60,10 @@ export const selectTransaction = createSelector(
         txnFingerprintId,
     )[0];
     return {
-      isLoading: false,
+      isLoading: transactionState.inFlight,
       transaction: transaction,
       lastUpdated: transactionState.lastUpdated,
+      isValid: transactionState.valid,
     };
   },
 );
@@ -70,7 +72,7 @@ const mapStateToProps = (
   state: AppState,
   props: TransactionDetailsProps,
 ): TransactionDetailsStateProps => {
-  const { isLoading, transaction, lastUpdated } = selectTransaction(
+  const { isLoading, transaction, lastUpdated, isValid } = selectTransaction(
     state,
     props,
   );
@@ -88,6 +90,7 @@ const mapStateToProps = (
     isLoading: isLoading,
     lastUpdated: lastUpdated,
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+    isDataValid: isValid,
   };
 };
 

@@ -90,6 +90,7 @@ export class CachedDataReducer<
   ERROR: string; // request encountered an error
   INVALIDATE: string; // invalidate data
   INVALIDATE_ALL: string; // invalidate all data on keyed cache
+  pendingRequestStarted: moment.Moment | null;
 
   /**
    * apiEndpoint - The API endpoint used to refresh data.
@@ -97,12 +98,15 @@ export class CachedDataReducer<
    * invalidationPeriod (optional) - The duration after
    *   data is received after which it will be invalidated.
    * requestTimeout (optional)
+   *  allowReplacementRequests (optional) - allows requests to be replaced
+   * while they are in flight.
    */
   constructor(
     protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>,
     public actionNamespace: TActionNamespace,
     protected invalidationPeriod?: moment.Duration,
     protected requestTimeout?: moment.Duration,
+    protected allowReplacementRequests = false,
   ) {
     // check actionNamespace
     assert(
@@ -114,6 +118,7 @@ export class CachedDataReducer<
     );
     CachedDataReducer.namespaces[actionNamespace] = true;
 
+    this.pendingRequestStarted = null;
     this.REQUEST = `cockroachui/CachedDataReducer/${actionNamespace}/REQUEST`;
     this.RECEIVE = `cockroachui/CachedDataReducer/${actionNamespace}/RECEIVE`;
     this.ERROR = `cockroachui/CachedDataReducer/${actionNamespace}/ERROR`;
@@ -233,6 +238,15 @@ export class CachedDataReducer<
     };
   };
 
+  cancelPendingRequest = (): void => {
+    this.pendingRequestStarted = null;
+  };
+
+  setPendingRequestTime = (): moment.Moment => {
+    this.pendingRequestStarted = moment.utc();
+    return this.pendingRequestStarted;
+  };
+
   /**
    * refresh is the primary action creator that should be used to refresh the
    * cached data. Dispatching it will attempt to asynchronously refresh the
@@ -259,10 +273,16 @@ export class CachedDataReducer<
 
       if (
         state &&
-        (state.inFlight || (this.invalidationPeriod && state.valid))
+        ((state.inFlight && !this.allowReplacementRequests) ||
+          (this.invalidationPeriod && state.valid))
       ) {
         return;
       }
+
+      this.cancelPendingRequest();
+      const pendingRequestStarted = this.allowReplacementRequests
+        ? this.setPendingRequestTime()
+        : null;
 
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
@@ -271,9 +291,16 @@ export class CachedDataReducer<
         .then(
           data => {
             // Dispatch the results to the store.
+            if (this.pendingRequestStarted !== pendingRequestStarted) {
+              return;
+            }
             dispatch(this.receiveData(data, req));
           },
           (error: Error) => {
+            if (this.pendingRequestStarted !== pendingRequestStarted) {
+              return;
+            }
+
             // TODO(couchand): This is a really myopic way to check for HTTP
             // codes.  However, at the moment that's all that the underlying
             // timeoutFetch offers.  Major changes to this plumbing are warranted.
@@ -293,6 +320,9 @@ export class CachedDataReducer<
           },
         )
         .then(() => {
+          if (this.pendingRequestStarted !== pendingRequestStarted) {
+            return;
+          }
           // Invalidate data after the invalidation period if one exists.
           if (this.invalidationPeriod) {
             setTimeout(

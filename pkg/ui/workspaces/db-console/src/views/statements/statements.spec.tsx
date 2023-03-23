@@ -602,7 +602,7 @@ function makeStateWithStatementsAndLastReset(
       },
     },
     localSettings: {
-      "timeScale/SQLActivity": timeScale,
+      [localStorage.GlOBAL_TIME_SCALE]: timeScale,
     },
     timeScale: {
       scale: timeScale,
