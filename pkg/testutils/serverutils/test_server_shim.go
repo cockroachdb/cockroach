@@ -44,6 +44,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var disableTestTenant = util.ConstantWithMetamorphicTestBool("disable-test-tenant", false)
+
 // ShouldStartDefaultTestTenant determines whether a default test tenant
 // should be started for test servers or clusters, to serve SQL traffic by
 // default.
@@ -69,7 +71,7 @@ func ShouldStartDefaultTestTenant(t testing.TB) bool {
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
-	return !util.ConstantWithMetamorphicTestBool("disable-test-tenant", false)
+	return !disableTestTenant
 }
 
 // TestServerInterface defines test server functionality that tests need; it is
