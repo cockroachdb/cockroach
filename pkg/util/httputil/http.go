@@ -12,6 +12,7 @@ package httputil
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"strconv"
@@ -108,6 +109,42 @@ func PostJSONWithRequest(
 	}
 
 	return doJSONRequest(httpClient, req, response)
+}
+
+// PostProtobuf uses the supplied client to POST request to the URL specified by
+// the parameters and unmarshal the result into response, using a
+// protobuf-encoded request body.
+func PostProtobuf(
+	ctx context.Context, httpClient http.Client, path string, request, response protoutil.Message,
+) error {
+	buf, err := protoutil.Marshal(request)
+	if err != nil {
+		return err
+	}
+	reader := bytes.NewReader(buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", path, reader)
+	if err != nil {
+		return err
+	}
+	if timeout := httpClient.Timeout; timeout > 0 {
+		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
+	}
+	req.Header.Set(AcceptHeader, ProtoContentType)
+	req.Header.Set(ContentTypeHeader, ProtoContentType)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if contentType := resp.Header.Get(ContentTypeHeader); !(resp.StatusCode == http.StatusOK && contentType == ProtoContentType) {
+		// NB: errors.Wrapf(nil, ...) returns nil.
+		// nolint:errwrap
+		return errors.Errorf(
+			"status: %s, content-type: %s, body: %s, error: %v", resp.Status, contentType, b, err,
+		)
+	}
+	return protoutil.Unmarshal(b, response)
 }
 
 func doJSONRequest(
