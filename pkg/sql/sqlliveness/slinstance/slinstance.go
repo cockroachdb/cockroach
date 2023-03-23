@@ -16,6 +16,7 @@ package slinstance
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -62,6 +63,8 @@ type Writer interface {
 	// the storage and if found replaces it with the input returning true.
 	// Otherwise it returns false to indicate that the session does not exist.
 	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, error)
+	// Delete removes the session from the sqlliveness table.
+	Delete(ctx context.Context, id sqlliveness.SessionID) error
 }
 
 type session struct {
@@ -126,7 +129,16 @@ type Instance struct {
 	ttl           func() time.Duration
 	hb            func() time.Duration
 	testKnobs     sqlliveness.TestingKnobs
-	mu            struct {
+
+	// drainOnce and drain are used to signal the shutdown of the heartbeat
+	// loop.
+	drainOnce sync.Once
+	drain     chan struct{}
+
+	// wait tracks the life of the heartbeat goroutine.
+	wait sync.WaitGroup
+
+	mu struct {
 		syncutil.Mutex
 		// stopErr, if set, indicates that the heartbeat loop has stopped because of
 		// this error. Calls to Session() will return this error.
@@ -295,17 +307,26 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 		log.Fatal(ctx, "expected heartbeat to always terminate with an error")
 	}
 
-	log.Warning(ctx, "exiting heartbeat loop")
-
 	// Keep track of the fact that this Instance is not usable anymore. Further
 	// Session() calls will return errors.
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.mu.s != nil {
-		_ = l.clearSessionLocked(ctx)
-	}
+
 	l.mu.stopErr = err
-	close(l.mu.blockCh)
+
+	select {
+	case <-l.drain:
+		log.Infof(ctx, "draining heartbeat loop")
+	default:
+		log.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
+		if l.mu.s != nil {
+			_ = l.clearSessionLocked(ctx)
+		}
+		// clearSessionLocked allocates a new l.mu.blockCh. Close blockCh so
+		// that callers do not get stuck waiting for a session and observe the
+		// stopErr.
+		close(l.mu.blockCh)
+	}
 }
 
 func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
@@ -322,6 +343,8 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	t.Reset(0)
 	for {
 		select {
+		case <-l.drain:
+			return stop.ErrUnavailable
 		case <-ctx.Done():
 			return stop.ErrUnavailable
 		case <-t.C:
@@ -395,6 +418,7 @@ func NewSQLInstance(
 		hb: func() time.Duration {
 			return DefaultHeartBeat.Get(&settings.SV)
 		},
+		drain: make(chan struct{}),
 	}
 	if testKnobs != nil {
 		l.testKnobs = *testKnobs
@@ -411,7 +435,36 @@ func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
 	// Detach from ctx's cancelation.
 	taskCtx := l.AnnotateCtx(context.Background())
 	taskCtx = logtags.WithTags(taskCtx, logtags.FromContext(ctx))
-	_ = l.stopper.RunAsyncTask(taskCtx, "slinstance", l.heartbeatLoop)
+
+	l.wait.Add(1)
+	err := l.stopper.RunAsyncTask(taskCtx, "slinstance", func(ctx context.Context) {
+		defer l.wait.Done()
+		l.heartbeatLoop(ctx)
+	})
+	if err != nil {
+		l.wait.Done()
+	}
+}
+
+func (l *Instance) Release(ctx context.Context) (sqlliveness.SessionID, error) {
+	l.drainOnce.Do(func() { close(l.drain) })
+	l.wait.Wait()
+
+	session := func() *session {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.mu.s
+	}()
+
+	if session == nil {
+		return sqlliveness.SessionID(""), errors.New("no session to release")
+	}
+
+	if err := l.storage.Delete(ctx, session.ID()); err != nil {
+		return sqlliveness.SessionID(""), err
+	}
+
+	return session.ID(), nil
 }
 
 // Session returns a live session id. For each Sqlliveness instance the

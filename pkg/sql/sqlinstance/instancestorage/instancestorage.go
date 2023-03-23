@@ -188,6 +188,62 @@ func (s *Storage) CreateInstance(
 	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID)
 }
 
+// ReleaseInstance deallocates the instance id iff it is currently owned by the
+// provided sessionID.
+func (s *Storage) ReleaseInstance(
+	ctx context.Context, sessionID sqlliveness.SessionID, instanceID base.SQLInstanceID,
+) error {
+	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		version, err := s.versionGuard(ctx, txn)
+		if err != nil {
+			return err
+		}
+
+		region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
+		if err != nil {
+			return errors.Wrap(err, "unable to determine region for sql_instance")
+		}
+
+		readCodec := s.getReadCodec(&version)
+
+		key := readCodec.encodeKey(region, instanceID)
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return err
+		}
+
+		instance, err := readCodec.decodeRow(kv.Key, kv.Value)
+		if err != nil {
+			return err
+		}
+
+		if instance.sessionID != sessionID {
+			// Great! The session was already released or released and
+			// claimed by another server.
+			return nil
+		}
+
+		batch := txn.NewBatch()
+
+		value, err := readCodec.encodeAvailableValue()
+		if err != nil {
+			return err
+		}
+		batch.Put(key, value)
+
+		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
+			dualKey := dualCodec.encodeKey(region, instanceID)
+			dualValue, err := dualCodec.encodeAvailableValue()
+			if err != nil {
+				return err
+			}
+			batch.Put(dualKey, dualValue)
+		}
+
+		return txn.CommitInBatch(ctx, batch)
+	})
+}
+
 func (s *Storage) createInstanceRow(
 	ctx context.Context,
 	sessionID sqlliveness.SessionID,
@@ -505,36 +561,6 @@ func (s *Storage) getInstanceRows(
 		}
 	}
 	return instances, nil
-}
-
-// ReleaseInstanceID deletes an instance ID record. The instance ID becomes
-// available to be reused by another SQL pod of the same tenant.
-// TODO(jeffswenson): delete this, it is unused.
-func (s *Storage) ReleaseInstanceID(
-	ctx context.Context, region []byte, id base.SQLInstanceID,
-) error {
-	// TODO(andrei): Ensure that we do not delete an instance ID that we no longer
-	// own, instead of deleting blindly.
-	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
-		b := txn.NewBatch()
-
-		readCodec := s.getReadCodec(&version)
-		b.Del(readCodec.encodeKey(region, id))
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			b.Del(dualCodec.encodeKey(region, id))
-		}
-		return txn.CommitInBatch(ctx, b)
-	})
-	if err != nil {
-		return errors.Wrapf(err, "could not delete instance %d", id)
-	}
-	return nil
 }
 
 // RunInstanceIDReclaimLoop runs a background task that allocates available

@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -99,7 +101,7 @@ func TestSQLInstance(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSQLInstanceWithRegion(t *testing.T) {
+func TestSQLInstanceRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -117,16 +119,38 @@ func TestSQLInstanceWithRegion(t *testing.T) {
 	fakeStorage := slstorage.NewFakeStorage()
 	var ambientCtx log.AmbientContext
 	sqlInstance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
-	sqlInstance.Start(ctx, []byte{42})
+	sqlInstance.Start(ctx, enum.One)
 
-	s1, err := sqlInstance.Session(ctx)
+	activeSession, err := sqlInstance.Session(ctx)
 	require.NoError(t, err)
-	a, err := fakeStorage.IsAlive(ctx, s1.ID())
+	activeSessionID := activeSession.ID()
+
+	a, err := fakeStorage.IsAlive(ctx, activeSessionID)
 	require.NoError(t, err)
 	require.True(t, a)
 
-	region, id, err := slstorage.UnsafeDecodeSessionID(s1.ID())
-	require.NoError(t, err)
-	require.Equal(t, []byte{42}, region)
-	require.NotNil(t, id)
+	require.NotEqual(t, 0, stopper.NumTasks())
+
+	// Make sure release is idempotent.
+	for i := 0; i < 5; i++ {
+		finalSession, err := sqlInstance.Release(ctx)
+		require.NoError(t, err)
+
+		// Release should always return the last active session.
+		require.Equal(t, activeSessionID, finalSession)
+
+		// Release should tear down the background heartbeat.
+		testutils.SucceedsSoon(t, func() error {
+			tasks := stopper.NumTasks()
+			if tasks != 0 {
+				return errors.Newf("expected zero runnings tasks, found: %d", tasks)
+			}
+			return nil
+		})
+
+		// Once the instance is shut down, it should return an error instead of
+		// the session.
+		_, err = sqlInstance.Session(ctx)
+		require.ErrorIs(t, err, stop.ErrUnavailable)
+	}
 }

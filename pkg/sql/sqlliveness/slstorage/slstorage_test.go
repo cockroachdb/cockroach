@@ -720,13 +720,16 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	unblock := <-getChan
 
 	// Delete the session being updated.
-	tdb.Exec(t, `DELETE FROM "`+t.Name()+`".sqlliveness WHERE true`)
+	require.NoError(t, storage.Delete(ctx, ID))
 
 	// Unblock the update and ensure that it saw that its session was deleted.
 	close(unblock)
 	res := <-resCh
 	require.False(t, res.exists)
 	require.NoError(t, res.err)
+
+	// Ensure delete is idempotent
+	require.NoError(t, storage.Delete(ctx, ID))
 }
 
 func newSqllivenessTable(
