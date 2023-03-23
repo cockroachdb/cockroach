@@ -2365,6 +2365,13 @@ func (c *clusterImpl) ConnE(
 		u.User = url.User(connOptions.User)
 		dataSourceName = u.String()
 	}
+	if len(connOptions.Options) > 0 {
+		vals := make(url.Values)
+		for k, v := range connOptions.Options {
+			vals.Add(k, v)
+		}
+		dataSourceName = dataSourceName + "&" + vals.Encode()
+	}
 	db, err := gosql.Open("postgres", dataSourceName)
 	if err != nil {
 		return nil, err
