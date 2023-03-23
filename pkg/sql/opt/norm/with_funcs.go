@@ -297,3 +297,23 @@ func (c *CustomFuncs) CanAddRecursiveLimit(
 func (c *CustomFuncs) GetRecursiveWithID(private *memo.RecursiveCTEPrivate) opt.WithID {
 	return private.WithID
 }
+
+func (c *CustomFuncs) ApplyBindingRowCount(
+	binding, initial memo.RelExpr,
+) memo.RelExpr {
+	// The properties of the binding are tricky: the recursive expression is
+	// invoked repeatedly and these must hold each time. We can't use the initial
+	// expression's properties directly, as those only hold the first time the
+	// recursive query is executed. We don't really know the input row count,
+	// except for the first time we run the recursive query. We don't have
+	// anything better though.
+	initialRowCount := initial.Relational().Statistics().RowCount
+	binding.Relational().Statistics().RowCount = initialRowCount
+	return binding
+}
+
+func (c *CustomFuncs) RowCountDifferent(
+	binding, initial memo.RelExpr,
+) bool {
+	return initial.Relational().Statistics().RowCount != binding.Relational().Statistics().RowCount
+}
