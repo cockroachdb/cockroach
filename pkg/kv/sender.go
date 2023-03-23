@@ -276,6 +276,9 @@ type TxnSender interface {
 	// The method is idempotent.
 	Step(context.Context) error
 
+	// GetReadSeqNum gets the read sequence point for the current transaction.
+	GetReadSeqNum() enginepb.TxnSeq
+
 	// SetReadSeqNum sets the read sequence point for the current transaction.
 	SetReadSeqNum(seq enginepb.TxnSeq) error
 

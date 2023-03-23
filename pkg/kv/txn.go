@@ -1485,6 +1485,13 @@ func (txn *Txn) Step(ctx context.Context) error {
 	return txn.mu.sender.Step(ctx)
 }
 
+// GetReadSeqNum gets the read sequence number for this transaction.
+func (txn *Txn) GetReadSeqNum() enginepb.TxnSeq {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.GetReadSeqNum()
+}
+
 // SetReadSeqNum sets the read sequence number for this transaction.
 func (txn *Txn) SetReadSeqNum(seq enginepb.TxnSeq) error {
 	txn.mu.Lock()

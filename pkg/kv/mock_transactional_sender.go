@@ -194,6 +194,9 @@ func (m *MockTransactionalSender) Step(_ context.Context) error {
 	return nil
 }
 
+// GetReadSeqNum is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetReadSeqNum() enginepb.TxnSeq { return 0 }
+
 // SetReadSeqNum is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetReadSeqNum(_ enginepb.TxnSeq) error { return nil }
 

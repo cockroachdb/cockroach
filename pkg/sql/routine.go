@@ -118,7 +118,7 @@ func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	// invoking statement are visible to the routine.
 	if g.expr.EnableStepping {
 		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
+		prevSeqNum := txn.GetReadSeqNum()
 		defer func() {
 			// If the routine errored, the transaction should be aborted, so
 			// there is no need to reconfigure stepping or revert to the
