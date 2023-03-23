@@ -1300,8 +1300,7 @@ func (txn *Txn) UpdateRootWithLeafFinalState(
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	txn.mu.sender.UpdateRootWithLeafFinalState(ctx, tfs)
-	return nil
+	return txn.mu.sender.UpdateRootWithLeafFinalState(ctx, tfs)
 }
 
 // UpdateStateOnRemoteRetryableErr updates the txn in response to an error
