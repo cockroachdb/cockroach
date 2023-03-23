@@ -319,6 +319,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	firstBatchKeyLimit rowinfra.KeyLimit,
+	spansCanOverlap bool,
 ) error {
 	f.reset(ctx)
 
@@ -330,43 +331,45 @@ func (f *txnKVFetcher) SetupNextFetch(
 		return errors.Errorf("invalid batch limit %d (batchBytesLimit: %d)", firstBatchKeyLimit, batchBytesLimit)
 	}
 
-	if batchBytesLimit != 0 {
-		// Verify the spans are ordered if a batch limit is used.
-		for i := 1; i < len(spans); i++ {
-			prevKey := spans[i-1].EndKey
-			if prevKey == nil {
-				// This is the case of a GetRequest.
-				prevKey = spans[i-1].Key
+	if !spansCanOverlap {
+		if batchBytesLimit != 0 {
+			// Verify the spans are ordered if a batch limit is used.
+			for i := 1; i < len(spans); i++ {
+				prevKey := spans[i-1].EndKey
+				if prevKey == nil {
+					// This is the case of a GetRequest.
+					prevKey = spans[i-1].Key
+				}
+				if spans[i].Key.Compare(prevKey) < 0 {
+					return errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+				}
 			}
-			if spans[i].Key.Compare(prevKey) < 0 {
-				return errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+		} else if util.RaceEnabled {
+			// Otherwise, just verify the spans don't contain consecutive overlapping
+			// spans.
+			for i := 1; i < len(spans); i++ {
+				prevEndKey := spans[i-1].EndKey
+				if prevEndKey == nil {
+					prevEndKey = spans[i-1].Key
+				}
+				curEndKey := spans[i].EndKey
+				if curEndKey == nil {
+					curEndKey = spans[i].Key
+				}
+				if spans[i].Key.Compare(prevEndKey) >= 0 {
+					// Current span's start key is greater than or equal to the last span's
+					// end key - we're good.
+					continue
+				} else if curEndKey.Compare(spans[i-1].Key) <= 0 {
+					// Current span's end key is less than or equal to the last span's start
+					// key - also good.
+					continue
+				}
+				// Otherwise, the two spans overlap, which isn't allowed - it leaves us at
+				// risk of incorrect results, since the row fetcher can't distinguish
+				// between identical rows in two different batches.
+				return errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
 			}
-		}
-	} else if util.RaceEnabled {
-		// Otherwise, just verify the spans don't contain consecutive overlapping
-		// spans.
-		for i := 1; i < len(spans); i++ {
-			prevEndKey := spans[i-1].EndKey
-			if prevEndKey == nil {
-				prevEndKey = spans[i-1].Key
-			}
-			curEndKey := spans[i].EndKey
-			if curEndKey == nil {
-				curEndKey = spans[i].Key
-			}
-			if spans[i].Key.Compare(prevEndKey) >= 0 {
-				// Current span's start key is greater than or equal to the last span's
-				// end key - we're good.
-				continue
-			} else if curEndKey.Compare(spans[i-1].Key) <= 0 {
-				// Current span's end key is less than or equal to the last span's start
-				// key - also good.
-				continue
-			}
-			// Otherwise, the two spans overlap, which isn't allowed - it leaves us at
-			// risk of incorrect results, since the row fetcher can't distinguish
-			// between identical rows in two different batches.
-			return errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
 		}
 	}
 

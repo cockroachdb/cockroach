@@ -235,7 +235,7 @@ var useStreamerEnabled = settings.RegisterBoolSetting(
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
 		"while adhering to memory limits.",
-	true,
+	false,
 )
 
 // This number was chosen by running TPCH queries 3, 4, 5, 9, and 19 with

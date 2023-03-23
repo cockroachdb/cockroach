@@ -63,9 +63,7 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	// is enabled.
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchdirectscan")
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
-	err := s.fetcher.SetupNextFetch(
-		ctx, s.Spans, nil /* spanIDs */, s.batchBytesLimit, firstBatchLimit,
-	)
+	err := s.fetcher.SetupNextFetch(ctx, s.Spans, nil, s.batchBytesLimit, firstBatchLimit, false /* spansCanOverlap */)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

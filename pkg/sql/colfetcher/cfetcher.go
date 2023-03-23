@@ -554,9 +554,7 @@ func (cf *cFetcher) StartScan(
 	cf.machine.limitHint = int(limitHint)
 	cf.machine.state[0] = stateResetBatch
 	cf.machine.state[1] = stateInitFetch
-	return cf.fetcher.SetupNextFetch(
-		ctx, spans, nil /* spanIDs */, batchBytesLimit, firstBatchLimit,
-	)
+	return cf.fetcher.SetupNextFetch(ctx, spans, nil, batchBytesLimit, firstBatchLimit, false /* spansCanOverlap */)
 }
 
 // fetcherState is the state enum for NextBatch.

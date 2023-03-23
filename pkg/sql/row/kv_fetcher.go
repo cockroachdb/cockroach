@@ -325,13 +325,12 @@ func (f *KVFetcher) SetupNextFetch(
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	firstBatchKeyLimit rowinfra.KeyLimit,
+	spansCanOverlap bool,
 ) error {
 	f.kvs = nil
 	f.batchResponse = nil
 	f.spanID = 0
-	return f.KVBatchFetcher.SetupNextFetch(
-		ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit,
-	)
+	return f.KVBatchFetcher.SetupNextFetch(ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit, spansCanOverlap)
 }
 
 // KVProvider is a KVBatchFetcher that returns a set slice of kvs.
@@ -356,7 +355,7 @@ func (f *KVProvider) NextBatch(context.Context) (KVBatchFetcherResponse, error) 
 
 // SetupNextFetch implements the KVBatchFetcher interface.
 func (f *KVProvider) SetupNextFetch(
-	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit, bool,
 ) error {
 	return nil
 }

@@ -111,6 +111,7 @@ type KVBatchFetcher interface {
 		spanIDs []int,
 		batchBytesLimit rowinfra.BytesLimit,
 		firstBatchKeyLimit rowinfra.KeyLimit,
+		spansCanOverlap bool,
 	) error
 
 	// NextBatch returns the next batch of rows. See KVBatchFetcherResponse for
@@ -518,7 +519,7 @@ func (rf *Fetcher) StartScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, spanIDs, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint),
+		ctx, spans, spanIDs, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint), rf.args.SpansCanOverlap,
 	); err != nil {
 		return err
 	}
@@ -618,7 +619,8 @@ func (rf *Fetcher) StartInconsistentScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, nil /* spanIDs */, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint),
+		ctx, spans, nil, batchBytesLimit,
+		rf.rowLimitToKeyLimit(rowLimitHint), false, /* spansCanOverlap */
 	); err != nil {
 		return err
 	}
