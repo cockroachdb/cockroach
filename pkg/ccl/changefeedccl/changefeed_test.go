@@ -19,6 +19,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -8354,4 +8356,80 @@ func TestPubsubValidationErrors(t *testing.T) {
 			sqlDB.ExpectErr(t, tc.expectedError, fmt.Sprintf("CREATE CHANGEFEED FOR foo INTO '%s'", tc.uri))
 		})
 	}
+}
+
+func TestChangefeedExecLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	str := strconv.Itoa
+
+	const nodes = 4
+	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{}}
+	for i := 0; i < nodes; i++ {
+		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			ExternalIODir: path.Join(dir, str(i)),
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
+			DisableDefaultTestTenant: true, // need nodelocal and splits.
+		}
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, args)
+	defer tc.Stopper().Stop(ctx)
+	tc.ToggleReplicateQueues(false)
+
+	n2 := sqlutils.MakeSQLRunner(tc.Conns[1])
+
+	// Setup a table with at least one range on each node to be sure we will see a
+	// file from that node if it isn't excluded by filter. Relocate can fail with
+	// errors like `change replicas... descriptor changed` thus the SucceedsSoon.
+	n2.ExecMultiple(t,
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"CREATE TABLE x (id INT PRIMARY KEY)",
+		"INSERT INTO x SELECT generate_series(1, 40)",
+		"ALTER TABLE x SPLIT AT SELECT id FROM x WHERE id % 5 = 0",
+	)
+	for _, i := range []string{
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 0)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 3, 4], 5)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[2, 1, 3], 10)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[2, 1, 4], 15)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[3, 4, 2], 20)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[3, 4, 1], 25)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[4, 2, 1], 30)`,
+		`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[4, 2, 3], 35)`,
+	} {
+		n2.ExecSucceedsSoon(t, i)
+	}
+
+	test := func(t *testing.T, name, filter string, expect []bool) {
+		t.Run(name, func(t *testing.T) {
+			// Run and wait for the changefeed.
+			var job int
+			n2.QueryRow(t, "CREATE CHANGEFEED FOR x INTO $1 WITH initial_scan='only', execution_locality=$2",
+				"nodelocal://0/"+name, filter).Scan(&job)
+			n2.Exec(t, "SHOW JOB WHEN COMPLETE $1", job)
+			// Now check each dir against expectation.
+			filesSomewhere := false
+			for i := range expect {
+				where := path.Join(dir, str(i), name)
+				x, err := os.ReadDir(where)
+				filesHere := err == nil && len(x) > 0
+				if !expect[i] {
+					require.False(t, filesHere, where)
+				}
+				filesSomewhere = filesSomewhere || filesHere
+			}
+			require.True(t, filesSomewhere)
+		})
+	}
+
+	test(t, "all", "", []bool{true, true, true, true})
+	test(t, "x", "x=0", []bool{true, true, false, false})
+	test(t, "y", "y=1", []bool{false, true, false, true})
 }

@@ -133,6 +133,7 @@ go_library(
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/syncutil",
