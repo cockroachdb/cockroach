@@ -636,7 +636,6 @@ func setDemoContextDefaults() {
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
-	demoCtx.Multitenant = true
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
 
