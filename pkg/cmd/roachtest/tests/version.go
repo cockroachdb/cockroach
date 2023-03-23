@@ -219,6 +219,7 @@ func registerVersion(r registry.Registry) {
 	for _, n := range []int{3, 5} {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("version/mixed/nodes=%d", n),
+			Timeout: 4 * time.Hour,
 			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

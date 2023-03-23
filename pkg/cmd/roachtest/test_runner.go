@@ -947,7 +947,7 @@ func (r *testRunner) runTest(
 
 	t.start = timeutil.Now()
 
-	timeout := 10 * time.Hour
+	timeout := 3 * time.Hour
 	if d := s.Timeout; d != 0 {
 		timeout = d
 	}
