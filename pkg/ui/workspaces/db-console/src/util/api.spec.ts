@@ -305,7 +305,7 @@ describe("rest api", function () {
           // Table schema details query
           { rows: [{ columns: ["a", "b", "c"], indexes: ["d", "e"] }] },
           // Table create statement query
-          { rows: [{ statement: "mock create stmt" }] },
+          { rows: [{ create_statement: "mock create stmt" }] },
           // Table zone config statement query
           { rows: [{ raw_config_sql: "mock zone config stmt" }] },
           // Table heuristics query
@@ -359,7 +359,7 @@ describe("rest api", function () {
           expect(resp.results.grantsResp.grants.length).toBe(1);
           expect(resp.results.schemaDetails.columns.length).toBe(3);
           expect(resp.results.schemaDetails.indexes.length).toBe(2);
-          expect(resp.results.createStmtResp.statement).toBe(
+          expect(resp.results.createStmtResp.create_statement).toBe(
             "mock create stmt",
           );
           expect(resp.results.zoneConfigResp.configure_zone_statement).toBe(

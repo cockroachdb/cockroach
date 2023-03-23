@@ -150,7 +150,8 @@ export const mapStateToProps = createSelector(
         loading: !!details?.inFlight,
         loaded: !!details?.valid,
         lastError: details?.lastError,
-        createStatement: details?.data?.results.createStmtResp.statement || "",
+        createStatement:
+          details?.data?.results.createStmtResp.create_statement || "",
         replicaCount:
           details?.data?.results.stats.replicaData.replicaCount || 0,
         indexNames: _.uniq(details?.data?.results.schemaDetails.indexes),
