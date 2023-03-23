@@ -28,60 +28,138 @@ func TestRangeKeyBatcherSplitSST(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	data := &storage.MemObject{}
 	st := cluster.MakeTestingClusterSettings()
-	w := storage.MakeIngestionSSTWriter(ctx, st, data)
 
-	for _, key := range []storage.MVCCRangeKey{
-		{
-			StartKey:  roachpb.Key("a"),
-			EndKey:    roachpb.Key("c"),
-			Timestamp: hlc.Timestamp{WallTime: 1},
-		},
-		{
-			StartKey:  roachpb.Key("b"),
-			EndKey:    roachpb.Key("f"),
-			Timestamp: hlc.Timestamp{WallTime: 2},
-		},
-		{
-			StartKey:  roachpb.Key("c"),
-			EndKey:    roachpb.Key("e"),
-			Timestamp: hlc.Timestamp{WallTime: 1},
-		},
-		{
-			StartKey:  roachpb.Key("d"),
-			EndKey:    roachpb.Key("f"),
-			Timestamp: hlc.Timestamp{WallTime: 1},
-		},
-	} {
-		require.NoError(t, w.PutRawMVCCRangeKey(key, []byte{}))
+	writeSST := func(keys []storage.MVCCRangeKey) []byte {
+		data := &storage.MemObject{}
+		w := storage.MakeIngestionSSTWriter(ctx, st, data)
+		defer w.Close()
+		for _, key := range keys {
+			require.NoError(t, w.PutRawMVCCRangeKey(key, []byte{}))
+		}
+		require.NoError(t, w.Finish())
+		return data.Data()
 	}
-	require.NoError(t, w.Finish())
 
-	input := data.Data()
-	actualStart := rangeKeysInSSTToString(t, input)
-	expectedStart := `{a-b}[0.000000001,0=]
-{b-f}[0.000000002,0= 0.000000001,0=]`
-	require.Equal(t, expectedStart, actualStart)
+	type testCase struct {
+		name  string
+		start roachpb.Key
+		end   roachpb.Key
+		split roachpb.Key
+		keys  []storage.MVCCRangeKey
+		full  string
+		lhs   string
+		rhs   string
+	}
 
-	var (
-		start = roachpb.Key("a")
-		end   = roachpb.Key("f")
-		split = roachpb.Key("c")
-	)
+	testCases := []testCase{
+		{
+			name:  "overlapping",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("f"),
+			split: roachpb.Key("c"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("a"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("b"),
+					EndKey:    roachpb.Key("f"),
+					Timestamp: hlc.Timestamp{WallTime: 2},
+				},
+				{
+					StartKey:  roachpb.Key("c"),
+					EndKey:    roachpb.Key("e"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("d"),
+					EndKey:    roachpb.Key("f"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{a-b}[0.000000001,0=]
+{b-f}[0.000000002,0= 0.000000001,0=]`,
+			lhs: `{a-b}[0.000000001,0=]
+{b-c}[0.000000002,0= 0.000000001,0=]`,
+			rhs: `{c-f}[0.000000002,0= 0.000000001,0=]`,
+		},
+		{
+			name:  "split-in-gap",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("g"),
+			split: roachpb.Key("d"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("a"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("b"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 2},
+				},
+				{
+					StartKey:  roachpb.Key("e"),
+					EndKey:    roachpb.Key("g"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("f"),
+					EndKey:    roachpb.Key("g"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{a-b}[0.000000001,0=]
+{b-c}[0.000000002,0= 0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+			lhs: `{a-b}[0.000000001,0=]
+{b-c}[0.000000002,0= 0.000000001,0=]`,
+			rhs: `{e-g}[0.000000001,0=]`,
+		},
+		{
+			name:  "split-on-last",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("g"),
+			split: roachpb.Key("f"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("a"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("e"),
+					EndKey:    roachpb.Key("g"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{a-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+			lhs: `{a-c}[0.000000001,0=]
+{e-f}[0.000000001,0=]`,
+			rhs: `{f-g}[0.000000001,0=]`,
+		},
+	}
 
-	left, right, err := splitRangeKeySSTAtKey(ctx, st, start, end, split, input)
-	require.NoError(t, err)
-
-	actualLeft := rangeKeysInSSTToString(t, left.data)
-	expectedLeft := `{a-b}[0.000000001,0=]
-{b-c}[0.000000002,0= 0.000000001,0=]`
-	require.Equal(t, expectedLeft, actualLeft)
-
-	actualRight := rangeKeysInSSTToString(t, right.data)
-	expectedRight := `{c-f}[0.000000002,0= 0.000000001,0=]`
-	require.Equal(t, expectedRight, actualRight)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := writeSST(tc.keys)
+			actualStart := rangeKeysInSSTToString(t, data)
+			require.Equal(t, tc.full, actualStart)
+			left, right, err := splitRangeKeySSTAtKey(ctx, st, tc.start, tc.end, tc.split, data)
+			require.True(t, len(left.start) > 0, "lhs start should be non-empty")
+			require.True(t, len(left.end) > 0, "lhs end should be non-empty")
+			require.True(t, len(right.start) > 0, "rhs start should be non-empty")
+			require.True(t, len(right.end) > 0, "rhs end should be non-empty")
+			require.NoError(t, err)
+			require.Equal(t, strings.TrimSpace(tc.lhs), rangeKeysInSSTToString(t, left.data))
+			require.Equal(t, strings.TrimSpace(tc.rhs), rangeKeysInSSTToString(t, right.data))
+		})
+	}
 }
 
 func rangeKeysInSSTToString(t *testing.T, data []byte) string {

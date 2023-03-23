@@ -991,10 +991,6 @@ func splitRangeKeySSTAtKey(
 		}
 
 		rangeKeys := iter.RangeKeys()
-		if len(first) == 0 {
-			first = append(first[:0], rangeKeys.Bounds.Key...)
-		}
-
 		if !reachedSplit && rangeKeys.Bounds.Key.Compare(splitKey) >= 0 {
 			// The start of this range key is greater than or equal
 			// to our split key -- it should be written to the right
@@ -1009,6 +1005,10 @@ func splitRangeKeySSTAtKey(
 			// Truncate this range key to the split point and write
 			// it to the left side.
 			rangeKeys.Bounds.EndKey = splitKey
+			if len(first) == 0 {
+				first = append(first[:0], rangeKeys.Bounds.Key...)
+			}
+			// NB: We don't call Next() here because the split key is exclusive already
 			last = append(last[:0], rangeKeys.Bounds.EndKey...)
 			for _, rk := range rangeKeys.AsRangeKeys() {
 				if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
@@ -1040,8 +1040,11 @@ func splitRangeKeySSTAtKey(
 			}
 		}
 
+		if len(first) == 0 {
+			first = append(first[:0], rangeKeys.Bounds.Key...)
+		}
 		last = append(last[:0], rangeKeys.Bounds.EndKey...)
-		last = last.Next()
+		last.Next()
 		for _, rk := range rangeKeys.AsRangeKeys() {
 			if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
 				return nil, nil, err
