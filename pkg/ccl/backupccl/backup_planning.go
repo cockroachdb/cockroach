@@ -197,6 +197,7 @@ func resolveOptionsForBackupJobDescription(
 	newOpts := tree.BackupOptions{
 		CaptureRevisionHistory: opts.CaptureRevisionHistory,
 		Detached:               opts.Detached,
+		ExecutionLocality:      opts.ExecutionLocality,
 	}
 
 	if opts.EncryptionPassphrase != nil {
