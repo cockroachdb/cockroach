@@ -108,6 +108,7 @@ func registerYCSB(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
 				},
+				Tags: []string{`aws`},
 			})
 
 			if wl == "A" {
@@ -129,6 +130,7 @@ func registerYCSB(r registry.Registry) {
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, true /* rangeTombstone */)
 					},
+					Tags: []string{`aws`},
 				})
 			}
 		}
