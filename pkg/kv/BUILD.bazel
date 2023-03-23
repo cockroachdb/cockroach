@@ -66,6 +66,7 @@ go_test(
         "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/keys",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/lock",
