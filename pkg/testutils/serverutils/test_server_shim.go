@@ -44,6 +44,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DefaultTestTenantMessage is a message that is printed when a test is run
+// with the default test tenant. This is useful for debugging test failures.
+const DefaultTestTenantMessage = "Running test with the default test tenant. " +
+	"If you are only seeing a test case failure when this message appears, there may be a " +
+	"problem with your test case running within tenants."
+
 // TenantModeFlagName is the exported name of the tenantMode flag, for use
 // in other packages.
 const TenantModeFlagName = "tenantMode"
@@ -330,6 +336,11 @@ func StartServer(
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("%+v", err)
 	}
+
+	if s.StartedDefaultTestTenant() {
+		t.Log(DefaultTestTenantMessage)
+	}
+
 	goDB := OpenDBConn(
 		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 
@@ -397,15 +408,18 @@ func OpenDBConn(
 }
 
 // StartServerRaw creates and starts a TestServer.
-// Generally StartServer() should be used. However this function can be used
+// Generally StartServer() should be used. However, this function can be used
 // directly when opening a connection to the server is not desired.
-func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
+func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface, error) {
 	server, err := NewServer(args)
 	if err != nil {
 		return nil, err
 	}
 	if err := server.Start(context.Background()); err != nil {
 		return nil, err
+	}
+	if server.StartedDefaultTestTenant() {
+		t.Log(DefaultTestTenantMessage)
 	}
 	return server, nil
 }
