@@ -283,9 +283,18 @@ export class StatementsPage extends React.Component<
   };
 
   updateRequestParams = (): void => {
-    this.props.onChangeLimit(this.state.limit);
-    this.props.onChangeReqSort(this.state.reqSortSetting);
-    this.props.onTimeScaleChange(this.state.timeScale);
+    if (this.props.limit !== this.state.limit) {
+      this.props.onChangeLimit(this.state.limit);
+    }
+
+    if (this.props.reqSortSetting !== this.state.reqSortSetting) {
+      this.props.onChangeReqSort(this.state.reqSortSetting);
+    }
+
+    if (this.props.timeScale !== this.state.timeScale) {
+      this.props.onTimeScaleChange(this.state.timeScale);
+    }
+
     this.refreshStatements();
   };
 
