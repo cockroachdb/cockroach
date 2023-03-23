@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -306,4 +307,49 @@ func getAdminClientForServer(
 	return client, func() {
 		_ = conn.Close() // nolint:grpcconnclose
 	}, nil
+}
+
+func TestServerShutdownReleasesSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantDisabled,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tenantArgs := base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	}
+
+	// ensure the tenant conenctor is linked
+	var _ = kvtenantccl.Connector{}
+	tenant, tenantSQLRaw := serverutils.StartTenant(t, s, tenantArgs)
+	defer tenant.Stopper().Stop(ctx)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantSQLRaw)
+
+	queryOwner := func(id base.SQLInstanceID) (owner *string) {
+		tenantSQL.QueryRow(t, "SELECT session_id FROM system.sql_instances WHERE id = $1", id).Scan(&owner)
+		return owner
+	}
+
+	sessionExists := func(session string) bool {
+		rows := tenantSQL.QueryStr(t, "SELECT session_id FROM system.sqlliveness WHERE session_id = $1", session)
+		return 0 < len(rows)
+	}
+
+	tmpTenant, err := s.StartTenant(ctx, tenantArgs)
+	require.NoError(t, err)
+
+	tmpSQLInstance := tmpTenant.SQLInstanceID()
+	session := queryOwner(tmpSQLInstance)
+	require.NotNil(t, session)
+	require.True(t, sessionExists(*session))
+
+	require.NoError(t, tmpTenant.DrainClients(context.Background()))
+
+	require.False(t, sessionExists(*session), "expected session %s to be deleted from the sqlliveness table, but it still exists", *session)
+	require.Nil(t, queryOwner(tmpSQLInstance), "expected sql_instance %d to have no owning session_id", tmpSQLInstance)
 }

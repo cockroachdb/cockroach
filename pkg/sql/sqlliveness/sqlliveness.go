@@ -39,8 +39,14 @@ type Provider interface {
 
 	// Start starts the sqlliveness subsystem. regionPhysicalRep should
 	// represent the physical representation of the current process region
-	// stored in the multi-region enum type associated with the system database.
+	// stored in the multi-region enum type associated with the system
+	// database.
 	Start(ctx context.Context, regionPhysicalRep []byte)
+
+	// Release delete's the sqlliveness session managed by the provider. This
+	// should be called near the end of the drain process, after the server has
+	// no running tasks that depend on the session.
+	Release(ctx context.Context) (SessionID, error)
 
 	// Metrics returns a metric.Struct which holds metrics for the provider.
 	Metrics() metric.Struct
