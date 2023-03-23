@@ -100,6 +100,7 @@ const (
 	OptMetricsScope             = `metrics_label`
 	OptUnordered                = `unordered`
 	OptVirtualColumns           = `virtual_columns`
+	OptExecutionLocality        = `execution_locality`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -339,6 +340,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptMetricsScope:             stringOption,
 	OptUnordered:                flagOption,
 	OptVirtualColumns:           enum("omitted", "null"),
+	OptExecutionLocality:        stringOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -350,7 +352,9 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
-	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter)
+	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
+	OptExecutionLocality,
+)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil

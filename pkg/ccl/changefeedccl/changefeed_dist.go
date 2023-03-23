@@ -353,8 +353,15 @@ func makePlan(
 			distMode = sql.DistributionTypeNone
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode))
+		var locFilter roachpb.Locality
+		if loc := details.Opts[changefeedbase.OptExecutionLocality]; loc != "" {
+			if err := locFilter.Set(loc); err != nil {
+				return nil, nil, err
+			}
+		}
+
+		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
+			sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err
