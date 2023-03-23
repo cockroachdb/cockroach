@@ -43,6 +43,7 @@ stubComponentInModule(
 stubComponentInModule("src/views/insights/schemaInsightsPage", "default");
 stubComponentInModule("src/views/schedules/schedulesPage", "default");
 stubComponentInModule("src/views/schedules/scheduleDetails", "default");
+stubComponentInModule("src/views/transactions/transactionDetails", "default");
 
 import React from "react";
 import { Action, Store } from "redux";
@@ -63,7 +64,6 @@ const JOBS_HEADER = "Jobs";
 const DATABASES_HEADER = "Databases";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
 const STATEMENTS_DETAILS_HEADER = "Statement Fingerprint";
-const TRANSACTION_DETAILS_HEADER = "Transaction Details";
 const ADVANCED_DEBUG_HEADER = "Advanced Debugging";
 const REDUX_DEBUG_HEADER = "Redux State";
 const CUSTOM_METRICS_CHART_HEADER = "Custom Chart";
@@ -419,10 +419,10 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/transaction/:aggregated_ts/:txn_fingerprint_id' path", () => {
+  describe("'/transaction/:txn_fingerprint_id' path", () => {
     test("routes to <TransactionDetails> component", () => {
-      navigateToPath("/transaction/1637877600/4948941983164833719");
-      screen.getByText(TRANSACTION_DETAILS_HEADER, { selector: "h3" });
+      navigateToPath("/transaction/4948941983164833719");
+      screen.getByTestId("transactionDetails");
     });
   });
 
