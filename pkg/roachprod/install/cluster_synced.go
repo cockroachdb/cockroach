@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -2382,8 +2383,17 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 // which we do want to be able to retry.
 func scp(src, dest string) (*RunResultDetails, error) {
 	args := []string{
+		// Enable recursive copies, compression.
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
+	}
+	if runtime.GOOS == "darwin" {
+		// SSH to src node and excute SCP there using agent-forwarding,
+		// as these are not the defaults on MacOS.
+		// TODO(sarkesian): Rather than checking Darwin, it would be preferable
+		// to check the output of `ssh-V` and check the version to see what flags
+		// are supported.
+		args = append(args, "-R", "-A")
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
