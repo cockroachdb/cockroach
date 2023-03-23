@@ -2750,7 +2750,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
-		FsyncLatency:     metric.NewManualWindowHistogram(metaStorageFsyncLatency, pebble.FsyncLatencyBuckets),
+		FsyncLatency: metric.NewManualWindowHistogram(
+			metaStorageFsyncLatency,
+			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
 
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
