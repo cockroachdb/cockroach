@@ -2382,9 +2382,7 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 // which we do want to be able to retry.
 func scp(src, dest string) (*RunResultDetails, error) {
 	args := []string{
-		"scp",
-		// ssh to src then scp dsc mode, use agent forwarding, recursive, compression
-		"-R", "-A", "-r", "-C",
+		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
 	}
 	args = append(args, sshAuthArgs()...)
