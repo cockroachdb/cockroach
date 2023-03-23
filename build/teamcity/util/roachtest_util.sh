@@ -61,8 +61,6 @@ case "${CLOUD}" in
   gce)
     ;;
   aws)
-    PARALLELISM=3
-    CPUQUOTA=384
     if [ -z "${TESTS}" ]; then
       # NB: anchor ycsb to beginning of line to avoid matching `zfs/ycsb/*` which
       # isn't supported on AWS at time of writing.
