@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
@@ -27,33 +28,41 @@ import (
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	return dsp.SetupAllNodesPlanningWithOracle(ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser)
+	return dsp.SetupAllNodesPlanningWithOracle(
+		ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser, roachpb.Locality{},
+	)
 }
 
-// SetupAllNodesPlanning creates a planCtx and sets up the planCtx.nodeStatuses
-// map for all nodes. It returns all nodes that can be used for planning.
+// SetupAllNodesPlanningWithOracle creates a planCtx and sets up the
+// planCtx.nodeStatuses map for all nodes. It returns all nodes that can be used
+// for planning, filtered using the passed locality filter, which along with the
+// passed replica oracle, is stored in the returned planning context to be used
+// by subsequent physical planning such as PartitionSpans.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	if dsp.codec.ForSystemTenant() {
-		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle)
+		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter)
 	}
-	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle)
+	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter)
 }
 
 // setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
-// in a system tenant.
+// in a system tenant, filtered using the passed locality filter if it is
+// non-empty.
 func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways, oracle)
+		DistributionTypeAlways, oracle, localityFilter)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
@@ -67,7 +76,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// planCtx.nodeStatuses map ourselves. checkInstanceHealthAndVersionSystem() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		if ok, _ := node.Desc.Locality.Matches(localityFilter); ok {
+			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		}
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.nodeStatuses))
 	for nodeID, status := range planCtx.nodeStatuses {
@@ -79,22 +90,26 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 }
 
 // setupAllNodesPlanningTenant creates a planCtx and returns all nodes available
-// in a non-system tenant.
+// in a non-system tenant, filtered using the passed locality filter if is
+// non-empty.
 func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways, oracle)
+		DistributionTypeAlways, oracle, localityFilter)
 	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	sqlInstanceIDs := make([]base.SQLInstanceID, len(pods))
-	for i, pod := range pods {
-		sqlInstanceIDs[i] = pod.InstanceID
+	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(pods))
+	for _, pod := range pods {
+		if ok, _ := pod.Locality.Matches(localityFilter); ok {
+			sqlInstanceIDs = append(sqlInstanceIDs, pod.InstanceID)
+		}
 	}
 	return planCtx, sqlInstanceIDs, nil
 }
