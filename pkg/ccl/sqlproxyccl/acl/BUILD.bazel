@@ -32,6 +32,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":acl"],
     deps = [
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "//pkg/util/timeutil",
