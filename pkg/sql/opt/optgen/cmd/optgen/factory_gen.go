@@ -357,10 +357,22 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 					// metadata so that other children can refer to it (via WithScan).
 					childTyp := g.md.typeOf(childFields[0])
 					childName := g.md.fieldName(childFields[0])
-					g.w.writeIndent(
-						"%s := f.invokeReplace(t.%s, replace).(%s)\n",
-						unTitle(childName), childName, childTyp.asField(),
-					)
+					isRecursiveCTE := define.Name == "RecursiveCTE"
+					if !isRecursiveCTE {
+						g.w.writeIndent(
+							"%s := f.invokeReplace(t.%s, replace).(%s)\n",
+							unTitle(childName), childName, childTyp.asField(),
+						)
+					} else {
+						initialName := g.md.fieldName(childFields[1])
+						g.w.writeIndent("newInitial := f.invokeReplace(t.%s, replace).(%s)\n", initialName, childTyp.asField())
+						g.w.writeIndent("initialRowCount := newInitial.Relational().Statistics().RowCount\n")
+						g.w.writeIndent("%s := f.ConstructFakeRel(&memo.FakeRelPrivate{\n", unTitle(childName))
+						g.w.nestIndent("Props: MakeBindingPropsForRecursiveCTE(\n")
+						g.w.nestIndent("props.AnyCardinality, t.%s.Relational().OutputCols, initialRowCount,\n", childName)
+						g.w.unnest("),\n")
+						g.w.unnest("})\n")
+					}
 					g.w.nestIndent("if id := t.WithBindingID(); id != 0 {\n")
 					g.w.writeIndent("f.Metadata().AddWithBinding(id, %s)", unTitle(childName))
 					g.w.unnest("}\n")
@@ -370,11 +382,13 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 				} else {
 					g.w.nestIndent("return f.Construct%s(\n", define.Name)
 				}
-				for _, child := range childFields {
+				for i, child := range childFields {
 					childTyp := g.md.typeOf(child)
 					childName := g.md.fieldName(child)
 
-					if childTyp.isListType() {
+					if define.Name == "RecursiveCTE" && i == 0 {
+						g.w.writeIndent("newInitial,\n")
+					} else if childTyp.isListType() {
 						g.w.writeIndent("f.copyAndReplaceDefault%s(t.%s, replace),\n",
 							childTyp.friendlyName, childName)
 					} else {
