@@ -38,6 +38,10 @@ var (
 func init() {
 	for _, typ := range types.OidToType {
 		switch typ.Oid() {
+		case oid.T_regnamespace:
+			// Temporarily don't include this.
+			// TODO(msirek): Remove this exclusion once
+			// https://github.com/cockroachdb/cockroach/issues/55791 is fixed.
 		case oid.T_unknown, oid.T_anyelement:
 			// Don't include these.
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
