@@ -267,7 +267,7 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},

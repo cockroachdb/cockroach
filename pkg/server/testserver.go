@@ -52,14 +52,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -579,16 +577,6 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	if len(ts.testTenants) == 0 {
 		ts.testTenants = make([]serverutils.TestTenantInterface, 1)
 		ts.testTenants[0] = tenant
-
-		if !skip.UnderBench() {
-			// Now that we've started the first tenant, log this fact for easier
-			// debugging. Skip the logging if we're running a benchmark (because
-			// these INFO messages break the benchstat utility).
-			log.Shout(context.Background(), severity.INFO,
-				"Running test with the default test tenant. "+
-					"If you are only seeing a test case failure when this message appears, there may be a "+
-					"problem with your test case running within tenants.")
-		}
 	} else {
 		// We restrict the creation of multiple default tenants because if
 		// we allow for more than one to be created, it's not clear what we

@@ -396,6 +396,10 @@ func (tc *TestCluster) Start(t testing.TB) {
 		}
 	}
 
+	if tc.StartedDefaultTestTenant() {
+		t.Log(serverutils.DefaultTestTenantMessage)
+	}
+
 	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {

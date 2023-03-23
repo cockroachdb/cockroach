@@ -73,7 +73,7 @@ import (
 func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestPanicRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{})
 	require.NoError(t, err)
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -129,7 +129,7 @@ func TestHealthCheck(t *testing.T) {
 
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DefaultZoneConfigOverride: &cfg,
@@ -419,7 +419,7 @@ func TestListenerFileCreation(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
