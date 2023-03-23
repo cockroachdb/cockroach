@@ -58,6 +58,7 @@ go_test(
     embed = [":slstorage"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",

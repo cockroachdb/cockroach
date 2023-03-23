@@ -188,6 +188,62 @@ func (s *Storage) CreateInstance(
 	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID)
 }
 
+// ReleaseInstance deallocates the instance id iff it is currently owned by the
+// provided sessionID.
+func (s *Storage) ReleaseInstance(
+	ctx context.Context, sessionID sqlliveness.SessionID, instanceID base.SQLInstanceID,
+) error {
+	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		version, err := s.versionGuard(ctx, txn)
+		if err != nil {
+			return err
+		}
+
+		region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
+		if err != nil {
+			return errors.Wrap(err, "unable to determine region for sql_instance")
+		}
+
+		readCodec := s.getReadCodec(&version)
+
+		key := readCodec.encodeKey(region, instanceID)
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return err
+		}
+
+		instance, err := readCodec.decodeRow(kv.Key, kv.Value)
+		if err != nil {
+			return err
+		}
+
+		if instance.sessionID != sessionID {
+			// Great! The session was already released or released and
+			// claimed by another server.
+			return nil
+		}
+
+		batch := txn.NewBatch()
+
+		value, err := readCodec.encodeAvailableValue()
+		if err != nil {
+			return err
+		}
+		batch.Put(key, value)
+
+		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
+			dualKey := dualCodec.encodeKey(region, instanceID)
+			dualValue, err := dualCodec.encodeAvailableValue()
+			if err != nil {
+				return err
+			}
+			batch.Put(dualKey, dualValue)
+		}
+
+		return txn.CommitInBatch(ctx, batch)
+	})
+}
+
 func (s *Storage) createInstanceRow(
 	ctx context.Context,
 	sessionID sqlliveness.SessionID,
