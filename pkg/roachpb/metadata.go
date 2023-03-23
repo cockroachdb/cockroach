@@ -595,6 +595,11 @@ func (l Locality) String() string {
 	return strings.Join(tiers, ",")
 }
 
+// Empty returns true if the tiers are empty.
+func (l Locality) Empty() bool {
+	return len(l.Tiers) == 0
+}
+
 // NonEmpty returns true if the tiers are non-empty.
 func (l Locality) NonEmpty() bool {
 	return len(l.Tiers) > 0
