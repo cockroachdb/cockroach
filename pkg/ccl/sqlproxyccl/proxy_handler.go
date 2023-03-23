@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
+	proxyproto "github.com/pires/go-proxyproto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -108,6 +109,11 @@ type ProxyOptions struct {
 	ThrottleBaseDelay time.Duration
 	// DisableConnectionRebalancing disables connection rebalancing for tenants.
 	DisableConnectionRebalancing bool
+	// RequireProxyProtocol changes the server's behavior to support the PROXY
+	// protocol (SQL=required, HTTP=best-effort). With this set to true, the
+	// PROXY info from upstream will be trusted on both HTTP and SQL, if the
+	// headers are allowed.
+	RequireProxyProtocol bool
 
 	// testingKnobs are knobs used for testing.
 	testingKnobs struct {
@@ -122,6 +128,9 @@ type ProxyOptions struct {
 
 		// balancerOpts is used to customize the balancer created by the proxy.
 		balancerOpts []balancer.Option
+
+		// validateProxyHeader is used to validate the PROXY header.
+		validateProxyHeader proxyproto.Validator
 
 		httpCancelErrHandler func(err error)
 	}
