@@ -208,12 +208,12 @@ FROM crdb_internal.%s_statistics_persisted
 
 // Common stmt and txn columns to sort on.
 const (
-	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
-	sortCPUTimeDesc        = `(statistics -> 'statistics' -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
-	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
-	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
-	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
-                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
+	sortSvcLatDesc         = `service_latency DESC`
+	sortCPUTimeDesc        = `cpu_sql_nanos DESC`
+	sortExecCountDesc      = `execution_count DESC`
+	sortContentionTimeDesc = `contention_time DESC`
+	sortPCTRuntimeDesc     = `total_estimated_execution_time DESC`
+	sortP99Desc            = `p99_latency DESC`
 )
 
 func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
@@ -225,7 +225,7 @@ func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 	case serverpb.StatsSortOptions_EXECUTION_COUNT:
 		return sortExecCountDesc
 	case serverpb.StatsSortOptions_P99_STMTS_ONLY:
-		return `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
+		return sortP99Desc
 	case serverpb.StatsSortOptions_CONTENTION_TIME:
 		return sortContentionTimeDesc
 	default:
