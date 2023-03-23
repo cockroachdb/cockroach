@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -243,6 +244,7 @@ func registerActiveRecord(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:       "activerecord",
 		Owner:      registry.OwnerSQLSessions,
+		Timeout:    5 * time.Hour,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},
