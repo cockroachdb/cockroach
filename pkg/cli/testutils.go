@@ -87,6 +87,11 @@ type TestCLIParams struct {
 	// TenantArgs will be used to initialize the test tenant. This should
 	// be set when the test needs to run in multitenant mode.
 	TenantArgs *base.TestTenantArgs
+
+	// SharedProcessTenantArgs will be used to initialize a test tenant that is
+	// running in the same process as the test server. This should be set when the
+	// test needs to run in multitenant mode.
+	SharedProcessTenantArgs *base.TestSharedProcessTenantArgs
 }
 
 // testTempFilePrefix is a sentinel marker to be used as the prefix of a
@@ -162,15 +167,27 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
-	if params.TenantArgs != nil {
+	if params.TenantArgs != nil && params.SharedProcessTenantArgs != nil {
+		c.fail(errors.AssertionFailedf("cannot set both TenantArgs and SharedProcessTenantArgs"))
+	}
+
+	if params.TenantArgs != nil || params.SharedProcessTenantArgs != nil {
 		if c.TestServer == nil {
 			c.fail(errors.AssertionFailedf("multitenant mode for CLI requires a DB server, try setting `NoServer` argument to false"))
 		}
+	}
+
+	if params.TenantArgs != nil {
 		if c.Insecure() {
 			params.TenantArgs.ForceInsecure = true
 		}
 		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, *params.TenantArgs)
 	}
+
+	if params.SharedProcessTenantArgs != nil {
+		c.tenant, _ = serverutils.StartSharedProcessTenant(c.t, c.TestServer, *params.SharedProcessTenantArgs)
+	}
+
 	baseCfg.User = username.NodeUserName()
 
 	// Ensure that CLI error messages and anything meant for the
