@@ -124,6 +124,7 @@ func registerRestore(r registry.Registry) {
 		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r),
 		Timeout: withPauseSpecs.timeout,
+		Tags:    []string{`aws`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			if c.Spec().Cloud != withPauseSpecs.backup.cloud {
@@ -274,6 +275,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			tags:     []string{"aws"},
 		},
 		{
 			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
@@ -295,6 +297,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			tags:     []string{"aws"},
 		},
 		{
 			// Benchmarks if per node throughput doubles if the vcpu count doubles
@@ -302,6 +305,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			tags:     []string{"aws"},
 		},
 		{
 			// Ensures we can restore a 48 length incremental chain.
@@ -309,6 +313,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup:   makeBackupSpecs(backupSpecs{backupsIncluded: 48}),
 			timeout:  1 * time.Hour,
+			tags:     []string{"aws"},
 		},
 		{
 			// The nightly 8TB Restore test.
@@ -317,6 +322,7 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
 			timeout: 5 * time.Hour,
+			tags:    []string{"aws"},
 		},
 		{
 			// The weekly 32TB Restore test.

@@ -13,6 +13,7 @@ package registry
 import (
 	"context"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -127,17 +128,19 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 	if !filter.Name.MatchString(t.Name) {
 		return FailedFilter
 	}
-	if len(t.Tags) == 0 {
-		if !filter.Tag.MatchString("default") {
-			return FailedTags
-		}
+
+	if len(filter.Tags) == 0 {
 		return Matched
 	}
-	for _, t := range t.Tags {
-		if filter.Tag.MatchString(t) {
+
+	testTags := stringSliceToSet(t.Tags)
+	for tag := range filter.Tags {
+		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
+		if matchesAll(testTags, strings.Split(tag, ",")) {
 			return Matched
 		}
 	}
+
 	return FailedTags
 }
 
@@ -147,4 +150,28 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 func PromSub(raw string) string {
 	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
 	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
+}
+
+func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
+	for _, tag := range filterTags {
+		negate := false
+		if tag[0] == '!' {
+			negate = true
+			tag = tag[1:]
+		}
+		_, tagExists := testTags[tag]
+
+		if negate == tagExists {
+			return false
+		}
+	}
+	return true
+}
+
+func stringSliceToSet(slice []string) map[string]struct{} {
+	set := make(map[string]struct{})
+	for _, s := range slice {
+		set[s] = struct{}{}
+	}
+	return set
 }
