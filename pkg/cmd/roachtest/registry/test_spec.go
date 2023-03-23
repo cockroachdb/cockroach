@@ -153,8 +153,15 @@ func PromSub(raw string) string {
 }
 
 func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
-	for _, s := range filterTags {
-		if _, ok := testTags[s]; !ok {
+	for _, tag := range filterTags {
+		negate := false
+		if tag[0] == '!' {
+			negate = true
+			tag = tag[1:]
+		}
+		_, tagExists := testTags[tag]
+
+		if negate == tagExists {
 			return false
 		}
 	}

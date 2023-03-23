@@ -67,6 +67,12 @@ func TestMatchOrSkip(t *testing.T) {
 		{[]string{"f", "tag:bar"}, "foo", []string{"bar"}, registry.Matched},
 		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, registry.FailedTags},
 		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
+		// Match tests that have both tags 'abc' and 'bar'
+		{[]string{"f", "tag:abc,bar"}, "foo", []string{"abc", "bar"}, registry.Matched},
+		{[]string{"f", "tag:abc,bar"}, "foo", []string{"abc"}, registry.FailedTags},
+		// Match tests that have tag 'abc' but not 'bar'
+		{[]string{"f", "tag:abc,!bar"}, "foo", []string{"abc"}, registry.Matched},
+		{[]string{"f", "tag:abc,!bar"}, "foo", []string{"abc", "bar"}, registry.FailedTags},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
