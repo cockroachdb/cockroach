@@ -13,8 +13,10 @@ package acceptance
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -109,6 +112,11 @@ func testDocker(
 			}()
 			hostConfig.Binds = append(hostConfig.Binds, interactivetestsDir+":/mnt/interactive_tests")
 		}
+
+		// Add a randomID to the container name to avoid overlap between tests running on
+		// different shards.
+		rnd := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		name = name + "-" + strconv.Itoa(rnd.Intn(10000000))
 
 		// Prepare the docker cluster.
 		// We need to do this "under" the directory preparation above so as

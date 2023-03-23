@@ -34,7 +34,8 @@ $BAZCI --artifacts_dir=$PWD/artifacts -- \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$PWD/artifacts/cockroach \
   --test_env=TZ=America/New_York \
-  --test_timeout=1800 || status=$?
+  --test_timeout=1800 || status=$? \
+  --profile=$PWD/artifacts/profile.gz
 
 # Some unit tests test automatic ballast creation. These ballasts can be
 # larger than the maximum artifact size. Remove any artifacts with the

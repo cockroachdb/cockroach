@@ -338,6 +338,7 @@
 /pkg/cmd/generate-binary/    @cockroachdb/sql-sessions
 /pkg/cmd/generate-distdir/ @cockroachdb/dev-inf
 /pkg/cmd/generate-logictest/       @cockroachdb/dev-inf
+/pkg/cmd/generate-acceptance-tests/       @cockroachdb/dev-inf
 /pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-sessions
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/spatial
 /pkg/cmd/generate-bazel-extra/ @cockroachdb/dev-inf

@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/randutil",  # keep
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_containerd_containerd//platforms",
         "@com_github_docker_docker//api/types",
@@ -37,9 +38,9 @@ go_test(
     size = "enormous",
     srcs = [
         "adapter_test.go",
-        "cli_test.go",
         "compose_test.go",
         "debug_remote_test.go",
+        "generated_cli_test.go",
         "main_test.go",
     ],
     args = ["-test.timeout=3595s"],
@@ -51,6 +52,7 @@ go_test(
     ],
     embed = [":acceptance"],
     gotags = ["acceptance"],
+    shard_count = 16,
     tags = ["integration"],
     deps = [
         "//pkg/acceptance/cluster",

@@ -18,10 +18,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -514,6 +516,10 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 // automatically, but exposed for tests that use INIT_NONE. nodeIdx
 // may designate any node in the cluster as the target of the command.
 func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
+	// Add a randomID to the container name to avoid overlap between tests running on
+	// different shards.
+	rnd := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	randomID := strconv.Itoa(rnd.Intn(10000000))
 	containerConfig := container.Config{
 		Image:      *cockroachImage,
 		Entrypoint: cockroachEntrypoint(),
@@ -521,14 +527,14 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 			"init",
 			"--certs-dir=/certs/",
 			"--host=" + l.Nodes[nodeIdx].nodeStr,
-			"--log-dir=/logs/init-command",
+			"--log-dir=/logs/init-command-" + randomID,
 			"--logtostderr=NONE",
 		},
 	}
 
 	log.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
 	maybePanic(l.OneShot(ctx, defaultImage, types.ImagePullOptions{},
-		containerConfig, container.HostConfig{}, platforms.DefaultSpec(), "init-command"))
+		containerConfig, container.HostConfig{}, platforms.DefaultSpec(), "init-command-"+randomID))
 	log.Info(ctx, "cluster successfully initialized")
 }
 
