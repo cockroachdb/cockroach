@@ -12,9 +12,12 @@ package acceptance
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -22,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
@@ -110,6 +114,16 @@ func testDocker(
 			hostConfig.Binds = append(hostConfig.Binds, interactivetestsDir+":/mnt/interactive_tests")
 		}
 
+		// Add a randomID to the container name to avoid overlap between tests running on
+		// different shards.
+		var nBig *big.Int
+		nBig, err = rand.Int(rand.Reader, big.NewInt(10000000))
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := nBig.Int64()
+		name = name + "-" + strconv.Itoa(int(n))
+
 		// Prepare the docker cluster.
 		// We need to do this "under" the directory preparation above so as
 		// to prevent the test from crashing because the directory gets
@@ -188,4 +202,56 @@ func testDockerOneShot(
 	ctx context.Context, t *testing.T, name string, containerConfig container.Config,
 ) error {
 	return testDocker(ctx, t, 0, name, containerConfig)
+}
+
+var cmdBase = []string{
+	"/usr/bin/env",
+	"COCKROACH_SKIP_UPDATE_CHECK=1",
+	"COCKROACH_CRASH_REPORTS=",
+	"/bin/bash",
+	"-c",
+}
+
+func runTestDockerCLI(t *testing.T, testNameSuffix, testFilePath string) {
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
+	containerConfig.Env = []string{
+		"CI=1", // Disables the initial color query by the termenv library.
+		fmt.Sprintf("PGUSER=%s", username.RootUser),
+	}
+	ctx := context.Background()
+	if err := testDockerOneShot(ctx, t, "cli_test_"+testNameSuffix, containerConfig); err != nil {
+		skip.IgnoreLintf(t, "TODO(dt): No binary in one-shot container, see #6086: %s", err)
+	}
+
+	containerPath := "/go/src/github.com/cockroachdb/cockroach/cli/interactive_tests"
+	if bazel.BuiltWithBazel() {
+		containerPath = "/mnt/interactive_tests"
+	}
+	testFile := filepath.Base(testFilePath)
+	testPath := filepath.Join(containerPath, testFile)
+	t.Run(testFile, func(t *testing.T) {
+		log.Infof(ctx, "-- starting tests from: %s", testFile)
+
+		// Symlink the logs directory to /logs, which is visible outside of the
+		// container and preserved if the test fails. (They don't write to /logs
+		// directly because they are often run manually outside of Docker, where
+		// /logs is unlikely to exist.)
+		cmd := "ln -s /logs logs"
+
+		// We run the expect command using 'bash -c "(expect ...)"'.
+		//
+		// We cannot run "expect" directly, nor "bash -c 'expect ...'",
+		// because both cause Expect to become the PID 1 process inside
+		// the container. On Unix, orphan processes need to be wait()ed
+		// upon by the PID 1 process when they terminate, lest they
+		// remain forever in the zombie state. Unfortunately, Expect
+		// does not contain code to do this. Bash does.
+		cmd += "; (expect -d -f " + testPath + " " + cluster.CockroachBinaryInContainer + ")"
+		containerConfig.Cmd = append(cmdBase, cmd)
+
+		if err := testDockerOneShot(ctx, t, "cli_test_"+testNameSuffix, containerConfig); err != nil {
+			t.Error(err)
+		}
+	})
 }
