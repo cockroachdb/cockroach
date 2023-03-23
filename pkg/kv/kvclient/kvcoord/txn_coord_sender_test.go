@@ -2615,7 +2615,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 // Check that ingesting an Aborted txn record is a no-op. The TxnCoordSender is
 // supposed to reject such updates because they risk putting it into an
 // inconsistent state. See comments in TxnCoordSender.UpdateRootWithLeafFinalState().
-func TestUpdateRoootWithLeafFinalStateInAbortedTxn(t *testing.T) {
+func TestUpdateRootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := createTestDBWithKnobs(t, nil /* knobs */)
