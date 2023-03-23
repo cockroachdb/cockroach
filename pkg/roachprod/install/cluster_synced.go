@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -2384,8 +2385,11 @@ func scp(src, dest string) (*RunResultDetails, error) {
 	args := []string{
 		"scp",
 		// ssh to src then scp dsc mode, use agent forwarding, recursive, compression
-		"-R", "-A", "-r", "-C",
+		"-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
+	}
+	if runtime.GOOS == "darwin" {
+		args = append(args, []string{"-R", "-A"}...)
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
