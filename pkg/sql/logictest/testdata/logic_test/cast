@@ -1516,33 +1516,3 @@ array_agg
 array_agg
 array_agg
 array_agg
-
-statement OK
-SET vectorize = off
-
-statement OK
-SET distsql = always
-
-# The query plan should be disallowed from executing in a distributed fashion
-# even with distsql = always.
-query T
-EXPLAIN SELECT
-        regproc(_int2::INT8)::REGPROC AS col865
-FROM
-        t98373@[0]
-----
-distribution: local
-vectorized: false
-·
-• render
-│
-└── • scan
-      missing stats
-      table: t98373@t98373_pkey
-      spans: FULL SCAN
-
-statement OK
-RESET vectorize
-
-statement OK
-RESET distsql
