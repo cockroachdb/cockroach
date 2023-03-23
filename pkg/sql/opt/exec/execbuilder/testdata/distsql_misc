@@ -126,3 +126,66 @@ vectorized: true
   spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0GL00AUx-9-iuF_UnkhnST1kJOyVijUbm16UCTIbOa5BtNMnJmAUvrdJamwVraS7VwG5r388v_lkXeA-9Egx-LjZvVmuRbP3y6LXfFhRWL3abMoXohisVrc7MRL8W57-15o5RUIrdG8Vnt2yD9DgpCAkIKQgTBHSeisqdg5Y4dHDiOw1D-Rzwh12_V-KJeEylhGfoCvfcPIsVN3DW9ZabbxDATNXtXNGDNEvx6OL913_gXCjWn6fetyoUjckahIaBCKTg21KJZCtVpIYfw3tiiPBNP7h2Tn1T0jl0e6YPcg1bfGarasz4Xq1oP-nF8bo_zYruq9alAeH_m4tYlMF8_P3nLJKznzktOnJkOmFssoTq6YWzLdLwnyS6I4vcIvne6XBvmlUZxd4ZdN98uC_LIongfuxSN-W3adaR1P-rNnw2qwvufTkjnT24o31lRjzOl6O3JjQbPzp648XZbt2BoF_4blf-FXZ_DsXzgJSU5D4CwEnj8JLo_PfgcAAP__LXzooA==
+
+subtest regression_98373
+
+statement ok
+CREATE TABLE IF NOT EXISTS t98373 AS
+        SELECT
+                g::INT2 AS _int2,
+                g::INT4 AS _int4,
+                g::INT8 AS _int8,
+                g::FLOAT8 AS _float8,
+                '2001-01-01'::DATE + g AS _date,
+                '2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp
+        FROM
+                generate_series(1, 5) AS g;
+
+statement OK
+SET vectorize = off
+
+statement OK
+SET distsql = always
+
+# These query plans should be disallowed from executing in a distributed
+# fashion, even with distsql = always. Check different flavors of EXPLAIN.
+
+query T
+EXPLAIN SELECT
+        regproc(_int2::INT8)::REGPROC AS col865
+FROM
+        t98373@[0]
+----
+distribution: local
+vectorized: false
+·
+• render
+│
+└── • scan
+      missing stats
+      table: t98373@t98373_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN(DISTSQL) SELECT
+        regproc(_int2::INT8)::REGPROC AS col865
+FROM
+        t98373@[0]
+----
+distribution: local
+vectorized: false
+·
+• render
+│
+└── • scan
+      missing stats
+      table: t98373@t98373_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkFFL-zAUxd__nyKcpw3yx9ahzjxtzCqFuc22D8IoozaXUeySmqSglH53aTMUHwSfwjk3Ofd30sG-1RCInnfrZbxhk7s4zdKn9ZSl0TpaZczQsTG6nBwq5S6FiDfZfCpEEj3sku2KLVNW6np-fcXuk-0jc7fz2c1ssQ9ycCgtaVOcyELsESLnGILIWm0GqxsvxPIdIuCoVNO6wc45Sm0IooOrXE0QyIqXmhIqJJmLABySXFHVY-x5oT8OzSt9gGOl6_akrGAjMzjSphjkf3AkpCQZ8VVrEZ47Ie85dOu-MawrjgQR9vzvqAnZRitLPyh_Sw76nIPkkfx3WN2aknZGl-MaL7fju9GQZJ2fhl7Eyo_6vP_3GQAA__92U5BK
+
+statement OK
+RESET vectorize
+
+statement OK
+RESET distsql
