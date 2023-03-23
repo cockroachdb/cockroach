@@ -1138,3 +1138,34 @@ statement ok
 USE test;
 DROP DATABASE d;
 DROP FUNCTION fn;
+
+# Regression test for #97757 - invalidate the query cache after changes to the
+# search path cause a function call to resolve to a UDF when it previously
+# resolved to a builtin function.
+subtest invalidate-builtin
+
+statement ok
+CREATE FUNCTION public.abs(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val+100 $$;
+
+query I
+SELECT abs(1);
+----
+1
+
+statement ok
+SET search_path = public, pg_catalog;
+
+# This should use the UDF abs which returns 101.
+query I
+SELECT abs(1);
+----
+101
+
+statement ok
+RESET search_path;
+
+# This should use the builtin abs again.
+query I
+SELECT abs(1);
+----
+1
