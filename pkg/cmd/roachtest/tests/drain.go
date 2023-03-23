@@ -50,7 +50,16 @@ func registerDrain(r registry.Registry) {
 			Owner:   registry.OwnerSQLExperience,
 			Cluster: r.MakeClusterSpec(1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runTestWarningForConnWait(ctx, t, c)
+				runWarningForConnWait(ctx, t, c)
+			},
+		})
+
+		r.Add(registry.TestSpec{
+			Name:    "drain/not-at-quorum",
+			Owner:   registry.OwnerSQLExperience,
+			Cluster: r.MakeClusterSpec(3),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runClusterNotAtQuorum(ctx, t, c)
 			},
 		})
 	}
@@ -205,9 +214,9 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 }
 
-// runTestWarningForConnWait is to verify a warning exists in the case that
+// runWarningForConnWait is to verify a warning exists in the case that
 // connectionWait expires.
-func runTestWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) {
+func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) {
 	var err error
 	const (
 		// Set the duration of the draining period.
@@ -298,6 +307,39 @@ func runTestWarningForConnWait(ctx context.Context, t test.Test, c cluster.Clust
 	require.NoError(t, err, "warning is not logged in the log file")
 }
 
+// runClusterNotAtQuorum is to verify that draining works even when the cluster
+// is not at quorum.
+func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	db := c.Conn(ctx, t.L(), 1)
+	defer func() { _ = db.Close() }()
+
+	err = WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
+
+	stopOpts := option.DefaultStopOpts()
+	stopOpts.RoachprodOpts.Sig = 9 // SIGKILL
+
+	c.Stop(ctx, t.L(), stopOpts, c.Node(1))
+	c.Stop(ctx, t.L(), stopOpts, c.Node(2))
+
+	t.Status("start draining node 3")
+	// Ignore the error, since the command is expected to time out.
+	results, _ := c.RunWithDetailsSingleNode(
+		ctx,
+		t.L(),
+		c.Node(3),
+		"./cockroach node drain --self --insecure --drain-wait=10s",
+	)
+	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
+	require.Contains(t, results.Stderr, "could not check drain related cluster settings")
+}
+
 // prepareCluster is to start the server on nodes in the given cluster, and set
 // the cluster setting for duration of each phase of the draining process.
 func prepareCluster(
@@ -310,7 +352,9 @@ func prepareCluster(
 ) {
 	var err error
 	err = c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err, "cannot mount cockroach binary")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
