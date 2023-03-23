@@ -304,6 +304,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemStatisticsActivityTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"drop the payload and progress columns from the system.jobs table",
+		toCV(clusterversion.V23_1DropPayloadAndProgressColumnsFromJobsTable),
+		upgrade.NoPrecondition,
+		dropPayloadProgressFromJobsTable),
 }
 
 func init() {

@@ -349,7 +349,7 @@ SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'key', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'endKey', 'base64'), 0)
 FROM (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM crdb_internal.system_jobs
 ) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
 ----
 /103/Table/114/1  /103/Table/114/1/100  /114/1/100  /114/2

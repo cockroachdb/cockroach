@@ -17,6 +17,7 @@ go_library(
         "delete_descriptors_of_dropped_functions.go",
         "desc_id_sequence_for_system_tenant.go",
         "descriptor_utils.go",
+        "drop_payload_progress_migration.go",
         "ensure_sql_schema_telemetry_schedule.go",
         "external_connections_table_user_id_migration.go",
         "fix_userfile_descriptor_corruption.go",

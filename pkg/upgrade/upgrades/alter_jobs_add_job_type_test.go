@@ -65,6 +65,7 @@ func TestCreateAdoptableJobPopulatesJobType(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
+					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.V23_1AddTypeColumnToJobsTable),
@@ -128,8 +129,6 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 		}
 	)
 
-	// Inject the old copy of the descriptor and validate that the schema matches the old version.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.JobsTable, getJobsTableDescriptorPriorToV23_1AddTypeColumnToJobsTable)
 	upgrades.ValidateSchemaExists(
 		ctx,
 		t,
@@ -169,6 +168,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	}, false)
 
 	// Run the upgrade which adds the job_type column.
+	log.Info(ctx, "running the upgrade")
 	upgrades.Upgrade(
 		t,
 		sqlDB,
@@ -184,6 +184,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, count, 0)
 
+	log.Info(ctx, "validate that the schema exists")
 	upgrades.ValidateSchemaExists(
 		ctx,
 		t,

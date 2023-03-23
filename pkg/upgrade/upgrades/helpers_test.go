@@ -146,7 +146,7 @@ func ValidateSchemaExists(
 		updated, err := schema.ValidationFn(storedTable, expectedTable, schema.Name)
 		require.NoError(t, err)
 		require.Equal(t, expectExists, updated,
-			"expected table to %s %s (name=%s)", str, schema, schema.Name)
+			"expected table to %s %s (name=%s)", str, schema.ValidationFn, schema.Name)
 	}
 }
 

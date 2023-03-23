@@ -338,6 +338,7 @@ func testMigrationWithFailures(
 					Settings: settings,
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
+							BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          startCV,
 						},

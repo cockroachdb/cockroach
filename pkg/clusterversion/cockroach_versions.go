@@ -510,6 +510,11 @@ const (
 	// that are optimized for the console.
 	V23_1AddSystemActivityTables
 
+	// V23_1DropPayloadAndProgressColumnsFromJobsTable is the version where the
+	// payload and progress columns are dropped from system.jobs since they are
+	// now written to system.job_info instead.
+	V23_1DropPayloadAndProgressColumnsFromJobsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -882,6 +887,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AddSystemActivityTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     V23_1DropPayloadAndProgressColumnsFromJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
 	},
 
 	// *************************************************

@@ -227,7 +227,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	} else {
 		// The stale read said that the upgrades had not run. Let's try a consistent read too since
 		log.Infof(ctx,
-			"the last last permanent upgrade (v%s) does not appear to have completed; attempting to run all upgrades",
+			"the last permanent upgrade (v%s) does not appear to have completed; attempting to run all upgrades",
 			lastVer)
 	}
 
@@ -358,6 +358,7 @@ func (m *Manager) Migrate(
 		log.Infof(ctx, "no need to migrate, cluster already at newest version")
 		return nil
 	}
+	log.Infof(ctx, "MIGRATING")
 
 	// Validation functions for updating the settings table. We use this in the
 	// tenant upgrade case to ensure that no new SQL servers were started
@@ -756,7 +757,7 @@ SELECT id, status
 			payload,
       false -- emit_defaults
 		) AS pl
-	FROM system.jobs
+	FROM crdb_internal.system_jobs
   WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
 	)
 	WHERE pl->'migration'->'clusterVersion' = $1::JSON;`

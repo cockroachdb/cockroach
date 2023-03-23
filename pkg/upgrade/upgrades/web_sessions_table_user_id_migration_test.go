@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -55,15 +54,8 @@ func runTestWebSessionsUserIDMigration(t *testing.T, numUsers int) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn-1),
-		false, /* initializeVersion */
-	)
-
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

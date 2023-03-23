@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -126,6 +127,7 @@ func NewPermanentTenantUpgrade(
 
 // Run kick-starts the actual upgrade process for tenant-level upgrades.
 func (m *TenantUpgrade) Run(ctx context.Context, v roachpb.Version, d TenantDeps) error {
+	log.Infof(ctx, "amaru upgrade=%s", v)
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
 	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d)
 }

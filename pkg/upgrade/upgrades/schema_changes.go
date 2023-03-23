@@ -345,10 +345,12 @@ func hasColumnFamily(
 	storedFamilyCols := storedFamily.ColumnNames
 	expectedFamilyCols := expectedFamily.ColumnNames
 	if len(storedFamilyCols) != len(expectedFamilyCols) {
+		log.Infof(context.Background(), "FAILING HERE %v and %v", storedFamilyCols, expectedFamilyCols)
 		return false, nil
 	}
 	for i, storedCol := range storedFamilyCols {
 		if storedCol != expectedFamilyCols[i] {
+			log.Infof(context.Background(), "FAILING HERE %s vs %s", storedCol, expectedFamilyCols[i])
 			return false, nil
 		}
 	}

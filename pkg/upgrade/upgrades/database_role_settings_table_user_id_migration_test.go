@@ -63,6 +63,7 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
+					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn - 1),
 				},
