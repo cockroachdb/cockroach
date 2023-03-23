@@ -31,43 +31,71 @@ var _ = kvtenantccl.Connector{}
 // TestTenantZip tests the operation of zip for a tenant server.
 func TestTenantZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	skip.UnderRace(t, "test too slow under race")
-	tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
-	defer tenantDirCleanupFn()
-	tenantArgs := base.TestTenantArgs{
-		TenantID:             serverutils.TestTenantID(),
-		HeapProfileDirName:   tenantDir,
-		GoroutineDumpDirName: tenantDir,
-	}
 
-	hostDir, hostDirCleanupFn := testutils.TempDir(t)
-	defer hostDirCleanupFn()
-	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: hostDir,
-		}},
-		// TODO(abarganier): Switch to secure mode once underlying infra has been
-		// updated to support it. See: https://github.com/cockroachdb/cockroach/issues/77173
-		Insecure:   true,
-		TenantArgs: &tenantArgs,
-	})
-	defer c.Cleanup()
-
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Strip any non-deterministic messages.
-	out = eraseNonDeterministicZipOutput(out)
-
-	// We use datadriven simply to read the golden output file; we don't actually
-	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t,
-		datapathutils.TestDataPath(t, "zip", "testzip_tenant"),
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
+	tenants := []struct {
+		testName      string
+		addTenantArgs func(params TestCLIParams) TestCLIParams
+	}{
+		{
+			testName: "testzip_tenant_separate_process",
+			addTenantArgs: func(params TestCLIParams) TestCLIParams {
+				tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
+				defer tenantDirCleanupFn()
+				tenantArgs := base.TestTenantArgs{
+					TenantID:             serverutils.TestTenantID(),
+					HeapProfileDirName:   tenantDir,
+					GoroutineDumpDirName: tenantDir,
+				}
+				params.TenantArgs = &tenantArgs
+				return params
+			},
 		},
-	)
+		{
+			testName: "testzip_shared_process_tenant",
+			addTenantArgs: func(params TestCLIParams) TestCLIParams {
+				sharedProcessTenantArgs := base.TestSharedProcessTenantArgs{
+					TenantName: "test-tenant",
+					TenantID:   serverutils.TestTenantID(),
+				}
+				params.SharedProcessTenantArgs = &sharedProcessTenantArgs
+				params.TargetSystemTenant = true
+				return params
+			},
+		},
+	}
+
+	for _, tenant := range tenants {
+		tenant := tenant // loop var capture
+		t.Run(tenant.testName, func(t *testing.T) {
+			hostDir, hostDirCleanupFn := testutils.TempDir(t)
+			defer hostDirCleanupFn()
+			c := NewCLITest(tenant.addTenantArgs(TestCLIParams{
+				StoreSpecs: []base.StoreSpec{{
+					Path: hostDir,
+				}},
+				// TODO(abarganier): Switch to secure mode once underlying infra has been
+				// updated to support it. See: https://github.com/cockroachdb/cockroach/issues/77173
+				Insecure: true,
+			}))
+			defer c.Cleanup()
+
+			out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Strip any non-deterministic messages.
+			out = eraseNonDeterministicZipOutput(out)
+
+			// We use datadriven simply to read the golden output file; we don't actually
+			// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
+			datadriven.RunTest(t,
+				datapathutils.TestDataPath(t, "zip", tenant.testName),
+				func(t *testing.T, td *datadriven.TestData) string {
+					return out
+				},
+			)
+		})
+	}
 }
