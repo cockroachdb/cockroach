@@ -2308,9 +2308,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	rdbLevelSize := storageLevelGaugeSlice(metaRdbLevelSize)
 	rdbLevelScore := storageLevelGaugeFloat64Slice(metaRdbLevelScores)
 
+	tsm := newTenantsStorageMetrics()
+	storeRegistry.AddMetricStruct(tsm)
 	sm := &StoreMetrics{
 		registry:              storeRegistry,
-		TenantsStorageMetrics: newTenantsStorageMetrics(),
+		TenantsStorageMetrics: tsm,
 		LoadSplitterMetrics: &split.LoadSplitterMetrics{
 			PopularKeyCount: metric.NewCounter(metaPopularKeyCount),
 			NoSplitKeyCount: metric.NewCounter(metaNoSplitKeyCount),
