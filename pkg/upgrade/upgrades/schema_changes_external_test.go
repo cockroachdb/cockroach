@@ -174,8 +174,6 @@ CREATE TABLE test.test_table (
 // alters a column in a table multiple times with failures at different stages
 // of the migration.
 func TestMigrationWithFailuresMultipleAltersOnSameColumn(t *testing.T) {
-	skip.WithIssue(t, 98991)
-
 	const createTableBefore = `
 CREATE TABLE test.test_table (
    username STRING NOT NULL
