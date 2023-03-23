@@ -2685,6 +2685,7 @@ declare_cursor_statement_timeout_enabled              on                  NULL  
 default_int_size                                      8                   NULL      NULL        NULL        string
 default_table_access_method                           heap                NULL      NULL        NULL        string
 default_tablespace                                    ·                   NULL      NULL        NULL        string
+default_text_search_config                            pg_catalog.english  NULL      NULL        NULL        string
 default_transaction_isolation                         serializable        NULL      NULL        NULL        string
 default_transaction_priority                          normal              NULL      NULL        NULL        string
 default_transaction_quality_of_service                regular             NULL      NULL        NULL        string
@@ -2835,6 +2836,7 @@ declare_cursor_statement_timeout_enabled              on                  NULL  
 default_int_size                                      8                   NULL  user     NULL      8                   8
 default_table_access_method                           heap                NULL  user     NULL      heap                heap
 default_tablespace                                    ·                   NULL  user     NULL      ·                   ·
+default_text_search_config                            pg_catalog.english  NULL  user     NULL      pg_catalog.english  pg_catalog.english
 default_transaction_isolation                         serializable        NULL  user     NULL      default             default
 default_transaction_priority                          normal              NULL  user     NULL      normal              normal
 default_transaction_quality_of_service                regular             NULL  user     NULL      regular             regular
@@ -2981,6 +2983,7 @@ declare_cursor_statement_timeout_enabled              NULL    NULL     NULL     
 default_int_size                                      NULL    NULL     NULL     NULL        NULL
 default_table_access_method                           NULL    NULL     NULL     NULL        NULL
 default_tablespace                                    NULL    NULL     NULL     NULL        NULL
+default_text_search_config                            NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation                         NULL    NULL     NULL     NULL        NULL
 default_transaction_priority                          NULL    NULL     NULL     NULL        NULL
 default_transaction_quality_of_service                NULL    NULL     NULL     NULL        NULL

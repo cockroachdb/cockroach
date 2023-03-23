@@ -4,10 +4,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tsearch",
     srcs = [
+        "config.go",
         "encoding.go",
         "eval.go",
         "lex.go",
         "random.go",
+        "rank.go",
         "snowball.go",
         "stopwords.go",
         "tsquery.go",
@@ -62,6 +64,7 @@ go_test(
     srcs = [
         "encoding_test.go",
         "eval_test.go",
+        "rank_test.go",
         "tsquery_test.go",
         "tsvector_test.go",
     ],
