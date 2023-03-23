@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins" // register all builtins in builtins:init() for memo package
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -349,6 +350,28 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 				panic(err)
 			}
 			return f.ConstructConstVal(d, placeholder.DataType())
+		}
+		// A recursive CTE may have the stats change on its Initial expression
+		// after placeholder assignment, if that happens we need to
+		// propagate that change to the Binding expression and rebuild
+		// everything.
+		if rcte, ok := e.(*memo.RecursiveCTEExpr); ok {
+			newInitial := f.CopyAndReplaceDefault(rcte.Initial, replaceFn).(memo.RelExpr)
+			if newInitial != rcte.Initial {
+				newBinding := f.ConstructFakeRel(&memo.FakeRelPrivate{
+					Props: MakeBindingPropsForRecursiveCTE(
+						props.AnyCardinality, rcte.Binding.Relational().OutputCols,
+						newInitial.Relational().Statistics().RowCount)})
+				if id := rcte.WithBindingID(); id != 0 {
+					f.Metadata().AddWithBinding(id, newBinding)
+				}
+				return f.ConstructRecursiveCTE(
+					newBinding,
+					newInitial,
+					f.invokeReplace(rcte.Recursive, replaceFn).(memo.RelExpr),
+					&rcte.RecursiveCTEPrivate,
+				)
+			}
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
