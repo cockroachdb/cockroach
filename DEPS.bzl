@@ -7117,10 +7117,10 @@ def go_deps():
         name = "com_github_pires_go_proxyproto",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pires/go-proxyproto",
-        sha256 = "ad00aa7f321a1b560d2c6fb33f0bfaf2a0ce056a25c9a756cbd198b655fcbbf9",
-        strip_prefix = "github.com/pires/go-proxyproto@v0.0.0-20191211124218-517ecdf5bb2b",
+        sha256 = "5ba5921ebf2f5d1186268740ebf6e594e4512fcbb503f2974b1038781a5920f8",
+        strip_prefix = "github.com/pires/go-proxyproto@v0.7.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pires/go-proxyproto/com_github_pires_go_proxyproto-v0.0.0-20191211124218-517ecdf5bb2b.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pires/go-proxyproto/com_github_pires_go_proxyproto-v0.7.0.zip",
         ],
     )
     go_repository(

@@ -83,6 +83,13 @@ func (d *TestSimpleDirectoryServer) ListPods(
 func (d *TestSimpleDirectoryServer) WatchPods(
 	req *tenant.WatchPodsRequest, server tenant.Directory_WatchPodsServer,
 ) error {
+	ctx := server.Context()
+	select {
+	case <-ctx.Done():
+		// Insted of returning right away, we block until context is done.
+		// This prevents the proxy server from constantly trying to establish
+		// a watch in test environments, causing spammy logs.
+	}
 	return nil
 }
 
