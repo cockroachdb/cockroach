@@ -961,7 +961,7 @@ func splitRangeKeySSTAtKey(
 		if err := writer.Finish(); err != nil {
 			return err
 		}
-		leftRet = &rangeKeySST{start: first, end: last.Next(), data: left.Data()}
+		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
 		writer = storage.MakeIngestionSSTWriter(ctx, st, right)
 		last = nil
 		first = nil
@@ -1041,6 +1041,7 @@ func splitRangeKeySSTAtKey(
 		}
 
 		last = append(last[:0], rangeKeys.Bounds.EndKey...)
+		last = last.Next()
 		for _, rk := range rangeKeys.AsRangeKeys() {
 			if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
 				return nil, nil, err
@@ -1052,7 +1053,7 @@ func splitRangeKeySSTAtKey(
 	if err := writer.Finish(); err != nil {
 		return nil, nil, err
 	}
-	rightRet = &rangeKeySST{start: first, end: last.Next(), data: right.Data()}
+	rightRet = &rangeKeySST{start: first, end: last, data: right.Data()}
 
 	return leftRet, rightRet, nil
 }
