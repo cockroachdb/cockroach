@@ -25,11 +25,19 @@ import {
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
 import moment from "moment";
+import { SqlStatsSortOptions } from "../api";
 
 const getEmptyData = () =>
   extend({}, data, { transactions: [], statements: [] });
 
 const lastUpdated = moment.utc();
+
+const defaultReqParaProps = {
+  limit: 100,
+  reqSortSetting: SqlStatsSortOptions.PCT_RUNTIME,
+  onChangeLimit: noop,
+  onChangeReqSort: noop,
+};
 
 storiesOf("Transactions Page", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
@@ -56,6 +64,7 @@ storiesOf("Transactions Page", module)
       lastUpdated={lastUpdated}
       isDataValid={true}
       isReqInFlight={false}
+      {...defaultReqParaProps}
     />
   ))
   .add("without data", () => {
@@ -79,6 +88,7 @@ storiesOf("Transactions Page", module)
         lastUpdated={lastUpdated}
         isDataValid={true}
         isReqInFlight={false}
+        {...defaultReqParaProps}
       />
     );
   })
@@ -110,6 +120,7 @@ storiesOf("Transactions Page", module)
         lastUpdated={lastUpdated}
         isDataValid={true}
         isReqInFlight={false}
+        {...defaultReqParaProps}
       />
     );
   })
@@ -134,6 +145,7 @@ storiesOf("Transactions Page", module)
         lastUpdated={lastUpdated}
         isDataValid={true}
         isReqInFlight={true}
+        {...defaultReqParaProps}
       />
     );
   })
@@ -165,6 +177,7 @@ storiesOf("Transactions Page", module)
         lastUpdated={lastUpdated}
         isDataValid={false}
         isReqInFlight={false}
+        {...defaultReqParaProps}
       />
     );
   });
