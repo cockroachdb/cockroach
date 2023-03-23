@@ -64,3 +64,14 @@
     )
     $private
 )
+
+# ReapplyBindingRowCount propagates stats changed after assign-placeholders.
+[ReapplyBindingRowCount, Normalize]
+(RecursiveCTE
+    $binding:*
+    $initial:* & (RowCountDifferent $binding $initial)
+    $recursive:*
+    $private:*
+)
+=>
+(ReapplyBindingRowCount $binding $initial $recursive $private)

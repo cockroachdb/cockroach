@@ -297,3 +297,46 @@ func (c *CustomFuncs) CanAddRecursiveLimit(
 func (c *CustomFuncs) GetRecursiveWithID(private *memo.RecursiveCTEPrivate) opt.WithID {
 	return private.WithID
 }
+
+func (c *CustomFuncs) ReapplyBindingRowCount(
+	binding, initial, recursive memo.RelExpr, private *memo.RecursiveCTEPrivate,
+) memo.RelExpr {
+	// The properties of the binding are tricky: the recursive expression is
+	// invoked repeatedly and these must hold each time. We can't use the initial
+	// expression's properties directly, as those only hold the first time the
+	// recursive query is executed. We don't really know the input row count,
+	// except for the first time we run the recursive query. We don't have
+	// anything better though.
+	card := initial.Relational().Cardinality.Union(recursive.Relational().Cardinality)
+	newRowCount := initial.Relational().Statistics().RowCount
+	newBinding := c.f.ConstructFakeRel(&memo.FakeRelPrivate{
+		Props: MakeBindingPropsForRecursiveCTE(card, binding.Relational().OutputCols, newRowCount),
+	})
+
+	// Re-optimize the recursive branch with the new properties.
+	withID := private.WithID
+	newWithID := c.f.Memo().NextWithID()
+	c.f.Metadata().AddWithBinding(newWithID, newBinding)
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if e == binding {
+			return newBinding
+		}
+		if withScan, ok := e.(*memo.WithScanExpr); ok && withScan.With == withID {
+			// Reconstruct the with scan using the new binding.
+			newPrivate := withScan.WithScanPrivate
+			newPrivate.With = newWithID
+			newPrivate.ID = c.f.Metadata().NextUniqueID()
+			return c.f.ConstructWithScan(&newPrivate)
+		}
+		return c.f.Replace(e, replace)
+	}
+	newRecursive := replace(recursive).(memo.RelExpr)
+	newPrivate := *private
+	newPrivate.WithID = newWithID
+	return c.f.ConstructRecursiveCTE(newBinding, initial, newRecursive, &newPrivate)
+}
+
+func (c *CustomFuncs) RowCountDifferent(binding, initial memo.RelExpr) bool {
+	return initial.Relational().Statistics().RowCount != binding.Relational().Statistics().RowCount
+}
