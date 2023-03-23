@@ -55,6 +55,7 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     embed = [":tenant"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

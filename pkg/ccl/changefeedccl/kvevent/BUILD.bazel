@@ -43,6 +43,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":kvevent"],
+    tags = ["ccl_test"],
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/keys",
