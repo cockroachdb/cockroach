@@ -126,7 +126,8 @@ func (s *txnSeqNumAllocator) populateLeafFinalState(tfs *roachpb.LeafTxnFinalSta
 // importLeafFinalState is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) importLeafFinalState(
 	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
-) {
+) error {
+	return nil
 }
 
 // stepLocked bumps the read seqnum to the current write seqnum.

@@ -110,7 +110,7 @@ type TxnSender interface {
 
 	// UpdateRootWithLeafFinalState updates a RootTxn using the final
 	// state of a LeafTxn.
-	UpdateRootWithLeafFinalState(context.Context, *roachpb.LeafTxnFinalState)
+	UpdateRootWithLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) error
 
 	// SetUserPriority sets the txn's priority.
 	SetUserPriority(roachpb.UserPriority) error

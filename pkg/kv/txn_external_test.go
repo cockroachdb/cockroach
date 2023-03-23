@@ -578,3 +578,65 @@ func TestRevScanAndGet(t *testing.T) {
 		require.NoError(t, txn.Run(ctx, b))
 	}
 }
+
+// TestUpdateRootWithLeafStateReadsBelowRefreshTimestamp ensures that if a leaf
+// transaction has performed reads below the root transaction's refreshed
+// timestamp an assertion error is returned. Note that the construction here
+// involves concurrent use of a root and leaf txn, which is not allowed by the
+// Txn API.
+//
+// This test codifies the desired behavior described in
+// https://github.com/cockroachdb/cockroach/issues/99255.
+func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	performConflictingRead := func(ctx context.Context, key roachpb.Key) (hlc.Timestamp, error) {
+		conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		if _, err := conflictTxn.Get(ctx, key); err != nil {
+			return hlc.Timestamp{}, err
+		}
+		if err := conflictTxn.Commit(ctx); err != nil {
+			return hlc.Timestamp{}, err
+		}
+		return conflictTxn.CommitTimestamp(), nil
+	}
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Perform a read to set the timestamp.
+		_, err := txn.Get(ctx, keyA)
+		require.NoError(t, err)
+		// Fork off a leaf transaction before the root is refreshed.
+		leafInputState := txn.GetLeafTxnInputState(ctx)
+		leafTxn := kv.NewLeafTxn(ctx, db, 0, leafInputState)
+
+		readTS, err := performConflictingRead(ctx, keyB)
+		require.NoError(t, err)
+		require.True(t, leafTxn.TestingCloneTxn().ReadTimestamp.Less(readTS))
+
+		// Write to KeyB using the root transaction. This should cause the timestamp
+		// to get bumped, which we will refresh to further down.
+		err = txn.Put(ctx, keyB, "garbage")
+		require.NoError(t, err)
+		err = txn.ManualRefresh(ctx)
+		require.NoError(t, err)
+
+		// Finally, try and update the root with the leaf transaction's state.
+		finalState, err := leafTxn.GetLeafTxnFinalState(ctx)
+		require.NoError(t, err)
+		err = txn.UpdateRootWithLeafFinalState(ctx, finalState)
+		require.Error(t, err)
+		require.True(t, errors.IsAssertionFailure(err), "%+v", err)
+		require.Regexp(
+			t, "attempting to append refresh spans after the tracked timestamp has moved forward", err,
+		)
+		return nil
+	})
+	require.NoError(t, err)
+}
