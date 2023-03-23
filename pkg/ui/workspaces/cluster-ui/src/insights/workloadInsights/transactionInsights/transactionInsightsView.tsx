@@ -51,7 +51,7 @@ import { TxnInsightsRequest } from "src/api";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
-import { useFetchDataWithPolling } from "src/util/hooks";
+import { useScheduleFunction } from "src/util/hooks";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { insights } from "src/util";
 import { Anchor } from "src/anchor";
@@ -122,13 +122,16 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   }, [refreshTransactionInsights, timeScale]);
 
   const shouldPoll = timeScale.key !== "Custom";
-  const clearPolling = useFetchDataWithPolling(
+  const [refetch, clearPolling] = useScheduleFunction(
     refresh,
-    isDataValid,
-    lastUpdated,
-    shouldPoll,
+    shouldPoll, // Don't reschedule refresh if we have a custom time interval.
     10 * 1000, // 10s polling interval
+    lastUpdated,
   );
+
+  useEffect(() => {
+    if (!isDataValid) refetch();
+  }, [isDataValid, refetch]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),

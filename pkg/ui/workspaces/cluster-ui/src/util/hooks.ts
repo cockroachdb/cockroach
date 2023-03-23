@@ -15,70 +15,87 @@ export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
   useEffect(() => {
     ref.current = value;
-  });
+  }, [value]);
   return ref.current;
 };
 
-const MIN_REQUEST_DELAY_MS = 1000;
+const MIN_REQUEST_DELAY_MS = 500;
+
+type VoidFunction = () => void;
 
 /**
- * useFetchDataWithPolling allows the setup of making data requests with optional polling.
- * Data will automatically be fetched when the data is not valid or was never updated.
- * Requests will be made at most once per polling interval.
+ * useScheduleFunction allows the scheduling of a function call at an interval.
+ * It will be scheduled as follows:
+ * 1. Call immediately if
+ *        - `scheduleNow` callback is used
+ *        - last completed time is not set
+ * 2. Otherwise, reschedule the function if shouldReschedule is true  based on the
+ * last completed time and the scheduleInterval provided.
+ *
  * @param callbackFn The call back function to be called at the provided interval.
- * @param pollingIntervalMs interval in ms to fetch data
- * @param isDataValid whether the current dasta is valid, if the data is not valid we fetch immediately
- * @param shouldPoll whether we should setup polling
- * @param lastUpdated the time the data was last updated
- * @returns a function to stop polling
+ * @param scheduleIntervalMs scheduling interval in millis
+ * @param shouldReschedule whether we should continue to reschedule the function after completion
+ * @param lastCompleted the time the function was last completed
+ * @returns a tuple containing a function to schedule the function immediately (clearing the prev schedule)
+ * and a function to clear the schedule
  */
-export const useFetchDataWithPolling = (
+export const useScheduleFunction = (
   callbackFn: () => void,
-  isDataValid: boolean,
-  lastUpdated: moment.Moment,
-  shouldPoll: boolean,
-  pollingIntervalMs: number | null,
-): (() => void) => {
+  shouldReschedule: boolean,
+  scheduleIntervalMs: number | null,
+  lastCompleted: moment.Moment | null,
+): [VoidFunction, VoidFunction] => {
   const lastReqMade = useRef<moment.Moment>(null);
   const refreshDataTimeout = useRef<NodeJS.Timeout>(null);
 
-  const clearRefreshDataTimeout = useCallback(() => {
+  // useRef so we don't have to include this in our dep array.
+  const clearSchedule = useCallback(() => {
     if (refreshDataTimeout.current != null) {
       clearTimeout(refreshDataTimeout.current);
     }
   }, []);
 
-  useEffect(() => {
-    const now = moment();
-    let nextRefresh = null;
+  const schedule = useCallback(
+    (scheduleNow = false) => {
+      const now = moment.utc();
+      let nextRefresh: moment.Moment;
+      if (scheduleNow) {
+        nextRefresh =
+          lastReqMade.current
+            ?.clone()
+            .add(MIN_REQUEST_DELAY_MS, "milliseconds") ?? now;
+      } else if (shouldReschedule && scheduleIntervalMs) {
+        nextRefresh = (lastCompleted ?? now)
+          .clone()
+          .add(scheduleIntervalMs, "milliseconds");
+      } else {
+        // Either we don't need to schedule the function again or we have
+        // invalid params to the hook.
+        return;
+      }
 
-    if (!isDataValid || !lastUpdated) {
-      // At most we will make all reqs managed by this hook once every MIN_REQUEST_DELAY_MS.
-      nextRefresh = lastReqMade.current
-        ? lastReqMade.current.clone().add(MIN_REQUEST_DELAY_MS, "milliseconds")
-        : now;
-    } else if (lastUpdated && pollingIntervalMs) {
-      nextRefresh = lastUpdated.clone().add(pollingIntervalMs, "milliseconds");
-    } else {
-      return;
-    }
-
-    if (shouldPoll) {
+      const timeoutMs = Math.max(0, nextRefresh.diff(now, "millisecond"));
       refreshDataTimeout.current = setTimeout(() => {
-        lastReqMade.current = now;
+        lastReqMade.current = moment.utc();
+        // TODO (xinhaoz) if we can swap to using the fetch API more directly here
+        // we can abort the api call on refreshes.
         callbackFn();
-      }, Math.max(0, nextRefresh.diff(now, "millisecond")));
-    }
+      }, timeoutMs);
+    },
+    [shouldReschedule, scheduleIntervalMs, lastCompleted, callbackFn],
+  );
 
-    return clearRefreshDataTimeout;
-  }, [
-    callbackFn,
-    clearRefreshDataTimeout,
-    isDataValid,
-    lastUpdated,
-    shouldPoll,
-    pollingIntervalMs,
-  ]);
+  useEffect(() => {
+    if (!lastCompleted) schedule(true);
+    else schedule();
 
-  return clearRefreshDataTimeout;
+    return clearSchedule;
+  }, [lastCompleted, schedule, clearSchedule]);
+
+  const scheduleNow = useCallback(() => {
+    clearSchedule();
+    schedule(true);
+  }, [schedule, clearSchedule]);
+
+  return [scheduleNow, clearSchedule];
 };
