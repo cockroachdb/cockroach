@@ -217,6 +217,7 @@ func TestManualWindowHistogram(t *testing.T) {
 	h := NewManualWindowHistogram(
 		Metadata{},
 		buckets,
+		false, /* withRotate */
 	)
 
 	// should return 0 if no observations are made
