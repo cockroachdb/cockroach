@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -46,7 +47,21 @@ func TestDrain(t *testing.T) {
 // doTestDrain runs the drain test.
 func doTestDrain(tt *testing.T) {
 	var drainSleepCallCount = 0
-	t := newTestDrainContext(tt, &drainSleepCallCount)
+	tc := testcluster.StartTestCluster(tt, 3, base.TestClusterArgs{
+		// We need to start the cluster insecure in order to not
+		// care about TLS settings for the RPC client connection.
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DrainSleepFn: func(time.Duration) {
+						drainSleepCallCount++
+					},
+				},
+			},
+			Insecure: true,
+		},
+	})
+	t := newTestDrainContext(tt, tc.Server(0))
 	defer t.Close()
 
 	// Issue a probe. We're not draining yet, so the probe should
@@ -105,8 +120,15 @@ func TestEnsureSQLStatsAreFlushedDuringDrain(t *testing.T) {
 
 	ctx := context.Background()
 
-	var drainSleepCallCount = 0
-	drainCtx := newTestDrainContext(t, &drainSleepCallCount)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		// We need to start the cluster insecure in order to not
+		// care about TLS settings for the RPC client connection.
+		ServerArgs: base.TestServerArgs{
+			Insecure: true,
+		},
+	})
+
+	drainCtx := newTestDrainContext(t, tc.Server(0))
 	defer drainCtx.Close()
 
 	var (
@@ -165,23 +187,9 @@ type testDrainContext struct {
 	connCloser func()
 }
 
-func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainContext {
+func newTestDrainContext(t *testing.T, s serverutils.TestTenantInterface) *testDrainContext {
 	tc := &testDrainContext{
 		T: t,
-		tc: testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-			// We need to start the cluster insecure in order to not
-			// care about TLS settings for the RPC client connection.
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						DrainSleepFn: func(time.Duration) {
-							*drainSleepCallCount++
-						},
-					},
-				},
-				Insecure: true,
-			},
-		}),
 	}
 
 	// We'll have the RPC talk to the first node.
@@ -288,10 +296,10 @@ func (t *testDrainContext) getDrainResponse(
 }
 
 func getAdminClientForServer(
-	s serverutils.TestServerInterface,
+	s serverutils.TestTenantInterface,
 ) (c serverpb.AdminClient, closer func(), err error) {
 	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(s.ServingRPCAddr(), grpc.WithInsecure())
+	conn, err := grpc.Dial(s.RPCAddr(), grpc.WithInsecure())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -299,4 +307,49 @@ func getAdminClientForServer(
 	return client, func() {
 		_ = conn.Close() // nolint:grpcconnclose
 	}, nil
+}
+
+func TestServerShutdownReleasesSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tenantArgs := base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	}
+
+	// ensure the tenant conenctor is linked
+	var _ = kvtenantccl.Connector{}
+	tenant, tenantSQLRaw := serverutils.StartTenant(t, s, tenantArgs)
+	defer tenant.Stopper().Stop(ctx)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantSQLRaw)
+
+	queryOwner := func(id base.SQLInstanceID) (owner *string) {
+		tenantSQL.QueryRow(t, "SELECT session_id FROM system.sql_instances WHERE id = $1", id).Scan(&owner)
+		return owner
+	}
+
+	sessionExists := func(session string) bool {
+		rows := tenantSQL.QueryStr(t, "SELECT session_id FROM system.sqlliveness WHERE session_id = $1", session)
+		return 0 < len(rows)
+	}
+
+	tmpTenant, err := s.StartTenant(ctx, tenantArgs)
+	require.NoError(t, err)
+
+	tmpSQLInstance := tmpTenant.SQLInstanceID()
+	session := queryOwner(tmpSQLInstance)
+	require.NotNil(t, session)
+	require.True(t, sessionExists(*session))
+
+	require.NoError(t, tmpTenant.DrainClients(context.Background()))
+
+	require.False(t, sessionExists(*session), "expected session %s to be deleted from the sqlliveness table, but it still exists", *session)
+	require.Nil(t, queryOwner(tmpSQLInstance), "expected sql_instance %d to have no owning session_id", tmpSQLInstance)
 }

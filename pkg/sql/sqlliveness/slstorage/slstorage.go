@@ -587,6 +587,33 @@ func (s *Storage) Update(
 	return sessionExists, nil
 }
 
+func (s *Storage) Delete(ctx context.Context, session sqlliveness.SessionID) error {
+	return s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		version, err := s.versionGuard(ctx, txn)
+		if err != nil {
+			return err
+		}
+
+		batch := txn.NewBatch()
+
+		readCodec := s.getReadCodec(&version)
+		key, err := readCodec.encode(session)
+		if err != nil {
+			return err
+		}
+		batch.Del(key)
+
+		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
+			dualKey, err := dualCodec.encode(session)
+			if err != nil {
+				return err
+			}
+			batch.Del(dualKey)
+		}
+		return txn.CommitInBatch(ctx, batch)
+	})
+}
+
 // CachedReader returns an implementation of sqlliveness.Reader which does
 // not synchronously read from the store. Calls to IsAlive will return the
 // currently known state of the session, but will trigger an asynchronous

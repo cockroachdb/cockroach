@@ -42,6 +42,11 @@ type Provider interface {
 	// stored in the multi-region enum type associated with the system database.
 	Start(ctx context.Context, regionPhysicalRep []byte)
 
+	// Release delete's the sqlliveness session managed by the provider. This
+	// should be called during server shutdown after the stopper has no running
+	// tasks.
+	Release(ctx context.Context) (SessionID, error)
+
 	// Metrics returns a metric.Struct which holds metrics for the provider.
 	Metrics() metric.Struct
 }
@@ -82,6 +87,9 @@ type Instance interface {
 }
 
 // Session represents a SQL instance lock with expiration.
+//
+// TODO(jeffswenson): document the fact the Session is released after all of
+// the async tasks associated with the stopper are shut down.
 type Session interface {
 	ID() SessionID
 

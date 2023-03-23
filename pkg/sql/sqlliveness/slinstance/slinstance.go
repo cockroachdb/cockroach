@@ -62,6 +62,8 @@ type Writer interface {
 	// the storage and if found replaces it with the input returning true.
 	// Otherwise it returns false to indicate that the session does not exist.
 	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, error)
+	// Delete removes the session from the sqlliveness table.
+	Delete(ctx context.Context, id sqlliveness.SessionID) error
 }
 
 type session struct {
@@ -125,7 +127,8 @@ type Instance struct {
 	ttl           func() time.Duration
 	hb            func() time.Duration
 	testKnobs     sqlliveness.TestingKnobs
-	mu            struct {
+
+	mu struct {
 		syncutil.Mutex
 		// stopErr, if set, indicates that the heartbeat loop has stopped because of
 		// this error. Calls to Session() will return this error.
@@ -408,6 +411,21 @@ func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
 	// Detach from ctx's cancelation.
 	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	_ = l.stopper.RunAsyncTask(taskCtx, "slinstance", l.heartbeatLoop)
+}
+
+func (l *Instance) Release(ctx context.Context) (sqlliveness.SessionID, error) {
+	session := func() *session {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.mu.s
+	}()
+	if session == nil {
+		return sqlliveness.SessionID(""), errors.New("no session to release")
+	}
+	if err := l.storage.Delete(ctx, session.ID()); err != nil {
+		return sqlliveness.SessionID(""), err
+	}
+	return session.ID(), nil
 }
 
 // Session returns a live session id. For each Sqlliveness instance the

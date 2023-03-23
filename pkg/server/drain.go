@@ -378,6 +378,17 @@ func (s *drainServer) drainClients(
 	// given sessions a chance to finish ongoing work.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
+	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
+	if err != nil {
+		return err
+	}
+
+	instanceID := s.sqlServer.sqlIDContainer.SQLInstanceID()
+	err = s.sqlServer.sqlInstanceStorage.ReleaseInstance(ctx, session, instanceID)
+	if err != nil {
+		return err
+	}
+
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil
 }
