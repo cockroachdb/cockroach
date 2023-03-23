@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -665,6 +667,23 @@ func createChangefeedJobRecord(
 	}
 	details.Opts = opts.AsMap()
 
+	if locFilter := details.Opts[changefeedbase.OptExecutionLocality]; locFilter != "" {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot create new changefeed with %s until upgrade to version %s is complete",
+				changefeedbase.OptExecutionLocality, clusterversion.V23_1.String(),
+			)
+		}
+		var executionLocality roachpb.Locality
+		if err := executionLocality.Set(locFilter); err != nil {
+			return nil, err
+		}
+		if _, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, executionLocality); err != nil {
+			return nil, err
+		}
+	}
+
 	ptsExpiration, err := opts.GetPTSExpiration()
 	if err != nil {
 		return nil, err
@@ -1049,12 +1068,53 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	return nil
 }
 
+// TODO(dt): remove this copy pasta from backupResumer in favor of a shared func
+// somewhere in pkg/jobs or the job registry.
+func (b *changefeedResumer) maybeRelocateJobExecution(
+	ctx context.Context, p sql.JobExecContext, locality roachpb.Locality,
+) error {
+	if locality.NonEmpty() {
+		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
+		if err != nil {
+			return err
+		}
+		if ok, missedTier := current.Locality.Matches(locality); !ok {
+			log.Infof(ctx,
+				"CHANGEFEED job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
+				b.job.ID(), current.NodeID, missedTier.String(),
+			)
+
+			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)
+			if err != nil {
+				return err
+			}
+			rng, _ := randutil.NewPseudoRand()
+			dest := instancesInRegion[rng.Intn(len(instancesInRegion))]
+
+			var res error
+			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				var err error
+				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, b.job.ID(), dest.InstanceID, dest.SessionID)
+				return err
+			}); err != nil {
+				return errors.Wrapf(err, "failed to relocate job coordinator to %d", dest.InstanceID)
+			}
+			return res
+		}
+	}
+	return nil
+}
+
 func (b *changefeedResumer) handleChangefeedError(
 	ctx context.Context,
 	changefeedErr error,
 	details jobspb.ChangefeedDetails,
 	jobExec sql.JobExecContext,
 ) error {
+	// Execution relocations just get returned so another node can take over.
+	if jobs.IsLeaseRelocationError(changefeedErr) {
+		return changefeedErr
+	}
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	onError, errErr := opts.GetOnError()
 	if errErr != nil {
@@ -1097,6 +1157,16 @@ func (b *changefeedResumer) resumeWithRetries(
 	progress jobspb.Progress,
 	execCfg *sql.ExecutorConfig,
 ) error {
+	if filter := details.Opts[changefeedbase.OptExecutionLocality]; filter != "" {
+		var loc roachpb.Locality
+		if err := loc.Set(filter); err != nil {
+			return err
+		}
+		if err := b.maybeRelocateJobExecution(ctx, jobExec, loc); err != nil {
+			return err
+		}
+	}
+
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
