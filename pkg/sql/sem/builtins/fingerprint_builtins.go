@@ -65,12 +65,6 @@ func fingerprint(
 	if allRevisions {
 		filter = kvpb.MVCCFilter_All
 	}
-	req := &kvpb.ExportRequest{
-		RequestHeader:      kvpb.RequestHeader{Key: startKey, EndKey: endKey},
-		StartTime:          startTime,
-		MVCCFilter:         filter,
-		ExportFingerprint:  true,
-		FingerprintOptions: kvpb.FingerprintOptions{Stripped: stripped}}
 	header := kvpb.Header{
 		Timestamp: evalCtx.Txn.ReadTimestamp(),
 		// We set WaitPolicy to Error, so that the export will return an error
@@ -92,8 +86,8 @@ func fingerprint(
 		NoMemoryReservedAtSource: true,
 	}
 
-	todo := make(chan *kvpb.ExportRequest, 1)
-	todo <- req
+	todo := make(chan kvpb.RequestHeader, 1)
+	todo <- kvpb.RequestHeader{Key: startKey, EndKey: endKey}
 	ctxDone := ctx.Done()
 	var fingerprint uint64
 	// TODO(adityamaru): Memory monitor this slice of buffered SSTs that
@@ -103,7 +97,13 @@ func fingerprint(
 		select {
 		case <-ctxDone:
 			return nil, ctx.Err()
-		case req := <-todo:
+		case reqHeader := <-todo:
+			req := &kvpb.ExportRequest{
+				RequestHeader:     reqHeader,
+				StartTime:         startTime,
+				MVCCFilter:        filter,
+				ExportFingerprint: true,
+			}
 			var rawResp kvpb.Response
 			var pErr *kvpb.Error
 			exportRequestErr := contextutil.RunWithTimeout(ctx,
@@ -134,10 +134,7 @@ func fingerprint(
 				if !resp.ResumeSpan.Valid() {
 					return nil, errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
 				}
-
-				resumeReq := req
-				resumeReq.RequestHeader = kvpb.RequestHeaderFromSpan(*resp.ResumeSpan)
-				todo <- resumeReq
+				todo <- kvpb.RequestHeaderFromSpan(*resp.ResumeSpan)
 			}
 		default:
 			// No ExportRequests left to send. We've aggregated range keys
