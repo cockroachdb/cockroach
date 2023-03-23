@@ -410,13 +410,16 @@ func (expr *CaseExpr) TypeCheck(
 	}
 
 	tmpExprs = tmpExprs[:0]
+	// TODO(mgartner): The ELSE branch should be the left-most expression. See
+	// typeCheckCaseVals for more details.
 	for _, when := range expr.Whens {
 		tmpExprs = append(tmpExprs, when.Val)
 	}
 	if expr.Else != nil {
 		tmpExprs = append(tmpExprs, expr.Else)
 	}
-	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, tmpExprs...)
+	// typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, tmpExprs...)
+	typedSubExprs, retType, err := typeCheckCaseVals(ctx, semaCtx, tmpExprs)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible value type")
 	}
@@ -429,6 +432,89 @@ func (expr *CaseExpr) TypeCheck(
 	}
 	expr.typ = retType
 	return expr, nil
+}
+
+// typeCheckCaseVals resolves the type of a CASE expression based on the types
+// of each branch. It returns the typed expressions for each branch and the resolved type
+// of the CASE expression.
+//
+// Type resolution follows Postgres's behavior outlined at:
+// https://www.postgresql.org/docs/15/typeconv-union-case.html
+// The description of the behavior is copied below, along with some pertinent
+// footnotes.
+//
+// NOTE: The exact behavior as described below is not currently implemented.
+// Specifically, we don't yet support domain types, so (2) is irrelevant. We
+// do not have a concept of preferred types (well, we do have type families
+// and canonical types, but they do not match the behavior Postgres preferred
+// types exactly), so parts of (5) are not fully implemented. Also, we do not
+// treat the ELSE clause as the left-most branch.
+//
+//  1. If all inputs are of the same type, and it is not unknown, resolve as
+//     that type.
+//
+//  2. If any input is of a domain type, treat it as being of the domain's base
+//     type for all subsequent steps. [12]
+//
+//  3. If all inputs are of type unknown, resolve as type text (the preferred
+//     type of the string category). Otherwise, unknown inputs are ignored for
+//     the purposes of the remaining rules.
+//
+//  4. If the non-unknown inputs are not all of the same type category, fail.
+//
+//  5. Select the first non-unknown input type as the candidate type, then
+//     consider each other non-unknown input type, left to right. [13] If the
+//     candidate type can be implicitly converted to the other type, but not
+//     vice-versa, select the other type as the new candidate type. Then
+//     continue considering the remaining inputs. If, at any stage of this
+//     process, a preferred type is selected, stop considering additional
+//     inputs.
+//
+//  6. Convert all inputs to the final candidate type. Fail if there is not an
+//     implicit conversion from a given input type to the candidate type.
+//
+//     [12] Somewhat like the treatment of domain inputs for operators and
+//     functions, this behavior allows a domain type to be preserved through a
+//     UNION or similar construct, so long as the user is careful to ensure that
+//     all inputs are implicitly or explicitly of that exact type. Otherwise the
+//     domain's base type will be used.
+//
+//     [13] For historical reasons, CASE treats its ELSE clause (if any) as the
+//     "first" input, with the THEN clauses(s) considered after that. In all
+//     other cases, "left to right" means the order in which the expressions
+//     appear in the query text.
+func typeCheckCaseVals(
+	ctx context.Context, semaCtx *SemaContext, vals Exprs,
+) ([]TypedExpr, *types.T, error) {
+	retType := types.Unknown
+	typedExprs := make([]TypedExpr, len(vals))
+	for i := range vals {
+		typedExpr, err := vals[i].TypeCheck(ctx, semaCtx, types.Any /* desiredType */)
+		if err != nil {
+			return nil, nil, err
+		}
+		typedExprs[i] = typedExpr
+		valType := typedExpr.ResolvedType()
+		switch {
+		case retType == types.Unknown:
+			retType = valType
+		case valType == types.Unknown:
+			// No-op.
+		case retType != valType:
+			if cast.ValidCast(retType, valType, cast.ContextImplicit) &&
+				!cast.ValidCast(valType, retType, cast.ContextImplicit) {
+				retType = valType
+				continue
+			}
+			return nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"incompatible value types %s and %s", errors.Safe(retType), errors.Safe(valType))
+		}
+	}
+	if retType == types.Unknown {
+		// If all branches result to type unknown, resolve as type TEXT.
+		retType = types.String
+	}
+	return typedExprs, retType, nil
 }
 
 func invalidCastError(castFrom, castTo *types.T) error {

@@ -346,6 +346,13 @@ func TestTenantLogic_cascade(
 	runLogicTest(t, "cascade")
 }
 
+func TestTenantLogic_case(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "case")
+}
+
 func TestTenantLogic_case_sensitive_names(
 	t *testing.T,
 ) {

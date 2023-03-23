@@ -310,6 +310,13 @@ func TestLogic_cascade(
 	runLogicTest(t, "cascade")
 }
 
+func TestLogic_case(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "case")
+}
+
 func TestLogic_case_sensitive_names(
 	t *testing.T,
 ) {

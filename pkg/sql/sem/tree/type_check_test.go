@@ -93,6 +93,8 @@ func TestTypeCheck(t *testing.T) {
 		{`true IS FALSE`, `true IS false`},
 		{`true IS NOT FALSE`, `true IS NOT false`},
 		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT8 WHEN 1:::INT8 THEN (1:::INT8, 2:::INT8) ELSE (1:::INT8, 3:::INT8) END`},
+		{`CASE WHEN NULL THEN NULL ELSE NULL END`, `CASE WHEN NULL THEN NULL ELSE NULL END`},
+		{`CASE 1 WHEN 2 THEN NULL ELSE NULL END`, `CASE 1:::INT8 WHEN 2:::INT8 THEN NULL ELSE NULL END`},
 		{`1 BETWEEN 2 AND 3`, `1:::INT8 BETWEEN 2:::INT8 AND 3:::INT8`},
 		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT8 BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8`},
 		{`count(3)`, `count(3:::INT8)`},
