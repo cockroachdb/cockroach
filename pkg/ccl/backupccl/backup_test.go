@@ -277,6 +277,55 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	require.True(t, found)
 }
 
+func findSST(t *testing.T, location string) string {
+	sstMatcher := regexp.MustCompile(`\d+\.sst`)
+	subDir := filepath.Join(location, "data")
+	files, err := os.ReadDir(subDir)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return ""
+		}
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if sstMatcher.MatchString(f.Name()) {
+			return f.Name()
+		}
+	}
+	return ""
+}
+
+func requireHasSSTs(t *testing.T, locations ...string) {
+	for _, location := range locations {
+		require.NotEqual(t, "", findSST(t, location))
+	}
+}
+
+func requireHasNoSSTs(t *testing.T, locations ...string) {
+	for _, location := range locations {
+		require.Equal(t, "", findSST(t, location))
+	}
+}
+
+// ensureLeaseholder ensures that each node has at least one leaseholder. These
+// are wrapped with SucceedsSoon() because EXPERIMENTAL_RELOCATE can fail if
+// there are other replication changes happening.
+func ensureLeaseholder(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	for _, stmt := range []string{
+		`ALTER TABLE data.bank SPLIT AT VALUES (0)`,
+		`ALTER TABLE data.bank SPLIT AT VALUES (100)`,
+		`ALTER TABLE data.bank SPLIT AT VALUES (200)`,
+		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
+		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
+		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
+	} {
+		testutils.SucceedsSoon(t, func() error {
+			_, err := sqlDB.DB.ExecContext(context.Background(), stmt)
+			return err
+		})
+	}
+}
+
 func TestBackupRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -317,53 +366,19 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
 	defer cleanupFn()
 
-	// locationToDir converts backup URIs based on localFoo to the temporary
+	// dirOf converts backup URIs based on localFoo to the temporary
 	// file it represents on disk.
-	locationToDir := func(location string) string {
+	dirOf := func(location string) string {
 		return strings.Replace(location, localFoo, filepath.Join(dir, "foo"), 1)
-	}
-
-	hasSSTs := func(t *testing.T, location string) bool {
-		sstMatcher := regexp.MustCompile(`\d+\.sst`)
-		subDir := filepath.Join(locationToDir(location), "data")
-		files, err := os.ReadDir(subDir)
-		if err != nil {
-			if oserror.IsNotExist(err) {
-				return false
-			}
-
-			t.Fatal(err)
-		}
-		found := false
-		for _, f := range files {
-			if sstMatcher.MatchString(f.Name()) {
-				found = true
-				break
-			}
-		}
-		return found
-	}
-
-	requireHasSSTs := func(t *testing.T, locations ...string) {
-		for _, location := range locations {
-			require.True(t, hasSSTs(t, location))
-		}
-	}
-
-	requireHasNoSSTs := func(t *testing.T, locations ...string) {
-		for _, location := range locations {
-			require.False(t, hasSSTs(t, location))
-		}
 	}
 
 	requireCompressedManifest := func(t *testing.T, locations ...string) {
 		partitionMatcher := regexp.MustCompile(`^BACKUP_PART_`)
 		for _, location := range locations {
-			subDir := locationToDir(location)
+			subDir := dirOf(location)
 			files, err := os.ReadDir(subDir)
 			if err != nil {
 				t.Fatal(err)
@@ -392,25 +407,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		sqlDB.Exec(t, restoreQuery, locationURIArgs...)
 	}
 
-	// Ensure that each node has at least one leaseholder. These are wrapped with
-	// SucceedsSoon() because EXPERIMENTAL_RELOCATE can fail if there are other
-	// replication changes happening.
-	ensureLeaseholder := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
-		for _, stmt := range []string{
-			`ALTER TABLE data.bank SPLIT AT VALUES (0)`,
-			`ALTER TABLE data.bank SPLIT AT VALUES (100)`,
-			`ALTER TABLE data.bank SPLIT AT VALUES (200)`,
-			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
-			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
-			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
-		} {
-			testutils.SucceedsSoon(t, func() error {
-				_, err := sqlDB.DB.ExecContext(ctx, stmt)
-				return err
-			})
-		}
-	}
-
 	t.Run("partition-by-unique-key", func(t *testing.T) {
 		ensureLeaseholder(t, sqlDB)
 		testSubDir := t.Name()
@@ -429,7 +425,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		runBackupRestore(t, sqlDB, backupURIs)
 
 		// Verify that at least one SST exists in each backup destination.
-		requireHasSSTs(t, locations...)
+		requireHasSSTs(t, dirOf(locations[0]), dirOf(locations[1]), dirOf(locations[2]))
 
 		// Verify that all of the partition manifests are compressed.
 		requireCompressedManifest(t, locations...)
@@ -456,8 +452,8 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 		// All data should be covered by az=az1 or az=az2, so expect all the
 		// data on those locations.
-		requireHasNoSSTs(t, locations[0], locations[1])
-		requireHasSSTs(t, locations[2], locations[3])
+		requireHasNoSSTs(t, dirOf(locations[0]), dirOf(locations[1]))
+		requireHasSSTs(t, dirOf(locations[2]), dirOf(locations[3]))
 	})
 
 	t.Run("partition-by-several-keys", func(t *testing.T) {
@@ -480,6 +476,91 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", locationFmtString)
 		sqlDB.ExpectErr(t, `tier must be in the form "key=value" not "region=east,az=az1"`, backupQuery, locationURIArgs...)
+	})
+}
+
+func TestBackupRestoreExecLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	// Disabled to run within tenant as certain MR features are not available to tenants.
+	args := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				ExternalIODir:            "/west0",
+				DisableDefaultTestTenant: true,
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "0"},
+					{Key: "region", Value: "west"},
+				}},
+			},
+			1: {
+				ExternalIODir:            "/west1",
+				DisableDefaultTestTenant: true,
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "1"},
+					{Key: "region", Value: "west"},
+				}},
+			},
+			2: {
+				ExternalIODir:            "/east0",
+				DisableDefaultTestTenant: true,
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "0"},
+					{Key: "region", Value: "east"},
+				}},
+			},
+			3: {
+				ExternalIODir:            "/east1",
+				DisableDefaultTestTenant: true,
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "1"},
+					{Key: "region", Value: "east"},
+				}},
+			},
+		},
+	}
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, 4 /* nodes */, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+
+	// Job exec relocation will return an error while it waits for resumption on a
+	// matching node, but this makes for a slow test, so just send the job stmt to
+	// the node which will not need to relocate the coordination, i.e. n3 or n4.
+	n3, n4 := sqlutils.MakeSQLRunner(tc.Conns[2]), sqlutils.MakeSQLRunner(tc.Conns[3])
+
+	t.Run("pin-top", func(t *testing.T) {
+		ensureLeaseholder(t, sqlDB)
+		n3.Exec(t, "BACKUP DATABASE data TO $1 WITH EXECUTION LOCALITY = $2",
+			"nodelocal://0/a", "tier=0")
+		// Check that at least one tier 0 node dir has an SST in it.
+		require.True(t, findSST(t, path.Join(dir, "west0", "a")) != "" || findSST(t, path.Join(dir, "east0", "a")) != "")
+		// Check that neither tier 1 node dir has an sst.
+		requireHasNoSSTs(t, path.Join(dir, "west1", "a"), path.Join(dir, "east1", "a"))
+	})
+
+	t.Run("pin-mid", func(t *testing.T) {
+		ensureLeaseholder(t, sqlDB)
+		n4.Exec(t, "BACKUP DATABASE data TO $1 WITH EXECUTION LOCALITY = $2",
+			"nodelocal://0/b", "region=east")
+
+		// Check that at least one east node dir has an SST in it.
+		require.True(t, findSST(t, path.Join(dir, "east0", "b")) != "" || findSST(t, path.Join(dir, "east1", "b")) != "")
+		// Check that neither west node dir has an sst.
+		requireHasNoSSTs(t, path.Join(dir, "west0", "b"), path.Join(dir, "west1", "b"))
+	})
+
+	t.Run("pin-single", func(t *testing.T) {
+		ensureLeaseholder(t, sqlDB)
+		n4.Exec(t, "BACKUP DATABASE data TO $1 WITH EXECUTION LOCALITY = $2",
+			"nodelocal://0/c", "tier=1,region=east")
+
+		// Check that at least the only node allowed has data in it.
+		requireHasSSTs(t, path.Join(dir, "east1", "c"))
+		// Check that no other node has data in it.
+		requireHasNoSSTs(t, path.Join(dir, "east0", "c"), path.Join(dir, "west0", "c"), path.Join(dir, "west1", "c"))
 	})
 }
 
@@ -10780,7 +10861,7 @@ func TestBackupInLocality(t *testing.T) {
 		{node: 3, filter: "region=central,dc=1", err: "no instances found"},
 	} {
 		db := sqlutils.MakeSQLRunner(cluster.ServerConn(tc.node - 1))
-		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH coordinator_locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
+		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH execution locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
 	}
 }
 

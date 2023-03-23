@@ -306,7 +306,7 @@ message BackupDetails {
   // invoked.
   string application_name = 23;
 
-  roachpb.Locality coordinator_location = 24 [(gogoproto.nullable) = false];
+  roachpb.Locality execution_locality = 24 [(gogoproto.nullable) = false];
 
   // IncldeAllSecondaryTenants indicates whether a full tenant backup
   // should also include a tenant backup of all existing secondary

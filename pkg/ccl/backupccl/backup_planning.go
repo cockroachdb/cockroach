@@ -197,6 +197,7 @@ func resolveOptionsForBackupJobDescription(
 	newOpts := tree.BackupOptions{
 		CaptureRevisionHistory: opts.CaptureRevisionHistory,
 		Detached:               opts.Detached,
+		ExecutionLocality:      opts.ExecutionLocality,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -519,7 +520,7 @@ func backupTypeCheck(
 		exprutil.Strings{
 			backupStmt.Subdir,
 			backupStmt.Options.EncryptionPassphrase,
-			backupStmt.Options.CoordinatorLocality,
+			backupStmt.Options.ExecutionLocality,
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backupStmt.To),
@@ -602,14 +603,14 @@ func backupPlanHook(
 		}
 	}
 
-	var coordinatorLocality roachpb.Locality
-	if backupStmt.Options.CoordinatorLocality != nil {
-		s, err := exprEval.String(ctx, backupStmt.Options.CoordinatorLocality)
+	var executionLocality roachpb.Locality
+	if backupStmt.Options.ExecutionLocality != nil {
+		s, err := exprEval.String(ctx, backupStmt.Options.ExecutionLocality)
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 		if s != "" {
-			if err := coordinatorLocality.Set(s); err != nil {
+			if err := executionLocality.Set(s); err != nil {
 				return nil, nil, nil, false, err
 			}
 		}
@@ -742,8 +743,8 @@ func backupPlanHook(
 		}
 
 		// Check that a node will currently be able to run this before we create it.
-		if coordinatorLocality.NonEmpty() {
-			if _, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, coordinatorLocality); err != nil {
+		if executionLocality.NonEmpty() {
+			if _, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, executionLocality); err != nil {
 				return err
 			}
 		}
@@ -760,7 +761,7 @@ func backupPlanHook(
 			AsOfInterval:               asOfInterval,
 			Detached:                   detached,
 			ApplicationName:            p.SessionData().ApplicationName,
-			CoordinatorLocation:        coordinatorLocality,
+			ExecutionLocality:          executionLocality,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
