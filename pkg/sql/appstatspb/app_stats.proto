@@ -226,9 +226,8 @@ message StatementStatisticsKey {
 
 message AggregatedStatementMetadata {
   optional string query = 1 [(gogoproto.nullable) = false];
-  // Formatted query is the return of the key_data.query after prettify_statement.
-  // The query above cannot be replaced by the formatted value, because is used as is for
-  // diagnostic bundle.
+  // Formatted query is the same value of query. It used to be formatted with prettify_statement,
+  // but until that function is improved (#91197), it should not be used.
   optional string formatted_query = 2 [(gogoproto.nullable) = false];
   optional string query_summary = 3 [(gogoproto.nullable) = false];
   optional string stmt_type = 4 [(gogoproto.nullable) = false];

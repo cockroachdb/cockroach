@@ -338,6 +338,7 @@ export class TransactionDetails extends React.Component<
                         <SqlBox
                           value={latestTransactionText}
                           className={transactionDetailsStylesCx("summary-card")}
+                          format={true}
                         />
                       </Col>
                     </Row>
@@ -458,6 +459,7 @@ export class TransactionDetails extends React.Component<
                       <SqlBox
                         value={latestTransactionText}
                         className={transactionDetailsStylesCx("summary-card")}
+                        format={true}
                       />
                     </Col>
                     <Col span={8}>
