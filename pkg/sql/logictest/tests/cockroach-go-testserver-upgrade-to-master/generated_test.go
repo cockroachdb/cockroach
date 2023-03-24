@@ -79,6 +79,13 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_database_role_settings_role_id(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_database_role_settings_role_id")
+}
+
 func TestLogic_mixed_version_external_connections_owner_id(
 	t *testing.T,
 ) {
