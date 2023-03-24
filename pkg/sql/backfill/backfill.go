@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -505,7 +506,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(desc)
+	ib.initIndexes(desc, nil /* whitelist */)
 
 	// Initialize ib.cols and ib.colIdxMap.
 	if err := ib.initCols(desc); err != nil {
@@ -640,11 +641,12 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	desc catalog.TableDescriptor,
+	indexesToBackfill []catid.IndexID,
 	mon *mon.BytesMonitor,
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(desc)
+	ib.initIndexes(desc, indexesToBackfill)
 
 	// Initialize ib.indexBackfillerCols.
 	if err := ib.initCols(desc); err != nil {
@@ -728,19 +730,24 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 }
 
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
-// populates the added field. It returns a set of column ordinals that must be
-// fetched in order to backfill the added indexes.
-func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) {
+// populates the added field to be all adding index mutations.
+// If `whitelist` is non-nil, we only allow those in this white list.
+func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor, whitelist []catid.IndexID) {
+	var whitelistAsSet catid.IndexSet
+	if whitelist != nil {
+		whitelistAsSet = catid.MakeIndexIDSet(whitelist...)
+	}
+
 	mutations := desc.AllMutations()
 	mutationID := mutations[0].MutationID()
-
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
 	for _, m := range mutations {
 		if m.MutationID() != mutationID {
 			break
 		}
-		if IndexMutationFilter(m) {
+		if IndexMutationFilter(m) &&
+			(whitelistAsSet.Empty() || whitelistAsSet.Contains(m.AsIndex().GetID())) {
 			idx := m.AsIndex()
 			ib.added = append(ib.added, idx)
 		}
