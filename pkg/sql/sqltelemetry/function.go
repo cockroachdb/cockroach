@@ -14,7 +14,6 @@ import "github.com/cockroachdb/cockroach/pkg/server/telemetry"
 
 // PlpgsqlStmtCounter is to be incremented every time a new plpgsql stmt is
 // used for a newly created function.
-// TODO: check the naming of the counter
 func PlpgsqlStmtCounter(stmtTag string) telemetry.Counter {
 	return telemetry.GetCounter("sql.plpgsql." + stmtTag)
 }

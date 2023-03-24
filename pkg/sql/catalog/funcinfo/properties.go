@@ -107,7 +107,7 @@ func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, erro
 	switch v {
 	case tree.FunctionLangSQL:
 		return catpb.Function_SQL, nil
-	case tree.FunctionLangPlPgSQL:
+	case tree.FunctionLangPLpgSQL:
 		return catpb.Function_PLPGSQL, nil
 	}
 

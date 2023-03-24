@@ -5,6 +5,7 @@ import (
   "fmt"
 
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
+  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/errors"
 )
@@ -96,6 +97,10 @@ func (u *plpgsqlSymUnion) uint32() uint32 {
 
 func (u *plpgsqlSymUnion) bool() bool {
     return u.val.(bool)
+}
+
+func (u *plpgsqlSymUnion) numVal() *tree.NumVal {
+    return u.val.(*tree.NumVal)
 }
 
 func (u *plpgsqlSymUnion) pLpgSQLGetDiagKind() plpgsqltree.PLpgSQLGetDiagKind {
@@ -1030,20 +1035,22 @@ stmt_open: OPEN IDENT open_stmt_processor ';'
   }
 ;
 
-stmt_fetch: FETCH opt_fetch_direction cursor_variable INTO
+stmt_fetch: FETCH opt_fetch_direction IDENT INTO
   {
+    return unimplemented(plpgsqllex, "fetch")
   }
 ;
 
-stmt_move: MOVE opt_fetch_direction cursor_variable ';'
+stmt_move: MOVE opt_fetch_direction IDENT ';'
   {
+    return unimplemented(plpgsqllex, "move")
   }
 ;
 
 opt_fetch_direction:
   {
+      return unimplemented(plpgsqllex, "fetch direction")
   }
-;
 
 stmt_close: CLOSE cursor_variable ';'
   {
@@ -1057,13 +1064,13 @@ stmt_null: NULL ';'
   }
 ;
 
-stmt_commit		: COMMIT opt_transaction_chain ';'
+stmt_commit: COMMIT opt_transaction_chain ';'
   {
     return unimplemented(plpgsqllex, "commit")
   }
 ;
 
-stmt_rollback	: ROLLBACK opt_transaction_chain ';'
+stmt_rollback: ROLLBACK opt_transaction_chain ';'
   {
     return unimplemented(plpgsqllex, "rollback")
   }
@@ -1076,19 +1083,22 @@ AND CHAIN
   { }
 | /* EMPTY */
   { }
-;
 
-cursor_variable: any_identifier
-  {}
+cursor_variable: IDENT
+  {
+    unimplemented(plpgsqllex, "cursor variable")
+  }
 ;
 
 exception_sect:
   { }
 | EXCEPTION
   {
+    return unimplemented(plpgsqllex, "exception")
   }
   proc_exceptions
   {
+    unimplemented(plpgsqllex, "exception")
   }
 ;
 
@@ -1114,6 +1124,9 @@ proc_conditions: proc_conditions OR proc_condition
 ;
 
 proc_condition: any_identifier
+  {
+  }
+| SQLSTATE SCONST
   {
   }
 ;
