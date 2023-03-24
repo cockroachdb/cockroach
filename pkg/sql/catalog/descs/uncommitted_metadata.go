@@ -71,10 +71,13 @@ func (uc *uncommittedComments) upsert(key catalogkeys.CommentKey, cmt string) {
 	uc.uncommitted[key] = cmt
 }
 
-func (uc *uncommittedComments) addAllToCatalog(mc nstree.MutableCatalog) {
+func (uc *uncommittedComments) addAllToCatalog(mc nstree.MutableCatalog) error {
 	for ck, cmt := range uc.uncommitted {
-		mc.UpsertComment(ck, cmt)
+		if err := mc.UpsertComment(ck, cmt); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 type uncommittedZoneConfigs struct {

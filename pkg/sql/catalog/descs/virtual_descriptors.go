@@ -101,7 +101,6 @@ func (tc virtualDescriptors) addAllToCatalog(mc nstree.MutableCatalog) {
 		default:
 			return nil
 		}
-		mc.UpsertComment(ck, comment)
-		return nil
+		return mc.UpsertComment(ck, comment)
 	})
 }
