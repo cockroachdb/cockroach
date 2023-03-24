@@ -83,10 +83,6 @@ func alterChangefeedPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		if err := validateSettings(ctx, p); err != nil {
-			return err
-		}
-
 		typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
 		if err != nil {
 			return err
@@ -125,6 +121,14 @@ func alterChangefeedPlanHook(
 			ctx, exprEval, alterChangefeedStmt.Cmds, prevOpts, prevDetails.SinkURI,
 		)
 		if err != nil {
+			return err
+		}
+
+		st, err := newOptions.GetInitialScanType()
+		if err != nil {
+			return err
+		}
+		if err := validateSettings(ctx, st != changefeedbase.OnlyInitialScan, p.ExecCfg()); err != nil {
 			return err
 		}
 
