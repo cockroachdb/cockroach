@@ -1,72 +1,92 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package plpgsqltree
 
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
-	"strings"
 )
 
-// PlpgSQLStmtCounter is used to accurately report telemetry for plpgsql
+// PLpgSQLStmtCounter is used to accurately report telemetry for plpgsql
 // statements. We can not use the counters due to counters needing to
 // be reset after every statement using reporter.ReportDiagnostics.
-type PlpgSQLStmtCounter map[string]int
+type PLpgSQLStmtCounter map[string]int
 
-func (p *PlpgSQLStmtCounter) String() string {
+func (p *PLpgSQLStmtCounter) String() string {
 	var buf strings.Builder
-	for k, v := range *p {
-		buf.WriteString(fmt.Sprintf("%s: %d\n", k, v))
+	counter := *p
+
+	// Sort the counters to avoid flakes in test
+	keys := make([]string, 0)
+	for k := range counter {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		buf.WriteString(fmt.Sprintf("%s: %d\n", k, counter[k]))
 
 	}
 	return buf.String()
 }
 
+type StmtVisitor interface {
+	visit(stmt PLpgSQLStatement) error
+}
+
 type plpgsqlVisitor struct {
-	ctx  context.Context
-	stmt PLpgSQLStatement
+	ctx context.Context
 	// StmtCnt captures telemetry for plpgsql statements that can be returned
 	// during parser test.
-	StmtCnt PlpgSQLStmtCounter
+	StmtCnt PLpgSQLStmtCounter
 	// Err captures errors while stmts are being walked.
 	Err error
 }
 
-func MakePlpgSqlVisitor() plpgsqlVisitor {
-	return plpgsqlVisitor{ctx: context.Background(), StmtCnt: PlpgSQLStmtCounter{}}
-}
-
 type walkableStmt interface {
 	PLpgSQLStatement
-	walkStmt(plpgsqlVisitor) PLpgSQLStatement
+	walkStmt(plpgsqlVisitor)
 }
 
 var _ walkableStmt = &PLpgSQLStmtIf{}
+var _ walkableStmt = &PLpgSQLStmtIfElseIfArm{}
 
-// WalkStmt walks plpgsql statements to ensure that telemetry is captured for nested statements.
-func WalkStmt(v plpgsqlVisitor, stmt PLpgSQLStatement) (newStmt PLpgSQLStatement, changed bool) {
+// Walk walks plpgsql statements to ensure that telemetry is captured for nested statements.
+func Walk(v plpgsqlVisitor, stmt PLpgSQLStatement) error {
 	wStmt, isWalkable := stmt.(walkableStmt)
 
 	if !isWalkable {
-		IncrementPlpgCounter(stmt, v)
-		return stmt, false
+		err := v.visit(stmt)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
-	newStmt = wStmt.walkStmt(v)
-	return newStmt, true
+	wStmt.walkStmt(v)
+	return nil
 }
 
-func walkElseIfStmt(v plpgsqlVisitor, stmt PLpgSQLStmtIfElseIfArm) (newStmt *PLpgSQLStmtIfElseIfArm, changed bool) {
-	newExpr := stmt.walkStmt(v)
-	return newExpr, true
-}
+var _ StmtVisitor = plpgsqlVisitor{}
 
-// IncrementPlpgCounter
-func IncrementPlpgCounter(stmt PLpgSQLStatement, v plpgsqlVisitor) {
+func (v plpgsqlVisitor) visit(stmt PLpgSQLStatement) error {
 	taggedStmt, ok := stmt.(TaggedPLpgSQLStatement)
 	if !ok {
-		v.Err = errors.AssertionFailedf("no tag found for stmt %q", stmt)
+		return errors.AssertionFailedf("no tag found for stmt %q", stmt)
 	}
 	tag := taggedStmt.PlpgSQLStatementTag()
 	telemetry.Inc(sqltelemetry.PlpgsqlStmtCounter(tag))
@@ -78,4 +98,9 @@ func IncrementPlpgCounter(stmt PLpgSQLStatement, v plpgsqlVisitor) {
 	} else {
 		v.StmtCnt[tag]++
 	}
+	return nil
+}
+
+func MakePLpgSQLVisitor() plpgsqlVisitor {
+	return plpgsqlVisitor{ctx: context.Background(), StmtCnt: PLpgSQLStmtCounter{}}
 }

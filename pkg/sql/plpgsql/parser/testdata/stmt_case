@@ -128,4 +128,5 @@ BEGIN
 END CASE;
 END
 ----
+stmt_call: 3
 stmt_case: 1

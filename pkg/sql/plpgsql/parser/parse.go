@@ -30,7 +30,7 @@ func init() {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner.PLPGSQLScanner
+	scanner    scanner.PLpgSQLScanner
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType
@@ -43,7 +43,7 @@ type Parser struct {
 var defaultNakedIntType = types.Int
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (statements.PLPGStatement, error) {
+func (p *Parser) Parse(sql string) (statements.PLpgStatement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
@@ -77,16 +77,16 @@ func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) 
 
 func (p *Parser) parseWithDepth(
 	depth int, plpgsql string, nakedIntType *types.T,
-) (statements.PLPGStatement, error) {
+) (statements.PLpgStatement, error) {
 	p.scanner.Init(plpgsql)
 	defer p.scanner.Cleanup()
 	sql, tokens, done := p.scanFnBlock()
 	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
 	if err != nil {
-		return statements.PLPGStatement{}, err
+		return statements.PLpgStatement{}, err
 	}
 	if !done {
-		return statements.PLPGStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
+		return statements.PLpgStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
 	}
 	return stmt, nil
 }
@@ -94,7 +94,7 @@ func (p *Parser) parseWithDepth(
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
 	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
-) (statements.PLPGStatement, error) {
+) (statements.PLpgStatement, error) {
 	p.lexer.init(sql, tokens, nakedIntType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
@@ -118,9 +118,9 @@ func (p *Parser) parse(
 			err = errors.WithTelemetry(err, tkeys...)
 		}
 
-		return statements.PLPGStatement{}, err
+		return statements.PLpgStatement{}, err
 	}
-	return statements.PLPGStatement{
+	return statements.PLpgStatement{
 		AST:             p.lexer.stmt,
 		SQL:             sql,
 		NumPlaceholders: p.lexer.numPlaceholders,
@@ -128,30 +128,30 @@ func (p *Parser) parse(
 	}, nil
 }
 
-// ParsePlpgCounter parses the function body and calls the WalkStmt function for
+// CountPLpgSQLStmt parses the function body and calls the Walk function for
 // each plpgsql statement.
-func ParsePlpgCounter(sql string) (plpgsqltree.PlpgSQLStmtCounter, error) {
-	v := plpgsqltree.MakePlpgSqlVisitor()
+func CountPLpgSQLStmt(sql string) (plpgsqltree.PLpgSQLStmtCounter, error) {
+	v := plpgsqltree.MakePLpgSQLVisitor()
 	stmt, err := Parse(sql)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, s := range stmt.AST.Body {
-		_, _ = plpgsqltree.WalkStmt(v, s)
+		v.Err = plpgsqltree.Walk(v, s)
 	}
 	return v.StmtCnt, v.Err
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (statements.PLPGStatement, error) {
+func Parse(sql string) (statements.PLpgStatement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
-// DealWithPlpgsqlFunc takes a plpgsql function and parses and collects
+// DealWithPLpgSQLFunc takes a plpgsql function and parses and collects
 // telemetry on the parsable statements
-func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
+func DealWithPLpgSQLFunc(stmt *tree.CreateFunction) error {
 	// assert that the language is PLPGSQL
 	var funcBodyStr string
 	for _, option := range stmt.Options {
@@ -161,10 +161,8 @@ func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
 		}
 	}
 
-	err := unimp.New("plpgsql", "plpgsql not supported for udf")
-	_, secErr := ParsePlpgCounter(funcBodyStr)
-	if err != nil {
-		err = errors.WithSecondaryError(err, secErr)
+	if _, err := CountPLpgSQLStmt(funcBodyStr); err != nil {
+		return errors.Wrap(err, "plpgsql not supported for udf")
 	}
-	return err
+	return unimp.New("plpgsql", "plpgsql not supported for udf")
 }

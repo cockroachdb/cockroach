@@ -12,6 +12,7 @@ package plpgsqltree
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -126,31 +127,24 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("<NOT DONE YET>")
 }
 
-func (s *PLpgSQLStmtIf) walkStmt(visitor plpgsqlVisitor) PLpgSQLStatement {
-	ret := s
+func (s *PLpgSQLStmtIf) walkStmt(visitor plpgsqlVisitor) {
+	visitor.Err = visitor.visit(s)
 
-	for i, thenStmt := range s.ThenBody {
-		stmt, changed := WalkStmt(visitor, thenStmt)
-		if changed {
-			ret.ThenBody[i] = stmt
-		}
+	for _, thenStmt := range s.ThenBody {
+
+		visitor.Err = Walk(visitor, thenStmt)
 	}
 
-	for i, elseIf := range s.ElseIfList {
-		stmt, changed := walkElseIfStmt(visitor, *elseIf)
-		if changed {
-			ret.ElseIfList[i] = stmt
-		}
+	for _, elseIf := range s.ElseIfList {
+
+		visitor.Err = Walk(visitor, elseIf)
 	}
 
-	for i, elseStmt := range s.ElseBody {
-		stmt, changed := WalkStmt(visitor, elseStmt)
-		if changed {
-			ret.ElseBody[i] = stmt
-		}
+	for _, elseStmt := range s.ElseBody {
+
+		visitor.Err = Walk(visitor, elseStmt)
 	}
-	IncrementPlpgCounter(ret, visitor)
-	return ret
+
 }
 
 func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
@@ -173,16 +167,12 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 	}
 }
 
-func (s *PLpgSQLStmtIfElseIfArm) walkStmt(visitor plpgsqlVisitor) *PLpgSQLStmtIfElseIfArm {
-	ret := s
-	for i, stmt := range s.Stmts {
-		newStmt, changed := WalkStmt(visitor, stmt)
-		if changed {
-			ret.Stmts[i] = newStmt
-		}
+func (s *PLpgSQLStmtIfElseIfArm) walkStmt(visitor plpgsqlVisitor) {
+	visitor.Err = visitor.visit(s)
+
+	for _, stmt := range s.Stmts {
+		visitor.Err = Walk(visitor, stmt)
 	}
-	IncrementPlpgCounter(ret, visitor)
-	return ret
 }
 
 func (s *PLpgSQLStmtIfElseIfArm) PlpgSQLStatementTag() string {
@@ -222,15 +212,37 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 
 }
 
+func (s *PLpgSQLStmtCase) walkStmt(visitor plpgsqlVisitor) {
+	visitor.Err = visitor.visit(s)
+
+	for _, when := range s.CaseWhenList {
+		visitor.Err = Walk(visitor, when)
+	}
+
+	if s.HaveElse {
+		for _, stmt := range s.ElseStmts {
+			visitor.Err = Walk(visitor, stmt)
+		}
+	}
+}
+
 func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
 	return "stmt_case"
 }
 
 type PLpgSQLStmtCaseWhenArm struct {
-	LineNo int
+	PLpgSQLStatementImpl
 	// TODO: Change to PLpgSQLExpr
 	Expr  string
 	Stmts []PLpgSQLStatement
+}
+
+func (s *PLpgSQLStmtCaseWhenArm) walkStmt(visitor plpgsqlVisitor) {
+	visitor.Err = visitor.visit(s)
+
+	for _, stmt := range s.Stmts {
+		visitor.Err = Walk(visitor, stmt)
+	}
 }
 
 func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
@@ -494,6 +506,10 @@ func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
 	}
 	ctx.WriteString("<NOT DONE YET>\n")
 
+}
+
+func (s *PLpgSQLStmtCall) PlpgSQLStatementTag() string {
+	return "stmt_call"
 }
 
 // stmt_getdiag
