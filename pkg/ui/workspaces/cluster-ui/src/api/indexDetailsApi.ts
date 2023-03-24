@@ -100,7 +100,7 @@ export async function getStatementsUsingIndex({
   }
 
   const selectStatements = {
-    sql: `SELECT * FROM system.statement_statistics 
+    sql: `SELECT * FROM crdb_internal.statement_statistics_persisted 
             WHERE $1::jsonb <@ indexes_usage
                 AND app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%' 
                 ${whereClause}
