@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -55,6 +56,13 @@ var WriteChunkSize = settings.RegisterByteSizeSetting(
 	"cloudstorage.write_chunk.size",
 	"controls the size of each file chunk uploaded by the cloud storage client",
 	8<<20,
+)
+
+var retryConnectionTimedOut = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"cloudstorage.retry_connection_timed_out",
+	"retry generic connection timed out errors; use with extreme caution",
+	false,
 )
 
 // HTTPRetryOptions defines the tunable settings which control the retry of HTTP
@@ -147,6 +155,22 @@ func IsResumableHTTPError(err error) bool {
 		sysutil.IsErrConnectionRefused(err)
 }
 
+func ResumingReaderRetryOnErrFnForSettings(
+	ctx context.Context, st *cluster.Settings,
+) func(error) bool {
+	return func(err error) bool {
+		if IsResumableHTTPError(err) {
+			return true
+		}
+		retryTimeouts := retryConnectionTimedOut.Get(&st.SV)
+		if retryTimeouts && strings.Contains(err.Error(), "connection timed out") {
+			log.Warningf(ctx, "retrying connection timed out because cloudstorage.retry_connection_timed_out = true")
+			return true
+		}
+		return false
+	}
+}
+
 // Maximum number of times we can attempt to retry reading from external storage,
 // without making any progress.
 const maxNoProgressReads = 3
@@ -163,6 +187,19 @@ type ResumingReader struct {
 	RetryOnErrFn func(error) bool // custom retry-on-error function
 	// ErrFn injects a delay between retries on errors. nil means no delay.
 	ErrFn func(error) time.Duration
+
+	// Used for debug logging
+	Filename string
+
+	OpenCount         int
+	OpenErrCount      int
+	LastOpenStartedAt time.Time
+	LastOpenDuration  time.Duration
+
+	ReadCount         int
+	ReadErrCount      int
+	LastReadStartedAt time.Time
+	LastReadDuration  time.Duration
 }
 
 var _ ioctx.ReadCloserCtx = &ResumingReader{}
@@ -173,6 +210,7 @@ func NewResumingReader(
 	opener ReaderOpenerAt,
 	reader io.ReadCloser,
 	pos int64,
+	filename string,
 	retryOnErrFn func(error) bool,
 	errFn func(error) time.Duration,
 ) *ResumingReader {
@@ -194,8 +232,16 @@ func NewResumingReader(
 func (r *ResumingReader) Open(ctx context.Context) error {
 	return DelayedRetry(ctx, "Open", r.ErrFn, func() error {
 		var readErr error
+
+		r.OpenCount++
+		r.LastOpenStartedAt = timeutil.Now()
 		r.Reader, readErr = r.Opener(ctx, r.Pos)
-		return readErr
+		r.LastOpenDuration = timeutil.Since(r.LastOpenStartedAt)
+		if readErr != nil {
+			r.OpenErrCount++
+			return errors.Wrapf(readErr, "open %s", r.Filename)
+		}
+		return nil
 	})
 }
 
@@ -211,24 +257,29 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 		}
 
 		if lastErr == nil {
+			r.ReadCount++
+			r.LastReadStartedAt = timeutil.Now()
 			n, readErr := r.Reader.Read(p)
+			r.LastReadDuration = timeutil.Since(r.LastReadStartedAt)
+
 			if readErr == nil || readErr == io.EOF {
 				r.Pos += int64(n)
 				return n, readErr
 			}
-			lastErr = readErr
+			r.ReadErrCount++
+			lastErr = errors.Wrapf(readErr, "read %s", r.Filename)
 		}
 
 		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(ctx, "Read err: %s", lastErr)
+			log.Errorf(ctx, "%s", lastErr)
 		}
 
 		// Use the configured retry-on-error decider to check for a resumable error.
 		if r.RetryOnErrFn(lastErr) {
 			if retries >= maxNoProgressReads {
-				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
+				return 0, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
 			}
-			log.Errorf(ctx, "Retry IO: error %s", lastErr)
+			log.Errorf(ctx, "Retry IO error: %s", lastErr)
 			lastErr = nil
 			if r.Reader != nil {
 				r.Reader.Close()
@@ -236,6 +287,13 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 			r.Reader = nil
 		}
 	}
+
+	log.VInfof(ctx, 2,
+		"read of %s failed with %v; (open: %d of %d attempts failed, last open at %s (took %s); read: %d of %d attempts failed, last read at %s (took %s)",
+		r.Filename, lastErr,
+		r.OpenErrCount, r.OpenCount, r.LastOpenStartedAt, r.LastOpenDuration,
+		r.ReadErrCount, r.ReadCount, r.LastReadStartedAt, r.LastReadDuration,
+	)
 
 	// NB: Go says Read() callers need to expect n > 0 *and* non-nil error, and do
 	// something with what was read before the error, but this mostly applies to
