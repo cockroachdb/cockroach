@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,7 +66,7 @@ func (stmt Statement) StringWithFlags(flags tree.FmtFlags) string {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner.PLPGSQLScanner
+	scanner    scanner.PLpgSQLScanner
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType
@@ -169,39 +168,4 @@ func (p *Parser) parse(
 func Parse(sql string) (Statement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
-}
-
-// ParsePlpgCounter parses the function body and calls the WalkStmt function for
-// each plpgsql statement.
-func ParsePlpgCounter(sql string) (plpgsqltree.PlpgSQLStmtCounter, error) {
-	v := plpgsqltree.MakePlpgSqlVisitor()
-	stmt, err := Parse(sql)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, s := range stmt.AST.Body {
-		_, _ = plpgsqltree.WalkStmt(v, s)
-	}
-	return v.StmtCnt, v.Err
-}
-
-// DealWithPlpgsqlFunc takes a plpgsql function and parses and collects
-// telemetry on the parsable statements
-func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
-	// assert that the language is PLPGSQL
-	var funcBodyStr string
-	for _, option := range stmt.Options {
-		switch opt := option.(type) {
-		case tree.FunctionBodyStr:
-			funcBodyStr = string(opt)
-		}
-	}
-
-	err := unimp.New("plpgsql", "plpgsql not supported for udf")
-	_, secErr := ParsePlpgCounter(funcBodyStr)
-	if err != nil {
-		err = errors.WithSecondaryError(err, secErr)
-	}
-	return err
 }
