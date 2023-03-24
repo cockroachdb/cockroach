@@ -280,14 +280,14 @@ export const filterStatementInsights = (
         }
 
         return (
-          (showInternal && isInternal(stmt.application)) ||
-          apps.includes(stmt.application)
+          (showInternal && isInternal(stmt?.application)) ||
+          apps.includes(stmt?.application)
         );
       },
     );
   } else {
     filteredStatements = filteredStatements.filter(
-      stmt => !isInternal(stmt.application),
+      stmt => !isInternal(stmt?.application),
     );
   }
   if (search) {
