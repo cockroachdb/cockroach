@@ -11,7 +11,9 @@ package changefeedccl
 import (
 	"context"
 	"errors"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -33,6 +35,24 @@ func TestConfluentSchemaRegistry(t *testing.T) {
 		url := "gopher://myhost"
 		_, err := newConfluentSchemaRegistry(url, nil)
 		require.Error(t, err)
+	})
+
+	t.Run("configure timeout", func(t *testing.T) {
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+		r, err := newConfluentSchemaRegistry(regServer.URL(), nil)
+		require.NoError(t, err)
+		require.Equal(t, defaultSchemaRegistryTimeout, r.client.Timeout)
+
+		// add explicit timeout param.
+		u, err := url.Parse(regServer.URL())
+		require.NoError(t, err)
+		values := u.Query()
+		values.Set(timeoutParam, "42ms")
+		u.RawQuery = values.Encode()
+		r, err = newConfluentSchemaRegistry(u.String(), nil)
+		require.NoError(t, err)
+		require.Equal(t, 42*time.Millisecond, r.client.Timeout)
 	})
 }
 
@@ -86,6 +106,7 @@ func TestConfluentSchemaRegistryRetryMetrics(t *testing.T) {
 			}
 			return nil
 		})
+		require.EqualValues(t, 0, sliMetrics.SchemaRegistrations.Value())
 		cancel()
 	})
 
