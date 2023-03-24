@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -942,8 +943,8 @@ revert=2'`)
 			var status string
 			var payloadBytes, progressBytes []byte
 			require.NoError(t, conn.QueryRowContext(
-				ctx, `SELECT status, progress, payload FROM system.jobs WHERE id = $1`, jobID).
-				Scan(&status, &progressBytes, &payloadBytes))
+				ctx, jobutils.InternalSystemJobsBaseQuery, jobID).
+				Scan(&status, &payloadBytes, &progressBytes))
 			if jobs.Status(status) == jobs.StatusFailed {
 				var payload jobspb.Payload
 				require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))

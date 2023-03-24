@@ -172,9 +172,17 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	id := ts.JobRegistry().(*jobs.Registry).MakeJobID()
 	_, err = tc.ServerConn(0).Exec(
-		`INSERT INTO system.jobs (status, payload) VALUES ($1, $2)`,
+		`INSERT INTO system.jobs (id, status) VALUES ($1, $2)`,
+		id,
 		jobs.StatusFailed,
+	)
+	require.NoError(t, err)
+	_, err = tc.ServerConn(0).Exec(
+		`INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
+		id,
+		jobs.GetLegacyPayloadKey(),
 		payload,
 	)
 	require.NoError(t, err)
@@ -470,7 +478,7 @@ func waitForJobCheckpoint(t *testing.T, tdb *sqlutils.SQLRunner) {
 	testutils.SucceedsSoon(t, func() error {
 		var progressBytes []byte
 		tdb.QueryRow(t, `
-SELECT progress FROM system.jobs
+SELECT progress FROM crdb_internal.system_jobs
   WHERE id = (SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION')
 `).Scan(&progressBytes)
 

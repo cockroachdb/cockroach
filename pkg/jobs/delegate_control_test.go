@@ -463,6 +463,7 @@ func TestJobControlByType(t *testing.T) {
 
 				// Clear the system.jobs table for the next test run.
 				th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.jobs WHERE id IN (%s)", jobIdsClause))
+				th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.job_info WHERE job_id IN (%s)", jobIdsClause))
 			})
 		}
 	}
