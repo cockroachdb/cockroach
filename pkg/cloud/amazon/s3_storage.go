@@ -681,7 +681,8 @@ func (s *s3Storage) ReadFileAt(
 ) (ioctx.ReadCloserCtx, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))})
+	path := path.Join(s.prefix, basename)
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path)})
 
 	stream, err := s.openStreamAt(ctx, basename, offset)
 	if err != nil {
@@ -718,8 +719,8 @@ func (s *s3Storage) ReadFileAt(
 		}
 		return s.Body, nil
 	}
-	return cloud.NewResumingReader(ctx, opener, stream.Body, offset,
-		cloud.IsResumableHTTPError, s3ErrDelay), size, nil
+	return cloud.NewResumingReader(ctx, opener, stream.Body, offset, path,
+		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), size, nil
 }
 
 func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
