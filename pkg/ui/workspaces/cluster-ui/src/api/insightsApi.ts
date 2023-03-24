@@ -172,7 +172,7 @@ type FingerprintStmtsResponseColumns = {
 const fingerprintStmtsQuery = (stmt_fingerprint_ids: string[]): string => `
 SELECT
   DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
-  prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
+  (metadata ->> 'query') AS query
 FROM crdb_internal.statement_statistics
 WHERE encode(fingerprint_id, 'hex') = ANY ARRAY[ ${stmt_fingerprint_ids
   .map(id => `'${id}'`)
@@ -197,7 +197,7 @@ function fingerprintStmtsResultsToEventState(
 }
 
 const makeInsightsSqlRequest = (queries: string[]): SqlExecutionRequest => ({
-  statements: queries.map(query => ({ sql: query })),
+  statements: queries?.map(query => ({ sql: query })),
   execute: true,
   max_result_size: LARGE_RESULT_SIZE,
   timeout: LONG_TIMEOUT,
@@ -314,9 +314,9 @@ export function combineTransactionInsightEventState(
     };
   }
   const txnsWithStmtQueries = txnFingerprintState.map(txnRow => ({
-    fingerprintID: txnRow.fingerprintID,
-    appName: txnRow.application,
-    queries: txnRow.queryIDs.map(stmtID => fingerprintToQuery.get(stmtID)),
+    fingerprintID: txnRow?.fingerprintID,
+    appName: txnRow?.application,
+    queries: txnRow?.queryIDs?.map(stmtID => fingerprintToQuery.get(stmtID)),
   }));
 
   const res = txnContentionState.map(row => {
@@ -620,8 +620,8 @@ export function combineTransactionInsightEventDetailsState(
 
   const res = {
     ...txnContentionDetailsState,
-    application: waitingTxn.application,
-    queries: waitingTxn.queryIDs.map(id => stmtFingerprintToQuery.get(id)),
+    application: waitingTxn?.application,
+    queries: waitingTxn?.queryIDs?.map(id => stmtFingerprintToQuery.get(id)),
   };
 
   return {
@@ -714,7 +714,7 @@ const statementInsightsQuery: InsightQuery<
 > = {
   name: InsightNameEnum.highContention,
   // We only surface the most recently observed problem for a given statement.
-  query: `SELECT *, prettify_statement(non_prettified_query, 108, 1, 1) AS query from (
+  query: `SELECT *, (non_prettified_query) AS query from (
     SELECT
       session_id,
       txn_id,
