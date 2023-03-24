@@ -101,8 +101,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 				panic(err)
 			}
 
-			if opt == tree.FunctionLangPlPgSQL {
-				if err := plpgsql.DealWithPlpgsqlFunc(cf); err != nil {
+			if opt == tree.FunctionLangPLpgSQL {
+				if err := plpgsql.ParseAndCollectTelemetryForPLpgSQLFunc(cf); err != nil {
+					// Until plpgsql is fully implemented DealWithPlpgSQlFunc will always
+					// return an error.
 					panic(err)
 				}
 			}
@@ -336,4 +338,3 @@ func checkStmtVolatility(
 		}
 	}
 }
-
