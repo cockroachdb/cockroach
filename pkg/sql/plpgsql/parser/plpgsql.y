@@ -1079,20 +1079,37 @@ stmt_open		: OPEN IDENT open_stmt_processor ';'
 						$$.val = openCursorStmt
 					}
 				;
-
-stmt_fetch		: FETCH opt_fetch_direction cursor_variable INTO
+// TODO: Should be fetch_target or target instead of expr_until_semi
+stmt_fetch		: FETCH opt_fetch_direction cursor_variable INTO expr_until_semi ';'
 					{
+					  return unimplemented(plpgsqllex, "fetch")
 					}
 				;
 
 stmt_move		: MOVE opt_fetch_direction cursor_variable ';'
 					{
+					  return unimplemented(plpgsqllex, "move")
 					}
 				;
 
 opt_fetch_direction	:
-					{
-					}
+          {}
+        | NEXT FROM
+					{}
+				| PRIOR FROM
+					{}
+				| FIRST FROM
+				  {}
+        | LAST FROM
+          {}
+        | ABSOLUTE ICONST FROM
+          {}
+        | RELATIVE ICONST FROM
+          {}
+        | FORWARD FROM
+          {}
+        | BACKWARD FROM
+          {}
 				;
 
 stmt_close		: CLOSE cursor_variable ';'
@@ -1126,8 +1143,10 @@ opt_transaction_chain:
 				;
 
 
-cursor_variable	: any_identifier
-{}
+cursor_variable	: IDENT
+{
+  unimplemented(plpgsqllex, "cursor variable")
+}
 ;
 
 exception_sect	:
