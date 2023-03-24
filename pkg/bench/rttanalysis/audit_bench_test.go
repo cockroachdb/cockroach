@@ -1,0 +1,25 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package rttanalysis
+
+import "testing"
+
+func BenchmarkAudit(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("Audit", []RoundTripBenchTestCase{
+		{
+			Name: "select from an audit table",
+			Setup: `CREATE TABLE audit_table(a INT);
+							ALTER TABLE audit_table EXPERIMENTAL_AUDIT SET READ WRITE;`,
+			Stmt: "SELECT * from audit_table",
+		},
+	})
+}
