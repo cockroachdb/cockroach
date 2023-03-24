@@ -270,9 +270,7 @@ func (m *MultiConnPool) Close() {
 	}
 }
 
-// AddPreparedStatement adds the given sql statement to the map of
-// statements that will be prepared when a new connection is retrieved
-// from the pool.
+// Method returns the query execution mode of the connection pool.
 func (m *MultiConnPool) Method() pgx.QueryExecMode {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -286,20 +284,6 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 	if numConns < 0 {
 		return nil
 	}
-
-	// "Warm up" the pools so we don't have to establish connections later (which
-	// would affect the observed latencies of the first requests, especially when
-	// prepared statements are used). We do this by
-	// acquiring connections (in parallel), then releasing them back to the
-	// pool.
-	var g errgroup.Group
-	// Limit concurrent connection establishment. Allowing this to run
-	// at maximum parallelism would trigger syn flood protection on the
-	// host, which combined with any packet loss could cause Acquire to
-	// return an error and fail the whole function. The value 100 is
-	// chosen because it is less than the default value for SOMAXCONN
-	// (128).
-	sem := semaphore.New(100)
 
 	warmupCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -315,30 +299,51 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 
 	warmupConns := make(chan struct{}, numWarmupConns)
 
+	// "Warm up" the pools so we don't have to establish connections later (which
+	// would affect the observed latencies of the first requests, especially when
+	// prepared statements are used). We do this by
+	// acquiring connections (in parallel), then releasing them back to the
+	// pool.
+	var g errgroup.Group
+
+	// Limit concurrent connection establishment. Allowing this to run
+	// at maximum parallelism would trigger syn flood protection on the
+	// host, which combined with any packet loss could cause Acquire to
+	// return an error and fail the whole function. The value 100 is
+	// chosen because it is less than the default value for SOMAXCONN
+	// (128).
+	sem := semaphore.New(100)
+
 	for i := 0; i < numWarmupConns; i++ {
 		p := m.Get()
 
 		g.Go(func() error {
 			if err := sem.Acquire(warmupCtx, 1); err != nil {
-				warmupConns <- struct{}{}
 				return err
 			}
+
 			conn, err := p.Acquire(warmupCtx)
 			if err != nil {
-				sem.Release(1)
-				warmupConns <- struct{}{}
 				return err
 			}
-			sem.Release(1)
-			warmupConns <- struct{}{}
-			<-warmupCtx.Done()
+
+			sem.Release(1)            // Allow next conn to be established
+			warmupConns <- struct{}{} // Signal connection establish complete
+			<-warmupCtx.Done()        // Block until all go routines complete
 			conn.Release()
-			return err
+			return nil
 		})
 	}
+
+WARMUP:
 	for i := 0; i < numWarmupConns; i++ {
-		<-warmupConns
+		select {
+		case <-warmupConns:
+		case <-warmupCtx.Done():
+			break WARMUP
+		}
 	}
+
 	cancel()
 	if err := g.Wait(); err != nil {
 		return err
