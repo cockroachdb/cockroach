@@ -1381,9 +1381,9 @@ func cmdExport(e *evalCtx) error {
 		ExportAllRevisions: e.hasArg("allRevisions"),
 		StopMidKey:         e.hasArg("stopMidKey"),
 		FingerprintOptions: storage.MVCCExportFingerprintOptions{
-			StripTenantPrefix:  e.hasArg("stripTenantPrefix"),
-			StripValueChecksum: e.hasArg("stripValueChecksum"),
-			StrippedVersion:    e.hasArg("stripped"),
+			StripTenantPrefix:            e.hasArg("stripTenantPrefix"),
+			StripValueChecksum:           e.hasArg("stripValueChecksum"),
+			StripIndexPrefixAndTimestamp: e.hasArg("stripped"),
 		},
 	}
 	if e.hasArg("maxIntents") {

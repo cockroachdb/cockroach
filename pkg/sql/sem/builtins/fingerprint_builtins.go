@@ -34,7 +34,7 @@ import (
 func fingerprint(
 	ctx context.Context,
 	evalCtx *eval.Context,
-	args tree.Datums,
+	span roachpb.Span,
 	startTime hlc.Timestamp,
 	allRevisions, stripped bool,
 ) (tree.Datum, error) {
@@ -53,13 +53,6 @@ func fingerprint(
 	if !isAdmin {
 		return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
 	}
-
-	arr := tree.MustBeDArray(args[0])
-	if arr.Len() != 2 {
-		return nil, errors.New("expected an array of two elements")
-	}
-	startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
-	endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
 
 	filter := kvpb.MVCCFilter_Latest
 	if allRevisions {
@@ -87,7 +80,7 @@ func fingerprint(
 	}
 
 	todo := make(chan kvpb.RequestHeader, 1)
-	todo <- kvpb.RequestHeader{Key: startKey, EndKey: endKey}
+	todo <- kvpb.RequestHeader{Key: span.Key, EndKey: span.EndKey}
 	ctxDone := ctx.Done()
 	var fingerprint uint64
 	// TODO(adityamaru): Memory monitor this slice of buffered SSTs that
@@ -99,15 +92,16 @@ func fingerprint(
 			return nil, ctx.Err()
 		case reqHeader := <-todo:
 			req := &kvpb.ExportRequest{
-				RequestHeader:     reqHeader,
-				StartTime:         startTime,
-				MVCCFilter:        filter,
-				ExportFingerprint: true,
-			}
+				RequestHeader:      reqHeader,
+				StartTime:          startTime,
+				MVCCFilter:         filter,
+				ExportFingerprint:  true,
+				FingerprintOptions: kvpb.FingerprintOptions{StripIndexPrefixAndTimestamp: stripped}}
 			var rawResp kvpb.Response
 			var pErr *kvpb.Error
 			exportRequestErr := contextutil.RunWithTimeout(ctx,
-				fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: startKey, EndKey: endKey}),
+				fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
+					EndKey: span.EndKey}),
 				5*time.Minute, func(ctx context.Context) error {
 					rawResp, pErr = kv.SendWrappedWithAdmission(ctx,
 						evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
@@ -166,9 +160,9 @@ func fingerprint(
 			// fingerprint them as a single rangekey with bounds [b-d)@t2.
 			rangekeyFingerprint, err := storage.FingerprintRangekeys(ctx, evalCtx.Settings,
 				storage.MVCCExportFingerprintOptions{
-					StripTenantPrefix:  true,
-					StripValueChecksum: true,
-					StrippedVersion:    stripped,
+					StripTenantPrefix:            true,
+					StripValueChecksum:           true,
+					StripIndexPrefixAndTimestamp: stripped,
 				}, ssts)
 			if err != nil {
 				return nil, err

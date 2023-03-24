@@ -146,8 +146,8 @@ func (f *fingerprintWriter) PutUnversioned(key roachpb.Key, value []byte) error 
 }
 
 func (f *fingerprintWriter) hashKey(key []byte) error {
-	if f.options.StrippedVersion {
-		return f.hash(f.stripTablePrefix(key))
+	if f.options.StripIndexPrefixAndTimestamp {
+		return f.hash(f.stripIndexPrefix(key))
 	}
 	if f.options.StripTenantPrefix {
 		return f.hash(f.stripTenantPrefix(key))
@@ -156,7 +156,7 @@ func (f *fingerprintWriter) hashKey(key []byte) error {
 }
 
 func (f *fingerprintWriter) hashTimestamp(timestamp hlc.Timestamp) error {
-	if f.options.StrippedVersion {
+	if f.options.StripIndexPrefixAndTimestamp {
 		return nil
 	}
 	f.timestampBuf = EncodeMVCCTimestampToBuf(f.timestampBuf, timestamp)
@@ -190,15 +190,15 @@ func (f *fingerprintWriter) stripValueChecksum(value []byte) []byte {
 }
 
 func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
-	remainder, err := keys.StripTenantPrefixE(key)
+	remainder, err := keys.StripTenantPrefix(key)
 	if err != nil {
 		return key
 	}
 	return remainder
 }
 
-func (f *fingerprintWriter) stripTablePrefix(key []byte) []byte {
-	remainder, err := keys.StripIndexPrefixE(key)
+func (f *fingerprintWriter) stripIndexPrefix(key []byte) []byte {
+	remainder, err := keys.StripIndexPrefix(key)
 	if err != nil {
 		return key
 	}

@@ -1702,7 +1702,7 @@ message ExportRequest {
 }
 
 message FingerprintOptions {
-  bool stripped = 1;
+  bool strip_index_prefix_and_timestamp = 1;
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the

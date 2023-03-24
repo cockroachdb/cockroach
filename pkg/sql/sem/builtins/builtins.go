@@ -7520,6 +7520,16 @@ expires until the statement bundle is collected`,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
+			// If the second arg is set to true, this overload allows the caller to
+			// execute a "stripped" fingerprint on the latest keys in a span. This
+			// stripped fingerprint strips each key's timestamp and index prefix
+			// before hashing, enabling a user to assert that two different tables
+			// have the same latest keys, for example. Because the index prefix is
+			// stripped, this option should only get used in the table key space.
+			//
+			// If the stripped param is set to false, this overload is equivalent to
+			// 'crdb_internal.fingerprint(span,NULL,LATEST)'
+
 			Types: tree.ParamTypes{
 				{Name: "span", Typ: types.BytesArray},
 				{Name: "stripped", Typ: types.Bool},
@@ -7529,8 +7539,16 @@ expires until the statement bundle is collected`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				skipTimestamp := *args[1].(*tree.DBool)
-				return fingerprint(ctx, evalCtx, args, hlc.Timestamp{}, false, bool(skipTimestamp))
+				if len(args) != 2 {
+					return nil, errors.New("argument list must have two elements")
+				}
+				span, err := parseSpan(args[0])
+				if err != nil {
+					return nil, err
+				}
+				skipTimestamp := bool(tree.MustBeDBool(args[1]))
+				return fingerprint(ctx, evalCtx, span, hlc.Timestamp{} /* allRevisions */, false,
+					skipTimestamp)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
@@ -7546,10 +7564,17 @@ expires until the statement bundle is collected`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				startTime := args[1].(*tree.DTimestampTZ).Time
+				if len(args) != 3 {
+					return nil, errors.New("argument list must have three elements")
+				}
+				span, err := parseSpan(args[0])
+				if err != nil {
+					return nil, err
+				}
+				startTime := tree.MustBeDTimestampTZ(args[1]).Time
 				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
-				allRevisions := *args[2].(*tree.DBool)
-				return fingerprint(ctx, evalCtx, args, startTimestamp, bool(allRevisions), false)
+				allRevisions := bool(tree.MustBeDBool(args[2]))
+				return fingerprint(ctx, evalCtx, span, startTimestamp, allRevisions /* stripped */, false)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
@@ -10468,4 +10493,14 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 		formattedStmt.WriteString("\n")
 	}
 	return formattedStmt.String(), nil
+}
+
+func parseSpan(arg tree.Datum) (roachpb.Span, error) {
+	arr := tree.MustBeDArray(arg)
+	if arr.Len() != 2 {
+		return roachpb.Span{}, errors.New("expected an array of two elements")
+	}
+	startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
+	endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
+	return roachpb.Span{Key: startKey, EndKey: endKey}, nil
 }

@@ -194,11 +194,11 @@ func evalExport(
 			// values before fingerprinting so that the fingerprint is tenant
 			// agnostic.
 			opts.FingerprintOptions = storage.MVCCExportFingerprintOptions{
-				StripTenantPrefix:  true,
-				StripValueChecksum: true,
-				StrippedVersion:    args.FingerprintOptions.Stripped,
+				StripTenantPrefix:            true,
+				StripValueChecksum:           true,
+				StripIndexPrefixAndTimestamp: args.FingerprintOptions.StripIndexPrefixAndTimestamp,
 			}
-			if opts.FingerprintOptions.StrippedVersion && args.MVCCFilter == kvpb.MVCCFilter_All {
+			if opts.FingerprintOptions.StripIndexPrefixAndTimestamp && args.MVCCFilter == kvpb.MVCCFilter_All {
 				// If a key's value were updated from a to b, the xor hash without
 				// timestamps of those two mvcc values would look the same if the key
 				// were updated from b to a. In other words, the order of key value
@@ -207,7 +207,7 @@ func evalExport(
 				// strip timestamps if fingerprinting all mvcc history.
 				return result.Result{}, errors.New("cannot fingerprint without mvcc timestamps and with mvcc history")
 			}
-			if opts.FingerprintOptions.StrippedVersion && !args.StartTime.IsEmpty() {
+			if opts.FingerprintOptions.StripIndexPrefixAndTimestamp && !args.StartTime.IsEmpty() {
 				// Supplying a startKey only complicates results (e.g. it surfaces
 				// tombstones), given that only the latest keys are surfaced.
 				return result.Result{}, errors.New("cannot fingerprint without mvcc timestamps and with a start time")
