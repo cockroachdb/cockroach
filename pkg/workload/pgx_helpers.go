@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
@@ -36,6 +37,7 @@ type MultiConnPool struct {
 		// preparedStatements is a map from name to SQL. The statements in the map
 		// are prepared whenever a new connection is acquired from the pool.
 		preparedStatements map[string]string
+		method             pgx.QueryExecMode
 	}
 }
 
@@ -70,6 +72,9 @@ type MultiConnPoolCfg struct {
 	// MaxConnLifetime.
 	MaxConnLifetimeJitter time.Duration
 
+	// Method specifies the query type to use for the  PG wire protocol.
+	Method string
+
 	// MinConns is the minimum number of connections the connection pool will
 	// attempt to keep.  Connection count may dip below this value periodically,
 	// see pgxpool documentation for details.
@@ -83,6 +88,24 @@ type MultiConnPoolCfg struct {
 
 	// LogLevel specifies the log level (default: warn)
 	LogLevel tracelog.LogLevel
+}
+
+// String values taken from pgx.ParseConfigWithOptions() to maintain
+// compatibility with pgx.  See [1] and [2] for additional details.
+//
+// [1] https://github.com/jackc/pgx/blob/fa5fbed497bc75acee05c1667a8760ce0d634cba/conn.go#L167-L182
+// [2] https://github.com/jackc/pgx/blob/fa5fbed497bc75acee05c1667a8760ce0d634cba/conn.go#L578-L612
+var stringToMethod = map[string]pgx.QueryExecMode{
+	"cache_statement": pgx.QueryExecModeCacheStatement,
+	"cache_describe":  pgx.QueryExecModeCacheDescribe,
+	"describe_exec":   pgx.QueryExecModeDescribeExec,
+	"exec":            pgx.QueryExecModeExec,
+	"simple_protocol": pgx.QueryExecModeSimpleProtocol,
+
+	// Preserve backward compatibility with original workload --method's
+	"prepare":   pgx.QueryExecModeCacheStatement,
+	"noprepare": pgx.QueryExecModeExec,
+	"simple":    pgx.QueryExecModeSimpleProtocol,
 }
 
 // pgxLogger implements the pgx.Logger interface.
@@ -158,6 +181,15 @@ func NewMultiConnPool(
 		maxConnsPerPool = cfg.MaxTotalConnections
 	}
 
+	// See
+	// https://github.com/jackc/pgx/blob/fa5fbed497bc75acee05c1667a8760ce0d634cba/conn.go#L578-L612
+	// for details on the specifics of each query mode.
+	queryMode, ok := stringToMethod[strings.ToLower(cfg.Method)]
+	if !ok {
+		return nil, errors.Errorf("unknown method %s", cfg.Method)
+	}
+	m.mu.method = queryMode
+
 	for i := range urls {
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
@@ -189,12 +221,8 @@ func NewMultiConnPool(
 				return true
 			}
 
-			// Disable the automatic prepared statement cache. We've seen a lot of
-			// churn in this cache since workloads create many of different queries.
 			connCfg := poolCfg.ConnConfig
-			connCfg.DefaultQueryExecMode = pgx.QueryExecModeDescribeExec
-			connCfg.StatementCacheCapacity = 0
-			connCfg.DescriptionCacheCapacity = 0
+			connCfg.DefaultQueryExecMode = queryMode
 			connCfg.Tracer = &tracelog.TraceLog{
 				Logger:   &pgxLogger{},
 				LogLevel: logLevel,
@@ -226,11 +254,13 @@ func (m *MultiConnPool) AddPreparedStatement(name string, statement string) {
 
 // Get returns one of the pools, in round-robin manner.
 func (m *MultiConnPool) Get() *pgxpool.Pool {
-	if len(m.Pools) == 1 {
+	numPools := uint32(len(m.Pools))
+	if numPools == 1 {
 		return m.Pools[0]
 	}
 	i := atomic.AddUint32(&m.counter, 1) - 1
-	return m.Pools[i%uint32(len(m.Pools))]
+
+	return m.Pools[i%numPools]
 }
 
 // Close closes all the pools.
@@ -238,6 +268,15 @@ func (m *MultiConnPool) Close() {
 	for _, p := range m.Pools {
 		p.Close()
 	}
+}
+
+// AddPreparedStatement adds the given sql statement to the map of
+// statements that will be prepared when a new connection is retrieved
+// from the pool.
+func (m *MultiConnPool) Method() pgx.QueryExecMode {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mu.method
 }
 
 // WarmupConns warms up numConns connections across all pools contained within

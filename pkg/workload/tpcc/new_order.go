@@ -123,7 +123,7 @@ func createNewOrder(
 		VALUES ($1, $2, $3)`,
 	)
 
-	if err := n.sr.Init(ctx, "new-order", mcp, config.connFlags); err != nil {
+	if err := n.sr.Init(ctx, "new-order", mcp); err != nil {
 		return nil, err
 	}
 

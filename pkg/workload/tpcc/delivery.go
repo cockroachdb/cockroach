@@ -72,7 +72,7 @@ func createDelivery(
 		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
 	)
 
-	if err := del.sr.Init(ctx, "delivery", mcp, config.connFlags); err != nil {
+	if err := del.sr.Init(ctx, "delivery", mcp); err != nil {
 		return nil, err
 	}
 

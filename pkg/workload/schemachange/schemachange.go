@@ -155,6 +155,7 @@ func (s *schemaChange) Ops(
 		MaxConnLifetime:       s.connFlags.MaxConnLifetime,
 		MaxConnLifetimeJitter: s.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   s.connFlags.Concurrency,
+		Method:                s.connFlags.Method,
 		MinConns:              s.connFlags.MinConns,
 		WarmupConns:           s.connFlags.WarmupConns,
 	}

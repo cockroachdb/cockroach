@@ -368,6 +368,7 @@ func (w *kv) Ops(
 		MaxConnLifetime:       w.connFlags.MaxConnLifetime,
 		MaxConnLifetimeJitter: w.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   w.connFlags.Concurrency + 1,
+		Method:                w.connFlags.Method,
 		MinConns:              w.connFlags.MinConns,
 		WarmupConns:           w.connFlags.WarmupConns,
 	}
@@ -492,7 +493,7 @@ func (w *kv) Ops(
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
 		op.delStmt = op.sr.Define(delStmtStr)
-		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
+		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp

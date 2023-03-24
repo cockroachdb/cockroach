@@ -466,6 +466,7 @@ func (g *ycsb) Ops(
 		MaxConnLifetime:       g.connFlags.MaxConnLifetime,
 		MaxConnLifetimeJitter: g.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   g.connFlags.Concurrency, // We want number of connections = number of workers.
+		Method:                g.connFlags.Method,
 		MinConns:              g.connFlags.MinConns,
 		WarmupConns:           g.connFlags.WarmupConns,
 	}, urls...)

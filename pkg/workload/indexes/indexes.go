@@ -164,6 +164,7 @@ func (w *indexes) Ops(
 		MaxConnLifetime:       w.connFlags.MaxConnLifetime,
 		MaxConnLifetimeJitter: w.connFlags.MaxConnLifetimeJitter,
 		MaxTotalConnections:   w.connFlags.Concurrency + 1,
+		Method:                w.connFlags.Method,
 		MinConns:              w.connFlags.MinConns,
 		WarmupConns:           w.connFlags.WarmupConns,
 	}
@@ -182,7 +183,7 @@ func (w *indexes) Ops(
 			buf:    make([]byte, w.payload),
 		}
 		op.stmt = op.sr.Define(stmt)
-		if err := op.sr.Init(ctx, "indexes", mcp, w.connFlags); err != nil {
+		if err := op.sr.Init(ctx, "indexes", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)

@@ -770,6 +770,7 @@ func (w *tpcc) Ops(
 		// Limit the number of connections per pool (otherwise preparing statements
 		// at startup can be slow).
 		MaxConnsPerPool: w.connFlags.Concurrency,
+		Method:          w.connFlags.Method,
 		MinConns:        w.connFlags.MinConns,
 		WarmupConns:     w.connFlags.WarmupConns,
 	}
