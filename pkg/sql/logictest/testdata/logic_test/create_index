@@ -1,4 +1,4 @@
-# LogicTest: default-configs local-mixed-22.2-23.1
+# LogicTest: default-configs
 
 statement ok
 CREATE TABLE t (
@@ -284,7 +284,7 @@ let $spans
                 SELECT j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0 AS span
                   FROM (
                         SELECT crdb_internal.pb_to_json('payload', payload) AS j
-                          FROM system.jobs
+                          FROM crdb_internal.system_jobs
                        )
                  WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%'
             ),
@@ -329,16 +329,16 @@ SELECT json_build_array(
 # sure that on resume it re-keys the spans correctly. We pretty_key these below
 # to confirm/show what is in them.
 statement ok
-UPDATE system.jobs
-  SET payload = crdb_internal.json_to_pb(
+UPDATE system.job_info
+  SET value = crdb_internal.json_to_pb(
     'cockroach.sql.jobs.jobspb.Payload',
       json_set(
-        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
+        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value),
         ARRAY['schemaChange', 'resumeSpanList', '0'],
         '{"resumeSpans": $spans}'::jsonb
       )
     )
-WHERE crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'description' LIKE 'CREATE INDEX pauseidx%';
+WHERE info_key = 'legacy_payload'::BYTES AND crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->>'description' LIKE 'CREATE INDEX pauseidx%';
 
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
@@ -349,7 +349,7 @@ SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'key', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'endKey', 'base64'), 0)
 FROM (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM crdb_internal.system_jobs
 ) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
 ----
 /103/Table/114/1  /103/Table/114/1/100  /114/1/100  /114/2
