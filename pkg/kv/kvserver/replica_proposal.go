@@ -195,6 +195,8 @@ const (
 	allowLeaseJump = true
 )
 
+var firstLivenessLeaseAcquisition = true
+
 // leasePostApplyLocked updates the Replica's internal state to reflect the
 // application of a new Range lease. The method is idempotent, so it can be
 // called repeatedly for the same lease safely. However, the method will panic
@@ -423,22 +425,30 @@ func (r *Replica) leasePostApplyLocked(
 	// this gossip if we're taking over after a leaseholder failure. In both cases,
 	// incremental liveness updates may have been lost, so we want to make sure that
 	// the latest view of node liveness ends up in gossip.
-	nls := keys.NodeLivenessSpan
-	if leaseChangingHands && iAmTheLeaseHolder && kvserverbase.ContainsKeyRange(r.descRLocked(), nls.Key, nls.EndKey) {
-		// NB: run these in an async task to keep them out of the critical section
-		// (r.mu is held here).
-		_ = r.store.stopper.RunAsyncTask(r.AnnotateCtx(context.Background()), "lease-triggers", func(ctx context.Context) {
-			// Re-acquire the raftMu, as we are now in an async task.
-			r.raftMu.Lock()
-			defer r.raftMu.Unlock()
-			if _, err := r.IsDestroyed(); err != nil {
-				// Nothing to do.
-				return
+	if isNodeLiveness := kvserverbase.ContainsKey(r.descRLocked(), keys.NodeLivenessSpan.Key); isNodeLiveness {
+		if firstLivenessLeaseAcquisition {
+			if !leaseChangingHands {
+				log.Fatalf(ctx, "lease didn't 'change hands' on first acquisition after restart: %+v to %+v", prevLease, newLease)
 			}
-			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Errorf(ctx, "%v", err)
-			}
-		})
+			firstLivenessLeaseAcquisition = false
+		}
+		if iAmTheLeaseHolder && leaseChangingHands {
+			log.Infof(ctx, "now liveness leaseholder")
+			// NB: run these in an async task to keep them out of the critical section
+			// (r.mu is held here).
+			_ = r.store.stopper.RunAsyncTask(r.AnnotateCtx(context.Background()), "lease-triggers", func(ctx context.Context) {
+				// Re-acquire the raftMu, as we are now in an async task.
+				r.raftMu.Lock()
+				defer r.raftMu.Unlock()
+				if _, err := r.IsDestroyed(); err != nil {
+					// Nothing to do.
+					return
+				}
+				if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
+					log.Errorf(ctx, "%v", err)
+				}
+			})
+		}
 	}
 
 	// Inform the store of this lease.
