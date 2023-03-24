@@ -564,6 +564,8 @@ func (sp *replicationTestSpec) main(ctx context.Context, t test.Test, c cluster.
 	sp.metrics.initalScanStart = newMetricSnapshot(metricSnapper, timeutil.Now())
 	ingestionJobID := sp.startReplicationStream()
 
+	removeTenantRateLimiters(t, sp.setup.dst.sysSQL, sp.setup.dst.name)
+
 	lv := makeLatencyVerifier("stream-ingestion", 0, 2*time.Minute, t.L(), getStreamIngestionJobInfo, t.Status, false)
 	defer lv.maybeLogLatencyHist()
 
