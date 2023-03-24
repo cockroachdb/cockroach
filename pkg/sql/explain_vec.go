@@ -106,6 +106,7 @@ func newFlowCtxForExplainPurposes(
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Mon:     monitor,
+		Txn:     p.txn,
 		Cfg: &execinfra.ServerConfig{
 			Settings:         p.execCfg.Settings,
 			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
