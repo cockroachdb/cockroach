@@ -366,6 +366,7 @@ func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *test
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.privileges", [][]string{
+			{"public", "/vtable/crdb_internal/tables", "{}", "{}", "4"},
 			{"testuser1", "/global/", "{VIEWACTIVITY}", "{}", "100"},
 			{"testuser2", "/global/", "{MODIFYCLUSTERSETTING}", "{}", "101"},
 		})
