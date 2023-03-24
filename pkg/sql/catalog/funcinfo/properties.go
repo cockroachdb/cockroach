@@ -108,7 +108,7 @@ func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, erro
 	switch v {
 	case tree.FunctionLangSQL:
 		return catpb.Function_SQL, nil
-	case tree.FunctionLangPlPgSQL:
+	case tree.FunctionLangPLpgSQL:
 		return catpb.Function_PLPGSQL, nil
 	case tree.FunctionLangC:
 		return -1, unimplemented.NewWithIssue(102201, "C is not yet supported")

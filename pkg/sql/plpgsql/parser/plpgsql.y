@@ -6,6 +6,7 @@ import (
 
   "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
+  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/errors"
   "github.com/cockroachdb/redact"
@@ -27,35 +28,35 @@ func unimplemented(plpgsqllex plpgsqlLexer, feature string) int {
 var _ scanner.ScanSymType = &plpgsqlSymType{}
 
 func (s *plpgsqlSymType) ID() int32 {
-	return s.id
+  return s.id
 }
 
 func (s *plpgsqlSymType) SetID(id int32) {
-	s.id = id
+  s.id = id
 }
 
 func (s *plpgsqlSymType) Pos() int32 {
-	return s.pos
+  return s.pos
 }
 
 func (s *plpgsqlSymType) SetPos(pos int32) {
-	s.pos = pos
+  s.pos = pos
 }
 
 func (s *plpgsqlSymType) Str() string {
-	return s.str
+  return s.str
 }
 
 func (s *plpgsqlSymType) SetStr(str string) {
-	s.str = str
+  s.str = str
 }
 
 func (s *plpgsqlSymType) UnionVal() interface{} {
-	return s.union.val
+  return s.union.val
 }
 
 func (s *plpgsqlSymType) SetUnionVal(val interface{}) {
-	s.union.val = val
+  s.union.val = val
 }
 
 func (s *plpgsqlSymType) plpgsqlScanSymType() {}
@@ -98,6 +99,10 @@ func (u *plpgsqlSymUnion) uint32() uint32 {
 
 func (u *plpgsqlSymUnion) bool() bool {
     return u.val.(bool)
+}
+
+func (u *plpgsqlSymUnion) numVal() *tree.NumVal {
+    return u.val.(*tree.NumVal)
 }
 
 func (u *plpgsqlSymUnion) pLpgSQLGetDiagKind() plpgsqltree.PLpgSQLGetDiagKind {
@@ -144,116 +149,116 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
  * see pl_scanner.c for info.  Be sure unreserved keywords are listed
  * in the "unreserved_keyword" production below.
  */
-%token <str>	ABSOLUTE
-%token <str>	ALIAS
-%token <str>	ALL
-%token <str>	AND
-%token <str>	ARRAY
-%token <str>	ASSERT
-%token <str>	BACKWARD
-%token <str>	BEGIN
-%token <str>	BY
-%token <str>	CALL
-%token <str>	CASE
-%token <str>	CHAIN
-%token <str>	CLOSE
-%token <str>	COLLATE
-%token <str>	COLUMN
-%token <str>	COLUMN_NAME
-%token <str>	COMMIT
-%token <str>	CONSTANT
-%token <str>	CONSTRAINT
-%token <str>	CONSTRAINT_NAME
-%token <str>	CONTINUE
-%token <str>	CURRENT
-%token <str>	CURSOR
-%token <str>	DATATYPE
-%token <str>	DEBUG
-%token <str>	DECLARE
-%token <str>	DEFAULT
-%token <str>	DETAIL
-%token <str>	DIAGNOSTICS
-%token <str>	DO
-%token <str>	DUMP
-%token <str>	ELSE
-%token <str>	ELSIF
-%token <str>	END
-%token <str>	END_CASE
-%token <str>	END_IF
-%token <str>	ERRCODE
-%token <str>	ERROR
-%token <str>	EXCEPTION
-%token <str>	EXECUTE
-%token <str>	EXIT
-%token <str>	FETCH
-%token <str>	FIRST
-%token <str>	FOR
-%token <str>	FOREACH
-%token <str>	FORWARD
-%token <str>	FROM
-%token <str>	GET
-%token <str>	HINT
-%token <str>	IF
-%token <str>	IMPORT
-%token <str>	IN
-%token <str>	INFO
-%token <str>	INSERT
-%token <str>	INTO
-%token <str>	IS
-%token <str>	LAST
-%token <str>	LOG
-%token <str>	LOOP
-%token <str>	MERGE
-%token <str>	MESSAGE
-%token <str>	MESSAGE_TEXT
-%token <str>	MOVE
-%token <str>	NEXT
-%token <str>	NO
-%token <str>	NO_SCROLL
-%token <str>	NOT
-%token <str>	NOTICE
-%token <str>	NULL
-%token <str>	OPEN
-%token <str>	OPTION
-%token <str>	OR
-%token <str>	PERFORM
-%token <str>	PG_CONTEXT
-%token <str>	PG_DATATYPE_NAME
-%token <str>	PG_EXCEPTION_CONTEXT
-%token <str>	PG_EXCEPTION_DETAIL
-%token <str>	PG_EXCEPTION_HINT
-%token <str>	PRINT_STRICT_PARAMS
-%token <str>	PRIOR
-%token <str>	QUERY
-%token <str>	RAISE
-%token <str>	RELATIVE
-%token <str>	RETURN
+%token <str>  ABSOLUTE
+%token <str>  ALIAS
+%token <str>  ALL
+%token <str>  AND
+%token <str>  ARRAY
+%token <str>  ASSERT
+%token <str>  BACKWARD
+%token <str>  BEGIN
+%token <str>  BY
+%token <str>  CALL
+%token <str>  CASE
+%token <str>  CHAIN
+%token <str>  CLOSE
+%token <str>  COLLATE
+%token <str>  COLUMN
+%token <str>  COLUMN_NAME
+%token <str>  COMMIT
+%token <str>  CONSTANT
+%token <str>  CONSTRAINT
+%token <str>  CONSTRAINT_NAME
+%token <str>  CONTINUE
+%token <str>  CURRENT
+%token <str>  CURSOR
+%token <str>  DATATYPE
+%token <str>  DEBUG
+%token <str>  DECLARE
+%token <str>  DEFAULT
+%token <str>  DETAIL
+%token <str>  DIAGNOSTICS
+%token <str>  DO
+%token <str>  DUMP
+%token <str>  ELSE
+%token <str>  ELSIF
+%token <str>  END
+%token <str>  END_CASE
+%token <str>  END_IF
+%token <str>  ERRCODE
+%token <str>  ERROR
+%token <str>  EXCEPTION
+%token <str>  EXECUTE
+%token <str>  EXIT
+%token <str>  FETCH
+%token <str>  FIRST
+%token <str>  FOR
+%token <str>  FOREACH
+%token <str>  FORWARD
+%token <str>  FROM
+%token <str>  GET
+%token <str>  HINT
+%token <str>  IF
+%token <str>  IMPORT
+%token <str>  IN
+%token <str>  INFO
+%token <str>  INSERT
+%token <str>  INTO
+%token <str>  IS
+%token <str>  LAST
+%token <str>  LOG
+%token <str>  LOOP
+%token <str>  MERGE
+%token <str>  MESSAGE
+%token <str>  MESSAGE_TEXT
+%token <str>  MOVE
+%token <str>  NEXT
+%token <str>  NO
+%token <str>  NO_SCROLL
+%token <str>  NOT
+%token <str>  NOTICE
+%token <str>  NULL
+%token <str>  OPEN
+%token <str>  OPTION
+%token <str>  OR
+%token <str>  PERFORM
+%token <str>  PG_CONTEXT
+%token <str>  PG_DATATYPE_NAME
+%token <str>  PG_EXCEPTION_CONTEXT
+%token <str>  PG_EXCEPTION_DETAIL
+%token <str>  PG_EXCEPTION_HINT
+%token <str>  PRINT_STRICT_PARAMS
+%token <str>  PRIOR
+%token <str>  QUERY
+%token <str>  RAISE
+%token <str>  RELATIVE
+%token <str>  RETURN
 %token <str>  RETURN_NEXT
 %token <str>  RETURN_QUERY
-%token <str>	RETURNED_SQLSTATE
-%token <str>	REVERSE
-%token <str>	ROLLBACK
-%token <str>	ROW_COUNT
-%token <str>	ROWTYPE
-%token <str>	SCHEMA
-%token <str>	SCHEMA_NAME
-%token <str>	SCROLL
-%token <str>	SLICE
-%token <str>	SQLSTATE
-%token <str>	STACKED
-%token <str>	STRICT
-%token <str>	TABLE
-%token <str>	TABLE_NAME
-%token <str>	THEN
-%token <str>	TO
-%token <str>	TYPE
-%token <str>	USE_COLUMN
-%token <str>	USE_VARIABLE
-%token <str>	USING
-%token <str>	VARIABLE_CONFLICT
-%token <str>	WARNING
-%token <str>	WHEN
-%token <str>	WHILE
+%token <str>  RETURNED_SQLSTATE
+%token <str>  REVERSE
+%token <str>  ROLLBACK
+%token <str>  ROW_COUNT
+%token <str>  ROWTYPE
+%token <str>  SCHEMA
+%token <str>  SCHEMA_NAME
+%token <str>  SCROLL
+%token <str>  SLICE
+%token <str>  SQLSTATE
+%token <str>  STACKED
+%token <str>  STRICT
+%token <str>  TABLE
+%token <str>  TABLE_NAME
+%token <str>  THEN
+%token <str>  TO
+%token <str>  TYPE
+%token <str>  USE_COLUMN
+%token <str>  USE_VARIABLE
+%token <str>  USING
+%token <str>  VARIABLE_CONFLICT
+%token <str>  WARNING
+%token <str>  WHEN
+%token <str>  WHILE
 
 
 %union {
@@ -596,7 +601,7 @@ proc_stmt:pl_block ';'
   { }
 ;
 
-stmt_perform	: PERFORM expr_until_semi ';'
+stmt_perform: PERFORM expr_until_semi ';'
   {
     return unimplemented(plpgsqllex, "perform")
   }
@@ -887,7 +892,7 @@ exit_type: EXIT
   // 3. if no, expecting a sql expression "read_sql_expression"
   //    we can just read until a ';', then do the sql expression validation during compile time.
 
-stmt_return : RETURN return_variable ';'
+stmt_return: RETURN return_variable ';'
   {
     return unimplemented(plpgsqllex, "return")
   }
@@ -1033,20 +1038,22 @@ stmt_open: OPEN IDENT open_stmt_processor ';'
   }
 ;
 
-stmt_fetch: FETCH opt_fetch_direction cursor_variable INTO
+stmt_fetch: FETCH opt_fetch_direction IDENT INTO
   {
+    return unimplemented(plpgsqllex, "fetch")
   }
 ;
 
-stmt_move: MOVE opt_fetch_direction cursor_variable ';'
+stmt_move: MOVE opt_fetch_direction IDENT ';'
   {
+    return unimplemented(plpgsqllex, "move")
   }
 ;
 
 opt_fetch_direction:
   {
+      return unimplemented(plpgsqllex, "fetch direction")
   }
-;
 
 stmt_close: CLOSE cursor_variable ';'
   {
@@ -1060,13 +1067,13 @@ stmt_null: NULL ';'
   }
 ;
 
-stmt_commit		: COMMIT opt_transaction_chain ';'
+stmt_commit: COMMIT opt_transaction_chain ';'
   {
     return unimplemented(plpgsqllex, "commit")
   }
 ;
 
-stmt_rollback	: ROLLBACK opt_transaction_chain ';'
+stmt_rollback: ROLLBACK opt_transaction_chain ';'
   {
     return unimplemented(plpgsqllex, "rollback")
   }
@@ -1079,19 +1086,22 @@ AND CHAIN
   { }
 | /* EMPTY */
   { }
-;
 
-cursor_variable: any_identifier
-  {}
+cursor_variable: IDENT
+  {
+    unimplemented(plpgsqllex, "cursor variable")
+  }
 ;
 
 exception_sect:
   { }
 | EXCEPTION
   {
+    return unimplemented(plpgsqllex, "exception")
   }
   proc_exceptions
   {
+    unimplemented(plpgsqllex, "exception")
   }
 ;
 
@@ -1117,6 +1127,9 @@ proc_conditions: proc_conditions OR proc_condition
 ;
 
 proc_condition: any_identifier
+  {
+  }
+| SQLSTATE SCONST
   {
   }
 ;
