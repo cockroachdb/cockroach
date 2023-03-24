@@ -366,7 +366,5 @@ func createInMemoryTenant(
 
 // removeTenantRateLimiters ensures the tenant is not throttled by limiters.
 func removeTenantRateLimiters(t test.Test, systemSQL *sqlutils.SQLRunner, tenantName string) {
-	systemSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1::STRING, 10000000000, 0,
-10000000000, now(), 0);`, tenantName)
 	systemSQL.Exec(t, `ALTER TENANT $1 GRANT CAPABILITY exempt_from_rate_limiting=true`, tenantName)
 }

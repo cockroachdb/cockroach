@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -236,6 +237,12 @@ func (p *planner) dropViewImpl(
 ) ([]string, error) {
 	var cascadeDroppedViews []string
 
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change, before we try to get job IDs and update job statuses later. See
+	// createOrUpdateSchemaChangeJob.
+	if catalog.HasConcurrentDeclarativeSchemaChange(viewDesc) {
+		return nil, scerrors.ConcurrentSchemaChangeError(viewDesc)
+	}
 	// Remove back-references from the tables/views this view depends on.
 	dependedOn := append([]descpb.ID(nil), viewDesc.DependsOn...)
 	for _, depID := range dependedOn {
