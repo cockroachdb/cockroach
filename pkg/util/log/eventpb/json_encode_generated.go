@@ -4923,6 +4923,33 @@ func (m *StoreStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 		b = strconv.AppendInt(b, int64(m.FlushCount), 10)
 	}
 
+	if m.FlushIngestCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FlushIngestCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.FlushIngestCount), 10)
+	}
+
+	if m.FlushIngestTableCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FlushIngestTableCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.FlushIngestTableCount), 10)
+	}
+
+	if m.FlushIngestTableBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FlushIngestTableBytes\":"...)
+		b = strconv.AppendUint(b, uint64(m.FlushIngestTableBytes), 10)
+	}
+
 	if m.MemtableSize != 0 {
 		if printComma {
 			b = append(b, ',')
