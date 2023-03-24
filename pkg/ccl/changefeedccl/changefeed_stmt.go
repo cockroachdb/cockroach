@@ -173,8 +173,12 @@ func changefeedPlanHook(
 	rowFn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
-
-		if err := validateSettings(ctx, p); err != nil {
+		opts := changefeedbase.MakeStatementOptions(rawOpts)
+		st, err := opts.GetInitialScanType()
+		if err != nil {
+			return err
+		}
+		if err := validateSettings(ctx, st == changefeedbase.OnlyInitialScan, p.ExecCfg()); err != nil {
 			return err
 		}
 
@@ -183,8 +187,6 @@ func changefeedPlanHook(
 			// already sent the wrong result column headers.
 			return errors.New(`omit the SINK clause for inline results`)
 		}
-
-		opts := changefeedbase.MakeStatementOptions(rawOpts)
 
 		jr, err := createChangefeedJobRecord(
 			ctx,
@@ -700,10 +702,10 @@ func createChangefeedJobRecord(
 	return jr, nil
 }
 
-func validateSettings(ctx context.Context, p sql.PlanHookState) error {
+func validateSettings(ctx context.Context, needsRangeFeed bool, execCfg *sql.ExecutorConfig) error {
 	if err := featureflag.CheckEnabled(
 		ctx,
-		p.ExecCfg(),
+		execCfg,
 		featureChangefeedEnabled,
 		"CHANGEFEED",
 	); err != nil {
@@ -712,7 +714,7 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 
 	// Changefeeds are based on the Rangefeed abstraction, which
 	// requires the `kv.rangefeed.enabled` setting to be true.
-	if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
+	if needsRangeFeed && !kvserver.RangefeedEnabled.Get(&execCfg.Settings.SV) {
 		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
