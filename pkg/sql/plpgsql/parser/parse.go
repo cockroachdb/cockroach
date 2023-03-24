@@ -11,8 +11,6 @@
 package parser
 
 import (
-	"go/constant"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
@@ -20,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"go/constant"
 )
 
 func init() {
@@ -161,10 +160,14 @@ func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
 		}
 	}
 
+<<<<<<< HEAD
 	err := unimp.New("plpgsql", "plpgsql not supported for udf")
 	_, secErr := ParsePlpgCounter(funcBodyStr)
 	if err != nil {
 		err = errors.WithSecondaryError(err, secErr)
 	}
 	return err
+=======
+	return unimp.NewWithIssue(91569, "PL/pgSQL is not yet supported")
+>>>>>>> 3d98e2e737e (sql:  add unimplemented error for `stmt_move` and `stmt_from`)
 }

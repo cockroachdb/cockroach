@@ -11,7 +11,6 @@
 package parser
 
 import (
-	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -282,12 +282,6 @@ func (l *lexer) ReadSqlExpressionStr2(
 	terminator1 int, terminator2 int,
 ) (sqlStr string, terminatorMet int) {
 	return l.ReadSqlConstruct(terminator1, terminator2, 0)
-}
-
-func (l *lexer) ReadSqlExpressionStr3(
-	terminator1 int, terminator2 int, terminator3 int,
-) (sqlStr string, terminatorMet int) {
-	return l.ReadSqlConstruct(terminator1, terminator2, terminator3)
 }
 
 func (l *lexer) ReadSqlConstruct(
