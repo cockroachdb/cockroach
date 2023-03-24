@@ -417,7 +417,7 @@ export class DatabasesPage extends React.Component<
     );
   };
 
-  // Returns a list of databses to the display based on input from the search
+  // Returns a list of databases to the display based on input from the search
   // box and the applied filters.
   filteredDatabasesData = (): DatabasesPageDataDatabase[] => {
     const { search, databases, filters, nodeRegions } = this.props;
@@ -732,7 +732,7 @@ export class DatabasesPage extends React.Component<
         <Pagination
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
-          total={this.props.databases.length}
+          total={databasesToDisplay.length}
           onChange={this.changePage}
         />
       </div>
