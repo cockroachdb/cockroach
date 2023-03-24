@@ -99,7 +99,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
       <>
         <Row gutter={24}>
           <Col className="gutter-row" span={24}>
-            <SqlBox value={job.description} size={SqlBoxSize.custom} />
+            <SqlBox value={job.description} size={SqlBoxSize.custom} format={true} />
           </Col>
         </Row>
         <Row gutter={24}>
