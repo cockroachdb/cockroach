@@ -2426,6 +2426,7 @@ func TestJobInTxn(t *testing.T) {
 
 	defer sql.ClearPlanHooks()
 	// Piggy back on BACKUP to be able to create a succeeding test job.
+	sql.ClearPlanHooks()
 	sql.AddPlanHook(
 		"test",
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
