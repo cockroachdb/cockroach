@@ -412,6 +412,23 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(cover))
+		coverSimple, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			noSpanTargetSize,
+			emptySpanFrontier,
+			emptyCompletedSpans,
+			true)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "c"), Files: c.paths("1", "4", "6")},
+			{Span: c.sp("c", "e"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("e", "f"), Files: c.paths("6")},
+			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverSimple))
 	})
 
 	t.Run("target-size", func(t *testing.T) {
@@ -433,6 +450,22 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverSized))
+
+		coverSizedSimple, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			2<<20,
+			emptySpanFrontier,
+			emptyCompletedSpans,
+			true)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "f"), Files: c.paths("1", "2", "4", "6")},
+			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverSizedSimple))
 	})
 
 	t.Run("introduced-spans", func(t *testing.T) {
@@ -456,6 +489,22 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverIntroduced))
+
+		coverIntroducedSimple, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			noSpanTargetSize,
+			introducedSpanFrontier,
+			emptyCompletedSpans,
+			true)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "f"), Files: c.paths("6")},
+			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverIntroducedSimple))
 	})
 	t.Run("completed-spans", func(t *testing.T) {
 
@@ -468,7 +517,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 		frontier, err := spanUtils.MakeFrontierAt(completedSpanTime, completedSpans...)
 		require.NoError(t, err)
-		coverIntroduced, err := makeImportSpans(
+		coverCompleted, err := makeImportSpans(
 			ctx,
 			spans,
 			backups,
@@ -483,7 +532,25 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
 			{Span: c.sp("f", "g"), Files: c.paths("6")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
-		}), reduce(coverIntroduced))
+		}), reduce(coverCompleted))
+
+		coverCompletedSimple, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			noSpanTargetSize,
+			emptySpanFrontier,
+			persistFrontier(frontier, 0),
+			true)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
+			{Span: c.sp("c", "e"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("e", "f"), Files: c.paths("6")},
+			{Span: c.sp("f", "g"), Files: c.paths("6")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverCompletedSimple))
 	})
 }
 
