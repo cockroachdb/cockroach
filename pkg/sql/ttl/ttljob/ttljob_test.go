@@ -201,9 +201,8 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
 	t *testing.T, expectedNumExpiredRows int,
 ) {
 	rows := h.sqlDB.Query(t, `
-				SELECT sys_j.status, sys_j.progress
-				FROM crdb_internal.jobs AS crdb_j
-				JOIN system.jobs as sys_j ON crdb_j.job_id = sys_j.id
+				SELECT crdb_j.status, crdb_j.progress
+				FROM crdb_internal.system_jobs AS crdb_j
 				WHERE crdb_j.job_type = 'ROW LEVEL TTL'
 			`)
 	jobCount := 0
@@ -233,9 +232,8 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 	t *testing.T, expectedSQLInstanceIDToProcessorMap map[base.SQLInstanceID]*processor,
 ) {
 	rows := h.sqlDB.Query(t, `
-				SELECT sys_j.status, sys_j.progress
-				FROM crdb_internal.jobs AS crdb_j
-				JOIN system.jobs as sys_j ON crdb_j.job_id = sys_j.id
+				SELECT crdb_j.status, crdb_j.progress
+				FROM crdb_internal.system_jobs AS crdb_j
 				WHERE crdb_j.job_type = 'ROW LEVEL TTL'
 			`)
 	jobCount := 0

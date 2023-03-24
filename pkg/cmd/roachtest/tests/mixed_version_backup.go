@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -300,7 +301,8 @@ func (mvb *mixedVersionBackup) waitForJobSuccess(
 	for r := retry.StartWithCtx(ctx, backupCompletionRetryOptions); r.Next(); {
 		var status string
 		var payloadBytes []byte
-		err := db.QueryRow(`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID).Scan(&status, &payloadBytes)
+		err := db.QueryRow(fmt.Sprintf(`SELECT status, payload FROM (%s)`,
+			jobutils.InternalSystemJobsBaseQuery), jobID).Scan(&status, &payloadBytes)
 		if err != nil {
 			lastErr = fmt.Errorf("error reading (status, payload) for job %d: %w", jobID, err)
 			l.Printf("%v", lastErr)

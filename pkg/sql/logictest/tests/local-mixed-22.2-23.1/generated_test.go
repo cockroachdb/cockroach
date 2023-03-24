@@ -93,13 +93,6 @@ func TestLogic_comment_on(
 	runLogicTest(t, "comment_on")
 }
 
-func TestLogic_create_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_index")
-}
-
 func TestLogic_drop_database(
 	t *testing.T,
 ) {

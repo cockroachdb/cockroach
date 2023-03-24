@@ -50,8 +50,8 @@ func TestJobsTableClaimFamily(t *testing.T) {
 
 	now := timeutil.Now()
 	_ = sqlDB.Query(t, `
-INSERT INTO system.jobs (id, status, payload, claim_session_id, claim_instance_id, num_runs, last_run)
-VALUES (1, 'running', '@!%$%45', 'foo', 101, 100, $1)`, now)
+INSERT INTO system.jobs (id, status, claim_session_id, claim_instance_id, num_runs, last_run)
+VALUES (1, 'running', 'foo', 101, 100, $1)`, now)
 	var status, sessionID string
 	var instanceID, numRuns int64
 	var lastRun time.Time
