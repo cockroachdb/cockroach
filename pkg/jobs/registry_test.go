@@ -202,8 +202,7 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 
 		var id jobspb.JobID
 		db.QueryRow(t,
-			`INSERT INTO system.jobs (status, payload, progress, created) VALUES ($1, $2, $3, $4) RETURNING id`,
-			status, payload, progress, created).Scan(&id)
+			`INSERT INTO system.jobs (status, created) VALUES ($1, $2) RETURNING id`, status, created).Scan(&id)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyPayloadKey(), payload)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyProgressKey(), progress)
 		return strconv.Itoa(int(id))
@@ -296,8 +295,8 @@ func TestRegistryGCPagination(t *testing.T) {
 		require.NoError(t, err)
 		var jobID jobspb.JobID
 		db.QueryRow(t,
-			`INSERT INTO system.jobs (status, created, payload) VALUES ($1, $2, $3) RETURNING id`,
-			StatusCanceled, timeutil.Now().Add(-time.Hour), payload).Scan(&jobID)
+			`INSERT INTO system.jobs (status, created) VALUES ($1, $2) RETURNING id`,
+			StatusCanceled, timeutil.Now().Add(-time.Hour)).Scan(&jobID)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
 			jobID, GetLegacyPayloadKey(), payload)
 	}
@@ -385,23 +384,33 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 	runTests := func(t *testing.T, createdJob *Job) {
 		t.Run("verify against system.jobs", func(t *testing.T) {
 			require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				progressQuery := `SELECT count(*)  FROM system.jobs AS a LEFT JOIN system.job_info AS b ON a.progress = b.value WHERE b.job_id IS NULL;`
+				countSystemJobs := `SELECT count(*)  FROM system.jobs`
 				row, err := txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, progressQuery)
+					sessiondata.NodeUserSessionDataOverride, countSystemJobs)
 				if err != nil {
 					return err
 				}
-				count := tree.MustBeDInt(row[0])
-				require.Equal(t, 0, int(count))
+				jobsCount := tree.MustBeDInt(row[0])
 
-				payloadQuery := `SELECT count(*)  FROM system.jobs AS a LEFT JOIN system.job_info AS b ON a.payload = b.value WHERE b.job_id IS NULL;`
+				countSystemJobInfo := `SELECT count(*)  FROM system.job_info;`
 				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, payloadQuery)
+					sessiondata.NodeUserSessionDataOverride, countSystemJobInfo)
 				if err != nil {
 					return err
 				}
-				count = tree.MustBeDInt(row[0])
-				require.Equal(t, 0, int(count))
+				jobInfoCount := tree.MustBeDInt(row[0])
+				require.Equal(t, jobsCount*2, jobInfoCount)
+
+				// Ensure no progress and payload is written to system.jobs.
+				nullPayloadAndProgress := `SELECT count(*) FROM system.jobs WHERE progress IS NOT NULL OR payload IS NOT NULL;`
+				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
+					sessiondata.NodeUserSessionDataOverride, nullPayloadAndProgress)
+				if err != nil {
+					return err
+				}
+				nullProgressAndPayload := tree.MustBeDInt(row[0])
+				require.Equal(t, 0, int(nullProgressAndPayload))
+
 				return nil
 			}))
 		})
@@ -1346,7 +1355,7 @@ func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 	// Insert a running job with a `claim_session_id` equal to our overridden test
 	// session.
 	tdb.Exec(t,
-		"INSERT INTO system.jobs (id, status, created, payload, claim_session_id) values ($1, $2, $3, 'test'::bytes, $4)",
+		"INSERT INTO system.jobs (id, status, created, claim_session_id) values ($1, $2, $3, $4)",
 		1, StatusRunning, timeutil.Now(), session.ID(),
 	)
 

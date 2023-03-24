@@ -1754,8 +1754,8 @@ func createAndWaitForJob(
 
 	var jobID jobspb.JobID
 	db.QueryRow(
-		t, `INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
-		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progressBytes,
+		t, `INSERT INTO system.jobs (created, status) VALUES ($1, $2) RETURNING id`,
+		timeutil.FromUnixMicros(now), jobs.StatusRunning,
 	).Scan(&jobID)
 	db.Exec(
 		t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, jobID, jobs.GetLegacyPayloadKey(), payload,

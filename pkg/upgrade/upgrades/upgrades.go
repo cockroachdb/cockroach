@@ -304,6 +304,12 @@ var upgrades = []upgradebase.Upgrade{
 		systemStatisticsActivityTableMigration,
 		"create statement_activity and transaction_activity job",
 	),
+	upgrade.NewTenantUpgrade(
+		"stop writing payload and progress to system.jobs",
+		toCV(clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs),
+		upgrade.NoPrecondition,
+		alterPayloadColumnToNullable,
+	),
 }
 
 func init() {
