@@ -285,12 +285,13 @@ func (f *KVFetcher) SetupNextFetch(
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	firstBatchKeyLimit rowinfra.KeyLimit,
+	spansCanOverlap bool,
 ) error {
 	f.kvs = nil
 	f.batchResponse = nil
 	f.spanID = 0
 	return f.KVBatchFetcher.SetupNextFetch(
-		ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit,
+		ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit, spansCanOverlap,
 	)
 }
 
@@ -323,7 +324,7 @@ func (f *SpanKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherResponse, 
 
 // SetupNextFetch implements the KVBatchFetcher interface.
 func (f *SpanKVFetcher) SetupNextFetch(
-	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit, bool,
 ) error {
 	return nil
 }
@@ -433,7 +434,7 @@ func (f *BackupSSTKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherRespo
 
 // SetupNextFetch implements the KVBatchFetcher interface.
 func (f *BackupSSTKVFetcher) SetupNextFetch(
-	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit, bool,
 ) error {
 	return nil
 }

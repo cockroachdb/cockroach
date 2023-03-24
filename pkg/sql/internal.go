@@ -743,6 +743,10 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.QualityOfService != nil {
 		sd.DefaultTxnQualityOfService = o.QualityOfService.ValidateInternal()
 	}
+	// At the moment, we disable the usage of the Streamer API in the internal
+	// executor to avoid possible concurrency with the "outer" query (which
+	// might be using the RootTxn).
+	sd.LocalOnlySessionData.StreamerEnabled = false
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(

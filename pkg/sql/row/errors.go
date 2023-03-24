@@ -319,7 +319,7 @@ func DecodeRowInfo(
 }
 
 func (f *singleKVFetcher) SetupNextFetch(
-	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit, bool,
 ) error {
 	return nil
 }

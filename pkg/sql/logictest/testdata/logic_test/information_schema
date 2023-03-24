@@ -4816,6 +4816,7 @@ sql_safe_updates                                      off
 ssl_renegotiation_limit                               0
 standard_conforming_strings                           on
 statement_timeout                                     0
+streamer_enabled                                      on
 stub_catalog_tables                                   on
 synchronize_seqscans                                  on
 synchronous_commit                                    on
