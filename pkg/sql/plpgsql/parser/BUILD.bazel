@@ -14,6 +14,7 @@ genrule(
     ],
     outs = ["plpgsql.go"],
     cmd = """
+    export GOPATH=/nonexist-gopath
       $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
           $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
           $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
@@ -67,6 +68,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":plpgparser",
+        "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

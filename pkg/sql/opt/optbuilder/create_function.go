@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -101,8 +101,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 				panic(err)
 			}
 
-			if opt == tree.FunctionLangPlPgSQL {
-				if err := plpgsql.DealWithPlpgsqlFunc(cf); err != nil {
+			if opt == tree.FunctionLangPLpgSQL {
+				if err := utils.ParseAndCollectTelemetryForPLpgSQLFunc(cf); err != nil {
+					// Until plpgsql is fully implemented DealWithPlpgSQlFunc will always
+					// return an error.
 					panic(err)
 				}
 			}
@@ -336,4 +338,3 @@ func checkStmtVolatility(
 		}
 	}
 }
-
