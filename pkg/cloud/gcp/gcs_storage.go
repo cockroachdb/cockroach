@@ -292,7 +292,8 @@ func (g *gcsStorage) ReadFileAt(
 		}, // opener
 		nil, //  reader
 		offset,
-		cloud.IsResumableHTTPError,
+		object,
+		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, g.settings),
 		nil, // errFn
 	)
 
