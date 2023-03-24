@@ -373,11 +373,18 @@ func (q *byIDLookupContext) lookupLeased(
 	if q.tc.cr.IsDescIDKnownToNotExist(id, q.flags.descFilters.maybeParentID) {
 		return nil, catalog.NoValidation, catalog.ErrDescriptorNotFound
 	}
-	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
-	if err != nil || shouldReadFromStore {
-		return nil, catalog.NoValidation, err
+
+	if !q.flags.layerFilters.withoutNewLease {
+		desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
+		if err != nil || shouldReadFromStore {
+			return nil, catalog.NoValidation, err
+		}
+		return desc, validate.ImmutableRead, nil
+	} else {
+		desc := q.tc.leased.getCachedByID(q.ctx, id)
+		return desc, validate.ImmutableRead, nil
 	}
-	return desc, validate.ImmutableRead, nil
+
 }
 
 // getDescriptorByName looks up a descriptor by name on a best-effort basis.

@@ -223,7 +223,13 @@ func (sr *schemaResolver) GetQualifiedTableNameByID(
 func (sr *schemaResolver) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := sr.descCollection.ByID(sr.txn).Get().Database(ctx, desc.GetParentID())
+	// When getting the fully qualified name, attempt to use the lease cache
+	// first, since a KV hop in a multi-cluster environment is expensive. The
+	// flag used here will never get a *new* lease only take advantage
+	// of an existing one. Previously, audit could be severely impacted by
+	// this, which would resolve names at the end of each statement.
+	descGetter := sr.descCollection.ByIDWithoutNewLease(sr.txn)
+	dbDesc, err := descGetter.Get().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +243,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 	// information from the namespace table.
 	var schemaName tree.Name
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := sr.descCollection.ByID(sr.txn).Get().Schema(ctx, schemaID)
+	scDesc, err := descGetter.Get().Schema(ctx, schemaID)
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())

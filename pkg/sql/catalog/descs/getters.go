@@ -453,6 +453,9 @@ type layerFilters struct {
 	withoutSynthetic bool
 	// withoutLeased specifies bypassing the leased descriptor layer.
 	withoutLeased bool
+	// withoutNewLease specifies that the lease descriptor layer will be used,
+	// but no leases will be acquired.
+	withoutNewLease bool
 	// withoutStorage specifies avoiding any queries to the KV layer.
 	withoutStorage bool
 	// withoutHydration specifies avoiding hydrating the descriptors.
@@ -491,6 +494,19 @@ func (tc *Collection) ByID(txn *kv.Txn) ByIDGetterBuilder {
 	return ByIDGetterBuilder(makeGetterBase(txn, tc, getterFlags{
 		layerFilters: layerFilters{
 			withoutLeased: true,
+		},
+	}))
+}
+
+// ByIDWithoutNewLease is like ByID but also looks up in the leased descriptors
+// layer. This may save a round-trip to KV at the expense of the descriptor
+// being slightly stale (one version off). This specific mode says that
+// leases will not be acquired if we don't have them already, instead we will
+// fall back to a KV look up.
+func (tc *Collection) ByIDWithoutNewLease(txn *kv.Txn) ByIDGetterBuilder {
+	return ByIDGetterBuilder(makeGetterBase(txn, tc, getterFlags{
+		layerFilters: layerFilters{
+			withoutNewLease: true,
 		},
 	}))
 }

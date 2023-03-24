@@ -1,4 +1,5 @@
 exp,benchmark
+0," Audit/select_from_an_audit_table"
 14,AlterRole/alter_role_with_1_option
 17,AlterRole/alter_role_with_2_options
 25,AlterRole/alter_role_with_3_options
@@ -27,6 +28,7 @@ exp,benchmark
 7,AlterTableUnsplit/alter_table_unsplit_at_1_value
 9,AlterTableUnsplit/alter_table_unsplit_at_2_values
 11,AlterTableUnsplit/alter_table_unsplit_at_3_values
+5,Audit/select_from_an_audit_table
 20,CreateRole/create_role_with_1_option
 23,CreateRole/create_role_with_2_options
 26,CreateRole/create_role_with_3_options
