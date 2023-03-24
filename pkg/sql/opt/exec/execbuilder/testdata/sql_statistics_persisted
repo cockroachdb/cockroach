@@ -110,7 +110,7 @@ SELECT * FROM crdb_internal.transaction_statistics_persisted
 statement ok
 CREATE STATISTICS system_statement_stats FROM system.statement_statistics
 
-query T
+query T retry
 EXPLAIN (VERBOSE)
 SELECT * FROM ((SELECT
   aggregated_ts,
@@ -349,7 +349,7 @@ vectorized: true
 statement ok
 CREATE STATISTICS system_transaction_stats FROM system.transaction_statistics
 
-query T
+query T retry
 EXPLAIN (VERBOSE)
 SELECT * FROM ((SELECT
   aggregated_ts,
