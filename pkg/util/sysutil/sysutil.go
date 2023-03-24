@@ -70,3 +70,8 @@ func IsErrConnectionReset(err error) bool {
 func IsErrConnectionRefused(err error) bool {
 	return errors.Is(err, syscall.ECONNREFUSED)
 }
+
+// IsErrTimedOut returns true if an error is an ETIMEDOUT error.
+func IsErrTimedOut(err error) bool {
+	return errors.Is(err, syscall.ETIMEDOUT)
+}
