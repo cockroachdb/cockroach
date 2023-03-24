@@ -168,7 +168,7 @@ func (h *httpStorage) ReadFileAt(
 			}
 			return s.Body, err
 		}
-		return cloud.NewResumingReader(ctx, opener, stream.Body, offset,
+		return cloud.NewResumingReader(ctx, opener, stream.Body, offset, basename,
 			cloud.IsResumableHTTPError, nil), size, nil
 	}
 	return ioctx.ReadCloserAdapter(stream.Body), size, nil
