@@ -52,10 +52,10 @@ BEGIN
   END IF;
 END
 ----
-stmt_null: 1
 stmt_assign: 3
-stmt_if_else_if: 1
 stmt_if: 1
+stmt_if_else_if: 1
+stmt_null: 1
 
 feature-count
 DECLARE
@@ -78,7 +78,7 @@ BEGIN
   END IF;
 END
 ----
-stmt_null: 2
 stmt_assign: 5
-stmt_if_else_if: 3
 stmt_if: 2
+stmt_if_else_if: 3
+stmt_null: 2
