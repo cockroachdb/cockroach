@@ -189,5 +189,5 @@ func DealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
 	}
 	_, _ = ParseAndIncPlpgCounter(funcBodyStr, false)
 
-	return unimp.New("plpgsql", "plpgsql not supported for udf")
+	return unimp.NewWithIssue(91569, "PL/pgSQL is not yet supported")
 }
