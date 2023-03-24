@@ -99,7 +99,7 @@ function TypeCell(value: InsightType): React.ReactElement {
     insightType(value) === "FailedExecution"
       ? "insight-type-failed"
       : "insight-type";
-  return <div className={cx(className)}>{value}</div>;
+  return <div className={cx(className)}>{insightType(value)}</div>;
 }
 
 const StatementExecution = ({
