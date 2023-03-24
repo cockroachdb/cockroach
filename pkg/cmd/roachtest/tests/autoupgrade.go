@@ -86,7 +86,10 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		clusterVersion := func() (string, error) {
 			var version string
-			if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&version); err != nil {
+			// NB:`SHOW CLUSTER SETTING version` can block when in the middle of
+			// migrating and then fail because it has an internal timeout.
+			// See: https://github.com/cockroachdb/cockroach/issues/99115
+			if err := db.QueryRowContext(ctx, `SELECT value FROM [SHOW CLUSTER SETTINGS] WHERE variable='version'`).Scan(&version); err != nil {
 				return "", errors.Wrap(err, "determining cluster version")
 			}
 			return version, nil
