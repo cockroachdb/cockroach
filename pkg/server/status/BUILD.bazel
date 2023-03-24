@@ -51,6 +51,7 @@ go_library(
         "//pkg/server/status/statuspb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/sem/catconstants",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
         "//pkg/util/cgroups",
