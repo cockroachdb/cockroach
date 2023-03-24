@@ -1,0 +1,32 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "jobsccl_test",
+    srcs = [
+        "jobs_info_storage_test.go",
+        "main_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    tags = ["ccl_test"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/isql",
+        "//pkg/testutils/jobutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

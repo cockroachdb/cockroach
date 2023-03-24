@@ -82,7 +82,7 @@ func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 	row, err := i.txn.QueryRowEx(
 		ctx, "job-info-get", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2",
+		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 LIMIT 1",
 		j.ID(), infoKey,
 	)
 
