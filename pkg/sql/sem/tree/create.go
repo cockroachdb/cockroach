@@ -1161,6 +1161,11 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 			ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-invisibility))
 		}
 	}
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
+	}
 }
 
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
