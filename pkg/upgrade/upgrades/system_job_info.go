@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -25,4 +26,16 @@ func systemJobInfoTableMigration(
 	return createSystemTable(
 		ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.SystemJobInfoTable,
 	)
+}
+
+const alterPayloadToNullableQuery = `
+ALTER TABLE system.jobs ALTER COLUMN payload DROP NOT NULL
+`
+
+func stopWritingPayloadAndProgress(
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+) error {
+	_, err := d.InternalExecutor.ExecEx(ctx, "set-job-payload-nullable", nil,
+		sessiondata.NodeUserSessionDataOverride, alterPayloadToNullableQuery)
+	return err
 }

@@ -183,6 +183,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 			continue
 		}
 		permanentUpgrades = append(permanentUpgrades, u)
+		log.Infof(ctx, "found p upgrade for %s", v.String())
 	}
 
 	user := username.RootUserName()
@@ -227,7 +228,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	} else {
 		// The stale read said that the upgrades had not run. Let's try a consistent read too since
 		log.Infof(ctx,
-			"the last last permanent upgrade (v%s) does not appear to have completed; attempting to run all upgrades",
+			"the last permanent upgrade (v%s) does not appear to have completed; attempting to run all upgrades",
 			lastVer)
 	}
 
@@ -756,7 +757,7 @@ SELECT id, status
 			payload,
       false -- emit_defaults
 		) AS pl
-	FROM system.jobs
+	FROM crdb_internal.system_jobs
   WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
 	)
 	WHERE pl->'migration'->'clusterVersion' = $1::JSON;`

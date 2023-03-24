@@ -223,12 +223,15 @@ func TestTenantRateLimiter(t *testing.T) {
 	for i := 0; i < tooManyWrites; i++ {
 		require.NoError(t, db.Put(ctx, mkKey(), 0))
 	}
+	log.Infof(ctx, "too many writes done")
 	timeSource.Advance(time.Second)
 	// Now ensure that in the same instant the write QPS limit does affect the
 	// tenant. First issue requests that can happen without blocking.
 	for i := 0; i < burstWrites; i++ {
+		log.Infof(ctx, "burst writes %d", i)
 		require.NoError(t, ts.DB().Put(ctx, mkKey(), 0))
 	}
+	log.Infof(ctx, "burst writes done")
 	// Attempt to issue another request, make sure that it gets blocked by
 	// observing a timer.
 	errCh := make(chan error, 1)
