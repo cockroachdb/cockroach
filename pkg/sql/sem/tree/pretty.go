@@ -1826,6 +1826,13 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 		}
 	}
 
+	if node.StorageParams != nil {
+		clauses = append(clauses, p.bracketKeyword(
+			"WITH", "(",
+			p.Doc(&node.StorageParams),
+			")", ""))
+	}
+
 	if len(clauses) == 0 {
 		return title
 	}
