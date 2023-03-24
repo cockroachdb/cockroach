@@ -50,7 +50,7 @@ import (
 func getHighWaterMark(ingestionJobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
-		`SELECT progress FROM system.jobs WHERE id = $1`, ingestionJobID,
+		`SELECT progress FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJobID,
 	).Scan(&progressBytes); err != nil {
 		return nil, err
 	}

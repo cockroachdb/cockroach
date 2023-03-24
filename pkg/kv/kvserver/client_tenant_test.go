@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // for tenant functionality
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -169,6 +171,11 @@ func TestTenantRateLimiter(t *testing.T) {
 					TimeSource: timeSource,
 				},
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+			UpgradeManager: &upgradebase.TestingKnobs{
+				SkipJobMetricsPollingJobBootstrap: true,
+				SkipAutoConfigRunnerJobBootstrap:  true,
+			},
 		},
 	})
 	ctx := context.Background()
@@ -211,7 +218,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	// bounds.
 	writeCostLower := cfg.WriteBatchUnits + cfg.WriteRequestUnits
 	writeCostUpper := cfg.WriteBatchUnits + cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
-	tolerance := 10.0 // Leave space for a couple of other background requests.
+	tolerance := 30.0 // Leave space for a couple of other background requests.
 	// burstWrites is a number of writes that don't exceed the burst limit.
 	burstWrites := int((cfg.Burst - tolerance) / writeCostUpper)
 	// tooManyWrites is a number of writes which definitely exceed the burst
