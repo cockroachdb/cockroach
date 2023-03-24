@@ -3119,8 +3119,11 @@ var charts = []sectionDescription{
 				Metrics: []string{"rocksdb.compactions"},
 			},
 			{
-				Title:   "Flushes",
-				Metrics: []string{"rocksdb.flushes"},
+				Title: "Flushes",
+				Metrics: []string{
+					"rocksdb.flushes",
+					"storage.flush.ingest.count",
+				},
 			},
 			{
 				Title:   "Index & Filter Block Size",
@@ -3181,8 +3184,15 @@ var charts = []sectionDescription{
 					"rocksdb.compacted-bytes-read",
 					"rocksdb.compacted-bytes-written",
 					"rocksdb.flushed-bytes",
+					"storage.flush.ingest.table.bytes",
 				},
 				AxisLabel: "Bytes",
+			},
+			{
+				Title: "Flushable Ingestions",
+				Metrics: []string{
+					"storage.flush.ingest.table.count",
+				},
 			},
 			{
 				Title:   "Stalls",
