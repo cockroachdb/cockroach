@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
@@ -39,10 +40,11 @@ func TestParseDataDriver(t *testing.T) {
 				// TODO(chengxiong): add pretty print round trip test.
 				return fn.String()
 			case "feature-count":
-				fn, err := parser.ParsePlpgCounter(d.Input)
+				fn, err := utils.CountPLpgSQLStmt(d.Input)
 				if err != nil {
 					d.Fatalf(t, "unexpected parse error: %v", err)
 				}
+
 				return fn.String()
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)

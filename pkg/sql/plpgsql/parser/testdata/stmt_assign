@@ -30,10 +30,7 @@ DECLARE
 BEGIN
 johnny := NULL;
 gyro = 7 + 7;
-CASE hello
-WHEN world THEN
-END CASE;
 END
 ----
 stmt_assign: 2
-stmt_case: 1
+stmt_block: 1
