@@ -860,7 +860,7 @@ export class DatabaseDetailsPage extends React.Component<
         <Pagination
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
-          total={this.props.tables.length}
+          total={tablesToDisplay.length}
           onChange={this.changePage.bind(this)}
         />
       </div>

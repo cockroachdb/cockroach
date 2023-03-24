@@ -9,8 +9,6 @@ go_library(
     deps = [
         "//pkg/build/bazel",
         "//pkg/testutils/buildutil",
-        "@com_github_google_go_github//github",
-        "@org_golang_x_oauth2//:oauth2",
     ],
 )
 
@@ -29,8 +27,6 @@ go_test(
     embed = [":github-pull-request-make_lib"],
     deps = [
         "//pkg/testutils/datapathutils",
-        "//pkg/testutils/skip",
-        "@com_github_kr_pretty//:pretty",
     ],
 )
 

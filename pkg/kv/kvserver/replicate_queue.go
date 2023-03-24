@@ -1001,7 +1001,11 @@ func (rq *replicateQueue) PlanOneChange(
 ) (change ReplicateQueueChange, _ error) {
 	// Initially set the change to be a no-op, it is then modified below if a
 	// step may be taken for this replica.
-	change = ReplicateQueueChange{Op: AllocationNoop{}}
+	change = ReplicateQueueChange{
+		Action:  allocatorimpl.AllocatorNoop,
+		Op:      AllocationNoop{},
+		replica: repl,
+	}
 
 	// Check lease and destroy status here. The queue does this higher up already, but
 	// adminScatter (and potential other future callers) also call this method and don't
