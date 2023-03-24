@@ -237,8 +237,8 @@ test_suite(
     name = "ccl_tests",
     tags = [
         "-broken_in_bazel",
-        "ccl_test",
         "-integration",
+        "ccl_test",
     ],
     tests = ALL_TESTS,
 )`)
