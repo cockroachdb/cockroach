@@ -1974,3 +1974,29 @@ REVOKE SELECT ON system.lease FROM testuser
 # we error explicitly instead of getting 100% compatibility.
 statement error invalid privilege type RULE for table
 GRANT RULE ON t TO testuser
+
+# This glob expands to no tables, that should be fine and should return the
+# correct errors.
+statement error pgcode 42704 no object matched
+GRANT SELECT ON TABLE empty.* TO testuser;
+
+statement ok
+create schema empty.sc
+
+statement error pgcode 42704 no object matched
+GRANT SELECT ON TABLE empty.sc.* TO testuser;
+
+# Add a test to ensure that when you mix virtual and physical tables in a grant
+# that you get the error we
+subtest mixed_virtual_physical
+
+statement ok
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t (i INT);
+
+statement error pgcode 0A000 cannot mix grants between virtual and non-virtual tables
+GRANT SELECT ON TABLE t, crdb_internal.tables TO testuser;
+
+statement error pgcode 0A000 cannot mix grants between virtual and non-virtual tables
+GRANT SELECT ON TABLE crdb_internal.tables, t TO testuser;
