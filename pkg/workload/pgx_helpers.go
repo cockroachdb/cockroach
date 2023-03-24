@@ -22,7 +22,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
-	"github.com/marusama/semaphore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -285,6 +284,7 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 		return nil
 	}
 
+	// NOTE(seanc@): see context cancellation note below.
 	warmupCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -296,8 +296,6 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 	} else {
 		numWarmupConns = numConns
 	}
-
-	warmupConns := make(chan struct{}, numWarmupConns)
 
 	// "Warm up" the pools so we don't have to establish connections later (which
 	// would affect the observed latencies of the first requests, especially when
@@ -312,41 +310,41 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 	// return an error and fail the whole function. The value 100 is
 	// chosen because it is less than the default value for SOMAXCONN
 	// (128).
-	sem := semaphore.New(100)
+	g.SetLimit(100)
 
+	warmupConns := make(chan *pgxpool.Conn, numWarmupConns)
 	for i := 0; i < numWarmupConns; i++ {
-		p := m.Get()
-
 		g.Go(func() error {
-			if err := sem.Acquire(warmupCtx, 1); err != nil {
-				return err
-			}
-
-			conn, err := p.Acquire(warmupCtx)
+			conn, err := m.Get().Acquire(warmupCtx)
 			if err != nil {
 				return err
 			}
-
-			sem.Release(1)            // Allow next conn to be established
-			warmupConns <- struct{}{} // Signal connection establish complete
-			<-warmupCtx.Done()        // Block until all go routines complete
-			conn.Release()
+			warmupConns <- conn
 			return nil
 		})
 	}
 
+	estConns := make([]*pgxpool.Conn, 0, numWarmupConns)
+	defer func() {
+		for _, conn := range estConns {
+			// NOTE(seanc@): Release() connections before canceling the warmupCtx to
+			// prevent partially established connections from being Acquire()'ed.
+			conn.Release()
+		}
+	}()
+
 WARMUP:
 	for i := 0; i < numWarmupConns; i++ {
 		select {
-		case <-warmupConns:
+		case conn := <-warmupConns:
+			estConns = append(estConns, conn)
 		case <-warmupCtx.Done():
+			if err := warmupCtx.Err(); err != nil {
+				return err
+			}
+
 			break WARMUP
 		}
-	}
-
-	cancel()
-	if err := g.Wait(); err != nil {
-		return err
 	}
 
 	return nil
