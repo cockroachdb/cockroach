@@ -795,7 +795,7 @@ func maybeCreateVirtualColumnForIndex(
 		// Check if inverted columns are invertible.
 		if inverted &&
 			!lastColumn &&
-			!colinfo.ColumnTypeIsIndexable(t) {
+			colinfo.ColumnTypeIsInvertedIndexable(t) {
 			panic(errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,

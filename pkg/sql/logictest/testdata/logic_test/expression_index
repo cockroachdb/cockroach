@@ -94,8 +94,11 @@ CREATE TABLE err (a INT, INDEX (a, (NULL)))
 statement ok
 CREATE TABLE t_null_cast (a INT, INDEX (a, (NULL::TEXT)))
 
-statement error index element j->'a' of type jsonb is not indexable
+statement ok
 CREATE TABLE err (a INT, j JSON, INDEX (a, (j->'a')))
+
+statement ok
+DROP TABLE err
 
 statement error index element \(a, b\) of type record is not indexable
 CREATE TABLE err (a INT, b INT, INDEX (a, (row(a, b))))
@@ -321,8 +324,11 @@ CREATE INDEX err ON t (a, (NULL), b)
 statement ok
 CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
 
-statement error index element j->'a' of type jsonb is not indexable
+statement ok
 CREATE INDEX err ON t (a, (j->'a'));
+
+statement ok
+DROP INDEX err
 
 statement error index element \(a, b\) of type record is not indexable
 CREATE INDEX err ON t (a, (row(a, b)));
