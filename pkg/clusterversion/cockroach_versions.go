@@ -517,6 +517,10 @@ const (
 	// the process of upgrading from previous supported releases to 23.2.
 	V23_2Start
 
+	// V23_2StopWritingPayloadAndProgressToSystemJobs is the version where the
+	// payload and progress columns are no longer written to system.jobs.
+	V23_2StopWritingPayloadAndProgressToSystemJobs
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -897,6 +901,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2Start,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
+	},
+	{
+		Key:     V23_2StopWritingPayloadAndProgressToSystemJobs,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
 	},
 
 	// *************************************************
