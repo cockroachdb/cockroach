@@ -1,12 +1,24 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package plpgsqltree
 
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
-	"strings"
 )
 
 // PlpgSQLStmtCounter is used to accurately report telemetry for plpgsql
@@ -16,8 +28,17 @@ type PlpgSQLStmtCounter map[string]int
 
 func (p *PlpgSQLStmtCounter) String() string {
 	var buf strings.Builder
-	for k, v := range *p {
-		buf.WriteString(fmt.Sprintf("%s: %d\n", k, v))
+	counter := *p
+
+	// Sort the counters to avoid flakes in test
+	keys := make([]string, 0)
+	for k := range counter {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		buf.WriteString(fmt.Sprintf("%s: %d\n", k, counter[k]))
 
 	}
 	return buf.String()
@@ -55,11 +76,6 @@ func WalkStmt(v plpgsqlVisitor, stmt PLpgSQLStatement) (newStmt PLpgSQLStatement
 
 	newStmt = wStmt.walkStmt(v)
 	return newStmt, true
-}
-
-func walkElseIfStmt(v plpgsqlVisitor, stmt PLpgSQLStmtIfElseIfArm) (newStmt *PLpgSQLStmtIfElseIfArm, changed bool) {
-	newExpr := stmt.walkStmt(v)
-	return newExpr, true
 }
 
 // IncrementPlpgCounter

@@ -12,6 +12,7 @@ package plpgsqltree
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -137,10 +138,7 @@ func (s *PLpgSQLStmtIf) walkStmt(visitor plpgsqlVisitor) PLpgSQLStatement {
 	}
 
 	for i, elseIf := range s.ElseIfList {
-		stmt, changed := walkElseIfStmt(visitor, *elseIf)
-		if changed {
-			ret.ElseIfList[i] = stmt
-		}
+		ret.ElseIfList[i] = elseIf.walkElseIfStmt(visitor)
 	}
 
 	for i, elseStmt := range s.ElseBody {
@@ -173,7 +171,7 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 	}
 }
 
-func (s *PLpgSQLStmtIfElseIfArm) walkStmt(visitor plpgsqlVisitor) *PLpgSQLStmtIfElseIfArm {
+func (s *PLpgSQLStmtIfElseIfArm) walkElseIfStmt(visitor plpgsqlVisitor) *PLpgSQLStmtIfElseIfArm {
 	ret := s
 	for i, stmt := range s.Stmts {
 		newStmt, changed := WalkStmt(visitor, stmt)
@@ -222,6 +220,26 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 
 }
 
+func (s *PLpgSQLStmtCase) walkStmt(visitor plpgsqlVisitor) PLpgSQLStatement {
+	ret := s
+
+	for i, when := range s.CaseWhenList {
+		ret.CaseWhenList[i] = when.walkCaseWhen(visitor)
+	}
+
+	if s.HaveElse {
+		for i, stmt := range s.ElseStmts {
+			newStmt, changed := WalkStmt(visitor, stmt)
+			if changed {
+				ret.ElseStmts[i] = newStmt
+			}
+		}
+	}
+
+	IncrementPlpgCounter(ret, visitor)
+	return ret
+}
+
 func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
 	return "stmt_case"
 }
@@ -231,6 +249,19 @@ type PLpgSQLStmtCaseWhenArm struct {
 	// TODO: Change to PLpgSQLExpr
 	Expr  string
 	Stmts []PLpgSQLStatement
+}
+
+func (s *PLpgSQLStmtCaseWhenArm) walkCaseWhen(v plpgsqlVisitor) *PLpgSQLStmtCaseWhenArm {
+	ret := s
+
+	for i, stmt := range s.Stmts {
+		newStmt, changed := WalkStmt(v, stmt)
+		if changed {
+			ret.Stmts[i] = newStmt
+		}
+	}
+
+	return ret
 }
 
 func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
@@ -494,6 +525,10 @@ func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
 	}
 	ctx.WriteString("<NOT DONE YET>\n")
 
+}
+
+func (s *PLpgSQLStmtCall) PlpgSQLStatementTag() string {
+	return "stmt_call"
 }
 
 // stmt_getdiag
