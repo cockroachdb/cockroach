@@ -119,6 +119,10 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	stmt := fmt.Sprintf("ALTER ROLE ALL SET copy_from_atomic_enabled = %t", atomic)
 	_, err = db.ExecContext(ctx, stmt)
 	require.NoError(t, err)
+	// See https://github.com/cockroachdb/cockroach/issues/99464#issuecomment-1482912491.
+	// This setting only has an effect if !atomic.
+	_, err = db.ExecContext(ctx, `ALTER ROLE ALL SET copy_from_retries_enabled = %t`)
+	require.NoError(t, err)
 	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "")
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
