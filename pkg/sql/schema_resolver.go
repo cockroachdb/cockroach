@@ -167,11 +167,13 @@ func (sr *schemaResolver) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
 	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(),
+		// When getting the fully qualified name use leased descriptors, since these
+		// will not involve any round trips.
 		tree.DatabaseLookupFlags{
 			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
-			AvoidLeased:    true,
+			AvoidLeased:    sr.skipDescriptorCache,
 		})
 	if err != nil {
 		return nil, err
