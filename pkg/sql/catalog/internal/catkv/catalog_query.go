@@ -133,8 +133,7 @@ func (cq catalogQuery) processCommentsResultRow(row kv.KeyValue, cb *nstree.Muta
 	if famID != keys.CommentsTableCommentColFamID {
 		return nil
 	}
-	cb.UpsertComment(cmtKey, string(row.ValueBytes()))
-	return nil
+	return cb.UpsertComment(cmtKey, string(row.ValueBytes()))
 }
 
 func (cq catalogQuery) processZonesResultRow(row kv.KeyValue, cb *nstree.MutableCatalog) error {
