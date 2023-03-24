@@ -140,6 +140,7 @@ export const StatementInsightDetails: React.FC<
                 <SqlBox
                   size={SqlBoxSize.custom}
                   value={insightEventDetails?.query}
+                  format={true}
                 />
               </Col>
             </Row>

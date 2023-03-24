@@ -31,7 +31,7 @@ export function QueriesCell(
     return <div>{transactionQueries[0]}</div>;
   }
 
-  const combinedQuery = transactionQueries.map((query, idx, arr) => (
+  const combinedQuery = transactionQueries?.map((query, idx, arr) => (
     <div key={idx}>
       {idx != 0 && <br />}
       {query}

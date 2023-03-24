@@ -63,7 +63,7 @@ function insightsTableData(
   }
   return insightDetails.insights
     .filter(insight => insight.name === InsightNameEnum.highContention)
-    .map(insight => {
+    ?.map(insight => {
       return {
         type: "HighContention",
         details: {
@@ -134,11 +134,11 @@ export const TransactionInsightDetails: React.FC<
     getTransactionInsightEventDetailsFromState(insightEventDetails);
 
   const insightQueries =
-    insightDetails?.queries.join("") || "Insight not found.";
+    insightDetails?.queries?.join("") || "Insight not found.";
   const insightsColumns = makeInsightsColumns(isCockroachCloud, hasAdminRole);
 
   const blockingExecutions: EventExecution[] =
-    insightDetails?.blockingContentionDetails.map(x => {
+    insightDetails?.blockingContentionDetails?.map(x => {
       return {
         executionID: x.blockingExecutionID,
         fingerprintID: x.blockingFingerprintID,
@@ -185,7 +185,11 @@ export const TransactionInsightDetails: React.FC<
           <section className={tableCx("section")}>
             <Row gutter={24}>
               <Col className="gutter-row" span={24}>
-                <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
+                <SqlBox
+                  value={insightQueries}
+                  size={SqlBoxSize.custom}
+                  format={true}
+                />
               </Col>
             </Row>
             {insightDetails && (
