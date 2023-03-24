@@ -3019,3 +3019,36 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 		})
 	}
 }
+
+// TestTxnTypeCompatibleWithBatchRequest tests if a transaction type and a batch
+// request are compatible.
+func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	rootTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
+
+	// a LeafTxn is not compatible with a locking request
+	_, err := leafTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	err = leafTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// a LeafTxn is compatible with a non-locking request
+	_, err = leafTxn.Get(ctx, roachpb.Key("a"))
+	require.NoError(t, err)
+
+	// a RootTxn is compatible with all requests
+	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	require.NoError(t, err)
+	_, err = rootTxn.Get(ctx, roachpb.Key("a"))
+	require.NoError(t, err)
+	err = rootTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
+	require.NoError(t, err)
+}
