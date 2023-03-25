@@ -823,6 +823,9 @@ func createFlagsOverride(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 		if flags.Changed("geo") {
 			opts.GeoDistributed = overrideOpts.GeoDistributed
 		}
+		if flags.Changed("label") {
+			opts.CustomLabels = overrideOpts.CustomLabels
+		}
 	}
 }
 
@@ -1084,7 +1087,7 @@ func (c *clusterImpl) validate(
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
-	cloudClusters, err := roachprod.List(l, false /* listMine */, pattern)
+	cloudClusters, err := roachprod.List(l, false /* listMine */, pattern, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
