@@ -40,6 +40,7 @@ type (
 		rt             test.Test
 		hooks          *testHooks
 		prng           *rand.Rand
+		bgChans        []shouldStop
 	}
 )
 
@@ -78,7 +79,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	addSteps := func(ss []testStep) { steps = append(steps, ss...) }
 
 	addSteps(p.initSteps())
-	addSteps(p.hooks.BackgroundSteps(p.nextID, p.initialContext()))
+	addSteps(p.hooks.BackgroundSteps(p.nextID, p.initialContext(), p.bgChans))
 
 	// previous -> current
 	addSteps(p.upgradeSteps(p.initialVersion, clusterupgrade.MainVersion))

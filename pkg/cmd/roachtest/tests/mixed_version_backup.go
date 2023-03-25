@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -255,22 +254,17 @@ func (mvb *mixedVersionBackup) loadBackupData(
 	l.Printf("decided to run import on node %d", importNode)
 
 	currentRoach := mixedversion.CurrentCockroachPath
-	var stopCSVServer context.CancelFunc
-	h.Background("csv server", func(bgCtx context.Context, bgLogger *logger.Logger) error {
+	stopCSVServer := h.Background("csv server", func(bgCtx context.Context, bgLogger *logger.Logger) error {
 		cmd := importBankCSVServerCommand(currentRoach, csvPort)
 		bgLogger.Printf("running CSV server in the background: %q", cmd)
-		var csvServerCtx context.Context
-		csvServerCtx, stopCSVServer = context.WithCancel(bgCtx)
-		err := mvb.cluster.RunE(csvServerCtx, mvb.roachNodes, cmd)
-
-		if err == nil || errors.Is(err, context.Canceled) {
-			bgLogger.Printf("CSV server terminated")
-			return nil
+		if err := mvb.cluster.RunE(bgCtx, mvb.roachNodes, cmd); err != nil {
+			return fmt.Errorf("error while running csv server: %w", err)
 		}
 
-		return fmt.Errorf("error while running csv server: %w", err)
+		return nil
 	})
-	if err := waitForPort(ctx, mvb.roachNodes, csvPort, mvb.cluster); err != nil {
+	defer stopCSVServer()
+	if err := waitForPort(ctx, l, mvb.roachNodes, csvPort, mvb.cluster); err != nil {
 		return err
 	}
 
@@ -279,7 +273,6 @@ func (mvb *mixedVersionBackup) loadBackupData(
 		mvb.cluster.Node(importNode),
 		importBankCommand(currentRoach, rows, 0 /* ranges */, csvPort, importNode),
 	)
-	stopCSVServer()
 	return err
 }
 
