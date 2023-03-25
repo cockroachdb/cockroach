@@ -37,6 +37,25 @@ export function getSortLabel(sort: SqlStatsSortType): string {
   }
 }
 
+export function getSortColumn(sort: SqlStatsSortType): string {
+  switch (sort) {
+    case SqlStatsSortOptions.SERVICE_LAT:
+      return "time";
+    case SqlStatsSortOptions.EXECUTION_COUNT:
+      return "executionCount";
+    case SqlStatsSortOptions.CPU_TIME:
+      return "cpu";
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
+      return "latencyP99";
+    case SqlStatsSortOptions.CONTENTION_TIME:
+      return "contention";
+    case SqlStatsSortOptions.PCT_RUNTIME:
+      return "workloadPct";
+    default:
+      return "";
+  }
+}
+
 export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
   .map(sortVal => ({
     value: sortVal as SqlStatsSortType,

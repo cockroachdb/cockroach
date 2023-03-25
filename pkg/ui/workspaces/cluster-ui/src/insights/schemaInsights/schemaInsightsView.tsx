@@ -136,7 +136,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
     // redux changes and syncs the URL params with redux.
     syncHistory(
       {
-        ascending: sortSetting.ascending.toString(),
+        ascending: sortSetting.ascending?.toString(),
         columnTitle: sortSetting.columnTitle,
         ...getFullFiltersAsStringRecord(filters),
         [SCHEMA_INSIGHT_SEARCH_PARAM]: search,
