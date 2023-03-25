@@ -997,7 +997,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			return err
 		}
 
-		// The fourth heuristic is to prefer candidates that accepts the "best"
+		// The fourth heuristic is to prefer candidates that accept the "best"
 		// mutual type in the resolvable type set of all constants.
 		if bestConstType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
 			// In case all overloads are filtered out at this step,
