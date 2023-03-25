@@ -321,7 +321,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 // List returns a cloud.Cloud struct of all roachprod clusters matching clusterNamePattern.
 // Alternatively, the 'listMine' option can be provided to get the clusters that are owned
 // by the current user.
-func List(l *logger.Logger, listMine bool, clusterNamePattern string) (cloud.Cloud, error) {
+func List(l *logger.Logger, listMine bool, clusterNamePattern string, opts vm.ListOptions) (cloud.Cloud, error) {
 	if err := LoadClusters(); err != nil {
 		return cloud.Cloud{}, err
 	}
@@ -345,7 +345,7 @@ func List(l *logger.Logger, listMine bool, clusterNamePattern string) (cloud.Clo
 		}
 	}
 
-	cld, err := Sync(l, vm.ListOptions{})
+	cld, err := Sync(l, opts)
 	if err != nil {
 		return cloud.Cloud{}, err
 	}
