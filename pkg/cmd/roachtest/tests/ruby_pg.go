@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -227,6 +228,7 @@ func registerRubyPG(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:       "ruby-pg",
+		Timeout:    1 * time.Hour,
 		Owner:      registry.OwnerSQLSessions,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,

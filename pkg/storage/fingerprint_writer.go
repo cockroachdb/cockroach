@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -114,13 +115,11 @@ func (f *fingerprintWriter) PutRawMVCCRangeKey(key MVCCRangeKey, bytes []byte) e
 // PutRawMVCC implements the Writer interface.
 func (f *fingerprintWriter) PutRawMVCC(key MVCCKey, value []byte) error {
 	defer f.hasher.Reset()
-
 	// Hash the key/timestamp and value of the RawMVCC.
 	if err := f.hashKey(key.Key); err != nil {
 		return err
 	}
-	f.timestampBuf = EncodeMVCCTimestampToBuf(f.timestampBuf, key.Timestamp)
-	if err := f.hash(f.timestampBuf); err != nil {
+	if err := f.hashTimestamp(key.Timestamp); err != nil {
 		return err
 	}
 	if err := f.hashValue(value); err != nil {
@@ -147,10 +146,24 @@ func (f *fingerprintWriter) PutUnversioned(key roachpb.Key, value []byte) error 
 }
 
 func (f *fingerprintWriter) hashKey(key []byte) error {
+	if f.options.StripIndexPrefixAndTimestamp {
+		return f.hash(f.stripIndexPrefix(key))
+	}
 	if f.options.StripTenantPrefix {
 		return f.hash(f.stripTenantPrefix(key))
 	}
 	return f.hash(key)
+}
+
+func (f *fingerprintWriter) hashTimestamp(timestamp hlc.Timestamp) error {
+	if f.options.StripIndexPrefixAndTimestamp {
+		return nil
+	}
+	f.timestampBuf = EncodeMVCCTimestampToBuf(f.timestampBuf, timestamp)
+	if err := f.hash(f.timestampBuf); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (f *fingerprintWriter) hashValue(value []byte) error {
@@ -177,7 +190,15 @@ func (f *fingerprintWriter) stripValueChecksum(value []byte) []byte {
 }
 
 func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
-	remainder, _, err := keys.DecodeTenantPrefixE(key)
+	remainder, err := keys.StripTenantPrefix(key)
+	if err != nil {
+		return key
+	}
+	return remainder
+}
+
+func (f *fingerprintWriter) stripIndexPrefix(key []byte) []byte {
+	remainder, err := keys.StripIndexPrefix(key)
 	if err != nil {
 		return key
 	}
@@ -247,8 +268,7 @@ func FingerprintRangekeys(
 			return 0, err
 		}
 		for _, v := range stack.Versions {
-			fw.timestampBuf = EncodeMVCCTimestampToBuf(fw.timestampBuf, v.Timestamp)
-			if err := fw.hash(fw.timestampBuf); err != nil {
+			if err := fw.hashTimestamp(v.Timestamp); err != nil {
 				return 0, err
 			}
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)

@@ -108,7 +108,7 @@ func registerTPCE(r registry.Registry) {
 
 	for _, opts := range []tpceOptions{
 		// Nightly, small scale configurations.
-		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1},
+		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1, timeout: 4 * time.Hour},
 		// Weekly, large scale configurations.
 		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: []string{"weekly"}, timeout: 36 * time.Hour},
 	} {

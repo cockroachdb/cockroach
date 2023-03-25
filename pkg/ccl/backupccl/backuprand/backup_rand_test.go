@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestBackupRestoreRandomDataRoundtrips conducts backup/restore roundtrips on
@@ -97,12 +98,13 @@ database_name = 'rand' AND schema_name = 'public'`)
 	}
 
 	expectedCreateTableStmt := make(map[string]string)
-	expectedData := make(map[string][][]string)
+	expectedData := make(map[string]int)
 	for _, tableName := range tableNames {
 		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t,
 			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tree.NameString(tableName)))[0][0]
 		if runSchemaOnlyExtension == "" {
-			expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tree.NameString(tableName)))
+			tableID := sqlutils.QueryTableID(t, sqlDB.DB, "rand", "public", tableName)
+			expectedData[tableName] = sqlutils.FingerprintTable(t, sqlDB, tableID)
 		}
 	}
 
@@ -135,7 +137,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 			assert.Equal(t, expectedCreateTableStmt[tableName], createStmt,
 				"SHOW CREATE %s not equal after RESTORE", tableName)
 			if runSchemaOnlyExtension == "" {
-				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, restoreTable), expectedData[tableName])
+				tableID := sqlutils.QueryTableID(t, sqlDB.DB, "restoredb", "public", tableName)
+				require.Equal(t, expectedData[tableName], sqlutils.FingerprintTable(t, sqlDB, tableID))
 			} else {
 				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM %s`, restoreTable),
 					[][]string{{"0"}})
