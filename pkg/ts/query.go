@@ -852,10 +852,13 @@ func (db *DB) readFromDatabase(
 				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
 				b.Get(key)
 			} else {
-				// Otherwise, we scan  all keys that prefix match the source, since the system tenant
-				// reads all tenant time series.
-				startKey := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
-				endKey := MakeDataKey(seriesName, source, diskResolution, currentTimestamp).PrefixEnd()
+				// Otherwise, we get the source associated with the system tenant.
+				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+				b.Get(key)
+				// Then we scan all keys that match the tenant source prefix since the system tenant
+				// aggregates sources across all tenants.
+				startKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp)
+				endKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp).PrefixEnd()
 				b.Scan(startKey, endKey)
 			}
 		}

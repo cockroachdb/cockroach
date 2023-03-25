@@ -37,12 +37,20 @@ func DumpRawTo(src tspb.TimeSeries_DumpRawClient, out io.Writer) error {
 	}
 }
 
-// MakeTenantSource creates a source given a NodeID and a TenantID
+// MakeTenantSource creates a source given a NodeID and a TenantID.
 func MakeTenantSource(nodeID string, tenantID string) string {
 	if tenantID != "" {
 		return fmt.Sprintf("%s-%s", nodeID, tenantID)
 	}
 	return nodeID
+}
+
+// MakeTenantSourcePrefix adds the tenant source suffix to a given source.
+func MakeTenantSourcePrefix(source string) string {
+	if source != "" {
+		return fmt.Sprintf("%s-", source)
+	}
+	return source
 }
 
 // DecodeSource splits a source into its individual components.
