@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type (
@@ -50,14 +51,16 @@ type (
 	// backgroundEvent is the struct sent by background steps when they
 	// finish (successfully or not).
 	backgroundEvent struct {
-		Name string
-		Err  error
+		Name            string
+		Err             error
+		TriggeredByTest bool
 	}
 
 	backgroundRunner struct {
-		group  ctxgroup.Group
-		ctx    context.Context
-		events chan backgroundEvent
+		group     ctxgroup.Group
+		ctx       context.Context
+		events    chan backgroundEvent
+		stopFuncs []StopFunc
 	}
 
 	testFailure struct {
@@ -126,12 +129,11 @@ func newTestRunner(
 func (tr *testRunner) run() error {
 	defer tr.closeConnections()
 	defer func() {
-		tr.logger.Printf("canceling mixed-version test context")
-		tr.cancel()
-		// Wait for some time so that any background tasks are properly
-		// canceled and their cancelation messages are displayed in the
-		// logs accordingly.
-		time.Sleep(5 * time.Second)
+		// Stop background functions explicitly so that the corresponding
+		// termination is marked `TriggeredByTest` (not necessary for
+		// correctness, just for clarity).
+		tr.logger.Printf("stopping background functions")
+		tr.background.Terminate()
 	}()
 
 	stepsErr := make(chan error)
@@ -152,6 +154,9 @@ func (tr *testRunner) run() error {
 		case event := <-tr.background.CompletedEvents():
 			if event.Err == nil {
 				tr.logger.Printf("background step finished: %s", event.Name)
+				continue
+			} else if event.TriggeredByTest {
+				tr.logger.Printf("background step canceled by test: %s", event.Name)
 				continue
 			}
 
@@ -218,8 +223,8 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			return err
 		}
 
-		if ss.Background() {
-			tr.startBackgroundStep(ss, stepLogger)
+		if stopChan := ss.Background(); stopChan != nil {
+			tr.startBackgroundStep(ss, stepLogger, stopChan)
 			return nil
 		}
 
@@ -243,7 +248,14 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 	if err := ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l)); err != nil {
 		if isContextCanceled(err) {
 			l.Printf("step terminated (context canceled)")
-			return nil
+			// Avoid creating a `stepError` (which involves querying binary
+			// and cluster versions) when the context was canceled as the
+			// main error (that caused the context to be canceled) will
+			// already include relevant information. This context
+			// cancelation could also be happening because the test author
+			// is explicitly stopping a background step, so running those
+			// queries would be wasteful.
+			return err
 		}
 		return tr.stepError(err, ss, l)
 	}
@@ -251,10 +263,23 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 	return nil
 }
 
-func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger) {
-	tr.background.Start(ss.Description(), func(ctx context.Context) error {
+func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopChan shouldStop) {
+	stop := tr.background.Start(ss.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
 	})
+
+	// We start a goroutine to listen for user-requests to stop the
+	// background function.
+	go func() {
+		select {
+		case <-stopChan:
+			// Test has requested the background function to stop.
+			stop()
+		case <-tr.ctx.Done():
+			// Parent context is done (test has finished).
+			return
+		}
+	}()
 }
 
 // stepError generates a `testFailure` error by augmenting the error
@@ -277,10 +302,12 @@ func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) er
 // debugging.
 func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	clusterVersionsBefore := tr.clusterVersions
+	var clusterVersionsAfter atomic.Value
 	if err := tr.refreshClusterVersions(); err != nil {
 		tr.logger.Printf("failed to fetch cluster versions after failure: %s", err)
+	} else {
+		clusterVersionsAfter = tr.clusterVersions
 	}
-	clusterVersionsAfter := tr.clusterVersions
 
 	tf := &testFailure{
 		description:           desc,
@@ -298,7 +325,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 		tr.logger.Printf("could not rename failed step logger: %v", err)
 	}
 
-	return tf
+	return errors.WithStack(tf)
 }
 
 func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
@@ -430,16 +457,41 @@ func newBackgroundRunner(ctx context.Context) *backgroundRunner {
 
 // Start will run the function `fn` in a goroutine. Any errors
 // returned by that function are observable by reading from the
-// channel returned by the `Events()` function.
-func (br *backgroundRunner) Start(name string, fn func(context.Context) error) {
+// channel returned by the `Events()` function. Returns a function
+// that can be called to stop the background function (canceling the
+// context passed to it).
+func (br *backgroundRunner) Start(name string, fn func(context.Context) error) context.CancelFunc {
+	bgCtx, cancel := context.WithCancel(br.ctx)
+	var expectedContextCancelation bool
 	br.group.Go(func() error {
-		err := fn(br.ctx)
+		err := fn(bgCtx)
 		br.events <- backgroundEvent{
-			Name: name,
-			Err:  err,
+			Name:            name,
+			Err:             err,
+			TriggeredByTest: err != nil && isContextCanceled(err) && expectedContextCancelation,
 		}
 		return err
 	})
+
+	stopBgFunc := func() {
+		expectedContextCancelation = true
+		cancel()
+	}
+	// Collect all stopFuncs so that we can explicitly stop all
+	// background functions when the test finishes.
+	br.stopFuncs = append(br.stopFuncs, stopBgFunc)
+	return stopBgFunc
+}
+
+// Terminate will call the stop functions for every background function
+// started during the test. This includes background functions created
+// during test runtime (using `helper.Background()`), as well as
+// background steps declared in the test setup (using
+// `BackgroundFunc`, `Workload`, et al).
+func (br *backgroundRunner) Terminate() {
+	for _, stop := range br.stopFuncs {
+		stop()
+	}
 }
 
 func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
@@ -494,8 +546,10 @@ func (h *Helper) Context() *Context {
 
 // Background allows test authors to create functions that run in the
 // background in mixed-version hooks.
-func (h *Helper) Background(name string, fn func(context.Context, *logger.Logger) error) {
-	h.runner.background.Start(name, func(ctx context.Context) error {
+func (h *Helper) Background(
+	name string, fn func(context.Context, *logger.Logger) error,
+) context.CancelFunc {
+	return h.runner.background.Start(name, func(ctx context.Context) error {
 		bgLogger, err := h.loggerFor(name)
 		if err != nil {
 			return fmt.Errorf("failed to create logger for background function %q: %w", name, err)
@@ -504,8 +558,7 @@ func (h *Helper) Background(name string, fn func(context.Context, *logger.Logger
 		err = fn(ctx, bgLogger)
 		if err != nil {
 			if isContextCanceled(err) {
-				bgLogger.Printf("background function terminated (context canceled)")
-				return nil
+				return err
 			}
 
 			desc := fmt.Sprintf("error in background function %s: %s", name, err)
@@ -519,9 +572,9 @@ func (h *Helper) Background(name string, fn func(context.Context, *logger.Logger
 // BackgroundCommand has the same semantics of `Background()`; the
 // command passed will run and the test will fail if the command is
 // not successful.
-func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) {
+func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) context.CancelFunc {
 	desc := fmt.Sprintf("run command: %q", cmd)
-	h.Background(desc, func(ctx context.Context, l *logger.Logger) error {
+	return h.Background(desc, func(ctx context.Context, l *logger.Logger) error {
 		l.Printf("running command `%s` on nodes %v in the background", cmd, nodes)
 		return h.runner.cluster.RunE(ctx, nodes, cmd)
 	})

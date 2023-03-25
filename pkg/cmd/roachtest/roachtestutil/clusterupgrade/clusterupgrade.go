@@ -146,9 +146,9 @@ func StartWithBinary(
 	nodes option.NodeListOption,
 	binaryPath string,
 	startOpts option.StartOpts,
-) {
+) error {
 	settings := install.MakeClusterSettings(install.BinaryOption(binaryPath))
-	c.Start(ctx, l, startOpts, settings, nodes)
+	return c.StartE(ctx, l, startOpts, settings, nodes)
 }
 
 // BinaryPathFromVersion shows where the binary for the given version
@@ -200,7 +200,9 @@ func RestartNodesWithNewBinary(
 		if err != nil {
 			return err
 		}
-		StartWithBinary(ctx, l, c, c.Node(node), binary, startOpts)
+		if err := StartWithBinary(ctx, l, c, c.Node(node), binary, startOpts); err != nil {
+			return err
+		}
 
 		// We have seen cases where a transient error could occur when this
 		// newly upgraded node serves as a gateway for a distributed query due
