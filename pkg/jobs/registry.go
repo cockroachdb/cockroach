@@ -1549,7 +1549,7 @@ func (r *Registry) stepThroughStateMachine(
 			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
-		if errors.Is(err, errJobLeaseNotHeld) {
+		if IsLeaseRelocationError(err) {
 			return err
 		}
 
@@ -1868,6 +1868,11 @@ func (r *Registry) RelocateLease(
 	}
 
 	return errors.Mark(errors.Newf("execution of job %d relocated to %d", id, destID), errJobLeaseNotHeld), nil
+}
+
+// IsLeaseRelocationError returns true if the error indicates lease relocation.
+func IsLeaseRelocationError(err error) bool {
+	return errors.Is(err, errJobLeaseNotHeld)
 }
 
 // IsDraining returns true if the job system has been informed that
