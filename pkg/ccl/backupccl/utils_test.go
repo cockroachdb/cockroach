@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -629,18 +630,14 @@ func upsertUntilBackpressure(
 	t *testing.T, rRand *rand.Rand, conn *gosql.DB, database, table string,
 ) {
 	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
+	for i := 1; i < 50; i++ {
 		_, err := conn.Exec(fmt.Sprintf("UPSERT INTO %s.%s VALUES (1, $1)", database, table),
-			randutil.RandBytes(rRand, 1<<15))
-		if err == nil {
-			return errors.New("expected `backpressure` error")
+			randutil.RandBytes(rRand, 5<<20))
+		if testutils.IsError(err, "backpressure") {
+			return
 		}
-
-		if !testutils.IsError(err, "backpressure") {
-			return errors.NewAssertionErrorWithWrappedErrf(err, "expected `backpressure` error")
-		}
-		return nil
-	})
+	}
+	assert.Fail(t, "expected `backpressure` error")
 }
 
 // requireRecoveryEvent fetches all available log entries on disk after

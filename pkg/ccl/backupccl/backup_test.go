@@ -1080,6 +1080,8 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 
 		sqlDB.Exec(t, incBackupQuery, queryArgs...)
 	}
+	bankTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
+	backupTableFingerprint := sqlutils.FingerprintTable(t, sqlDB, bankTableID)
 
 	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
 
@@ -1100,7 +1102,7 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 		restoreQuery = fmt.Sprintf("%s WITH kms = %s", restoreQuery, kmsURIFmtString)
 	}
 	queryArgs := append(restoreURIArgs, kmsURIArgs...)
-	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts)
+	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts, backupTableFingerprint)
 }
 
 func verifyRestoreData(
@@ -1110,6 +1112,7 @@ func verifyRestoreData(
 	restoreQuery string,
 	restoreURIArgs []interface{},
 	numAccounts int,
+	bankStrippedFingerprint int,
 ) {
 	var unused string
 	var restored struct {
@@ -1160,6 +1163,8 @@ func verifyRestoreData(
 			t.Fatal("unexpected span start at primary index")
 		}
 	}
+	restorebankID := sqlutils.QueryTableID(t, sqlDB.DB, "data", "public", "bank")
+	require.Equal(t, bankStrippedFingerprint, sqlutils.FingerprintTable(t, sqlDB, restorebankID))
 }
 
 func TestBackupRestoreSystemTables(t *testing.T) {
@@ -9417,7 +9422,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
-	const tableRangeMaxBytes = 1 << 18
+	const tableRangeMaxBytes = 100 << 20
 	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 	require.NoError(t, err)
@@ -9501,7 +9506,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	// Exclude the table from backup so that it does not hold up GC.
 	runner.Exec(t, `ALTER TABLE test.foo SET (exclude_data_from_backup = true)`)
 
-	const tableRangeMaxBytes = 1 << 18
+	const tableRangeMaxBytes = 100 << 20
 	runner.Exec(t, "ALTER TABLE test.foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 

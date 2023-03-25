@@ -536,6 +536,7 @@ func registerTPCC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		// run the same mixed-headroom test, but going back two versions
 		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomSpec.String(),
+		Timeout:           5 * time.Hour,
 		Owner:             registry.OwnerTestEng,
 		Tags:              []string{`default`},
 		Cluster:           mixedHeadroomSpec,
@@ -1083,6 +1084,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Name:              name,
 		Owner:             owner,
 		Cluster:           nodes,
+		Timeout:           5 * time.Hour,
 		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
