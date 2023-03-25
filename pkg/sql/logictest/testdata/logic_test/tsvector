@@ -360,3 +360,67 @@ LIMIT
 	2
 ----
 0
+
+subtest 98804_regression_test
+
+statement ok
+RESET default_text_search_config
+
+statement ok
+CREATE TABLE ab (a TEXT, b TEXT)
+
+statement ok
+INSERT INTO ab VALUES('fat rats', 'fat cats chased fat, out of shape rats');
+
+query B
+SELECT a @@ b FROM ab
+----
+false
+
+query B
+SELECT b @@ a FROM ab
+----
+true
+
+query B
+SELECT 'fat rats' @@ b FROM ab
+----
+false
+
+query B
+SELECT b @@ 'fat rats' FROM ab
+----
+true
+
+query B
+SELECT a @@ 'fat cats ate fat bats' FROM ab
+----
+false
+
+query B
+SELECT 'fat cats ate fat bats' @@ a FROM ab
+----
+false
+
+statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+SELECT b @@ a::tsvector FROM ab
+
+statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+SELECT a::tsvector @@ b FROM ab
+
+query B
+SELECT 'fat bat cat' @@ 'bats fats'
+----
+true
+
+query B
+SELECT 'bats fats' @@ 'fat bat cat'
+----
+false
+
+statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+SELECT 'fat cats chased fat, out of shape rats' @@ 'fat rats'::tsvector
+
+statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+SELECT 'fat rats'::tsvector @@ 'fat cats chased fat, out of shape rats'
+
