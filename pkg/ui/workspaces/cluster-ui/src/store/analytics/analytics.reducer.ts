@@ -26,6 +26,14 @@ type Page =
   | "Workload Insights - Statement"
   | "Workload Insights - Transaction";
 
+type ApplySearchCriteriaEvent = {
+  name: "Apply Search Criteria";
+  page: Page;
+  tsValue: string;
+  limitValue: number;
+  sortValue: string;
+};
+
 type BackButtonClick = {
   name: "Back Clicked";
   page: Page;
@@ -102,6 +110,7 @@ type TimeScaleChangeEvent = {
 };
 
 type AnalyticsEvent =
+  | ApplySearchCriteriaEvent
   | BackButtonClick
   | ColumnsChangeEvent
   | FilterEvent

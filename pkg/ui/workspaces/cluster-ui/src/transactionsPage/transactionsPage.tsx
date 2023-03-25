@@ -24,7 +24,7 @@ import {
   SortSetting,
   updateSortSettingQueryParamsOnTab,
 } from "../sortedtable";
-import { Pagination } from "../pagination";
+import { Pagination, ResultsPerPageLabel } from "../pagination";
 import { statisticsClasses } from "./transactionsPageClasses";
 import {
   aggregateAcrossNodeIDs,
@@ -54,6 +54,7 @@ import {
   SqlStatsSortType,
   createCombinedStmtsRequest,
   StatementsRequest,
+  SqlStatsSortOptions,
 } from "src/api/statementsApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -79,8 +80,9 @@ import {
   STATS_LONG_LOADING_DURATION,
   txnRequestSortOptions,
   getSortLabel,
+  getSortColumn,
+  getSubsetWarning,
 } from "src/util/sqlActivityConstants";
-import { Button } from "src/button";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -131,6 +133,7 @@ export interface TransactionsPageDispatchProps {
     columnTitle: string,
     ascending: boolean,
   ) => void;
+  onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
@@ -289,6 +292,13 @@ export class TransactionsPage extends React.Component<
     }
   };
 
+  isSortSettingSameAsReqSort = (): boolean => {
+    return (
+      getSortColumn(this.state.reqSortSetting) ==
+      this.props.sortSetting.columnTitle
+    );
+  };
+
   onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
@@ -403,7 +413,29 @@ export class TransactionsPage extends React.Component<
       this.props.onTimeScaleChange(this.state.timeScale);
     }
 
+    if (this.props.onApplySearchCriteria) {
+      this.props.onApplySearchCriteria(
+        this.state.timeScale,
+        this.state.limit,
+        getSortLabel(this.state.reqSortSetting),
+      );
+    }
     this.refreshData();
+    const ss: SortSetting = {
+      ascending: false,
+      columnTitle: getSortColumn(this.state.reqSortSetting),
+    };
+    this.onChangeSortSetting(ss);
+  };
+
+  hasReqSortOption = (): boolean => {
+    let found = false;
+    Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
+      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
+        found = true;
+      }
+    });
+    return found;
   };
 
   renderTransactions(): React.ReactElement {
@@ -497,6 +529,7 @@ export class TransactionsPage extends React.Component<
 
     const period = timeScaleToString(this.props.timeScale);
     const sortSettingLabel = getSortLabel(this.props.reqSortSetting);
+
     return (
       <>
         <h5 className={`${commonStyles("base-heading")} ${cx("margin-top")}`}>
@@ -536,6 +569,15 @@ export class TransactionsPage extends React.Component<
               <p className={timeScaleStylesCx("time-label")}>
                 Showing aggregated stats from{" "}
                 <span className={timeScaleStylesCx("bold")}>{period}</span>
+                {", "}
+                <ResultsPerPageLabel
+                  pagination={{
+                    ...pagination,
+                    total: transactionsToDisplay.length,
+                  }}
+                  pageName={"Statements"}
+                  search={search}
+                />
               </p>
             </PageConfigItem>
             {hasAdminRole && (
@@ -558,6 +600,19 @@ export class TransactionsPage extends React.Component<
             onRemoveFilter={this.onSubmitFilters}
             onClearFilters={this.onClearFilters}
           />
+          {!this.isSortSettingSameAsReqSort() && (
+            <InlineAlert
+              intent="warning"
+              title={getSubsetWarning(
+                "transaction",
+                this.props.limit,
+                sortSettingLabel,
+                this.hasReqSortOption(),
+                this.props.sortSetting.columnTitle as StatisticTableColumnKeys,
+              )}
+              className={cx("margin-bottom")}
+            />
+          )}
           <TransactionsTable
             columns={displayColumns}
             transactions={transactionsToDisplay}
