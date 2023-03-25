@@ -90,8 +90,11 @@ type VM struct {
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
 
-	// NonBootAttachedVolumes are the non-bootable volumes attached to the VM.
+	// NonBootAttachedVolumes are the non-bootable, _persistent_ volumes attached to the VM.
 	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
+
+	// LocalDisks are the ephemeral SSD disks attached to the VM.
+	LocalDisks []Volume `json:"local_disks"`
 
 	// CostPerHour is the estimated cost per hour of this VM, in US dollars. 0 if
 	//there is no estimate available.
@@ -212,6 +215,7 @@ func DefaultCreateOpts() CreateOpts {
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,
+		CustomLabels:   map[string]string{"roachtest": "true"},
 	}
 	defaultCreateOpts.SSDOpts.UseLocalSSD = true
 	defaultCreateOpts.SSDOpts.NoExt4Barrier = true
@@ -273,7 +277,8 @@ type VolumeCreateOpts struct {
 }
 
 type ListOptions struct {
-	IncludeVolumes bool
+	IncludeVolumes       bool
+	ComputeEstimatedCost bool
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
