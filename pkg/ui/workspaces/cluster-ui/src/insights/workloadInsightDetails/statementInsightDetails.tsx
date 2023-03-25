@@ -159,7 +159,11 @@ export const StatementInsightDetails: React.FC<
           <section className={cx("section")}>
             <Row>
               <Col span={24}>
-                <SqlBox size={SqlBoxSize.custom} value={details?.query} />
+                <SqlBox
+                  size={SqlBoxSize.custom}
+                  value={details?.query}
+                  format={true}
+                />
               </Col>
             </Row>
           </section>
