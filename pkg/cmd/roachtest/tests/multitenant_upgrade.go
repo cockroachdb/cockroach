@@ -226,6 +226,10 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		`pq: error validating the version of one or more SQL server instances: validate cluster version failed: some tenant pods running on binary less than 23.1`,
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
+	t.Status("stop the second tenant 11 server and restart it on the new binary")
+	tenant11b.stop(ctx, t, c)
+	tenant11b.start(ctx, t, c, currentBinary)
+
 	t.Status("verify that the first tenant 11 server can now query the storage cluster")
 	{
 		verifySQL(t, tenant11a.pgURL,
@@ -234,10 +238,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			mkStmt("SHOW CLUSTER SETTING version").
 				withResults([][]string{{initialVersion}}))
 	}
-
-	t.Status("stop the second tenant 11 server and restart it on the new binary")
-	tenant11b.stop(ctx, t, c)
-	tenant11b.start(ctx, t, c, currentBinary)
 
 	t.Status("verify the second tenant 11 server works with the new binary")
 	{
