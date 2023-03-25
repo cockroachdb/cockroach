@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -38,7 +37,6 @@ import (
 // TestDrain tests the Drain RPC.
 func TestDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 86974, "flaky test")
 	defer log.Scope(t).Close(t)
 	doTestDrain(t)
 }
@@ -64,18 +62,27 @@ func doTestDrain(tt *testing.T) {
 
 	// Issue another probe. This checks that the server is still running
 	// (i.e. Shutdown: false was effective), the draining status is
-	// still properly reported, and the server slept once.
+	// still properly reported, and that the server only slept once (which only
+	// should occur on the first drain).
 	resp = t.sendProbe()
 	t.assertDraining(resp, true)
 	// probe-only has no remaining.
 	t.assertRemaining(resp, false)
 	t.assertEqual(1, drainSleepCallCount)
 
-	// Issue another drain. Verify that the remaining is zero (i.e. complete)
-	// and that the server did not sleep again.
-	resp = t.sendDrainNoShutdown()
-	t.assertDraining(resp, true)
-	t.assertRemaining(resp, false)
+	// Repeat drain commands until we verify that there are zero remaining leases
+	// (i.e. complete). Also validate that the server did not sleep again.
+	testutils.SucceedsSoon(t, func() error {
+		resp = t.sendDrainNoShutdown()
+		if !resp.IsDraining {
+			return errors.Newf("expected draining")
+		}
+		if resp.DrainRemainingIndicator > 0 {
+			return errors.Newf("still %d remaining, desc: %s", resp.DrainRemainingIndicator,
+				resp.DrainRemainingDescription)
+		}
+		return nil
+	})
 	t.assertEqual(1, drainSleepCallCount)
 
 	// Now issue a drain request without drain but with shutdown.
