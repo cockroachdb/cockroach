@@ -258,6 +258,16 @@ export const ConnectedStatementsPage = withRouter(
           dispatch(updateStmtsPageLimitAction(limit)),
         onChangeReqSort: (sort: SqlStatsSortType) =>
           dispatch(updateStmsPageReqSortAction(sort)),
+        onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) =>
+          dispatch(
+            analyticsActions.track({
+              name: "Apply Search Criteria",
+              page: "Statements",
+              tsValue: ts.key,
+              limitValue: limit,
+              sortValue: sort,
+            }),
+          ),
       },
       activePageProps: mapDispatchToRecentStatementsPageProps(dispatch),
     }),
