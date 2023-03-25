@@ -616,7 +616,7 @@ func (sp *replicationTestSpec) main(ctx context.Context, t test.Test, c cluster.
 }
 func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if !c.IsLocal() {
-		t.Fatal("acceptance tests should only run on a local cluster")
+		t.Skip("c2c/acceptance is only meant to run on a local cluster")
 	}
 	sp := replicationTestSpec{
 		srcNodes: 1,
