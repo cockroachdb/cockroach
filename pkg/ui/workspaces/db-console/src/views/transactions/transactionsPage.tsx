@@ -50,6 +50,7 @@ import {
   selectTxnsDataValid,
   selectTxnsDataInFlight,
 } from "src/selectors/executionFingerprintsSelectors";
+import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 
 // selectData returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -142,6 +143,7 @@ const fingerprintsPageActions = {
   onSearchComplete: (query: string) => searchLocalSetting.set(query),
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
+  onApplySearchCriteria: trackApplySearchCriteriaAction,
 };
 
 type StateProps = {
