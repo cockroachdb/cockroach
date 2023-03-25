@@ -10,6 +10,10 @@
 
 import { duration } from "moment";
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
+import {
+  getLabel,
+  StatisticTableColumnKeys,
+} from "../statsTableUtil/statsTableUtil";
 
 export const limitOptions = [
   { value: 25, label: "25" },
@@ -27,7 +31,22 @@ export function getSortLabel(sort: SqlStatsSortType): string {
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "Contention Time";
     case SqlStatsSortOptions.PCT_RUNTIME:
-      return "% Of All Runtime";
+      return "% of All Runtime";
+    default:
+      return "";
+  }
+}
+
+export function getSortColumn(sort: SqlStatsSortType): string {
+  switch (sort) {
+    case SqlStatsSortOptions.SERVICE_LAT:
+      return "time";
+    case SqlStatsSortOptions.EXECUTION_COUNT:
+      return "executionCount";
+    case SqlStatsSortOptions.CONTENTION_TIME:
+      return "contention";
+    case SqlStatsSortOptions.PCT_RUNTIME:
+      return "workloadPct";
     default:
       return "";
   }
@@ -49,3 +68,18 @@ export const txnRequestSortOptions = stmtRequestSortOptions.filter(
 );
 
 export const STATS_LONG_LOADING_DURATION = duration(2, "s");
+
+export function getSubsetWarning(
+  type: "statement" | "transaction",
+  limit: number,
+  sortLabel: string,
+  showSuggestion: boolean,
+  columnTitle: StatisticTableColumnKeys,
+): string {
+  const warningSuggestion = showSuggestion
+    ? `Update the search criteria to see the ${type} fingerprints 
+    sorted on ${getLabel(columnTitle, type)}.`
+    : "";
+  return `You are viewing a subset (Top ${limit}) of fingerprints by ${sortLabel}.
+    ${warningSuggestion}`;
+}
