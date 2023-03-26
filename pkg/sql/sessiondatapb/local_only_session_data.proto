@@ -365,8 +365,13 @@ message LocalOnlySessionData {
   // Execution of these deallocated prepared statements will fail until they are
   // prepared again.
   int64 prepared_statements_cache_size = 97;
+    
   // StreamerEnabled controls whether the Streamer API can be used.
   bool streamer_enabled = 98;
+
+  // DisableDropTenant causes errors when the client
+  // attempts to drop tenants or tenant records.
+  bool disable_drop_tenant = 99;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

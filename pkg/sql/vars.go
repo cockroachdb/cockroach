@@ -1521,6 +1521,34 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_drop_tenant`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableDropTenant), nil
+		},
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_drop_tenant", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableDropTenant(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			// Note:
+			// - We use a cluster setting here instead of a default role option
+			//   because we need this to be settable also for the 'admin' role.
+			// - The cluster setting is named "enable" because boolean cluster
+			//   settings are all ".enabled" -- we do not have ".disabled"
+			//   settings anywhere.
+			// - The session var is named "disable_" because we want the Go
+			//   default value (false) to mean that tenant deletion is enabled.
+			//   This is needed for backward-compatibility with Cockroach Cloud.
+			return fmt.Sprint(!enableDropTenant.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`allow_prepare_as_opt_plan`: {
 		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
