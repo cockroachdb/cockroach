@@ -131,7 +131,11 @@ the maximum number of statements was reached in the console.`;
         >
           <Row gutter={24}>
             <Col span={24}>
-              <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
+              <SqlBox
+                value={insightQueries}
+                size={SqlBoxSize.custom}
+                format={true}
+              />
             </Col>
           </Row>
           {txnDetails && (
