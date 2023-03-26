@@ -63,21 +63,6 @@ func TestDescriptorIDSequenceForSystemTenant(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
 
-	// Undo the bootstrapping.
-	{
-		q := fmt.Sprintf(`
-SELECT
-    crdb_internal.unsafe_delete_descriptor(id, true),
-    crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id, true)
-FROM system.namespace
-WHERE id = %d`,
-			keys.DescIDSequenceID,
-		)
-		tdb.CheckQueryResults(t, q, [][]string{{"true", "true"}})
-		_, err := s.DB().Del(ctx, keys.SystemSQLCodec.SequenceKey(keys.DescIDSequenceID))
-		require.NoError(t, err)
-	}
-
 	getOld := func() int64 {
 		ret, err := s.DB().Get(ctx, keys.LegacyDescIDGenerator)
 		require.NoError(t, err)

@@ -18,12 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,18 +40,6 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			DisableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
-				// Avoiding jobs to be adopted.
-				JobsTestingKnobs: &jobs.TestingKnobs{
-					DisableAdoptions: true,
-				},
-				// DisableAdoptions needs this.
-				UpgradeManager: &upgradebase.TestingKnobs{
-					DontUseJobs:                       true,
-					SkipJobMetricsPollingJobBootstrap: true,
-				},
-				KeyVisualizer: &keyvisualizer.TestingKnobs{
-					SkipJobBootstrap: true,
-				},
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
@@ -85,9 +71,6 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 	createJob(2, jobspb.RestoreDetails{}, jobspb.RestoreProgress{})
 	createJob(3, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{})
 
-	// Validate that there are no rows in the system.job_info table.
-	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.job_info`, [][]string{{"0"}})
-
 	upgrades.Upgrade(t, tc.ServerConn(0), clusterversion.V23_1CreateSystemJobInfoTable, nil, false)
 
 	// Create two more jobs that we should see written to both system.jobs and
@@ -97,7 +80,10 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 
 	// Validate that we see 2 rows (payload and progress) in the system.job_info
 	// table for each row written in the system.jobs table since the last upgrade.
-	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.jobs AS j, system.job_info AS i WHERE j.id = i.job_id AND (j.payload = i.value OR j.progress = i.value)`,
+	sqlDB.CheckQueryResults(t, `
+SELECT count(*) FROM system.jobs AS j, system.job_info AS i
+WHERE j.id = i.job_id AND (j.payload = i.value OR j.progress = i.value) AND (j.id >= 1 AND j.id <= 5)
+`,
 		[][]string{{"4"}})
 
 	upgrades.Upgrade(t, tc.ServerConn(0), clusterversion.V23_1JobInfoTableIsBackfilled, nil, false)
@@ -107,6 +93,9 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 	// We expect to see 14 rows because of:
 	// - 4 rows from before
 	// - 10 rows (payload + progress) for the 5 jobs in system.jobs
-	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.jobs AS j, system.job_info AS i WHERE j.id = i.job_id AND (j.payload = i.value OR j.progress = i.value)`,
+	sqlDB.CheckQueryResults(t, `
+SELECT count(*) FROM system.jobs AS j, system.job_info AS i
+WHERE j.id = i.job_id AND (j.payload = i.value OR j.progress = i.value) AND (j.id >= 1 AND j.id <= 5)
+`,
 		[][]string{{"14"}})
 }
