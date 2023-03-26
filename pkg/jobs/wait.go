@@ -42,6 +42,9 @@ func (r *Registry) NotifyToAdoptJobs() {
 func (r *Registry) NotifyToResume(ctx context.Context, jobs ...jobspb.JobID) {
 	m := newJobIDSet(jobs...)
 	_ = r.stopper.RunAsyncTask(ctx, "resume-jobs", func(ctx context.Context) {
+		ctx, cancel := r.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		r.withSession(ctx, func(ctx context.Context, s sqlliveness.Session) {
 			r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, m)
 			if !r.adoptionDisabled(ctx) {
