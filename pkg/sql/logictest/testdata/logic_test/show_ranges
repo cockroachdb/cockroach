@@ -454,3 +454,41 @@ CREATE TABLE v0 (c1 BIT PRIMARY KEY );
 
 statement error pgcode 42846 pq: crdb_internal.encode_key\(\): invalid cast: bytes -> bit
 SHOW RANGE FROM TABLE v0 FOR ROW ( b'\x68')
+
+subtest prev_interface_error_hints
+
+statement error pgcode 42703 .*\nHINT.*lease holder and range size
+SELECT lease_holder FROM [SHOW RANGES FROM TABLE v0]
+
+statement error pgcode 42703 .*\nHINT.*lease holder and range size
+SELECT lease_holder FROM [show ranges from table v0]
+
+statement error pgcode 42703 .*\nHINT.*lease holder and range size
+SELECT lease_holder_locality FROM [SHOW RANGES FROM TABLE v0]
+
+statement error pgcode 42703 .*\nHINT.*lease holder and range size
+SELECT range_size FROM [SHOW RANGES FROM TABLE v0]
+
+statement error pgcode 42703 .*\nHINT.*lease holder and range size
+SELECT range_size_mb FROM [SHOW RANGES FROM TABLE v0]
+
+statement error pgcode 42703 .*\nHINT.*display the database name
+SELECT database_name FROM crdb_internal.ranges
+
+statement error pgcode 42703 .*\nHINT.*display the database name
+SELECT database_name FROM CRDB_INTERNAL."ranges"
+
+statement error pgcode 42703 .*\nHINT.*display the database name
+SELECT database_name FROM crdb_internal.ranges_no_leases
+
+statement error pgcode 42703 .*\nHINT.*To retrieve table/schema.*with ranges
+SELECT table_name FROM crdb_internal.ranges
+
+statement error pgcode 42703 .*\nHINT.*To retrieve table/schema.*with ranges
+SELECT table_id FROM crdb_internal.ranges
+
+statement error pgcode 42703 .*\nHINT.*To retrieve table/schema.*with ranges
+SELECT schema_name FROM crdb_internal.ranges
+
+statement error pgcode 42703 .*\nHINT.*To retrieve index.*with ranges
+SELECT index_name FROM crdb_internal.ranges

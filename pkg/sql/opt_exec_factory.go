@@ -777,7 +777,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	onCond tree.TypedExpr,
 ) (exec.Node, error) {
 	tn := &table.(*optVirtualTable).name
-	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
+	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn, ef.planner)
 	if err != nil {
 		return nil, err
 	}

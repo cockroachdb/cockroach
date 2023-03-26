@@ -2232,9 +2232,11 @@ func truncateStatementStringForTelemetry(stmt string) string {
 // hideNonVirtualTableNameFunc returns a function that can be used with
 // FmtCtx.SetReformatTableNames. It hides all table names that are not virtual
 // tables.
-func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *tree.TableName) {
+func hideNonVirtualTableNameFunc(
+	vt VirtualTabler, ns eval.ClientNoticeSender,
+) func(ctx *tree.FmtCtx, name *tree.TableName) {
 	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
-		virtual, err := vt.getVirtualTableEntry(tn)
+		virtual, err := vt.getVirtualTableEntry(tn, ns)
 
 		if err != nil || virtual == nil {
 			// Current table is non-virtual and therefore needs to be scrubbed (for statement stats) or redacted (for logs).
@@ -2278,14 +2280,16 @@ func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *
 	return reformatFn
 }
 
-func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
+func anonymizeStmtAndConstants(
+	stmt tree.Statement, vt VirtualTabler, ns eval.ClientNoticeSender,
+) string {
 	// Re-format to remove most names.
 	fmtFlags := tree.FmtAnonymize | tree.FmtHideConstants
 	var f *tree.FmtCtx
 	if vt != nil {
 		f = tree.NewFmtCtx(
 			fmtFlags,
-			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)),
+			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)),
 		)
 	} else {
 		f = tree.NewFmtCtx(fmtFlags)
@@ -2296,8 +2300,10 @@ func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
 
 // WithAnonymizedStatement attaches the anonymized form of a statement
 // to an error object.
-func WithAnonymizedStatement(err error, stmt tree.Statement, vt VirtualTabler) error {
-	anonStmtStr := anonymizeStmtAndConstants(stmt, vt)
+func WithAnonymizedStatement(
+	err error, stmt tree.Statement, vt VirtualTabler, ns eval.ClientNoticeSender,
+) error {
+	anonStmtStr := anonymizeStmtAndConstants(stmt, vt, ns)
 	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
 	return errors.WithSafeDetails(err,
 		"while executing: %s", errors.Safe(anonStmtStr))
@@ -3529,7 +3535,7 @@ func quantizeCounts(d *appstatspb.StatementStatistics) {
 	d.FirstAttemptCount = int64((float64(d.FirstAttemptCount) / float64(oldCount)) * float64(newCount))
 }
 
-func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
+func scrubStmtStatKey(vt VirtualTabler, key string, ns eval.ClientNoticeSender) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -3539,7 +3545,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	// Re-format to remove most names.
 	f := tree.NewFmtCtx(
 		tree.FmtAnonymize,
-		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)),
+		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)),
 	)
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
@@ -3548,12 +3554,16 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 // formatStmtKeyAsRedactableString given an AST node this function will fully
 // qualify names using annotations to format it out into a redactable string.
 func formatStmtKeyAsRedactableString(
-	vt VirtualTabler, rootAST tree.Statement, ann *tree.Annotations, fs tree.FmtFlags,
+	vt VirtualTabler,
+	rootAST tree.Statement,
+	ann *tree.Annotations,
+	fs tree.FmtFlags,
+	ns eval.ClientNoticeSender,
 ) redact.RedactableString {
 	f := tree.NewFmtCtx(
 		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode|fs,
 		tree.FmtAnnotations(ann),
-		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)))
+		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)))
 	f.FormatNode(rootAST)
 	formattedRedactableStatementString := f.CloseAndGetString()
 	return redact.RedactableString(formattedRedactableStatementString)

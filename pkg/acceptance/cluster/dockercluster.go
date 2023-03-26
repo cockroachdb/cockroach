@@ -493,6 +493,9 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",
 		"COCKROACH_SKIP_UPDATE_CHECK=1",
 		"COCKROACH_CRASH_REPORTS=",
+		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+		// Remove in v23.2.
+		"COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR=false",
 	}
 	l.createRoach(ctx, node, l.vols, env, cmd...)
 	maybePanic(node.Start(ctx))

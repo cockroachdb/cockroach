@@ -1450,15 +1450,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 	schema: vtable.PGCatalogDepend,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		vt := p.getVirtualTabler()
-		pgConstraintsDesc, err := vt.getVirtualTableDesc(&pgConstraintsTableName)
+		pgConstraintsDesc, err := vt.getVirtualTableDesc(&pgConstraintsTableName, p)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_constraint")
 		}
-		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName)
+		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName, p)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
-		pgRewriteDesc, err := vt.getVirtualTableDesc(&pgRewriteTableName)
+		pgRewriteDesc, err := vt.getVirtualTableDesc(&pgRewriteTableName, p)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_rewrite")
 		}
@@ -2892,19 +2892,19 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		vt := p.getVirtualTabler()
 		h := makeOidHasher()
 
-		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName)
+		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName, p)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
 		pgClassOid := tableOid(pgClassDesc.GetID())
 
-		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName)
+		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName, p)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_authid")
 		}
 		pgAuthIDOid := tableOid(pgAuthIDDesc.GetID())
 
-		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName)
+		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName, p)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_database")
 		}
