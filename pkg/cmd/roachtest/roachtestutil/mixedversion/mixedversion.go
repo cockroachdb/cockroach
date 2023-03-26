@@ -226,8 +226,8 @@ type (
 		// closing the channel. When that happens, the test runner will
 		// cancel the underlying context.
 		//
-		// There is one channel in `bgChans` for each hook in
-		// `Test.hooks.background`.
+		// Invariant: there is exactly one channel in `bgChans` for each
+		// hook in `Test.hooks.background`.
 		bgChans []shouldStop
 
 		// test-only field, allowing us to avoid passing a test.Test
