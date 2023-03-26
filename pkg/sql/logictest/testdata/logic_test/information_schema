@@ -5206,6 +5206,7 @@ default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
 default_with_oids                                     off
 descriptor_validation                                 on
+disable_drop_tenant                                   off
 disable_hoist_projection_in_join_limitation           off
 disable_partially_distributed_plans                   off
 disable_plan_gists                                    off

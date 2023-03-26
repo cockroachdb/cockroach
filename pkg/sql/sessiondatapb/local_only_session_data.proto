@@ -318,7 +318,6 @@ message LocalOnlySessionData {
   // optimizer should use improved statistics calculations for disjunctive
   // filters.
   bool optimizer_use_improved_disjunction_stats = 86;
-
   // OptimizerUseLimitOrderingForStreamingGroupBy enables the exploration rule
   // which optimizes 'SELECT ... GROUP BY ... ORDER BY ... LIMIT n' queries.
   // The rule uses the required ordering in the limit expression to inform an
@@ -367,6 +366,9 @@ message LocalOnlySessionData {
   int64 prepared_statements_cache_size = 97;
   // StreamerEnabled controls whether the Streamer API can be used.
   bool streamer_enabled = 98;
+  // DisableDropTenant causes errors when the client
+  // attempts to drop tenants or tenant records.
+  bool disable_drop_tenant = 99;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
