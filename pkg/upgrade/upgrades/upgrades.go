@@ -298,11 +298,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		createComputedIndexesOnSystemSQLStatistics,
 	),
-	upgrade.NewTenantUpgrade(
+	upgrade.NewPermanentTenantUpgrade(
 		"create statement_activity and transaction_activity tables",
 		toCV(clusterversion.V23_1AddSystemActivityTables),
-		upgrade.NoPrecondition,
 		systemStatisticsActivityTableMigration,
+		"create statement_activity and transaction_activity job",
 	),
 	upgrade.NewTenantUpgrade(
 		"stop writing payload and progress to system.jobs",
