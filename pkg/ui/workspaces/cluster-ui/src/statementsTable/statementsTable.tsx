@@ -41,15 +41,12 @@ import {
   SortedTable,
 } from "src/sortedtable";
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { StatementTableCell } from "./statementsTableContent";
 import {
   statisticsTableTitles,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
 
-type ICollectedStatementStatistics =
-  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
 const cx = classNames.bind(styles);
@@ -123,9 +120,6 @@ export function makeStatementsColumns(
   };
   const sampledExecStatsBarChartOptions = {
     classes: defaultBarChartOptions.classes,
-    displayNoSamples: (d: ICollectedStatementStatistics) => {
-      return longToInt(d.stats.exec_stats?.count) == 0;
-    },
   };
 
   const countBar = countBarChart(statements, defaultBarChartOptions);
@@ -181,7 +175,7 @@ export function makeStatementsColumns(
       cell: (stmt: AggregateStatistics) =>
         stmt.applicationName?.length > 0 ? stmt.applicationName : unset,
       sort: (stmt: AggregateStatistics) => stmt.applicationName,
-      showByDefault: false,
+      showByDefault: true,
     },
     {
       name: "rowsProcessed",
