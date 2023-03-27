@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -2729,7 +2730,10 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
-	rankingsAccumulator := NewReplicaAccumulator(s.rebalanceObjManager.Objective().ToDimension())
+	// We wish to track both CPU and QPS, due to different usecases between UI
+	// and rebalancing. By default rebalancing uses CPU whilst the UI will use
+	// QPS.
+	rankingsAccumulator := NewReplicaAccumulator(load.CPU, load.Queries)
 	rankingsByTenantAccumulator := NewTenantReplicaAccumulator()
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
@@ -3300,7 +3304,7 @@ type HotReplicaInfo struct {
 // Note that this uses cached information, so it's cheap but may be slightly
 // out of date.
 func (s *Store) HottestReplicas() []HotReplicaInfo {
-	topLoad := s.replRankings.TopLoad()
+	topLoad := s.replRankings.TopLoad(load.Queries)
 	return mapToHotReplicasInfo(topLoad)
 }
 
