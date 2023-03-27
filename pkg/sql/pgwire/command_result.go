@@ -321,6 +321,36 @@ func (r *commandResult) SetPortalOutput(
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
+// SendCopyOut is part of the sql.CopyOutResult interface.
+func (r *commandResult) SendCopyOut(
+	ctx context.Context, cols colinfo.ResultColumns, format pgwirebase.FormatCode,
+) error {
+	r.assertNotReleased()
+	r.conn.writerState.fi.registerCmd(r.pos)
+	return r.conn.bufferCopyOut(cols, format)
+}
+
+// SendCopyData is part of the sql.CopyOutResult interface.
+func (r *commandResult) SendCopyData(ctx context.Context, copyData []byte, isHeader bool) error {
+	if err := r.beforeAdd(); err != nil {
+		return err
+	}
+	if err := r.conn.bufferCopyData(copyData, r); err != nil {
+		return err
+	}
+	if !isHeader {
+		r.rowsAffected++
+	}
+	return nil
+}
+
+// SendCopyDone is part of the pgwirebase.Conn interface.
+func (r *commandResult) SendCopyDone(ctx context.Context) error {
+	r.assertNotReleased()
+	r.conn.writerState.fi.registerCmd(r.pos)
+	return r.conn.bufferCopyDone()
+}
+
 // IncrementRowsAffected is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.assertNotReleased()
