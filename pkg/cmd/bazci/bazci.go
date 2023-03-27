@@ -246,6 +246,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 func (s *monitorBuildServer) Finalize() error {
 	if s.action == "build" {
 		for _, target := range s.builtTargets {
+			if target == nil {
+				continue
+			}
 			for _, outputGroup := range target.OutputGroup {
 				if outputGroup == nil || outputGroup.Incomplete {
 					continue
