@@ -500,8 +500,10 @@ type testRange struct {
 	qps, reqCPU       float64
 }
 
-func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange, loadDimension load.Dimension) {
-	acc := NewReplicaAccumulator(loadDimension)
+func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
+	// Track both CPU and QPS by default, the ordering the consumer uses will
+	// deepend on the current rebalance objective.
+	acc := NewReplicaAccumulator(load.Queries, load.CPU)
 	for i, r := range ranges {
 		rangeID := roachpb.RangeID(i + 1)
 		repl := &Replica{store: s, RangeID: rangeID}
@@ -787,8 +789,8 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", withQPSCPU(t, objectiveProvider, func(t *testing.T) {
 			lbRebalanceDimension := objectiveProvider.Objective().ToDimension()
-			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps, reqCPU: tc.reqCPU}}, lbRebalanceDimension)
-			hottestRanges := sr.replicaRankings.TopLoad()
+			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps, reqCPU: tc.reqCPU}})
+			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			options.LoadThreshold = allocatorimpl.WithAllDims(0.1)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
@@ -929,10 +931,10 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			loadRanges(
 				rr, s, []testRange{
 					{voters: voterStores, nonVoters: nonVoterStores, qps: perReplicaQPS, reqCPU: perReplicaReqCPU},
-				}, lbRebalanceDimension,
+				},
 			)
 
-			hottestRanges := sr.replicaRankings.TopLoad()
+			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
@@ -1270,10 +1272,10 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			loadRanges(
 				rr, s, []testRange{
 					{voters: tc.voters, nonVoters: tc.nonVoters, qps: testingQPS, reqCPU: testingReqCPU},
-				}, lbRebalanceDimension,
+				},
 			)
 
-			hottestRanges := sr.replicaRankings.TopLoad()
+			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingLeasesAndReplicas)
 			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
@@ -1360,10 +1362,9 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 					qps:    100,
 					reqCPU: 100 * float64(time.Millisecond)},
 			},
-			lbRebalanceDimension,
 		)
 
-		hottestRanges := sr.replicaRankings.TopLoad()
+		hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options := sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
@@ -1528,10 +1529,9 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
 			loadRanges(rr, s,
 				[]testRange{{voters: tc.voters, qps: tc.QPS, reqCPU: tc.reqCPU}},
-				lbRebalanceDimension,
 			)
 
-			hottestRanges := sr.replicaRankings.TopLoad()
+			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
@@ -1621,9 +1621,9 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 
 		// Load in a range with replicas on an overfull node, a slightly underfull
 		// node, and a very underfull node.
-		loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 4, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}}, lbRebalanceDimension)
+		loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 4, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}})
 
-		hottestRanges := sr.replicaRankings.TopLoad()
+		hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options := sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 		repl := rctx.hottestRanges[0]
@@ -1638,9 +1638,9 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		// Then do the same, but for replica rebalancing. Make s5 an existing replica
 		// that's behind, and see how a new replica is preferred as the leaseholder
 		// over it.
-		loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}}, lbRebalanceDimension)
+		loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}})
 
-		hottestRanges = sr.replicaRankings.TopLoad()
+		hottestRanges = sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options = sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx = sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
@@ -1798,9 +1798,9 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 
 			// Load in a range with replicas on an overfull node, a slightly underfull
 			// node, and a very underfull node.
-			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}}, lbRebalanceDimension)
+			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}})
 
-			hottestRanges := sr.replicaRankings.TopLoad()
+			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			require.Greater(t, len(rctx.hottestRanges), 0)
