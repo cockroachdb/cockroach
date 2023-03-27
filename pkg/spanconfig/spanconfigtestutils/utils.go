@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -33,7 +34,7 @@ import (
 
 // spanRe matches strings of the form "[start, end)", capturing both the "start"
 // and "end" keys.
-var spanRe = regexp.MustCompile(`^\[(\w+),\s??(\w+)\)$`)
+var spanRe = regexp.MustCompile(`^\[((/Tenant/\d*/)?\w+),\s??((/Tenant/\d*/)?\w+)\)$`)
 
 // systemTargetRe matches strings of the form
 // "{entire-keyspace|source=<id>,(target=<id>|all-tenant-keyspace-targets-set)}".
@@ -44,6 +45,14 @@ var systemTargetRe = regexp.MustCompile(
 // configRe matches either FALLBACK (for readability) or a single letter. It's a
 // shorthand for declaring a unique tagged config.
 var configRe = regexp.MustCompile(`^(FALLBACK)|(^\w)$`)
+
+// tenantRe matches a string of the form "/Tenant/<id>".
+var tenantRe = regexp.MustCompile(`/Tenant/(\d*)`)
+
+// keyRe matches a string of the form "a", "Tenant/10/a". An optional tenant
+// prefix may be used to specify a key inside a secondary tenant's keyspace;
+// otherwise, the key is within the system tenant's keyspace.
+var keyRe = regexp.MustCompile(`(Tenant/\d*/)?(\w+)`)
 
 // ParseRangeID is helper function that constructs a roachpb.RangeID from a
 // string of the form "r<int>".
@@ -145,11 +154,48 @@ func ParseSpan(t testing.TB, sp string) roachpb.Span {
 	}
 
 	matches := spanRe.FindStringSubmatch(sp)
-	start, end := matches[1], matches[2]
+	startStr, endStr := matches[1], matches[3]
+	start, tenStart := ParseKey(t, startStr)
+	end, tenEnd := ParseKey(t, endStr)
+
+	// Sanity check keys don't straddle tenant boundaries.
+	require.Equal(t, tenStart, tenEnd)
+
 	return roachpb.Span{
-		Key:    roachpb.Key(start),
-		EndKey: roachpb.Key(end),
+		Key:    start,
+		EndKey: end,
 	}
+}
+
+// ParseKey constructs a roachpb.Key from the supplied input. The key may be
+// optionally prefixed with a "/Tenant/ID/" prefix; doing so ensures the key
+// belongs to the specified tenant's keyspace. Otherwise, the key lies in the
+// system tenant's keyspace.
+//
+// In addition to the key, the tenant ID is also returned.
+func ParseKey(t testing.TB, key string) (roachpb.Key, roachpb.TenantID) {
+	require.True(t, keyRe.MatchString(key))
+
+	matches := keyRe.FindStringSubmatch(key)
+	tenantID := roachpb.SystemTenantID
+	if matches[1] != "" {
+		tenantID = parseTenant(t, key)
+	}
+
+	codec := keys.MakeSQLCodec(tenantID)
+	return append(codec.TenantPrefix(), roachpb.Key(matches[2])...), tenantID
+}
+
+// parseTenant expects a string of the form "ten-<tenantID>" and returns the
+// tenant ID.
+func parseTenant(t testing.TB, input string) roachpb.TenantID {
+	require.True(t, tenantRe.MatchString(input), input)
+
+	matches := tenantRe.FindStringSubmatch(input)
+	tenID := matches[1]
+	tenIDRaw, err := strconv.Atoi(tenID)
+	require.NoError(t, err)
+	return roachpb.MustMakeTenantID(uint64(tenIDRaw))
 }
 
 // parseSystemTarget is a helepr function that constructs a
@@ -216,6 +262,73 @@ func ParseConfig(t testing.TB, conf string) roachpb.SpanConfig {
 					},
 				},
 			},
+		},
+	}
+}
+
+// ParseDeclareBoundsArguments parses datadriven test input to a list of
+// tenantcapabilities.Updates that can be applied to a
+// tenantcapabilities.Reader. The input is of the following form:
+//
+// delete ten-10
+// set ten-10:{GC.ttl_start=5, GC.ttl_end=30}
+func ParseDeclareBoundsArguments(t *testing.T, input string) []tenantcapabilities.Update {
+	var updates []tenantcapabilities.Update
+	for _, line := range strings.Split(input, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		const setPrefix, deletePrefix = "set ", "delete "
+
+		switch {
+		case strings.HasPrefix(line, setPrefix):
+			line = strings.TrimPrefix(line, line[:len(setPrefix)])
+			parts := strings.Split(line, ":")
+			require.Len(t, parts, 2)
+			tenantID := parseTenant(t, parts[0])
+			bounds := parseBounds(t, parts[1])
+			updates = append(updates, tenantcapabilities.Update{
+				Entry: tenantcapabilities.Entry{
+					TenantID: tenantID,
+					TenantCapabilities: &tenantcapabilitiespb.TenantCapabilities{
+						SpanConfigBounds: bounds,
+					},
+				},
+			})
+		case strings.HasPrefix(line, deletePrefix):
+			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
+			tenantID := parseTenant(t, line)
+			updates = append(updates, tenantcapabilities.Update{
+				Entry: tenantcapabilities.Entry{
+					TenantID: tenantID,
+				},
+				Deleted: true,
+			})
+		default:
+			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
+				line, setPrefix, deletePrefix)
+		}
+	}
+	return updates
+}
+
+// parseBounds parses a string that looks like {GC.ttl_start=5, GC.ttl_end=40}
+// into a SpanConfigBoudns struct.
+func parseBounds(t *testing.T, input string) *tenantcapabilitiespb.SpanConfigBounds {
+	require.True(t, boundsRe.MatchString(input))
+
+	matches := boundsRe.FindStringSubmatch(input)
+	gcTTLStart, err := strconv.Atoi(matches[1])
+	require.NoError(t, err)
+	gcTTLEnd, err := strconv.Atoi(matches[2])
+	require.NoError(t, err)
+
+	return &tenantcapabilitiespb.SpanConfigBounds{
+		GCTTLSeconds: &tenantcapabilitiespb.SpanConfigBounds_Int32Range{
+			Start: int32(gcTTLStart),
+			End:   int32(gcTTLEnd),
 		},
 	}
 }
@@ -347,21 +460,44 @@ func ParseStoreApplyArguments(t testing.TB, input string) (updates []spanconfig.
 // roundtrip; spans containing special keys that translate to pretty-printed
 // keys are printed as such.
 func PrintSpan(sp roachpb.Span) string {
-	s := []string{
-		sp.Key.String(),
-		sp.EndKey.String(),
-	}
-	for i := range s {
+	var res []string
+	for _, key := range []roachpb.Key{sp.Key, sp.EndKey} {
+		var tenantPrefixStr string
+		rest, tenID, err := keys.DecodeTenantPrefix(key)
+		if err != nil {
+			panic(err)
+		}
+
+		if !tenID.IsSystem() {
+			tenantPrefixStr = fmt.Sprintf("%s", keys.MakeSQLCodec(tenID).TenantPrefix())
+		}
+
 		// Raw keys are quoted, so we unquote them.
-		if strings.Contains(s[i], "\"") {
+		restStr := roachpb.Key(rest).String()
+		if strings.Contains(restStr, "\"") {
 			var err error
-			s[i], err = strconv.Unquote(s[i])
+			restStr, err = strconv.Unquote(restStr)
 			if err != nil {
 				panic(err)
 			}
 		}
+
+		// For keys inside a secondary tenant, we don't print the "/Min" suffix if
+		// the key is at the start of their keyspace. Also, we add a "/" delimiter
+		// after the tenant prefix.
+		if !tenID.IsSystem() {
+			if roachpb.Key(rest).Compare(keys.MinKey) == 0 {
+				restStr = ""
+			}
+
+			if restStr != "" {
+				restStr = fmt.Sprintf("/%s", restStr)
+			}
+		}
+
+		res = append(res, fmt.Sprintf("%s%s", tenantPrefixStr, restStr))
 	}
-	return fmt.Sprintf("[%s,%s)", s[0], s[1])
+	return fmt.Sprintf("[%s,%s)", res[0], res[1])
 }
 
 // PrintTarget is a helper function that prints a spanconfig.Target.
