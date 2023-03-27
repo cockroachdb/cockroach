@@ -47,7 +47,7 @@ import (
 func registerRestoreNodeShutdown(r registry.Registry) {
 	sp := restoreSpecs{
 		hardware: makeHardwareSpecs(hardwareSpecs{}),
-		backup: makeBackupSpecs(
+		backup: makeRestoringBackupSpecs(
 			backupSpecs{workload: tpceRestore{customers: 1000},
 				version: "v22.2.1"}),
 		timeout:     1 * time.Hour,
@@ -106,7 +106,7 @@ func registerRestore(r registry.Registry) {
 
 	withPauseSpecs := restoreSpecs{
 		hardware: makeHardwareSpecs(hardwareSpecs{}),
-		backup: makeBackupSpecs(
+		backup: makeRestoringBackupSpecs(
 			backupSpecs{workload: tpceRestore{customers: 1000},
 				version: "v22.2.1"}),
 		timeout:     3 * time.Hour,
@@ -265,7 +265,7 @@ func registerRestore(r registry.Registry) {
 	for _, sp := range []restoreSpecs{
 		{
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   makeBackupSpecs(backupSpecs{}),
+			backup:   makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
 			tags:     registry.Tags("aws"),
 		},
@@ -273,21 +273,21 @@ func registerRestore(r registry.Registry) {
 			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
 			// by default.
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
+			backup:   makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
 		},
 		{
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
 			// performance but nodes should not OOM.
 			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
-			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
+			backup:   makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
 		},
 		{
 			// Benchmarks if per node throughput remains constant if the number of
 			// nodes doubles relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
-			backup:   makeBackupSpecs(backupSpecs{}),
+			backup:   makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
 			tags:     registry.Tags("aws"),
 		},
@@ -297,7 +297,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				nodes: 9,
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
-			backup:  makeBackupSpecs(backupSpecs{}),
+			backup:  makeRestoringBackupSpecs(backupSpecs{}),
 			timeout: 90 * time.Minute,
 			tags:    registry.Tags("aws"),
 		},
@@ -305,7 +305,7 @@ func registerRestore(r registry.Registry) {
 			// Benchmarks if per node throughput doubles if the vcpu count doubles
 			// relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
-			backup:   makeBackupSpecs(backupSpecs{}),
+			backup:   makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
 			tags:     registry.Tags("aws"),
 		},
@@ -313,14 +313,14 @@ func registerRestore(r registry.Registry) {
 			// Ensures we can restore a 48 length incremental chain.
 			// Also benchmarks per node throughput for a long chain.
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   makeBackupSpecs(backupSpecs{backupsIncluded: 48}),
+			backup:   makeRestoringBackupSpecs(backupSpecs{backupsIncluded: 48}),
 			timeout:  1 * time.Hour,
 			tags:     registry.Tags("aws"),
 		},
 		{
 			// The nightly 8TB Restore test.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
-			backup: makeBackupSpecs(backupSpecs{
+			backup: makeRestoringBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
 			timeout: 5 * time.Hour,
@@ -329,7 +329,7 @@ func registerRestore(r registry.Registry) {
 		{
 			// The weekly 32TB Restore test.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
-			backup: makeBackupSpecs(backupSpecs{
+			backup: makeRestoringBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 2000000}}),
 			timeout: 24 * time.Hour,
@@ -338,7 +338,7 @@ func registerRestore(r registry.Registry) {
 		{
 			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup: makeBackupSpecs(
+			backup: makeRestoringBackupSpecs(
 				backupSpecs{workload: tpceRestore{customers: 1000},
 					version: "v22.2.1"}),
 			timeout:     3 * time.Hour,
@@ -404,8 +404,11 @@ type hardwareSpecs struct {
 	// cpus is the per node cpu count.
 	cpus int
 
-	// nodes is the number of nodes in the restore.
+	// nodes is the number of crdb nodes in the restore.
 	nodes int
+
+	// addWorkloadNode is true if workload node should also get spun up
+	workloadNode bool
 
 	// volumeSize indicates the size of per node block storage (pd-ssd for gcs,
 	// ebs for aws). If zero, local ssd's are used.
@@ -428,11 +431,15 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 	if hw.mem != spec.Auto {
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
+	addWorkloadNode := 0
+	if hw.workloadNode {
+		addWorkloadNode++
+	}
 	if len(hw.zones) > 0 {
 		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
 	}
-	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
+	s := r.MakeClusterSpec(hw.nodes+addWorkloadNode, clusterOpts...)
 
 	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:
@@ -462,6 +469,21 @@ func (hw hardwareSpecs) String(verbose bool) string {
 	return builder.String()
 }
 
+func (hw hardwareSpecs) getWorkloadNode() int {
+	if hw.workloadNode {
+		return hw.nodes + 1
+	}
+	return 0
+}
+
+func (hw hardwareSpecs) getCRDBNodes() option.NodeListOption {
+	nodes := make(option.NodeListOption, hw.nodes)
+	for i := range nodes {
+		nodes[i] = i + 1
+	}
+	return nodes
+}
+
 // makeHardwareSpecs instantiates hardware specs for a restore roachtest.
 // Unless the caller provides any explicit specs, the default specs are used.
 func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
@@ -479,10 +501,11 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 		specs.volumeSize = override.volumeSize
 	}
 	specs.zones = override.zones
+	specs.workloadNode = override.workloadNode
 	return specs
 }
 
-var defaultBackupSpecs = backupSpecs{
+var defaultRestoringBackupSpecs = backupSpecs{
 	// TODO(msbutler): write a script that automatically finds the latest versioned fixture.
 	version:          "v22.2.0",
 	cloud:            spec.AWS,
@@ -517,16 +540,19 @@ type backupSpecs struct {
 
 // String returns a stringified version of the backup specs. Note that the
 // backup version, backup directory, and AOST are never included.
+//
+// TODO(msbutler): the semantics around specifying backupsIncluded and backupProperties is real
+// confusing. Simplify this.
 func (bs backupSpecs) String(verbose bool) string {
 	var builder strings.Builder
 	builder.WriteString("/" + bs.workload.String())
 
-	if verbose || bs.backupProperties != defaultBackupSpecs.backupProperties {
+	if verbose || bs.backupProperties != defaultRestoringBackupSpecs.backupProperties {
 		builder.WriteString("/" + bs.backupProperties)
 	}
 	builder.WriteString("/" + bs.cloud)
 
-	if verbose || bs.backupsIncluded != defaultBackupSpecs.backupsIncluded {
+	if verbose || bs.backupsIncluded != defaultRestoringBackupSpecs.backupsIncluded {
 		builder.WriteString("/" + fmt.Sprintf("backupsIncluded=%d", bs.backupsIncluded))
 	}
 	return builder.String()
@@ -554,11 +580,7 @@ func (bs backupSpecs) getAostCmd() string {
 		bs.backupsIncluded)
 }
 
-// makeBackupSpecs initializes the default backup specs. The caller can override
-// any of the default backup specs by passing any non-nil params.
-func makeBackupSpecs(override backupSpecs) backupSpecs {
-	specs := defaultBackupSpecs
-
+func makeBackupSpecs(override backupSpecs, specs backupSpecs) backupSpecs {
 	if override.cloud != "" {
 		specs.cloud = override.cloud
 	}
@@ -581,17 +603,57 @@ func makeBackupSpecs(override backupSpecs) backupSpecs {
 	if override.workload != nil {
 		specs.workload = override.workload
 	}
-
 	return specs
+}
+
+// makeRestoringBackupSpecs initializes the default restoring backup specs. The caller can override
+// any of the default backup specs by passing any non-nil params.
+func makeRestoringBackupSpecs(override backupSpecs) backupSpecs {
+	return makeBackupSpecs(override, defaultRestoringBackupSpecs)
 }
 
 type backupWorkload interface {
 	fixtureDir() string
 	String() string
+
+	// DatabaseName specifies the name of the database the workload will operate on.
+	DatabaseName() string
+
+	// initWorkload loads the cluster with the workload's schema and initial data.
+	initWorkload(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs)
+
+	// foregroundRun begins a foreground workload that runs indefinitely until the passed context
+	// is cancelled.
+	foregroundRun(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs) error
 }
 
 type tpceRestore struct {
 	customers int
+}
+
+func (tpce tpceRestore) initWorkload(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
+) {
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c, sp.getWorkloadNode(), sp.getCRDBNodes())
+	require.NoError(t, err)
+	tpceSpec.init(ctx, t, c, tpceCmdOptions{
+		customers: tpce.customers,
+		racks:     sp.nodes})
+}
+
+func (tpce tpceRestore) foregroundRun(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
+) error {
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c, sp.getWorkloadNode(), sp.getCRDBNodes())
+	require.NoError(t, err)
+
+	_, err = tpceSpec.run(ctx, t, c, tpceCmdOptions{
+		// Set the duration to be a week to ensure the workload never exits early.
+		duration:  time.Hour * 7 * 24,
+		customers: tpce.customers,
+		racks:     sp.nodes,
+		threads:   sp.cpus * sp.nodes})
+	return err
 }
 
 func (tpce tpceRestore) fixtureDir() string {
@@ -616,6 +678,10 @@ func (tpce tpceRestore) String() string {
 		panic("tpce customer count not recognized")
 	}
 	return builder.String()
+}
+
+func (tpce tpceRestore) DatabaseName() string {
+	return "tpce"
 }
 
 // restoreSpecs define input parameters to a restore roachtest set during
@@ -670,15 +736,17 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-
 	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		rd.t.Skip("test configured to run on %s", rd.sp.backup.cloud)
 	}
-
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	rd.getAOST(ctx)
+}
 
+// getAOST gets the AOST to use in the restore cmd.
+func (rd *restoreDriver) getAOST(ctx context.Context) {
 	var aost string
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	err := conn.QueryRowContext(ctx, rd.sp.backup.getAostCmd()).Scan(&aost)
