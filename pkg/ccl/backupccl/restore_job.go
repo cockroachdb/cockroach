@@ -393,7 +393,7 @@ func restore(
 		return distRestore(
 			ctx,
 			execCtx,
-			int64(job.ID()),
+			job.ID(),
 			dataToRestore,
 			endTime,
 			encryption,
