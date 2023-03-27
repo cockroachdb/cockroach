@@ -2818,8 +2818,8 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Decimal),
-			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return ctx.GetClusterTimestamp(), nil
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return evalCtx.GetClusterTimestamp()
 			},
 			Info: `Returns the logical time of the current transaction as
 a CockroachDB HLC in decimal form.

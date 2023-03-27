@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
+
 // Context defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -404,12 +406,15 @@ func (ec *Context) GetStmtTimestamp() time.Time {
 
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ec *Context) GetClusterTimestamp() *tree.DDecimal {
+func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
+	if ec.Txn == nil {
+		return nil, ErrNilTxnInClusterContext
+	}
 	ts := ec.Txn.CommitTimestamp()
 	if ts.IsEmpty() {
-		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
+		return nil, errors.AssertionFailedf("zero cluster timestamp in txn")
 	}
-	return TimestampToDecimalDatum(ts)
+	return TimestampToDecimalDatum(ts), nil
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been
