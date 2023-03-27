@@ -513,6 +513,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 				if !w.expensiveChecks && check.Expensive {
 					continue
 				}
+				if check.LoadOnly {
+					// TODO(nvanbenschoten): support load-only checks.
+					continue
+				}
 				start := timeutil.Now()
 				err := check.Fn(db, "" /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
