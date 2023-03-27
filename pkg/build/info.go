@@ -42,6 +42,11 @@ var (
 	binaryVersion = computeVersion(tag)
 )
 
+const (
+	DefaultTelemetryChannel = "official-binary"
+	FIPSTelemetryChannel    = "official-fips-binary"
+)
+
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
 	return typ == "release"
@@ -50,7 +55,7 @@ func IsRelease() bool {
 // SeemsOfficial reports whether this binary is likely to have come from an
 // official release channel.
 func SeemsOfficial() bool {
-	return channel == "official-binary" || channel == "source-archive"
+	return channel == DefaultTelemetryChannel || channel == FIPSTelemetryChannel || channel == "source-archive"
 }
 
 func computeVersion(tag string) string {
