@@ -22,25 +22,35 @@ type Check struct {
 	// If asOfSystemTime is non-empty it will be used to perform the check as
 	// a historical query using the provided value as the argument to the
 	// AS OF SYSTEM TIME clause.
-	Fn        func(db *gosql.DB, asOfSystemTime string) error
+	Fn func(db *gosql.DB, asOfSystemTime string) error
+	// If true, the check is "expensive" and may take a long time to run.
 	Expensive bool
+	// If true, the check is only valid immediately after loading the dataset.
+	// The check may fail if run after the workload.
+	LoadOnly bool
 }
 
 // AllChecks returns a slice of all of the checks.
 func AllChecks() []Check {
 	return []Check{
-		{"3.3.2.1", check3321, false},
-		{"3.3.2.2", check3322, false},
-		{"3.3.2.3", check3323, false},
-		{"3.3.2.4", check3324, false},
-		{"3.3.2.5", check3325, false},
-		{"3.3.2.6", check3326, true},
-		{"3.3.2.7", check3327, false},
-		{"3.3.2.8", check3328, false},
-		{"3.3.2.9", check3329, false},
-		{"3.3.2.10", check33210, true},
-		{"3.3.2.11", check33211, false},
-		{"3.3.2.12", check33212, true},
+		{"3.3.2.1", check3321, false, false},
+		{"3.3.2.2", check3322, false, false},
+		{"3.3.2.3", check3323, false, false},
+		{"3.3.2.4", check3324, false, false},
+		{"3.3.2.5", check3325, false, false},
+		{"3.3.2.6", check3326, true, false},
+		{"3.3.2.7", check3327, false, false},
+		{"3.3.2.8", check3328, false, false},
+		{"3.3.2.9", check3329, false, false},
+		{"3.3.2.10", check33210, true, false},
+		// 3.3.2.11 is LoadOnly. It asserts a relationship between the number of
+		// rows in the "order" table and rows in the "new_order" table. Rows are
+		// inserted into these tables transactional by the NewOrder transaction.
+		// However, only rows in the "new_order" table are deleted by the Delivery
+		// transaction. Consequently, the consistency condition will fail after the
+		// first Delivery transaction is run by the workload.
+		{"3.3.2.11", check33211, false, true},
+		{"3.3.2.12", check33212, true, false},
 	}
 }
 
