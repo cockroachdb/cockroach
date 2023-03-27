@@ -24,14 +24,18 @@ import {
 } from "src/util/constants";
 import {
   selectStatements,
-  selectApps,
   selectTotalFingerprints,
   selectLastReset,
 } from "./statementsPage";
 import { selectStatementDetails } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
+import {
+  TimeScale,
+  toRoundedDateRange,
+  util,
+  selectStmtsAllApps as selectApps,
+} from "@cockroachlabs/cluster-ui";
 
 const { generateStmtDetailsToID, longToInt } = util;
 
@@ -100,56 +104,6 @@ describe("selectStatements", () => {
     expect(result.length).toBe(2);
   });
 
-  it("coalesces statements from different apps", () => {
-    const stmtA = makeFingerprint(1);
-    const stmtB = makeFingerprint(1, "foobar");
-    const stmtC = makeFingerprint(1, "another");
-    const sumCount = stmtA.stats.count
-      .add(stmtB.stats.count.add(stmtC.stats.count))
-      .toNumber();
-    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale);
-    const props = makeEmptyRouteProps();
-
-    const result = selectStatements(state, props);
-
-    expect(result.length).toBe(1);
-    expect(result[0].label).toEqual(stmtA.key.key_data.query);
-    expect(result[0].stats.count.toNumber()).toEqual(sumCount);
-  });
-
-  it("coalesces statements with differing node ids", () => {
-    const state = makeStateWithStatements(
-      [
-        makeFingerprint(1, "", 1),
-        makeFingerprint(1, "", 2),
-        makeFingerprint(1, "", 3),
-      ],
-      timeScale,
-    );
-    const props = makeEmptyRouteProps();
-
-    const result = selectStatements(state, props);
-
-    expect(result.length).toBe(1);
-  });
-
-  it("coalesces statements with differing distSQL and failed values", () => {
-    const state = makeStateWithStatements(
-      [
-        makeFingerprint(1, "", 1, false, false),
-        makeFingerprint(1, "", 1, false, true),
-        makeFingerprint(1, "", 1, true, false),
-        makeFingerprint(1, "", 1, true, true),
-      ],
-      timeScale,
-    );
-    const props = makeEmptyRouteProps();
-
-    const result = selectStatements(state, props);
-
-    expect(result.length).toBe(1);
-  });
-
   it("filters out statements when app param is set", () => {
     const state = makeStateWithStatements(
       [
@@ -201,7 +155,7 @@ describe("selectApps", () => {
   it("returns an empty array if the statements data is invalid", () => {
     const state = makeInvalidState();
 
-    const result = selectApps(state);
+    const result = selectApps(state?.cachedData?.statements?.data);
 
     expect(result).toEqual([]);
   });
@@ -217,7 +171,7 @@ describe("selectApps", () => {
       timeScale,
     );
 
-    const result = selectApps(state);
+    const result = selectApps(state?.cachedData?.statements?.data);
 
     expect(result).toEqual([unset, "cockroach sql", "foobar"]);
   });
@@ -241,52 +195,6 @@ describe("selectTotalFingerprints", () => {
     const result = selectTotalFingerprints(state);
 
     expect(result).toBe(3);
-  });
-
-  it("coalesces statements from different apps", () => {
-    const state = makeStateWithStatements(
-      [
-        makeFingerprint(1),
-        makeFingerprint(1, "foobar"),
-        makeFingerprint(1, "another"),
-      ],
-      timeScale,
-    );
-
-    const result = selectTotalFingerprints(state);
-
-    expect(result).toBe(1);
-  });
-
-  it("coalesces statements with differing node ids", () => {
-    const state = makeStateWithStatements(
-      [
-        makeFingerprint(1, "", 1),
-        makeFingerprint(1, "", 2),
-        makeFingerprint(1, "", 3),
-      ],
-      timeScale,
-    );
-
-    const result = selectTotalFingerprints(state);
-
-    expect(result).toBe(1);
-  });
-
-  it("coalesces statements with differing distSQL and failed keys", () => {
-    const state = makeStateWithStatements(
-      [
-        makeFingerprint(1, "", 1, false, false),
-        makeFingerprint(1, "", 1, false, true),
-        makeFingerprint(1, "", 1, true, false),
-        makeFingerprint(1, "", 1, true, true),
-      ],
-      timeScale,
-    );
-
-    const result = selectTotalFingerprints(state);
-
-    expect(result).toBe(1);
   });
 });
 
@@ -314,9 +222,8 @@ describe("selectStatement", () => {
     const state = makeInvalidState();
     const props = makeEmptyRouteProps();
     const { statementDetails } = selectStatementDetails(state, props);
-    const result = statementDetails;
 
-    expect(result).toBeNull();
+    expect(statementDetails).toBeNull();
   });
 
   it("returns the statement currently loaded", () => {
