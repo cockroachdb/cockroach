@@ -2085,6 +2085,14 @@ message SubsumeResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
+  // RangeIDLocalMVCCStats are the MVCC statistics for the replicated range
+  // ID-local keys. During a merge, these must be subtracted from MVCCStats
+  // since they won't be present in the merged range.
+  storage.enginepb.MVCCStats range_id_local_mvcc_stats = 8 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "RangeIDLocalMVCCStats"
+  ];
+
   // LeaseAppliedIndex is the lease applied index of the last applied command
   // at the time that the Subsume request executed. This is NOT intended to be
   // the lease index of the SubsumeRequest itself. Instead, it is intended to
