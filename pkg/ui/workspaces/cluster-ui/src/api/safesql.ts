@@ -83,7 +83,7 @@ export class SQL implements SQLStringer {
 // case sensitive when used in a query.  If the input string contains a zero
 // byte, the result will be truncated immediately before it.
 // Cribbed from https://github.com/lib/pq and Typescript-ified.
-function QuoteIdentifier(name: string): string {
+export function QuoteIdentifier(name: string): string {
   // Use a search regex to replace all occurrences instead of just the first occurrence.
   const search = /"/g;
   return `"` + name.replace(search, `""`) + `"`;

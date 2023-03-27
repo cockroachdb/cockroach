@@ -60,6 +60,7 @@ import { RecommendationType } from "../indexDetailsPage";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { UIConfigState } from "../store";
+import { QuoteIdentifier } from "../api/safesql";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
@@ -375,7 +376,9 @@ export class DatabaseTablePage extends React.Component<
     const query = indexStat.indexRecommendations.map(recommendation => {
       switch (recommendation.type) {
         case "DROP_UNUSED":
-          return `DROP INDEX ${this.props.name}@${indexStat.indexName};`;
+          return `DROP INDEX ${QuoteIdentifier(
+            this.props.name,
+          )}@${QuoteIdentifier(indexStat.indexName)};`;
       }
     });
     if (query.length === 0) {
