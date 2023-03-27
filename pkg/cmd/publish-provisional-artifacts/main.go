@@ -157,6 +157,7 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		o.VersionStr = versionStr
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
+		o.Channel = release.ChannelFromPlatform(platform)
 		cockroachBuildOpts = append(cockroachBuildOpts, o)
 	}
 
@@ -234,8 +235,10 @@ func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 		log.Printf("done building cockroach: %s", pretty.Sprint(o))
 	}()
 
-	var buildOpts release.BuildOptions
-	buildOpts.ExecFn = execFn
+	buildOpts := release.BuildOptions{
+		ExecFn:  execFn,
+		Channel: release.ChannelFromPlatform(o.Platform),
+	}
 	if flags.isRelease {
 		buildOpts.Release = true
 		buildOpts.BuildTag = o.VersionStr
@@ -253,6 +256,7 @@ type opts struct {
 	AbsolutePath             string
 	CockroachSQLAbsolutePath string
 	PkgDir                   string
+	Channel                  string
 }
 
 func markLatestRelease(svc release.ObjectPutGetter, o opts) {
