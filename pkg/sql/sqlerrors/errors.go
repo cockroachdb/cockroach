@@ -378,6 +378,21 @@ func IsUndefinedSchemaError(err error) bool {
 	return errHasCode(err, pgcode.UndefinedSchema)
 }
 
+// IsMissingDescriptorError checks whether the error has any indication
+// that it corresponds to a missing descriptor of any kind.
+//
+// Note that this does not deal with the lower-level
+// catalog.ErrDescriptorNotFound error. That error should be transformed
+// by this package for all uses in the SQL layer and coming out of
+// descs.Collection functions.
+func IsMissingDescriptorError(err error) bool {
+	return IsUndefinedRelationError(err) ||
+		IsUndefinedSchemaError(err) ||
+		IsUndefinedDatabaseError(err) ||
+		errHasCode(err, pgcode.UndefinedObject) ||
+		errHasCode(err, pgcode.UndefinedFunction)
+}
+
 func errHasCode(err error, code ...pgcode.Code) bool {
 	pgCode := pgerror.GetPGCode(err)
 	for _, c := range code {
