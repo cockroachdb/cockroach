@@ -1199,7 +1199,7 @@ func (icc *internalClientComm) CreateEmptyQueryResult(pos CmdPos) EmptyQueryResu
 }
 
 // CreateCopyInResult is part of the ClientComm interface.
-func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
+func (icc *internalClientComm) CreateCopyInResult(cmd CopyIn, pos CmdPos) CopyInResult {
 	panic("unimplemented")
 }
 

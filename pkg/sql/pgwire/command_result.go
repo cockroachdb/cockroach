@@ -321,6 +321,12 @@ func (r *commandResult) SetPortalOutput(
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
+// SetRowsAffected is part of the sql.CopyIn interface.
+func (r *commandResult) SetRowsAffected(ctx context.Context, n int) {
+	r.assertNotReleased()
+	r.rowsAffected = n
+}
+
 // SendCopyOut is part of the sql.CopyOutResult interface.
 func (r *commandResult) SendCopyOut(
 	ctx context.Context, cols colinfo.ResultColumns, format pgwirebase.FormatCode,
