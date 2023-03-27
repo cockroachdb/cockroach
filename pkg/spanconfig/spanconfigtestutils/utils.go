@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -42,9 +44,13 @@ var systemTargetRe = regexp.MustCompile(
 	`^{(entire-keyspace)|(source=(\d*),\s??((target=(\d*))|all-tenant-keyspace-targets-set))}$`,
 )
 
-// configRe matches either FALLBACK (for readability) or a single letter. It's a
-// shorthand for declaring a unique tagged config.
-var configRe = regexp.MustCompile(`^(FALLBACK)|(^\w)$`)
+// configRe matches either FALLBACK (for readability), a single letter, or a
+// specified GC TTL value. It's a shorthand for declaring a unique tagged config.
+var configRe = regexp.MustCompile(`^(FALLBACK)|(^GC\.ttl=(\d*))|(^\w)$`)
+
+// boundsRe matches a string of the form "{GC.ttl_start=<int>,GC.ttl_end=<int>}".
+// It translates to an upper/lower bound expressed through SpanConfigBounds.
+var boundsRe = regexp.MustCompile(`{GC\.ttl_start=(\d*),\s??GC.ttl_end=(\d*)}`)
 
 // tenantRe matches a string of the form "/Tenant/<id>".
 var tenantRe = regexp.MustCompile(`/Tenant/(\d*)`)
@@ -239,8 +245,7 @@ func ParseTarget(t testing.TB, target string) spanconfig.Target {
 }
 
 // ParseConfig is helper function that constructs a roachpb.SpanConfig that's
-// "tagged" with the given string (i.e. a constraint with the given string a
-// required key).
+// "tagged" with the given string. See configRe for specifics.
 func ParseConfig(t testing.TB, conf string) roachpb.SpanConfig {
 	if !configRe.MatchString(conf) {
 		t.Fatalf("expected %s to match config regex", conf)
@@ -248,20 +253,31 @@ func ParseConfig(t testing.TB, conf string) roachpb.SpanConfig {
 	matches := configRe.FindStringSubmatch(conf)
 
 	var ts int64
+	var gcTTL int
 	if matches[1] == "FALLBACK" {
 		ts = -1
+	} else if matches[4] != "" {
+		ts = int64(matches[4][0])
 	} else {
-		ts = int64(matches[2][0])
+		var err error
+		gcTTL, err = strconv.Atoi(matches[3])
+		require.NoError(t, err)
+	}
+
+	var protectionPolicies []roachpb.ProtectionPolicy
+	if ts != 0 {
+		protectionPolicies = []roachpb.ProtectionPolicy{
+			{
+				ProtectedTimestamp: hlc.Timestamp{
+					WallTime: ts,
+				},
+			},
+		}
 	}
 	return roachpb.SpanConfig{
 		GCPolicy: roachpb.GCPolicy{
-			ProtectionPolicies: []roachpb.ProtectionPolicy{
-				{
-					ProtectedTimestamp: hlc.Timestamp{
-						WallTime: ts,
-					},
-				},
-			},
+			ProtectionPolicies: protectionPolicies,
+			TTLSeconds:         int32(gcTTL),
 		},
 	}
 }
@@ -518,6 +534,12 @@ func PrintTarget(t testing.TB, target spanconfig.Target) string {
 // ParseSpanConfig helper above.
 func PrintSpanConfig(config roachpb.SpanConfig) string {
 	// See ParseConfig for what a "tagged" roachpb.SpanConfig translates to.
+	if config.GCPolicy.TTLSeconds != 0 && len(config.GCPolicy.ProtectionPolicies) != 0 {
+		panic("cannot have both TTL and protection policies set for tagged configs") // sanity check
+	}
+	if config.GCPolicy.TTLSeconds != 0 {
+		return fmt.Sprintf("GC.ttl=%d", config.GCPolicy.TTLSeconds)
+	}
 	conf := make([]string, 0, len(config.GCPolicy.ProtectionPolicies)*2)
 	for i, policy := range config.GCPolicy.ProtectionPolicies {
 		if i > 0 {

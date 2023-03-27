@@ -35,6 +35,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

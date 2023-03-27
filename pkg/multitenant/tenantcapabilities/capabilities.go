@@ -249,3 +249,21 @@ func (c CapabilityID) CapabilityType() Type {
 		panic(errors.AssertionFailedf("missing case: %q", c))
 	}
 }
+
+// NewEmptyReader returns a new Reader which corresponds to an empty global
+// capability state.
+func NewEmptyReader() Reader {
+	return emptyReader(true)
+}
+
+type emptyReader bool
+
+// GetCapabilities implements the Reader interface.
+func (emptyReader) GetCapabilities(roachpb.TenantID) (TenantCapabilities, bool) {
+	return nil, false
+}
+
+// GetGlobalCapabilityState implements the Reader interface.
+func (emptyReader) GetGlobalCapabilityState() map[roachpb.TenantID]TenantCapabilities {
+	return nil
+}

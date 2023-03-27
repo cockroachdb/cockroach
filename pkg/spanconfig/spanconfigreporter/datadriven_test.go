@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -233,7 +234,9 @@ func newMockCluster(
 		nodes:    make(map[roachpb.NodeID]roachpb.NodeDescriptor),
 		ranges:   make(map[roachpb.RangeID]roachpb.RangeDescriptor),
 		liveness: make(map[roachpb.NodeID]bool),
-		store:    spanconfigstore.New(roachpb.TestingDefaultSpanConfig(), st, scKnobs),
+		store: spanconfigstore.New(
+			roachpb.TestingDefaultSpanConfig(), st, tenantcapabilities.NewEmptyReader(), scKnobs,
+		),
 	}
 }
 

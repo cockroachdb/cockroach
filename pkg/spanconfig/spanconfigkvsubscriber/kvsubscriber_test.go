@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -91,6 +92,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		1<<20, /* 1 MB */
 		roachpb.SpanConfig{},
 		cluster.MakeTestingClusterSettings(),
+		tenantcapabilities.NewEmptyReader(),
 		nil,
 		nil,
 	)

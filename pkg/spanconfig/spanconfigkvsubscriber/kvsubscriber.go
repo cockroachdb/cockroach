@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -139,6 +140,9 @@ type KVSubscriber struct {
 
 	clock   *hlc.Clock
 	metrics *Metrics
+
+	// capabilitiesReader provides a handle to the global tenant capability state.
+	capabilitiesReader tenantcapabilities.Reader
 }
 
 var _ spanconfig.KVSubscriber = &KVSubscriber{}
@@ -186,6 +190,7 @@ func New(
 	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
+	capabilitiesReader tenantcapabilities.Reader,
 	knobs *spanconfig.TestingKnobs,
 	registry *metric.Registry,
 ) *KVSubscriber {
@@ -200,12 +205,13 @@ func New(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	spanConfigStore := spanconfigstore.New(fallback, settings, knobs)
+	spanConfigStore := spanconfigstore.New(fallback, settings, capabilitiesReader, knobs)
 	s := &KVSubscriber{
-		fallback: fallback,
-		knobs:    knobs,
-		settings: settings,
-		clock:    clock,
+		fallback:           fallback,
+		knobs:              knobs,
+		settings:           settings,
+		clock:              clock,
+		capabilitiesReader: capabilitiesReader,
 	}
 	var rfCacheKnobs *rangefeedcache.TestingKnobs
 	if knobs != nil {
@@ -395,7 +401,7 @@ func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update
 func (s *KVSubscriber) handleCompleteUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
-	freshStore := spanconfigstore.New(s.fallback, s.settings, s.knobs)
+	freshStore := spanconfigstore.New(s.fallback, s.settings, s.capabilitiesReader, s.knobs)
 	for _, ev := range events {
 		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
@@ -230,8 +231,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		1<<20, /* 1 MB */
 		cfg.DefaultSpanConfig,
 		cfg.Settings,
-		nil,
-		nil,
+		tenantcapabilities.NewEmptyReader(),
+		nil, /* knobs */
+		nil, /* registry */
 	)
 	cfg.SystemConfigProvider = systemconfigwatcher.New(
 		keys.SystemSQLCodec,

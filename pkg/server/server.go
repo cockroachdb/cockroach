@@ -623,6 +623,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
 	)
 
+	tenantCapabilitiesWatcher := tenantcapabilitieswatcher.New(
+		clock,
+		rangeFeedFactory,
+		keys.TenantsTableID,
+		stopper,
+		1<<20, /* 1 MB */
+		tenantCapabilitiesTestingKnobs,
+	)
+
 	var spanConfig struct {
 		// kvAccessor powers the span configuration RPCs and the host tenant's
 		// reconciliation job.
@@ -668,6 +677,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				1<<20, /* 1 MB */
 				fallbackConf,
 				cfg.Settings,
+				tenantCapabilitiesWatcher,
 				spanConfigKnobs,
 				registry,
 			)
@@ -789,15 +799,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	tenantSettingsWatcher := tenantsettingswatcher.New(
 		clock, rangeFeedFactory, stopper, st,
-	)
-
-	tenantCapabilitiesWatcher := tenantcapabilitieswatcher.New(
-		clock,
-		rangeFeedFactory,
-		keys.TenantsTableID,
-		stopper,
-		1<<20, /* 1 MB */
-		tenantCapabilitiesTestingKnobs,
 	)
 
 	node := NewNode(
