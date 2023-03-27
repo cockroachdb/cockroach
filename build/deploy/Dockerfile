@@ -1,5 +1,5 @@
 FROM registry.access.redhat.com/ubi8/ubi-minimal
-ARG additional_packages
+ARG fips_enabled
 
 # For deployment, we need the following additionally installed:
 # tzdata - for time zone functions; reinstalled to replace the missing
@@ -8,8 +8,23 @@ ARG additional_packages
 # tar - used by kubectl cp
 RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
-    && microdnf install tzdata hostname tar gzip xz $additional_packages -y \
+    && microdnf install tzdata hostname tar gzip xz -y \
     && rm -rf /var/cache/yum
+# FIPS mode requires the `openssl` package installed. Also we need to temporarily
+# install the `crypto-policies-scripts` packege to tweak some configs. Because
+# `microdnf` doesn't support `autoremove`, we need to record the list of
+# packages before and after, and remove the installed ones afterward.
+RUN if [ "$fips_enabled" == "1" ]; then \
+    microdnf install -y openssl && \
+    rpm -qa | sort > /before.txt && \
+    microdnf install crypto-policies-scripts && \
+    fips-mode-setup --enable --no-bootcfg && \
+    rpm -qa | sort > /after.txt && \
+    microdnf remove -y $(comm -13 /before.txt /after.txt) && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /before.txt /after.txt; \
+    fi
+
 
 RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
 COPY cockroach.sh cockroach /cockroach/
