@@ -97,7 +97,7 @@ export function makeTransactionsColumns(
   };
   const sampledExecStatsBarChartOptions = {
     classes: defaultBarChartOptions.classes,
-    displayNoSamples: (d: TransactionInfo) => {
+    _: (d: TransactionInfo) => {
       return longToInt(d.stats_data.stats.exec_stats?.count) == 0;
     },
   };
@@ -172,9 +172,10 @@ export function makeTransactionsColumns(
       title: statisticsTableTitles.applicationName(statType),
       className: cx("statements-table__col-app-name"),
       cell: (item: TransactionInfo) =>
-        item.stats_data?.app?.length > 0 ? item.stats_data?.app : unset,
+        item.stats_data?.app?.length ? item.stats_data.app : unset,
       sort: (item: TransactionInfo) => item.stats_data?.app,
-      showByDefault: false,
+
+      showByDefault: true,
     },
     {
       name: "rowsProcessed",

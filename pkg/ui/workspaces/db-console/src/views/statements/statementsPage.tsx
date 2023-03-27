@@ -12,7 +12,6 @@ import { connect } from "react-redux";
 import { bindActionCreators } from "redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import * as protos from "src/js/protos";
 import {
   refreshNodes,
   refreshDatabases,
@@ -23,7 +22,6 @@ import {
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
-import { appAttr, unset } from "src/util/constants";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import {
@@ -34,10 +32,8 @@ import {
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
 } from "src/redux/user";
-import { queryByName } from "src/util/query";
 
 import {
-  AggregateStatistics,
   Filters,
   defaultFilters,
   util,
@@ -48,6 +44,8 @@ import {
   StatementsPageDispatchProps,
   StatementsPageRootProps,
   api,
+  selectStmtsAllApps,
+  selectStmtsCombiner,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -75,152 +73,13 @@ import {
 } from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
-type ICollectedStatementStatistics =
-  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-
-const {
-  aggregateStatementStats,
-  combineStatementStats,
-  flattenStatementStats,
-  statementKey,
-} = util;
-
-type ExecutionStatistics = util.ExecutionStatistics;
-type StatementStatistics = util.StatementStatistics;
-
-interface StatementsSummaryData {
-  statementFingerprintID: string;
-  statementFingerprintHexID: string;
-  statement: string;
-  statementSummary: string;
-  aggregatedTs: number;
-  implicitTxn: boolean;
-  fullScan: boolean;
-  database: string;
-  applicationName: string;
-  stats: StatementStatistics[];
-}
-
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.statements?.data,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
-  (
-    state: CachedDataReducerState<StatementsResponseMessage>,
-    props: RouteComponentProps<any>,
-    diagnosticsReportsPerStatement,
-  ): AggregateStatistics[] => {
-    if (!state.data || !state.valid) {
-      return null;
-    }
-    let statements = flattenStatementStats(state.data.statements);
-    const app = queryByName(props.location, appAttr);
-    const isInternal = (statement: ExecutionStatistics) =>
-      statement.app.startsWith(state.data.internal_app_name_prefix);
-
-    if (app && app !== "All") {
-      const criteria = decodeURIComponent(app).split(",");
-      let showInternal = false;
-      if (criteria.includes(state.data.internal_app_name_prefix)) {
-        showInternal = true;
-      }
-      if (criteria.includes(unset)) {
-        criteria.push("");
-      }
-
-      statements = statements.filter(
-        (statement: ExecutionStatistics) =>
-          (showInternal && isInternal(statement)) ||
-          criteria.includes(statement.app),
-      );
-    } else {
-      // We don't want to show internal statements by default.
-      statements = statements.filter(
-        (statement: ExecutionStatistics) => !isInternal(statement),
-      );
-    }
-
-    const statsByStatementKey: {
-      [statement: string]: StatementsSummaryData;
-    } = {};
-    statements.forEach(stmt => {
-      const key = statementKey(stmt);
-      if (!(key in statsByStatementKey)) {
-        statsByStatementKey[key] = {
-          statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
-          statementFingerprintHexID: util.FixFingerprintHexValue(
-            stmt.statement_fingerprint_id?.toString(16),
-          ),
-          statement: stmt.statement,
-          statementSummary: stmt.statement_summary,
-          aggregatedTs: stmt.aggregated_ts,
-          implicitTxn: stmt.implicit_txn,
-          fullScan: stmt.full_scan,
-          database: stmt.database,
-          applicationName: stmt.app,
-          stats: [],
-        };
-      }
-      statsByStatementKey[key].stats.push(stmt.stats);
-    });
-
-    return Object.keys(statsByStatementKey).map(key => {
-      const stmt = statsByStatementKey[key];
-      return {
-        aggregatedFingerprintID: stmt.statementFingerprintID,
-        aggregatedFingerprintHexID: util.FixFingerprintHexValue(
-          stmt.statementFingerprintHexID,
-        ),
-        label: stmt.statement,
-        summary: stmt.statementSummary,
-        aggregatedTs: stmt.aggregatedTs,
-        implicitTxn: stmt.implicitTxn,
-        fullScan: stmt.fullScan,
-        database: stmt.database,
-        applicationName: stmt.applicationName,
-        stats: combineStatementStats(stmt.stats),
-        diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
-      };
-    });
-  },
-);
-
-// selectApps returns the array of all apps with statement statistics present
-// in the data.
-export const selectApps = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data) {
-      return [];
-    }
-
-    let sawBlank = false;
-    let sawInternal = false;
-    const apps: { [app: string]: boolean } = {};
-    state.data.statements.forEach(
-      (statement: ICollectedStatementStatistics) => {
-        if (
-          state.data.internal_app_name_prefix &&
-          statement.key.key_data.app.startsWith(
-            state.data.internal_app_name_prefix,
-          )
-        ) {
-          sawInternal = true;
-        } else if (statement.key.key_data.app) {
-          apps[statement.key.key_data.app] = true;
-        } else {
-          sawBlank = true;
-        }
-      },
-    );
-    return []
-      .concat(sawInternal ? [state.data.internal_app_name_prefix] : [])
-      .concat(sawBlank ? [unset] : [])
-      .concat(Object.keys(apps))
-      .sort();
-  },
+  selectStmtsCombiner,
 );
 
 // selectDatabases returns the array of all databases in the cluster.
@@ -245,8 +104,7 @@ export const selectTotalFingerprints = createSelector(
     if (!state.data) {
       return 0;
     }
-    const aggregated = aggregateStatementStats(state.data.statements);
-    return aggregated.length;
+    return state.data.statements?.length ?? 0;
   },
 );
 
@@ -385,7 +243,7 @@ export default withRouter(
     (state: AdminUIState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
         ...props,
-        apps: selectApps(state),
+        apps: selectStmtsAllApps(state.cachedData.statements?.data),
         columns: statementColumnsLocalSetting.selectorToArray(state),
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
