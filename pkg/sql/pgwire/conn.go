@@ -897,7 +897,6 @@ func (c *conn) handleSimpleQuery(
 			if err := c.stmtBuf.Push(
 				ctx,
 				sql.CopyOut{
-					Conn:         c,
 					ParsedStmt:   stmts[i],
 					Stmt:         cp,
 					TimeReceived: timeReceived,
@@ -1261,34 +1260,6 @@ func (c *conn) BeginCopyIn(
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// BeginCopyOut is part of the pgwirebase.Conn interface.
-func (c *conn) BeginCopyOut(
-	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
-) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyOutResponse)
-	c.msgBuilder.writeByte(byte(format))
-	c.msgBuilder.putInt16(int16(len(columns)))
-	for range columns {
-		c.msgBuilder.putInt16(int16(format))
-	}
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-// SendCopyData is part of the pgwirebase.Conn interface.
-func (c *conn) SendCopyData(ctx context.Context, copyData []byte) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDataCommand)
-	if _, err := c.msgBuilder.Write(copyData); err != nil {
-		return err
-	}
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-// SendCopyDone is part of the pgwirebase.Conn interface.
-func (c *conn) SendCopyDone(ctx context.Context) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
 // SendCommandComplete is part of the pgwirebase.Conn interface.
 func (c *conn) SendCommandComplete(tag []byte) error {
 	c.bufferCommandComplete(tag)
@@ -1342,7 +1313,7 @@ func cookTag(
 	tag := append(buf, tagStr...)
 
 	switch stmtType {
-	case tree.RowsAffected:
+	case tree.RowsAffected, tree.CopyIn, tree.CopyOut:
 		tag = append(tag, ' ')
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
@@ -1358,10 +1329,6 @@ func cookTag(
 			tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 		}
 
-	case tree.CopyIn, tree.CopyOut:
-		// Nothing to do. The CommandComplete message has been sent elsewhere.
-		panic(errors.AssertionFailedf("Copy statements should have been handled elsewhere " +
-			"and not produce results"))
 	default:
 		panic(errors.AssertionFailedf("unexpected result type %v", stmtType))
 	}
@@ -1648,6 +1615,36 @@ func (c *conn) bufferNoDataMsg() {
 	}
 }
 
+func (c *conn) bufferCopyOut(columns []colinfo.ResultColumn, format pgwirebase.FormatCode) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyOutResponse)
+	c.msgBuilder.writeByte(byte(format))
+	c.msgBuilder.putInt16(int16(len(columns)))
+	for range columns {
+		c.msgBuilder.putInt16(int16(format))
+	}
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
+func (c *conn) bufferCopyData(copyData []byte, res *commandResult) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDataCommand)
+	if _, err := c.msgBuilder.Write(copyData); err != nil {
+		return err
+	}
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		return err
+	}
+	if err := c.maybeFlush(res.pos, res.bufferingDisabled); err != nil {
+		return err
+	}
+	c.maybeReallocate()
+	return nil
+}
+
+func (c *conn) bufferCopyDone() error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
 // writeRowDescription writes a row description to the given writer.
 //
 // formatCodes specifies the format for each column. It can be nil, in which
@@ -1854,8 +1851,11 @@ func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
 }
 
 // CreateCopyOutResult is part of the sql.ClientComm interface.
-func (c *conn) CreateCopyOutResult(pos sql.CmdPos) sql.CopyOutResult {
-	return c.newMiscResult(pos, noCompletionMsg)
+func (c *conn) CreateCopyOutResult(cmd sql.CopyOut, pos sql.CmdPos) sql.CopyOutResult {
+	res := c.newMiscResult(pos, commandComplete)
+	res.stmtType = cmd.Stmt.StatementReturnType()
+	res.cmdCompleteTag = cmd.Stmt.StatementTag()
+	return res
 }
 
 // pgwireReader is an io.Reader that wraps a conn, maintaining its metrics as

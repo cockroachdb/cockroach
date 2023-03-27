@@ -1204,7 +1204,7 @@ func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
 }
 
 // CreateCopyOutResult is part of the ClientComm interface.
-func (icc *internalClientComm) CreateCopyOutResult(pos CmdPos) CopyOutResult {
+func (icc *internalClientComm) CreateCopyOutResult(cmd CopyOut, pos CmdPos) CopyOutResult {
 	panic("unimplemented")
 }
 

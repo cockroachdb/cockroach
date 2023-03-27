@@ -364,9 +364,6 @@ var _ Command = CopyIn{}
 type CopyOut struct {
 	ParsedStmt parser.Statement
 	Stmt       *tree.CopyTo
-	// Conn is the network connection. Execution of the CopyFrom statement takes
-	// control of the connection.
-	Conn pgwirebase.Conn
 	// TimeReceived is the time at which the message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time
@@ -682,7 +679,7 @@ type ClientComm interface {
 	// CreateCopyInResult creates a result for a Copy-in command.
 	CreateCopyInResult(pos CmdPos) CopyInResult
 	// CreateCopyOutResult creates a result for a Copy-out command.
-	CreateCopyOutResult(pos CmdPos) CopyOutResult
+	CreateCopyOutResult(cmd CopyOut, pos CmdPos) CopyOutResult
 	// CreateDrainResult creates a result for a Drain command.
 	CreateDrainResult(pos CmdPos) DrainResult
 
@@ -883,9 +880,20 @@ type CopyInResult interface {
 }
 
 // CopyOutResult represents the result of a CopyOut command. Closing this result
-// produces no output for the client.
+// sends a CommandComplete message to the client.
 type CopyOutResult interface {
 	ResultBase
+
+	// SendCopyOut sends the copy out response to the client.
+	SendCopyOut(
+		ctx context.Context, cols colinfo.ResultColumns, format pgwirebase.FormatCode,
+	) error
+
+	// SendCopyData adds a COPY data row to the result.
+	SendCopyData(ctx context.Context, copyData []byte, isHeader bool) error
+
+	// SendCopyDone sends the copy done response to the client.
+	SendCopyDone(ctx context.Context) error
 }
 
 // ClientLock is an interface returned by ClientComm.lockCommunication(). It
@@ -1077,6 +1085,25 @@ func (r *streamingCommandResult) SetPrepStmtOutput(context.Context, colinfo.Resu
 func (r *streamingCommandResult) SetPortalOutput(
 	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
+}
+
+// SendCopyOut is part of the sql.CopyOutResult interface.
+func (r *streamingCommandResult) SendCopyOut(
+	ctx context.Context, cols colinfo.ResultColumns, format pgwirebase.FormatCode,
+) error {
+	return errors.AssertionFailedf("streamingCommandResult does not implement SendCopyOut")
+}
+
+// SendCopyData is part of the sql.CopyOutResult interface.
+func (r *streamingCommandResult) SendCopyData(
+	ctx context.Context, copyData []byte, isHeader bool,
+) error {
+	return errors.AssertionFailedf("streamingCommandResult does not implement SendCopyData")
+}
+
+// SendCopyDone is part of the pgwirebase.Conn interface.
+func (r *streamingCommandResult) SendCopyDone(ctx context.Context) error {
+	return errors.AssertionFailedf("streamingCommandResult does not implement SendCopyDone")
 }
 
 // BulkJobInfoKey are for keys stored in pgwire.commandResult.bulkJobInfo.

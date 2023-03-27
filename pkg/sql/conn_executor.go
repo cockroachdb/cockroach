@@ -16,7 +16,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -2281,9 +2280,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
-		res = ex.clientComm.CreateCopyOutResult(pos)
+		copyRes := ex.clientComm.CreateCopyOutResult(tcmd, pos)
+		res = copyRes
 		stmtCtx := withStatement(ctx, tcmd.Stmt)
-		ev, payload = ex.execCopyOut(stmtCtx, tcmd)
+		ev, payload = ex.execCopyOut(stmtCtx, tcmd, copyRes)
 
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
@@ -2586,7 +2586,7 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 }
 
 func (ex *connExecutor) execCopyOut(
-	ctx context.Context, cmd CopyOut,
+	ctx context.Context, cmd CopyOut, res CopyOutResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload) {
 	// First handle connExecutor state transitions.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
@@ -2774,16 +2774,11 @@ func (ex *connExecutor) execCopyOut(
 		// above.
 		txn := ex.planner.Txn()
 		var err error
-		if numOutputRows, err = runCopyTo(ctx, &ex.planner, txn, cmd); err != nil {
+		if numOutputRows, err = runCopyTo(ctx, &ex.planner, txn, cmd, res); err != nil {
 			return err
 		}
 
-		// Finalize execution by sending the statement tag and number of rows read.
-		dummy := tree.CopyTo{}
-		tag := []byte(dummy.StatementTag())
-		tag = append(tag, ' ')
-		tag = strconv.AppendInt(tag, int64(numOutputRows), 10 /* base */)
-		return cmd.Conn.SendCommandComplete(tag)
+		return nil
 	}); copyErr != nil {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		payload := eventNonRetriableErrPayload{err: copyErr}

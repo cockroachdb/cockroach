@@ -129,7 +129,7 @@ func (c *csvCopyToTranslater) headerRow(rcs colinfo.ResultColumns) ([]byte, bool
 }
 
 func runCopyTo(
-	ctx context.Context, p *planner, txn *kv.Txn, cmd CopyOut,
+	ctx context.Context, p *planner, txn *kv.Txn, cmd CopyOut, res CopyOutResult,
 ) (numOutputRows int, retErr error) {
 	copyOptions, err := processCopyOptions(ctx, p, cmd.Stmt.Options)
 	if err != nil {
@@ -140,7 +140,7 @@ func runCopyTo(
 	var t copyToTranslater
 	switch cmd.Stmt.Options.CopyFormat {
 	case tree.CopyFormatBinary:
-		//wireFormat = pgwirebase.FormatBinary
+		// wireFormat = pgwirebase.FormatBinary
 		return 0, unimplemented.NewWithIssue(
 			97180,
 			"binary format for COPY TO not implemented",
@@ -203,7 +203,7 @@ func runCopyTo(
 	}()
 
 	// Send the message describing the columns to the client.
-	if err := cmd.Conn.BeginCopyOut(ctx, it.Types(), wireFormat); err != nil {
+	if err := res.SendCopyOut(ctx, it.Types(), wireFormat); err != nil {
 		return 0, err
 	}
 
@@ -213,7 +213,7 @@ func runCopyTo(
 		if row, ok, err := t.headerRow(it.Types()); err != nil {
 			return err
 		} else if ok {
-			if err := cmd.Conn.SendCopyData(ctx, row); err != nil {
+			if err := res.SendCopyData(ctx, row, true /* isHeader */); err != nil {
 				return err
 			}
 		}
@@ -231,7 +231,7 @@ func runCopyTo(
 			if err != nil {
 				return err
 			}
-			if err := cmd.Conn.SendCopyData(ctx, row); err != nil {
+			if err := res.SendCopyData(ctx, row, false /* isHeader */); err != nil {
 				return err
 			}
 		}
@@ -239,7 +239,7 @@ func runCopyTo(
 	}(); err != nil {
 		return 0, err
 	}
-	return numOutputRows, cmd.Conn.SendCopyDone(ctx)
+	return numOutputRows, res.SendCopyDone(ctx)
 }
 
 var encodeMap = func() map[byte]byte {
