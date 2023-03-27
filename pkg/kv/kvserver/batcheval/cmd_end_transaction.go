@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1272,9 +1273,7 @@ func mergeTrigger(
 
 	// The stats for the merged range are the sum of the LHS and RHS stats
 	// adjusted for range key merges (which is the inverse of the split
-	// adjustment). The RHS's replicated range ID stats are subtracted -- the only
-	// replicated range ID keys we copy from the RHS are the keys in the abort
-	// span, and we've already accounted for those stats above.
+	// adjustment).
 	ms.Add(merge.RightMVCCStats)
 	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(batch, merge.LeftDesc, merge.RightDesc)
 	if err != nil {
@@ -1282,7 +1281,18 @@ func mergeTrigger(
 	}
 	ms.Subtract(msRangeKeyDelta)
 
-	{
+	// The RHS's replicated range ID stats are subtracted -- the only replicated
+	// range ID keys we copy from the RHS are the keys in the abort span, and
+	// we've already accounted for those stats above.
+	//
+	// NB: RangeIDLocalMVCCStats is introduced in 23.2 to mitigate a SysBytes race
+	// with lease requests (which ignore latches). For 23.1 compatibility, we fall
+	// back to computing it here when not set. We don't need a version gate since
+	// it's only used at evaluation time and doesn't affect below-Raft state.
+	if merge.RightRangeIDLocalMVCCStats != (enginepb.MVCCStats{}) {
+		ms.Subtract(merge.RightRangeIDLocalMVCCStats)
+	} else {
+		_ = clusterversion.V23_1 // remove this branch when 23.1 support is removed
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
 		sysMS, err := storage.ComputeStats(batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
