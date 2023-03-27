@@ -104,16 +104,28 @@ func (s *InboundStreamInfo) finishLocked() {
 }
 
 // cancelIfNotConnected cancels and finishes s if it's not marked as connected,
-// finished, or canceled, and returns the pending receiver if so.
-func (s *InboundStreamInfo) cancelIfNotConnected() InboundStreamHandler {
+// finished, or canceled, and sends the provided error to the pending receiver
+// if so. A boolean indicating whether s is canceled is returned.
+func (s *InboundStreamInfo) cancelIfNotConnected(err error) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.mu.connected || s.mu.finished || s.mu.canceled {
-		return nil
+		return false
 	}
+	s.cancelLocked(err)
+	return true
+}
+
+// cancelLocked marks s as canceled, finishes it, and sends the given error to
+// the receiver. The mutex of s must be held when calling this method.
+func (s *InboundStreamInfo) cancelLocked(err error) {
+	s.mu.AssertHeld()
 	s.mu.canceled = true
 	s.finishLocked()
-	return s.receiver
+	// Since Timeout might block, we must send the error in a new goroutine.
+	go func() {
+		s.receiver.Timeout(err)
+	}()
 }
 
 // finish is the same as finishLocked when the mutex of s is not held already.
@@ -344,12 +356,8 @@ func (fr *FlowRegistry) cancelPendingStreams(
 	for _, is := range inboundStreams {
 		// Connected, non-finished inbound streams will get an error returned in
 		// ProcessInboundStream(). Handle non-connected streams here.
-		pendingReceiver := is.cancelIfNotConnected()
-		if pendingReceiver != nil {
+		if is.cancelIfNotConnected(pendingReceiverErr) {
 			numTimedOutReceivers++
-			go func(receiver InboundStreamHandler) {
-				receiver.Timeout(pendingReceiverErr)
-			}(pendingReceiver)
 		}
 	}
 	return numTimedOutReceivers
@@ -612,8 +620,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	}
 	if handshakeErr != nil {
 		// The handshake failed, so we're canceling this stream.
-		s.mu.canceled = true
-		s.finishLocked()
+		s.cancelLocked(handshakeErr)
 		return nil, nil, nil, handshakeErr
 	}
 	if s.mu.connected {
