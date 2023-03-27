@@ -372,20 +372,6 @@ func TestAllVersionsAgree(t *testing.T) {
 	})
 }
 
-// Returns two versions v0 and v1 which correspond to adjacent releases. v1 will
-// equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this
-// (as we retire old versions).
-func v0v1() (roachpb.Version, roachpb.Version) {
-	v1 := clusterversion.TestingBinaryMinSupportedVersion
-	v0 := clusterversion.TestingBinaryMinSupportedVersion
-	if v0.Minor > 0 {
-		v0.Minor--
-	} else {
-		v0.Major--
-	}
-	return v0, v1
-}
-
 // TestClusterVersionMixedVersionTooOld verifies that we're unable to bump a
 // cluster version in a mixed node cluster where one of the nodes is running a
 // binary that cannot support the targeted cluster version.
@@ -398,7 +384,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// GOTRACEBACK=all, as it is on CI.
 	defer log.DisableTracebacks()()
 
-	v0, v1 := v0v1()
+	v0, v1 := clusterversion.TestingBinaryMinSupportedVersion, clusterversion.TestingBinaryVersion
 	v0s := v0.String()
 	v1s := v1.String()
 
@@ -414,6 +400,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 			BinaryVersionOverride:          v0,
 		},
 		// Inject an upgrade which would run to upgrade the cluster.

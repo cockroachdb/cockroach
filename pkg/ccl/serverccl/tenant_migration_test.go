@@ -91,7 +91,8 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 				Settings:          makeSettings(),
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						BinaryVersionOverride: test.binaryVersion,
+						BinaryVersionOverride:       test.binaryVersion,
+						BootstrapVersionKeyOverride: clusterversion.BinaryMinSupportedVersionKey,
 						// We're bumping cluster versions manually ourselves. We
 						// want to avoid racing with the auto-upgrade process.
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -107,7 +108,8 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 					TenantID: serverutils.TestTenantID(),
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							BinaryVersionOverride: test.binaryVersion,
+							BootstrapVersionKeyOverride: clusterversion.BinaryMinSupportedVersionKey,
+							BinaryVersionOverride:       test.binaryVersion,
 						},
 					},
 				})
@@ -207,7 +209,9 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 						// This test wants to bootstrap at the previously active
 						// cluster version, so we can actually bump the cluster
 						// version to the binary version.
-						BinaryVersionOverride: test.initialClusterVersion.Version,
+						BinaryVersionOverride:       test.initialClusterVersion.Version,
+						BootstrapVersionKeyOverride: clusterversion.BinaryMinSupportedVersionKey,
+
 						// We're bumping cluster versions manually ourselves. We
 						// want to avoid racing with the auto-upgrade process.
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -222,7 +226,8 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 					TenantID: serverutils.TestTenantID(),
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							BinaryVersionOverride: test.initialClusterVersion.Version,
+							BootstrapVersionKeyOverride: clusterversion.BinaryMinSupportedVersionKey,
+							BinaryVersionOverride:       test.initialClusterVersion.Version,
 						},
 					},
 				})
