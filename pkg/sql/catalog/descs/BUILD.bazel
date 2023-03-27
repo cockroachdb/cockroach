@@ -77,7 +77,7 @@ go_library(
 
 go_test(
     name = "descs_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "collection_test.go",
         "errors_test.go",
