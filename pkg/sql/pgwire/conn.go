@@ -380,7 +380,7 @@ func (c *conn) serveImpl(
 		defer reserved.Close(ctx)
 		var err error
 		for param, value := range testingStatusReportParams {
-			err = c.sendParamStatus(param, value)
+			err = c.bufferParamStatus(param, value)
 			if err != nil {
 				break
 			}
@@ -395,7 +395,12 @@ func (c *conn) serveImpl(
 		close(dummyCh)
 		procCh = dummyCh
 
-		if err := c.sendReadyForQuery(0 /* queryCancelKey */); err != nil {
+		if err := c.bufferInitialReadyForQuery(0 /* queryCancelKey */); err != nil {
+			return
+		}
+		// We don't have a CmdPos to pass in, since we haven't received any commands
+		// yet, so we just use the initial lastFlushed value.
+		if err := c.Flush(c.writerState.fi.lastFlushed); err != nil {
 			return
 		}
 	}
@@ -735,13 +740,6 @@ func (c *conn) processCommandsAsync(
 	return retCh
 }
 
-func (c *conn) sendParamStatus(param, value string) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
-	c.msgBuilder.writeTerminatedString(param)
-	c.msgBuilder.writeTerminatedString(value)
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
 func (c *conn) bufferParamStatus(param, value string) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
 	c.msgBuilder.writeTerminatedString(param)
@@ -778,37 +776,42 @@ func (c *conn) sendInitialConnData(
 	for _, param := range statusReportParams {
 		param := param
 		value := connHandler.GetParamStatus(ctx, param)
-		if err := c.sendParamStatus(param, value); err != nil {
+		if err := c.bufferParamStatus(param, value); err != nil {
 			return sql.ConnectionHandler{}, err
 		}
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
-	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
+	if err := c.bufferParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 
-	if err := c.sendReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
+	if err := c.bufferInitialReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
+		return sql.ConnectionHandler{}, err
+	}
+	// We don't have a CmdPos to pass in, since we haven't received any commands
+	// yet, so we just use the initial lastFlushed value.
+	if err := c.Flush(c.writerState.fi.lastFlushed); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 	return connHandler, nil
 }
 
-// sendReadyForQuery sends the final messages of the connection handshake.
-// This includes a BackendKeyData message and a ServerMsgReady
+// bufferInitialReadyForQuery sends the final messages of the connection
+// handshake. This includes a BackendKeyData message and a ServerMsgReady
 // message indicating that there is no active transaction.
-func (c *conn) sendReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
+func (c *conn) bufferInitialReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
 	// Send our BackendKeyData to the client, so they can cancel the connection.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
 	c.msgBuilder.putInt64(int64(queryCancelKey))
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		return err
 	}
 
 	// An initial ServerMsgReady message is part of the handshake.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(byte(sql.IdleTxnBlock))
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		return err
 	}
 	return nil
@@ -1356,9 +1359,13 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
 	}
-	return c.maybeFlush(r.pos, r.bufferingDisabled)
+	if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
+	}
+	c.maybeReallocate()
+	return nil
 }
 
 // bufferBatch serializes a batch and adds all the rows from it to the buffer.
@@ -1399,6 +1406,7 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
 				return err
 			}
+			c.maybeReallocate()
 		}
 	}
 	return nil
