@@ -677,7 +677,7 @@ type ClientComm interface {
 	// CreateEmptyQueryResult creates a result for an empty-string query.
 	CreateEmptyQueryResult(pos CmdPos) EmptyQueryResult
 	// CreateCopyInResult creates a result for a Copy-in command.
-	CreateCopyInResult(pos CmdPos) CopyInResult
+	CreateCopyInResult(cmd CopyIn, pos CmdPos) CopyInResult
 	// CreateCopyOutResult creates a result for a Copy-out command.
 	CreateCopyOutResult(cmd CopyOut, pos CmdPos) CopyOutResult
 	// CreateDrainResult creates a result for a Drain command.
@@ -874,9 +874,12 @@ type EmptyQueryResult interface {
 }
 
 // CopyInResult represents the result of a CopyIn command. Closing this result
-// produces no output for the client.
+// sends a CommandComplete message to the client.
 type CopyInResult interface {
 	ResultBase
+
+	// SetRowsAffected sets the number of rows affected by the COPY.
+	SetRowsAffected(ctx context.Context, n int)
 }
 
 // CopyOutResult represents the result of a CopyOut command. Closing this result
@@ -1085,6 +1088,11 @@ func (r *streamingCommandResult) SetPrepStmtOutput(context.Context, colinfo.Resu
 func (r *streamingCommandResult) SetPortalOutput(
 	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
+}
+
+// SetRowsAffected is part of the sql.CopyInResult interface.
+func (r *streamingCommandResult) SetRowsAffected(ctx context.Context, rows int) {
+	r.rowsAffected = rows
 }
 
 // SendCopyOut is part of the sql.CopyOutResult interface.

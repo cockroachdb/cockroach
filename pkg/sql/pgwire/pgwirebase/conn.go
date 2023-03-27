@@ -30,8 +30,4 @@ type Conn interface {
 	// subprotocol (COPY ... FROM STDIN). This message informs the client about
 	// the columns that are expected for the rows to be inserted.
 	BeginCopyIn(ctx context.Context, columns []colinfo.ResultColumn, format FormatCode) error
-
-	// SendCommandComplete sends a serverMsgCommandComplete with the given
-	// payload.
-	SendCommandComplete(tag []byte) error
 }
