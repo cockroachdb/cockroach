@@ -47,19 +47,13 @@ const (
 		v BYTES NOT NULL,
 		INDEX (v)
 	)`
-	// TODO(ajwerner): Change this to use the "easier" hash sharded index syntax once that
-	// is in.
 	shardedKvSchema = `(
-		k BIGINT NOT NULL,
-		v BYTES NOT NULL,
-		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
-		PRIMARY KEY (shard, k)
+		k BIGINT NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d),
+		v BYTES NOT NULL
 	)`
 	shardedKvSchemaWithIndex = `(
-		k BIGINT NOT NULL,
+		k BIGINT NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d,
 		v BYTES NOT NULL,
-		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
-		PRIMARY KEY (shard, k),
 		INDEX (v)
 	)`
 )
@@ -200,7 +194,7 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 				return errors.New("'sequential' and 'zipfian' cannot both be enabled")
 			}
 			if w.shards > 0 && !(w.sequential || w.zipfian) {
-				return errors.New("'shards' only work with 'sequential' or 'zipfian' key distributions")
+				return errors.New("'num-shards' only work with 'sequential' or 'zipfian' key distributions")
 			}
 			if w.readPercent+w.spanPercent+w.delPercent > 100 {
 				return errors.New("'read-percent', 'span-percent' and 'del-precent' combined exceed 100%")
@@ -277,16 +271,7 @@ func (w *kv) Tables() []workload.Table {
 		if w.secondaryIndex {
 			schema = shardedKvSchemaWithIndex
 		}
-		checkConstraint := strings.Builder{}
-		checkConstraint.WriteString(`shard IN (`)
-		for i := 0; i < w.shards; i++ {
-			if i != 0 {
-				checkConstraint.WriteString(",")
-			}
-			fmt.Fprintf(&checkConstraint, "%d", i)
-		}
-		checkConstraint.WriteString(")")
-		table.Schema = fmt.Sprintf(schema, w.shards, checkConstraint.String())
+		table.Schema = fmt.Sprintf(schema, w.shards)
 	} else {
 		if w.secondaryIndex {
 			table.Schema = kvSchemaWithIndex
@@ -372,15 +357,7 @@ func (w *kv) Ops(
 
 	// Read statement
 	var buf strings.Builder
-	if w.shards == 0 {
-		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
-		}
-	} else if w.enum {
+	if w.enum {
 		buf.WriteString(`SELECT k, v, e FROM kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
@@ -389,17 +366,12 @@ func (w *kv) Ops(
 			fmt.Fprintf(&buf, `$%d`, i+1)
 		}
 	} else {
-		// TODO(ajwerner): We're currently manually plumbing down the computed shard column
-		// since the optimizer doesn't yet support deriving values of computed columns
-		// when all the columns they reference are available. See
-		// https://github.com/cockroachdb/cockroach/issues/39340#issuecomment-535338071
-		// for details. Remove this once that functionality is added.
-		buf.WriteString(`SELECT k, v FROM kv WHERE (shard, k) in (`)
+		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, `(mod($%d, %d), $%d)`, i+1, w.shards, i+1)
+			fmt.Fprintf(&buf, `$%d`, i+1)
 		}
 	}
 	buf.WriteString(`)`)
@@ -420,9 +392,6 @@ func (w *kv) Ops(
 	// Select for update statement
 	var sfuStmtStr string
 	if w.writesUseSelectForUpdate {
-		if w.shards != 0 {
-			return workload.QueryLoad{}, fmt.Errorf("select for update in kv requires shard=0")
-		}
 		buf.Reset()
 		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
@@ -450,22 +419,12 @@ func (w *kv) Ops(
 
 	// Del statement
 	buf.Reset()
-	if w.shards == 0 {
-		buf.WriteString(`DELETE FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
+	buf.WriteString(`DELETE FROM kv WHERE k IN (`)
+	for i := 0; i < w.batchSize; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
 		}
-	} else {
-		buf.WriteString(`DELETE FROM kv WHERE (shard, k) in (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `(mod($%d, %d), $%d)`, i+1, w.shards, i+1)
-		}
+		fmt.Fprintf(&buf, `$%d`, i+1)
 	}
 	buf.WriteString(`)`)
 	delStmtStr := buf.String()
