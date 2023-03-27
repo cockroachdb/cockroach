@@ -354,7 +354,11 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
     %s \
     --test %s %s`, nodesStr, testName, nemesis)
 	errCh := jc.startTest(ctx, t, func(args ...string) error {
-		return runE(c, ctx, controller, args...)
+		// Overwrite the minimum max range size allowed by cockroach, as
+		// Jepsen attempts to set custom range sizes.
+		env := "COCKROACH_MIN_RANGE_MAX_BYTES=0"
+		newArgs := append([]string{env}, args...)
+		return runE(c, ctx, controller, newArgs...)
 	}, testArgs)
 
 	outputDir := t.ArtifactsDir()
