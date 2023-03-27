@@ -1263,12 +1263,6 @@ func (c *conn) BeginCopyIn(
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// SendCommandComplete is part of the pgwirebase.Conn interface.
-func (c *conn) SendCommandComplete(tag []byte) error {
-	c.bufferCommandComplete(tag)
-	return nil
-}
-
 // Rd is part of the pgwirebase.Conn interface.
 func (c *conn) Rd() pgwirebase.BufferedReader {
 	return &pgwireReader{conn: c}
@@ -1854,8 +1848,11 @@ func (c *conn) CreateErrorResult(pos sql.CmdPos) sql.ErrorResult {
 }
 
 // CreateCopyInResult is part of the sql.ClientComm interface.
-func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
-	return c.newMiscResult(pos, noCompletionMsg)
+func (c *conn) CreateCopyInResult(cmd sql.CopyIn, pos sql.CmdPos) sql.CopyInResult {
+	res := c.newMiscResult(pos, commandComplete)
+	res.stmtType = cmd.Stmt.StatementReturnType()
+	res.cmdCompleteTag = cmd.Stmt.StatementTag()
+	return res
 }
 
 // CreateCopyOutResult is part of the sql.ClientComm interface.
