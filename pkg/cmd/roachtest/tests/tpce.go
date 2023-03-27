@@ -23,7 +23,80 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
+
+type tpceSpec struct {
+	loadNode         option.NodeListOption
+	roachNodes       option.NodeListOption
+	roachNodeIPFlags []string
+}
+
+type tpceCmdOptions struct {
+	customers int
+	racks     int
+	duration  time.Duration
+	threads   int
+}
+
+func (to tpceCmdOptions) String() string {
+	var builder strings.Builder
+	if to.customers != 0 {
+		builder.WriteString(fmt.Sprintf(" --customers=%d", to.customers))
+	}
+	if to.racks != 0 {
+		builder.WriteString(fmt.Sprintf(" --racks=%d", to.racks))
+	}
+	if to.duration != 0 {
+		builder.WriteString(fmt.Sprintf(" --duration=%s", to.duration))
+	}
+	if to.threads != 0 {
+		builder.WriteString(fmt.Sprintf(" --threads=%d", to.threads))
+	}
+	return builder.String()
+}
+
+func initTPCESpec(
+	ctx context.Context, t test.Test, c cluster.Cluster, loadNode,
+	roachNodes option.NodeListOption,
+) (*tpceSpec, error) {
+	t.Status("installing docker")
+	if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
+		return nil, err
+	}
+	roachNodeIPs, err := c.InternalIP(ctx, t.L(), roachNodes)
+	if err != nil {
+		return nil, err
+	}
+	roachNodeIPFlags := make([]string, len(roachNodeIPs))
+	for i, ip := range roachNodeIPs {
+		roachNodeIPFlags[i] = fmt.Sprintf("--hosts=%s", ip)
+	}
+	return &tpceSpec{
+		loadNode:         loadNode,
+		roachNodes:       roachNodes,
+		roachNodeIPFlags: roachNodeIPFlags,
+	}, nil
+}
+
+func (ts *tpceSpec) dockerCmdPrefix() string {
+	return `sudo docker run cockroachdb/tpc-e:latest`
+}
+
+// init initializes an empty cluster with a tpce database. This includes a bulk
+// import of the data and schema creation.
+func (ts *tpceSpec) init(ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions) {
+	c.Run(ctx, ts.loadNode, fmt.Sprintf("%s %s --init %s", ts.dockerCmdPrefix(), o.String(), ts.roachNodeIPFlags[0]))
+}
+
+// run runs the tpce workload on cluster that has been initialized with the tpce schema.
+func (ts *tpceSpec) run(
+	ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions,
+) (install.RunResultDetails, error) {
+	cmd := fmt.Sprintf("%s %s %s",
+		ts.dockerCmdPrefix(), o.String(), strings.Join(ts.roachNodeIPFlags, " "))
+	return c.RunWithDetailsSingleNode(ctx, t.L(), ts.loadNode, cmd)
+}
 
 func registerTPCE(r registry.Registry) {
 	type tpceOptions struct {
@@ -50,10 +123,8 @@ func registerTPCE(r registry.Registry) {
 		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 
-		t.Status("installing docker")
-		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
-			t.Fatal(err)
-		}
+		tpceSpec, err := initTPCESpec(ctx, t, c, loadNode, roachNodes)
+		require.NoError(t, err)
 
 		// Configure to increase the speed of the import.
 		func() {
@@ -73,27 +144,20 @@ func registerTPCE(r registry.Registry) {
 
 		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
-			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
-
-			roachNodeIPs, err := c.InternalIP(ctx, t.L(), roachNodes)
-			if err != nil {
-				return err
-			}
-			roachNodeIPFlags := make([]string, len(roachNodeIPs))
-			for i, ip := range roachNodeIPs {
-				roachNodeIPFlags[i] = fmt.Sprintf("--hosts=%s", ip)
-			}
 
 			t.Status("preparing workload")
-			c.Run(ctx, loadNode, fmt.Sprintf("%s --customers=%d --racks=%d --init %s",
-				dockerRun, opts.customers, racks, roachNodeIPFlags[0]))
+			tpceSpec.init(ctx, t, c, tpceCmdOptions{
+				customers: opts.customers,
+				racks:     racks,
+			})
 
 			t.Status("running workload")
-			duration := 2 * time.Hour
-			threads := opts.nodes * opts.cpus
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode,
-				fmt.Sprintf("%s --customers=%d --racks=%d --duration=%s --threads=%d %s",
-					dockerRun, opts.customers, racks, duration, threads, strings.Join(roachNodeIPFlags, " ")))
+			result, err := tpceSpec.run(ctx, t, c, tpceCmdOptions{
+				customers: opts.customers,
+				racks:     racks,
+				duration:  2 * time.Hour,
+				threads:   opts.nodes * opts.cpus,
+			})
 			if err != nil {
 				t.Fatal(err.Error())
 			}
