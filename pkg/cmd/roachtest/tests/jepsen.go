@@ -77,8 +77,8 @@ to running roachtest and update repository URLs in the file to your liking.
 
 const envBuildJepsen = "ROACHTEST_BUILD_JEPSEN"
 
-const jepsenRepo = "https://github.com/cockroachdb/jepsen"
-const repoBranch = "tc-nightly"
+const jepsenRepo = "https://github.com/renatolabs/jepsen"
+const repoBranch = "allow-small-ranges"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
 const binaryVersion = "0.1.0-3d7c345d-standalone"
@@ -212,7 +212,7 @@ type jepsenConfig struct {
 }
 
 func makeJepsenConfig() jepsenConfig {
-	if e := os.Getenv(envBuildJepsen); e != "" {
+	if true { // e := os.Getenv(envBuildJepsen); e != "" {
 		return jepsenConfig{
 			buildFromSource: true,
 			repoURL:         jepsenRepo,
@@ -354,7 +354,11 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
     %s \
     --test %s %s`, nodesStr, testName, nemesis)
 	errCh := jc.startTest(ctx, t, func(args ...string) error {
-		return runE(c, ctx, controller, args...)
+		// Overwrite the minimum max range size allowed by cockroach, as
+		// Jepsen attempts to set custom range sizes.
+		env := "COCKROACH_MIN_RANGE_MAX_BYTES=0"
+		newArgs := append([]string{env}, args...)
+		return runE(c, ctx, controller, newArgs...)
 	}, testArgs)
 
 	outputDir := t.ArtifactsDir()
