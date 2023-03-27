@@ -1137,6 +1137,8 @@ func CheckSSTConflicts(
 					if sstChangedKeys && !extChangedKeys {
 						sstIter.SeekGE(MVCCKey{Key: extIter.UnsafeKey().Key})
 						sstOK, sstErr = sstIter.Valid()
+						extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+						extOK, extErr = extIter.Valid()
 					}
 					// Re-seek the ext iterator if the ext iterator changed keys and:
 					// 1) the SST iterator did not change keys, and we need to bring the ext
