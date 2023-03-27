@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
