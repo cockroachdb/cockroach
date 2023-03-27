@@ -149,6 +149,26 @@ describe("Filter transactions", () => {
     );
   });
 
+  it("should not error with txn with null app_names", () => {
+    const filter: Filters = {
+      app: "hello",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      nodes: "",
+      regions: "",
+    };
+    expect(
+      filterTransactions(
+        txData.map(txn => (txn.app_names = null)),
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+        false,
+      ).transactions.length,
+    ).toEqual(0);
+  });
+
   it("filters by time", () => {
     const filter: Filters = {
       app: "$ internal,$ TEST",

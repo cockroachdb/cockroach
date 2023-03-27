@@ -1581,64 +1581,61 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	firstServerProto := testCluster.Server(0)
 
 	type testCase struct {
-		query         string
-		fingerprinted string
-		count         int
-		shouldRetry   bool
-		numRows       int
+		query       string
+		execStmtCnt int
+		expectedCnt int
+		shouldRetry bool
+		numRows     int
+		appNames    []string
 	}
 
 	testCases := []testCase{
-		{query: `CREATE DATABASE roachblog`, count: 1, numRows: 0},
-		{query: `SET database = roachblog`, count: 1, numRows: 0},
-		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
+		{query: `CREATE DATABASE roachblog`, execStmtCnt: 1, expectedCnt: 1, numRows: 0, appNames: []string{"app0"}},
+		{query: `SET database = roachblog`, execStmtCnt: 1, expectedCnt: 1, numRows: 0, appNames: []string{"app1"}},
+		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, execStmtCnt: 1, expectedCnt: 1, numRows: 0, appNames: []string{"app2"}},
 		{
-			query:         `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
-			count:         1,
-			numRows:       1,
+			query:       `INSERT INTO posts VALUES (1, 'foo')`,
+			execStmtCnt: 1,
+			expectedCnt: 1,
+			numRows:     1,
+			appNames:    []string{"app3"},
 		},
-		{query: `SELECT * FROM posts`, count: 2, numRows: 1},
-		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3, numRows: 2},
+		{query: `SELECT * FROM posts`, execStmtCnt: 2, expectedCnt: 2, numRows: 1, appNames: []string{"app4"}},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, execStmtCnt: 3, expectedCnt: 3, numRows: 2, appNames: []string{"app5"}},
 		{
-			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
-			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
-			shouldRetry:   true,
-			count:         1,
-			numRows:       2,
-		},
-		{
-			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
-			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
-			shouldRetry:   true,
-			count:         1,
-			numRows:       2,
+			query:       `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
+			shouldRetry: true,
+			execStmtCnt: 1,
+			expectedCnt: 2,
+			numRows:     2,
+			appNames:    []string{"app6", "app7"},
 		},
 	}
 
-	appNameToTestCase := make(map[string]testCase)
+	appNameToTestCase := make(map[string]*testCase)
 
 	for i, tc := range testCases {
-		appName := fmt.Sprintf("app%d", i)
-		appNameToTestCase[appName] = tc
-
-		// Create a brand new connection for each app, so that we don't pollute
-		// transaction stats collection with `SET application_name` queries.
-		sqlDB, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
-			t.Fatal(err)
-		}
-		for c := 0; c < tc.count; c++ {
-			if _, err := sqlDB.Exec(tc.query); err != nil {
+		for _, appName := range tc.appNames {
+			appNameToTestCase[appName] = &testCases[i]
+			// Create a brand new connection for each app, so that we don't pollute
+			// transaction stats collection with `SET application_name` queries.
+			sqlDB, err := gosql.Open("postgres", pgURL.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
+				t.Fatal(err)
+			}
+			for c := 0; c < tc.execStmtCnt; c++ {
+				if _, err := sqlDB.Exec(tc.query); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := sqlDB.Close(); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := sqlDB.Close(); err != nil {
-			t.Fatal(err)
-		}
+
 	}
 
 	// Flush stats, as combinedstmts reads only from system.
@@ -1650,53 +1647,76 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	respAppNames := make(map[string]bool)
+
 	// Construct a map of all the statement fingerprint IDs.
 	statementFingerprintIDs := make(map[appstatspb.StmtFingerprintID]bool, len(resp.Statements))
 	for _, respStatement := range resp.Statements {
 		statementFingerprintIDs[respStatement.ID] = true
 	}
 
-	respAppNames := make(map[string]bool)
 	for _, respTransaction := range resp.Transactions {
-		appName := respTransaction.StatsData.App
-		tc, found := appNameToTestCase[appName]
+
+		var tc *testCase
+		var tcTemp *testCase
+		var found bool
+		for i, appName := range respTransaction.AppNames {
+			tcTemp, found = appNameToTestCase[appName]
+
+			if !found {
+				break
+			}
+
+			if i > 0 {
+				// We should expect them to come from the same test case.
+				assert.Equal(t, tc, tcTemp)
+			}
+
+			tc = tcTemp
+			respAppNames[appName] = true
+		}
+
 		if !found {
-			// Ignore internal queries, they aren't relevant to this test.
+			// Ignore non-test case related queries.
 			continue
 		}
-		respAppNames[appName] = true
+
 		// Ensure all statementFingerprintIDs comprised by the Transaction Response can be
 		// linked to StatementFingerprintIDs for statements in the response.
 		for _, stmtFingerprintID := range respTransaction.StatsData.StatementFingerprintIDs {
 			if _, found := statementFingerprintIDs[stmtFingerprintID]; !found {
-				t.Fatalf("app: %s, expected stmtFingerprintID: %d not found in StatementResponse.", appName, stmtFingerprintID)
+				t.Fatalf("query: %s, expected stmtFingerprintID: %d not found in StatementResponse.",
+					tc.query, stmtFingerprintID)
 			}
 		}
+
 		stats := respTransaction.StatsData.Stats
-		if tc.count != int(stats.Count) {
-			t.Fatalf("app: %s, expected count %d, got %d", appName, tc.count, stats.Count)
+
+		if tc.expectedCnt != int(stats.Count) {
+			t.Fatalf("query: %s, expected count %d, got %d", tc.query, tc.expectedCnt, stats.Count)
 		}
+
 		if tc.shouldRetry && respTransaction.StatsData.Stats.MaxRetries == 0 {
-			t.Fatalf("app: %s, expected retries, got none\n", appName)
+			t.Fatalf("query: %s, expected retries, got none\n", tc.query)
 		}
 
 		// Sanity check numeric stat values
 		if respTransaction.StatsData.Stats.CommitLat.Mean <= 0 {
-			t.Fatalf("app: %s, unexpected mean for commit latency\n", appName)
+			t.Fatalf("query: %s, unexpected mean for commit latency\n", tc.query)
 		}
 		if respTransaction.StatsData.Stats.RetryLat.Mean <= 0 && tc.shouldRetry {
-			t.Fatalf("app: %s, expected retry latency mean to be non-zero as retries were involved\n", appName)
+			t.Fatalf("query: %s, expected retry latency mean to be non-zero as retries were involved\n", tc.query)
 		}
 		if respTransaction.StatsData.Stats.ServiceLat.Mean <= 0 {
-			t.Fatalf("app: %s, unexpected mean for service latency\n", appName)
+			t.Fatalf("query: %s, unexpected mean for service latency\n", tc.query)
 		}
 		if respTransaction.StatsData.Stats.NumRows.Mean != float64(tc.numRows) {
-			t.Fatalf("app: %s, unexpected number of rows observed. expected: %d, got %d\n",
-				appName, tc.numRows, int(respTransaction.StatsData.Stats.NumRows.Mean))
+			t.Fatalf("query: %s, unexpected number of rows observed. expected: %d, got %d\n",
+				tc.query, tc.numRows, int(respTransaction.StatsData.Stats.NumRows.Mean))
 		}
 	}
 
-	// Ensure we got transaction statistics for all the queries we sent.
+	//Ensure we got transaction statistics for all the queries we sent.
 	for appName := range appNameToTestCase {
 		if _, found := respAppNames[appName]; !found {
 			t.Fatalf("app: %s did not appear in the response\n", appName)
@@ -1963,11 +1983,13 @@ func TestStatusAPIStatements(t *testing.T) {
 				// be automatically retried, confusing the test success check.
 				continue
 			}
+
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
 				// We ignore internal queries, these are not relevant for the
 				// validity of this test.
 				continue
 			}
+
 			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
 				continue
@@ -2080,17 +2102,24 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				// be automatically retried, confusing the test success check.
 				continue
 			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// CombinedStatementStats should filter out internal queries.
-				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
+
+			for _, app := range respStatement.AppNames {
+				if strings.HasPrefix(app, catconstants.InternalAppNamePrefix) {
+					// CombinedStatementStats should filter out internal queries.
+					t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
+				}
 			}
+
 			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
 				continue
 			}
 
 			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
-			expectedTxnFingerprints[respStatement.Key.KeyData.TransactionFingerprintID] = struct{}{}
+
+			for _, txnFingerprintID := range respStatement.TxnFingerprintIDs {
+				expectedTxnFingerprints[txnFingerprintID] = struct{}{}
+			}
 		}
 
 		for _, respTxn := range resp.Transactions {
@@ -2105,6 +2134,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				expectedStmts, statementsInResponse, pretty.Sprint(resp), path)
 		}
 		if hasTxns {
+			// We expect that expectedTxnFingerprints is now empty since
+			// we should have removed them all.
 			assert.Empty(t, expectedTxnFingerprints)
 		} else {
 			assert.Empty(t, resp.Transactions)

@@ -4116,6 +4116,8 @@ tenant pods.
 | key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  | [reserved](#support-status) |
 | id | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
+| txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) | repeated | In 23.1 we expect the response to only group on fingerprint_id in the overview page. We now return the aggregated list of unique app names, leaving the app field in the key empty. | [reserved](#support-status) |
+| app_names | [string](#cockroach.server.serverpb.StatementsResponse-string) | repeated | In 23.1 we expect the response to only group on fingerprint_id in the overview page. We now return the aggregated list of unique app names. | [reserved](#support-status) |
 
 
 
@@ -4146,6 +4148,7 @@ tenant pods.
 | ----- | ---- | ----- | ----------- | -------------- |
 | stats_data | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.CollectedTransactionStatistics) |  |  | [reserved](#support-status) |
 | node_id | [int32](#cockroach.server.serverpb.StatementsResponse-int32) |  |  | [reserved](#support-status) |
+| app_names | [string](#cockroach.server.serverpb.StatementsResponse-string) | repeated | In 23.1 we expect the response to only group on fingerprint_id in the overview page. We now return the aggregated list of unique app names, leaving the app field in the key empty. | [reserved](#support-status) |
 
 
 
@@ -4227,6 +4230,8 @@ Support status: [reserved](#support-status)
 | key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  | [reserved](#support-status) |
 | id | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
+| txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) | repeated | In 23.1 we expect the response to only group on fingerprint_id in the overview page. We now return the aggregated list of unique app names, leaving the app field in the key empty. | [reserved](#support-status) |
+| app_names | [string](#cockroach.server.serverpb.StatementsResponse-string) | repeated | In 23.1 we expect the response to only group on fingerprint_id in the overview page. We now return the aggregated list of unique app names. | [reserved](#support-status) |
 
 
 
@@ -4257,6 +4262,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | stats_data | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.CollectedTransactionStatistics) |  |  | [reserved](#support-status) |
 | node_id | [int32](#cockroach.server.serverpb.StatementsResponse-int32) |  |  | [reserved](#support-status) |
+| app_names | [string](#cockroach.server.serverpb.StatementsResponse-string) | repeated | In 23.1 we expect the response to only group on fingerprint_id in the overview page. We now return the aggregated list of unique app names, leaving the app field in the key empty. | [reserved](#support-status) |
 
 
 

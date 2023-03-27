@@ -171,9 +171,8 @@ export function makeTransactionsColumns(
       name: "applicationName",
       title: statisticsTableTitles.applicationName(statType),
       className: cx("statements-table__col-app-name"),
-      cell: (item: TransactionInfo) =>
-        item.stats_data?.app?.length > 0 ? item.stats_data?.app : unset,
-      sort: (item: TransactionInfo) => item.stats_data?.app,
+      cell: (item: TransactionInfo) => item.app_names?.join(", ") ?? "",
+      sort: (item: TransactionInfo) => item.app_names?.join(", ") ?? "",
       showByDefault: false,
     },
     {

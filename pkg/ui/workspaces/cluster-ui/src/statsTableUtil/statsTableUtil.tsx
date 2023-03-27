@@ -29,7 +29,7 @@ export type NodeNames = { [nodeId: string]: string };
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
   actions: "Actions",
-  applicationName: "Application Name",
+  applicationName: "Application Name(s)",
   bytesRead: "Bytes Read",
   clientAddress: "Client IP Address",
   contention: "Contention Time",

@@ -472,11 +472,13 @@ export class TransactionDetails extends React.Component<
                           )}
                         />
                         <SummaryCardItem
-                          label="Application name"
+                          label="Application names"
                           value={
-                            transaction?.stats_data?.app?.length > 0
-                              ? transaction?.stats_data?.app
-                              : unset
+                            transaction?.app_names?.length
+                              ? transaction.app_names
+                                  .map(app => (app ? app : unset))
+                                  .join(", ")
+                              : ""
                           }
                         />
                         <SummaryCardItem

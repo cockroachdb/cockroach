@@ -15,7 +15,17 @@ import {
   idAttr,
   statementAttr,
   txnFingerprintIdAttr,
+  unset,
+  ExecutionStatistics,
+  queryByName,
+  appAttr,
+  flattenStatementStats,
+  FixFingerprintHexValue,
 } from "src/util";
+import { createSelector } from "@reduxjs/toolkit";
+import { SqlStatsResponse } from "../api";
+import { AggregateStatistics } from "src/statementsTable";
+import { StatementDiagnosticsDictionary } from "src/store/statementDiagnostics";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
@@ -24,14 +34,14 @@ import {
 // between db-console and cluster-ui.
 
 export const selectExecutionID = (
-  _state: any,
+  _state: unknown,
   props: RouteComponentProps,
 ): string | null => {
   return getMatchParamByName(props.match, executionIdAttr);
 };
 
 export const selectID = (
-  _state: any,
+  _state: unknown,
   props: RouteComponentProps,
 ): string | null => {
   return getMatchParamByName(props.match, idAttr);
@@ -46,3 +56,88 @@ export const selectTransactionFingerprintID = (
   _state: unknown,
   props: RouteComponentProps,
 ): string | null => getMatchParamByName(props.match, txnFingerprintIdAttr);
+
+// selectStmtsAllApps returns the array of all unique apps within the data.
+export const selectStmtsAllApps = createSelector(
+  (data: SqlStatsResponse) => data,
+  data => {
+    if (!data) {
+      return [];
+    }
+
+    const apps = new Set<string>();
+    data.statements?.forEach(statement => {
+      statement.app_names?.forEach((app: string) => {
+        if (
+          data.internal_app_name_prefix &&
+          statement.key.key_data.app.startsWith(data.internal_app_name_prefix)
+        ) {
+          apps.add(data.internal_app_name_prefix);
+          return;
+        }
+        apps.add(app ? app : unset);
+      });
+    });
+
+    return Array.from(apps).sort();
+  },
+);
+
+export const selectStmtsCombiner = (
+  statsResp: SqlStatsResponse,
+  props: RouteComponentProps<unknown>,
+  diagnosticsReportsPerStatement: StatementDiagnosticsDictionary,
+): AggregateStatistics[] => {
+  // State is valid if we successfully fetched data, and the data has not yet been invalidated.
+  if (!statsResp) {
+    return null;
+  }
+  let statements = flattenStatementStats(statsResp.statements);
+  const app = queryByName(props.location, appAttr);
+  const containsInternalApps = (statement: ExecutionStatistics) =>
+    statement.app_names.some(app =>
+      app.startsWith(statsResp.internal_app_name_prefix),
+    );
+  const onlyInternalApps = (statement: ExecutionStatistics) =>
+    statement.app_names.every(app =>
+      app.startsWith(statsResp.internal_app_name_prefix),
+    );
+
+  if (app && app !== "All") {
+    const criteria = decodeURIComponent(app).split(",");
+    let showInternal = false;
+    if (criteria.includes(statsResp.internal_app_name_prefix)) {
+      showInternal = true;
+    }
+    if (criteria.includes(unset)) {
+      criteria.push("");
+    }
+
+    statements = statements.filter(
+      (statement: ExecutionStatistics) =>
+        (showInternal && containsInternalApps(statement)) ||
+        statement.app_names.some(app => criteria.includes(app)),
+    );
+  } else {
+    // We don't want to show statements that only come from internal apps.
+    statements = statements.filter(
+      (statement: ExecutionStatistics) => !onlyInternalApps(statement),
+    );
+  }
+
+  return statements.map(stmt => ({
+    aggregatedFingerprintID: stmt.statement_fingerprint_id?.toString(),
+    aggregatedFingerprintHexID: FixFingerprintHexValue(
+      stmt.statement_fingerprint_id?.toString(16),
+    ),
+    label: stmt.statement,
+    summary: stmt.statement_summary,
+    aggregatedTs: stmt.aggregated_ts,
+    implicitTxn: stmt.implicit_txn,
+    fullScan: stmt.full_scan,
+    database: stmt.database,
+    applicationNames: stmt.app_names.map(app => (app ? app : unset)),
+    stats: stmt.stats,
+    diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
+  }));
+};

@@ -27,7 +27,6 @@ import {
 import { Pagination } from "../pagination";
 import { statisticsClasses } from "./transactionsPageClasses";
 import {
-  aggregateAcrossNodeIDs,
   generateRegion,
   generateRegionNode,
   getTrxAppFilterOptions,
@@ -35,7 +34,7 @@ import {
   filterTransactions,
 } from "./utils";
 import { flatMap, merge } from "lodash";
-import { unique, syncHistory } from "src/util";
+import { unique, syncHistory, unset } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { Delayed } from "../delayed";
@@ -80,7 +79,6 @@ import {
   txnRequestSortOptions,
   getSortLabel,
 } from "src/util/sqlActivityConstants";
-import { Button } from "src/button";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -432,15 +430,14 @@ export class TransactionsPage extends React.Component<
       internal_app_name_prefix,
     );
 
-    const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
-      filteredTransactions,
-      statements,
-    ).map(t => ({
-      stats_data: t.stats_data,
-      node_id: t.node_id,
-      regions: generateRegion(t, statements),
-      regionNodes: generateRegionNode(t, statements, nodeRegions),
-    }));
+    const transactionsToDisplay: TransactionInfo[] = filteredTransactions.map(
+      t => ({
+        stats_data: t.stats_data,
+        regions: generateRegion(t, statements),
+        regionNodes: generateRegionNode(t, statements, nodeRegions),
+        app_names: t.app_names?.map(app => (app ? app : unset)).sort(),
+      }),
+    );
     const { current, pageSize } = pagination;
     const hasData = data?.transactions?.length > 0;
     const isUsedFilter = search?.length > 0;

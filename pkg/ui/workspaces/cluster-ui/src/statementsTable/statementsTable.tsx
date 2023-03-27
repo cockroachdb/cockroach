@@ -19,7 +19,6 @@ import {
   Count,
   TimestampToNumber,
   TimestampToMoment,
-  unset,
   DurationCheckSample,
 } from "src/util";
 import { DATE_FORMAT, Duration } from "src/util/format";
@@ -66,7 +65,7 @@ export interface AggregateStatistics {
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
-  applicationName: string;
+  applicationNames: string[];
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;
@@ -178,9 +177,8 @@ export function makeStatementsColumns(
       name: "applicationName",
       title: statisticsTableTitles.applicationName(statType),
       className: cx("statements-table__col-app-name"),
-      cell: (stmt: AggregateStatistics) =>
-        stmt.applicationName?.length > 0 ? stmt.applicationName : unset,
-      sort: (stmt: AggregateStatistics) => stmt.applicationName,
+      cell: (stmt: AggregateStatistics) => stmt.applicationNames?.join(", "),
+      sort: (stmt: AggregateStatistics) => stmt.applicationNames.join(","),
       showByDefault: false,
     },
     {

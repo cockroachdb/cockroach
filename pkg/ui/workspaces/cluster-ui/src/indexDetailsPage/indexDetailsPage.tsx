@@ -314,22 +314,17 @@ export class IndexDetailsPage extends React.Component<
 
   private getApps(): string[] {
     const { statements } = this.state;
-    let sawBlank = false;
-    let sawInternal = false;
-    const apps: { [app: string]: boolean } = {};
+    const apps = new Set<string>();
     statements.forEach((statement: AggregateStatistics) => {
-      if (statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX)) {
-        sawInternal = true;
-      } else if (statement.applicationName) {
-        apps[statement.applicationName] = true;
-      } else {
-        sawBlank = true;
-      }
+      statement.applicationNames?.forEach(app => {
+        if (app.startsWith(INTERNAL_APP_NAME_PREFIX)) {
+          apps.add(INTERNAL_APP_NAME_PREFIX);
+          return;
+        }
+        apps.add(app ? app : unset);
+      });
     });
-    return []
-      .concat(sawInternal ? [INTERNAL_APP_NAME_PREFIX] : [])
-      .concat(sawBlank ? [unset] : [])
-      .concat(Object.keys(apps).sort());
+    return Array.from(apps).sort();
   }
 
   private renderIndexRecommendations(
@@ -419,8 +414,11 @@ export class IndexDetailsPage extends React.Component<
     const { filters, search, statements } = this.state;
     const { nodeRegions, isTenant } = this.props;
     let filteredStatements = statements;
+    // We only expect 1 app in applicationNames here.
     const isInternal = (statement: AggregateStatistics) =>
-      statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX);
+      statement.applicationNames.some(app =>
+        app.startsWith(INTERNAL_APP_NAME_PREFIX),
+      );
 
     if (filters.app && filters.app !== "All") {
       const criteria = decodeURIComponent(filters.app).split(",");
@@ -435,7 +433,7 @@ export class IndexDetailsPage extends React.Component<
       filteredStatements = statements.filter(
         (statement: AggregateStatistics) =>
           (showInternal && isInternal(statement)) ||
-          criteria.includes(statement.applicationName),
+          statement.applicationNames.some(app => criteria.includes(app)),
       );
     }
     return filteredStatementsData(

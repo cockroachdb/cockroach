@@ -794,9 +794,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
   internal_app_name_prefix: "$ internal",
   transactions: [
     {
+      app_names: ["$ internal-select-running/get-claimed-jobs"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(100)],
-        app: "$ internal-select-running/get-claimed-jobs",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(93),
@@ -816,9 +816,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ internal-stmt-diag-poll"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(101)],
-        app: "$ internal-stmt-diag-poll",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(281),
@@ -838,9 +838,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ internal-get-tables"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(102)],
-        app: "$ internal-get-tables",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(1),
@@ -854,9 +854,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ internal-read orphaned leases"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(103)],
-        app: "$ internal-read orphaned leases",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(1),
@@ -870,9 +870,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ internal-expire-sessions"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(104)],
-        app: "$ internal-expire-sessions",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(280),
@@ -889,9 +889,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ internal-show-version"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(105)],
-        app: "$ internal-show-version",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(1),
@@ -905,9 +905,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ internal-delete-sessions"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(106), Long.fromInt(107)],
-        app: "$ internal-delete-sessions",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(141),
@@ -927,9 +927,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 5,
     },
     {
+      app_names: ["$ TEST"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(108)],
-        app: "$ TEST",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(278),
@@ -946,9 +946,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 4,
     },
     {
+      app_names: ["$ TEST"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(109)],
-        app: "$ TEST",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(140),
@@ -968,9 +968,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 4,
     },
     {
+      app_names: ["$ TEST"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(107)],
-        app: "$ TEST",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(280),
@@ -990,9 +990,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
       node_id: 4,
     },
     {
+      app_names: ["$ TEST EXACT"],
       stats_data: {
         statement_fingerprint_ids: [Long.fromInt(107)],
-        app: "$ TEST EXACT",
         aggregated_ts: timestamp,
         stats: {
           count: Long.fromInt(280),

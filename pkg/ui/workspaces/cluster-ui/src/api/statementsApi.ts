@@ -200,7 +200,7 @@ export function convertStatementRawFormatToAggregatedStatistics(
   s: StatementRawFormat,
 ): AggregateStatistics {
   return {
-    applicationName: s.app_name,
+    applicationNames: [s.app_name],
     database: s.metadata.db,
     fullScan: s.metadata.fullScan,
     implicitTxn: s.metadata.implicitTxn,

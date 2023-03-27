@@ -288,7 +288,7 @@ export const mockStmt = (
     aggregatedTs,
     implicitTxn: true,
     database: "defaultdb",
-    applicationName: "app",
+    applicationNames: ["app"],
     fullScan: false,
     ...partialStmt,
     stats: {
