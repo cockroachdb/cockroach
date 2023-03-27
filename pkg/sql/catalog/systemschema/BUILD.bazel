@@ -20,7 +20,6 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util/envutil",
         "//pkg/util/log",
     ],
 )

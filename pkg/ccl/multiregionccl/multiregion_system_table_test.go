@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -39,7 +38,6 @@ import (
 func TestMrSystemDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	skip.WithIssue(t, 98039, "flaky test")
 
@@ -257,7 +255,6 @@ func TestMrSystemDatabase(t *testing.T) {
 func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
 	cs := cluster.MakeTestingClusterSettings()

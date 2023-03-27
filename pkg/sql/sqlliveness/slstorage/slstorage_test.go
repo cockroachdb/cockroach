@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,16 +54,6 @@ func TestStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testStorage(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testStorage(t)
-	})
-}
-func testStorage(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -323,16 +312,7 @@ func testStorage(t *testing.T) {
 func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testConcurrentAccessesAndEvictions(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testConcurrentAccessesAndEvictions(t)
-	})
-}
-func testConcurrentAccessesAndEvictions(t *testing.T) {
+
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -477,16 +457,7 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 func TestConcurrentAccessSynchronization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testConcurrentAccessSynchronization(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testConcurrentAccessSynchronization(t)
-	})
-}
-func testConcurrentAccessSynchronization(t *testing.T) {
+
 	ctx := context.Background()
 	type filterFunc = func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error
 	var requestFilter atomic.Value
@@ -679,16 +650,7 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 func TestDeleteMidUpdateFails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testDeleteMidUpdateFails(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testDeleteMidUpdateFails(t)
-	})
-}
-func testDeleteMidUpdateFails(t *testing.T) {
+
 	ctx := context.Background()
 	type filterFunc = func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error
 	var respFilter atomic.Value
