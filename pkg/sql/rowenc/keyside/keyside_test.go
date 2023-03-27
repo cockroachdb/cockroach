@@ -41,7 +41,7 @@ func TestEncodeDecode(t *testing.T) {
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		newD, leftoverBytes, err := keyside.Decode(a, d.ResolvedType(), b, dir)
+		_, leftoverBytes, err := keyside.Decode(a, d.ResolvedType(), b, dir)
 		if len(leftoverBytes) > 0 {
 			return "Leftover bytes"
 		}
