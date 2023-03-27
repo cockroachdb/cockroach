@@ -77,8 +77,8 @@ to running roachtest and update repository URLs in the file to your liking.
 
 const envBuildJepsen = "ROACHTEST_BUILD_JEPSEN"
 
-const jepsenRepo = "https://github.com/cockroachdb/jepsen"
-const repoBranch = "tc-nightly"
+const jepsenRepo = "https://github.com/renatolabs/jepsen"
+const repoBranch = "allow-small-ranges"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
 const binaryVersion = "0.1.0-3d7c345d-standalone"
@@ -120,7 +120,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	// so do it before the initialization check for ease of iteration.
 	if err := c.GitClone(
 		ctx, t.L(),
-		"https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller,
+		"https://github.com/renatolabs/jepsen", "/mnt/data1/jepsen", "allow-small-ranges", controller,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ type jepsenConfig struct {
 }
 
 func makeJepsenConfig() jepsenConfig {
-	if e := os.Getenv(envBuildJepsen); e != "" {
+	if true { // e := os.Getenv(envBuildJepsen); e != "" {
 		return jepsenConfig{
 			buildFromSource: true,
 			repoURL:         jepsenRepo,
