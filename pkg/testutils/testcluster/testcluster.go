@@ -850,6 +850,14 @@ func (tc *TestCluster) WaitForVoters(
 	return tc.waitForNewReplicas(startKey, true /* waitForVoter */, targets...)
 }
 
+// WaitForVotersOrFatal is the same as WaitForVoters but it will Fatal the test
+// on error.
+func (tc *TestCluster) WaitForVotersOrFatal(
+	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) {
+	require.NoError(t, tc.WaitForVoters(startKey, targets...))
+}
+
 // waitForNewReplicas waits for each of the targets to have a fully initialized
 // replica of the range indicated by startKey.
 //
