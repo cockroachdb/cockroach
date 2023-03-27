@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -174,12 +175,16 @@ func (g *githubIssues) createPostRequest(
 		clusterParams[roachtestPrefix("encrypted")] = fmt.Sprintf("%v", g.cluster.encAtRest)
 	}
 
+	issueMessage := messagePrefix + message
+	if strings.Contains(issueName, "costfuzz/workload-replay") {
+		issueMessage = "This details about this test failure have been omitted; consult the log for more details"
+	}
 	return issues.PostRequest{
 		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        issueName,
-		Message:         messagePrefix + message,
+		Message:         issueMessage,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
