@@ -108,8 +108,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	require.Nil(t, rc.Checksum)
 
 	// Need to reset the context, since we deadlined it above.
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+	ctx = context.Background()
 	// Next condition, node should quiesce.
 	tc.repl.store.Stopper().Quiesce(ctx)
 	rc, err = tc.repl.getChecksum(ctx, uuid.FastMakeV4())
