@@ -1173,7 +1173,7 @@ ORDER BY
 statistics_name  column_names  row_count  null_count  has_histogram
 s                {a}           3          0           true
 s                {b}           3          0           true
-s                {j}           3          0           false
+s                {j}           3          0           true
 s                {rowid}       3          0           true
 
 # Test that non-index columns have histograms collected for them, with
@@ -2264,7 +2264,7 @@ SHOW STATISTICS USING JSON FOR TABLE j;
 statement ok
 ALTER TABLE j INJECT STATISTICS '$j_stats'
 
-statement error pq: cannot create partial statistics on an inverted index column
+statement error pq: table j does not contain a non-partial forward index with j as a prefix column
 CREATE STATISTICS j_partial ON j FROM j USING EXTREMES;
 
 statement ok
