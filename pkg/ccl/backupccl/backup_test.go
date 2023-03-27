@@ -3421,7 +3421,6 @@ func startBackgroundWrites(
 
 func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 58211, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const rows = 10
