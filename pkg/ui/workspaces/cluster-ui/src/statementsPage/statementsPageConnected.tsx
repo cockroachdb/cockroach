@@ -28,7 +28,6 @@ import {
   StatementsPageStateProps,
 } from "./statementsPage";
 import {
-  selectApps,
   selectDatabases,
   selectLastReset,
   selectStatements,
@@ -72,6 +71,7 @@ import {
   StatementDiagnosticsReport,
   SqlStatsSortType,
 } from "../api";
+import { selectStmtsAllApps } from "../selectors";
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps & RouteComponentProps;
@@ -93,7 +93,7 @@ export const ConnectedStatementsPage = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
         ...props,
-        apps: selectApps(state),
+        apps: selectStmtsAllApps(state.adminUI?.statements?.data),
         columns: selectColumns(state),
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
