@@ -267,7 +267,8 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	if reader.ConsistentIterators() {
 		iter = maybeUnwrapUnsafeIter(reader.NewMVCCIterator(MVCCKeyIterKind, opts)).(*pebbleIterator)
 	} else {
-		iter = newPebbleIteratorByCloning(intentIter.GetRawIter(), opts, StandardDurability)
+		cloneCtx := intentIter.CloneContext()
+		iter = newPebbleIteratorByCloning(cloneCtx.rawIter, opts, StandardDurability)
 	}
 
 	*iiIter = intentInterleavingIter{
