@@ -361,9 +361,9 @@ type EngineIterator interface {
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() ([]byte, error)
-	// GetRawIter is a low-level method only for use in the storage package,
-	// that returns the underlying pebble Iterator.
-	GetRawIter() pebbleiter.Iterator
+	// CloneContext is a low-level method only for use in the storage package,
+	// that provides sufficient context that the iterator may be cloned.
+	CloneContext() CloneContext
 	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
 	// additional exclusive upper limit parameter. The limit is semantically
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
@@ -386,6 +386,12 @@ type EngineIterator interface {
 	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
+}
+
+// CloneContext is an opaque type encapsulating sufficient context to construct
+// a clone of an existing iterator.
+type CloneContext struct {
+	rawIter pebbleiter.Iterator
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.

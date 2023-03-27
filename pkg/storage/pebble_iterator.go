@@ -887,9 +887,9 @@ func (p *pebbleIterator) IsPrefix() bool {
 	return p.prefix
 }
 
-// GetRawIter is part of the EngineIterator interface.
-func (p *pebbleIterator) GetRawIter() pebbleiter.Iterator {
-	return p.iter
+// CloneContext is part of the EngineIterator interface.
+func (p *pebbleIterator) CloneContext() CloneContext {
+	return CloneContext{rawIter: p.iter}
 }
 
 func (p *pebbleIterator) getBlockPropertyFilterMask() pebble.BlockPropertyFilterMask {
