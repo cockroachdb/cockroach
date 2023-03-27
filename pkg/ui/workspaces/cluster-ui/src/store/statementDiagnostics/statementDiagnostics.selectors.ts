@@ -26,7 +26,7 @@ export const selectStatementDiagnosticsReports = createSelector(
   state => state.data?.reports,
 );
 
-type StatementDiagnosticsDictionary = {
+export type StatementDiagnosticsDictionary = {
   [statementFingerprint: string]: IStatementDiagnosticsReport[];
 };
 

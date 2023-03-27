@@ -27,7 +27,6 @@ import {
 import { Pagination, ResultsPerPageLabel } from "../pagination";
 import { statisticsClasses } from "./transactionsPageClasses";
 import {
-  aggregateAcrossNodeIDs,
   generateRegionNode,
   getTrxAppFilterOptions,
   searchTransactionsData,
@@ -448,11 +447,6 @@ export class TransactionsPage extends React.Component<
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
 
-    // We apply the search filters and app name filters prior to aggregating across Node IDs
-    // in order to match what's done on the Statements Page.
-    //
-    // TODO(davidh): Once the redux layer for TransactionsPage is added to this repo,
-    // extract this work into the selector
     const { transactions: filteredTransactions, activeFilters } =
       filterTransactions(
         searchTransactionsData(search, data?.transactions || [], statements),
@@ -468,14 +462,13 @@ export class TransactionsPage extends React.Component<
       internal_app_name_prefix,
     );
 
-    const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
-      filteredTransactions,
-      statements,
-    ).map(t => ({
-      stats_data: t.stats_data,
-      node_id: t.node_id,
-      regionNodes: generateRegionNode(t, statements, nodeRegions),
-    }));
+    const transactionsToDisplay: TransactionInfo[] = filteredTransactions.map(
+      t => ({
+        stats_data: t.stats_data,
+        node_id: t.node_id,
+        regionNodes: generateRegionNode(t, statements, nodeRegions),
+      }),
+    );
     const { current, pageSize } = pagination;
     const hasData = data?.transactions?.length > 0;
     const isUsedFilter = search?.length > 0;
