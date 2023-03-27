@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -50,7 +49,6 @@ func TestColdStartLatency(t *testing.T) {
 	skip.WithIssue(t, 96334)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
@@ -274,7 +272,7 @@ func TestColdStartLatency(t *testing.T) {
                             'progress',
                             progress
                            )->'AutoSpanConfigReconciliation' AS p
-                      FROM system.jobs
+                      FROM crdb_internal.system_jobs
                      WHERE status = 'running'
                 ),
        checkpoint AS (
