@@ -154,6 +154,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, goTestArgs...)
 	}
+	args = append(args, d.getGoTestEnvArgs()...)
 	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)

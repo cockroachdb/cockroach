@@ -279,6 +279,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_filter", filesRegexp+"/"+subtests)
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
+	args = append(args, d.getGoTestEnvArgs()...)
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
