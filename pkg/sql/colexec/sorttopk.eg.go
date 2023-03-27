@@ -408,7 +408,13 @@ func spool_false(t *topKSorter) {
 }
 
 func compareRow_false(
-	t *topKSorter, vecIdx1 int, vecIdx2 int, rowIdx1 int, rowIdx2 int, groupIdx1 int, groupIdx2 int,
+	t *topKSorter,
+	vecIdx1 int,
+	vecIdx2 int,
+	rowIdx1 int,
+	rowIdx2 int,
+	groupIdx1 int,
+	groupIdx2 int,
 ) int {
 	for i := range t.orderingCols {
 		info := t.orderingCols[i]
@@ -428,7 +434,13 @@ func compareRow_false(
 }
 
 func compareRow_true(
-	t *topKSorter, vecIdx1 int, vecIdx2 int, rowIdx1 int, rowIdx2 int, groupIdx1 int, groupIdx2 int,
+	t *topKSorter,
+	vecIdx1 int,
+	vecIdx2 int,
+	rowIdx1 int,
+	rowIdx2 int,
+	groupIdx1 int,
+	groupIdx2 int,
 ) int {
 	for i := range t.orderingCols {
 		// TODO(harding): If groupIdx1 != groupIdx2, we may be able to do some

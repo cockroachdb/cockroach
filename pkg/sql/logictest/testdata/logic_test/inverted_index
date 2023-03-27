@@ -73,14 +73,6 @@ CREATE INVERTED INDEX ON c (foo DESC)
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error column foo of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
-CREATE TABLE d (
-  id INT PRIMARY KEY,
-  foo JSONB,
-  bar JSONB,
-  INVERTED INDEX (foo, bar)
-)
-
 statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,

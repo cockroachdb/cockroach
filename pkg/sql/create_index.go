@@ -554,7 +554,7 @@ func replaceExpressionElemsWithVirtualCols(
 			}
 
 			if isInverted {
-				if i < lastColumnIdx && colinfo.ColumnTypeIsOnlyInvertedIndexable(typ) {
+				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
 					return errors.WithHint(
 						pgerror.Newf(
 							pgcode.InvalidTableDefinition,

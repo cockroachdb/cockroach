@@ -336,8 +336,11 @@ DROP INDEX err
 statement error index element \(a, b\) of type record is not indexable
 CREATE INDEX err ON t (a, (row(a, b)));
 
-statement error index element j->'a' of type jsonb is not allowed as a prefix column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement ok
 CREATE INVERTED INDEX err ON t ((j->'a'), j);
+
+statement ok
+DROP INDEX err
 
 statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (a + b));
