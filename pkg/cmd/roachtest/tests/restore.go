@@ -411,7 +411,17 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	if hw.mem != spec.Auto {
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
-	return r.MakeClusterSpec(hw.nodes, clusterOpts...)
+	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
+
+	if s.Cloud == "aws" && s.VolumeSize != 0 {
+		// Work around an issue that RAID0s local NVMe and GP3 storage together:
+		// https://github.com/cockroachdb/cockroach/issues/98783.
+		//
+		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
+		s.InstanceType = spec.AWSMachineType(s.CPUs, s.Mem)
+		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
+	}
+	return s
 }
 
 // String prints the hardware specs. If verbose==true, verbose specs are printed.
