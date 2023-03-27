@@ -553,7 +553,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 1
 		return version
 	}
-	v0 := clusterversion.ByKey(clusterversion.TODODelete_V22_1)
+	v0 := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
 	v0_fence := fence(v0)
 	v1 := next(v0)
 	v1_fence := fence(v1)
@@ -578,6 +578,7 @@ func TestPrecondition(t *testing.T) {
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          v0,
+			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 		},
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.

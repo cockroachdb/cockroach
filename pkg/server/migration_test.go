@@ -37,11 +37,15 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v := func(major, minor int32) roachpb.Version {
-		return roachpb.Version{Major: major, Minor: minor}
-	}
-	cv := func(major, minor int32) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{Version: v(major, minor)}
+	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	// In cases where we use prev as the binary version for the test, set the
+	// minimum supported version to prev's binary version - 1 Major version.
+	prevMsv := clusterversion.ClusterVersion{
+		Version: roachpb.Version{
+			Major: prev.Version.Major - 1,
+			Minor: prev.Version.Minor,
+		},
 	}
 
 	var tests = []struct {
@@ -51,27 +55,27 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 		expErrMatch               string // empty if expecting a nil error
 	}{
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(20, 1),
+			binaryVersion:             cur.Version,
+			binaryMinSupportedVersion: prev.Version,
+			targetClusterVersion:      prev,
 			expErrMatch:               "",
 		},
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(20, 2),
+			binaryVersion:             cur.Version,
+			binaryMinSupportedVersion: prev.Version,
+			targetClusterVersion:      cur,
 			expErrMatch:               "",
 		},
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(21, 1),
+			binaryVersion:             prev.Version,
+			binaryMinSupportedVersion: prevMsv.Version,
+			targetClusterVersion:      cur,
 			expErrMatch:               "binary version.*less than target cluster version",
 		},
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(19, 2),
+			binaryVersion:             cur.Version,
+			binaryMinSupportedVersion: prev.Version,
+			targetClusterVersion:      prevMsv,
 			expErrMatch:               "target cluster version.*less than binary's min supported version",
 		},
 	}
@@ -89,7 +93,8 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &TestingKnobs{
-					BinaryVersionOverride: test.binaryVersion,
+					BootstrapVersionKeyOverride: clusterversion.BinaryMinSupportedVersionKey,
+					BinaryVersionOverride:       test.binaryVersion,
 				},
 			},
 		})
@@ -114,12 +119,8 @@ func TestBumpClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v := func(major, minor int32) roachpb.Version {
-		return roachpb.Version{Major: major, Minor: minor}
-	}
-	cv := func(major, minor int32) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{Version: v(major, minor)}
-	}
+	cur := clusterversion.TestingBinaryVersion
+	prev := clusterversion.TestingBinaryMinSupportedVersion
 
 	var tests = []struct {
 		binaryVersion        roachpb.Version
@@ -128,22 +129,22 @@ func TestBumpClusterVersion(t *testing.T) {
 		expClusterVersion    clusterversion.ClusterVersion
 	}{
 		{
-			binaryVersion:        v(21, 1),
-			activeClusterVersion: cv(20, 2),
-			bumpClusterVersion:   cv(20, 2),
-			expClusterVersion:    cv(20, 2),
+			binaryVersion:        cur,
+			activeClusterVersion: clusterversion.ClusterVersion{Version: prev},
+			bumpClusterVersion:   clusterversion.ClusterVersion{Version: prev},
+			expClusterVersion:    clusterversion.ClusterVersion{Version: prev},
 		},
 		{
-			binaryVersion:        v(21, 1),
-			activeClusterVersion: cv(20, 2),
-			bumpClusterVersion:   cv(21, 1),
-			expClusterVersion:    cv(21, 1),
+			binaryVersion:        cur,
+			activeClusterVersion: clusterversion.ClusterVersion{Version: prev},
+			bumpClusterVersion:   clusterversion.ClusterVersion{Version: cur},
+			expClusterVersion:    clusterversion.ClusterVersion{Version: cur},
 		},
 		{
-			binaryVersion:        v(21, 1),
-			activeClusterVersion: cv(21, 1),
-			bumpClusterVersion:   cv(20, 2),
-			expClusterVersion:    cv(21, 1),
+			binaryVersion:        cur,
+			activeClusterVersion: clusterversion.ClusterVersion{Version: cur},
+			bumpClusterVersion:   clusterversion.ClusterVersion{Version: prev},
+			expClusterVersion:    clusterversion.ClusterVersion{Version: cur},
 		},
 	}
 

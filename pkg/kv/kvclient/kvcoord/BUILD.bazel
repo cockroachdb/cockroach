@@ -157,7 +157,6 @@ go_test(
     deps = [
         "//build/bazelutil:noop",
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",

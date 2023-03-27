@@ -414,6 +414,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 			BinaryVersionOverride:          v0,
 		},
 		// Inject an upgrade which would run to upgrade the cluster.

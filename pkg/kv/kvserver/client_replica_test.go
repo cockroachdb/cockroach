@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -4873,8 +4874,8 @@ func TestRangeMigration(t *testing.T) {
 
 	// We're going to be transitioning from startV to endV. Think a cluster of
 	// binaries running vX, but with active version vX-1.
-	startV := roachpb.Version{Major: 41}
-	endV := roachpb.Version{Major: 42}
+	startV := roachpb.Version{Major: clusterversion.TestingBinaryMinSupportedVersion.Major}
+	endV := roachpb.Version{Major: clusterversion.TestingBinaryVersion.Major}
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -4884,6 +4885,7 @@ func TestRangeMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startV,
+					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 			},
