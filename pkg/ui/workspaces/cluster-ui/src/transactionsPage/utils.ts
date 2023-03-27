@@ -16,16 +16,10 @@ import {
 } from "../queryFilter";
 import { AggregateStatistics } from "../statementsTable";
 import Long from "long";
-import _ from "lodash";
 import {
-  addExecStats,
-  aggregateNumericStats,
-  FixLong,
   longToInt,
-  TimestampToNumber,
   addStatementStats,
   flattenStatementStats,
-  DurationToNumber,
   computeOrUseStmtSummary,
   transactionScopedStatementKey,
   unset,
@@ -33,7 +27,6 @@ import {
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Transaction =
   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
@@ -53,7 +46,6 @@ export const getTrxAppFilterOptions = (
 
   return Array.from(uniqueAppNames).sort();
 };
-
 export const collectStatementsText = (statements: Statement[]): string =>
   statements.map(s => s.key.key_data.query).join("\n");
 
@@ -182,8 +174,8 @@ export const filterTransactions = (
   // Current filters: app, service latency, nodes and regions.
   const filteredTransactions = data
     .filter((t: Transaction) => {
-      const isInternal = (t: Transaction) =>
-        t.stats_data.app.startsWith(internalAppNamePrefix);
+      const app = t.stats_data.app;
+      const isInternal = app.startsWith(internalAppNamePrefix);
 
       if (filters.app && filters.app != "All") {
         const apps = filters.app.split(",");
@@ -196,13 +188,13 @@ export const filterTransactions = (
         }
 
         return (
-          (showInternal && isInternal(t)) ||
-          t.stats_data.app === filters.app ||
-          apps.includes(t.stats_data.app)
+          (showInternal && isInternal) ||
+          app === filters.app ||
+          apps.includes(app)
         );
       } else {
         // We don't want to show internal transactions by default.
-        return !isInternal(t);
+        return !isInternal;
       }
     })
     .filter(
@@ -316,109 +308,4 @@ export const generateRegionNode = (
     );
   });
   return regionNodes;
-};
-
-type TransactionWithFingerprint = Transaction & { fingerprint: string };
-
-// withFingerprint adds the concatenated statement fingerprints to the Transaction object since it
-// only comes with statement_fingerprint_ids
-const withFingerprint = function (
-  t: Transaction,
-  stmts: Statement[],
-): TransactionWithFingerprint {
-  return {
-    ...t,
-    fingerprint: statementFingerprintIdsToText(
-      t.stats_data.statement_fingerprint_ids,
-      stmts,
-    ),
-  };
-};
-
-// addTransactionStats adds together two stat objects into one using their counts to compute a new
-// average for the numeric statistics. It's modeled after the similar `addStatementStats` function
-function addTransactionStats(
-  a: TransactionStats,
-  b: TransactionStats,
-): Required<TransactionStats> {
-  const countA = FixLong(a.count).toInt();
-  const countB = FixLong(b.count).toInt();
-  return {
-    count: a.count.add(b.count),
-    max_retries: a.max_retries.greaterThan(b.max_retries)
-      ? a.max_retries
-      : b.max_retries,
-    num_rows: aggregateNumericStats(a.num_rows, b.num_rows, countA, countB),
-    service_lat: aggregateNumericStats(
-      a.service_lat,
-      b.service_lat,
-      countA,
-      countB,
-    ),
-    retry_lat: aggregateNumericStats(a.retry_lat, b.retry_lat, countA, countB),
-    commit_lat: aggregateNumericStats(
-      a.commit_lat,
-      b.commit_lat,
-      countA,
-      countB,
-    ),
-    idle_lat: aggregateNumericStats(a.idle_lat, b.idle_lat, countA, countB),
-    rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
-    rows_written: aggregateNumericStats(
-      a.rows_written,
-      b.rows_written,
-      countA,
-      countB,
-    ),
-    bytes_read: aggregateNumericStats(
-      a.bytes_read,
-      b.bytes_read,
-      countA,
-      countB,
-    ),
-    exec_stats: addExecStats(a.exec_stats, b.exec_stats),
-  };
-}
-
-function combineTransactionStats(
-  txnStats: TransactionStats[],
-): TransactionStats {
-  return _.reduce(txnStats, addTransactionStats);
-}
-
-// mergeTransactionStats takes a list of transactions (assuming they're all for the same fingerprint
-// and returns a copy of the first element with its `stats_data.stats` object replaced with a
-// merged stats object that aggregates statistics from every copy of the fingerprint in the list
-// provided
-// This function SHOULD NOT mutate any objects in the provided txns array.
-const mergeTransactionStats = function (txns: Transaction[]): Transaction {
-  if (txns.length === 0) {
-    return null;
-  }
-  const txn = _.cloneDeep(txns[0]);
-  txn.stats_data.stats = combineTransactionStats(
-    txns.map(t => t.stats_data.stats),
-  );
-  return txn;
-};
-
-// aggregateAcrossNodeIDs takes a list of transactions and a list of statements that those
-// transactions reference and returns a list of transactions that have been grouped by their
-// fingerprints and had their statistics aggregated across copies of the transaction. This is used
-// to deduplicate identical copies of the transaction that are run on different nodes. CRDB returns
-// different objects to represent those transactions.
-//
-// The function uses the fingerprint and the `app` that ran the transaction as the key to group the
-// transactions when deduping.
-//
-export const aggregateAcrossNodeIDs = function (
-  t: Transaction[],
-  stmts: Statement[],
-): Transaction[] {
-  return _.chain(t)
-    .map(t => withFingerprint(t, stmts))
-    .groupBy(t => t.fingerprint)
-    .mapValues(mergeTransactionStats)
-    .values()
-    .value();
 };
