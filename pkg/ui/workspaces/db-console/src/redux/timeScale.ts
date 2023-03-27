@@ -167,6 +167,11 @@ export const selectTimeScale = createSelector(
   timeScaleState => timeScaleState.scale,
 );
 
+export const selectMetricsTime = createSelector(
+  (state: AdminUIState) => state.timeScale.metricsTime,
+  x => x,
+);
+
 export type AdjustTimeScaleReturnType = {
   timeScale: TimeScale;
   adjustmentReason?: "low_resolution_period" | "deleted_data_period";
