@@ -27,7 +27,6 @@ import {
 import { Pagination } from "../pagination";
 import { statisticsClasses } from "./transactionsPageClasses";
 import {
-  aggregateAcrossNodeIDs,
   generateRegion,
   generateRegionNode,
   getTrxAppFilterOptions,
@@ -80,7 +79,6 @@ import {
   txnRequestSortOptions,
   getSortLabel,
 } from "src/util/sqlActivityConstants";
-import { Button } from "src/button";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -432,15 +430,13 @@ export class TransactionsPage extends React.Component<
       internal_app_name_prefix,
     );
 
-    const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
-      filteredTransactions,
-      statements,
-    ).map(t => ({
-      stats_data: t.stats_data,
-      node_id: t.node_id,
-      regions: generateRegion(t, statements),
-      regionNodes: generateRegionNode(t, statements, nodeRegions),
-    }));
+    const transactionsToDisplay: TransactionInfo[] = filteredTransactions.map(
+      t => ({
+        stats_data: t.stats_data,
+        regions: generateRegion(t, statements),
+        regionNodes: generateRegionNode(t, statements, nodeRegions),
+      }),
+    );
     const { current, pageSize } = pagination;
     const hasData = data?.transactions?.length > 0;
     const isUsedFilter = search?.length > 0;

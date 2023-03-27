@@ -9,82 +9,21 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import {
-  aggregateStatementStats,
-  appAttr,
-  FixFingerprintHexValue,
-  combineStatementStats,
-  ExecutionStatistics,
-  flattenStatementStats,
-  formatDate,
-  queryByName,
-  statementKey,
-  StatementStatistics,
-  TimestampToMoment,
-  unset,
-} from "src/util";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { formatDate, TimestampToMoment } from "src/util";
 import { RouteComponentProps } from "react-router-dom";
 
 import { AppState } from "src/store";
 import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnostics";
-import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
 import { localStorageSelector } from "../store/utils/selectors";
 import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
-
-type ICollectedStatementStatistics =
-  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-export interface StatementsSummaryData {
-  statementFingerprintID: string;
-  statementFingerprintHexID: string;
-  statement: string;
-  statementSummary: string;
-  aggregatedTs: number;
-  implicitTxn: boolean;
-  fullScan: boolean;
-  database: string;
-  applicationName: string;
-  stats: StatementStatistics[];
-}
+import { selectStmtsCombiner } from "src/selectors/common";
 
 export const selectStatementsLastUpdated = createSelector(
   sqlStatsSelector,
   sqlStats => sqlStats.lastUpdated,
 );
-
-// selectApps returns the array of all apps with statement statistics present
-// in the data.
-export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
-  if (!sqlStatsState.data || !sqlStatsState.valid) {
-    return [];
-  }
-
-  let sawBlank = false;
-  let sawInternal = false;
-  const apps: { [app: string]: boolean } = {};
-  sqlStatsState.data.statements.forEach(
-    (statement: ICollectedStatementStatistics) => {
-      if (
-        sqlStatsState.data.internal_app_name_prefix &&
-        statement.key.key_data.app.startsWith(
-          sqlStatsState.data.internal_app_name_prefix,
-        )
-      ) {
-        sawInternal = true;
-      } else if (statement.key.key_data.app) {
-        apps[statement.key.key_data.app] = true;
-      } else {
-        sawBlank = true;
-      }
-    },
-  );
-  return []
-    .concat(sawInternal ? [sqlStatsState.data.internal_app_name_prefix] : [])
-    .concat(sawBlank ? [unset] : [])
-    .concat(Object.keys(apps).sort());
-});
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(databasesListSelector, state => {
@@ -105,8 +44,7 @@ export const selectTotalFingerprints = createSelector(
     if (!state.data) {
       return 0;
     }
-    const aggregated = aggregateStatementStats(state.data.statements);
-    return aggregated.length;
+    return state.data.statements?.length ?? 0;
   },
 );
 
@@ -135,88 +73,10 @@ export const selectStatementsDataInFlight = createSelector(
 );
 
 export const selectStatements = createSelector(
-  sqlStatsSelector,
+  (state: AppState) => state.adminUI?.statements?.data,
   (_: AppState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
-  (
-    state: SQLStatsState,
-    props: RouteComponentProps<any>,
-    diagnosticsReportsPerStatement,
-  ): AggregateStatistics[] => {
-    // State is valid if we successfully fetched data, and the data has not yet been invalidated.
-    if (!state.data || !state.valid) {
-      return null;
-    }
-    let statements = flattenStatementStats(state.data.statements);
-    const app = queryByName(props.location, appAttr);
-    const isInternal = (statement: ExecutionStatistics) =>
-      statement.app.startsWith(state.data.internal_app_name_prefix);
-
-    if (app && app !== "All") {
-      const criteria = decodeURIComponent(app).split(",");
-      let showInternal = false;
-      if (criteria.includes(state.data.internal_app_name_prefix)) {
-        showInternal = true;
-      }
-      if (criteria.includes(unset)) {
-        criteria.push("");
-      }
-
-      statements = statements.filter(
-        (statement: ExecutionStatistics) =>
-          (showInternal && isInternal(statement)) ||
-          criteria.includes(statement.app),
-      );
-    } else {
-      // We don't want to show internal statements by default.
-      statements = statements.filter(
-        (statement: ExecutionStatistics) => !isInternal(statement),
-      );
-    }
-
-    const statsByStatementKey: {
-      [statement: string]: StatementsSummaryData;
-    } = {};
-    statements.forEach(stmt => {
-      const key = statementKey(stmt);
-      if (!(key in statsByStatementKey)) {
-        statsByStatementKey[key] = {
-          statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
-          statementFingerprintHexID: FixFingerprintHexValue(
-            stmt.statement_fingerprint_id?.toString(16),
-          ),
-          statement: stmt.statement,
-          statementSummary: stmt.statement_summary,
-          aggregatedTs: stmt.aggregated_ts,
-          implicitTxn: stmt.implicit_txn,
-          fullScan: stmt.full_scan,
-          database: stmt.database,
-          applicationName: stmt.app,
-          stats: [],
-        };
-      }
-      statsByStatementKey[key].stats.push(stmt.stats);
-    });
-
-    return Object.keys(statsByStatementKey).map(key => {
-      const stmt = statsByStatementKey[key];
-      return {
-        aggregatedFingerprintID: stmt.statementFingerprintID,
-        aggregatedFingerprintHexID: FixFingerprintHexValue(
-          stmt.statementFingerprintHexID,
-        ),
-        label: stmt.statement,
-        summary: stmt.statementSummary,
-        aggregatedTs: stmt.aggregatedTs,
-        implicitTxn: stmt.implicitTxn,
-        fullScan: stmt.fullScan,
-        database: stmt.database,
-        applicationName: stmt.applicationName,
-        stats: combineStatementStats(stmt.stats),
-        diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
-      };
-    });
-  },
+  selectStmtsCombiner,
 );
 
 export const selectStatementsLastError = createSelector(

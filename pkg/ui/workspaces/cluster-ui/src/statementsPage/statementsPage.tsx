@@ -84,7 +84,6 @@ import {
   stmtRequestSortOptions,
   getSortLabel,
 } from "src/util/sqlActivityConstants";
-import { Button } from "src/button";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
