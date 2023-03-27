@@ -1027,7 +1027,7 @@ func checkColumnsValidForInvertedIndex(
 						"the last column in an inverted index cannot have the DESC option")
 				}
 				// Any preceding columns must not be inverted indexable.
-				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
+				if i < lastCol && colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()) {
 					return errors.WithHint(
 						pgerror.Newf(
 							pgcode.FeatureNotSupported,

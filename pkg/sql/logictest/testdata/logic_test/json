@@ -964,7 +964,7 @@ INSERT INTO t VALUES
 # Ensuring the ordering is intact due
 # to the creation of an index
 query T
-SELECT x FROM t
+SELECT x FROM t ORDER BY x
 ----
 "a"
 "aa"
