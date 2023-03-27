@@ -81,6 +81,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		return nil
 	}
 	if !r.ContainsKeyRange(span.Key, span.EndKey) || !r.shouldGossip(ctx) {
+		log.Infof(ctx, "XXX not containing range or should not gossip")
 		return nil
 	}
 
@@ -116,6 +117,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}
 		key := gossip.MakeNodeLivenessKey(kvLiveness.NodeID)
+		log.Infof(ctx, "XXX gossip n%d", kvLiveness.NodeID)
 		// Look up liveness from gossip; skip gossiping anew if unchanged.
 		if err := r.store.Gossip().GetInfoProto(key, &gossipLiveness); err == nil {
 			if gossipLiveness == kvLiveness && r.store.Gossip().InfoOriginatedHere(key) {

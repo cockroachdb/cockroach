@@ -436,19 +436,24 @@ func (r *Replica) leasePostApplyLocked(
 	// incremental liveness updates may have been lost, so we want to make sure that
 	// the latest view of node liveness ends up in gossip.
 	nls := keys.NodeLivenessSpan
+	if kvserverbase.ContainsKey(r.descRLocked(), keys.NodeLivenessPrefix) {
+		log.Infof(ctx, "XXX liveness leaseholder is %v (following %v); leaseChangingHands=%t iAmTheLeaseholder=%t", newLease, prevLease, leaseChangingHands, iAmTheLeaseHolder)
+	}
 	if leaseChangingHands && iAmTheLeaseHolder && kvserverbase.ContainsKeyRange(r.descRLocked(), nls.Key, nls.EndKey) {
 		// NB: run these in an async task to keep them out of the critical section
 		// (r.mu is held here).
 		_ = r.store.stopper.RunAsyncTask(r.AnnotateCtx(context.Background()), "lease-triggers", func(ctx context.Context) {
+			log.Infof(ctx, "XXX gossiping")
 			// Re-acquire the raftMu, as we are now in an async task.
 			r.raftMu.Lock()
 			defer r.raftMu.Unlock()
 			if _, err := r.IsDestroyed(); err != nil {
 				// Nothing to do.
+				log.Infof(ctx, "XXX destroyed")
 				return
 			}
 			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Errorf(ctx, "%v", err)
+				log.Errorf(ctx, "XXX %v", err)
 			}
 		})
 	}
