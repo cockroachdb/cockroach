@@ -416,8 +416,7 @@ func (r *Replica) leasePostApplyLocked(
 	// this gossip if we're taking over after a leaseholder failure. In both cases,
 	// incremental liveness updates may have been lost, so we want to make sure that
 	// the latest view of node liveness ends up in gossip.
-	nls := keys.NodeLivenessSpan
-	if leaseChangingHands && iAmTheLeaseHolder && kvserverbase.ContainsKeyRange(r.descRLocked(), nls.Key, nls.EndKey) {
+	if leaseChangingHands && iAmTheLeaseHolder {
 		// NB: run these in an async task to keep them out of the critical section
 		// (r.mu is held here).
 		_ = r.store.stopper.RunAsyncTask(r.AnnotateCtx(context.Background()), "lease-triggers", func(ctx context.Context) {
