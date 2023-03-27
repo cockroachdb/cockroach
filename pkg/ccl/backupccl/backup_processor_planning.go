@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -170,7 +171,11 @@ func distBackup(
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
 	i := 0
+	var jobID jobspb.JobID
 	for sqlInstanceID, spec := range backupSpecs {
+		if i == 0 {
+			jobID = jobspb.JobID(spec.JobID)
+		}
 		corePlacement[i].SQLInstanceID = sqlInstanceID
 		corePlacement[i].Core.BackupData = spec
 		i++
@@ -206,6 +211,12 @@ func distBackup(
 	defer recv.Release()
 
 	defer close(progCh)
+	execCfg := execCtx.ExecCfg()
+	if err := jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper,
+		p, execCfg.InternalDB, jobID); err != nil {
+		log.Warningf(ctx, "failed to store DistSQL plan diagram for job %d: %+v", jobID, err.Error())
+	}
+
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
 	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)

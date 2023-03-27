@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -266,6 +268,12 @@ func distImport(
 			if err := testingKnobs.beforeRunDSP(); err != nil {
 				return err
 			}
+		}
+
+		execCfg := execCtx.ExecCfg()
+		if err := jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper,
+			p, execCfg.InternalDB, job.ID()); err != nil {
+			log.Warningf(ctx, "failed to store DistSQL plan diagram for job %d: %+v", job.ID(), err.Error())
 		}
 
 		// Copy the evalCtx, as dsp.Run() might change it.

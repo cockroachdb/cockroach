@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -110,7 +112,11 @@ func distStreamIngest(
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
+	var jobID jobspb.JobID
 	for i := range streamIngestionSpecs {
+		if i == 0 {
+			jobID = jobspb.JobID(streamIngestionSpecs[i].JobID)
+		}
 		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
 		corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[i]
 	}
@@ -150,6 +156,11 @@ func distStreamIngest(
 		evalCtx.Tracing,
 	)
 	defer recv.Release()
+
+	if err := jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper,
+		p, execCfg.InternalDB, jobID); err != nil {
+		log.Warningf(ctx, "failed to store DistSQL plan diagram for job %d: %+v", jobID, err.Error())
+	}
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx

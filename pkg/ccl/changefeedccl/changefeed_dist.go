@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -312,6 +314,11 @@ func startDistChangefeed(
 			// returned by resumed jobs, then it breaks instead of returning
 			// nonsense.
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
+		}
+
+		if err := jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper,
+			p, execCfg.InternalDB, jobID); err != nil {
+			log.Warningf(ctx, "failed to store DistSQL plan diagram for job %d: %+v", jobID, err.Error())
 		}
 
 		// Copy the evalCtx, as dsp.Run() might change it.
