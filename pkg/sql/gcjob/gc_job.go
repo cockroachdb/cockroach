@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -137,7 +138,7 @@ func deleteTableData(
 			table, err = col.ByID(txn.KV()).Get().Table(ctx, droppedTable.ID)
 			return err
 		}); err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
 				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
@@ -564,6 +565,17 @@ func waitForWork(
 		wait()
 	}
 	return ctx.Err()
+}
+
+// isMissingDescriptorError checks whether the error has a code corresponding
+// to a missing descriptor or if there is a lower-level catalog error with
+// the same meaning.
+//
+// TODO(ajwerner,postamar): Nail down when we expect the lower-level error
+// and tighten up the collection.
+func isMissingDescriptorError(err error) bool {
+	return errors.Is(err, catalog.ErrDescriptorNotFound) ||
+		sqlerrors.IsMissingDescriptorError(err)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

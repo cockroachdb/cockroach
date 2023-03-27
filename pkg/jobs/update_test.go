@@ -82,8 +82,6 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 		expectedProgress jobspb.Progress) {
 		infoStorage := createdJob.InfoStorage(txn)
 
-		// Verify the payload in the system.job_info is the same as what we read
-		// from system.jobs.
 		payload, exists, err := infoStorage.GetLegacyPayload(ctx)
 		require.NoError(t, err)
 		require.True(t, exists)
@@ -93,8 +91,6 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 		}
 		require.Equal(t, data, payload)
 
-		// Verify the progress in the system.job_info is the same as what we read
-		// from system.jobs.
 		progress, exists, err := infoStorage.GetLegacyProgress(ctx)
 		require.NoError(t, err)
 		require.True(t, exists)
@@ -108,23 +104,32 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 	runTests := func(t *testing.T, createdJob *jobs.Job) {
 		t.Run("verify against system.jobs", func(t *testing.T) {
 			require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				progressQuery := `SELECT count(*)  FROM system.jobs AS a LEFT JOIN system.job_info AS b ON a.progress = b.value WHERE b.job_id IS NULL;`
+				countSystemJobs := `SELECT count(*)  FROM system.jobs`
 				row, err := txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, progressQuery)
+					sessiondata.NodeUserSessionDataOverride, countSystemJobs)
 				if err != nil {
 					return err
 				}
-				count := tree.MustBeDInt(row[0])
-				require.Equal(t, 0, int(count))
+				jobsCount := tree.MustBeDInt(row[0])
 
-				payloadQuery := `SELECT count(*)  FROM system.jobs AS a LEFT JOIN system.job_info AS b ON a.payload = b.value WHERE b.job_id IS NULL;`
+				countSystemJobInfo := `SELECT count(*)  FROM system.job_info;`
 				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, payloadQuery)
+					sessiondata.NodeUserSessionDataOverride, countSystemJobInfo)
 				if err != nil {
 					return err
 				}
-				count = tree.MustBeDInt(row[0])
-				require.Equal(t, 0, int(count))
+				jobInfoCount := tree.MustBeDInt(row[0])
+				require.Equal(t, jobsCount*2, jobInfoCount)
+
+				// Ensure no progress and payload is written to system.jobs.
+				nullPayloadAndProgress := `SELECT count(*) FROM system.jobs WHERE progress IS NOT NULL OR payload IS NOT NULL;`
+				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
+					sessiondata.NodeUserSessionDataOverride, nullPayloadAndProgress)
+				if err != nil {
+					return err
+				}
+				nullProgressAndPayload := tree.MustBeDInt(row[0])
+				require.Equal(t, 0, int(nullProgressAndPayload))
 				return nil
 			}))
 		})

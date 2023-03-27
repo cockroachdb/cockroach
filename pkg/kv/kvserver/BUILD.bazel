@@ -429,6 +429,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/ts",
         "//pkg/ts/tspb",
+        "//pkg/upgrade/upgradebase",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/caller",

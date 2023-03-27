@@ -264,7 +264,7 @@ func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
 func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
 	ret := &jobspb.Progress{}
 	var buf []byte
-	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
+	db.QueryRow(t, `SELECT progress FROM crdb_internal.system_jobs WHERE id = $1`, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
 		t.Fatal(err)
 	}

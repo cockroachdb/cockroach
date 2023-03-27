@@ -1556,7 +1556,6 @@ system              public             primary                                  
 system              public             29_15_1_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             29_15_2_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             29_15_3_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
-system              public             29_15_4_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        jobs                             PRIMARY KEY      NO             NO
 system              public             29_41_1_not_null                                                                                                system         public        join_tokens                      CHECK            NO             NO
 system              public             29_41_2_not_null                                                                                                system         public        join_tokens                      CHECK            NO             NO
@@ -1856,7 +1855,6 @@ system              public             29_14_3_not_null                         
 system              public             29_15_1_not_null                                                                                                id IS NOT NULL
 system              public             29_15_2_not_null                                                                                                status IS NOT NULL
 system              public             29_15_3_not_null                                                                                                created IS NOT NULL
-system              public             29_15_4_not_null                                                                                                payload IS NOT NULL
 system              public             29_19_1_not_null                                                                                                id IS NOT NULL
 system              public             29_19_2_not_null                                                                                                hashedSecret IS NOT NULL
 system              public             29_19_3_not_null                                                                                                username IS NOT NULL

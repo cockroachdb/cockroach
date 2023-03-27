@@ -4584,7 +4584,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	got := sqlDB.QueryStr(t, `
 		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
-		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM system.jobs)
+		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM crdb_internal.system_jobs)
 		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
 		gcAt.WallTime,
 	)[0]

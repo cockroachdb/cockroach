@@ -544,6 +544,8 @@ func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
 	}
 	if sc.droppedDatabaseID != descpb.InvalidID {
 		buf = buf.Add("db", sc.droppedDatabaseID)
+	} else if !sc.droppedSchemaIDs.Empty() {
+		buf = buf.Add("schema", sc.droppedSchemaIDs)
 	}
 	return buf
 }
@@ -720,7 +722,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Otherwise, continue with the rest of the schema change state machine.
-	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID {
+	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID && sc.droppedSchemaIDs.Empty() {
 		if tableDesc.IsPhysicalTable() {
 			// We've dropped this physical table, let's kick off a GC job.
 			dropTime := timeutil.Now().UnixNano()

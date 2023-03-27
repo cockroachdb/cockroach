@@ -464,9 +464,6 @@ func batchJobInsertStmt(
 	jobs []*Job,
 	modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
-	instanceID := r.ID()
-	columns := []string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`, `job_type`}
-	numColumns := len(columns)
 	marshalPanic := func(m protoutil.Message) []byte {
 		data, err := protoutil.Marshal(m)
 		if err != nil {
@@ -479,7 +476,8 @@ func batchJobInsertStmt(
 	if err != nil {
 		return "", nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to make timestamp for creation of job")
 	}
-
+	instanceID := r.ID()
+	columns := []string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`, `job_type`}
 	valueFns := map[string]func(*Job) (interface{}, error){
 		`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
 		`created`:           func(job *Job) (interface{}, error) { return created, nil },
@@ -500,6 +498,24 @@ func batchJobInsertStmt(
 			return payload.Type().String(), nil
 		},
 	}
+
+	// TODO(adityamaru: Remove this once we are outside the compatability
+	// window for 22.2.
+	if r.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+		columns = []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`}
+		valueFns = map[string]func(*Job) (interface{}, error){
+			`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
+			`created`:           func(job *Job) (interface{}, error) { return created, nil },
+			`status`:            func(job *Job) (interface{}, error) { return StatusRunning, nil },
+			`claim_session_id`:  func(job *Job) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
+			`claim_instance_id`: func(job *Job) (interface{}, error) { return instanceID, nil },
+			`job_type`: func(job *Job) (interface{}, error) {
+				payload := job.Payload()
+				return payload.Type().String(), nil
+			},
+		}
+	}
+	numColumns := len(columns)
 
 	// TODO(jayant): remove this version gate in 24.1
 	// To run the upgrade below, migration and schema change jobs will need to be
@@ -595,9 +611,15 @@ func (r *Registry) CreateJobWithTxn(
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to construct job created timestamp")
 		}
-		cols := [...]string{"id", "created", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
-		const totalNumCols = len(cols)
-		vals := [totalNumCols]interface{}{jobID, created, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
+
+		cols := []string{"id", "created", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
+		vals := []interface{}{jobID, created, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
+		log.Infof(ctx, "active version is %s", r.settings.Version.ActiveVersion(ctx))
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+			cols = []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
+			vals = []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
+		}
+		totalNumCols := len(cols)
 		numCols := totalNumCols
 		placeholders := func() string {
 			var p strings.Builder
@@ -711,11 +733,17 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		typ := j.mu.payload.Type().String()
 
 		nCols := 7
-		cols := [7]string{"id", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
-		placeholders := [7]string{"$1", "$2", "$3", "$4", "$5", "$6", "$7"}
-		values := [7]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID, typ}
+		cols := []string{"id", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
+		placeholders := []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7"}
+		values := []interface{}{jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID, typ}
 		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
 			nCols -= 1
+		}
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+			cols = []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
+			placeholders = []string{"$1", "$2", "$3", "$4", "$5"}
+			values = []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
+			nCols = 5
 		}
 		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will

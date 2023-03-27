@@ -13,11 +13,23 @@ package catalog
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // DescriptorIDSet efficiently stores an unordered set of descriptor ids.
 type DescriptorIDSet struct {
 	set intsets.Fast
+}
+
+// SafeFormat implements SafeFormatter for DescriptorIDSet.
+func (d *DescriptorIDSet) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeString(redact.SafeString(d.String()))
+}
+
+// String implement fmt.Stringer for DescriptorIDSet.
+func (d *DescriptorIDSet) String() string {
+	return d.set.String()
 }
 
 // MakeDescriptorIDSet returns a set initialized with the given values.
@@ -31,6 +43,8 @@ func MakeDescriptorIDSet(ids ...descpb.ID) DescriptorIDSet {
 
 // Suppress the linter.
 var _ = MakeDescriptorIDSet
+
+var _ redact.SafeFormatter = (*DescriptorIDSet)(nil)
 
 // Add adds an id to the set. No-op if the id is already in the set.
 func (d *DescriptorIDSet) Add(id descpb.ID) {

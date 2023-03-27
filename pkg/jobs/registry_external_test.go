@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -94,31 +93,15 @@ func TestExpiringSessionsAndClaimJobsDoesNotTouchTerminalJobs(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
-	payload, err := protoutil.Marshal(&jobspb.Payload{
-		Details: jobspb.WrapPayloadDetails(jobspb.BackupDetails{}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	progress, err := protoutil.Marshal(&jobspb.Progress{
-		Details: jobspb.WrapProgressDetails(jobspb.BackupProgress{}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	const insertQuery = `
    INSERT
      INTO system.jobs (
                         status,
-                        payload,
-                        progress,
                         claim_session_id,
                         claim_instance_id
                       )
-   VALUES ($1, $2, $3, $4, $5)
+   VALUES ($1, $2, $3)
 RETURNING id;
 `
 	// Disallow clean up of claimed jobs
@@ -128,12 +111,10 @@ RETURNING id;
 	terminalClaims := make([][]byte, len(terminalStatuses))
 	for i, s := range terminalStatuses {
 		terminalClaims[i] = uuid.MakeV4().GetBytes() // bogus claim
-		tdb.QueryRow(t, insertQuery, s, payload, progress, terminalClaims[i], 42).
-			Scan(&terminalIDs[i])
+		tdb.QueryRow(t, insertQuery, s, terminalClaims[i], 42).Scan(&terminalIDs[i])
 	}
 	var nonTerminalID jobspb.JobID
-	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, payload, progress, uuid.MakeV4().GetBytes(), 42).
-		Scan(&nonTerminalID)
+	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, uuid.MakeV4().GetBytes(), 42).Scan(&nonTerminalID)
 
 	checkClaimEqual := func(id jobspb.JobID, exp []byte) error {
 		const getClaimQuery = `SELECT claim_session_id FROM system.jobs WHERE id = $1`
