@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -60,7 +61,7 @@ var replanRestoreFrequency = settings.RegisterDurationSetting(
 func distRestore(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID int64,
+	jobID jobspb.JobID,
 	dataToRestore restorationData,
 	restoreTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -111,7 +112,7 @@ func distRestore(
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:        jobID,
+			JobID:        int64(jobID),
 			RestoreTime:  restoreTime,
 			Encryption:   fileEncryption,
 			TableRekeys:  dataToRestore.getRekeys(),
@@ -184,7 +185,7 @@ func distRestore(
 			NumNodes:                 int64(numNodes),
 			UseSimpleImportSpans:     useSimpleImportSpans,
 			UseFrontierCheckpointing: spanFilter.useFrontierCheckpointing,
-			JobID:                    jobID,
+			JobID:                    int64(jobID),
 		}
 		if spanFilter.useFrontierCheckpointing {
 			spec.CheckpointedSpans = persistFrontier(spanFilter.checkpointFrontier, 0)
@@ -291,6 +292,9 @@ func distRestore(
 			evalCtx.Tracing,
 		)
 		defer recv.Release()
+
+		execCfg := execCtx.ExecCfg()
+		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx

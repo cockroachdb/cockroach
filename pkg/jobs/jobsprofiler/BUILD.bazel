@@ -1,0 +1,49 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "jobsprofiler",
+    srcs = ["profiler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/isql",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "jobsprofiler_test",
+    srcs = [
+        "main_test.go",
+        "profiler_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
