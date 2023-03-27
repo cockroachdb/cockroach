@@ -252,6 +252,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 
 func TestPebbleMetricEventListener(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 97843, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
