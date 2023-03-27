@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -45,7 +44,7 @@ func deleteIndexData(
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
 	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
-	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+	if isMissingDescriptorError(err) {
 		handleTableDescriptorDeleted(ctx, parentID, progress)
 		return nil
 	}
@@ -94,7 +93,7 @@ func gcIndexes(
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
 	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
-	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+	if isMissingDescriptorError(err) {
 		handleTableDescriptorDeleted(ctx, parentID, progress)
 		return nil
 	}
@@ -131,8 +130,7 @@ func gcIndexes(
 			)
 		}
 		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
-		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
-			sqlerrors.IsUndefinedRelationError(err) {
+		if isMissingDescriptorError(err) {
 			handleTableDescriptorDeleted(ctx, parentID, progress)
 			return nil
 		}
@@ -213,8 +211,7 @@ func deleteIndexZoneConfigsAfterGC(
 		}
 		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
 		switch {
-		case errors.Is(err, catalog.ErrDescriptorNotFound),
-			sqlerrors.IsUndefinedRelationError(err):
+		case isMissingDescriptorError(err):
 			log.Infof(ctx, "removing index %d zone config from table %d failed: %v",
 				index.IndexID, parentID, err)
 		case err != nil:
