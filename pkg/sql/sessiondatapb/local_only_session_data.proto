@@ -369,6 +369,10 @@ message LocalOnlySessionData {
   // DisableDropTenant causes errors when the client
   // attempts to drop tenants or tenant records.
   bool disable_drop_tenant = 99;
+  // TestingOptimizerInjectPanics indicates whether random panics are injected
+  // during optimization. The goal of this setting is to flush out cases where
+  // panics used for error-propagation are uncaught.
+  bool testing_optimizer_inject_panics = 100;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
