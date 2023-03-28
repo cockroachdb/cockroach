@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -321,6 +322,12 @@ type portalPauseInfo struct {
 		cancelQueryFunc context.CancelFunc
 		// cancelQueryCtx is the context to be canceled when closing the portal.
 		cancelQueryCtx context.Context
+		// retPayload is needed for the cleanup steps as we will have to check the
+		// latest encountered error, so this field should be updated for each execution.
+		retPayload fsm.EventPayload
+		// retErr is needed for the cleanup steps as we will have to check the latest
+		// encountered error, so this field should be updated for each execution.
+		retErr  error
 		cleanup cleanupFuncStack
 	}
 
