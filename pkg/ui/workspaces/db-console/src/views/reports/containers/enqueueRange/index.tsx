@@ -11,7 +11,7 @@
 import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import { enqueueRange } from "src/util/api";
 import { cockroach } from "src/js/protos";

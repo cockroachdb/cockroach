@@ -21,7 +21,7 @@ import { getFlushedTxnStatsApi } from "src/api/statementsApi";
 import { refreshTxnStatsSaga, requestTxnStatsSaga } from "./txnStats.sagas";
 import { actions, reducer, TxnStatsState } from "./txnStats.reducer";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 
 const lastUpdated = moment();
 

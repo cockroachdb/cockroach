@@ -26,7 +26,7 @@ import {
 } from "./databaseDetailsPage";
 
 import * as H from "history";
-import moment from "moment";
+import moment from "moment-timezone";
 import { defaultFilters } from "src/queryFilter";
 const history = H.createHashHistory();
 

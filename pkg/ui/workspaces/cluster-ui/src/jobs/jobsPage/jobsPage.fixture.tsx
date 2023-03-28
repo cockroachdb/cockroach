@@ -12,7 +12,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import { JobsPageProps } from "./jobsPage";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import Job = cockroach.server.serverpb.IJobResponse;
