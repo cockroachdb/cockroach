@@ -1070,6 +1070,10 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
+	if createdBy := b.job.Payload().CreationClusterID; !jobExec.ExtendedEvalContext().ClusterID.Equal(createdBy) {
+		return errors.Newf("this changefeed was orignally created by cluster %s; it must be recreated on this cluster if this cluster is now expected to emit to the same destination", createdBy)
+	}
+
 	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
