@@ -44,7 +44,13 @@ import {
   selectTxnsPageReqSort,
 } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
-import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
+import {
+  txnFingerprintIdAttr,
+  getMatchParamByName,
+  queryByName,
+  appNamesAttr,
+  unset,
+} from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 import { actions as analyticsActions } from "../store/analytics";
 
@@ -60,16 +66,23 @@ export const selectTransaction = createSelector(
         isValid: transactionState.valid,
       };
     }
+
+    const apps = queryByName(props.location, appNamesAttr)
+      ?.split(",")
+      .map(s => s.trim());
+
     const txnFingerprintId = getMatchParamByName(
       props.match,
       txnFingerprintIdAttr,
     );
 
-    const transaction = transactions.filter(
+    const transaction = transactions.find(
       txn =>
-        txn.stats_data.transaction_fingerprint_id.toString() ==
-        txnFingerprintId,
-    )[0];
+        txn.stats_data.transaction_fingerprint_id.toString() ===
+          txnFingerprintId &&
+        (apps?.length ? apps.includes(txn.stats_data.app ?? unset) : true),
+    );
+
     return {
       isLoading: transactionState.inFlight,
       transaction: transaction,
