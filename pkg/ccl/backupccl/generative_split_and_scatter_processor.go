@@ -124,8 +124,11 @@ func newGenerativeSplitAndScatterProcessor(
 		spec:                         spec,
 		chunkSplitAndScatterers:      chunkSplitAndScatterers,
 		chunkEntrySplitAndScatterers: chunkEntrySplitAndScatterers,
-		// Large enough so that it never blocks.
-		doneScatterCh:     make(chan entryNode, spec.NumEntries),
+		// There's not much science behind this sizing of doneScatterCh,
+		// other than it's the max number of entries that can be processed
+		// in parallel downstream. It has been verified ad-hoc that this
+		// sizing does not bottleneck restore.
+		doneScatterCh:     make(chan entryNode, int(spec.NumNodes)*maxConcurrentRestoreWorkers),
 		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
 	}
 	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, nil, /* memMonitor */
