@@ -214,16 +214,17 @@ message SnapshotRequest {
 
     // The priority of the snapshot.
     // Deprecated, prefer sender_queue_priority.
-    // TODO(abaptist): Remove this field for v23.1.
-    Priority priority = 6;
+    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
+    Priority deprecated_priority = 6;
 
     // The strategy of the snapshot.
-    Strategy strategy = 7;
+    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
+    Strategy deprecated_strategy = 7;
 
     // The type of the snapshot.
     // Deprecated, prefer sender_queue_name.
-    // TODO(abaptist): Remove this field for v23.1.
-    Type type = 9;
+    // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
+    Type deprecated_type = 9;
 
     // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
     // This is always true for snapshots generated in v21.1+ clusters. In v20.2
@@ -378,12 +379,12 @@ message DelegateSendSnapshotRequest {
   roachpb.ReplicaDescriptor delegated_sender = 4 [(gogoproto.nullable) = false];
 
   // The priority of the snapshot.
-  // TODO(abaptist): Remove this field for v23.1.
-  SnapshotRequest.Priority priority = 5;
+  // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
+  SnapshotRequest.Priority deprecated_priority = 5;
 
   // The type of the snapshot.
-  // TODO(abaptist): Remove this field for v23.1.
-  SnapshotRequest.Type type = 6;
+  // TODO(abaptist): Remove this field when v23.1 compatibility is dropped.
+  SnapshotRequest.Type deprecated_type = 6;
 
   // The Raft term of the coordinator (in most cases the leaseholder) replica.
   // The term is used during snapshot receiving to reject messages from an older term.
