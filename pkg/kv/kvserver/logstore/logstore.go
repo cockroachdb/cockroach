@@ -496,7 +496,7 @@ func LoadEntries(
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
 	lo, hi, maxBytes uint64,
-) (_ []raftpb.Entry, _cachedSize int, _loadedSize int, _ error) {
+) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
@@ -512,7 +512,7 @@ func LoadEntries(
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
 	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
-		return ents, int(cachedSize), 0, nil
+		return ents, cachedSize, 0, nil
 	}
 
 	combinedSize := cachedSize // size tracks total size of ents.
@@ -567,12 +567,12 @@ func LoadEntries(
 
 	// Did the correct number of results come back? If so, we're all good.
 	if uint64(len(ents)) == hi-lo {
-		return ents, int(cachedSize), int(combinedSize - cachedSize), nil
+		return ents, cachedSize, combinedSize - cachedSize, nil
 	}
 
 	// Did we hit the size limit? If so, return what we have.
 	if exceededMaxBytes {
-		return ents, int(cachedSize), int(combinedSize - cachedSize), nil
+		return ents, cachedSize, combinedSize - cachedSize, nil
 	}
 
 	// Did we get any results at all? Because something went wrong.
