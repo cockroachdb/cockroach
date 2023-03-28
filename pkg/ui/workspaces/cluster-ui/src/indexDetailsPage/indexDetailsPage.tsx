@@ -34,7 +34,7 @@ import { Anchor } from "../anchor";
 import {
   calculateTotalWorkload,
   Count,
-  DATE_FORMAT_24_UTC,
+  DATE_FORMAT_24_TZ,
   EncodeDatabaseTableIndexUri,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
@@ -72,7 +72,7 @@ import {
   Filters,
 } from "../queryFilter";
 import { commonStyles } from "../common";
-import { Loading } from "src";
+import { Loading, Timestamp } from "src";
 import LoadingError from "../sqlActivity/errorComponent";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 import { filteredStatementsData } from "../sqlActivity/util";
@@ -303,12 +303,12 @@ export class IndexDetailsPage extends React.Component<
     }
   }
 
-  private getTimestampString(timestamp: Moment): string {
+  private getTimestamp(timestamp: Moment) {
     const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
     if (timestamp.isSame(minDate)) {
-      return "Never";
+      return <>Never</>;
     } else {
-      return timestamp.format(DATE_FORMAT_24_UTC);
+      return <Timestamp time={timestamp} format={DATE_FORMAT_24_TZ} />;
     }
   }
 
@@ -490,8 +490,7 @@ export class IndexDetailsPage extends React.Component<
                 title="Index stats accumulate from the time the index was created or had its stats reset.. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster. Last reset is the timestamp at which the last reset started."
               >
                 <div className={cx("last-reset", "underline")}>
-                  Last reset:{" "}
-                  {this.getTimestampString(this.props.details.lastReset)}
+                  Last reset: {this.getTimestamp(this.props.details.lastReset)}
                 </div>
               </Tooltip>
               {hasAdminRole && (
@@ -559,9 +558,7 @@ export class IndexDetailsPage extends React.Component<
                         </td>
                         <td className="table__cell">
                           <p className={cx("summary-card--value")}>
-                            {this.getTimestampString(
-                              this.props.details.lastRead,
-                            )}
+                            {this.getTimestamp(this.props.details.lastRead)}
                           </p>
                         </td>
                       </tr>

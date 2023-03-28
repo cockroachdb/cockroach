@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { SchedulesPage, SchedulesPageProps } from "./schedulesPage";
 import { allSchedulesFixture } from "./schedulesPage.fixture";
 import { render } from "@testing-library/react";
@@ -45,7 +43,7 @@ const getMockSchedulesPageProps = (
 };
 
 describe("Schedules", () => {
-  it("renders expected schedules table columns", () => {
+  it.only("renders expected schedules table columns", () => {
     const { getByText } = render(
       <MemoryRouter>
         <SchedulesPage {...getMockSchedulesPageProps(allSchedulesFixture)} />
@@ -57,8 +55,8 @@ describe("Schedules", () => {
       "Schedule ID",
       "Owner",
       "Recurrence",
-      "Creation Time (UTC)",
-      "Next Execution Time (UTC)",
+      "Creation Time",
+      "Next Execution Time",
       "Jobs Running",
     ];
 

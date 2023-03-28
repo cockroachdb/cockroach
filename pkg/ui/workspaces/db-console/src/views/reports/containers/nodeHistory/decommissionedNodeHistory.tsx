@@ -29,6 +29,7 @@ import {
   Table,
   SortSetting,
   util,
+  Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
@@ -91,7 +92,12 @@ export class DecommissionedNodeHistory extends React.Component<
       title: "Decommissioned On",
       sorter: sortByDecommissioningDate,
       render: (_text, record) => {
-        return record.decommissionedDate.format(util.DATE_FORMAT_24_UTC);
+        return (
+          <Timestamp
+            time={record.decommissionedDate}
+            format={util.DATE_FORMAT_24_TZ}
+          />
+        );
       },
     },
   ];

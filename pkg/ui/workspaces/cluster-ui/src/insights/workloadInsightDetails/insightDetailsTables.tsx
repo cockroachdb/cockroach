@@ -19,6 +19,7 @@ import {
   TransactionDetailsLink,
 } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
+import { Timestamp, Timezone } from "../../timestamp";
 
 interface InsightDetailsTableProps {
   data: ContentionEvent[];
@@ -70,7 +71,14 @@ export function makeInsightDetailsColumns(
       name: "contentionStartTime",
       title: insightsTableTitles.contentionStartTime(execType),
       cell: (item: ContentionEvent) =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+        item.startTime ? (
+          <Timestamp
+            time={item.startTime}
+            format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+          />
+        ) : (
+          <>N/A</>
+        ),
       sort: (item: ContentionEvent) => item.startTime.unix(),
     },
     {
