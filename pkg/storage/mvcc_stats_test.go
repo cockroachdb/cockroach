@@ -1481,7 +1481,7 @@ var mvccStatsTests = []struct {
 				UpperBound: end,
 			})
 			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: start})
+			_, _ = iter.SeekGE(MVCCKey{Key: start})
 			return ComputeStatsForIter(iter, nowNanos)
 		},
 	},

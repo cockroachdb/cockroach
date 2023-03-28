@@ -171,8 +171,7 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 				Key:       []byte{test.seekKey[0]},
 				Timestamp: hlc.Timestamp{WallTime: int64(test.seekKey[1])},
 			}
-			it.SeekGE(seekKey)
-			ok, err := it.Valid()
+			ok, err := it.SeekGE(seekKey)
 			require.NoError(t, err)
 			if !ok {
 				if test.expected == "notOK" {
@@ -223,19 +222,16 @@ func populateBatch(t *testing.T, batch Batch, input string) {
 type iterSubtest struct {
 	name     string
 	expected string
-	fn       func(SimpleMVCCIterator)
+	fn       func(SimpleMVCCIterator) (bool, error)
 }
 
 // iterateSimpleMVCCIterator iterates through a simpleMVCCIterator for expected values,
 // and assumes that populateBatch populated the keys for the iterator.
 func iterateSimpleMVCCIterator(t *testing.T, it SimpleMVCCIterator, subtest iterSubtest) {
 	var output bytes.Buffer
-	for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
-		ok, err := it.Valid()
-		require.NoError(t, err)
-		if !ok {
-			break
-		}
+	var ok bool
+	var err error
+	for ok, err = it.SeekGE(MVCCKey{Key: keys.LocalMax}); ok; ok, err = subtest.fn(it) {
 		output.Write(it.UnsafeKey().Key)
 		if it.UnsafeKey().Timestamp.IsEmpty() {
 			output.WriteRune('M')
@@ -248,5 +244,6 @@ func iterateSimpleMVCCIterator(t *testing.T, it SimpleMVCCIterator, subtest iter
 			}
 		}
 	}
+	require.NoError(t, err)
 	require.Equal(t, subtest.expected, output.String())
 }

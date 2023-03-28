@@ -226,7 +226,7 @@ func FingerprintRangekeys(
 		KeyTypes:   IterKeyTypePointsOnly,
 		UpperBound: keys.MaxKey,
 	}
-	pointKeyIter, err := NewMultiMemSSTIterator(ssts, false /* verify */, pointKeyIterOpts)
+	pointKeyIter, err := WithDeprecatedAPI(NewMultiMemSSTIterator(ssts, false /* verify */, pointKeyIterOpts))
 	if err != nil {
 		return 0, err
 	}
@@ -250,7 +250,7 @@ func FingerprintRangekeys(
 		UpperBound: keys.MaxKey,
 	}
 	var fingerprint uint64
-	iter, err := NewMultiMemSSTIterator(ssts, true /* verify */, rangeKeyIterOpts)
+	iter, err := WithDeprecatedAPI(NewMultiMemSSTIterator(ssts, true /* verify */, rangeKeyIterOpts))
 	if err != nil {
 		return fingerprint, err
 	}

@@ -186,12 +186,14 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 				UpperBound: ri.spans[ri.curIndex].EndKey,
 				KeyTypes:   ri.KeyTypes,
 			})
+		var iterValid bool
+		var err error
 		if ri.Reverse {
-			ri.it.SeekLT(storage.MakeMVCCMetadataKey(ri.spans[ri.curIndex].EndKey))
+			iterValid, err = ri.it.SeekLT(storage.MakeMVCCMetadataKey(ri.spans[ri.curIndex].EndKey))
 		} else {
-			ri.it.SeekGE(storage.MakeMVCCMetadataKey(ri.spans[ri.curIndex].Key))
+			iterValid, err = ri.it.SeekGE(storage.MakeMVCCMetadataKey(ri.spans[ri.curIndex].Key))
 		}
-		if valid, err := ri.it.Valid(); valid || err != nil {
+		if iterValid || err != nil {
 			ri.err = err
 			return
 		}
@@ -216,8 +218,7 @@ func (ri *ReplicaMVCCDataIterator) Next() {
 	if ri.Reverse {
 		panic("Next called on reverse iterator")
 	}
-	ri.it.Next()
-	valid, err := ri.it.Valid()
+	valid, err := ri.it.Next()
 	if err != nil {
 		ri.err = err
 		return
@@ -233,8 +234,7 @@ func (ri *ReplicaMVCCDataIterator) Prev() {
 	if !ri.Reverse {
 		panic("Prev called on forward iterator")
 	}
-	ri.it.Prev()
-	valid, err := ri.it.Valid()
+	valid, err := ri.it.Prev()
 	if err != nil {
 		ri.err = err
 		return
@@ -395,12 +395,13 @@ func IterateMVCCReplicaKeySpans(
 					KeyTypes:   keyType,
 				})
 				defer iter.Close()
+				var ok bool
+				var err error
 				if options.Reverse {
-					iter.SeekLT(storage.MakeMVCCMetadataKey(span.EndKey))
+					ok, err = iter.SeekLT(storage.MakeMVCCMetadataKey(span.EndKey))
 				} else {
-					iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+					ok, err = iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
 				}
-				ok, err := iter.Valid()
 				if err == nil && ok {
 					err = visitor(iter, span, keyType)
 				}

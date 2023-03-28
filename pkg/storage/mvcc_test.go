@@ -860,7 +860,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 			{
 				// Seek the iter to a valid position.
 				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
-				iter.SeekGE(MakeMVCCMetadataKey(key))
+				_, _ = iter.SeekGE(MakeMVCCMetadataKey(key))
 				iter.Close()
 			}
 
@@ -874,7 +874,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 				_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 			case "computeStatsForIter":
 				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
-				iter.SeekGE(MVCCKey{Key: iterOptions.LowerBound})
+				_, _ = iter.SeekGE(MVCCKey{Key: iterOptions.LowerBound})
 				_, err = ComputeStatsForIter(iter, 0)
 				iter.Close()
 			}
@@ -3842,18 +3842,16 @@ func checkEngineEquality(
 	makeIter := func(eng Engine) MVCCIterator {
 		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 			IterOptions{LowerBound: span.Key, UpperBound: span.EndKey})
-		iter.SeekGE(MVCCKey{Key: span.Key})
+		_, _ = iter.SeekGE(MVCCKey{Key: span.Key})
 		return iter
 	}
 	iter1, iter2 := makeIter(eng1), makeIter(eng2)
 	defer iter1.Close()
 	defer iter2.Close()
 	count := 0
+	valid1, err1 := iter1.Valid()
+	valid2, err2 := iter2.Valid()
 	for {
-		valid1, err1 := iter1.Valid()
-		valid2, err2 := iter2.Valid()
-		require.NoError(t, err1)
-		require.NoError(t, err2)
 		if valid1 && !valid2 {
 			t.Fatalf("iter2 exhausted before iter1")
 		} else if !valid1 && valid2 {
@@ -3876,9 +3874,11 @@ func checkEngineEquality(
 		if debug {
 			log.Infof(ctx, "key: %s", iter1.UnsafeKey().String())
 		}
-		iter1.Next()
-		iter2.Next()
+		valid1, err1 = iter1.Next()
+		valid2, err2 = iter2.Next()
 	}
+	require.NoError(t, err1)
+	require.NoError(t, err2)
 	if expectEmpty && count > 0 {
 		t.Fatalf("expected no keys but found %d", count)
 	}
@@ -4107,8 +4107,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 			IterOptions{LowerBound: lu.Span.Key, UpperBound: lu.Span.EndKey})
 		defer iter.Close()
-		iter.SeekGE(MVCCKey{Key: lu.Span.Key})
-		valid, err := iter.Valid()
+		valid, err := iter.SeekGE(MVCCKey{Key: lu.Span.Key})
 		require.NoError(t, err)
 		require.False(t, valid)
 	}
@@ -4138,8 +4137,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	// Compact the engine so that SINGLEDEL consumes the SETWITHDEL, becoming a
 	// DEL.
 	require.NoError(t, eng.Compact())
-	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
-		IterOptions{LowerBound: lu.Span.Key, UpperBound: lu.Span.EndKey})
+	iter := DeprecatedMVCCIterator{MVCCIterator: eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+		IterOptions{LowerBound: lu.Span.Key, UpperBound: lu.Span.EndKey})}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: lu.Span.Key})
 	if lu.Status == roachpb.COMMITTED {
@@ -4923,9 +4922,9 @@ type seekLTTrackingIterator struct {
 	MVCCIterator
 }
 
-func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) {
+func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) (valid bool, err error) {
 	it.seekLTCalled++
-	it.MVCCIterator.SeekLT(k)
+	return it.MVCCIterator.SeekLT(k)
 }
 
 // Injected via `external_helpers_test.go`.
@@ -5600,11 +5599,11 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			require.NoError(t, MVCCGarbageCollectRangeKeys(ctx, engine, &ms, rangeKeys),
 				"failed to run mvcc range tombstone garbage collect")
 
-			it := engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			it := DeprecatedMVCCIterator{MVCCIterator: engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 				KeyTypes:   IterKeyTypeRangesOnly,
 				LowerBound: d.rangeStart,
 				UpperBound: d.rangeEnd,
-			})
+			})}
 			defer it.Close()
 			it.SeekGE(MVCCKey{Key: d.rangeStart})
 			expectIndex := 0
@@ -6429,11 +6428,11 @@ func exportAllData(
 func sstToKeys(t *testing.T, data []byte) ([]MVCCKey, []MVCCRangeKeyStack) {
 	var results []MVCCKey
 	var rangeKeyRes []MVCCRangeKeyStack
-	it, err := NewMemSSTIterator(data, false, IterOptions{
+	it, err := WithDeprecatedAPI(NewMemSSTIterator(data, false, IterOptions{
 		KeyTypes:   pebble.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	require.NoError(t, err, "Failed to read exported data")
 	defer it.Close()
 	for it.SeekGE(MVCCKey{Key: []byte{}}); ; {
@@ -6926,7 +6925,7 @@ func (f *fingerprintOracle) fingerprintPointKeys(t *testing.T, dataSST []byte) u
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	}
-	iter, err := NewMemSSTIterator(dataSST, false, iterOpts)
+	iter, err := WithDeprecatedAPI(NewMemSSTIterator(dataSST, false, iterOpts))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7007,8 +7006,7 @@ func mvccGetRaw(t *testing.T, r Reader, key MVCCKey) []byte {
 func mvccGetRawWithError(t *testing.T, r Reader, key MVCCKey) ([]byte, error) {
 	iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
 	defer iter.Close()
-	iter.SeekGE(key)
-	if ok, err := iter.Valid(); err != nil || !ok {
+	if ok, err := iter.SeekGE(key); !ok {
 		return nil, err
 	}
 	return iter.Value()

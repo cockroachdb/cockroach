@@ -173,15 +173,11 @@ func rangeKeysInSSTToString(t *testing.T, data []byte) string {
 	require.NoError(t, err)
 	defer iter.Close()
 
-	iter.SeekGE(storage.MVCCKey{Key: roachpb.KeyMin})
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: roachpb.KeyMin})
+	for ok {
 		fmt.Fprintf(&buf, "%v\n", iter.RangeKeys())
-		iter.Next()
+		ok, err = iter.Next()
 	}
+	require.NoError(t, err)
 	return strings.TrimSpace(buf.String())
 }

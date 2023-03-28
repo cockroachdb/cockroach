@@ -148,17 +148,13 @@ func getRawHistoryKVs(
 				return err
 			}
 			defer it.Close()
-			for it.SeekGE(kvstorage.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					return err
-				} else if !ok {
-					return nil
-				}
+			ok, err := it.SeekGE(kvstorage.NilKey)
+			for ; ok; ok, err = it.Next() {
 				k := it.UnsafeKey().Clone()
 				suffix, _, err := codec.DecodeTablePrefix(k.Key)
 				require.NoError(t, err)
-				v, err := it.Value()
-				require.NoError(t, err)
+				v, verr := it.Value()
+				require.NoError(t, verr)
 				row := roachpb.KeyValue{
 					Key: suffix,
 					Value: roachpb.Value{
@@ -168,6 +164,7 @@ func getRawHistoryKVs(
 				row.Value.ClearChecksum()
 				rows = append(rows, row)
 			}
+			return err
 		}())
 	}
 	return rows

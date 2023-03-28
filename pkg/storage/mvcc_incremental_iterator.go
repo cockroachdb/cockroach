@@ -239,14 +239,13 @@ func NewMVCCIncrementalIterator(
 }
 
 // SeekGE implements SimpleMVCCIterator.
-func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
+func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) (valid bool, err error) {
 	if i.timeBoundIter != nil {
 		// Check which is the first key seen by the TBI.
-		i.timeBoundIter.SeekGE(startKey)
-		if ok, err := i.timeBoundIter.Valid(); !ok {
+		if ok, err := i.timeBoundIter.SeekGE(startKey); !ok {
 			i.err = err
 			i.valid = false
-			return
+			return i.valid, i.err
 		}
 		unsafeTBIKey := i.timeBoundIter.UnsafeKey().Key
 		if unsafeTBIKey.Compare(startKey.Key) > 0 {
@@ -256,10 +255,12 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	prevRangeKey := i.rangeKeys.Bounds.Key.Clone()
-	i.iter.SeekGE(startKey)
+	_, _ = i.iter.SeekGE(startKey)
+	// TODO(jackson): Refactor to use i.iter.SeekGE's return values.
 	i.advance(true /* seeked */)
 	i.rangeKeyChanged = !prevRangeKey.Equal(i.rangeKeys.Bounds.Key) // Is there a better way?
 	i.rangeKeyChangedIgnoringTime = i.rangeKeyChanged
+	return i.valid, i.err
 }
 
 // Close implements SimpleMVCCIterator.
@@ -271,9 +272,11 @@ func (i *MVCCIncrementalIterator) Close() {
 }
 
 // Next implements SimpleMVCCIterator.
-func (i *MVCCIncrementalIterator) Next() {
-	i.iter.Next()
+func (i *MVCCIncrementalIterator) Next() (valid bool, err error) {
+	_, _ = i.iter.Next()
+	// TODO(jackson): Refactor to use i.iter.Next's return values.
 	i.advance(false /* seeked */)
+	return i.valid, i.err
 }
 
 // updateValid updates i.valid and i.err based on the underlying iterator, and
@@ -285,9 +288,11 @@ func (i *MVCCIncrementalIterator) updateValid() bool {
 }
 
 // NextKey implements SimpleMVCCIterator.
-func (i *MVCCIncrementalIterator) NextKey() {
-	i.iter.NextKey()
+func (i *MVCCIncrementalIterator) NextKey() (valid bool, err error) {
+	_, _ = i.iter.NextKey()
 	i.advance(false /* seeked */)
+	// TODO(jackson): Refactor to use i.iter.NextKey's return values.
+	return i.valid, i.err
 }
 
 // maybeSkipKeys checks if any keys can be skipped by using a time-bound
@@ -324,8 +329,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() (rangeKeyChanged bool) {
 		// in keyspace, which makes the incremental iterator optimization
 		// ineffective. And so in this case we want to minimize the extra cost of
 		// using the incremental iterator, by avoiding a SeekGE.
-		i.timeBoundIter.NextKey()
-		if ok, err := i.timeBoundIter.Valid(); !ok {
+		if ok, err := i.timeBoundIter.NextKey(); !ok {
 			i.valid, i.err = false, err
 			return false
 		}
@@ -339,8 +343,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() (rangeKeyChanged bool) {
 			// due to aborted transactions and keys which have been subsumed due to
 			// range tombstones. In this case we can SeekGE() the TBI to the main iterator.
 			seekKey := MakeMVCCMetadataKey(iterKey)
-			i.timeBoundIter.SeekGE(seekKey)
-			if ok, err := i.timeBoundIter.Valid(); !ok {
+			if ok, err := i.timeBoundIter.SeekGE(seekKey); !ok {
 				i.valid, i.err = false, err
 				return false
 			}
@@ -350,8 +353,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() (rangeKeyChanged bool) {
 			// stuck in the middle of the bare range key so we step forward.
 			if hasPoint, hasRange := i.timeBoundIter.HasPointAndRange(); hasRange && !hasPoint {
 				if !i.timeBoundIter.RangeBounds().Key.Equal(tbiKey) {
-					i.timeBoundIter.Next()
-					if ok, err := i.timeBoundIter.Valid(); !ok {
+					if ok, err := i.timeBoundIter.Next(); !ok {
 						i.valid, i.err = false, err
 						return false
 					}
@@ -370,8 +372,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() (rangeKeyChanged bool) {
 			// optimizations that attempt to make it cheaper if the seeked key is
 			// "nearby" (within the same sstable block).
 			seekKey := MakeMVCCMetadataKey(tbiKey)
-			i.iter.SeekGE(seekKey)
-			if !i.updateValid() {
+			if i.valid, i.err = i.iter.SeekGE(seekKey); !i.valid {
 				return false
 			}
 			rangeKeyChanged := i.iter.RangeKeyChanged()
@@ -380,8 +381,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() (rangeKeyChanged bool) {
 			// case we should move on to the next key.
 			if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
 				if !i.iter.RangeBounds().Key.Equal(i.iter.UnsafeKey().Key) {
-					i.iter.Next()
-					if !i.updateValid() {
+					if i.valid, i.err = i.iter.Next(); !i.valid {
 						return false
 					}
 					rangeKeyChanged = rangeKeyChanged || i.iter.RangeKeyChanged()
@@ -493,11 +493,8 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 	i.ignoringTime = false
 	i.rangeKeyChanged, i.rangeKeyChangedIgnoringTime = false, false
 	hadRange, hadRangeIgnoringTime := !i.rangeKeys.IsEmpty(), !i.rangeKeysIgnoringTime.IsEmpty()
-	for {
-		if !i.updateValid() {
-			return
-		}
-
+	i.valid, i.err = i.iter.Valid()
+	for i.valid {
 		// If the caller was a SeekGE operation, process the initial range key (if
 		// any) even if RangeKeyChanged() does not fire.
 		rangeKeyChanged := seeked || i.iter.RangeKeyChanged()
@@ -525,7 +522,7 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 			// then we move on to the next key.
 			if !i.hasPoint {
 				if !i.hasRange {
-					i.iter.Next()
+					i.valid, i.err = i.iter.Next()
 					continue
 				}
 				i.meta.Reset()
@@ -560,7 +557,7 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 					i.hasPoint = false
 					return
 				}
-				i.iter.Next()
+				i.valid, i.err = i.iter.Next()
 				continue
 			}
 		}
@@ -577,9 +574,9 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 			i.hasPoint = i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime)
 			return
 		} else if i.endTime.Less(metaTimestamp) {
-			i.iter.Next()
+			i.valid, i.err = i.iter.Next()
 		} else if metaTimestamp.LessEq(i.startTime) {
-			i.iter.NextKey()
+			i.valid, i.err = i.iter.NextKey()
 		} else {
 			// The current key is a valid user key and within the time bounds. We are
 			// done.
@@ -670,31 +667,30 @@ func (i *MVCCIncrementalIterator) ValueLen() int {
 	return i.iter.ValueLen()
 }
 
-// updateIgnoreTime updates the iterator's metadata and handles intents depending on the iterator's
-// intent policy.
-func (i *MVCCIncrementalIterator) updateIgnoreTime() {
+// updateIgnoreTime updates the iterator's metadata and handles intents
+// depending on the iterator's intent policy.
+func (i *MVCCIncrementalIterator) updateIgnoreTime(valid bool, err error) (bool, error) {
+	i.valid, i.err = valid, err
 	i.ignoringTime = true
 	i.rangeKeyChanged, i.rangeKeyChangedIgnoringTime = false, false
 	hadRange := !i.rangeKeys.IsEmpty()
-	for {
-		if !i.updateValid() {
-			return
-		}
-
+	for i.valid {
 		if i.iter.RangeKeyChanged() {
 			i.hasPoint, i.hasRange = i.updateRangeKeys()
 			i.rangeKeyChanged = hadRange || i.hasRange // !hasRange → !hasRange is no change
 			i.rangeKeyChangedIgnoringTime = true
 			if !i.hasPoint {
 				i.meta.Reset()
-				return
+				return i.valid, i.err
 			}
 		} else if !i.hasPoint {
 			i.hasPoint = true
 		}
 
 		if err := i.updateMeta(); err != nil {
-			return
+			// NB: This is intentionally returning i.err instead of err.
+			// updateMeta already handles updating i.err appropriately.
+			return i.valid, i.err
 		}
 
 		// We have encountered an intent but it does not lie in the timestamp span
@@ -708,13 +704,14 @@ func (i *MVCCIncrementalIterator) updateIgnoreTime() {
 		// TODO(msbulter): investigate if it's clearer for the caller to emit the intent in
 		// addition to the provisional value.
 		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
-			i.iter.Next()
+			i.valid, i.err = i.iter.Next()
 			continue
 		}
 
 		// We have a valid KV or an intent to emit.
-		return
+		return i.valid, i.err
 	}
+	return i.valid, i.err
 }
 
 // NextIgnoringTime returns the next key/value that would be encountered in a
@@ -732,9 +729,8 @@ func (i *MVCCIncrementalIterator) updateIgnoreTime() {
 //     within the time bounds.
 //
 // * RangeBounds() and RangeKeys() will return empty results.
-func (i *MVCCIncrementalIterator) NextIgnoringTime() {
-	i.iter.Next()
-	i.updateIgnoreTime()
+func (i *MVCCIncrementalIterator) NextIgnoringTime() (ok bool, err error) {
+	return i.updateIgnoreTime(i.iter.Next())
 }
 
 // NextKeyIgnoringTime returns the next distinct key that would be encountered
@@ -743,9 +739,8 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 // handled according to the iterator policy.
 //
 // NB: See NextIgnoringTime comment for important details about range keys.
-func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
-	i.iter.NextKey()
-	i.updateIgnoreTime()
+func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() (bool, error) {
+	return i.updateIgnoreTime(i.iter.NextKey())
 }
 
 // IgnoringTime returns true if the previous positioning operation ignored time

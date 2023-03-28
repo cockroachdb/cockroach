@@ -158,32 +158,27 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		defer iter.Close()
 
 		// MVCCIterators check boundaries on seek and next/prev
-		iter.SeekGE(outsideKey)
-		if _, err := iter.Valid(); !isReadSpanErr(err) {
+		if _, err := iter.SeekGE(outsideKey); !isReadSpanErr(err) {
 			t.Fatalf("Seek: unexpected error %v", err)
 		}
-		iter.SeekGE(outsideKey3)
-		if _, err := iter.Valid(); !isReadSpanErr(err) {
+		if _, err := iter.SeekGE(outsideKey3); !isReadSpanErr(err) {
 			t.Fatalf("Seek: unexpected error %v", err)
 		}
 		// Seeking back in bounds restores validity.
-		iter.SeekGE(insideKey)
-		if ok, err := iter.Valid(); !ok || err != nil {
+		if ok, err := iter.SeekGE(insideKey); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey) {
 			t.Fatalf("expected key %s, got %s", insideKey, iter.UnsafeKey())
 		}
-		iter.Next()
-		if ok, err := iter.Valid(); !ok || err != nil {
+		if ok, err := iter.Next(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey2) {
 			t.Fatalf("expected key %s, got %s", insideKey2, iter.UnsafeKey())
 		}
 		// Scan out of bounds.
-		iter.Next()
-		if ok, err := iter.Valid(); ok {
+		if ok, err := iter.Next(); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		} else if err != nil {
 			// Scanning out of bounds sets Valid() to false but is not an error.
@@ -201,48 +196,41 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	t.Run("reverse scans", func(t *testing.T) {
 		iter := spanset.NewIterator(eng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
 		defer iter.Close()
-		iter.SeekLT(outsideKey4)
-		if _, err := iter.Valid(); !isReadSpanErr(err) {
+		if _, err := iter.SeekLT(outsideKey4); !isReadSpanErr(err) {
 			t.Fatalf("SeekLT: unexpected error %v", err)
 		}
 		// Seeking back in bounds restores validity.
-		iter.SeekLT(insideKey3)
-		if ok, err := iter.Valid(); !ok || err != nil {
+		if ok, err := iter.SeekLT(insideKey3); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey2) {
 			t.Fatalf("expected key %s, got %s", insideKey2, iter.UnsafeKey())
 		}
-		iter.Prev()
-		if ok, err := iter.Valid(); !ok || err != nil {
+		if ok, err := iter.Prev(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.UnsafeKey(), insideKey) {
 			t.Fatalf("expected key %s, got %s", insideKey, iter.UnsafeKey())
 		}
 		// Scan out of bounds.
-		iter.Prev()
-		if ok, err := iter.Valid(); ok {
+		if ok, err := iter.Prev(); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		} else if err != nil {
 			t.Errorf("unexpected error on iterator: %+v", err)
 		}
 
 		// Seeking back in bounds restores validity.
-		iter.SeekLT(insideKey2)
-		if ok, err := iter.Valid(); !ok || err != nil {
+		if ok, err := iter.SeekLT(insideKey2); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		// SeekLT to the lower bound is invalid.
-		iter.SeekLT(insideKey)
-		if ok, err := iter.Valid(); ok {
+		if ok, err := iter.SeekLT(insideKey); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.UnsafeKey())
 		} else if !isReadSpanErr(err) {
 			t.Fatalf("SeekLT: unexpected error %v", err)
 		}
 		// SeekLT to upper bound restores validity.
-		iter.SeekLT(outsideKey3)
-		if ok, err := iter.Valid(); !ok || err != nil {
+		if ok, err := iter.SeekLT(outsideKey3); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 	})

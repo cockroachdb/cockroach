@@ -449,13 +449,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
 
-	for iter.SeekGE(startKeyMVCC); ; iter.NextKey() {
-		ok, err := iter.Valid()
-		if err != nil {
-			return summary, err
-		}
-
-		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
+	iterValid, iterErr := iter.SeekGE(startKeyMVCC)
+	for ; iterValid; iterValid, iterErr = iter.NextKey() {
+		if !iter.UnsafeKey().Less(endKeyMVCC) {
 			break
 		}
 
@@ -469,8 +465,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		valueScratch = append(valueScratch[:0], v...)
 		value := roachpb.Value{RawBytes: valueScratch}
 
+		var ok bool
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
-
 		if errors.Is(err, ErrImportingKeyError) {
 			// The keyRewriter returns ErrImportingKeyError iff the key is part of an
 			// in-progress import. Keys from in-progress imports never get restored,
@@ -500,6 +496,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
+	}
+	if iterErr != nil {
+		return summary, iterErr
 	}
 	// Flush out the last batch.
 	if err := batcher.Flush(ctx); err != nil {

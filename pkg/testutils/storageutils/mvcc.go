@@ -29,8 +29,8 @@ func MVCCGetRaw(t *testing.T, r storage.Reader, key storage.MVCCKey) []byte {
 func MVCCGetRawWithError(t *testing.T, r storage.Reader, key storage.MVCCKey) ([]byte, error) {
 	iter := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 	defer iter.Close()
-	iter.SeekGE(key)
-	if ok, err := iter.Valid(); err != nil || !ok {
+	ok, err := iter.SeekGE(key)
+	if !ok {
 		return nil, err
 	}
 	return iter.Value()

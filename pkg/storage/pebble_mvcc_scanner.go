@@ -556,8 +556,8 @@ func (p *pebbleMVCCScanner) init(
 
 // get seeks to the start key exactly once and adds one KV to the result set.
 func (p *pebbleMVCCScanner) get(ctx context.Context) {
-	p.parent.SeekGE(MVCCKey{Key: p.start})
-	if !p.iterValid() {
+	if valid, err := p.parent.SeekGE(MVCCKey{Key: p.start}); !valid {
+		p.err = firstError(err, p.err)
 		return
 	}
 
@@ -1083,8 +1083,8 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 		}
 		// Fallthrough to NextKey.
 	}
-	p.parent.NextKey()
-	if !p.iterValid() {
+	if iterValid, err := p.parent.NextKey(); !iterValid {
+		p.err = firstError(err, p.err)
 		return false
 	}
 	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
@@ -1173,8 +1173,8 @@ func (p *pebbleMVCCScanner) advanceKeyAtEndReverse() bool {
 	// Iterating to the next key might have caused the iterator to reach the
 	// end of the key space. If that happens, back up to the very last key.
 	p.peeked = false
-	p.parent.SeekLT(MVCCKey{Key: p.end})
-	if !p.iterValid() {
+	if valid, err := p.parent.SeekLT(MVCCKey{Key: p.end}); !valid {
+		p.err = firstError(err, p.err)
 		return false
 	}
 	if !p.processRangeKeys(true /* seeked */, true /* reverse */) {
@@ -1556,12 +1556,15 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 		if hasPoint {
 			return true
 		}
+		var valid bool
+		var err error
 		if !reverse {
-			p.parent.Next()
+			valid, err = p.parent.Next()
 		} else {
-			p.parent.Prev()
+			valid, err = p.parent.Prev()
 		}
-		if !p.iterValid() {
+		if !valid {
+			p.err = firstError(err, p.err)
 			return false
 		}
 	}
@@ -1633,10 +1636,21 @@ func (p *pebbleMVCCScanner) decodeCurrentValueExtended(v []byte) bool {
 	return p.err == nil
 }
 
+func firstError(err1, err2 error) error {
+	if err1 != nil {
+		return err1
+	}
+	return err2
+}
+
 func (p *pebbleMVCCScanner) iterValid() bool {
 	if valid, err := p.parent.Valid(); !valid {
 		// Defensive: unclear if p.err can already be non-nil here, but
 		// regardless, don't overwrite unless we have a non-nil err.
+		//
+		// TODO(jackson): Ensure that p.err cannot be non-nil here and
+		// elsewhere, and remove this if statement and the firstError calls
+		// elsewhere.
 		if err != nil {
 			p.err = err
 		}
@@ -1648,8 +1662,8 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 // iterSeek seeks to the latest revision of the specified key (or a greater key).
 func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
 	p.clearPeeked()
-	p.parent.SeekGE(key)
-	if !p.iterValid() {
+	if valid, err := p.parent.SeekGE(key); !valid {
+		p.err = firstError(err, p.err)
 		return false
 	}
 	if !p.processRangeKeys(true /* seeked */, false /* reverse */) {
@@ -1661,8 +1675,8 @@ func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
 // iterSeekReverse seeks to the latest revision of the key before the specified key.
 func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 	p.clearPeeked()
-	p.parent.SeekLT(key)
-	if !p.iterValid() {
+	if valid, err := p.parent.SeekLT(key); !valid {
+		p.err = firstError(err, p.err)
 		return false
 	}
 	if !p.processRangeKeys(true /* seeked */, true /* reverse */) {
@@ -1689,19 +1703,20 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		// to get back to the current entry. If we've peeked off the beginning,
 		// it's okay to Next: Pebble will reposition to the first visible key.
 		p.peeked = false
-		p.parent.Next()
+		valid, err := p.parent.Next()
 		// We don't need to process range key changes here, because curRangeKeys
 		// already contains the range keys at this position from before the peek.
 		if buildutil.CrdbTestBuild {
 			p.assertOwnedRangeKeys()
 		}
-		if !p.iterValid() {
+		if !valid {
+			p.err = firstError(err, p.err)
 			return false
 		}
 	}
 	// Step forward from the current entry.
-	p.parent.Next()
-	if !p.iterValid() {
+	if valid, err := p.parent.Next(); !valid {
+		p.err = firstError(err, p.err)
 		return false
 	}
 	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
@@ -1714,12 +1729,16 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 func (p *pebbleMVCCScanner) iterPrev() bool {
 	if p.peeked {
 		p.peeked = false
+		if !p.iterValid() {
+			return false
+		}
 	} else {
-		p.parent.Prev()
+		if valid, err := p.parent.Prev(); !valid {
+			p.err = firstError(err, p.err)
+			return false
+		}
 	}
-	if !p.iterValid() {
-		return false
-	}
+
 	if !p.processRangeKeys(false /* seeked */, true /* reverse */) {
 		return false
 	}
@@ -1761,8 +1780,8 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool, bool) {
 
 		// With the current iterator state saved we can move the iterator to the
 		// previous entry.
-		p.parent.Prev()
-		if !p.iterValid() {
+		if valid, err := p.parent.Prev(); !valid {
+			p.err = firstError(err, p.err)
 			// The iterator is now invalid, but note that this case is handled in
 			// both iterNext and iterPrev. In the former case, we'll position the
 			// iterator at the first entry, and in the latter iteration will be done.

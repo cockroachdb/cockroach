@@ -325,7 +325,7 @@ func (p *pebbleIterator) Close() {
 }
 
 // SeekGE implements the MVCCIterator interface.
-func (p *pebbleIterator) SeekGE(key MVCCKey) {
+func (p *pebbleIterator) SeekGE(key MVCCKey) (valid bool, err error) {
 	p.mvccDirIsReverse = false
 	p.mvccDone = false
 	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
@@ -334,11 +334,13 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	} else {
 		p.iter.SeekGE(p.keyBuf)
 	}
+	// TODO(jackson): Use the return value provided by p.iter.Seek[Prefix]GE.
+	return p.Valid()
 }
 
 // SeekIntentGE implements the MVCCIterator interface.
-func (p *pebbleIterator) SeekIntentGE(key roachpb.Key, _ uuid.UUID) {
-	p.SeekGE(MVCCKey{Key: key})
+func (p *pebbleIterator) SeekIntentGE(key roachpb.Key, _ uuid.UUID) (valid bool, err error) {
+	return p.SeekGE(MVCCKey{Key: key})
 }
 
 // SeekEngineKeyGE implements the EngineIterator interface.
@@ -423,7 +425,7 @@ func (p *pebbleIterator) Valid() (bool, error) {
 }
 
 // Next implements the MVCCIterator interface.
-func (p *pebbleIterator) Next() {
+func (p *pebbleIterator) Next() (valid bool, err error) {
 	if p.mvccDirIsReverse {
 		// Switching directions.
 		p.mvccDirIsReverse = false
@@ -433,6 +435,8 @@ func (p *pebbleIterator) Next() {
 		return
 	}
 	p.iter.Next()
+	// TODO(jackson): Use the return value provided by p.iter.Next.
+	return p.Valid()
 }
 
 // NextEngineKey implements the Engineterator interface.
@@ -462,7 +466,7 @@ func (p *pebbleIterator) NextEngineKeyWithLimit(
 }
 
 // NextKey implements the MVCCIterator interface.
-func (p *pebbleIterator) NextKey() {
+func (p *pebbleIterator) NextKey() (valid bool, err error) {
 	if p.mvccDirIsReverse {
 		// Switching directions.
 		p.mvccDirIsReverse = false
@@ -472,12 +476,13 @@ func (p *pebbleIterator) NextKey() {
 		return
 	}
 	if valid, err := p.Valid(); err != nil || !valid {
-		return
+		return false, err
 	}
 
 	// NB: If p.prefix, iterators can't move onto a separate key by definition,
 	// so the below call to NextPrefix will exhaust the iterator.
 	p.iter.NextPrefix()
+	return p.Valid()
 }
 
 // UnsafeKey implements the MVCCIterator interface.
@@ -558,11 +563,14 @@ func (p *pebbleIterator) ValueLen() int {
 }
 
 // SeekLT implements the MVCCIterator interface.
-func (p *pebbleIterator) SeekLT(key MVCCKey) {
+func (p *pebbleIterator) SeekLT(key MVCCKey) (valid bool, err error) {
 	p.mvccDirIsReverse = true
 	p.mvccDone = false
 	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
-	p.iter.SeekLT(p.keyBuf)
+	if !p.iter.SeekLT(p.keyBuf) {
+		return false, p.iter.Error()
+	}
+	return true, nil
 }
 
 // SeekEngineKeyLT implements the EngineIterator interface.
@@ -594,16 +602,19 @@ func (p *pebbleIterator) SeekEngineKeyLTWithLimit(
 }
 
 // Prev implements the MVCCIterator interface.
-func (p *pebbleIterator) Prev() {
+func (p *pebbleIterator) Prev() (valid bool, err error) {
 	if !p.mvccDirIsReverse {
 		// Switching directions.
 		p.mvccDirIsReverse = true
 		p.mvccDone = false
 	}
 	if p.mvccDone {
-		return
+		return false, nil
 	}
-	p.iter.Prev()
+	if !p.iter.Prev() {
+		return false, p.iter.Error()
+	}
+	return true, nil
 }
 
 // PrevEngineKey implements the EngineIterator interface.
@@ -782,11 +793,11 @@ func IsValidSplitKey(key roachpb.Key) bool {
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
-	return findSplitKeyUsingIterator(p, start, end, minSplitKey, targetSize)
+	return findSplitKeyUsingIterator(DeprecatedMVCCIterator{p}, start, end, minSplitKey, targetSize)
 }
 
 func findSplitKeyUsingIterator(
-	iter MVCCIterator, start, end, minSplitKey roachpb.Key, targetSize int64,
+	iter DeprecatedMVCCIterator, start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	const timestampLen = 12
 

@@ -182,13 +182,8 @@ func (l *LegacyIntentScanner) ConsumeIntents(
 	// will always be the first version of a key if it exists, so its fine that
 	// we skip over all other versions of keys.
 	var meta enginepb.MVCCMetadata
-	for l.iter.SeekGE(startKey); ; l.iter.NextKey() {
-		if ok, err := l.iter.Valid(); err != nil {
-			return err
-		} else if !ok || !l.iter.UnsafeKey().Less(endKey) {
-			break
-		}
-
+	ok, err := l.iter.SeekGE(startKey)
+	for ; ok && l.iter.UnsafeKey().Less(endKey); ok, err = l.iter.NextKey() {
 		// If the key is not a metadata key, ignore it.
 		unsafeKey := l.iter.UnsafeKey()
 		if unsafeKey.IsValue() {
@@ -215,7 +210,7 @@ func (l *LegacyIntentScanner) ConsumeIntents(
 			})
 		}
 	}
-	return nil
+	return err
 }
 
 // Close implements the IntentScanner interface.

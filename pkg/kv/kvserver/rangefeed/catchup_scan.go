@@ -38,7 +38,7 @@ import (
 //     is not within the time bounds.
 type simpleCatchupIter interface {
 	storage.SimpleMVCCIterator
-	NextIgnoringTime()
+	NextIgnoringTime() (bool, error)
 	RangeKeyChangedIgnoringTime() bool
 	RangeKeysIgnoringTime() storage.MVCCRangeKeyStack
 }
@@ -47,8 +47,8 @@ type simpleCatchupIterAdapter struct {
 	storage.SimpleMVCCIterator
 }
 
-func (i simpleCatchupIterAdapter) NextIgnoringTime() {
-	i.SimpleMVCCIterator.Next()
+func (i simpleCatchupIterAdapter) NextIgnoringTime() (bool, error) {
+	return i.SimpleMVCCIterator.Next()
 }
 
 func (i simpleCatchupIterAdapter) RangeKeyChangedIgnoringTime() bool {
@@ -155,18 +155,15 @@ func (i *CatchUpIterator) CatchUpScan(
 	// Iterate though all keys using Next. We want to publish all committed
 	// versions of each key that are after the registration's startTS, so we
 	// can't use NextKey.
+	var ok bool
+	var err error
 	var lastKey roachpb.Key
 	var meta enginepb.MVCCMetadata
-	i.SeekGE(storage.MVCCKey{Key: i.span.Key})
-
+	if ok, err = i.SeekGE(storage.MVCCKey{Key: i.span.Key}); err != nil {
+		return err
+	}
 	every := log.Every(100 * time.Millisecond)
-	for {
-		if ok, err := i.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-
+	for ok {
 		if err := i.pacer.Pace(ctx); err != nil {
 			// We're unable to pace things automatically -- shout loudly
 			// semi-infrequently but don't fail the rangefeed itself.
@@ -214,7 +211,9 @@ func (i *CatchUpIterator) CatchUpScan(
 			// step onto the next key. This may be a point key version at the same key
 			// as the range key's start bound, or a later point/range key.
 			if !hasPoint {
-				i.Next()
+				if ok, err = i.Next(); err != nil {
+					return err
+				}
 				continue
 			}
 		}
@@ -245,9 +244,7 @@ func (i *CatchUpIterator) CatchUpScan(
 			// the time bounds. Using `NextIgnoringTime` on the next line makes sure
 			// that we are guaranteed to validate the version that belongs to the
 			// intent.
-			i.NextIgnoringTime()
-
-			if ok, err := i.Valid(); err != nil {
+			if ok, err = i.NextIgnoringTime(); err != nil {
 				return errors.Wrap(err, "iterating to provisional value for intent")
 			} else if !ok {
 				return errors.Errorf("expected provisional value for intent")
@@ -261,7 +258,9 @@ func (i *CatchUpIterator) CatchUpScan(
 			// hit an intent proves that there wasn't a previous value, so we can
 			// (in fact, have to, to avoid surfacing unwanted keys) unconditionally
 			// enforce time bounds.
-			i.Next()
+			if ok, err = i.Next(); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -278,7 +277,9 @@ func (i *CatchUpIterator) CatchUpScan(
 		if ignore && !withDiff {
 			// Skip all the way to the next key.
 			// NB: fast-path to avoid value copy when !r.withDiff.
-			i.NextKey()
+			if ok, err = i.NextKey(); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -346,17 +347,20 @@ func (i *CatchUpIterator) CatchUpScan(
 
 		if ignore {
 			// Skip all the way to the next key.
-			i.NextKey()
+			ok, err = i.NextKey()
 		} else {
 			// Move to the next version of this key (there may not be one, in which
 			// case it will move to the next key).
 			if withDiff {
 				// Need to see the next version even if it is older than the time
 				// bounds.
-				i.NextIgnoringTime()
+				ok, err = i.NextIgnoringTime()
 			} else {
-				i.Next()
+				ok, err = i.Next()
 			}
+		}
+		if err != nil {
+			return err
 		}
 	}
 

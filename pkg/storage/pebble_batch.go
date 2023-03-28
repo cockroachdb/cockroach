@@ -354,11 +354,11 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 	start, end roachpb.Key, pointKeys, rangeKeys bool,
 ) error {
 	clearPointKeys := func(start, end roachpb.Key) error {
-		iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter := DeprecatedMVCCIterator{p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:   IterKeyTypePointsOnly,
 			LowerBound: start,
 			UpperBound: end,
-		})
+		})}
 		defer iter.Close()
 		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
 			if valid, err := iter.Valid(); err != nil {
@@ -382,11 +382,11 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 	}
 
 	clearRangeKeys := func(start, end roachpb.Key) error {
-		iter := p.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		iter := DeprecatedMVCCIterator{p.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
 			UpperBound: end,
-		})
+		})}
 		defer iter.Close()
 		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
 			if valid, err := iter.Valid(); err != nil {

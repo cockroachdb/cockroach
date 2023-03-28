@@ -651,12 +651,12 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 		exportResp := res.(*kvpb.ExportResponse)
 		for _, file := range exportResp.Files {
 			if err := func() error {
-				it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+				it, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
 					// NB: We assume there will be no MVCC range tombstones here.
 					KeyTypes:   storage.IterKeyTypePointsOnly,
 					LowerBound: keys.MinKey,
 					UpperBound: keys.MaxKey,
-				})
+				}))
 				if err != nil {
 					return err
 				}

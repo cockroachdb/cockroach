@@ -163,14 +163,14 @@ func TestGCIterator(t *testing.T) {
 			ds.setupTest(t, eng, desc)
 			snap := eng.NewSnapshot()
 			defer snap.Close()
-			mvccIt := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			mvccIt := storage.DeprecatedMVCCIterator{MVCCIterator: snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				LowerBound: desc.StartKey.AsRawKey(),
 				UpperBound: desc.EndKey.AsRawKey(),
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-			})
+			})}
 			mvccIt.SeekLT(storage.MVCCKey{Key: desc.EndKey.AsRawKey()})
 			defer mvccIt.Close()
-			it := makeGCIterator(mvccIt, tc.gcThreshold)
+			it := makeGCIterator(mvccIt.MVCCIterator, tc.gcThreshold)
 			expectations := tc.expectations
 			for i, ex := range expectations {
 				s, ok := it.state()

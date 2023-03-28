@@ -383,8 +383,7 @@ func (i *intentInterleavingIter) doMaybeSkipIntentRangeKey() error {
 			i.valid = false
 			return i.err
 		} else if intentCmp == 0 {
-			i.iter.Next()
-			if err := i.tryDecodeKey(); err != nil {
+			if err := i.tryDecodeKey(i.iter.Next()); err != nil {
 				return err
 			}
 			hasPoint, hasRange = i.iter.HasPointAndRange()
@@ -469,7 +468,7 @@ func (i *intentInterleavingIter) adjustSeekRangeKeyChanged() {
 	}
 }
 
-func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
+func (i *intentInterleavingIter) SeekGE(key MVCCKey) (valid bool, err error) {
 	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
 
 	i.dir = +1
@@ -479,14 +478,14 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 	if i.constraint != notConstrained {
 		i.checkConstraint(key.Key, false)
 	}
-	i.iter.SeekGE(key)
-	if err := i.tryDecodeKey(); err != nil {
-		return
+	if err := i.tryDecodeKey(i.iter.SeekGE(key)); err != nil {
+		return false, err
 	}
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
 	if adjustRangeKeyChanged {
 		i.adjustSeekRangeKeyChanged()
 	}
+
 	var intentSeekKey roachpb.Key
 	if key.Timestamp.IsEmpty() {
 		// Common case.
@@ -512,16 +511,19 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		}
 		iterState, err := i.intentIter.SeekEngineKeyGEWithLimit(EngineKey{Key: intentSeekKey}, limitKey)
 		if err = i.tryDecodeLockKey(iterState, err); err != nil {
-			return
+			return false, err
 		}
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
-			return
+			return false, err
 		}
 	}
 	i.computePos()
+	return i.valid, i.err
 }
 
-func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
+func (i *intentInterleavingIter) SeekIntentGE(
+	key roachpb.Key, txnUUID uuid.UUID,
+) (valid bool, err error) {
 	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
 
 	i.dir = +1
@@ -531,9 +533,8 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	if i.constraint != notConstrained {
 		i.checkConstraint(key, false)
 	}
-	i.iter.SeekGE(MVCCKey{Key: key})
-	if err := i.tryDecodeKey(); err != nil {
-		return
+	if err := i.tryDecodeKey(i.iter.SeekGE(MVCCKey{Key: key})); err != nil {
+		return false, err
 	}
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
 	if adjustRangeKeyChanged {
@@ -554,9 +555,10 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 		return
 	}
 	if err := i.maybeSkipIntentRangeKey(); err != nil {
-		return
+		return false, err
 	}
 	i.computePos()
+	return i.valid, i.err
 }
 
 func (i *intentInterleavingIter) checkConstraint(k roachpb.Key, isExclusiveUpper bool) {
@@ -577,15 +579,15 @@ func (i *intentInterleavingIter) checkConstraint(k roachpb.Key, isExclusiveUpper
 	}
 }
 
-func (i *intentInterleavingIter) tryDecodeKey() error {
-	i.iterValid, i.err = i.iter.Valid()
-	if i.iterValid {
+func (i *intentInterleavingIter) tryDecodeKey(valid bool, err error) error {
+	i.iterValid, i.err = valid, err
+	if valid {
 		i.iterKey = i.iter.UnsafeKey()
 	}
-	if i.err != nil {
-		i.valid = false
+	if err != nil {
+		valid = false
 	}
-	return i.err
+	return err
 }
 
 // Assumes that i.err != nil. And i.iterValid and i.iterKey are up to date.
@@ -704,9 +706,9 @@ func (i *intentInterleavingIter) Valid() (bool, error) {
 	return i.valid, i.err
 }
 
-func (i *intentInterleavingIter) Next() {
+func (i *intentInterleavingIter) Next() (valid bool, err error) {
 	if i.err != nil {
-		return
+		return false, i.err
 	}
 	if i.dir < 0 {
 		// Switching from reverse to forward iteration.
@@ -721,9 +723,8 @@ func (i *intentInterleavingIter) Next() {
 			// iteration. Since intentKey is synchronized with intentIter for
 			// non-prefix iteration, step both forward.
 			i.valid = true
-			i.iter.Next()
-			if err := i.tryDecodeKey(); err != nil {
-				return
+			if err := i.tryDecodeKey(i.iter.Next()); err != nil {
+				return false, err
 			}
 			i.rangeKeyChanged = i.iter.RangeKeyChanged()
 			var limitKey roachpb.Key
@@ -732,13 +733,13 @@ func (i *intentInterleavingIter) Next() {
 			}
 			iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
-				return
+				return false, err
 			}
 			if err := i.maybeSkipIntentRangeKey(); err != nil {
-				return
+				return false, err
 			}
 			i.computePos()
-			return
+			return i.valid, i.err
 		}
 		// At least one of the iterators is not exhausted.
 		if isCurAtIntent {
@@ -754,16 +755,15 @@ func (i *intentInterleavingIter) Next() {
 			// code) violates the invariant that the iter is pointing to the
 			// provisional value, but it does care that iter is pointing to some
 			// version of that key.
-			i.iter.Next()
-			if err := i.tryDecodeKey(); err != nil {
-				return
+			if err := i.tryDecodeKey(i.iter.Next()); err != nil {
+				return false, err
 			}
 			i.rangeKeyChanged = i.iter.RangeKeyChanged()
 			i.intentCmp = 0
 			if !i.iterValid {
 				i.err = errors.Errorf("intent has no provisional value")
 				i.valid = false
-				return
+				return false, i.err
 			}
 			if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
 				// If there was a bare range key before the provisional value, iter
@@ -771,7 +771,7 @@ func (i *intentInterleavingIter) Next() {
 				// so it must now be at the provisional value, but it is not.
 				i.err = errors.Errorf("intent has no provisional value")
 				i.valid = false
-				return
+				return false, i.err
 			}
 		} else {
 			// The intentIter precedes the iter. It could be for the same key, iff
@@ -780,7 +780,7 @@ func (i *intentInterleavingIter) Next() {
 			limitKey := i.makeUpperLimitKey()
 			iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
-				return
+				return false, err
 			}
 			// NB: doesn't need maybeSkipIntentRangeKey() as intentCmp > 0.
 			i.intentCmp = +1
@@ -788,7 +788,7 @@ func (i *intentInterleavingIter) Next() {
 		// INVARIANT: i.valid
 	}
 	if !i.valid {
-		return
+		return false, nil
 	}
 	if i.isCurAtIntentIterForward() {
 		// The iterator is positioned at an intent in intentIter. iter must be
@@ -799,12 +799,12 @@ func (i *intentInterleavingIter) Next() {
 		if i.intentCmp != 0 {
 			i.err = errors.Errorf("intentIter at intent, but iter not at provisional value")
 			i.valid = false
-			return
+			return false, i.err
 		}
 		if !i.iterValid {
 			i.err = errors.Errorf("iter expected to be at provisional value, but is exhausted")
 			i.valid = false
-			return
+			return false, i.err
 		}
 		var limitKey roachpb.Key
 		if !i.prefix {
@@ -812,7 +812,7 @@ func (i *intentInterleavingIter) Next() {
 		}
 		iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 		if err = i.tryDecodeLockKey(iterState, err); err != nil {
-			return
+			return false, err
 		}
 		i.rangeKeyChanged = false // already surfaced at the intent
 		// NB: doesn't need maybeSkipIntentRangeKey() as intentCmp > 0.
@@ -820,9 +820,8 @@ func (i *intentInterleavingIter) Next() {
 	} else {
 		// Common case:
 		// The iterator is positioned at iter, at an MVCC value.
-		i.iter.Next()
-		if err := i.tryDecodeKey(); err != nil {
-			return
+		if err := i.tryDecodeKey(i.iter.Next()); err != nil {
+			return false, err
 		}
 		i.rangeKeyChanged = i.iter.RangeKeyChanged()
 		if i.intentIterState == pebble.IterAtLimit && i.iterValid && !i.prefix {
@@ -831,20 +830,21 @@ func (i *intentInterleavingIter) Next() {
 			limitKey := i.makeUpperLimitKey()
 			iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
-				return
+				return false, err
 			}
 		}
 		// Whether we stepped the intentIter or not, we have stepped iter, and
 		// iter could now be at a bare range key that is equal to the intentIter
 		// key.
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
-			return
+			return false, err
 		}
 		i.computePos()
 	}
+	return i.valid, nil
 }
 
-func (i *intentInterleavingIter) NextKey() {
+func (i *intentInterleavingIter) NextKey() (valid bool, err error) {
 	// NextKey is not called to switch directions, i.e., we must already
 	// be in the forward direction.
 	if i.dir < 0 {
@@ -866,9 +866,8 @@ func (i *intentInterleavingIter) NextKey() {
 		// Step the iter to NextKey(), i.e., past all the versions of this key.
 		// Note that iter may already be exhausted, in which case calling NextKey
 		// is a no-op.
-		i.iter.NextKey()
-		if err := i.tryDecodeKey(); err != nil {
-			return
+		if err := i.tryDecodeKey(i.iter.NextKey()); err != nil {
+			return false, err
 		}
 		i.rangeKeyChanged = i.iter.RangeKeyChanged()
 		var limitKey roachpb.Key
@@ -877,33 +876,33 @@ func (i *intentInterleavingIter) NextKey() {
 		}
 		iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 		if err := i.tryDecodeLockKey(iterState, err); err != nil {
-			return
+			return false, err
 		}
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
-			return
+			return false, err
 		}
 		i.computePos()
-		return
+		return i.valid, i.err
 	}
 	// Common case:
 	// The iterator is positioned at iter, i.e., at a MVCC value.
 	// Step the iter to NextKey(), i.e., past all the versions of this key.
-	i.iter.NextKey()
-	if err := i.tryDecodeKey(); err != nil {
-		return
+	if err := i.tryDecodeKey(i.iter.NextKey()); err != nil {
+		return false, err
 	}
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
 	if i.intentIterState == pebble.IterAtLimit && i.iterValid && !i.prefix {
 		limitKey := i.makeUpperLimitKey()
 		iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 		if err = i.tryDecodeLockKey(iterState, err); err != nil {
-			return
+			return false, err
 		}
 	}
 	if err := i.maybeSkipIntentRangeKey(); err != nil {
-		return
+		return false, err
 	}
 	i.computePos()
+	return i.valid, i.err
 }
 
 // TODO(erikgrinaker): Consider computing this once and storing it as a struct
@@ -1047,7 +1046,7 @@ func (i *intentInterleavingIter) Close() {
 	intentInterleavingIterPool.Put(i)
 }
 
-func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
+func (i *intentInterleavingIter) SeekLT(key MVCCKey) (valid bool, err error) {
 	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
 
 	i.dir = -1
@@ -1057,7 +1056,7 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 	if i.prefix {
 		i.err = errors.Errorf("prefix iteration is not permitted with SeekLT")
 		i.valid = false
-		return
+		return false, i.err
 	}
 	if i.constraint != notConstrained {
 		// If the seek key of SeekLT is the boundary between the local and global
@@ -1083,9 +1082,8 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 		}
 	}
 
-	i.iter.SeekLT(key)
-	if err := i.tryDecodeKey(); err != nil {
-		return
+	if err := i.tryDecodeKey(i.iter.SeekLT(key)); err != nil {
+		return false, i.err
 	}
 	var intentSeekKey roachpb.Key
 	if key.Timestamp.IsEmpty() {
@@ -1103,7 +1101,7 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 	}
 	iterState, err := i.intentIter.SeekEngineKeyLTWithLimit(EngineKey{Key: intentSeekKey}, limitKey)
 	if err = i.tryDecodeLockKey(iterState, err); err != nil {
-		return
+		return false, err
 	}
 	i.computePos()
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
@@ -1111,9 +1109,10 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 		i.adjustSeekRangeKeyChanged()
 	}
 	i.maybeSuppressRangeKeyChanged()
+	return i.valid, i.err
 }
 
-func (i *intentInterleavingIter) Prev() {
+func (i *intentInterleavingIter) Prev() (valid bool, err error) {
 	if i.err != nil {
 		return
 	}
@@ -1125,9 +1124,8 @@ func (i *intentInterleavingIter) Prev() {
 		if !i.valid {
 			// Both iterators are exhausted, so step both backward.
 			i.valid = true
-			i.iter.Prev()
-			if err := i.tryDecodeKey(); err != nil {
-				return
+			if err := i.tryDecodeKey(i.iter.Prev()); err != nil {
+				return false, err
 			}
 			var limitKey roachpb.Key
 			if i.iterValid {
@@ -1135,12 +1133,12 @@ func (i *intentInterleavingIter) Prev() {
 			}
 			iterState, err := i.intentIter.PrevEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
-				return
+				return false, err
 			}
 			i.computePos()
 			i.rangeKeyChanged = i.iter.RangeKeyChanged()
 			i.maybeSuppressRangeKeyChanged()
-			return
+			return i.valid, i.err
 		}
 		// At least one of the iterators is not exhausted.
 		if isCurAtIntent {
@@ -1158,11 +1156,10 @@ func (i *intentInterleavingIter) Prev() {
 			if i.intentCmp != 0 {
 				i.err = errors.Errorf("iter not at provisional value, cmp: %d", i.intentCmp)
 				i.valid = false
-				return
+				return false, i.err
 			}
-			i.iter.Prev()
-			if err := i.tryDecodeKey(); err != nil {
-				return
+			if err := i.tryDecodeKey(i.iter.Prev()); err != nil {
+				return false, err
 			}
 			i.computePos()
 			// TODO(sumeer): These calls to initialize and suppress rangeKeyChanged
@@ -1177,7 +1174,7 @@ func (i *intentInterleavingIter) Prev() {
 			limitKey := i.makeLowerLimitKey()
 			iterState, err := i.intentIter.PrevEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
-				return
+				return false, err
 			}
 			i.computePos()
 			// TODO(sumeer): This call to suppress rangeKeyChanged is unnecessary
@@ -1188,7 +1185,7 @@ func (i *intentInterleavingIter) Prev() {
 		// INVARIANT: i.valid
 	}
 	if !i.valid {
-		return
+		return false, i.err
 	}
 	if i.isCurAtIntentIterReverse() {
 		// The iterator is positioned at an intent in intentIter, and iter is
@@ -1199,9 +1196,8 @@ func (i *intentInterleavingIter) Prev() {
 		// off the bare range key if there is one, and account for the fact
 		// that the range key may have already changed on the intent.
 		if i.iterBareRangeAtIntent {
-			i.iter.Prev()
-			if err := i.tryDecodeKey(); err != nil {
-				return
+			if err := i.tryDecodeKey(i.iter.Prev()); err != nil {
+				return false, err
 			}
 		}
 		// Two cases:
@@ -1222,7 +1218,7 @@ func (i *intentInterleavingIter) Prev() {
 		}
 		intentIterState, err := i.intentIter.PrevEngineKeyWithLimit(limitKey)
 		if err = i.tryDecodeLockKey(intentIterState, err); err != nil {
-			return
+			return false, err
 		}
 		if !i.iterValid {
 			// It !i.iterValid, the intentIter can no longer be valid either.
@@ -1231,7 +1227,7 @@ func (i *intentInterleavingIter) Prev() {
 				i.err = errors.Errorf("reverse iteration discovered intent without provisional value")
 			}
 			i.valid = false
-			return
+			return false, i.err
 		}
 		// iterValid == true. So positioned at iter.
 		i.intentCmp = -1
@@ -1240,7 +1236,7 @@ func (i *intentInterleavingIter) Prev() {
 			if i.intentCmp > 0 {
 				i.err = errors.Errorf("intentIter should not be after iter")
 				i.valid = false
-				return
+				return false, i.err
 			}
 			// INVARIANT: i.intentCmp <= 0. So this call to
 			// maybeSuppressRangeKeyChanged() will be a no-op.
@@ -1249,9 +1245,8 @@ func (i *intentInterleavingIter) Prev() {
 	} else {
 		// Common case:
 		// The iterator is positioned at iter, i.e., at a MVCC value.
-		i.iter.Prev()
-		if err := i.tryDecodeKey(); err != nil {
-			return
+		if err := i.tryDecodeKey(i.iter.Prev()); err != nil {
+			return false, err
 		}
 		if i.intentIterState == pebble.IterAtLimit && i.iterValid {
 			// TODO(sumeer): could avoid doing this if i.iter has stepped to
@@ -1259,13 +1254,14 @@ func (i *intentInterleavingIter) Prev() {
 			limitKey := i.makeLowerLimitKey()
 			iterState, err := i.intentIter.PrevEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
-				return
+				return false, err
 			}
 		}
 		i.computePos()
 		i.rangeKeyChanged = i.iter.RangeKeyChanged()
 		i.maybeSuppressRangeKeyChanged()
 	}
+	return i.valid, i.err
 }
 
 func (i *intentInterleavingIter) UnsafeRawKey() []byte {
@@ -1305,7 +1301,7 @@ func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
 func (i *intentInterleavingIter) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
-	return findSplitKeyUsingIterator(i, start, end, minSplitKey, targetSize)
+	return findSplitKeyUsingIterator(DeprecatedMVCCIterator{i}, start, end, minSplitKey, targetSize)
 }
 
 func (i *intentInterleavingIter) Stats() IteratorStats {
@@ -1484,29 +1480,29 @@ func maybeUnwrapUnsafeIter(iter MVCCIterator) MVCCIterator {
 
 var _ MVCCIterator = &unsafeMVCCIterator{}
 
-func (i *unsafeMVCCIterator) SeekGE(key MVCCKey) {
+func (i *unsafeMVCCIterator) SeekGE(key MVCCKey) (valid bool, err error) {
 	i.mangleBufs()
-	i.MVCCIterator.SeekGE(key)
+	return i.MVCCIterator.SeekGE(key)
 }
 
-func (i *unsafeMVCCIterator) Next() {
+func (i *unsafeMVCCIterator) Next() (valid bool, err error) {
 	i.mangleBufs()
-	i.MVCCIterator.Next()
+	return i.MVCCIterator.Next()
 }
 
-func (i *unsafeMVCCIterator) NextKey() {
+func (i *unsafeMVCCIterator) NextKey() (valid bool, err error) {
 	i.mangleBufs()
-	i.MVCCIterator.NextKey()
+	return i.MVCCIterator.NextKey()
 }
 
-func (i *unsafeMVCCIterator) SeekLT(key MVCCKey) {
+func (i *unsafeMVCCIterator) SeekLT(key MVCCKey) (valid bool, err error) {
 	i.mangleBufs()
-	i.MVCCIterator.SeekLT(key)
+	return i.MVCCIterator.SeekLT(key)
 }
 
-func (i *unsafeMVCCIterator) Prev() {
+func (i *unsafeMVCCIterator) Prev() (valid bool, err error) {
 	i.mangleBufs()
-	i.MVCCIterator.Prev()
+	return i.MVCCIterator.Prev()
 }
 
 func (i *unsafeMVCCIterator) UnsafeKey() MVCCKey {

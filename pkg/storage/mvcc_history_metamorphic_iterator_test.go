@@ -121,7 +121,7 @@ func (m *metamorphicIterator) moveAround() {
 				if stillValid {
 					resetActions = append(resetActions, action{
 						"ResetViaPrev",
-						mvccIt.Prev,
+						func() { mvccIt.Prev() },
 					})
 				}
 			},
@@ -135,10 +135,10 @@ func (m *metamorphicIterator) moveAround() {
 	if iit != nil {
 		actions = append(actions, action{
 			"NextIgnoringTime",
-			iit.NextIgnoringTime,
+			func() { _, _ = iit.NextIgnoringTime() },
 		}, action{
 			"NextKeyIgnoringTime",
-			iit.NextKeyIgnoringTime,
+			func() { _, _ = iit.NextKeyIgnoringTime() },
 		})
 	}
 
@@ -165,7 +165,7 @@ func (m *metamorphicIterator) moveAround() {
 					mvccIt.Prev()
 					resetActions = append(resetActions, action{
 						"ResetViaNext",
-						mvccIt.Next,
+						func() { mvccIt.Next() },
 					})
 				},
 			})
@@ -291,26 +291,29 @@ func (m *metamorphicIterator) Close() {
 	m.it.Close()
 }
 
-func (m *metamorphicIterator) SeekGE(key storage.MVCCKey) {
+func (m *metamorphicIterator) SeekGE(key storage.MVCCKey) (bool, error) {
 	m.isForward = true
 	m.it.SeekGE(key)
 	m.moveAround()
+	return m.it.Valid()
 }
 
 func (m *metamorphicIterator) Valid() (bool, error) {
 	return m.it.Valid()
 }
 
-func (m *metamorphicIterator) Next() {
+func (m *metamorphicIterator) Next() (bool, error) {
 	m.it.Next()
 	m.isForward = true
 	m.moveAround()
+	return m.it.Valid()
 }
 
-func (m *metamorphicIterator) NextKey() {
+func (m *metamorphicIterator) NextKey() (bool, error) {
 	m.it.NextKey()
 	m.isForward = true
 	m.moveAround()
+	return m.it.Valid()
 }
 
 func (m *metamorphicIterator) UnsafeKey() storage.MVCCKey {
@@ -355,23 +358,26 @@ type metamorphicMVCCIterator struct {
 
 var _ storage.MVCCIterator = (*metamorphicMVCCIterator)(nil)
 
-func (m *metamorphicMVCCIterator) SeekLT(key storage.MVCCKey) {
+func (m *metamorphicMVCCIterator) SeekLT(key storage.MVCCKey) (bool, error) {
 	m.it.(storage.MVCCIterator).SeekLT(key)
 	m.moveAround()
+	return m.it.Valid()
 }
 
-func (m *metamorphicMVCCIterator) Prev() {
+func (m *metamorphicMVCCIterator) Prev() (bool, error) {
 	m.it.(storage.MVCCIterator).Prev()
 	m.moveAround()
+	return m.it.Valid()
 }
 
 func (m *metamorphicMVCCIterator) UnsafeLazyValue() pebble.LazyValue {
 	return m.it.(storage.MVCCIterator).UnsafeLazyValue()
 }
 
-func (m *metamorphicMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
+func (m *metamorphicMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) (bool, error) {
 	m.it.(storage.MVCCIterator).SeekIntentGE(key, txnUUID)
 	m.moveAround()
+	return m.it.Valid()
 }
 
 func (m *metamorphicMVCCIterator) UnsafeRawKey() []byte {
@@ -422,16 +428,18 @@ func (m *metamorphicMVCCIncrementalIterator) RangeKeyChangedIgnoringTime() bool 
 	return m.it.(*storage.MVCCIncrementalIterator).RangeKeyChangedIgnoringTime()
 }
 
-func (m *metamorphicMVCCIncrementalIterator) NextIgnoringTime() {
+func (m *metamorphicMVCCIncrementalIterator) NextIgnoringTime() (bool, error) {
 	m.it.(*storage.MVCCIncrementalIterator).NextIgnoringTime()
 	m.isForward = true
 	m.moveAround()
+	return m.it.Valid()
 }
 
-func (m *metamorphicMVCCIncrementalIterator) NextKeyIgnoringTime() {
+func (m *metamorphicMVCCIncrementalIterator) NextKeyIgnoringTime() (bool, error) {
 	m.it.(*storage.MVCCIncrementalIterator).NextKeyIgnoringTime()
 	m.isForward = true
 	m.moveAround()
+	return m.it.Valid()
 }
 
 func (m *metamorphicMVCCIncrementalIterator) TryGetIntentError() error {

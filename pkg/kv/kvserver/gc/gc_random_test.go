@@ -430,35 +430,35 @@ func assertLiveData(
 		GCTTL:     gcTTL,
 		Threshold: gcThreshold,
 	}
-	pointIt := before.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
+	pointIt := storage.DeprecatedMVCCIterator{MVCCIterator: before.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
 		storage.IterOptions{
 			LowerBound: desc.StartKey.AsRawKey(),
 			UpperBound: desc.EndKey.AsRawKey(),
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		})
+		})}
 	defer pointIt.Close()
 	pointIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
-	pointExpectationsGenerator := getExpectationsGenerator(t, pointIt, gcThreshold, intentThreshold,
-		&expInfo)
+	pointExpectationsGenerator := getExpectationsGenerator(t, pointIt.MVCCIterator,
+		gcThreshold, intentThreshold, &expInfo)
 
-	rangeIt := before.NewMVCCIterator(storage.MVCCKeyIterKind,
+	rangeIt := storage.DeprecatedMVCCIterator{MVCCIterator: before.NewMVCCIterator(storage.MVCCKeyIterKind,
 		storage.IterOptions{
 			LowerBound: desc.StartKey.AsRawKey(),
 			UpperBound: desc.EndKey.AsRawKey(),
 			KeyTypes:   storage.IterKeyTypeRangesOnly,
-		})
+		})}
 	defer rangeIt.Close()
 	rangeIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
-	expectedRanges := mergeRanges(filterRangeFragments(rangeFragmentsFromIt(t, rangeIt), gcThreshold,
+	expectedRanges := mergeRanges(filterRangeFragments(rangeFragmentsFromIt(t, rangeIt.MVCCIterator), gcThreshold,
 		&expInfo))
 
 	// Loop over engine data after applying GCer requests and compare with
 	// expected point keys.
-	itAfter := after.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	itAfter := storage.DeprecatedMVCCIterator{MVCCIterator: after.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: desc.StartKey.AsRawKey(),
 		UpperBound: desc.EndKey.AsRawKey(),
 		KeyTypes:   storage.IterKeyTypePointsOnly,
-	})
+	})}
 	defer itAfter.Close()
 
 	itAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
@@ -491,15 +491,15 @@ func assertLiveData(
 		}
 	}
 
-	rangeItAfter := after.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	rangeItAfter := storage.DeprecatedMVCCIterator{MVCCIterator: after.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypeRangesOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
-	})
+	})}
 	defer rangeItAfter.Close()
 	rangeItAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
-	actualRanges := mergeRanges(rangeFragmentsFromIt(t, rangeItAfter))
+	actualRanges := mergeRanges(rangeFragmentsFromIt(t, rangeItAfter.MVCCIterator))
 
 	// Be careful when enabling logging on tests with default large N,
 	// 1000 elements is ok, but 10k or 100k entries might become unreadable.
@@ -517,8 +517,12 @@ func assertLiveData(
 }
 
 func getExpectationsGenerator(
-	t *testing.T, it storage.MVCCIterator, gcThreshold, intentThreshold hlc.Timestamp, expInfo *Info,
+	t *testing.T,
+	origIter storage.MVCCIterator,
+	gcThreshold, intentThreshold hlc.Timestamp,
+	expInfo *Info,
 ) func() (storage.MVCCKeyValue, bool) {
+	it := storage.DeprecatedMVCCIterator{MVCCIterator: origIter}
 	var pending []storage.MVCCKeyValue
 	return func() (storage.MVCCKeyValue, bool) {
 		for {
@@ -666,12 +670,12 @@ func getExpectationsGenerator(
 func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 	var result []string
 
-	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it := storage.DeprecatedMVCCIterator{MVCCIterator: r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound:           key,
 		UpperBound:           key.Next(),
 		KeyTypes:             storage.IterKeyTypePointsAndRanges,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
-	})
+	})}
 	defer it.Close()
 
 	it.SeekGE(storage.MVCCKey{Key: key})
@@ -705,17 +709,14 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 
 func rangeFragmentsFromIt(t *testing.T, it storage.MVCCIterator) [][]storage.MVCCRangeKeyValue {
 	var result [][]storage.MVCCRangeKeyValue
-	for {
-		ok, err := it.Valid()
-		require.NoError(t, err, "failed to read range tombstones from iterator")
-		if !ok {
-			break
-		}
+	ok, err := it.Valid()
+	for ok {
 		if _, hasRange := it.HasPointAndRange(); hasRange {
 			result = append(result, it.RangeKeys().Clone().AsRangeKeyValues())
 		}
-		it.NextKey()
+		ok, err = it.NextKey()
 	}
+	require.NoError(t, err, "failed to read range tombstones from iterator")
 	return result
 }
 

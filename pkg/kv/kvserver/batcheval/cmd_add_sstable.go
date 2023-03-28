@@ -251,11 +251,11 @@ func EvalAddSSTable(
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, and if the request did not include pre-computed stats,
 	// compute the expected MVCC stats delta of ingesting the SST.
-	sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	sstIter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -278,7 +278,7 @@ func EvalAddSSTable(
 		stats = *args.MVCCStats
 	} else {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
-		stats, err = storage.ComputeStatsForIter(sstIter, h.Timestamp.WallTime)
+		stats, err = storage.ComputeStatsForIter(sstIter.MVCCIterator, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
 		}
@@ -375,13 +375,13 @@ func EvalAddSSTable(
 	// addition, and instead just use this key-only iterator. If a caller actually
 	// needs to know what data is there, it must issue its own real Scan.
 	if args.ReturnFollowingLikelyNonEmptySpanStart {
-		existingIter := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+		existingIter := storage.DeprecatedMVCCIterator{MVCCIterator: spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
 			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
 			storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: reply.RangeSpan.EndKey,
 			},
-		)
+		)}
 		defer existingIter.Close()
 		existingIter.SeekGE(end)
 		if ok, err := existingIter.Valid(); err != nil {
@@ -406,10 +406,10 @@ func EvalAddSSTable(
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))
 
 		// Ingest point keys.
-		pointIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		pointIter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsOnly,
 			UpperBound: keys.MaxKey,
-		})
+		}))
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -444,10 +444,10 @@ func EvalAddSSTable(
 		}
 
 		// Ingest range keys.
-		rangeIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		rangeIter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypeRangesOnly,
 			UpperBound: keys.MaxKey,
-		})
+		}))
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -509,10 +509,10 @@ func EvalAddSSTable(
 func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.MVCCStats) error {
 
 	// Check SST point keys.
-	iter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		return err
 	}
@@ -544,10 +544,10 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 	}
 
 	// Check SST range keys.
-	iter, err = storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	iter, err = storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		return err
 	}
@@ -590,11 +590,11 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 	// same timestamp as the given statistics, since they may contain
 	// timing-dependent values (typically MVCC garbage, i.e. multiple versions).
 	if stats != nil {
-		iter, err = storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		iter, err = storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
 			UpperBound: keys.MaxKey,
-		})
+		}))
 		if err != nil {
 			return err
 		}
@@ -602,7 +602,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 		iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 
 		given := *stats
-		actual, err := storage.ComputeStatsForIter(iter, given.LastUpdateNanos)
+		actual, err := storage.ComputeStatsForIter(iter.MVCCIterator, given.LastUpdateNanos)
 		if err != nil {
 			return errors.Wrap(err, "failed to compare stats: %w")
 		}
