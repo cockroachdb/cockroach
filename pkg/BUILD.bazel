@@ -443,6 +443,7 @@ ALL_TESTS = [
     "//pkg/util/search:search_test",
     "//pkg/util/shuffle:shuffle_test",
     "//pkg/util/span:span_test",
+    "//pkg/util/startup:startup_test",
     "//pkg/util/stop:stop_test",
     "//pkg/util/stringarena:stringarena_test",
     "//pkg/util/syncutil/singleflight:singleflight_test",
