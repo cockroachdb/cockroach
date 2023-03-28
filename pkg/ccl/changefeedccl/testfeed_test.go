@@ -1344,7 +1344,7 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 
 		for k, v := range row {
 			if k == parquetCrdbEventTypeColName {
-				if string(v.([]byte)) == parquetEventDelete {
+				if string(v.([]byte)) == parquetEventDelete.DString().String() {
 					isDeleted = true
 				}
 				continue
