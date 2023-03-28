@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "//pkg/util/timeutil",
