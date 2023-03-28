@@ -2844,6 +2844,9 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		if selfDelegate {
 			delegateRequest.QueueOnDelegateLen = -1
 		}
+		if !selfDelegate {
+			r.store.Metrics().DelegateSnapshotInProgress.Inc(1)
+		}
 
 		retErr = contextutil.RunWithTimeout(
 			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
@@ -2851,6 +2854,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 				return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
 			},
 		)
+		if !selfDelegate {
+			r.store.Metrics().DelegateSnapshotInProgress.Dec(1)
+		}
+
 		// Return once we have success.
 		if retErr == nil {
 			if !selfDelegate {
@@ -2861,7 +2868,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 			if !selfDelegate {
 				r.store.Metrics().DelegateSnapshotFailures.Inc(1)
 			}
-			log.Warningf(ctx, "attempt %d: delegate snapshot %+v request failed %v", n+1, delegateRequest, retErr)
+			log.KvDistribution.Warningf(ctx, "attempt %d: delegate snapshot %+v request failed %v", n+1, delegateRequest, retErr)
 		}
 	}
 	return
