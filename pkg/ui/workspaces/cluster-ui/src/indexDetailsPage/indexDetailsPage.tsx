@@ -28,7 +28,7 @@ import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tooltip/style";
 import { SummaryCard } from "../summaryCard";
-import moment, { Moment } from "moment";
+import moment, { Moment } from "moment-timezone";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
 import {

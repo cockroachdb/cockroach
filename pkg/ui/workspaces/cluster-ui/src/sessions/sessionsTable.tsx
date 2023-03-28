@@ -20,7 +20,7 @@ import { BytesWithPrecision, Count } from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 
-import moment from "moment";
+import moment from "moment-timezone";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 type ISession = cockroach.server.serverpb.Session;
