@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -664,6 +665,10 @@ func (m *Manager) shouldRunMigration(
 
 type scanFunc = func(_ context.Context, from, to interface{}, maxRows int64) ([]kv.KeyValue, error)
 
+// This method has baked in startup retry and should not be called on a non
+// startup path. This is different from master/23.1 and changes that would reuse
+// this in other places are unlikely, but care must be taken in case some fixes
+// are backported.
 func getCompletedMigrations(
 	ctx context.Context, scan scanFunc, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
@@ -671,7 +676,11 @@ func getCompletedMigrations(
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
 	prefix := codec.StartupMigrationKeyPrefix()
-	keyvals, err := scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+	var keyvals []kv.KeyValue
+	err := startup.RunIdempotentWithRetry(ctx, "get completed migrations", func(ctx context.Context) (err error) {
+		keyvals, err = scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+		return err
+	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 	}
