@@ -354,3 +354,48 @@ func hasColumnFamily(
 	}
 	return true, nil
 }
+
+// onlyHasColumnFamily returns true if storedTable has only the given column
+// family, comparing with expectedTable. storedTable descriptor must be read
+// from system storage as compared to reading from the systemschema package. On
+// the contrary, expectedTable must be accessed directly from systemschema
+// package. This function returns an error if there is more than one column
+// family, or if the only column family does not match the provided family name.
+func onlyHasColumnFamily(
+	storedTable, expectedTable catalog.TableDescriptor, colFamily string,
+) (bool, error) {
+	var storedFamily, expectedFamily *descpb.ColumnFamilyDescriptor
+	storedFamilies := storedTable.GetFamilies()
+	if len(storedFamilies) > 1 {
+		return false, nil
+	}
+	if storedFamilies[0].Name == colFamily {
+		storedFamily = &storedFamilies[0]
+	}
+
+	if storedFamily == nil {
+		return false, nil
+	}
+
+	expectedFamilies := expectedTable.GetFamilies()
+	if expectedFamilies[0].Name == colFamily {
+		expectedFamily = &expectedFamilies[0]
+	}
+
+	if expectedFamily == nil {
+		return false, errors.Errorf("column family %s does not exist", colFamily)
+	}
+
+	// Check that columns match.
+	storedFamilyCols := storedFamily.ColumnNames
+	expectedFamilyCols := expectedFamily.ColumnNames
+	if len(storedFamilyCols) != len(expectedFamilyCols) {
+		return false, nil
+	}
+	for i, storedCol := range storedFamilyCols {
+		if storedCol != expectedFamilyCols[i] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
