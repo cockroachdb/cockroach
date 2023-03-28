@@ -336,16 +336,6 @@
 <tr><td>varbit <code>=</code> varbit</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
-<tr><td><code>></code></td><td>Return</td></tr>
-</thead><tbody>
-<tr><td>jsonb <code>></code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
-</tbody></table>
-<table><thead>
-<tr><td><code>>=</code></td><td>Return</td></tr>
-</thead><tbody>
-<tr><td>jsonb <code>>=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
-</tbody></table>
-<table><thead>
 <tr><td><code>>></code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="inet.html">inet</a> <code>>></code> <a href="inet.html">inet</a></td><td><a href="bool.html">bool</a></td></tr>
