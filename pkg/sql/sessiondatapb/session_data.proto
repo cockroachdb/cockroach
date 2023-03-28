@@ -112,6 +112,10 @@ message SessionData {
   // that is used for builtins like to_tsvector and to_tsquery if no
   // text search configuration is explicitly passed in.
   string default_text_search_config = 26;
+  // TestingOptimizerInjectPanics indicates whether random panics are injected
+  // during optimization. The goal of this setting is to flush out cases where
+  // panics used for error-propagation are uncaught.
+  bool testing_optimizer_inject_panics = 27;
 }
 
 // DataConversionConfig contains the parameters that influence the output
