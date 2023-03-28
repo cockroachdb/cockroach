@@ -1172,9 +1172,6 @@ StatementPhase stage 1 of 1 with 21 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 107
       ParentSchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 107
-      ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 107
@@ -1234,6 +1231,8 @@ StatementPhase stage 1 of 1 with 21 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: root
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> PUBLIC
@@ -1301,9 +1300,6 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 107
       ParentSchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 107
-      ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 107
@@ -1374,6 +1370,8 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
       TableID: 107
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
+      TableID: 107
+    *scop.AssertColumnFamilyIsRemoved
       TableID: 107
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
