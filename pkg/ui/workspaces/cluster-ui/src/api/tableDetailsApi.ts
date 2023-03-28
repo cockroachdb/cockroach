@@ -21,7 +21,7 @@ import {
   SqlTxnResult,
   txnResultIsEmpty,
 } from "./sqlApi";
-import moment from "moment";
+import moment from "moment-timezone";
 import { fromHexString, withTimeout } from "./util";
 import { Format, Identifier, Join, SQL } from "./safesql";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";

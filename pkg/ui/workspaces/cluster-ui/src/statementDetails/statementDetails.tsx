@@ -72,7 +72,7 @@ import {
   generateCPUTimeseries,
 } from "./timeseriesUtils";
 import { Delayed } from "../delayed";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   InsertStmtDiagnosticRequest,
   InsightRecommendation,
