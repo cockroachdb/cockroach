@@ -24,7 +24,7 @@ import (
 
 // parseUsingFastParser parses string as JSON using fast json parser.
 func parseUsingFastParser(s string, cfg parseConfig) (JSON, error) {
-	input, err := unsafeGetBytes(s)
+	input, err := UnsafeGetBytes(s)
 	if err != nil {
 		return nil, err
 	}
@@ -326,13 +326,13 @@ func decodeErrorContext(err error, s string, pos int) error {
 	)
 }
 
-// unsafeGetBytes returns []byte in the underlying string,
+// UnsafeGetBytes returns []byte in the underlying string,
 // without incurring copy.
 // This unsafe mechanism is safe to use here because, ultimately, every
 // JSON object produced from those bytes will copy those bytes anyway
 // (i.e. jsonString([]byte)).
 // See https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
-func unsafeGetBytes(s string) ([]byte, error) {
+func UnsafeGetBytes(s string) ([]byte, error) {
 	const maxStrLen = 1 << 30 // Really, can't see us supporting input JSONs that big.
 	if len(s) > maxStrLen {
 		return nil, bytes.ErrTooLarge
