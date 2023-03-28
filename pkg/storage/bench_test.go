@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/stretchr/testify/require"
 )
@@ -1933,7 +1933,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		// files.
 		format := sstable.TableFormatPebblev2
 		opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
-		writer := sstable.NewWriter(objstorage.NewFileWritable(sstFile), opts)
+		writer := sstable.NewWriter(objstorageprovider.NewFileWritable(sstFile), opts)
 		for _, kv := range kvPairs {
 			require.NoError(b, writer.Add(
 				pebble.InternalKey{UserKey: kv.key, Trailer: uint64(kv.kind)}, kv.value))
