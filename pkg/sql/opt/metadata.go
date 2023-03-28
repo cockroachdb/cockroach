@@ -131,6 +131,12 @@ type Metadata struct {
 	// query depends on.
 	privileges map[cat.StableID]privilegeBitmap
 
+	// builtinRefsByName stores the names used to reference builtin functions in
+	// the query. This is necessary to handle the case where changes to the search
+	// path cause a function call to be resolved to a UDF with the same signature
+	// as a builtin function.
+	builtinRefsByName map[tree.UnresolvedName]struct{}
+
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
 }
@@ -196,6 +202,14 @@ func (md *Metadata) Init() {
 		delete(md.privileges, id)
 	}
 
+	builtinRefsByName := md.builtinRefsByName
+	if builtinRefsByName == nil {
+		builtinRefsByName = make(map[tree.UnresolvedName]struct{})
+	}
+	for name := range md.builtinRefsByName {
+		delete(md.builtinRefsByName, name)
+	}
+
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*md = Metadata{}
@@ -208,6 +222,7 @@ func (md *Metadata) Init() {
 	md.udfDeps = udfDeps
 	md.objectRefsByName = objectRefsByName
 	md.privileges = privileges
+	md.builtinRefsByName = builtinRefsByName
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -222,7 +237,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
-		len(md.udfDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 {
+		len(md.udfDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
+		len(md.builtinRefsByName) != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -286,6 +302,13 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 			md.privileges = make(map[cat.StableID]privilegeBitmap)
 		}
 		md.privileges[id] = privilegeSet
+	}
+
+	for name := range from.builtinRefsByName {
+		if md.builtinRefsByName == nil {
+			md.builtinRefsByName = make(map[tree.UnresolvedName]struct{})
+		}
+		md.builtinRefsByName[name] = struct{}{}
 	}
 
 	md.sequences = append(md.sequences, from.sequences...)
@@ -418,6 +441,22 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
+	// Check that any references to builtin functions do not now resolve to a UDF
+	// with the same signature (e.g. after changes to the search path).
+	for name := range md.builtinRefsByName {
+		definition, err := optCatalog.ResolveFunction(
+			ctx, &name, &evalCtx.SessionData().SearchPath,
+		)
+		if err != nil {
+			return false, maybeSwallowMetadataResolveErr(err)
+		}
+		for i := range definition.Overloads {
+			if definition.Overloads[i].IsUDF {
+				return false, nil
+			}
+		}
+	}
+
 	return true, nil
 }
 
@@ -516,6 +555,19 @@ func (md *Metadata) AddUserDefinedFunction(
 	if name != nil {
 		md.objectRefsByName[id] = append(md.objectRefsByName[id], name)
 	}
+}
+
+// AddBuiltin adds a name used to resolve a builtin function to the metadata for
+// this query. This is necessary to handle the case when changes to the search
+// path cause a function call to resolve as a UDF instead of a builtin function.
+func (md *Metadata) AddBuiltin(name *tree.UnresolvedObjectName) {
+	if name == nil {
+		return
+	}
+	if md.builtinRefsByName == nil {
+		md.builtinRefsByName = make(map[tree.UnresolvedName]struct{})
+	}
+	md.builtinRefsByName[*name.ToUnresolvedName()] = struct{}{}
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
