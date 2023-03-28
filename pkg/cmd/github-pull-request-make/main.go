@@ -237,7 +237,11 @@ func main() {
 				// to strip out the unnecessary calls to `bazel`, but that might
 				// better be saved for when we no longer need `make` support and
 				// don't have to worry about accidentally breaking it.
-				out, err := exec.Command("bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", name), "--output=label").Output()
+				out, err := exec.Command(
+					"bazel",
+					"query",
+					fmt.Sprintf("kind(go_test, //%s:all) except attr(tags, \"integration\", //%s:all)", name, name),
+					"--output=label").Output()
 				if err != nil {
 					log.Fatal(err)
 				}
