@@ -2090,7 +2090,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 			}
 
 			statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
-			expectedTxnFingerprints[respStatement.Key.KeyData.TransactionFingerprintID] = struct{}{}
+			for _, txnFingerprintID := range respStatement.TxnFingerprintIDs {
+				expectedTxnFingerprints[txnFingerprintID] = struct{}{}
+			}
 		}
 
 		for _, respTxn := range resp.Transactions {
@@ -2105,6 +2107,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				expectedStmts, statementsInResponse, pretty.Sprint(resp), path)
 		}
 		if hasTxns {
+			// We expect that expectedTxnFingerprints is now empty since
+			// we should have removed them all.
 			assert.Empty(t, expectedTxnFingerprints)
 		} else {
 			assert.Empty(t, resp.Transactions)
