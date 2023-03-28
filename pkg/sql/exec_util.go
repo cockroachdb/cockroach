@@ -3391,6 +3391,10 @@ func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
 	m.data.OptimizerAlwaysUseHistograms = val
 }
 
+func (m *sessionDataMutator) SetPreparedStatementsCacheSize(val int64) {
+	m.data.PreparedStatementsCacheSize = val
+}
+
 func (m *sessionDataMutator) SetStreamerEnabled(val bool) {
 	m.data.StreamerEnabled = val
 }
