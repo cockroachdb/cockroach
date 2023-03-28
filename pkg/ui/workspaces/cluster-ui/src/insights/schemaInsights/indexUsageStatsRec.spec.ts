@@ -14,7 +14,7 @@ import {
   recommendDropUnusedIndex,
 } from "./indexUsageStatsRec";
 import { ClusterIndexUsageStatistic } from "../../api";
-import moment from "moment";
+import moment from "moment-timezone";
 
 describe("recommendDropUnusedIndex", () => {
   const mockCurrentTime = moment();

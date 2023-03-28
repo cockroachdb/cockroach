@@ -10,7 +10,7 @@
 
 import React from "react";
 import { shallow } from "enzyme";
-import moment from "moment";
+import moment from "moment-timezone";
 import _ from "lodash";
 
 import { MetricsTimeManagerUnconnected as MetricsTimeManager } from "./";

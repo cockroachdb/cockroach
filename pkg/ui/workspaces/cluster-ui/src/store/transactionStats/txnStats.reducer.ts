@@ -12,7 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../../timeScaleDropdown";
-import moment from "moment";
+import moment from "moment-timezone";
 import { StatementsResponse } from "../sqlStats";
 
 export type TxnStatsState = {

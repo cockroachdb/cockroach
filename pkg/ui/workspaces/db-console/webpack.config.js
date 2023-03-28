@@ -15,8 +15,11 @@ const rimraf = require("rimraf");
 const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const StringReplacePlugin = require("string-replace-webpack-plugin");
+const MomentTimezoneDataPlugin = require("moment-timezone-data-webpack-plugin");
 const WebpackBar = require("webpackbar");
 const { ESBuildMinifyPlugin } = require("esbuild-loader");
+
+const currentYear = new Date().getFullYear();
 
 const proxyPrefixes = ["/_admin", "/_status", "/ts", "/login", "/logout"];
 function shouldProxy(reqPath) {
@@ -47,6 +50,16 @@ module.exports = (env, argv) => {
       color: "orange",
       reporters: [ "basic" ],
       profile: true,
+    }),
+
+    // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
+    new MomentTimezoneDataPlugin({
+      matchZones: ["Etc/UTC", "America/New_York"],
+      startYear: 2021,
+      endYear: currentYear + 10,
+      // We have to tell the plugin where to store the pruned file
+      // otherwise webpack can't find it.
+      cacheDir: path.resolve(__dirname, "timezones"),
     }),
   ];
 
