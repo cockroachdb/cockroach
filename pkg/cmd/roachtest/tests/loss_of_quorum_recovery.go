@@ -167,7 +167,9 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	workloadHistogramFile := "restored.json"
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	settings := install.MakeClusterSettings()
+	settings := install.MakeClusterSettings(install.EnvOption([]string{
+		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
+	}))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, nodes)
 
 	// Cleanup stale files generated during recovery. We do this for the case
@@ -383,7 +385,9 @@ func runHalfOnlineRecoverLossOfQuorum(
 	workloadHistogramFile := "restored.json"
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	settings := install.MakeClusterSettings()
+	settings := install.MakeClusterSettings(install.EnvOption([]string{
+		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
+	}))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, nodes)
 
 	// Cleanup stale files generated during recovery. We do this for the case

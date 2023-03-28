@@ -834,7 +834,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 // where it needs to be estimated using node localities.
 func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 95338, "flaky test")
 	defer utilccl.TestingEnableEnterprise()()
 
 	skip.UnderStressRace(t, "times out")
@@ -973,6 +972,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 
 		startKey := keys.MakeSQLCodec(serverutils.TestTenantID()).TenantPrefix()
 		tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+		tc.WaitForVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 		desc := tc.LookupRangeOrFatal(t, startKey)
 		require.Equal(t, []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1, ReplicaID: 1},
