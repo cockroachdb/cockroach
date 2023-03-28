@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -300,6 +301,12 @@ type portalPauseInfo struct {
 	// queryStats stores statistics on query execution. It is incremented for
 	// each execution of the portal.
 	queryStats *topLevelQueryStats
+	// retPayload is needed for the cleanup steps as we will have to check the
+	// latest encountered error, so this field should be updated for each execution.
+	retPayload fsm.EventPayload
+	// retErr is needed for the cleanup steps as we will have to check the latest
+	// encountered error, so this field should be updated for each execution.
+	retErr error
 	// The following 4 stacks store functions to call when close the portal.
 	// They should be called in this order:
 	// flowCleanup -> dispatchToExecEngCleanup -> execStmtInOpenStateCleanup ->
