@@ -11,7 +11,7 @@
 import { createMemoryHistory } from "history";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { SortSetting } from "../sortedtable";
 import { Filters } from "../queryFilter";

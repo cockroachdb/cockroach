@@ -10,7 +10,7 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { createMemoryHistory } from "history";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 import { SchedulesPageProps } from "./schedulesPage";
 
 import { Schedule } from "src/api/schedulesApi";
