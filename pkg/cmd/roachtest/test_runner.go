@@ -50,6 +50,11 @@ import (
 	"github.com/petermattis/goid"
 )
 
+var _, alwaysCollectArtifacts = map[string]bool{
+	"true": true,
+	"1":    true,
+}[os.Getenv("ROACHTEST_ALWAYS_COLLECT_ARTIFACTS")]
+
 var (
 	errTestsFailed = fmt.Errorf("some tests failed")
 
@@ -1111,7 +1116,7 @@ func (r *testRunner) teardownTest(
 			t.L().Printf("no live node found, skipping validation checks")
 		}
 
-		if timedOut || t.Failed() {
+		if timedOut || t.Failed() || alwaysCollectArtifacts {
 			r.collectClusterArtifacts(ctx, c, t.L())
 		}
 	})
