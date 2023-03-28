@@ -1,0 +1,185 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.concurrency.isolation;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation";
+
+import "gogoproto/gogo.proto";
+
+// Level represents the different transaction isolation levels, which define how
+// concurrent transactions are allowed to interact and the isolation guarantees
+// that are made to individual transactions. Conceptually, isolation levels
+// achieve this by controlling how and when the changes made by one transaction
+// become visible to other transactions.
+//
+// Isolation levels in this enumeration are ordered from strongest to weakest.
+// Strong isolation levels provide a high degree of isolation between concurrent
+// transactions. They limit or eliminate the forms of concurrency effects that
+// transactions may observe. Weak isolation levels are more permissive. They
+// trade off isolation guarantees for improved performance. Transactions run
+// under weaker isolation levels block less and encounter fewer retry errors. In
+// some cases, they also perform less work.
+//
+// WARNING: Because isolation levels are defined from strongest to weakest in
+// this enumeration (which is important for backwards compatability), their
+// value comparison semantics do not represent a comparison of strength. The
+// equality operators (==, !=) may be used to match a specific isolation level,
+// but ordering operators (<, <=, >, >=) must not be used. Use the WeakerThan
+// method instead.
+//
+// Background
+//
+// Transaction isolation levels have historically been defined in multiple ways.
+//
+// ANSI SQL[^1] defined four isolation levels: READ UNCOMMITTED, READ COMMITTED,
+// REPEATABLE READ, and SERIALIZABLE. The levels were defined in terms of three
+// _phenomena_: Dirty Reads, Non-Repeatable Reads, and Phantom Reads. Stronger
+// isolation levels allow fewer phenomena to occur. As a result, they permit
+// less anomalous behavior ("permit fewer anomalies"). Weaker isolation levels
+// allow more phenomena to occur.
+//
+//  | Isolation Level  | Dirty Read   | Non-repeatable Read | Phantom Read |
+//  | ---------------- | ------------ | ------------------- | ------------ |
+//  | Read Uncommitted | Possible     | Possible            | Possible     |
+//  | Read Committed   | Not Possible | Possible            | Possible     |
+//  | Repeatable Read  | Not Possible | Not Possible        | Possible     |
+//  | Serializable     | Not Possible | Not Possible        | Not Possible |
+//
+// "A Critique of ANSI SQL Isolation Levels"[^2] demonstrated that the ANSI SQL
+// standard definitions of isolation levels were insufficient. Some phenomena
+// were ambiguous, while others were missing entirely. The work provided a new
+// characterization of isolation levels, defining the levels using a set of
+// eight different phenomena. The expanded characterization also made room for a
+// new isolation level: SNAPSHOT.
+//
+// While more complete, these definitions were still based on preventing
+// conflicting operations that could lead to anomalies from executing
+// concurrently. Adya’s dissertation "Weak Consistency: A Generalized Theory and
+// Optimistic Implementations for Distributed Transactions"[^3] argued that this
+// _preventative_ approach is overly restrictive. The definitions were
+// “disguised versions of locking” and therefore disallow optimistic and
+// multi-versioning schemes. Adya’s work generalizes existing isolation levels
+// in terms of conflicts, serialization graphs, and the forms of phenomena
+// allowed in the serialization graphs of different isolation levels.
+//
+// While these formalizations of isolation levels differ in their classification
+// approach (e.g. permitted anomalies vs. permitted histories), all three leave
+// room for a large degree of implementation freedom, leading to a diverse
+// landscape of database systems with unique approaches towards transaction
+// isolation that all "conform to the specification".
+//
+// Implementation
+//
+// CockroachDB implements three isolation levels: READ COMMITTED, SNAPSHOT, and
+// SERIALIZABLE, which loosely map on to each of the classifications presented
+// above. The system also exposes REPEATABLE READ, which maps to SNAPSHOT, and
+// READ UNCOMMITTED, which maps to READ COMMITTED.
+//
+// It contrasts the three isolation levels using a pair of properties:
+//
+// Write Skew Tolerance: Does the isolation level permit write skew? In an MVCC
+// system, this property can be expressed as whether the isolation level allows
+// transactions to write and commit at an MVCC timestamp above the MVCC
+// timestamp of its read snapshot(s).
+//
+// Read Snapshot Scope: Does the isolation level allow transactions to operate
+// across multiple read snapshots? If not, a single read snapshot is used for
+// the entire transaction. If so, what is the scope of each read snapshot?
+//
+// With these two properties in hand, CockroachDB then constructs a unifying
+// framework for its three supported isolation levels:
+//
+//  | Isolation Level     | Write Skew Tolerance | Read Snapshot Scope |
+//  |---------------------|----------------------|---------------------|
+//  | Serializable (SSI)  | No                   | Per-Transaction     |
+//  | Snapshot (SI)       | Yes                  | Per-Transaction     |
+//  | Read Committed (RC) | Yes                  | Per-Statement       |
+//
+// Write Skew Tolerance characterizes the difference between Snapshot and
+// Serializable isolation. Snapshot transactions permit write skew, so they
+// can commit at a later timestamp than their read timestamp. Serializable
+// transactions proscribe write skew, so they must commit at their read
+// timestamp. These transactions accomplish this by refreshing their reads to
+// their commit timestamp at commit time, effectively advancing their read
+// timestamp forward while verifying equivalence with their original read
+// timestamp. When a read refresh fails validation, the transaction must
+// restart. For more details, see the comment on txnSpanRefresher.
+//
+// Read Snapshot Scope characterizes the difference between Snapshot isolation
+// and Read Committed isolation. Snapshot transactions use a single consistent
+// read snapshot across their entire lifetime, ensuring "repeatable reads" and
+// avoiding "phantoms" across statements. When the transaction's read snapshot
+// must change due to contention (e.g. on a write-write conflict to avoid lost
+// updates, or on a read uncertainty error to enforce real-time ordering), the
+// transaction must restart. Conversely, Read Committed transactions use a new
+// read snapshot for each statement. The use of multiple read snapshots across
+// the lifetime of a transaction permits anomalies like non-repeatable reads
+// between statements. However, this scoping benefits from only requiring
+// statement-level retries when a read snapshot must change. As a result, these
+// retries can commonly be handled gateway-side without application involvement.
+//
+// For more about isolation levels in CockroachDB, see the Read Committed RFC:
+//  cockroachdb/cockroach/docs/RFCS/20230122_read_committed_isolation.md
+//
+// References
+//
+// [^1]: 1992, https://www.contrib.andrew.cmu.edu/~shadow/sql/sql1992.txt
+//
+// [^2]: 1995, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf
+//
+// [^3]: 1999, https://pmg.csail.mit.edu/papers/adya-phd.pdf
+//
+enum Level {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // Serializable provides the strictest transaction isolation. The isolation
+  // level emulates serial transaction execution for all committed transactions;
+  // as if transactions had been executed one after another, serially, rather
+  // than concurrently.
+  //
+  // Serializable isolation is commonly implemented using two-phase locking
+  // [2PL]. However, CockroachDB does not use two-phase locking. Instead, its
+  // implementation of Serializable isolation uses an optimistic concurrency
+  // control algorithm that is related to Serializable Snapshot Isolation [SSI]
+  // and is probably most accurately described as a variant of Write-Snapshot
+  // Isolation [WSI]. These two algorithms live in a family of concurrency
+  // control schemes that extend the multi-versioning present in Snapshot
+  // Isolation with additional runtime conflict detection to provide
+  // Serializable Isolation.
+  //
+  // [2PL]: https://en.wikipedia.org/wiki/Two-phase_locking
+  // [SSI]: https://dl.acm.org/doi/10.1145/1620585.1620587
+  // [WSI]: https://dl.acm.org/doi/10.1145/2168836.2168853
+  Serializable = 0;
+
+  // Snapshot provides moderately strict transaction isolation. A transaction
+  // using the isolation level sees only data committed before the transaction
+  // began; it never sees either uncommitted data or changes committed during
+  // transaction execution by concurrent transactions. A transaction using this
+  // isolation level is also prevented from writing to data that has changed
+  // since the transaction began ("first committer wins"), preventing lost
+  // updates.
+  //
+  // Snapshot isolation is commonly built upon Multi-Version Concurrency Control
+  // (MVCC), which allows to isolation level to provide efficient concurrent
+  // access to reads and writes in different transactions that operate on the
+  // same data.
+  Snapshot = 1;
+
+  // ReadCommitted provides relatively weak transaction isolation. Each
+  // statement in a transaction using this isolation level sees only data
+  // committed before that statement began. However, two successive statements
+  // can see different data.
+  //
+  // For more about ReadCommitted, see the Read Committed RFC:
+  //  cockroachdb/cockroach/docs/RFCS/20230122_read_committed_isolation.md
+  ReadCommitted = 2;
+}
