@@ -15,7 +15,7 @@ import {
   throwError,
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
-import moment from "moment";
+import moment from "moment-timezone";
 import { getSchemaInsights, SqlApiResponse } from "../../api";
 import {
   refreshSchemaInsightsSaga,

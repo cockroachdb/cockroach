@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { duration } from "moment";
+import { duration } from "moment-timezone";
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 
 export const limitOptions = [

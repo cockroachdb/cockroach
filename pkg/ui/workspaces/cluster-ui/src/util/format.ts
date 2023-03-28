@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
 import { longToInt } from "./fixLong";
 
 export const kibi = 1024;
@@ -191,8 +192,17 @@ export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
  */
 export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
 export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
+export const DATE_WITH_SECONDS_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm:ss z";
 export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC =
   "MMM DD, YYYY [at] H:mm:ss:ms UTC";
+
+export function FormatWithTimezone(
+  m: moment.Moment,
+  formatString = DATE_WITH_SECONDS_FORMAT_24_TZ,
+  timezone = "UTC",
+): string {
+  return moment.tz(m, timezone).format(formatString);
+}
 
 export function RenderCount(yesCount: Long, totalCount: Long): string {
   if (longToInt(yesCount) == 0) {

@@ -49,7 +49,7 @@ import {
 import styles from "./databaseTablePage.module.scss";
 import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import moment, { Moment } from "moment";
+import moment, { Moment } from "moment-timezone";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
