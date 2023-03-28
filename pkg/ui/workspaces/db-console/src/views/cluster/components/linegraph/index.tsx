@@ -34,6 +34,7 @@ import {
   TimeScale,
   Visualization,
   util,
+  WithTimezoneProps,
 } from "@cockroachlabs/cluster-ui";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
@@ -43,10 +44,11 @@ import {
   findClosestTimeScale,
   defaultTimeScaleOptions,
   TimeWindow,
+  WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
 
-export interface LineGraphProps extends MetricsDataComponentProps {
+export interface OwnProps extends MetricsDataComponentProps {
   isKvGraph?: boolean;
   title?: string;
   subtitle?: string;
@@ -58,6 +60,8 @@ export interface LineGraphProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
 }
+
+export type LineGraphProps = OwnProps & WithTimezoneProps;
 
 // touPlot formats our timeseries data into the format
 // uPlot expects which is a 2-dimensional array where the
@@ -153,7 +157,8 @@ export function fillGaps(
 // and store its ref in a global variable.
 // Once we receive updates to props, we push new data to the
 // uPlot object.
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+// InternalLinegraph is exported for testing.
+export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
   constructor(props: LineGraphProps) {
     super(props);
 
@@ -295,6 +300,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     this.xAxisDomain = calculateXAxisDomain(
       util.NanoToMilli(this.props.timeInfo.start.toNumber()),
       util.NanoToMilli(this.props.timeInfo.end.toNumber()),
+      this.props.timezone,
     );
 
     const prevKeys =
@@ -365,3 +371,5 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     );
   }
 }
+
+export default WithTimezone<OwnProps>(InternalLineGraph);

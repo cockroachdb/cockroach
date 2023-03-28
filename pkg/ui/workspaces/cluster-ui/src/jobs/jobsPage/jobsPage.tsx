@@ -25,7 +25,7 @@ import ColumnsSelector, {
 } from "src/columnsSelector/columnsSelector";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { isSelectedColumn } from "src/columnsSelector/utils";
-import { DATE_FORMAT_24_UTC, syncHistory, TimestampToMoment } from "src/util";
+import { DATE_FORMAT_24_TZ, syncHistory, TimestampToMoment } from "src/util";
 import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
 import {
   showOptions,
@@ -40,6 +40,7 @@ import { commonStyles } from "src/common";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
+import { Timestamp } from "../../timestamp";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -240,10 +241,16 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     );
   };
 
-  formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp): string => {
-    return `Since ${TimestampToMoment(earliestRetainedTime).format(
-      DATE_FORMAT_24_UTC,
-    )}`;
+  formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp) => {
+    return (
+      <>
+        Since{" "}
+        <Timestamp
+          time={TimestampToMoment(earliestRetainedTime)}
+          format={DATE_FORMAT_24_TZ}
+        />
+      </>
+    );
   };
 
   render(): React.ReactElement {

@@ -15,8 +15,9 @@ import {
   BytesFitScale,
   ComputeByteScale,
   ComputeDurationScale,
-  DATE_WITH_SECONDS_FORMAT_24_UTC,
+  DATE_WITH_SECONDS_FORMAT_24_TZ,
   DurationFitScale,
+  FormatWithTimezone,
 } from "src/util/format";
 
 /**
@@ -264,11 +265,7 @@ const timeIncrements: number[] = timeIncrementDurations.map(inc =>
   inc.asMilliseconds(),
 );
 
-export function formatTimeStamp(timeMillis: number): string {
-  return moment.utc(timeMillis).format(DATE_WITH_SECONDS_FORMAT_24_UTC);
-}
-
-function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
+function ComputeTimeAxisDomain(extent: Extent, timezone: string): AxisDomain {
   // Compute increment; for time scales, this is taken from a table of allowed
   // values.
   let increment = 0;
@@ -288,17 +285,25 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
 
   axisDomain.label = "time";
 
-  let tickDateFormatter: (d: Date) => string;
-  if (increment < moment.duration(24, "hours").asMilliseconds()) {
-    tickDateFormatter = (d: Date) => moment.utc(d).format("H:mm");
-  } else {
-    tickDateFormatter = (d: Date) => moment.utc(d).format("MM/DD H:mm");
-  }
+  const tickDateFormatter = (d: Date, format: string) =>
+    moment(d).tz(timezone).format(format);
+
+  const format =
+    increment < moment.duration(24, "hours").asMilliseconds()
+      ? "H:mm"
+      : "MM/DD H:mm";
+
   axisDomain.tickFormat = (n: number) => {
-    return tickDateFormatter(new Date(n));
+    return tickDateFormatter(new Date(n), format);
   };
 
-  axisDomain.guideFormat = formatTimeStamp;
+  axisDomain.guideFormat = millis => {
+    return FormatWithTimezone(
+      moment(millis),
+      DATE_WITH_SECONDS_FORMAT_24_TZ,
+      timezone,
+    );
+  };
   return axisDomain;
 }
 
@@ -324,19 +329,21 @@ export function calculateYAxisDomain(
 export function calculateXAxisDomain(
   startMillis: number,
   endMillis: number,
+  timezone = "UTC",
 ): AxisDomain {
-  return ComputeTimeAxisDomain([startMillis, endMillis] as Extent);
+  return ComputeTimeAxisDomain([startMillis, endMillis] as Extent, timezone);
 }
 
 export function calculateXAxisDomainBarChart(
   startMillis: number,
   endMillis: number,
   samplingIntervalMillis: number,
+  timezone = "UTC",
 ): AxisDomain {
   // For bar charts, we want to render past endMillis to fully render the
   // last bar. We should extend the x axis to the next sampling interval.
-  return ComputeTimeAxisDomain([
-    startMillis,
-    endMillis + samplingIntervalMillis,
-  ] as Extent);
+  return ComputeTimeAxisDomain(
+    [startMillis, endMillis + samplingIntervalMillis] as Extent,
+    timezone,
+  );
 }
