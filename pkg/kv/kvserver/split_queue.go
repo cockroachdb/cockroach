@@ -139,7 +139,12 @@ func shouldSplitRange(
 	shouldBackpressureWrites bool,
 	confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
-	if confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey) {
+	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
+	if err != nil {
+		log.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
+		return false, 0
+	}
+	if needsSplit {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
 		shouldQ = true

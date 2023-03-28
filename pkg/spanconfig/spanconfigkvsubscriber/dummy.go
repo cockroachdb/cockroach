@@ -43,8 +43,8 @@ func (n *noopKVSubscriber) LastUpdated() hlc.Timestamp {
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.
-func (n *noopKVSubscriber) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKey) bool {
-	return false
+func (n *noopKVSubscriber) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKey) (bool, error) {
+	return false, nil
 }
 
 // ComputeSplitKey is part of the spanconfig.KVSubscriber interface.
