@@ -82,6 +82,7 @@ func (_f *Factory) ConstructSelect(
 	input memo.RelExpr,
 	filters memo.FiltersExpr,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -138,6 +139,7 @@ func (_f *Factory) ConstructInnerJoin(
 	right memo.RelExpr,
 	on memo.FiltersExpr,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -159,6 +161,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 	right memo.RelExpr,
 	on memo.FiltersExpr,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -178,6 +181,7 @@ SKIP_RULES:
 func (_f *Factory) ConstructFiltersItem(
 	condition opt.ScalarExpr,
 ) memo.FiltersItem {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	item := memo.FiltersItem{Condition: condition}
 	item.PopulateProps(_f.mem)
 	return item
@@ -188,6 +192,7 @@ func (_f *Factory) ConstructKVOptionsItem(
 	value opt.ScalarExpr,
 	key string,
 ) memo.KVOptionsItem {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	item := memo.KVOptionsItem{Value: value, Key: key}
 	return item
 }
@@ -214,6 +219,7 @@ func (_f *Factory) ConstructKVOptionsItem(
 // achieved by moving the factory.Replace call to the top of the replace
 // function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := e.(type) {
 	case *memo.SelectExpr:
 		input := replace(t.Input).(memo.RelExpr)
@@ -277,6 +283,7 @@ func (f *Factory) replaceFiltersExpr(list memo.FiltersExpr, replace ReplaceFunc)
 // operator using children copied (and potentially remapped) by the given replace
 // function. See comments for CopyAndReplace for more details.
 func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := src.(type) {
 	case *memo.SelectExpr:
 		return f.ConstructSelect(
@@ -327,6 +334,7 @@ func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr
 }
 
 func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch op {
 	case opt.SelectOp:
 		return f.ConstructSelect(
@@ -417,6 +425,7 @@ import (
 func (_f *Factory) ConstructVariable(
 	col opt.ColumnID,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -436,6 +445,7 @@ SKIP_RULES:
 func (_f *Factory) ConstructMin(
 	input *memo.VariableExpr,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -455,6 +465,7 @@ SKIP_RULES:
 func (_f *Factory) ConstructMax(
 	input *memo.VariableExpr,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -474,6 +485,7 @@ SKIP_RULES:
 func (_f *Factory) ConstructAggDistinct(
 	input opt.ScalarExpr,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -561,6 +573,7 @@ SKIP_RULES:
 // achieved by moving the factory.Replace call to the top of the replace
 // function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := e.(type) {
 	case *memo.VariableExpr:
 		return t
@@ -595,6 +608,7 @@ func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 // operator using children copied (and potentially remapped) by the given replace
 // function. See comments for CopyAndReplace for more details.
 func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := src.(type) {
 	case *memo.VariableExpr:
 		return t
@@ -629,6 +643,7 @@ func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr
 }
 
 func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch op {
 	case opt.VariableOp:
 		return f.ConstructVariable(
@@ -681,6 +696,7 @@ func (_f *Factory) ConstructWith(
 	binding memo.RelExpr,
 	main memo.RelExpr,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -718,6 +734,7 @@ SKIP_RULES:
 // achieved by moving the factory.Replace call to the top of the replace
 // function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := e.(type) {
 	case *memo.WithExpr:
 		binding := replace(t.Binding).(memo.RelExpr)
@@ -736,6 +753,7 @@ func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 // operator using children copied (and potentially remapped) by the given replace
 // function. See comments for CopyAndReplace for more details.
 func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := src.(type) {
 	case *memo.WithExpr:
 		binding := f.invokeReplace(t.Binding, replace).(memo.RelExpr)
@@ -762,6 +780,7 @@ func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr
 }
 
 func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch op {
 	case opt.WithOp:
 		return f.ConstructWith(
@@ -834,6 +853,7 @@ func (_f *Factory) ConstructProject(
 	projections memo.ProjectionsExpr,
 	passthrough opt.ColSet,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -875,6 +895,7 @@ SKIP_RULES:
 func (_f *Factory) ConstructValues(
 	rows memo.ScalarListExpr,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -912,6 +933,7 @@ SKIP_RULES:
 // achieved by moving the factory.Replace call to the top of the replace
 // function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := e.(type) {
 	case *memo.ProjectExpr:
 		input := replace(t.Input).(memo.RelExpr)
@@ -991,6 +1013,7 @@ func (f *Factory) replaceScalarListExpr(list memo.ScalarListExpr, replace Replac
 // operator using children copied (and potentially remapped) by the given replace
 // function. See comments for CopyAndReplace for more details.
 func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := src.(type) {
 	case *memo.ProjectExpr:
 		return f.ConstructProject(
@@ -1043,6 +1066,7 @@ func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr
 }
 
 func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch op {
 	case opt.ProjectOp:
 		return f.ConstructProject(
@@ -1100,6 +1124,7 @@ func (_f *Factory) ConstructAnd(
 	left opt.ScalarExpr,
 	right opt.ScalarExpr,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -1119,6 +1144,7 @@ SKIP_RULES:
 func (_f *Factory) ConstructRange(
 	and opt.ScalarExpr,
 ) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -1172,6 +1198,7 @@ SKIP_RULES:
 // achieved by moving the factory.Replace call to the top of the replace
 // function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := e.(type) {
 	case *memo.AndExpr:
 		left := replace(t.Left).(opt.ScalarExpr)
@@ -1197,6 +1224,7 @@ func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 // operator using children copied (and potentially remapped) by the given replace
 // function. See comments for CopyAndReplace for more details.
 func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := src.(type) {
 	case *memo.AndExpr:
 		return f.ConstructAnd(
@@ -1224,6 +1252,7 @@ func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr
 }
 
 func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch op {
 	case opt.AndOp:
 		return f.ConstructAnd(
@@ -1331,6 +1360,7 @@ func (_f *Factory) ConstructUnion(
 	left memo.RelExpr,
 	right memo.RelExpr,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)
 	_f.constructorStackDepth++
 	if _f.constructorStackDepth > maxConstructorStackDepth {
 		// If the constructor call stack depth exceeds the limit, call
@@ -1492,6 +1522,7 @@ SKIP_RULES:
 // achieved by moving the factory.Replace call to the top of the replace
 // function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := e.(type) {
 	case *memo.UnionExpr:
 		left := replace(t.Left).(memo.RelExpr)
@@ -1510,6 +1541,7 @@ func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 // operator using children copied (and potentially remapped) by the given replace
 // function. See comments for CopyAndReplace for more details.
 func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch t := src.(type) {
 	case *memo.UnionExpr:
 		return f.ConstructUnion(
@@ -1532,6 +1564,7 @@ func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr
 }
 
 func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch op {
 	case opt.UnionOp:
 		return f.ConstructUnion(

@@ -3154,6 +3154,10 @@ func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {
 	m.data.TestingVectorizeInjectPanics = val
 }
 
+func (m *sessionDataMutator) SetTestingOptimizerInjectPanics(val bool) {
+	m.data.TestingOptimizerInjectPanics = val
+}
+
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
 	m.data.OptimizerFKCascadesLimit = int64(val)
 }

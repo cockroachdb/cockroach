@@ -700,6 +700,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`testing_optimizer_inject_panics`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`testing_optimizer_inject_panics`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("testing_optimizer_inject_panics", s)
+			if err != nil {
+				return err
+			}
+			m.SetTestingOptimizerInjectPanics(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().TestingOptimizerInjectPanics), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	// This is deprecated; the only allowable setting is "on".
 	`optimizer`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
