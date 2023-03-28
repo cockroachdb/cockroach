@@ -171,7 +171,9 @@ func newMockSpanConfigSubscriber(
 	}
 }
 
-func (m *mockSpanConfigSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+func (m *mockSpanConfigSubscriber) NeedsSplit(
+	ctx context.Context, start, end roachpb.RKey,
+) (bool, error) {
 	return m.Store.NeedsSplit(ctx, start, end)
 }
 

@@ -700,14 +700,15 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s *SystemConfig) NeedsSplit(ctx context.Context, startKey, endKey roachpb.RKey) bool {
-	// TODO(arul): bubble up this error.
+func (s *SystemConfig) NeedsSplit(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) (bool, error) {
 	splits, err := s.ComputeSplitKey(ctx, startKey, endKey)
 	if err != nil {
-		log.FatalfDepth(ctx, 3, "unable to compute split key for needs split: %v", err)
+		return false, err
 	}
 
-	return len(splits) > 0
+	return len(splits) > 0, nil
 }
 
 // shouldSplitOnSystemTenantObject checks if the ID is eligible for a split at

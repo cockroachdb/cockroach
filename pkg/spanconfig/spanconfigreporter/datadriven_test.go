@@ -274,7 +274,7 @@ func (s *mockCluster) Scan(
 }
 
 // NeedsSplit implements spanconfig.StoreReader.
-func (s *mockCluster) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+func (s *mockCluster) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
 	return s.store.NeedsSplit(ctx, start, end)
 }
 

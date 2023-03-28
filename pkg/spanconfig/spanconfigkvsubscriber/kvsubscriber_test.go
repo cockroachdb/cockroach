@@ -171,7 +171,7 @@ func (m *manualStore) Apply(
 }
 
 // NeedsSplit implements the spanconfig.Store interface.
-func (m *manualStore) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKey) bool {
+func (m *manualStore) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKey) (bool, error) {
 	panic("unimplemented")
 }
 

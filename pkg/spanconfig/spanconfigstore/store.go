@@ -96,14 +96,13 @@ func New(
 }
 
 // NeedsSplit is part of the spanconfig.StoreReader interface.
-func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
-	// TODO(arul): bubble up this error.
+func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
 	splits, err := s.ComputeSplitKey(ctx, start, end)
 	if err != nil {
-		log.FatalfDepth(ctx, 3, "unable to compute split key for needs split: %v", err)
+		return false, err
 	}
 
-	return len(splits) > 0
+	return len(splits) > 0, nil
 }
 
 // ComputeSplitKey is part of the spanconfig.StoreReader interface.

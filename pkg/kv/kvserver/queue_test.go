@@ -712,11 +712,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		return nil
 	})
 	neverSplitsDesc := neverSplits.Desc()
-	if cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
+	needsSplit, err := cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
+	require.NoError(t, err)
+	if needsSplit {
 		t.Fatal("System config says range needs to be split")
 	}
 	willSplitDesc := willSplit.Desc()
-	if cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
+	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
+	require.NoError(t, err)
+	if needsSplit {
 		t.Fatal("System config says range needs to be split")
 	}
 
@@ -748,11 +752,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()
-	if cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
+	needsSplit, err = cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
+	require.NoError(t, err)
+	if needsSplit {
 		t.Fatal("System config says range needs to be split")
 	}
 	willSplitDesc = willSplit.Desc()
-	if !cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
+	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
+	require.NoError(t, err)
+	if !needsSplit {
 		t.Fatal("System config says range does not need to be split")
 	}
 

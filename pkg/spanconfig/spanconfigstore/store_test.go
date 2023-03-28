@@ -155,7 +155,8 @@ func TestDataDriven(t *testing.T) {
 				d.ScanArgs(t, "span", &spanStr)
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
-				result := store.NeedsSplit(ctx, start, end)
+				result, err := store.NeedsSplit(ctx, start, end)
+				require.NoError(t, err)
 				return fmt.Sprintf("%t", result)
 
 			case "compute-split":

@@ -331,7 +331,7 @@ func (s *KVSubscriber) LastUpdated() hlc.Timestamp {
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.
-func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
