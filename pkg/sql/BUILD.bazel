@@ -540,6 +540,7 @@ go_library(
         "//pkg/util/rangedesc",
         "//pkg/util/retry",
         "//pkg/util/ring",
+        "//pkg/util/startup",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
