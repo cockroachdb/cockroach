@@ -894,15 +894,31 @@ const (
 	// found.
 	systemJobsAndJobInfoBaseQuery = `
 WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress')
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
 	SELECT 
+		DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
+		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
+	FROM system.jobs AS j
+	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+`
+
+	// systemJobsAndJobInfoBaseQueryWithIDPredicate is the same as
+	// systemJobsAndJobInfoBaseQuery but with a predicate on `job_id` in the CTE
+	// queries.
+	systemJobsAndJobInfoBaseQueryWithIDPredicate = `
+WITH
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
+	SELECT
 		id, status, created, payload.value AS payload, progress.value AS progress,
 		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
 	FROM system.jobs AS j
 	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
 	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
 `
+
 	// Before clusterversion.V23_1JobInfoTableIsBackfilled, the system.job_info
 	// table has not been fully populated with the payload and progress of jobs in
 	// the cluster.
@@ -942,6 +958,9 @@ func getInternalSystemJobsQueryFromClusterVersion(
 	var baseQuery string
 	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
 		baseQuery = systemJobsAndJobInfoBaseQuery
+		if predicate == jobID {
+			baseQuery = systemJobsAndJobInfoBaseQueryWithIDPredicate
+		}
 	} else if version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
 		baseQuery = systemJobsBaseQuery
 	} else {
