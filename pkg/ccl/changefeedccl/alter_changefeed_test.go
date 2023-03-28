@@ -1253,7 +1253,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	cdcTestWithSystem(t, testFn, feedTestForceSink("pubsub"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
