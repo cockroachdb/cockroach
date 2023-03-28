@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -158,6 +159,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 func TestTenantRateLimiter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 99744)
 
 	// This test utilizes manual time to make the rate-limiting calculations more
 	// obvious. This timesource is not used inside the actual database.
