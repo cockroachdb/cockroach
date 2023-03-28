@@ -126,10 +126,12 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 
 func getDiff(ctx context.Context, sha string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", sha, "origin/master", "--")
-	outputBytes, err := cmd.Output()
+	outputBytes, err := cmd.CombinedOutput()
 	if err != nil {
+		fmt.Printf("git diff failed, got output: %s\n", string(outputBytes))
 		return "", err
 	}
+	fmt.Println("successfully ran git diff")
 	return string(outputBytes), nil
 }
 
@@ -239,6 +241,7 @@ func main() {
 				// don't have to worry about accidentally breaking it.
 				out, err := exec.Command("bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", name), "--output=label").Output()
 				if err != nil {
+					fmt.Printf("bazel query failed: output %s\n", string(out))
 					log.Fatal(err)
 				}
 				numTargets := 0
