@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.1-22.2
+
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser
 
@@ -59,8 +61,16 @@ test           public       t4          admin     ALL             true
 test           public       t4          root      ALL             true
 test           public       t4          testuser  CREATE          false
 
+skipif config local-mixed-22.1-22.2
 statement ok
 CREATE USER testuser2
+
+# We need this hack for local-mixed-22.1-22.2, since the test is using the 22.2
+# system schema, even though the bootstrap version is 22.1. This limitation is
+# fixed in the 23.1 branch.
+onlyif config local-mixed-22.1-22.2
+statement ok
+INSERT INTO system.users VALUES ('testuser2', '', false, 101)
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT CREATE ON TABLES TO testuser, testuser2
@@ -160,3 +170,6 @@ test           public       typ        public     USAGE           false
 test           public       typ        root       ALL             true
 test           public       typ        testuser   ALL             false
 test           public       typ        testuser2  ALL             false
+
+statement error cannot alter default privileges for functions until cluster is upgraded to v22.2
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT EXECUTE ON FUNCTIONS TO testuser WITH GRANT OPTION

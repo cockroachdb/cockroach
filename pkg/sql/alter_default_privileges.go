@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -52,6 +53,14 @@ func (n *alterDefaultPrivilegesNode) Close(context.Context)        {}
 func (p *planner) alterDefaultPrivileges(
 	ctx context.Context, n *tree.AlterDefaultPrivileges,
 ) (planNode, error) {
+	if n.Grant.Target == privilege.Functions {
+		if !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2) {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot alter default privileges for functions until cluster is upgraded to v22.2",
+			)
+		}
+	}
 	// ALTER DEFAULT PRIVILEGES without specifying a schema alters the privileges
 	// for the current database.
 	database := p.CurrentDatabase()
