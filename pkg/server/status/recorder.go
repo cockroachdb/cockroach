@@ -73,22 +73,6 @@ const (
 // custom scrape logic that adds relevant labels already.
 var disableNodeAndTenantLabels = envutil.EnvOrDefaultBool(disableNodeAndTenantLabelsEnvVar, false)
 
-type quantile struct {
-	suffix   string
-	quantile float64
-}
-
-var recordHistogramQuantiles = []quantile{
-	{"-max", 100},
-	{"-p99.999", 99.999},
-	{"-p99.99", 99.99},
-	{"-p99.9", 99.9},
-	{"-p99", 99},
-	{"-p90", 90},
-	{"-p75", 75},
-	{"-p50", 50},
-}
-
 // storeMetrics is the minimum interface of the storage.Store object needed by
 // MetricsRecorder to provide status summaries. This is used instead of Store
 // directly in order to simplify testing.
@@ -643,8 +627,8 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 			avg = 0
 		}
 		fn(name+"-avg", avg)
-		for _, pt := range recordHistogramQuantiles {
-			fn(name+pt.suffix, windowedSnapshot.ValueAtQuantile(pt.quantile))
+		for _, pt := range metric.RecordHistogramQuantiles {
+			fn(name+pt.Suffix, windowedSnapshot.ValueAtQuantile(pt.Quantile))
 		}
 	case metric.PrometheusExportable:
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
