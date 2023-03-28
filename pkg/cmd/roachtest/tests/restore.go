@@ -123,7 +123,7 @@ func registerRestore(r registry.Registry) {
 		Benchmark: true,
 		Cluster:   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
 		Timeout:   withPauseSpecs.timeout,
-		Tags:    registry.Tags("aws"),
+		Tags:      registry.Tags("aws"),
 
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
