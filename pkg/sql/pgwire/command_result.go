@@ -429,21 +429,6 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 // to AddRow will block until the associated client connection asks for more
 // rows. It essentially implements the "execute portal with limit" part of the
 // Postgres protocol.
-//
-// This design is known to be flawed. It only supports a specific subset of the
-// protocol. We only allow a portal suspension in an explicit transaction where
-// the suspended portal is completely exhausted before any other pgwire command
-// is executed, otherwise an error is produced. You cannot, for example,
-// interleave portal executions (a portal must be executed to completion before
-// another can be executed). It also breaks the software layering by adding an
-// additional state machine here, instead of teaching the state machine in the
-// sql package about portals.
-//
-// This has been done because refactoring the executor to be able to correctly
-// suspend a portal will require a lot of work, and we wanted to move
-// forward. The work included is things like auditing all of the defers and
-// post-execution stuff (like stats collection) to have it only execute once
-// per statement instead of once per portal.
 type limitedCommandResult struct {
 	*commandResult
 	portalName  string
@@ -669,13 +654,13 @@ func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatu
 }
 
 // Err is part of the sql.RestrictedCommandResult interface.
+// Unlike commandResult.Err(), we don't assert that the result is not released
+// here. This is because we can reach this function after Sync is reached in an
+// implicit transaction, and we're on the clean-up stage of a pausable portal
+// without a new result being created. In other words, for pausable portals we
+// have some cases that Err() can be called after Close().
 func (r *limitedCommandResult) Err() error {
 	return r.err
-}
-
-// SetError is part of the sql.RestrictedCommandResult interface.
-func (r *limitedCommandResult) SetError(err error) {
-	r.err = err
 }
 
 // Get the column index for job id based on the result header defined in
