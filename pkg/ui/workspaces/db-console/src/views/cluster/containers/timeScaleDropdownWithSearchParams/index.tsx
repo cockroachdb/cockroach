@@ -22,7 +22,7 @@ import {
   findClosestTimeScale,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
-import moment from "moment";
+import moment from "moment-timezone";
 
 // The time scale dropdown from cluster-ui that updates route params as
 // options are selected.

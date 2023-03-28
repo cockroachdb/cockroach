@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import * as protos from "src/js/protos";
 import { util } from "@cockroachlabs/cluster-ui";

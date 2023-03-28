@@ -24,7 +24,7 @@ import {
   allJobsFixture,
   earliestRetainedTime,
 } from "../../jobs/jobsPage/jobsPage.fixture";
-import moment from "moment";
+import moment from "moment-timezone";
 
 describe("jobs sagas", () => {
   const lastUpdated = moment.utc(new Date("2023-02-21T12:00:00.000Z"));

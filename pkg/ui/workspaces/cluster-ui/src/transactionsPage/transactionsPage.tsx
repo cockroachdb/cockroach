@@ -75,7 +75,7 @@ import {
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   STATS_LONG_LOADING_DURATION,
   txnRequestSortOptions,

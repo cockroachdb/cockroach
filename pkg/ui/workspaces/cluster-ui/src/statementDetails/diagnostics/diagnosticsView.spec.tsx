@@ -18,7 +18,7 @@ import { DiagnosticsView } from "./diagnosticsView";
 import { Table } from "src/table";
 import { TestStoreProvider } from "src/test-utils";
 import { StatementDiagnosticsReport } from "../../api";
-import moment from "moment";
+import moment from "moment-timezone";
 
 const activateDiagnosticsRef = { current: { showModalFor: jest.fn() } };
 
