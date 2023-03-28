@@ -100,14 +100,13 @@ func getCombinedStatementStats(
 	}
 
 	if req.FetchMode != nil && req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
-		// Change the whereClause for the statements to those matching the txn_fingerprint_ids in the
-		// transactions response that are within the desired interval. We also don't need the order and
-		// limit anymore.
-		orderAndLimit = ""
-		whereClause, args = buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
+		// If we're fetching for txns, the client still expects statement stats for
+		// stmts in the txns response.
+		statements, err = collectStmtsForTxns(ctx, ie, req, transactions, testingKnobs, tableSuffix)
+	} else {
+		statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit, testingKnobs, tableSuffix)
 	}
 
-	statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit, testingKnobs, tableSuffix)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -407,17 +406,15 @@ func collectCombinedStatements(
 SELECT * FROM (
 SELECT
     fingerprint_id,
-    transaction_fingerprint_id,
+    array_agg(distinct transaction_fingerprint_id),
     app_name,
     max(aggregated_ts) as aggregated_ts,
-    metadata,
+    crdb_internal.merge_stats_metadata(array_agg(metadata)) as metadata,
     crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
 FROM %s%s %s
 GROUP BY
     fingerprint_id,
-    transaction_fingerprint_id,
-    app_name,
-    metadata
+    app_name
 ) %s
 %s`
 
@@ -475,12 +472,18 @@ GROUP BY
 			return nil, serverError(ctx, err)
 		}
 
-		var transactionFingerprintID uint64
-		if transactionFingerprintID, err = sqlstatsutil.DatumToUint64(row[1]); err != nil {
-			return nil, serverError(ctx, err)
+		var txnFingerprintID uint64
+		txnFingerprintDatums := tree.MustBeDArray(row[1])
+		txnFingerprintIDs := make([]appstatspb.TransactionFingerprintID, 0, txnFingerprintDatums.Array.Len())
+		for _, idDatum := range txnFingerprintDatums.Array {
+			if txnFingerprintID, err = sqlstatsutil.DatumToUint64(idDatum); err != nil {
+				return nil, serverError(ctx, err)
+			}
+			txnFingerprintIDs = append(txnFingerprintIDs, appstatspb.TransactionFingerprintID(txnFingerprintID))
 		}
 
 		app := string(tree.MustBeDString(row[2]))
+
 		aggregatedTs := tree.MustBeDTimestampTZ(row[3]).Time
 
 		var metadata appstatspb.CollectedStatementStatistics
@@ -490,8 +493,6 @@ GROUP BY
 		}
 
 		metadata.Key.App = app
-		metadata.Key.TransactionFingerprintID =
-			appstatspb.TransactionFingerprintID(transactionFingerprintID)
 
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
@@ -503,8 +504,9 @@ GROUP BY
 				KeyData:      metadata.Key,
 				AggregatedTs: aggregatedTs,
 			},
-			ID:    appstatspb.StmtFingerprintID(statementFingerprintID),
-			Stats: metadata.Stats,
+			ID:                appstatspb.StmtFingerprintID(statementFingerprintID),
+			Stats:             metadata.Stats,
+			TxnFingerprintIDs: txnFingerprintIDs,
 		}
 
 		statements = append(statements, stmt)
@@ -535,13 +537,12 @@ SELECT
     app_name,
     max(aggregated_ts) as aggregated_ts,
     fingerprint_id,
-    metadata,
+    max(metadata),
     crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
 FROM %s%s %s
 GROUP BY
     app_name,
-    fingerprint_id,
-    metadata
+    fingerprint_id
 ) %s
 %s`
 
@@ -596,6 +597,7 @@ GROUP BY
 		}
 
 		app := string(tree.MustBeDString(row[0]))
+
 		aggregatedTs := tree.MustBeDTimestampTZ(row[1]).Time
 		fingerprintID, err := sqlstatsutil.DatumToUint64(row[2])
 		if err != nil {
@@ -631,6 +633,121 @@ GROUP BY
 	}
 
 	return transactions, nil
+}
+
+func collectStmtsForTxns(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	req *serverpb.CombinedStatementsStatsRequest,
+	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
+	testingKnobs *sqlstats.TestingKnobs,
+	tableSuffix string,
+) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
+
+	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
+
+	queryFormat := `
+SELECT
+    fingerprint_id,
+    transaction_fingerprint_id,
+    crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+    app_name
+FROM %s%s %s
+GROUP BY
+    fingerprint_id,
+    transaction_fingerprint_id,
+    app_name
+`
+
+	const expectedNumDatums = 5
+
+	query := fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics_persisted", tableSuffix, whereClause)
+
+	it, err := ie.QueryIteratorEx(ctx, "stmts-for-txn", nil,
+		sessiondata.NodeUserSessionDataOverride, query, args...)
+
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if !it.HasResults() {
+		err = closeIterator(it, err)
+
+		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, "", whereClause)
+
+		it, err = ie.QueryIteratorEx(ctx, "stmts-for-txn-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+	}
+
+	defer func() {
+		closeErr := it.Close()
+		if closeErr != nil {
+			err = errors.CombineErrors(err, closeErr)
+		}
+	}()
+
+	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var row tree.Datums
+		if row = it.Cur(); row == nil {
+			return nil, errors.New("unexpected null row on collectStmtsForTxns")
+		}
+
+		if row.Len() != expectedNumDatums {
+			return nil, errors.Newf("expected %d columns, received %d on collectStmtsForTxns", expectedNumDatums)
+		}
+
+		var statementFingerprintID uint64
+		if statementFingerprintID, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
+			return nil, serverError(ctx, err)
+		}
+
+		var txnFingerprintID uint64
+		if txnFingerprintID, err = sqlstatsutil.DatumToUint64(row[1]); err != nil {
+			return nil, serverError(ctx, err)
+		}
+
+		var metadata appstatspb.CollectedStatementStatistics
+		metadataJSON := tree.MustBeDJSON(row[2]).JSON
+		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
+			return nil, serverError(ctx, err)
+		}
+
+		metadata.Key.TransactionFingerprintID = appstatspb.TransactionFingerprintID(txnFingerprintID)
+
+		statsJSON := tree.MustBeDJSON(row[3]).JSON
+		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
+			return nil, serverError(ctx, err)
+		}
+
+		app := string(tree.MustBeDString(row[4]))
+		metadata.Key.App = app
+
+		stmt := serverpb.StatementsResponse_CollectedStatementStatistics{
+			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
+				KeyData: metadata.Key,
+			},
+			ID:    appstatspb.StmtFingerprintID(statementFingerprintID),
+			Stats: metadata.Stats,
+		}
+
+		statements = append(statements, stmt)
+
+	}
+
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	return statements, nil
 }
 
 func (s *statusServer) StatementDetails(
