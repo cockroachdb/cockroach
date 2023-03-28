@@ -979,6 +979,34 @@ of processing.
 		Measurement: "Elections called after timeout",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftStorageReadBytes = metric.Metadata{
+		Name: "raft.storage.read_bytes",
+		Help: `Counter of raftpb.Entry.Size() read from pebble for raft log entries.
+
+These are the bytes returned from the (raft.Storage).Entries method that were not
+returned via the raft entry cache. This metric plus the raft.storage.read_bytes
+metric represent the total bytes returned from the Entries method.
+
+Since pebble might serve these entries from the block cache, only a fraction of this
+throughput might manifest in disk metrics.
+
+Entries tracked in this metric incur an unmarshalling-related CPU and memory
+overhead that would not be incurred would the entries be served from the raft
+entry cache.
+
+The bytes returned here do not correspond 1:1 to bytes read from pebble. This
+metric measures the in-memory size of the raftpb.Entry, whereas we read its
+encoded representation from pebble. As there is no compression involved, these
+will generally be comparable.
+
+A common reason for elevated measurements on this metric is that a store is
+falling behind on raft log application. The raft entry cache generally tracks
+entries that were recently appended, so if log application falls behind the
+cache will already have moved on to newer entries.
+`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -1938,6 +1966,7 @@ type StoreMetrics struct {
 	RaftApplyCommittedLatency metric.IHistogram
 	RaftSchedulerLatency      metric.IHistogram
 	RaftTimeoutCampaign       *metric.Counter
+	RaftStorageReadBytes      *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -2504,7 +2533,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
-		RaftTimeoutCampaign: metric.NewCounter(metaRaftTimeoutCampaign),
+		RaftTimeoutCampaign:  metric.NewCounter(metaRaftTimeoutCampaign),
+		RaftStorageReadBytes: metric.NewCounter(metaRaftStorageReadBytes),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{

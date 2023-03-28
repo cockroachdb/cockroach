@@ -496,9 +496,9 @@ func LoadEntries(
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
 	lo, hi, maxBytes uint64,
-) ([]raftpb.Entry, error) {
+) (_ []raftpb.Entry, _cachedSize int, _loadedSize int, _ error) {
 	if lo > hi {
-		return nil, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
+		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
 
 	n := hi - lo
@@ -507,13 +507,15 @@ func LoadEntries(
 	}
 	ents := make([]raftpb.Entry, 0, n)
 
-	ents, size, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+	ents, cachedSize, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
 	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
-		return ents, nil
+		return ents, int(cachedSize), 0, nil
 	}
+
+	combinedSize := cachedSize // size tracks total size of ents.
 
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
@@ -543,8 +545,8 @@ func LoadEntries(
 		}
 
 		// Note that we track the size of proposals with payloads inlined.
-		size += uint64(ent.Size())
-		if size > maxBytes {
+		combinedSize += uint64(ent.Size())
+		if combinedSize > maxBytes {
 			exceededMaxBytes = true
 			if len(ents) == 0 { // make sure to return at least one entry
 				ents = append(ents, ent)
@@ -559,18 +561,18 @@ func LoadEntries(
 	reader := eng.NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
 	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	if uint64(len(ents)) == hi-lo {
-		return ents, nil
+		return ents, int(cachedSize), int(combinedSize - cachedSize), nil
 	}
 
 	// Did we hit the size limit? If so, return what we have.
 	if exceededMaxBytes {
-		return ents, nil
+		return ents, int(cachedSize), int(combinedSize - cachedSize), nil
 	}
 
 	// Did we get any results at all? Because something went wrong.
@@ -578,25 +580,25 @@ func LoadEntries(
 		// Was the missing index after the last index?
 		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
 		if err != nil {
-			return nil, err
+			return nil, 0, 0, err
 		}
 		if lastIndex <= expectedIndex {
-			return nil, raft.ErrUnavailable
+			return nil, 0, 0, raft.ErrUnavailable
 		}
 
 		// We have a gap in the record, if so, return a nasty error.
-		return nil, errors.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
+		return nil, 0, 0, errors.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
 	}
 
 	// No results, was it due to unavailability or truncation?
 	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 	if ts.Index >= lo {
 		// The requested lo index has already been truncated.
-		return nil, raft.ErrCompacted
+		return nil, 0, 0, raft.ErrCompacted
 	}
 	// The requested lo index does not yet exist.
-	return nil, raft.ErrUnavailable
+	return nil, 0, 0, raft.ErrUnavailable
 }
