@@ -38,7 +38,7 @@ const (
 // RaceSucceedsSoonDuration if race is enabled).
 func SucceedsSoon(t TB, fn func() error) {
 	t.Helper()
-	SucceedsWithin(t, fn, succeedsSoonDuration())
+	SucceedsWithin(t, fn, SucceedsSoonDuration())
 }
 
 // SucceedsSoonError returns an error unless the supplied function runs without
@@ -47,7 +47,7 @@ func SucceedsSoon(t TB, fn func() error) {
 // and ending at DefaultSucceedsSoonDuration (or RaceSucceedsSoonDuration if
 // race is enabled).
 func SucceedsSoonError(fn func() error) error {
-	return SucceedsWithinError(fn, succeedsSoonDuration())
+	return SucceedsWithinError(fn, SucceedsSoonDuration())
 }
 
 // SucceedsWithin fails the test (with t.Fatal) unless the supplied
@@ -77,7 +77,7 @@ func SucceedsWithinError(fn func() error, duration time.Duration) error {
 	return retry.ForDuration(duration, wrappedFn)
 }
 
-func succeedsSoonDuration() time.Duration {
+func SucceedsSoonDuration() time.Duration {
 	if util.RaceEnabled {
 		return RaceSucceedsSoonDuration
 	}
