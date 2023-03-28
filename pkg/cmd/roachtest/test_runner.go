@@ -899,8 +899,10 @@ func (r *testRunner) runTest(
 				shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			}
 
-			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
-				t.Name(), runID, t.duration().Milliseconds())
+			if teamCity {
+				shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
+					t.Name(), runID, t.duration().Milliseconds())
+			}
 		}
 
 		if teamCity {
