@@ -42,6 +42,7 @@ func convertToVecTree(
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	isPlanLocal bool,
+	recordingStats bool,
 ) (opChains execopnode.OpChains, cleanup func(), err error) {
 	if !isPlanLocal && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
@@ -54,10 +55,11 @@ func convertToVecTree(
 	// execinfra.BatchReceiver, so we always pass in a fakeBatchReceiver to the
 	// creator.
 	creator := newVectorizedFlowCreator(
-		nil /* flowBase */, newNoopFlowCreatorHelper(), nil /* componentCreator */, false, false,
-		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, flowCtx.NewTypeResolver(flowCtx.Txn),
-		admission.WorkInfo{},
+		nil /* flowBase */, newNoopFlowCreatorHelper(), nil, /* componentCreator */
+		recordingStats, false /* isGatewayNode */, nil, /* waitGroup */
+		&execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer,
+		execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore,
+		flowCtx.NewTypeResolver(flowCtx.Txn), admission.WorkInfo{},
 	)
 	opChains, _, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, nil /*localVectorSources*/, fuseOpt)
 	cleanup = func() {
@@ -101,6 +103,7 @@ func ExplainVec(
 	gatewaySQLInstanceID base.SQLInstanceID,
 	verbose bool,
 	distributed bool,
+	recordingStats bool,
 ) ([]string, error) {
 	tp := treeprinter.NewWithStyle(treeprinter.CompactStyle)
 	root := tp.Child("│")
@@ -122,7 +125,7 @@ func ExplainVec(
 			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].sqlInstanceID < sortedFlows[j].sqlInstanceID })
 			for _, flow := range sortedFlows {
 				var cleanup func()
-				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
+				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed, recordingStats)
 				// We need to delay the cleanup until after the tree has been
 				// formatted.
 				defer cleanup()
