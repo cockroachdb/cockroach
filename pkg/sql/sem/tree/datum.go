@@ -1038,6 +1038,16 @@ func MustBeDDecimal(e Expr) DDecimal {
 	panic(errors.AssertionFailedf("expected *DDecimal, found %T", e))
 }
 
+// AsDDecimal attempts to retrieve a DDecimal from an Expr, returning a DDecimal and
+// a flag signifying whether the assertion was successful.
+func AsDDecimal(e Expr) (*DDecimal, bool) {
+	switch t := e.(type) {
+	case *DDecimal:
+		return t, true
+	}
+	return nil, false
+}
+
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
