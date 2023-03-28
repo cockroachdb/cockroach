@@ -734,21 +734,13 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 		f.t.Status("skipping fail on local cluster")
 		return
 	}
-	// When dropping both input and output, we use multiport to block traffic both
-	// to port 26257 and from port 26257 on either side of the connection, to
-	// avoid any spurious packets from making it through.
-	//
 	// We don't do this when only blocking in one direction, because e.g. in the
 	// input case we don't want inbound connections to work (INPUT to 26257), but
 	// we do want responses for outbound connections to work (INPUT from 26257).
-	if f.input && f.output {
-		f.c.Run(ctx, f.c.Node(nodeID),
-			`sudo iptables -A INPUT -m multiport -p tcp --ports 26257 -j DROP`)
-		f.c.Run(ctx, f.c.Node(nodeID),
-			`sudo iptables -A OUTPUT -m multiport -p tcp --ports 26257 -j DROP`)
-	} else if f.input {
+	if f.input {
 		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
-	} else if f.output {
+	}
+	if f.output {
 		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
 	}
 }
