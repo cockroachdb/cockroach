@@ -11,7 +11,6 @@
 package spanconfigtestutils
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -543,51 +542,6 @@ func MaybeLimitAndOffset(
 	}
 
 	return strings.TrimSpace(output.String())
-}
-
-// SplitPoint is a unit of what's retrievable from a spanconfig.StoreReader. It
-// captures a single split point, and the config to be applied over the
-// following key span (or at least until the next such SplitPoint).
-//
-// TODO(irfansharif): Find a better name?
-type SplitPoint struct {
-	RKey   roachpb.RKey
-	Config roachpb.SpanConfig
-}
-
-// SplitPoints is a collection of split points.
-type SplitPoints []SplitPoint
-
-func (rs SplitPoints) String() string {
-	var output strings.Builder
-	for _, c := range rs {
-		output.WriteString(fmt.Sprintf("%-42s %s\n", c.RKey.String(),
-			PrintSpanConfigDiffedAgainstDefaults(c.Config)))
-	}
-	return output.String()
-}
-
-// GetSplitPoints returns a list of range split points as suggested by the given
-// StoreReader.
-func GetSplitPoints(ctx context.Context, t testing.TB, reader spanconfig.StoreReader) SplitPoints {
-	var splitPoints []SplitPoint
-	splitKey := roachpb.RKeyMin
-	for {
-		splitKeyConf, err := reader.GetSpanConfigForKey(ctx, splitKey)
-		require.NoError(t, err)
-
-		splitPoints = append(splitPoints, SplitPoint{
-			RKey:   splitKey,
-			Config: splitKeyConf,
-		})
-
-		if !reader.NeedsSplit(ctx, splitKey, roachpb.RKeyMax) {
-			break
-		}
-		splitKey = reader.ComputeSplitKey(ctx, splitKey, roachpb.RKeyMax)
-	}
-
-	return splitPoints
 }
 
 // ParseProtectionTarget returns a ptpb.Target based on the input. This target
