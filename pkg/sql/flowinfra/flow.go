@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -151,8 +153,7 @@ type Flow interface {
 	MemUsage() int64
 
 	// Cancel cancels the flow by canceling its context. Safe to be called from
-	// any goroutine but **cannot** be called after (or concurrently with)
-	// Cleanup.
+	// any goroutine.
 	Cancel()
 
 	// AddOnCleanupStart adds a callback to be executed at the very beginning of
@@ -232,12 +233,19 @@ type FlowBase struct {
 
 	statementSQL string
 
-	status flowStatus
+	mu struct {
+		syncutil.Mutex
+		status flowStatus
+		// Cancel function for ctx. Call this to cancel the flow (safe to be
+		// called multiple times).
+		//
+		// NB: must be used with care as this function should **not** be called
+		// once the Flow has been cleaned up. Consider using Flow.Cancel
+		// instead when unsure.
+		ctxCancel context.CancelFunc
+	}
 
-	// Cancel function for ctx. Call this to cancel the flow (safe to be called
-	// multiple times).
-	ctxCancel context.CancelFunc
-	ctxDone   <-chan struct{}
+	ctxDone <-chan struct{}
 
 	// sp is the span that this Flow runs in. Can be nil if no span was created
 	// for the flow. Flow.Cleanup() finishes it.
@@ -249,11 +257,23 @@ type FlowBase struct {
 	admissionInfo admission.WorkInfo
 }
 
+func (f *FlowBase) getStatus() flowStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.status
+}
+
+func (f *FlowBase) setStatus(status flowStatus) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.mu.status = status
+}
+
 // Setup is part of the Flow interface.
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
 ) (context.Context, execopnode.OpChains, error) {
-	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	ctx, f.mu.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 	f.spec = spec
 	return ctx, nil, nil
@@ -288,7 +308,7 @@ func (f *FlowBase) SetStartedGoroutines(val bool) {
 
 // Started returns true if f has either been Run() or Start()ed.
 func (f *FlowBase) Started() bool {
-	return f.status != flowNotStarted
+	return f.getStatus() != flowNotStarted
 }
 
 var _ Flow = &FlowBase{}
@@ -331,7 +351,6 @@ func NewFlowBase(
 		localVectorSources:    localVectorSources,
 		admissionInfo:         admissionInfo,
 		onCleanupEnd:          onFlowCleanupEnd,
-		status:                flowNotStarted,
 		statementSQL:          statementSQL,
 	}
 }
@@ -380,9 +399,10 @@ func (f *FlowBase) GetCtxDone() <-chan struct{} {
 }
 
 // GetCancelFlowFn returns the context cancellation function of the context of
-// this flow.
+// this flow. The returned function is only safe to be used before Flow.Cleanup
+// has been called.
 func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
-	return f.ctxCancel
+	return f.mu.ctxCancel
 }
 
 // SetProcessorsAndOutputs overrides the current f.processors and f.outputs with
@@ -466,7 +486,7 @@ func (f *FlowBase) StartInternal(
 		}
 	}
 
-	f.status = flowRunning
+	f.setStatus(flowRunning)
 
 	if multitenant.TenantRUEstimateEnabled.Get(&f.Cfg.Settings.SV) &&
 		!f.Gateway && f.CollectStats {
@@ -479,7 +499,10 @@ func (f *FlowBase) StartInternal(
 		log.Infof(ctx, "registered flow %s", f.ID.Short())
 	}
 	for _, s := range f.startables {
-		s.Start(ctx, &f.waitGroup, f.ctxCancel)
+		// Note that it is safe to pass the context cancellation function
+		// directly since the main goroutine of the Flow will block until all
+		// startable goroutines exit.
+		s.Start(ctx, &f.waitGroup, f.mu.ctxCancel)
 	}
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
@@ -561,9 +584,13 @@ func (f *FlowBase) Wait() {
 	var panicVal interface{}
 	if panicVal = recover(); panicVal != nil {
 		// If Wait is called as part of stack unwinding during a panic, the flow
-		// context must be canceled to ensure that all asynchronous goroutines get
-		// the message that they must exit (otherwise we will wait indefinitely).
-		f.ctxCancel()
+		// context must be canceled to ensure that all asynchronous goroutines
+		// get the message that they must exit (otherwise we will wait
+		// indefinitely).
+		//
+		// Cleanup is only called _after_ Wait, so it's safe to use ctxCancel
+		// directly.
+		f.mu.ctxCancel()
 	}
 	waitChan := make(chan struct{})
 
@@ -593,7 +620,13 @@ func (f *FlowBase) MemUsage() int64 {
 
 // Cancel is part of the Flow interface.
 func (f *FlowBase) Cancel() {
-	f.ctxCancel()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.mu.status == flowFinished {
+		// The Flow is already done, nothing to cancel.
+		return
+	}
+	f.mu.ctxCancel()
 }
 
 // AddOnCleanupStart is part of the Flow interface.
@@ -624,11 +657,13 @@ func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
 }
 
 // Cleanup is part of the Flow interface.
-// NOTE: this implements only the shared clean up logic between row-based and
+// NOTE: this implements only the shared cleanup logic between row-based and
 // vectorized flows.
 func (f *FlowBase) Cleanup(ctx context.Context) {
-	if f.status == flowFinished {
-		panic("flow cleanup called twice")
+	if buildutil.CrdbTestBuild {
+		if f.getStatus() == flowFinished {
+			panic("flow cleanup called twice")
+		}
 	}
 
 	// Release any descriptors accessed by this flow.
@@ -675,8 +710,10 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if !f.IsLocal() && f.Started() {
 		f.flowRegistry.UnregisterFlow(f.ID)
 	}
-	f.status = flowFinished
-	f.ctxCancel()
+	// Importantly, we must mark the Flow as finished before f.sp is finished in
+	// the defer above.
+	f.setStatus(flowFinished)
+	f.mu.ctxCancel()
 }
 
 // cancel cancels all unconnected streams of this flow. This function is called
