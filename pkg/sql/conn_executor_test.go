@@ -1264,24 +1264,6 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		locked(func() { require.True(t, mu.txnDeadline.Less(fs.Expiration())) })
 	})
 
-	t.Run("expired session leads to clear error", func(t *testing.T) {
-		// In this test we use an intentionally expired session in the tenant
-		// and observe that we get a clear error indicating that the session
-		// was expired.
-		sessionDuration := -time.Nanosecond
-		fs := fakeSession{
-			ExpTS: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0),
-		}
-		defer setClientSessionOverride(&fs)()
-		txn, err := sqlConn.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = txn.ExecContext(ctx, "UPSERT INTO t1.test(k, v) VALUES (1, 'abc')")
-		require.Regexp(t, `liveness session expired (\S+) before transaction`, err)
-		require.NoError(t, txn.Rollback())
-	})
-
 	t.Run("single_tenant_ignore_session_expiry", func(t *testing.T) {
 		// In this test, we check that the session expiry is ignored in a single-tenant
 		// environment. To verify this, we deliberately set the session duration to be

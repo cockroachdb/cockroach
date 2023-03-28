@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/evalcatalog",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",
