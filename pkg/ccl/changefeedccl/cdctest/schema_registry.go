@@ -116,6 +116,13 @@ func (r *SchemaRegistry) registerSchema(subject string, schema string) int32 {
 	return id
 }
 
+// RegistrationCount returns the number of Registration requests received.
+func (r *SchemaRegistry) RegistrationCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return int(r.mu.idAlloc)
+}
+
 var (
 	// We are slightly stricter than confluent here as they allow
 	// a trailing slash.
