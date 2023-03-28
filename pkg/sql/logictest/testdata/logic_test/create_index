@@ -338,7 +338,7 @@ UPDATE system.job_info
         '{"resumeSpans": $spans}'::jsonb
       )
     )
-WHERE info_key = 'legacy_payload'::BYTES AND crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->>'description' LIKE 'CREATE INDEX pauseidx%';
+WHERE info_key = 'legacy_payload' AND crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->>'description' LIKE 'CREATE INDEX pauseidx%';
 
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
