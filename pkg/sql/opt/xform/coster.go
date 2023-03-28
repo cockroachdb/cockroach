@@ -527,6 +527,8 @@ func (c *coster) MaybeGetBestCostRelation(
 // the cost based on Big-O estimated complexity. Most constant factors are
 // ignored for now.
 func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost {
+	opt.MaybeInjectOptimizerTestingPanic(c.ctx, c.evalCtx)
+
 	var cost memo.Cost
 	switch candidate.Op() {
 	case opt.TopKOp:

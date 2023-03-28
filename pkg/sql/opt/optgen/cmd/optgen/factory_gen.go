@@ -96,6 +96,8 @@ func (g *factoryGen) genConstructFuncs() {
 
 		g.w.nest(" {\n")
 
+		g.w.writeIndent("opt.MaybeInjectOptimizerTestingPanic(_f.ctx, _f.evalCtx)\n")
+
 		if define.Tags.Contains("ListItem") {
 			g.w.writeIndent("item := memo.%s{", define.Name)
 			for i, field := range fields {
@@ -189,6 +191,7 @@ func (g *factoryGen) genReplace() {
 	g.w.writeIndent("// achieved by moving the factory.Replace call to the top of the replace\n")
 	g.w.writeIndent("// function rather than bottom.\n")
 	g.w.nestIndent("func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {\n")
+	g.w.writeIndent("opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)\n")
 	g.w.writeIndent("switch t := e.(type) {\n")
 
 	defines := g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("ListItem").WithoutTag("Private")
@@ -335,6 +338,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 	g.w.writeIndent("// function. See comments for CopyAndReplace for more details.\n")
 	g.w.nestIndent("func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr)")
 	g.w.nest("{\n")
+	g.w.writeIndent("opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)\n")
 	g.w.writeIndent("switch t := src.(type) {\n")
 
 	defines := g.compiled.Defines.
@@ -492,6 +496,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 //	}
 func (g *factoryGen) genDynamicConstruct() {
 	g.w.nestIndent("func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {\n")
+	g.w.writeIndent("opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)\n")
 	g.w.writeIndent("switch op {\n")
 
 	defines := g.compiled.Defines.
