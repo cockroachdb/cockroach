@@ -12,6 +12,7 @@ package descs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
 )
 
 type leaseManager interface {
@@ -198,16 +200,7 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(
 	// expiration as the deadline will serve a purpose.
 	var deadline hlc.Timestamp
 	if session != nil {
-		if expiration, txnTS := session.Expiration(), txn.ReadTimestamp(); txnTS.Less(expiration) {
-			deadline = expiration
-		} else {
-			// If the session has expired relative to this transaction, propagate
-			// a clear error that that's what is going on.
-			return errors.Errorf(
-				"liveness session expired %s before transaction",
-				txnTS.GoTime().Sub(expiration.GoTime()),
-			)
-		}
+		deadline = session.Expiration()
 	}
 	if leaseDeadline, ok := ld.getDeadline(); ok && (deadline.IsEmpty() || leaseDeadline.Less(deadline)) {
 		// Set the deadline to the lease deadline if session expiration is empty
@@ -216,10 +209,36 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(
 	}
 	// If the deadline has been set, update the transaction deadline.
 	if !deadline.IsEmpty() {
+		// If the deadline certainly cannot be met, return an error which will
+		// be retried explicitly.
+		if txnTs := txn.ReadTimestamp(); deadline.LessEq(txnTs) {
+			return &livenessSessionExpiredError{
+				txnTS:      txnTs,
+				expiration: deadline,
+			}
+		}
 		return txn.UpdateDeadline(ctx, deadline)
 	}
 	return nil
 }
+
+type livenessSessionExpiredError struct {
+	txnTS, expiration hlc.Timestamp
+}
+
+func (e *livenessSessionExpiredError) SafeFormatError(p errbase.Printer) (next error) {
+	p.Printf("liveness session expired %v before transaction",
+		e.txnTS.GoTime().Sub(e.expiration.GoTime()))
+	return nil
+}
+
+func (e *livenessSessionExpiredError) ClientVisibleRetryError() {}
+
+func (e *livenessSessionExpiredError) Error() string {
+	return fmt.Sprint(errors.Formattable(e))
+}
+
+var _ errors.SafeFormatter = (*livenessSessionExpiredError)(nil)
 
 func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline bool) {
 	_ = ld.cache.IterateByID(func(descriptor catalog.NameEntry) error {

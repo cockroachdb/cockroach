@@ -3102,12 +3102,16 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 	"retriable MinTimestampBoundUnsatisfiableError",
 )
 
+// errIsRetriable is true if the error is a client-visible retry error
+// or the error is a special error that is handled internally and retried.
 func errIsRetriable(err error) bool {
-	return errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) ||
-		scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID ||
+	_, isRetriable := err.(pgerror.ClientVisibleRetryError)
+	return isRetriable ||
 		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
+		// Note that this error is not handled internally and can make it to the
+		// client in implicit transactions. This is not great; it should
+		// be marked as a client visible retry error.
 		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
-		execinfra.IsDynamicQueryHasNoHomeRegionError(err) ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
@@ -3517,18 +3521,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// Session is considered active when executing a transaction.
 		ex.totalActiveTimeStopWatch.Start()
 
-		if !ex.server.cfg.Codec.ForSystemTenant() {
-			// Update the leased descriptor collection with the current sqlliveness.Session.
-			// This is required in the multi-tenant environment to update the transaction
-			// deadline to either the session expiry or the leased descriptor deadline,
-			// whichever is sooner. We need this to ensure that transactions initiated
-			// by ephemeral SQL pods in multi-tenant environments are committed before the
-			// session expires.
-			session, err := ex.server.cfg.SQLLiveness.Session(ex.Ctx())
-			if err != nil {
-				return advanceInfo{}, err
-			}
-			ex.extraTxnState.descCollection.SetSession(session)
+		if err := ex.maybeSetSQLLivenessSession(); err != nil {
+			return advanceInfo{}, err
 		}
 	case txnCommit:
 		if res.Err() != nil {
@@ -3605,13 +3599,38 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		fallthrough
-	case txnRestart, txnRollback:
+	case txnRollback:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+	case txnRestart:
+		// In addition to resetting the extraTxnState, the restart event may
+		// also need to reset the sqlliveness.Session.
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+		if err := ex.maybeSetSQLLivenessSession(); err != nil {
+			return advanceInfo{}, err
+		}
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
 	return advInfo, nil
+}
+
+func (ex *connExecutor) maybeSetSQLLivenessSession() error {
+	if !ex.server.cfg.Codec.ForSystemTenant() ||
+		ex.server.cfg.TestingKnobs.ForceSQLLivenessSession {
+		// Update the leased descriptor collection with the current sqlliveness.Session.
+		// This is required in the multi-tenant environment to update the transaction
+		// deadline to either the session expiry or the leased descriptor deadline,
+		// whichever is sooner. We need this to ensure that transactions initiated
+		// by ephemeral SQL pods in multi-tenant environments are committed before the
+		// session expires.
+		session, err := ex.server.cfg.SQLLiveness.Session(ex.Ctx())
+		if err != nil {
+			return err
+		}
+		ex.extraTxnState.descCollection.SetSession(session)
+	}
+	return nil
 }
 
 func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
