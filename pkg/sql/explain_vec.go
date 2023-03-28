@@ -78,7 +78,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	willDistribute := physPlan.Distribution.WillDistribute()
 	n.run.lines, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
-		distSQLPlanner.gatewaySQLInstanceID, verbose, willDistribute,
+		distSQLPlanner.gatewaySQLInstanceID, verbose, willDistribute, false, /* recordingStats */
 	)
 	if err != nil {
 		return err
