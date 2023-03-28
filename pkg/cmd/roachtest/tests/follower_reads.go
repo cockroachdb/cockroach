@@ -730,7 +730,7 @@ func verifyHighFollowerReadRatios(
 	}
 
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 
