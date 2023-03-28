@@ -495,7 +495,7 @@ func StaticSplits() []roachpb.RKey {
 // However, splits are not required between the tables of secondary tenants.
 func (s *SystemConfig) ComputeSplitKey(
 	ctx context.Context, startKey, endKey roachpb.RKey,
-) (rr roachpb.RKey) {
+) (rr roachpb.RKey, _ error) {
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
@@ -508,11 +508,11 @@ func (s *SystemConfig) ComputeSplitKey(
 			if split.Less(endKey) {
 				// The split point is contained within [startKey, endKey), so we need to
 				// create the split.
-				return split
+				return split, nil
 			}
 			// [startKey, endKey) is contained between the previous split point and
 			// this split point.
-			return nil
+			return nil, nil
 		}
 		// [startKey, endKey) is somewhere greater than this split point. Continue.
 	}
@@ -521,12 +521,12 @@ func (s *SystemConfig) ComputeSplitKey(
 	// anything, the key range must be somewhere in the SQL table part of the
 	// keyspace. First, look for split keys within the system-tenant's keyspace.
 	if split := s.systemTenantTableBoundarySplitKey(ctx, startKey, endKey); split != nil {
-		return split
+		return split, nil
 	}
 
 	// If the system tenant does not have any splits, look for split keys at the
 	// boundary of each secondary tenant.
-	return s.tenantBoundarySplitKey(ctx, startKey, endKey)
+	return s.tenantBoundarySplitKey(ctx, startKey, endKey), nil
 }
 
 func (s *SystemConfig) systemTenantTableBoundarySplitKey(
@@ -701,7 +701,13 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
 func (s *SystemConfig) NeedsSplit(ctx context.Context, startKey, endKey roachpb.RKey) bool {
-	return len(s.ComputeSplitKey(ctx, startKey, endKey)) > 0
+	// TODO(arul): bubble up this error.
+	splits, err := s.ComputeSplitKey(ctx, startKey, endKey)
+	if err != nil {
+		log.FatalfDepth(ctx, 3, "unable to compute split key for needs split: %v", err)
+	}
+
+	return len(splits) > 0
 }
 
 // shouldSplitOnSystemTenantObject checks if the ID is eligible for a split at

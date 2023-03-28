@@ -236,7 +236,11 @@ func (sq *splitQueue) processAttempt(
 ) (processed bool, err error) {
 	desc := r.Desc()
 	// First handle the case of splitting due to span config maps.
-	if splitKey := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
+	splitKey, err := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to compute split key")
+	}
+	if splitKey != nil {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			kvpb.AdminSplitRequest{

@@ -162,7 +162,8 @@ func TestDataDriven(t *testing.T) {
 				d.ScanArgs(t, "span", &spanStr)
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
-				splitKey := store.ComputeSplitKey(ctx, start, end)
+				splitKey, err := store.ComputeSplitKey(ctx, start, end)
+				require.NoError(t, err)
 				if splitKey == nil {
 					return "n/a"
 				}
@@ -320,7 +321,8 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = store.ComputeSplitKey(ctx, roachpb.RKey(query.Key), roachpb.RKey(query.EndKey))
+				_, err := store.ComputeSplitKey(ctx, roachpb.RKey(query.Key), roachpb.RKey(query.EndKey))
+				require.NoError(b, err)
 			}
 		})
 	}
