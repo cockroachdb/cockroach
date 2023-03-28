@@ -453,12 +453,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		name := e.Name.String()
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 		if !ok {
-			err := pgerror.Newf(
-				pgcode.InvalidSQLStatementName,
-				"prepared statement %q does not exist", name,
-			)
-			return makeErrEvent(err)
+			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
+		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
+
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
 		if err != nil {
@@ -2087,7 +2085,7 @@ func (ex *connExecutor) sessionStateBase64() (tree.Datum, error) {
 	// we look at CurState() directly.
 	_, isNoTxn := ex.machine.CurState().(stateNoTxn)
 	state, err := serializeSessionState(
-		!isNoTxn, ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
+		!isNoTxn, &ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
 		ex.server.cfg,
 	)
 	if err != nil {
