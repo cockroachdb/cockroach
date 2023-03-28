@@ -360,7 +360,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 
 		// Verify the payload in the system.job_info is the same as what we read
 		// from system.jobs.
-		require.NoError(t, infoStorage.Iterate(ctx, []byte(legacyPayloadKey), func(infoKey, value []byte) error {
+		require.NoError(t, infoStorage.Iterate(ctx, legacyPayloadKey, func(infoKey string, value []byte) error {
 			data, err := protoutil.Marshal(&expectedPayload)
 			if err != nil {
 				panic(err)
@@ -371,7 +371,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 
 		// Verify the progress in the system.job_info is the same as what we read
 		// from system.jobs.
-		require.NoError(t, infoStorage.Iterate(ctx, []byte(legacyProgressKey), func(infoKey, value []byte) error {
+		require.NoError(t, infoStorage.Iterate(ctx, legacyProgressKey, func(infoKey string, value []byte) error {
 			data, err := protoutil.Marshal(&expectedProgress)
 			if err != nil {
 				panic(err)
@@ -525,9 +525,9 @@ func TestBatchJobsCreation(t *testing.T) {
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
 
 				// Ensure that we are also writing the payload and progress to the job_info table.
-				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_payload'::BYTES`,
+				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_payload'`,
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
-				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_progress'::BYTES`,
+				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_progress'`,
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
 			}
 		})
