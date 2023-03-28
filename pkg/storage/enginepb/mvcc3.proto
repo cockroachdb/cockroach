@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.storage.enginepb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
+import "kv/kvserver/concurrency/isolation/levels.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -25,13 +26,14 @@ message TxnMeta {
   bytes id = 1 [(gogoproto.customname) = "ID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.nullable) = false];
-  reserved 2;
   // key is the key which anchors the transaction. This is typically
   // the first key read or written during the transaction and
   // determines which range in the cluster will hold the transaction
   // record.
   bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
-  // Incremented on txn retry.
+  // iso_level is the isolation level of the transaction.
+  cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 2;
+  // epoch is the current epoch of the transaction.
   int32 epoch = 4 [(gogoproto.casttype) = "TxnEpoch"];
   // The proposed timestamp for the transaction. This starts as the current wall
   // time on the txn coordinator, and is forwarded by the timestamp cache if the
