@@ -124,6 +124,7 @@ const StatementExecution = ({
         </div>
       ) : (
         <StatementLink
+          appNames={[rec.execution.application]}
           statementFingerprintID={rec.execution.fingerprintID}
           statement={rec.execution.statement}
           statementSummary={rec.execution.summary}
