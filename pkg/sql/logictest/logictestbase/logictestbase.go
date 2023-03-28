@@ -524,6 +524,7 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
+		"local-mixed-22.2-23.1",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"
