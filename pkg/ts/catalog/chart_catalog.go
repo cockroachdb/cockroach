@@ -636,8 +636,8 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-voter",
 					"range.snapshots.applied-initial",
 					"range.snapshots.applied-non-voter",
-					"range.snapshot.delegate.successes",
-					"range.snapshot.delegate.failures",
+					"range.snapshots.delegate.successes",
+					"range.snapshots.delegate.failures",
 				},
 			},
 			{
@@ -649,6 +649,7 @@ var charts = []sectionDescription{
 					"range.snapshots.recv-in-progress",
 					"range.snapshots.send-total-in-progress",
 					"range.snapshots.recv-total-in-progress",
+					"range.snapshots.delegate.in-progress",
 				},
 			},
 			{
