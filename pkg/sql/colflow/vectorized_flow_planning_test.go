@@ -44,6 +44,12 @@ func TestVectorizedPlanning(t *testing.T) {
 		// deterministic.
 		_, err := conn.ExecContext(ctx, `SET direct_columnar_scans_enabled = false`)
 		require.NoError(t, err)
+		// Disable sampling of the txns so that we don't collect execution stats
+		// for the statement (if we did, then we'd add the vectorized stats
+		// collectors to the operator tree and would have to keep the
+		// columnarizer-materializer pair).
+		_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0`)
+		require.NoError(t, err)
 		// Check that there is no columnarizer-materializer pair on top of the
 		// root of the execution tree if the root is a wrapped row-execution
 		// processor.
