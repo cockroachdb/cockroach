@@ -9,18 +9,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONS
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+ │         │    └── ABSENT → WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │         └── 1 Mutation operation
  │              └── AddUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104,"Validity":2}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+ │    │    │    └── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+ │         │    └── ABSENT → WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │         └── 3 Mutation operations
  │              ├── AddUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104,"Validity":2}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
@@ -28,12 +28,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONS
  └── PostCommitPhase
       ├── Stage 1 of 2 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── WRITE_ONLY → VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+      │    │    └── WRITE_ONLY → VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
       └── Stage 2 of 2 in PostCommitPhase
            ├── 2 elements transitioning toward PUBLIC
-           │    ├── VALIDATED → PUBLIC UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+           │    ├── VALIDATED → PUBLIC UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
            │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
            └── 4 Mutation operations
                 ├── SetConstraintName {"ConstraintID":2,"Name":"unique_j","TableID":104}
