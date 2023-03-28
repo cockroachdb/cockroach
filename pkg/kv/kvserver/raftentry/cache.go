@@ -227,6 +227,7 @@ func (c *Cache) Get(id roachpb.RangeID, idx uint64) (e raftpb.Entry, ok bool) {
 	e, ok = p.get(idx)
 	if ok {
 		c.metrics.Hits.Inc(1)
+		c.metrics.ReadBytes.Inc(int64(e.Size()))
 	}
 	return e, ok
 }
@@ -251,9 +252,11 @@ func (c *Cache) Scan(
 	defer p.mu.RUnlock()
 
 	ents, bytes, nextIdx, exceededMaxBytes = p.scan(ents, lo, hi, maxBytes)
+	// Track all bytes that are returned to caller, but only consider an access a
+	// "hit" if it returns all requested entries or stops short because of a
+	// maximum bytes limit.
+	c.metrics.ReadBytes.Inc(int64(bytes))
 	if nextIdx == hi || exceededMaxBytes {
-		// Only consider an access a "hit" if it returns all requested entries or
-		// stops short because of a maximum bytes limit.
 		c.metrics.Hits.Inc(1)
 	}
 	return ents, bytes, nextIdx, exceededMaxBytes

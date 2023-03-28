@@ -4068,6 +4068,7 @@ var charts = []sectionDescription{
 				Title: "raft.Storage.Engine Read bytes",
 				Metrics: []string{
 					"raft.storage.read_bytes",
+					"raft.entrycache.read_bytes",
 				},
 			},
 		},

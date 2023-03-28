@@ -1104,7 +1104,7 @@ of processing.
 		Help: `Counter of raftpb.Entry.Size() read from pebble for raft log entries.
 
 These are the bytes returned from the (raft.Storage).Entries method that were not
-returned via the raft entry cache. This metric plus the raft.storage.read_bytes
+returned via the raft entry cache. This metric plus the raft.entrycache.read_bytes
 metric represent the total bytes returned from the Entries method.
 
 Since pebble might serve these entries from the block cache, only a fraction of this
