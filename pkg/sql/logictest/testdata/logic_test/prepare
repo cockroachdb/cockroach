@@ -1471,3 +1471,190 @@ query ITT
 EXECUTE args_deduce_type_1(1,'10','100');
 ----
 1  10  100
+
+# Test that prepared_statements_cache_size functions correctly.
+subtest prepared_statements_cache_size
+
+statement ok
+DEALLOCATE ALL
+
+# With a very small cache, all prepared statements except the most recent one
+# should be automatically deallocated.
+statement ok
+SET prepared_statements_cache_size = '1 KiB'
+
+statement ok
+PREPARE pscs01 AS SELECT $1::bool, 1
+
+statement ok
+PREPARE pscs02 AS SELECT $1::float, 2
+
+statement ok
+PREPARE pscs03 AS SELECT $1::decimal, 3
+
+statement ok
+PREPARE pscs04 AS SELECT $1::string, 4
+
+statement ok
+PREPARE pscs05 AS SELECT $1::json, 5
+
+statement ok
+PREPARE pscs06 AS SELECT $1::int, 6
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs06
+
+query II
+EXECUTE pscs06(6)
+----
+6  6
+
+statement error prepared statement \"pscs05\" does not exist
+EXECUTE pscs05(5)
+
+statement error prepared statement \"pscs04\" does not exist
+EXECUTE pscs04(4)
+
+statement error prepared statement \"pscs03\" does not exist
+EXECUTE pscs03(3)
+
+statement error prepared statement \"pscs02\" does not exist
+EXECUTE pscs02(2)
+
+statement error prepared statement \"pscs01\" does not exist
+EXECUTE pscs01(1)
+
+# We should automatically deallocate old prepared statements as the cache grows.
+statement ok
+SET prepared_statements_cache_size = '20 KiB'
+
+statement ok
+PREPARE pscs07 AS SELECT $1::date, 7
+
+statement ok
+PREPARE pscs08 AS SELECT $1::timestamp, 8
+
+statement ok
+PREPARE pscs09 AS SELECT $1::bool, 9
+
+statement ok
+PREPARE pscs10 AS SELECT $1::bytes, 10
+
+statement ok
+PREPARE pscs11 AS SELECT $1::smallint, 11
+
+statement ok
+PREPARE pscs12 AS SELECT $1::time, 12
+
+statement ok
+PREPARE pscs13 AS SELECT $1::bigint, 13
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs08
+pscs09
+pscs10
+pscs11
+pscs12
+pscs13
+
+statement ok
+DEALLOCATE pscs10
+
+# Now we should have room for one more.
+statement ok
+PREPARE pscs14 AS SELECT $1::int, 14
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs08
+pscs09
+pscs11
+pscs12
+pscs13
+pscs14
+
+# Executing a prepared statement should move it to the front of the LRU list.
+query II
+EXECUTE pscs11(11)
+----
+11  11
+
+statement ok
+PREPARE pscs15 AS SELECT $1::timetz, 15
+
+statement ok
+PREPARE pscs16 AS SELECT $1::float, 16
+
+statement ok
+PREPARE pscs17 AS SELECT $1::interval, 17
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs11
+pscs13
+pscs14
+pscs15
+pscs16
+pscs17
+
+# Retrying a transaction should rewind the LRU list after each retry even if
+# some prepared statements were evicted. (We use a sequence to break out of the
+# retry loop.)
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE TABLE prep_stmts (which INT, name STRING)
+
+statement ok
+BEGIN;
+INSERT INTO prep_stmts SELECT 1, name FROM pg_catalog.pg_prepared_statements;
+PREPARE pscs18 AS SELECT $1::inet, 18;
+EXECUTE pscs14(14);
+PREPARE pscs19 AS SELECT $1::string, 19;
+INSERT INTO prep_stmts SELECT 2, name FROM pg_catalog.pg_prepared_statements;
+SELECT IF(nextval('s') <= 3, crdb_internal.force_retry('1 hour'), 0);
+COMMIT
+
+# Validate that the transaction was actually tried multiple times.
+query I
+SELECT currval('s')
+----
+4
+
+# Validate that the LRU list was correct before and after the PREPAREs, even
+# after multiple retries.
+query IT
+SELECT which, name FROM prep_stmts ORDER BY which, name
+----
+1  pscs11
+1  pscs13
+1  pscs14
+1  pscs15
+1  pscs16
+1  pscs17
+2  pscs14
+2  pscs15
+2  pscs16
+2  pscs17
+2  pscs18
+2  pscs19
+
+statement ok
+DROP TABLE prep_stmts
+
+statement ok
+DROP SEQUENCE s
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+RESET prepared_statements_cache_size
