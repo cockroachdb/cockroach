@@ -73,6 +73,15 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		{
 			keyGenerator:      NewUniformKeyGen(0, int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
+			readRatio:         0.00,
+			maxSize:           1000,
+			minSize:           100,
+			duration:          1000 * time.Second,
+			expectedQuartiles: [3]int{25, 49, 75},
+		},
+		{
+			keyGenerator:      NewUniformKeyGen(0, int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			rate:              10,
 			readRatio:         0.75,
 			maxSize:           1000,
 			minSize:           100,
