@@ -10,7 +10,7 @@
 
 import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
 import * as timeScale from "./timeScale";
-import moment from "moment";
+import moment from "moment-timezone";
 
 describe("time scale reducer", function () {
   describe("actions", function () {
