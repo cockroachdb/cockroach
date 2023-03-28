@@ -1490,12 +1490,13 @@ func makeLeFn(a, b *types.T, v volatility.V) *CmpOp {
 func makeIsFn(a, b *types.T, v volatility.V) *CmpOp {
 	return makeCmpOpOverload(treecmp.IsNotDistinctFrom, a, b, true, v)
 }
-func makeGtFn(a, b *types.T, v volatility.V) *CmpOp {
-	return makeCmpOpOverload(treecmp.GT, a, b, false, v)
-}
-func makeGeFn(a, b *types.T, v volatility.V) *CmpOp {
-	return makeCmpOpOverload(treecmp.GE, a, b, false, v)
-}
+
+//func makeGtFn(a, b *types.T, v volatility.V) *CmpOp {
+//	return makeCmpOpOverload(treecmp.GT, a, b, false, v)
+//}
+//func makeGeFn(a, b *types.T, v volatility.V) *CmpOp {
+//	return makeCmpOpOverload(treecmp.GE, a, b, false, v)
+//}
 
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
