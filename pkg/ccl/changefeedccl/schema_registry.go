@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,7 +119,7 @@ func getAndDeleteParams(u *url.URL) (*schemaRegistryParams, error) {
 
 func newConfluentSchemaRegistry(
 	baseURL string, p externalConnectionProvider, sliMetrics *sliMetrics,
-) (*confluentSchemaRegistry, error) {
+) (schemaRegistry, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "malformed schema registry url")
@@ -136,6 +137,17 @@ func newConfluentSchemaRegistry(
 		return nil, errors.Errorf("unsupported scheme: %q", u.Scheme)
 	}
 
+	schemaRegistrySingletons.mu.Lock()
+	cache, ok := schemaRegistrySingletons.cachePerEndpoint[baseURL]
+	if !ok {
+		cache = &schemaRegistryCache{entries: make(map[struct {
+			subject string
+			schema  string
+		}]int32)}
+		schemaRegistrySingletons.cachePerEndpoint[baseURL] = cache
+	}
+	schemaRegistrySingletons.mu.Unlock()
+
 	s, err := getAndDeleteParams(u)
 	if err != nil {
 		return nil, err
@@ -148,12 +160,16 @@ func newConfluentSchemaRegistry(
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 5
-	return &confluentSchemaRegistry{
-		baseURL:    u,
-		client:     httpClient,
-		retryOpts:  retryOpts,
-		sliMetrics: sliMetrics,
-	}, nil
+	reg := schemaRegistryWithCache{
+		base: &confluentSchemaRegistry{
+			baseURL:    u,
+			client:     httpClient,
+			retryOpts:  retryOpts,
+			sliMetrics: sliMetrics,
+		},
+		cache: cache,
+	}
+	return &reg, nil
 }
 
 // Setup the httputil.Client to use when dialing Confluent schema registry. If `ca_cert`
@@ -292,3 +308,56 @@ func (r *confluentSchemaRegistry) urlForPath(relPath string) string {
 	u.Path = path.Join(u.EscapedPath(), relPath)
 	return u.String()
 }
+
+type schemaRegistryCache struct {
+	mu      syncutil.Mutex
+	entries map[struct {
+		subject string
+		schema  string
+	}]int32
+}
+
+type schemaRegistryWithCache struct {
+	base  schemaRegistry
+	cache *schemaRegistryCache
+}
+
+// Ping implements the schemaRegistry interface.
+func (csr *schemaRegistryWithCache) Ping(ctx context.Context) error {
+	return csr.base.Ping(ctx)
+}
+
+// RegisterSchemaForSubject implements the schemaRegistry interface.
+func (csr *schemaRegistryWithCache) RegisterSchemaForSubject(
+	ctx context.Context, subject string, schema string,
+) (int32, error) {
+	cacheKey := struct {
+		subject string
+		schema  string
+	}{subject, schema}
+	csr.cache.mu.Lock()
+	defer csr.cache.mu.Unlock()
+	id, ok := csr.cache.entries[cacheKey]
+	if ok {
+		return id, nil
+	}
+	// TODO: Make this a LRU eviction.
+	if len(csr.cache.entries) > 1023 {
+		csr.cache.entries = make(map[struct {
+			subject string
+			schema  string
+		}]int32)
+	}
+	id, err := csr.base.RegisterSchemaForSubject(ctx, subject, schema)
+	if err == nil {
+		csr.cache.entries[cacheKey] = id
+	}
+	return id, err
+}
+
+type sharedSchemaRegistryCaches struct {
+	mu               syncutil.Mutex
+	cachePerEndpoint map[string]*schemaRegistryCache
+}
+
+var schemaRegistrySingletons = &sharedSchemaRegistryCaches{cachePerEndpoint: make(map[string]*schemaRegistryCache)}
