@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 )
 
 // opReference represents one operation; an opGenerator reference as well as
@@ -770,7 +770,7 @@ func (i ingestOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error = %s", err.Error())
 	}
 
-	sstWriter := storage.MakeIngestionSSTWriter(ctx, i.m.st, objstorage.NewFileWritable(f))
+	sstWriter := storage.MakeIngestionSSTWriter(ctx, i.m.st, objstorageprovider.NewFileWritable(f))
 	for _, key := range i.keys {
 		_ = sstWriter.Put(key, []byte("ingested"))
 	}
