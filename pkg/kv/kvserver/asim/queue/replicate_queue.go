@@ -54,10 +54,8 @@ func NewReplicateQueue(
 // MaybeAdd proposes a replica for inclusion into the ReplicateQueue, if it
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a non-noop, then the replica is added.
-func (rq *replicateQueue) MaybeAdd(
-	ctx context.Context, replica state.Replica, state state.State,
-) bool {
-	rng, ok := state.Range(replica.Range())
+func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
+	rng, ok := s.Range(replica.Range())
 	if !ok {
 		return false
 	}
@@ -98,6 +96,14 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 
 		rng, ok := s.Range(state.RangeID(item.rangeID))
 		if !ok {
+			return
+		}
+
+		// Check that the store associated with this queue still has the lease for
+		// the range, if not we shouldn't process it.
+		// TODO(kvoli): This check as well with all of this logic shouldn't  exist
+		// bespokely for the simulator. Similar to the above TODO.
+		if lhStore, ok := s.LeaseholderStore(rng.RangeID()); ok && lhStore.StoreID() != rq.storeID {
 			return
 		}
 
