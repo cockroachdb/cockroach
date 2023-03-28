@@ -542,23 +542,15 @@ func TestGCTenant(t *testing.T) {
 	})
 }
 
-// This test exercises code whereby an index GC job is running, and, in the
+// This test exercises code whereby an GC job is running, and, in the
 // meantime, the descriptor is removed. We want to ensure that the GC job
-// finishes without an error.
-func TestDropIndexWithDroppedDescriptor(t *testing.T) {
+// finishes without an error. We want to test this both for index drops
+// and for table drops.
+func TestDropWithDeletedDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The way the GC job works is that it initially clears the index
-	// data, then it waits for the background MVCC GC to run and remove
-	// the underlying tombstone, and then finally it removes any relevant
-	// zone configurations for the index from system.zones. In the first
-	// and final phases, the job resolves the descriptor. This test ensures
-	// that the code is robust to the descriptor being removed both before
-	// the initial DelRange, and after, when going to remove the zone config.
-	testutils.RunTrueAndFalse(t, "before DelRange", func(
-		t *testing.T, beforeDelRange bool,
-	) {
+	runTest := func(t *testing.T, dropIndex bool, beforeDelRange bool) {
 		ctx, cancel := context.WithCancel(context.Background())
 		gcJobID := make(chan jobspb.JobID)
 		knobs := base.TestingKnobs{
@@ -628,7 +620,12 @@ SELECT descriptor_id, index_id
  WHERE descriptor_name = 'foo'
    AND index_name = 'foo_j_i_idx';`).Scan(&tableID, &indexID)
 		// Drop the index.
-		tdb.Exec(t, "DROP INDEX foo@foo_j_i_idx")
+		if dropIndex {
+			tdb.Exec(t, "DROP INDEX foo@foo_j_i_idx")
+		} else {
+			tdb.Exec(t, "DROP TABLE foo")
+		}
+
 		codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
 		tablePrefix.Store(codec.TablePrefix(uint32(tableID)))
 
@@ -654,5 +651,20 @@ SELECT descriptor_id, index_id
 		// Ensure that the job completes successfully in either case.
 		jr := s.JobRegistry().(*jobs.Registry)
 		require.NoError(t, jr.WaitForJobs(ctx, []jobspb.JobID{jobID}))
+	}
+
+	// The way the GC job works is that it initially clears the index
+	// data, then it waits for the background MVCC GC to run and remove
+	// the underlying tombstone, and then finally it removes any relevant
+	// zone configurations for the index from system.zones. In the first
+	// and final phases, the job resolves the descriptor. This test ensures
+	// that the code is robust to the descriptor being removed both before
+	// the initial DelRange, and after, when going to remove the zone config.
+	testutils.RunTrueAndFalse(t, "before DelRange", func(
+		t *testing.T, beforeDelRange bool,
+	) {
+		testutils.RunTrueAndFalse(t, "drop index", func(t *testing.T, dropIndex bool) {
+			runTest(t, dropIndex, beforeDelRange)
+		})
 	})
 }
