@@ -180,6 +180,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.UniqueWithoutIndexConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(IndexID, "IndexIDForValidation"),
 	),
 	rel.EntityMapping(t((*scpb.UniqueWithoutIndexConstraintUnvalidated)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
