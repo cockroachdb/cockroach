@@ -1672,14 +1672,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		},
 	}},
 
-	treecmp.GT: {overloads: []*CmpOp{
-		// Single-type comparisons.
-		makeGtFn(types.Jsonb, types.Jsonb, volatility.Immutable),
-	}},
-	treecmp.GE: {overloads: []*CmpOp{
-		// Single-type comparisons.
-		makeGeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
-	}},
 	treecmp.IsNotDistinctFrom: {overloads: []*CmpOp{
 		{
 			LeftType:  types.Unknown,
