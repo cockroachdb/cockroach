@@ -48,7 +48,7 @@ process for those artifacts and that would add some traceability.
 
 If you want to make a change to jepsen (like upgrade the version to resolve
 issues with env incompatibility or bump jdbc driver versions), you can create
-a pull request for tc-nightly-master branch and after merging build a new
+a pull request for tc-nightly-main branch and after merging build a new
 artifact using:
 
 # install build dependencies and build tools
@@ -59,7 +59,7 @@ chmod +x lein
 # clone repository and checkout release branch
 git clone https://github.com/cockroachdb/jepsen
 cd jepsen/cockroachdb
-git checkout tc-nightly-master
+git checkout tc-nightly-main
 
 # build executable jar
 ~/lein uberjar
@@ -81,7 +81,7 @@ const jepsenRepo = "https://github.com/cockroachdb/jepsen"
 const repoBranch = "tc-nightly"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
-const binaryVersion = "0.1.0-3d7c345d-standalone"
+const binaryVersion = "0.1.0-21cbebe-standalone"
 
 var jepsenNemeses = []struct {
 	name, config string
