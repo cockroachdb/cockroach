@@ -9,6 +9,7 @@ genrule(
         "//pkg/gossip:gossip_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/kv/kvpb:kvpb_proto",
+        "//pkg/kv/kvserver/concurrency/isolation:isolation_proto",
         "//pkg/kv/kvserver/concurrency/lock:lock_proto",
         "//pkg/kv/kvserver/kvserverpb:kvserverpb_proto",
         "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",

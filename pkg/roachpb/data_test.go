@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
@@ -504,8 +505,9 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Key:               Key("foo"),
 		ID:                uuid.MakeV4(),
+		Key:               Key("foo"),
+		IsoLevel:          isolation.Snapshot,
 		Epoch:             2,
 		WriteTimestamp:    makeSynTS(20, 21),
 		MinTimestamp:      makeSynTS(10, 11),

@@ -71,6 +71,7 @@ go_test(
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/testutils/zerofields",
