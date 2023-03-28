@@ -393,7 +393,7 @@ func dumpImpl(
 	ctx context.Context, db *kv.DB, req *tspb.DumpRequest, d func(*roachpb.KeyValue) error,
 ) error {
 	names := req.Names
-	if len(names) == 0 {
+	if len(req.Names) == 0 {
 		names = catalog.AllInternalTimeseriesMetricNames()
 	}
 	resolutions := req.Resolutions
