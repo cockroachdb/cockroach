@@ -308,6 +308,17 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
+	// We need this part so that when we check if we need to increment the count
+	// of executed stmt, we are checking the latest error and payload. Otherwise,
+	// we would be checking the ones evaluated at the portal's first-time
+	// execution.
+	defer func() {
+		if isPausablePortal {
+			portal.pauseInfo.retErr = retErr
+			portal.pauseInfo.retPayload = retPayload
+		}
+	}()
+
 	ast := parserStmt.AST
 	var sp *tracing.Span
 	if !isPausablePortal || !portal.pauseInfo.execStmtInOpenStateCleanup.isComplete {
@@ -398,6 +409,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			processCleanupFunc(
 				"increment executed stmt cnt",
 				func() {
+					// We need to check the latest errors rather than the ones evaluated
+					// when this function is created.
+					if isPausablePortal {
+						retErr = portal.pauseInfo.retErr
+						retPayload = portal.pauseInfo.retPayload
+					}
 					if retErr == nil && !payloadHasError(retPayload) {
 						ex.incrementExecutedStmtCounter(ast)
 					}
@@ -466,6 +483,9 @@ func (ex *connExecutor) execStmtInOpenState(
 				}
 				resToPushErr.SetError(errToPush)
 				retPayload = eventNonRetriableErrPayload{err: errToPush}
+				if isPausablePortal {
+					portal.pauseInfo.retPayload = retPayload
+				}
 			}
 			ex.removeActiveQuery(queryID, ast)
 			cancelQueryFunc()
@@ -635,6 +655,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				if isPausablePortal {
 					ihToFinish = &portal.pauseInfo.ihWrapper.ih
 					curRes = portal.pauseInfo.curRes
+					retErr = portal.pauseInfo.retErr
+					retPayload = portal.pauseInfo.retPayload
 				}
 				retErr = ihToFinish.Finish(
 					ex.server.cfg,
@@ -648,6 +670,9 @@ func (ex *connExecutor) execStmtInOpenState(
 					retPayload,
 					retErr,
 				)
+				if isPausablePortal {
+					portal.pauseInfo.retErr = retErr
+				}
 			})
 		}()
 	}
