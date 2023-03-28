@@ -1254,7 +1254,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Certain statements want their results to go to the client
 	// directly. Configure this here.
-	if planner.curPlan.avoidBuffering || ex.sessionData().AvoidBuffering {
+	if ex.executorType != executorTypeInternal && (planner.curPlan.avoidBuffering || ex.sessionData().AvoidBuffering) {
 		res.DisableBuffering()
 	}
 
