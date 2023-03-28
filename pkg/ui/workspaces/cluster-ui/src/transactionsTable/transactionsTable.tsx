@@ -34,8 +34,9 @@ import {
   Count,
   FixLong,
   longToInt,
-  TimestampToString,
   unset,
+  appNamesAttr,
+  propsToQueryString,
 } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
@@ -72,8 +73,8 @@ const { latencyClasses } = tableClasses;
 const cx = classNames.bind(statsTablePageStyles);
 
 interface TransactionLinkTargetProps {
-  aggregatedTs: string;
   transactionFingerprintId: string;
+  application?: string;
 }
 
 // TransactionLinkTarget returns the link to the relevant transaction page, given
@@ -81,7 +82,11 @@ interface TransactionLinkTargetProps {
 export const TransactionLinkTarget = (
   props: TransactionLinkTargetProps,
 ): string => {
-  return `/transaction/${props.transactionFingerprintId}`;
+  const searchParams = propsToQueryString({
+    [appNamesAttr]: [props.application],
+  });
+
+  return `/transaction/${props.transactionFingerprintId}?${searchParams}`;
 };
 
 export function makeTransactionsColumns(
@@ -147,7 +152,7 @@ export function makeTransactionsColumns(
               item.stats_data.statement_fingerprint_ids,
               statements,
             ) || "Transaction query unavailable.",
-          aggregatedTs: TimestampToString(item.stats_data.aggregated_ts),
+          appName: item.stats_data.app,
           transactionFingerprintId:
             item.stats_data.transaction_fingerprint_id.toString(),
           search,

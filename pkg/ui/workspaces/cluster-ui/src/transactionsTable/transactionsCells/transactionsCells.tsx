@@ -12,7 +12,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { getHighlightedText } from "src/highlightedText";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { limitText } from "src/util";
+import { limitText, unset } from "src/util";
 import classNames from "classnames/bind";
 import statementsStyles from "../../statementsTable/statementsTableContent.module.scss";
 import transactionsCellsStyles from "./transactionsCells.module.scss";
@@ -25,22 +25,22 @@ const textWrapper = ownCellStyles("text-wrapper");
 const hoverAreaClassName = ownCellStyles("hover-area");
 
 interface TextCellProps {
+  appName: string;
   transactionText: string;
   transactionSummary: string;
-  aggregatedTs: string;
   transactionFingerprintId: string;
   search: string;
 }
 
 export const transactionLink = ({
+  appName,
   transactionText,
   transactionSummary,
-  aggregatedTs,
   transactionFingerprintId,
   search,
 }: TextCellProps): React.ReactElement => {
   const linkProps = {
-    aggregatedTs,
+    application: appName,
     transactionFingerprintId,
   };
 
