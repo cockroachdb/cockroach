@@ -902,8 +902,8 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 			log.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
 		}
 
-		if !testutils.IsError(err, `remote couldn't accept INITIAL snapshot`) {
-			t.Fatalf(`expected "remote couldn't accept INITIAL snapshot" error got: %+v`, err)
+		if !testutils.IsError(err, `remote couldn't accept snapshot`) {
+			t.Fatalf(`expected "remote couldn't accept snapshot" error got: %+v`, err)
 		}
 		// Make sure we cleaned up after ourselves (by removing the learner/non-voter).
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -1021,7 +1021,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		if err != nil {
 			return err
 		}
-		matched, err := regexp.MatchString("streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", recording.String())
+		matched, err := regexp.MatchString("streamed snapshot.*to.*NON_VOTER", recording.String())
 		if err != nil {
 			return err
 		}
@@ -2269,7 +2269,7 @@ func getExpectedSnapshotSizeBytes(
 	originRepl *kvserver.Replica,
 	snapType kvserverpb.SnapshotRequest_Type,
 ) (int64, error) {
-	snap, err := originRepl.GetSnapshot(ctx, snapType, uuid.MakeV4())
+	snap, err := originRepl.GetSnapshot(ctx, uuid.MakeV4())
 	if err != nil {
 		return 0, err
 	}
