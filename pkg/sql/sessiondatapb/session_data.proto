@@ -35,11 +35,11 @@ message SessionData {
   // VectorizeMode indicates which kinds of queries to use vectorized execution
   // engine for.
   VectorizeExecMode vectorize_mode = 5;
-  // TestingVectorizeInjectPanics indicates whether random panics are injected
-  // into the vectorized flow execution. The goal of such behavior is making
-  // sure that errors that are propagated as panics in the vectorized engine
-  // are caught in all scenarios.
-  bool testing_vectorize_inject_panics = 6;
+  // TestingInjectPanics indicates whether random panics are injected into the
+  // vectorized flow execution and query optimization. The goal of such behavior
+  // is making sure that errors that are propagated as panics in the vectorized
+  // engine and optimizer are caught in all scenarios.
+  bool testing_inject_panics = 6;
   // DefaultIntSize specifies the size in bits or bytes (preferred) of how a
   // "naked" INT type should be parsed.
   int32 default_int_size = 7;

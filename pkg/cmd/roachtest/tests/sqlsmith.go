@@ -148,13 +148,14 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 
 		// We will enable panic injection on this connection in the vectorized
-		// engine (and will ignore the injected errors) in order to test that
-		// the panic-catching mechanism of error propagation works as expected.
+		// engine and optimizer (and will ignore the injected errors) in order
+		// to test that the panic-catching mechanism of error propagation works
+		// as expected.
 		// Note: it is important to enable this testing knob only after all
 		// other setup queries have already completed, including the smither
 		// instantiation (otherwise, the setup might fail because of the
 		// injected panics).
-		injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+		injectPanicsStmt := "SET testing_inject_panics=true;"
 		if _, err := conn.Exec(injectPanicsStmt); err != nil {
 			t.Fatal(err)
 		}

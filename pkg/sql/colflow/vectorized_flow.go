@@ -1237,7 +1237,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 			s.closers = append(s.closers, result.ToClose...)
-			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
+			if flowCtx.EvalCtx.SessionData().TestingInjectPanics {
 				result.Root = newPanicInjector(result.Root)
 			}
 

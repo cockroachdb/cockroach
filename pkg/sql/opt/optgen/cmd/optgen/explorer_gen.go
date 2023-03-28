@@ -120,6 +120,7 @@ func (g *explorerGen) genRuleFuncs() {
 		g.w.writeIndent("_required *physical.Required,\n")
 		g.w.unnest(") (_fullyExplored bool)")
 		g.w.nest(" {\n")
+		g.w.writeIndent("opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)\n")
 		g.w.writeIndent("_fullyExplored = true\n\n")
 
 		sortRulesByPriority(rules)

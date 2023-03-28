@@ -3108,8 +3108,8 @@ func (m *sessionDataMutator) SetVectorize(val sessiondatapb.VectorizeExecMode) {
 	m.data.VectorizeMode = val
 }
 
-func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {
-	m.data.TestingVectorizeInjectPanics = val
+func (m *sessionDataMutator) SetTestingInjectPanics(val bool) {
+	m.data.TestingInjectPanics = val
 }
 
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
