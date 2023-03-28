@@ -14,6 +14,7 @@ import { InsightExecEnum } from "src/insights";
 import { contentModifiers } from "../../../statsTableUtil/statsTableUtil";
 import { Anchor } from "../../../anchor";
 import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";
+import { Timezone } from "src/timestamp";
 
 export const insightsColumnLabels = {
   executionID: "Execution ID",
@@ -23,7 +24,7 @@ export const insightsColumnLabels = {
   query: "Execution",
   status: "Status",
   insights: "Insights",
-  startTime: "Start Time (UTC)",
+  startTime: "Start Time",
   elapsedTime: "Elapsed Time",
   applicationName: "Application Name",
   username: "User Name",
@@ -31,7 +32,7 @@ export const insightsColumnLabels = {
   numRetries: "Retries",
   isFullScan: "Full Scan",
   contention: "Contention Time",
-  contentionStartTime: "Contention Start Time (UTC)",
+  contentionStartTime: "Contention Start Time",
   rowsProcessed: "Rows Processed",
   schemaName: "Schema Name",
   databaseName: "Database Name",
@@ -70,10 +71,13 @@ function makeToolTip(
   content: JSX.Element,
   columnKey: InsightsTableColumnKeys,
   execType?: InsightExecEnum,
+  timezone?: JSX.Element,
 ): ReactElement {
   return (
     <Tooltip placement="bottom" style="tableTitle" content={content}>
-      {getLabel(columnKey, execType)}
+      <>
+        {getLabel(columnKey, execType)} {timezone}
+      </>
     </Tooltip>
   );
 }
@@ -138,12 +142,16 @@ export const insightsTableTitles: InsightsTableTitleType = {
     return makeToolTip(
       <p>The timestamp at which the {execType} started.</p>,
       "startTime",
+      undefined,
+      <Timezone />,
     );
   },
   contentionStartTime: (execType: InsightExecEnum) => {
     return makeToolTip(
       <p>The timestamp at which contention was detected for the {execType}.</p>,
       "contentionStartTime",
+      undefined,
+      <Timezone />,
     );
   },
   elapsedTime: (execType: InsightExecEnum) => {

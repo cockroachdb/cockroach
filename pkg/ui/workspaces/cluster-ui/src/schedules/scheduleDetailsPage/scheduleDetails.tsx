@@ -20,13 +20,14 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DATE_FORMAT_24_UTC, idAttr, getMatchParamByName } from "src/util";
+import { DATE_FORMAT_24_TZ, idAttr, getMatchParamByName } from "src/util";
 
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import scheduleStyles from "src/schedules/schedules.module.scss";
 
 import classNames from "classnames/bind";
+import { Timestamp } from "../../timestamp";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const scheduleCx = classNames.bind(scheduleStyles);
@@ -75,11 +76,29 @@ export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
             <SummaryCard className={cardCx("summary-card")}>
               <SummaryCardItem
                 label="Creation Time"
-                value={schedule.created?.format(DATE_FORMAT_24_UTC)}
+                value={
+                  schedule.created ? (
+                    <Timestamp
+                      time={schedule.created}
+                      format={DATE_FORMAT_24_TZ}
+                    />
+                  ) : (
+                    <>N/A</>
+                  )
+                }
               />
               <SummaryCardItem
                 label="Next Execution Time"
-                value={schedule.nextRun?.format(DATE_FORMAT_24_UTC)}
+                value={
+                  schedule.nextRun ? (
+                    <Timestamp
+                      time={schedule.nextRun}
+                      format={DATE_FORMAT_24_TZ}
+                    />
+                  ) : (
+                    <>N/A</>
+                  )
+                }
               />
               <SummaryCardItem label="Recurrence" value={schedule.recurrence} />
               <SummaryCardItem

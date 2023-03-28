@@ -31,7 +31,7 @@ import {
   SummaryLabel,
   SummaryValue,
 } from "src/views/shared/components/summaryBar";
-import { Button, util } from "@cockroachlabs/cluster-ui";
+import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import "./nodeOverview.styl";
 import {
@@ -115,7 +115,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 
   render() {
     const { node, nodesSummary } = this.props;
-    const { Bytes, Percentage, DATE_FORMAT_24_UTC } = util;
+    const { Bytes, Percentage, DATE_FORMAT_24_TZ } = util;
     if (!node) {
       return (
         <div className="section">
@@ -306,9 +306,12 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               />
               <SummaryValue
                 title="Last Update"
-                value={util
-                  .LongToMoment(node.updated_at)
-                  .format(DATE_FORMAT_24_UTC)}
+                value={
+                  <Timestamp
+                    time={util.LongToMoment(node.updated_at)}
+                    format={DATE_FORMAT_24_TZ}
+                  />
+                }
               />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue

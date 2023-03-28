@@ -15,6 +15,7 @@ import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
 import { capitalize, DATE_FORMAT, Duration } from "src/util";
 import { StatusIcon } from "./statusIcon";
+import { Timestamp, Timezone } from "../timestamp";
 
 export type ExecutionsColumn =
   | "applicationName"
@@ -51,7 +52,7 @@ export const executionsColumnLabels: Record<
     }
   },
   retries: () => "Retries",
-  startTime: () => "Start Time (UTC)",
+  startTime: () => "Start Time",
   statementCount: () => "Statements",
   status: () => "Status",
   timeSpentBlocking: () => "Time Spent Blocking",
@@ -181,8 +182,14 @@ function makeRecentExecutionColumns(
     },
     startTime: {
       name: "startTime",
-      title: executionsTableTitles.startTime(execType),
-      cell: (item: RecentExecution) => item.start.format(DATE_FORMAT),
+      title: (
+        <>
+          {executionsTableTitles.startTime(execType)} <Timezone />
+        </>
+      ),
+      cell: (item: RecentExecution) => (
+        <Timestamp time={item.start} format={DATE_FORMAT} />
+      ),
       sort: (item: RecentExecution) => item.start.unix(),
     },
     elapsedTime: {

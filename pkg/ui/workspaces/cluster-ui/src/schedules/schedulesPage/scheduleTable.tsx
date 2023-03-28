@@ -18,10 +18,11 @@ import { EmptyTable } from "src/empty";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { dropSchedules, pauseSchedules, resumeSchedules } from "src/util/docs";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_FORMAT } from "src/util/format";
 
 import styles from "../schedules.module.scss";
 import classNames from "classnames/bind";
+import { Timestamp, Timezone } from "../../timestamp";
 const cx = classNames.bind(styles);
 
 class SchedulesSortedTable extends SortedTable<Schedule> {}
@@ -101,10 +102,17 @@ const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
         style="tableTitle"
         content={<p>Date and time the schedule will next execute.</p>}
       >
-        {"Next Execution Time (UTC)"}
+        <>
+          Next Execution Time <Timezone />
+        </>
       </Tooltip>
     ),
-    cell: schedule => schedule.nextRun?.format(DATE_FORMAT_24_UTC),
+    cell: schedule =>
+      schedule.nextRun ? (
+        <Timestamp time={schedule.nextRun} format={DATE_FORMAT} />
+      ) : (
+        <>N/A</>
+      ),
     sort: schedule => schedule.nextRun?.valueOf(),
   },
   {
@@ -157,10 +165,17 @@ const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
         style="tableTitle"
         content={<p>Date and time the schedule was created.</p>}
       >
-        {"Creation Time (UTC)"}
+        <>
+          Creation Time <Timezone />
+        </>
       </Tooltip>
     ),
-    cell: schedule => schedule.created?.format(DATE_FORMAT_24_UTC),
+    cell: schedule =>
+      schedule.created ? (
+        <Timestamp time={schedule.created} format={DATE_FORMAT} />
+      ) : (
+        <>N/A</>
+      ),
     sort: schedule => schedule.created?.valueOf(),
   },
 ];

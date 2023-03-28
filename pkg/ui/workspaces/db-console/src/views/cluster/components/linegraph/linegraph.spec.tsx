@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { shallow } from "enzyme";
+import { shallow, ShallowWrapper } from "enzyme";
 import React from "react";
 import uPlot from "uplot";
 import _ from "lodash";
 
-import { fillGaps, LineGraph, LineGraphProps } from "./index";
+import LineGraph, { InternalLineGraph, OwnProps } from "./index";
+import { fillGaps } from "./index";
 import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
@@ -26,8 +27,8 @@ import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import Long from "long";
 
 describe("<LineGraph>", function () {
-  let mockProps: LineGraphProps;
-  const linegraph = (props: LineGraphProps) =>
+  let mockProps: OwnProps;
+  const linegraph = (props: OwnProps) =>
     shallow(
       <LineGraph {...props}>
         <Axis />
@@ -73,13 +74,17 @@ describe("<LineGraph>", function () {
 
   it("should render a root component on mount", () => {
     const wrapper = linegraph({ ...mockProps });
-    const root = wrapper.find(".linegraph");
+    const root = wrapper.dive().find(".linegraph");
     expect(root.length).toBe(1);
   });
 
   it("should set a new chart on update", () => {
-    const wrapper = linegraph({ ...mockProps });
-    const instance = wrapper.instance() as any as LineGraph;
+    const wrapper = linegraph({ ...mockProps }).dive() as ShallowWrapper<
+      any,
+      Readonly<{}>,
+      React.Component<{}, {}, any>
+    >;
+    const instance = wrapper.instance() as any as InternalLineGraph;
     wrapper.setProps({
       data: {
         results: [
@@ -107,8 +112,12 @@ describe("<LineGraph>", function () {
     const wrapper = linegraph({
       ...mockProps,
       data: { results: [{}], toJSON: jest.fn() },
-    });
-    const instance = wrapper.instance() as unknown as LineGraph;
+    }).dive() as ShallowWrapper<
+      any,
+      Readonly<{}>,
+      React.Component<{}, {}, any>
+    >;
+    const instance = wrapper.instance() as unknown as InternalLineGraph;
     const mockFn = jest.fn();
     const mockMetrics = [
       {

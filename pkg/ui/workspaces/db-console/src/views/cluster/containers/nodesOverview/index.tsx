@@ -34,6 +34,7 @@ import {
   Table,
   SortSetting,
   util,
+  Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
@@ -462,8 +463,12 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "decommissionedSince",
       title: "decommissioned on",
-      render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        record.decommissionedDate.format(util.DATE_FORMAT_24_UTC),
+      render: (_text: string, record: DecommissionedNodeStatusRow) => (
+        <Timestamp
+          time={record.decommissionedDate}
+          format={util.DATE_FORMAT_24_TZ}
+        />
+      ),
     },
     {
       key: "status",

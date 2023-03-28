@@ -96,7 +96,7 @@ describe("getEventInfo", function () {
       const event: clusterUiApi.EventColumns =
         createEventWithEventType(eventType);
       const eventContent = shallow(
-        getEventInfo(event).content as React.ReactElement<any>,
+        getEventInfo(event, "UTC").content as React.ReactElement<any>,
       );
       expect(eventContent.text()).not.toMatch(/Unknown event type/);
     });

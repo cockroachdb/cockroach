@@ -23,6 +23,7 @@ import {
   SortedTable,
   SortSetting,
   util,
+  Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -109,10 +110,13 @@ export class Settings extends React.Component<SettingsProps, SettingsState> {
       {
         name: "lastUpdated",
         title: "Last Updated",
-        cell: (setting: IterableSetting) =>
-          setting.last_updated
-            ? setting.last_updated.format(util.DATE_FORMAT_24_UTC)
-            : "No overrides",
+        cell: (setting: IterableSetting) => (
+          <Timestamp
+            time={setting.last_updated}
+            format={util.DATE_FORMAT_24_TZ}
+            fallback={"No overrides"}
+          />
+        ),
         sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
       },
       {

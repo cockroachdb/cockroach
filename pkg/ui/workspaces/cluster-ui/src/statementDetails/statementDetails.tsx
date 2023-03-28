@@ -30,7 +30,7 @@ import {
   appAttr,
   appNamesAttr,
   FixFingerprintHexValue,
-  DATE_FORMAT_24_UTC,
+  DATE_FORMAT_24_TZ,
   intersperse,
   queryByName,
   RenderCount,
@@ -55,7 +55,6 @@ import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
-  timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -90,6 +89,8 @@ import {
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
+import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
+import { Timestamp } from "../timestamp";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -445,7 +446,6 @@ export class StatementDetails extends React.Component<
       .includes("timeout");
     const hasData =
       Number(this.props.statementDetails?.statement?.stats?.count) > 0;
-    const period = timeScaleToString(this.props.timeScale);
 
     return (
       <Tabs
@@ -455,10 +455,10 @@ export class StatementDetails extends React.Component<
         activeKey={currentTab}
       >
         <TabPane tab="Overview" key="overview">
-          {this.renderOverviewTabContent(hasTimeout, hasData, period)}
+          {this.renderOverviewTabContent(hasTimeout, hasData)}
         </TabPane>
         <TabPane tab="Explain Plans" key="explain-plan">
-          {this.renderExplainPlanTabContent(hasTimeout, hasData, period)}
+          {this.renderExplainPlanTabContent(hasTimeout, hasData)}
         </TabPane>
         {!this.props.isTenant && !this.props.hasViewActivityRedactedRole && (
           <TabPane
@@ -545,7 +545,6 @@ export class StatementDetails extends React.Component<
   renderOverviewTabContent = (
     hasTimeout: boolean,
     hasData: boolean,
-    period: string,
   ): React.ReactElement => {
     if (!hasData) {
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
@@ -575,9 +574,12 @@ export class StatementDetails extends React.Component<
         : nodes.map(node => nodeRegions[node]).filter(r => r), // Remove undefined / unknown regions.
     ).sort();
 
-    const lastExec =
-      stats.last_exec_timestamp &&
-      TimestampToMoment(stats.last_exec_timestamp).format(DATE_FORMAT_24_UTC);
+    const lastExec = stats.last_exec_timestamp && (
+      <Timestamp
+        time={TimestampToMoment(stats.last_exec_timestamp)}
+        format={DATE_FORMAT_24_TZ}
+      />
+    );
 
     const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
     const unavailableTooltip = !statementSampled && (
@@ -694,7 +696,9 @@ export class StatementDetails extends React.Component<
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           Showing aggregated stats from{" "}
-          <span className={timeScaleStylesCx("bold")}>{period}</span>
+          <span className={timeScaleStylesCx("bold")}>
+            <FormattedTimescale ts={this.props.timeScale} />
+          </span>
         </p>
         <section className={cx("section")}>
           <Row gutter={24}>
@@ -839,7 +843,6 @@ export class StatementDetails extends React.Component<
   renderExplainPlanTabContent = (
     hasTimeout: boolean,
     hasData: boolean,
-    period: string,
   ): React.ReactElement => {
     if (!hasData) {
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
@@ -859,7 +862,9 @@ export class StatementDetails extends React.Component<
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           Showing explain plans from{" "}
-          <span className={timeScaleStylesCx("bold")}>{period}</span>
+          <span className={timeScaleStylesCx("bold")}>
+            <FormattedTimescale ts={this.props.timeScale} />
+          </span>
         </p>
         <section className={cx("section")}>
           <Row gutter={24}>

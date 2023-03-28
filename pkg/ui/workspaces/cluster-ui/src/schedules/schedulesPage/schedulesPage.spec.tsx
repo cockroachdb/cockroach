@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { SchedulesPage, SchedulesPageProps } from "./schedulesPage";
 import { allSchedulesFixture } from "./schedulesPage.fixture";
 import { render } from "@testing-library/react";

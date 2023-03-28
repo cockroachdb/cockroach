@@ -19,7 +19,7 @@ import {
 } from "src/recentExecutions";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { StatusIcon } from "src/recentExecutions/statusIcon";
-import { DATE_FORMAT_24_UTC, Duration } from "src/util";
+import { DATE_FORMAT_24_TZ, Duration } from "src/util";
 
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -28,6 +28,7 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 import styles from "./statementDetails.module.scss";
+import { Timestamp } from "../timestamp";
 const cx = classNames.bind(styles);
 
 type Props = {
@@ -48,8 +49,13 @@ export const RecentStatementDetailsOverviewTab = ({
           <Col className="gutter-row" span={12}>
             <SummaryCard className={cx("summary-card")}>
               <SummaryCardItem
-                label="Start Time (UTC)"
-                value={statement.start.format(DATE_FORMAT_24_UTC)}
+                label="Start Time"
+                value={
+                  <Timestamp
+                    time={statement.start}
+                    format={DATE_FORMAT_24_TZ}
+                  />
+                }
               />
               <SummaryCardItem
                 label="Elapsed Time"

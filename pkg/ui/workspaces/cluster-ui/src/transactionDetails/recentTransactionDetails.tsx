@@ -28,11 +28,12 @@ import {
 import { StatusIcon } from "src/recentExecutions/statusIcon";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr, DATE_FORMAT_24_UTC } from "src/util";
+import { executionIdAttr, DATE_FORMAT_24_TZ } from "src/util";
 
 import styles from "../statementDetails/statementDetails.module.scss";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { capitalize, Duration } from "../util/format";
+import { Timestamp } from "../timestamp";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
@@ -50,7 +51,7 @@ const BACK_TO_RECENT_TXNS_BUTTON_LABEL = "Recent Transactions";
 const TXN_EXECUTION_ID_LABEL = "Transaction Execution ID";
 
 export const RecentTxnInsightsLabels = {
-  START_TIME: "Start Time (UTC)",
+  START_TIME: "Start Time",
   ELAPSED_TIME: "Elapsed Time",
   STATUS: "Status",
   RETRY_COUNT: "Internal Retries",
@@ -119,7 +120,12 @@ export const RecentTransactionDetails: React.FC<
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
                   label={RecentTxnInsightsLabels.START_TIME}
-                  value={transaction.start.format(DATE_FORMAT_24_UTC)}
+                  value={
+                    <Timestamp
+                      time={transaction.start}
+                      format={DATE_FORMAT_24_TZ}
+                    />
+                  }
                 />
                 <SummaryCardItem
                   label={RecentTxnInsightsLabels.ELAPSED_TIME}
