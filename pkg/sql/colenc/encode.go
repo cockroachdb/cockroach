@@ -307,6 +307,9 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 				if kys[row] == nil {
 					continue
 				}
+				if skip := b.skipColumnNotInPrimaryIndexValue(family.DefaultColumnID, vec, row); skip {
+					continue
+				}
 				marshaled, err := MarshalLegacy(typ, vec, row+b.start)
 				if err != nil {
 					return err
