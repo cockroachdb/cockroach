@@ -2814,7 +2814,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	}
 
 	snapUUID := uuid.MakeV4()
-	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
+	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, senderQueueName != kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
 	// sending to release the log truncation constraint.
 	defer cleanup()
@@ -2831,10 +2831,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		RangeID:              r.RangeID,
 		CoordinatorReplica:   sender,
 		RecipientReplica:     recipient,
-		Priority:             priority,
+		DeprecatedPriority:   priority,
 		SenderQueueName:      senderQueueName,
 		SenderQueuePriority:  senderQueuePriority,
-		Type:                 snapType,
+		DeprecatedType:       snapType,
 		Term:                 kvpb.RaftTerm(status.Term),
 		DelegatedSender:      sender,
 		FirstIndex:           appliedIndex,
@@ -3114,10 +3114,9 @@ func (r *Replica) followerSendSnapshot(
 		return nil, err
 	}
 
-	snapType := req.Type
-	snap, err := r.GetSnapshot(ctx, snapType, req.SnapId)
+	snap, err := r.GetSnapshot(ctx, req.SnapId)
 	if err != nil {
-		return nil, errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return nil, errors.Wrapf(err, "%s: failed to generate snapshot", r)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -3159,11 +3158,11 @@ func (r *Replica) followerSendSnapshot(
 			},
 		},
 		RangeSize:           rangeSize,
-		Priority:            req.Priority,
+		DeprecatedPriority:  req.DeprecatedPriority,
 		SenderQueueName:     req.SenderQueueName,
 		SenderQueuePriority: req.SenderQueuePriority,
-		Strategy:            kvserverpb.SnapshotRequest_KV_BATCH,
-		Type:                req.Type,
+		DeprecatedStrategy:  kvserverpb.SnapshotRequest_KV_BATCH,
+		DeprecatedType:      req.DeprecatedType,
 		SharedReplicate:     sharedReplicate,
 	}
 	newBatchFn := func() storage.WriteBatch {
@@ -3183,15 +3182,19 @@ func (r *Replica) followerSendSnapshot(
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
 		r.store.metrics.updateCrossLocalityMetricsOnSnapshotSent(comparisonResult, inc)
 
-		switch header.Priority {
-		case kvserverpb.SnapshotRequest_RECOVERY:
+		// This computation is a little ugly, it is intended for backward
+		// compatibility of stats, but in the future it should be cleaned up.
+		if header.SenderQueueName == kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 			r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
-		case kvserverpb.SnapshotRequest_REBALANCE:
+		} else if header.SenderQueueName == kvserverpb.SnapshotRequest_OTHER {
 			r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
-		default:
-			// If a snapshot is not a RECOVERY or REBALANCE snapshot, it must be of
-			// type UNKNOWN.
-			r.store.metrics.RangeSnapshotUnknownSentBytes.Inc(inc)
+		} else { // replicate queue does both types, so need to split
+			// See AllocatorAction.Priority
+			if header.SenderQueuePriority > 0 {
+				r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
+			} else {
+				r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
+			}
 		}
 	}
 

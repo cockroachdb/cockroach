@@ -4722,7 +4722,6 @@ func TestTenantID(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(
 						snapshot kvserver.IncomingSnapshot,
-						requestType kvserverpb.SnapshotRequest_Type,
 						strings []string,
 					) error {
 						if snapshot.Desc.RangeID == repl.RangeID {
@@ -4801,7 +4800,6 @@ func TestUninitializedMetric(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				BeforeSnapshotSSTIngestion: func(
 					snapshot kvserver.IncomingSnapshot,
-					_ kvserverpb.SnapshotRequest_Type,
 					_ []string,
 				) error {
 					if snapshot.Desc.RangeID == repl.RangeID {
