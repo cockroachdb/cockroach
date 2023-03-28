@@ -104,6 +104,7 @@ func (_e *explorer) exploreLimit(
 	_rootOrd int,
 	_required *physical.Required,
 ) (_fullyExplored bool) {
+	opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)
 	_fullyExplored = true
 
 	// [PushLimitIntoIndexJoin]
@@ -180,6 +181,7 @@ func (_e *explorer) exploreInnerJoin(
 	_rootOrd int,
 	_required *physical.Required,
 ) (_fullyExplored bool) {
+	opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)
 	_fullyExplored = true
 
 	// [TestRootAccess]
@@ -292,6 +294,7 @@ func (_e *explorer) exploreLimit(
 	_rootOrd int,
 	_required *physical.Required,
 ) (_fullyExplored bool) {
+	opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)
 	_fullyExplored = true
 
 	// [MatchInputScan]
@@ -414,6 +417,7 @@ func (_e *explorer) exploreLimit(
 	_rootOrd int,
 	_required *physical.Required,
 ) (_fullyExplored bool) {
+	opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)
 	_fullyExplored = true
 
 	// [MatchInputNonScan]
@@ -570,6 +574,7 @@ func (_e *explorer) exploreUnion(
 	_rootOrd int,
 	_required *physical.Required,
 ) (_fullyExplored bool) {
+	opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)
 	_fullyExplored = true
 
 	// [Let]
