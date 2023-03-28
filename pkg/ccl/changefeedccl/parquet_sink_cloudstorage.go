@@ -35,11 +35,23 @@ var includeParquetTestMetadata = false
 // defined below.
 const parquetCrdbEventTypeColName string = "__crdb_event_type__"
 
+type parquetEventType int
+
 const (
-	parquetEventInsert string = "c"
-	parquetEventUpdate string = "u"
-	parquetEventDelete string = "d"
+	parquetEventInsert parquetEventType = iota
+	parquetEventUpdate
+	parquetEventDelete
 )
+
+var parquetEventTypeDatumStringMap = map[parquetEventType]*tree.DString{
+	parquetEventInsert: tree.NewDString("c"),
+	parquetEventUpdate: tree.NewDString("u"),
+	parquetEventDelete: tree.NewDString("d"),
+}
+
+func (e parquetEventType) DString() *tree.DString {
+	return parquetEventTypeDatumStringMap[e]
+}
 
 // We need a separate sink for parquet format because the parquet encoder has to
 // write metadata to the parquet file (buffer) after each flush. This means that the
@@ -178,13 +190,8 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 		return err
 	}
 
-	if updatedRow.IsDeleted() {
-		parquetRow[parquetCrdbEventTypeColName] = []byte(parquetEventDelete)
-	} else if prevRow.IsInitialized() && !prevRow.IsDeleted() {
-		parquetRow[parquetCrdbEventTypeColName] = []byte(parquetEventUpdate)
-	} else {
-		parquetRow[parquetCrdbEventTypeColName] = []byte(parquetEventInsert)
-	}
+	et := getEventTypeDatum(updatedRow, prevRow)
+	parquetRow[parquetCrdbEventTypeColName] = []byte(et.DString().String())
 
 	if err = file.parquetCodec.parquetWriter.AddData(parquetRow); err != nil {
 		return err
@@ -202,6 +209,15 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	}
 
 	return nil
+}
+
+func getEventTypeDatum(updatedRow cdcevent.Row, prevRow cdcevent.Row) parquetEventType {
+	if updatedRow.IsDeleted() {
+		return parquetEventDelete
+	} else if prevRow.IsInitialized() && !prevRow.IsDeleted() {
+		return parquetEventUpdate
+	}
+	return parquetEventInsert
 }
 
 func makeParquetWriterWrapper(
