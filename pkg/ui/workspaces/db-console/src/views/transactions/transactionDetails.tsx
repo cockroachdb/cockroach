@@ -18,8 +18,8 @@ import {
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { txnFingerprintIdAttr } from "src/util/constants";
-import { getMatchParamByName } from "src/util/query";
+import { appNamesAttr, txnFingerprintIdAttr, unset } from "src/util/constants";
+import { getMatchParamByName, queryByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
   reqSortSetting,
@@ -51,16 +51,23 @@ export const selectTransaction = createSelector(
         isValid: transactionState.valid,
       };
     }
+
+    const apps = queryByName(props.location, appNamesAttr)
+      ?.split(",")
+      .map(s => s.trim());
+
     const txnFingerprintId = getMatchParamByName(
       props.match,
       txnFingerprintIdAttr,
     );
 
-    const transaction = transactions.filter(
+    const transaction = transactions.find(
       txn =>
-        txn.stats_data.transaction_fingerprint_id.toString() ==
-        txnFingerprintId,
-    )[0];
+        txn.stats_data.transaction_fingerprint_id.toString() ===
+          txnFingerprintId &&
+        (apps?.length ? apps.includes(txn.stats_data.app ?? unset) : true),
+    );
+
     return {
       isLoading: transactionState.inFlight,
       transaction: transaction,
