@@ -1248,7 +1248,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	err := ex.makeExecPlan(ctx, planner)
 	defer planner.curPlan.close(ctx)
 
-	// include gist in error reports
+	// Include gist in error reports.
 	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
 	if planner.extendedEvalCtx.TxnImplicit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
@@ -1280,6 +1280,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Finally, process the planning error from above.
 	if err != nil {
+		err = addPlanningErrorHints(ctx, err, &stmt, ex.server.cfg.Settings, planner)
 		res.SetError(err)
 		return nil
 	}
