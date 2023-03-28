@@ -27,7 +27,7 @@ import {
 import { actions, reducer, SQLStatsState } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 
 const lastUpdated = moment();
 

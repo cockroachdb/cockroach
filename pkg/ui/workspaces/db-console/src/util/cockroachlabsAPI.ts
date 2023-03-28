@@ -12,7 +12,7 @@
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
 
-import moment from "moment";
+import moment from "moment-timezone";
 
 import { VersionList, VersionCheckRequest } from "src/interfaces/cockroachlabs";
 import { withTimeout } from "./api";

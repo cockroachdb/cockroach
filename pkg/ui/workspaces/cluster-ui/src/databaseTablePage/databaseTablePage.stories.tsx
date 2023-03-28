@@ -19,7 +19,7 @@ import {
   randomTablePrivilege,
 } from "src/storybook/fixtures";
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
-import moment from "moment";
+import moment from "moment-timezone";
 import * as H from "history";
 const history = H.createHashHistory();
 

@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import moment from "moment";
+import moment from "moment-timezone";
 import classnames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, Icon } from "@cockroachlabs/ui-components";
