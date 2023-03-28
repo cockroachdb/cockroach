@@ -218,7 +218,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	// bounds.
 	writeCostLower := cfg.WriteBatchUnits + cfg.WriteRequestUnits
 	writeCostUpper := cfg.WriteBatchUnits + cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
-	tolerance := 30.0 // Leave space for a couple of other background requests.
+	tolerance := 50.0 // Leave space for a couple of other background requests.
 	// burstWrites is a number of writes that don't exceed the burst limit.
 	burstWrites := int((cfg.Burst - tolerance) / writeCostUpper)
 	// tooManyWrites is a number of writes which definitely exceed the burst

@@ -88,6 +88,10 @@ type TestingKnobs struct {
 	// often the SQLWatcher checkpoints noops.
 	SQLWatcherCheckpointNoopsEveryDurationOverride time.Duration
 
+	// SQLWatcherSkipNoopCheckpoints allows tests to skip no-op checkpoints
+	// entirely.
+	SQLWatcherSkipNoopCheckpoints bool
+
 	// SplitterStepLogger is used to capture internal steps the splitter is
 	// making, for debugging and test-readability purposes.
 	SplitterStepLogger func(string)

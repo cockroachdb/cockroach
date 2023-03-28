@@ -170,7 +170,8 @@ func (s *SQLWatcher) watch(
 			if err != nil {
 				return err
 			}
-			if len(sqlUpdates) == 0 && !checkpointNoops.ShouldProcess(timeutil.Now()) {
+			if len(sqlUpdates) == 0 &&
+				(!checkpointNoops.ShouldProcess(timeutil.Now()) || s.knobs.SQLWatcherSkipNoopCheckpoints) {
 				continue
 			}
 			if err := handler(ctx, sqlUpdates, combinedFrontierTS); err != nil {
