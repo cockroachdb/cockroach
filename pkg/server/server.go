@@ -106,6 +106,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
@@ -1285,6 +1286,8 @@ func (li listenerInfo) Iter() map[string]string {
 // should represent the general startup operation.
 func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
+	done := startup.Begin(ctx)
+	defer done()
 
 	// The following initialization is mirrored in
 	// (*SQLServerWrapper).PreStart. Please keep them in sync.

@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
@@ -23,6 +24,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/startup",
         "//pkg/util/stop",
     ],
 )
