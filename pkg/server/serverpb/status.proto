@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+ // Copyright 2016 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -1595,6 +1595,11 @@ message StatementsResponse {
     uint64 id = 3 [(gogoproto.customname) = "ID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+    // In 23.1 we expect the response to only group on fingerprint_id and app_name
+    // in the overview page. We now return the aggregated list of unique txn fingerprint ids,
+    // leaving the txn_fingerprint_id field in the key empty.
+   repeated uint64 txn_fingerprint_ids = 4 [(gogoproto.customname) = "TxnFingerprintIDs",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"];
   }
 
   repeated CollectedStatementStatistics statements = 1 [(gogoproto.nullable) = false];
