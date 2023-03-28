@@ -61,8 +61,20 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │         rule: "column type removed before column family"
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 1}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -204,10 +216,6 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     ObjectID: 106
 │           │     ParentSchemaID: 101
 │           │
-│           ├── • NotImplementedForPublicObjects
-│           │     DescID: 106
-│           │     ElementType: scpb.ColumnFamily
-│           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 1
 │           │     TableID: 106
@@ -280,9 +288,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     DescriptorID: 106
 │           │     User: admin
 │           │
-│           └── • RemoveUserPrivileges
-│                 DescriptorID: 106
-│                 User: root
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: root
+│           │
+│           └── • AssertColumnFamilyIsRemoved
+│                 TableID: 106
 │
 ├── • PreCommitPhase
 │   │
@@ -417,8 +428,20 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │         rule: "column type removed before column family"
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -635,10 +658,6 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     ObjectID: 106
 │           │     ParentSchemaID: 101
 │           │
-│           ├── • NotImplementedForPublicObjects
-│           │     DescID: 106
-│           │     ElementType: scpb.ColumnFamily
-│           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 1
 │           │     TableID: 106
@@ -729,6 +748,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │
 │           ├── • MakeWriteOnlyColumnDeleteOnly
 │           │     ColumnID: 4294967294
+│           │     TableID: 106
+│           │
+│           ├── • AssertColumnFamilyIsRemoved
 │           │     TableID: 106
 │           │
 │           ├── • MakeWriteOnlyColumnDeleteOnly
