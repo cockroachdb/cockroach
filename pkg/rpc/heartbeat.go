@@ -171,6 +171,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, request *PingRequest) (*Pi
 
 	if fn := hs.onHandlePing; fn != nil {
 		if err := fn(ctx, request, &response); err != nil {
+			log.Infof(ctx, "failing ping request from node n%d", request.OriginNodeID)
 			return nil, err
 		}
 	}
