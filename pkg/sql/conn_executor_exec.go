@@ -281,6 +281,17 @@ func (ex *connExecutor) execStmtInOpenState(
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	isPausablePortal := portal != nil && portal.isPausable()
+	// updateRetErrAndPayload ensures that the latest event payload and error is
+	// always recorded by portal.pauseInfo.
+	// TODO(janexing): add test for this.
+	updateRetErrAndPayload := func(err error, payload fsm.EventPayload) {
+		retPayload = payload
+		retErr = err
+		if isPausablePortal {
+			portal.pauseInfo.retPayload = payload
+			portal.pauseInfo.retErr = err
+		}
+	}
 	// For pausable portals, we delay the clean-up until closing the portal by
 	// adding the function to the execStmtInOpenStateCleanup.
 	// Otherwise, perform the clean-up step within every execution.
@@ -290,7 +301,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		} else if !portal.pauseInfo.execStmtInOpenStateCleanup.isComplete {
 			portal.pauseInfo.execStmtInOpenStateCleanup.appendFunc(namedFunc{
 				fName: fName,
-				f:     f,
+				f: func() {
+					f()
+					// Some cleanup steps modify the retErr and retPayload. We need to
+					// ensure that cleanup after them can see the update.
+					updateRetErrAndPayload(retErr, retPayload)
+				},
 			})
 		}
 	}
@@ -302,10 +318,19 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		// If there's any error, do the cleanup right here.
 		if (retErr != nil || payloadHasError(retPayload)) && isPausablePortal {
+			updateRetErrAndPayload(retErr, retPayload)
 			portal.pauseInfo.flowCleanup.run()
 			portal.pauseInfo.dispatchToExecEngCleanup.run()
 			portal.pauseInfo.execStmtInOpenStateCleanup.run()
 		}
+	}()
+
+	// We need this part so that when we check if we need to increment the count
+	// of executed stmt, we are checking the latest error and payload. Otherwise,
+	// we would be checking the ones evaluated at the portal's first-time
+	// execution.
+	defer func() {
+		updateRetErrAndPayload(retErr, retPayload)
 	}()
 
 	ast := parserStmt.AST
@@ -398,6 +423,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			processCleanupFunc(
 				"increment executed stmt cnt",
 				func() {
+					// We need to check the latest errors rather than the ones evaluated
+					// when this function is created.
+					if isPausablePortal {
+						retErr = portal.pauseInfo.retErr
+						retPayload = portal.pauseInfo.retPayload
+					}
 					if retErr == nil && !payloadHasError(retPayload) {
 						ex.incrementExecutedStmtCounter(ast)
 					}
@@ -634,6 +665,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				if isPausablePortal {
 					ihToFinish = &portal.pauseInfo.ihWrapper.ih
 					curRes = portal.pauseInfo.curRes
+					retErr = portal.pauseInfo.retErr
+					retPayload = portal.pauseInfo.retPayload
 				}
 				retErr = ihToFinish.Finish(
 					ex.server.cfg,
