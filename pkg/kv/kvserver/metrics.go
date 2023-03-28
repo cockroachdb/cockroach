@@ -2107,6 +2107,8 @@ func (ref *tenantMetricsRef) assert(ctx context.Context) {
 // call acquire and release to properly reference count the metrics for
 // individual tenants.
 type TenantsStorageMetrics struct {
+	// NB: If adding more metrics to this struct, be sure to
+	// also update TenantsStorageMetricsSet().
 	LiveBytes      *aggmetric.AggGauge
 	KeyBytes       *aggmetric.AggGauge
 	ValBytes       *aggmetric.AggGauge
@@ -2133,6 +2135,31 @@ type TenantsStorageMetrics struct {
 	// except that should one ever look at this map through a debugger
 	// the int64->uint64 conversion has to be done manually.
 	tenants syncutil.IntMap // map[int64(roachpb.TenantID)]*tenantStorageMetrics
+}
+
+// TenantsStorageMetricsSet returns the set of all metric names contained
+// within TenantsStorageMetrics.
+func TenantsStorageMetricsSet() map[string]struct{} {
+	return map[string]struct{}{
+		metaLiveBytes.Name:      {},
+		metaKeyBytes.Name:       {},
+		metaValBytes.Name:       {},
+		metaRangeKeyBytes.Name:  {},
+		metaRangeValBytes.Name:  {},
+		metaTotalBytes.Name:     {},
+		metaIntentBytes.Name:    {},
+		metaLiveCount.Name:      {},
+		metaKeyCount.Name:       {},
+		metaValCount.Name:       {},
+		metaRangeKeyCount.Name:  {},
+		metaRangeValCount.Name:  {},
+		metaIntentCount.Name:    {},
+		metaIntentAge.Name:      {},
+		metaGcBytesAge.Name:     {},
+		metaSysBytes.Name:       {},
+		metaSysCount.Name:       {},
+		metaAbortSpanBytes.Name: {},
+	}
 }
 
 var _ metric.Struct = (*TenantsStorageMetrics)(nil)

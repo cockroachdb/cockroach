@@ -33,7 +33,7 @@ type Registry struct {
 	labels  []labelPair
 	tracked map[string]Iterable
 
-	// computedLabels get filled in by getLabels().
+	// computedLabels get filled in by GetLabels().
 	// We hold onto the slice to avoid a re-allocation every
 	// time the metrics get scraped.
 	computedLabels []*prometheusgo.LabelPair
@@ -67,7 +67,7 @@ func (r *Registry) AddLabel(name string, value interface{}) {
 	r.computedLabels = append(r.computedLabels, &prometheusgo.LabelPair{})
 }
 
-func (r *Registry) getLabels() []*prometheusgo.LabelPair {
+func (r *Registry) GetLabels() []*prometheusgo.LabelPair {
 	r.Lock()
 	defer r.Unlock()
 	for i, l := range r.labels {

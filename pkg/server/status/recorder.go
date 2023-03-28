@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -49,6 +51,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -393,6 +396,23 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 			timestampNanos: now.UnixNano(),
 		}
 		storeRecorder.record(&data)
+
+		// Now record secondary tenant store metrics, if any exist in the process.
+		tenantStorageMetrics := kvserver.TenantsStorageMetricsSet()
+		tIDLabel := multitenant.TenantIDLabel
+		for tenantID := range mr.mu.tenantRegistries {
+			tenantStoreRecorder := registryRecorder{
+				registry:       r,
+				format:         storeTimeSeriesPrefix,
+				source:         tsutil.MakeTenantSource(storeID.String(), tenantID.String()),
+				timestampNanos: now.UnixNano(),
+			}
+			tenantID := tenantID.String()
+			tenantStoreRecorder.recordChild(&data, tenantStorageMetrics, &prometheusgo.LabelPair{
+				Name:  &tIDLabel,
+				Value: &tenantID,
+			})
+		}
 	}
 	atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
 	return data
@@ -656,6 +676,66 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 				},
 			},
 		})
+	})
+}
+
+// recordChild filters the metrics in the registry down to those provided in
+// the metricsFilter argument, and iterates through any child metrics that
+// may exist on said metric. Child metrics whose label sets contains a match
+// against the childLabelFilter are recorded into the provided dest slice of
+// type tspb.TimeSeriesData.
+//
+// NB: Only available for Counter and Gauge metrics.
+func (rr registryRecorder) recordChild(
+	dest *[]tspb.TimeSeriesData,
+	metricsFilter map[string]struct{},
+	childLabelFilter *prometheusgo.LabelPair,
+) {
+	labels := rr.registry.GetLabels()
+	rr.registry.Select(metricsFilter, func(name string, v interface{}) {
+		prom, ok := v.(metric.PrometheusExportable)
+		if !ok {
+			return
+		}
+		promIter, ok := v.(metric.PrometheusIterable)
+		if !ok {
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		m.Label = append(labels, prom.GetLabels()...)
+
+		processChildMetric := func(metric *prometheusgo.Metric) {
+			found := false
+			for _, label := range metric.Label {
+				if label.GetName() == childLabelFilter.GetName() &&
+					label.GetValue() == childLabelFilter.GetValue() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return
+			}
+			var value float64
+			if metric.Gauge != nil {
+				value = *metric.Gauge.Value
+			} else if metric.Counter != nil {
+				value = *metric.Counter.Value
+			} else {
+				return
+			}
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   fmt.Sprintf(rr.format, prom.GetName()),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+		}
+		promIter.Each(m.Label, processChildMetric)
 	})
 }
 
