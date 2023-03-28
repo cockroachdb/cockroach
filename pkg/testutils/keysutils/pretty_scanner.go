@@ -67,7 +67,7 @@ func parseTableKeysAsAscendingInts(
 	if !ok {
 		panic(fmt.Sprintf("unknown table: %s", tableName))
 	}
-	output := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
+	output := TestingSQLCodec.TablePrefix(uint32(tableID))
 	if remainder == "" {
 		return "", output
 	}
@@ -167,3 +167,8 @@ func parseAscendingIntIndexKey(input string) (string, roachpb.Key) {
 	}
 	return remainder, key
 }
+
+// TestingSQLCodec is a SQL key codec. It is equivalent to keys.SystemSQLCodec, but
+// should be used when it is unclear which tenant should be referenced by the
+// surrounding context.
+var TestingSQLCodec = keys.MakeSQLCodec(roachpb.SystemTenantID)

@@ -3005,3 +3005,81 @@ project
  │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
  └── projections
       └── i:2 [as=i:5, outer=(2)]
+
+exec-ddl
+CREATE TABLE yz (y INT, z INT, INDEX (y) STORING (z));
+----
+
+exec-ddl
+ALTER TABLE yz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 1
+  }
+]';
+----
+
+# Regression test for #99389.
+assign-placeholders-norm query-args=(1) format=show-stats
+WITH RECURSIVE cte(a,b) AS (
+  (SELECT * FROM yz WHERE y = $1)
+  UNION ALL
+  (SELECT y+1, z FROM yz LEFT JOIN cte ON b = z)
+)
+SELECT * FROM cte;
+----
+project
+ ├── columns: a:16 b:17
+ ├── immutable
+ ├── stats: [rows=10]
+ ├── recursive-c-t-e
+ │    ├── columns: a:6 b:7
+ │    ├── working table binding: &1
+ │    ├── initial columns: y:1 z:2
+ │    ├── recursive columns: "?column?":15 z:9
+ │    ├── immutable
+ │    ├── stats: [rows=10]
+ │    ├── fake-rel
+ │    │    ├── columns: a:6 b:7
+ │    │    ├── cardinality: [1 - ]
+ │    │    └── stats: [rows=1.00001, distinct(7)=0.100001, null(7)=0.0100001]
+ │    ├── select
+ │    │    ├── columns: y:1!null z:2
+ │    │    ├── stats: [rows=1.00001, distinct(1)=1, null(1)=0]
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── scan yz
+ │    │    │    ├── columns: y:1 z:2
+ │    │    │    └── stats: [rows=100000, distinct(1)=100000, null(1)=0]
+ │    │    └── filters
+ │    │         └── y:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    └── project
+ │         ├── columns: "?column?":15 z:9
+ │         ├── immutable
+ │         ├── stats: [rows=100001]
+ │         ├── left-join (hash)
+ │         │    ├── columns: y:8 z:9 b:14
+ │         │    ├── stats: [rows=100001, distinct(14)=1, null(14)=0]
+ │         │    ├── scan yz
+ │         │    │    ├── columns: y:8 z:9
+ │         │    │    └── stats: [rows=100000, distinct(9)=1, null(9)=0]
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: b:14
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  b:7 => b:14
+ │         │    │    ├── cardinality: [1 - ]
+ │         │    │    └── stats: [rows=1.00001, distinct(14)=0.100001, null(14)=0.0100001]
+ │         │    └── filters
+ │         │         └── b:14 = z:9 [outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
+ │         └── projections
+ │              └── y:8 + 1 [as="?column?":15, outer=(8), immutable]
+ └── projections
+      ├── a:6 [as=a:16, outer=(6)]
+      └── b:7 [as=b:17, outer=(7)]

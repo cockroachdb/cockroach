@@ -20,7 +20,7 @@ import {
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { toDateRange, util } from "@cockroachlabs/cluster-ui";
+import { util } from "@cockroachlabs/cluster-ui";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -37,7 +37,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { History } from "history";
 import { refreshSettings } from "src/redux/apiReducers";
-import { selectTimeScale, adjustTimeScale } from "src/redux/timeScale";
+import { adjustTimeScale, selectMetricsTime } from "src/redux/timeScale";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
@@ -255,12 +255,12 @@ class MetricsDataProvider extends React.Component<
 const timeInfoSelector = createSelector(
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
-  selectTimeScale,
-  (sTTL, mTTL, scale) => {
-    if (!_.isObject(scale)) {
+  selectMetricsTime,
+  (sTTL, mTTL, metricsTime) => {
+    if (!_.isObject(metricsTime.currentWindow)) {
       return null;
     }
-    const [startMoment, endMoment] = toDateRange(scale);
+    const { start: startMoment, end: endMoment } = metricsTime.currentWindow;
     const start = startMoment.valueOf();
     const end = endMoment.valueOf();
     const syncedScale = findClosestTimeScale(
