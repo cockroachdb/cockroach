@@ -100,7 +100,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 func runDiskStalledDetection(
 	ctx context.Context, t test.Test, c cluster.Cluster, s diskStaller, doStall bool,
 ) {
-	startOpts := option.DefaultStartOptsNoBackups()
+	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = []string{
 		"--store", s.DataDir(),
 		"--log", fmt.Sprintf(`{sinks: {stderr: {filter: INFO}}, file-defaults: {dir: "%s"}}`, s.LogDir()),
