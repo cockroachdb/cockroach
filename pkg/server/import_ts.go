@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	yaml "gopkg.in/yaml.v2"
@@ -38,6 +39,10 @@ import (
 const maxBatchSize = 10000
 
 func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
+	// We don't want to do startup retries as this is not meant to be run in
+	// production.
+	ctx = startup.WithoutChecks(ctx)
+
 	var deferError func(error)
 	{
 		var defErr error
