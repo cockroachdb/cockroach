@@ -2794,7 +2794,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		senderQueuePriority = 0
 	}
 	snapUUID := uuid.MakeV4()
-	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
+	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, senderQueueName != kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
 	// sending to release the log truncation constraint.
 	defer cleanup()
@@ -3074,10 +3074,9 @@ func (r *Replica) followerSendSnapshot(
 		return err
 	}
 
-	snapType := req.Type
-	snap, err := r.GetSnapshot(ctx, snapType, req.SnapId)
+	snap, err := r.GetSnapshot(ctx, req.SnapId)
 	if err != nil {
-		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return errors.Wrapf(err, "%s: failed to generate snapshot", r)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -3133,16 +3132,21 @@ func (r *Replica) followerSendSnapshot(
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
 
-		switch header.Priority {
-		case kvserverpb.SnapshotRequest_RECOVERY:
+		// This computation is a little ugly, it is intended for backward
+		// compatibility of stats, but in the future it should be cleaned up.
+		if header.SenderQueueName == kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 			r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
-		case kvserverpb.SnapshotRequest_REBALANCE:
+		} else if header.SenderQueueName == kvserverpb.SnapshotRequest_OTHER {
 			r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
-		default:
-			// If a snapshot is not a RECOVERY or REBALANCE snapshot, it must be of
-			// type UNKNOWN.
-			r.store.metrics.RangeSnapshotUnknownSentBytes.Inc(inc)
+		} else { // replicate queue does both types, so need to split
+			// See AllocatorAction.Priority
+			if header.SenderQueuePriority > 0 {
+				r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
+			} else {
+				r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
+			}
 		}
+		r.store.metrics.RangeSnapshotUnknownSentBytes.Inc(inc)
 	}
 
 	return contextutil.RunWithTimeout(
