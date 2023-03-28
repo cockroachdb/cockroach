@@ -89,6 +89,22 @@ type MultiConnPoolCfg struct {
 	LogLevel tracelog.LogLevel
 }
 
+// NewMultiConnPoolCfgFromFlags constructs a new MultiConnPoolCfg object based
+// on the connection flags.
+func NewMultiConnPoolCfgFromFlags(cf *ConnFlags) MultiConnPoolCfg {
+	return MultiConnPoolCfg{
+		ConnHealthCheckPeriod: cf.ConnHealthCheckPeriod,
+		MaxConnIdleTime:       cf.MaxConnIdleTime,
+		MaxConnLifetime:       cf.MaxConnLifetime,
+		MaxConnLifetimeJitter: cf.MaxConnLifetimeJitter,
+		MaxConnsPerPool:       cf.Concurrency,
+		MaxTotalConnections:   cf.Concurrency,
+		Method:                cf.Method,
+		MinConns:              cf.MinConns,
+		WarmupConns:           cf.WarmupConns,
+	}
+}
+
 // String values taken from pgx.ParseConfigWithOptions() to maintain
 // compatibility with pgx.  See [1] and [2] for additional details.
 //

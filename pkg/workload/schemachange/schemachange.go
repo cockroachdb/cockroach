@@ -149,16 +149,7 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	cfg := workload.MultiConnPoolCfg{
-		ConnHealthCheckPeriod: s.connFlags.ConnHealthCheckPeriod,
-		MaxConnIdleTime:       s.connFlags.MaxConnIdleTime,
-		MaxConnLifetime:       s.connFlags.MaxConnLifetime,
-		MaxConnLifetimeJitter: s.connFlags.MaxConnLifetimeJitter,
-		MaxTotalConnections:   s.connFlags.Concurrency,
-		Method:                s.connFlags.Method,
-		MinConns:              s.connFlags.MinConns,
-		WarmupConns:           s.connFlags.WarmupConns,
-	}
+	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
