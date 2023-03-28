@@ -843,62 +843,68 @@ func (ih *instrumentationHelper) CollectScannedSpanStats(
 	planner *planner,
 	isInternal bool,
 ) {
-	stmtType := planner.stmt.AST.StatementType()
-	if spanStats.ShouldCacheFingerprintInfo(
-		stmtType,
-		isInternal,
-		int64(ih.scanCounts[exec.ScanCount]),
-	) {
-		var spanStatsArray []enginepb.MVCCStats
-		newStatsForFingerprint := false
-		tablesScannedArray := make([]cat.StableID, 0, len(ih.tablesScanned))
-		for key := range ih.tablesScanned {
-			tablesScannedArray = append(tablesScannedArray, key)
+	if !spanStats.CheckFingerprintInfo(ih.fingerprint) {
+		stmtType := planner.stmt.AST.StatementType()
+		if spanStats.ShouldCacheFingerprintInfo(
+			stmtType,
+			isInternal,
+		) {
+			tablesScannedArray := make([]cat.StableID, 0, len(ih.tablesScanned))
+			for key := range ih.tablesScanned {
+				tablesScannedArray = append(tablesScannedArray, key)
+			}
+			spanStats.CreateFingerprintInfo(ih.fingerprint, tablesScannedArray)
+		} else {
+			return
 		}
-		if spanStats.ShouldCollectSpanStatsForFingerprint(ih.fingerprint, tablesScannedArray) {
-			for _, tabID := range tablesScannedArray {
-				var tableSpanStats enginepb.MVCCStats
-				resetSpanStats := false
-				if spanStats.ShouldCollectSpanStatsForTable(tabID) {
-					tableStartKey := planner.ExecCfg().Codec.TablePrefix(uint32(tabID))
-					resolvedSpanStartKey, err := keys.Addr(tableStartKey)
-					if err != nil {
-						log.Warningf(ctx, "failed to resolve addr for key %q: %+v", tableStartKey, err)
-					}
-
-					tableEndKey := tableStartKey.PrefixEnd()
-					resolvedSpanEndKey, err := keys.Addr(tableEndKey)
-					if err != nil {
-						log.Warningf(ctx, "failed to resolve addr for key %q: %+v", tableEndKey, err)
-					}
-					spanStatsRequest := roachpb.SpanStatsRequest{
-						NodeID:   "0",
-						StartKey: resolvedSpanStartKey,
-						EndKey:   resolvedSpanEndKey,
-					}
-					var spanStatsResponse *roachpb.SpanStatsResponse
-					spanStatsResponse, err = planner.extendedEvalCtx.TenantStatusServer.SpanStats(ctx, &spanStatsRequest)
-					if err != nil {
-						if log.V(1) {
-							log.Warningf(ctx, "failed to fetch span stats: %s", err)
-						}
-					}
-					if spanStatsResponse != nil {
-						tableSpanStats = spanStatsResponse.TotalStats
-					}
+	}
+	storedTabIDs, collect := spanStats.ShouldCollectSpanStats()
+	if collect {
+		var spanArray []roachpb.Span
+		var span roachpb.Span
+		tableSpanMap := make(map[cat.StableID]roachpb.Span)
+		for _, tabID := range storedTabIDs {
+			tableStartKey := planner.ExecCfg().Codec.TablePrefix(uint32(tabID))
+			tableEndKey := tableStartKey.PrefixEnd()
+			span = roachpb.Span{
+				Key:    tableStartKey,
+				EndKey: tableEndKey,
+			}
+			spanArray = append(spanArray, span)
+			tableSpanMap[tabID] = span
+		}
+		spanStatsRequest := roachpb.SpanStatsRequest{
+			NodeID: "0",
+			Spans:  spanArray,
+		}
+		var spanStatsResponse *roachpb.SpanStatsResponse
+		spanStatsResponse, err := planner.extendedEvalCtx.TenantStatusServer.
+			SpanStats(ctx, &spanStatsRequest)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf(ctx, "failed to fetch span stats: %s", err)
+			}
+		} else if spanStatsResponse != nil {
+			var tableSpanStats enginepb.MVCCStats
+			var resetStatsCollection bool
+			for i, tabID := range storedTabIDs {
+				span = tableSpanMap[tabID]
+				resetStatsCollection = i == len(storedTabIDs)-1
+				log.Infof(ctx, "spanStatsResponse: %v", spanStatsResponse)
+				log.Infof(ctx, "resetStatsCollection: %v", resetStatsCollection)
+				tableSpanStatsResponse := spanStatsResponse.SpanToStats[span.String()]
+				if tableSpanStatsResponse != nil {
+					tableSpanStats = tableSpanStatsResponse.TotalStats
+					log.Infof(ctx, "tableSpanStats: %v", tableSpanStats)
+					spanStats.UpdateSpanStatistics(
+						tabID,
+						tableSpanStats,
+						resetStatsCollection,
+					)
 				}
-				if tableSpanStats != (enginepb.MVCCStats{}) {
-					resetSpanStats = true
-					newStatsForFingerprint = true
-				}
-				spanStatsInCache := spanStats.UpdateSpanStatistics(
-					tabID,
-					tableSpanStats,
-					resetSpanStats,
-				)
-				spanStatsArray = append(spanStatsArray, spanStatsInCache)
 			}
 		}
-		ih.scannedSpanStats = spanStats.UpdateFingerprintInfo(ih.fingerprint, tablesScannedArray, spanStatsArray, newStatsForFingerprint)
 	}
+	ih.scannedSpanStats = spanStats.FingerprintSpanStats(ih.fingerprint)
+	log.Infof(ctx, "ih.scannedSpanStats: %v", ih.scannedSpanStats)
 }

@@ -188,8 +188,8 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
-// CollectScannedSpanStats specifies whether we sample span statistics for tables scanned
-// during the execution of a statement fingerprint.
+// CollectScannedSpanStats specifies whether we sample span statistics for
+// tables scanned during the execution of statement fingerprints.
 var CollectScannedSpanStats = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.metrics.statement_details.scanned_span_stats_collection.enabled",
@@ -197,11 +197,20 @@ var CollectScannedSpanStats = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// MaxMemScannedSpanStats specifies the maximum number of tables for which to collect span
-// statistics to store in memory.
+// MaxMemScannedSpanStats specifies the maximum number of tables for which to
+// collect span statistics to store in memory.
 var MaxMemScannedSpanStats = settings.RegisterIntSetting(
 	settings.TenantWritable,
-	"sql.metrics.statement_details.max_mem_scanned_span_stats",
+	"sql.metrics.statement_details.scanned_span_stats_collection.tables",
 	"the maximum number of tables for which to collect span statistics to store in memory",
 	100,
+).WithPublic()
+
+// ScannedSpanStatsRefresh specifies the interval after which to refresh span
+// stats in the fingerprint span stats cache.
+var ScannedSpanStatsRefresh = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.metrics.statement_details.scanned_span_stats_collection.interval",
+	"the interval between span stats collections",
+	time.Hour,
 ).WithPublic()

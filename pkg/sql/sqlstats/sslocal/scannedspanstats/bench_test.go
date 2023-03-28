@@ -138,7 +138,7 @@ func BenchmarkScannedSpanStats(b *testing.B) {
 								defer stop.Stop(ctx)
 
 								sqlRunner.Exec(b, `CREATE DATABASE IF NOT EXISTS bench`)
-								sqlRunner.Exec(b, `SET CLUSTER SETTING sql.metrics.statement_details.max_mem_scanned_span_stats = $1`, test.maxScannedSpanStats)
+								sqlRunner.Exec(b, `SET CLUSTER SETTING sql.metrics.statement_details.scanned_span_stats_collection.tables = $1`, test.maxScannedSpanStats)
 								var tableNames []string
 
 								// Create n number of tables

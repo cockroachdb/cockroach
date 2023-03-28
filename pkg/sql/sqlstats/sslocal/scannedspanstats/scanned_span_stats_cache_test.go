@@ -13,6 +13,7 @@ package scannedspanstats_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -31,7 +32,6 @@ func TestSQLStatsScannedSpanStats(t *testing.T) {
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	st := cluster.MakeTestingClusterSettings()
-	sqlstats.CollectScannedSpanStats.Override(ctx, &st.SV, true)
 	params.Settings = st
 	testServer, sqlConn, _ := serverutils.StartServer(t, params)
 	defer func() {
@@ -58,7 +58,6 @@ func TestSQLStatsScannedSpanStats(t *testing.T) {
 	)
 	testConn.Exec(t, "SET application_name = $1", appName)
 	testConn.Exec(t, "USE test")
-	minExecutions := 5
 
 	// All test cases are DML statements
 	testCases := []struct {
@@ -93,32 +92,68 @@ func TestSQLStatsScannedSpanStats(t *testing.T) {
 	var liveBytes float64
 	var pctLive float64
 	var totalBytes float64
-	for i := 0; i < (minExecutions + 2); i++ {
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				testConn.Exec(t, tc.statement)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testConn.Exec(t, tc.statement)
 
-				if i >= minExecutions-1 {
+			rows := testConn.QueryRow(t,
+				"SELECT statistics -> 'statistics' -> 'scannedSpanStats' ->> 'liveBytes',"+
+					"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'pctLive',"+
+					"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'totalBytes'"+
+					"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1"+
+					"AND metadata ->> 'query'=$2", appName, tc.statement)
+			rows.Scan(&liveBytes, &pctLive, &totalBytes)
+			require.Equal(t, float64(0), liveBytes)
+			require.Equal(t, float64(0), pctLive)
+			require.Equal(t, float64(0), totalBytes)
+		})
+	}
 
-					rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' -> 'scannedSpanStats' ->> 'liveBytes',"+
-						"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'pctLive',"+
-						"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'totalBytes'"+
-						"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1"+
-						"AND metadata ->> 'query'=$2", appName, tc.statement)
-					rows.Scan(&liveBytes, &pctLive, &totalBytes)
-					if i < minExecutions {
-						require.Equal(t, float64(0), liveBytes)
-						require.Equal(t, float64(0), pctLive)
-						require.Equal(t, float64(0), totalBytes)
-					} else {
-						require.Positive(t, liveBytes)
-						require.Positive(t, pctLive)
-						require.Positive(t, totalBytes)
-						require.GreaterOrEqual(t, totalBytes, liveBytes)
-						require.LessOrEqual(t, pctLive, float64(1))
-					}
-				}
-			})
-		}
+	sqlstats.CollectScannedSpanStats.Override(ctx, &st.SV, true)
+
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testConn.Exec(t, tc.statement)
+
+			rows := testConn.QueryRow(t,
+				"SELECT statistics -> 'statistics' -> 'scannedSpanStats' ->> 'liveBytes',"+
+					"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'pctLive',"+
+					"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'totalBytes'"+
+					"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1"+
+					"AND metadata ->> 'query'=$2", appName, tc.statement)
+			rows.Scan(&liveBytes, &pctLive, &totalBytes)
+			if i == 0 {
+				require.Positive(t, liveBytes)
+				require.Positive(t, pctLive)
+				require.Positive(t, totalBytes)
+				require.GreaterOrEqual(t, totalBytes, liveBytes)
+				require.LessOrEqual(t, pctLive, float64(1))
+			} else {
+				require.Equal(t, float64(0), liveBytes)
+				require.Equal(t, float64(0), pctLive)
+				require.Equal(t, float64(0), totalBytes)
+			}
+		})
+	}
+
+	sqlstats.ScannedSpanStatsRefresh.Override(ctx, &st.SV, time.Nanosecond)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testConn.Exec(t, tc.statement)
+
+			rows := testConn.QueryRow(t,
+				"SELECT statistics -> 'statistics' -> 'scannedSpanStats' ->> 'liveBytes',"+
+					"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'pctLive',"+
+					"statistics -> 'statistics' -> 'scannedSpanStats' ->> 'totalBytes'"+
+					"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1"+
+					"AND metadata ->> 'query'=$2", appName, tc.statement)
+			rows.Scan(&liveBytes, &pctLive, &totalBytes)
+			require.Positive(t, liveBytes)
+			require.Positive(t, pctLive)
+			require.Positive(t, totalBytes)
+			require.GreaterOrEqual(t, totalBytes, liveBytes)
+			require.LessOrEqual(t, pctLive, float64(1))
+		})
 	}
 }
