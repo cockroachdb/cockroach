@@ -17,7 +17,7 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { capitalize, Duration } from "src/util";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util/format";
 import { StmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
@@ -39,6 +39,7 @@ import { ContentionStatementDetailsTable } from "./insightDetailsTables";
 import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
 import { Heading } from "@cockroachlabs/ui-components";
 import { SortSetting } from "../../sortedtable";
+import { Timestamp } from "../../timestamp";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
@@ -102,15 +103,21 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Start Time"
-              value={insightDetails.startTime.format(
-                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-              )}
+              value={
+                <Timestamp
+                  time={insightDetails.startTime}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                />
+              }
             />
             <SummaryCardItem
               label="End Time"
-              value={insightDetails.endTime.format(
-                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-              )}
+              value={
+                <Timestamp
+                  time={insightDetails.endTime}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                />
+              }
             />
             <SummaryCardItem
               label="Elapsed Time"

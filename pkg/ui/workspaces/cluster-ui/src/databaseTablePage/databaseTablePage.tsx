@@ -32,8 +32,7 @@ import {
 } from "src/summaryCard";
 import * as format from "src/util/format";
 import {
-  DATE_FORMAT,
-  DATE_FORMAT_24_UTC,
+  DATE_FORMAT_24_TZ,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
   EncodeUriName,
@@ -61,6 +60,7 @@ import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { UIConfigState } from "../store";
 import { QuoteIdentifier } from "../api/safesql";
+import { Timestamp } from "../timestamp";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
@@ -306,9 +306,13 @@ export class DatabaseTablePage extends React.Component<
   private getLastResetString() {
     const lastReset = this.props.indexStats.lastReset;
     if (lastReset.isSame(this.minDate)) {
-      return "Last reset: Never";
+      return <>Last reset: Never</>;
     } else {
-      return "Last reset: " + lastReset.format(DATE_FORMAT_24_UTC);
+      return (
+        <>
+          Last reset: <Timestamp time={lastReset} format={DATE_FORMAT_24_TZ} />
+        </>
+      );
     }
   }
 
@@ -316,11 +320,14 @@ export class DatabaseTablePage extends React.Component<
     // This case only occurs when we have no reads, resets, or creation time on
     // the index.
     if (indexStat.lastUsed.isSame(this.minDate)) {
-      return "Never";
+      return <>Never</>;
     }
-    return `Last ${indexStat.lastUsedType}: ${indexStat.lastUsed.format(
-      DATE_FORMAT,
-    )}`;
+    return (
+      <>
+        Last {indexStat.lastUsedType}:{" "}
+        <Timestamp time={indexStat.lastUsed} format={DATE_FORMAT_24_TZ} />
+      </>
+    );
   }
 
   private renderIndexRecommendations = (
@@ -420,7 +427,7 @@ export class DatabaseTablePage extends React.Component<
     },
     {
       name: "last used",
-      title: "Last Used (UTC)",
+      title: "Last Used",
       hideTitleUnderline: true,
       className: cx("index-stats-table__col-last-used"),
       cell: indexStat => this.getLastUsedString(indexStat),
@@ -566,9 +573,12 @@ export class DatabaseTablePage extends React.Component<
                           {this.props.details.statsLastUpdated && (
                             <SummaryCardItem
                               label="Table Stats Last Updated"
-                              value={this.props.details.statsLastUpdated.format(
-                                DATE_FORMAT_24_UTC,
-                              )}
+                              value={
+                                <Timestamp
+                                  time={this.props.details.statsLastUpdated}
+                                  format={DATE_FORMAT_24_TZ}
+                                />
+                              }
                             />
                           )}
                           {this.props.automaticStatsCollectionEnabled !=

@@ -26,13 +26,14 @@ import {
   pauseJob,
   resumeJob,
 } from "src/util/docs";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_FORMAT_24_TZ } from "src/util/format";
 
 import { HighwaterTimestamp, JobStatusCell } from "../util";
 import { JobDescriptionCell } from "./jobDescriptionCell";
 
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
+import { Timestamp } from "../../timestamp";
 const cx = classNames.bind(styles);
 
 type Job = cockroach.server.serverpb.IJobResponse;
@@ -52,9 +53,9 @@ export const jobsColumnLabels: any = {
   status: "Status",
   jobId: "Job ID",
   users: "User Name",
-  creationTime: "Creation Time (UTC)",
-  lastModifiedTime: "Last Modified Time (UTC)",
-  lastExecutionTime: "Last Execution Time (UTC)",
+  creationTime: "Creation Time",
+  lastModifiedTime: "Last Modified Time",
+  lastExecutionTime: "Last Execution Time",
   executionCount: "Execution Count",
   highWaterTimestamp: "High-water Timestamp",
   coordinatorID: "Coordinator Node",
@@ -166,7 +167,12 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           {jobsColumnLabels.creationTime}
         </Tooltip>
       ),
-      cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
+      cell: job => (
+        <Timestamp
+          time={TimestampToMoment(job?.created)}
+          format={DATE_FORMAT_24_TZ}
+        />
+      ),
       sort: job => TimestampToMoment(job?.created).valueOf(),
       showByDefault: true,
     },
@@ -181,7 +187,12 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           {jobsColumnLabels.lastModifiedTime}
         </Tooltip>
       ),
-      cell: job => TimestampToMoment(job?.modified).format(DATE_FORMAT_24_UTC),
+      cell: job => (
+        <Timestamp
+          time={TimestampToMoment(job?.modified)}
+          format={DATE_FORMAT_24_TZ}
+        />
+      ),
       sort: job => TimestampToMoment(job?.modified).valueOf(),
       showByDefault: true,
     },
@@ -196,7 +207,12 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
           {jobsColumnLabels.lastExecutionTime}
         </Tooltip>
       ),
-      cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
+      cell: job => (
+        <Timestamp
+          time={TimestampToMoment(job?.last_run)}
+          format={DATE_FORMAT_24_TZ}
+        />
+      ),
       sort: job => TimestampToMoment(job?.last_run).valueOf(),
       showByDefault: true,
     },
