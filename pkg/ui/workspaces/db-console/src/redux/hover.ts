@@ -12,7 +12,7 @@
  * Monitors the currently hovered chart and point in time.
  */
 
-import moment from "moment";
+import moment from "moment-timezone";
 import { Action } from "redux";
 
 import { PayloadAction } from "src/interfaces/action";

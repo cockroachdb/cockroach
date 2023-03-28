@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import { TimestampToMoment } from "src/util";
 

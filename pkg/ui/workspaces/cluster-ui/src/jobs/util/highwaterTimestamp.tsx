@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 import { google } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 

@@ -14,7 +14,7 @@ import { storiesOf } from "@storybook/react";
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
 import { IndexDetailsPage, IndexDetailsPageProps } from "./indexDetailsPage";
-import moment from "moment";
+import moment from "moment-timezone";
 
 const withData: IndexDetailsPageProps = {
   databaseName: randomName(),

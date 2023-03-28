@@ -23,7 +23,7 @@ import {
 } from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
-import moment from "moment";
+import moment from "moment-timezone";
 
 storiesOf("Transactions Details", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
