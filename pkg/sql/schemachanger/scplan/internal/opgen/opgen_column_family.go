@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -34,8 +35,18 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				revertible(false),
-				emit(func(this *scpb.ColumnFamily) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.ColumnFamily, md *opGenContext) *scop.AssertColumnFamilyIsRemoved {
+					// Use stricter criteria for clean up, since the newer
+					// rules enforce proper ordering here.
+					if md.ActiveVersion.IsActive(clusterversion.V23_1) {
+						return &scop.AssertColumnFamilyIsRemoved{
+							TableID:  this.TableID,
+							FamilyID: this.FamilyID,
+						}
+					}
+					// We would have used NotImplemented before, but that will be an
+					// assertion now, so just return no-ops.
+					return nil
 				}),
 			),
 		),
