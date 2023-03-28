@@ -1674,7 +1674,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 
 	treecmp.GT: {overloads: []*CmpOp{
 		// Single-type comparisons.
-		makeGeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
+		makeGtFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 	}},
 	treecmp.GE: {overloads: []*CmpOp{
 		// Single-type comparisons.
