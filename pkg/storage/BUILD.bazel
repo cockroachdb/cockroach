@@ -18,6 +18,7 @@ go_library(
         "in_mem.go",
         "intent_interleaving_iter.go",
         "intent_reader_writer.go",
+        "interface_adapter.go",
         "min_version.go",
         "mvcc.go",
         "mvcc_incremental_iterator.go",

@@ -564,11 +564,11 @@ func (v *validator) processOp(op Operation) {
 			break
 		}
 		err := func() error {
-			iter, err := storage.NewMemSSTIterator(t.Data, false /* verify */, storage.IterOptions{
+			iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(t.Data, false /* verify */, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				LowerBound: keys.MinKey,
 				UpperBound: keys.MaxKey,
-			})
+			}))
 			if err != nil {
 				return err
 			}

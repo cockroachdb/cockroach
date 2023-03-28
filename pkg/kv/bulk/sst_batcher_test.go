@@ -80,14 +80,10 @@ func TestDuplicateHandling(t *testing.T) {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, iterOpts)
 			require.NoError(t, err)
 			defer it.Close()
-			for it.SeekGE(storage.NilKey); ; it.Next() {
-				ok, err := it.Valid()
-				require.NoError(t, err)
-				if !ok {
-					break
-				}
+			require.NoError(t, storage.Iterate(it, storage.NilKey, func(storage.IteratorPos) error {
 				keyCount++
-			}
+				return nil
+			}))
 		}
 		require.Equal(t, count, keyCount)
 	}

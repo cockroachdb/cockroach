@@ -108,7 +108,7 @@ func assertExpectErr(
 		EndTime:   endTime,
 	})
 	defer iter.Close()
-	var iterFn func()
+	var iterFn func() (bool, error)
 	if revisions {
 		iterFn = iter.Next
 	} else {
@@ -146,23 +146,25 @@ func assertExpectErrs(
 		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
 	})
 	defer iter.Close()
-	var iterFn func()
+	var iterFn func() (bool, error)
 	if revisions {
 		iterFn = iter.Next
 	} else {
 		iterFn = iter.NextKey
 	}
-	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn() {
-		if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+	var ok bool
+	var err error
+	for ok, err = iter.SeekGE(MakeMVCCMetadataKey(startKey)); ok; ok, err = iterFn() {
+		if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
 		// pass
 	}
 
-	if iter.NumCollectedIntents() != len(expectedIntents) {
-		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumCollectedIntents())
+	if collectedIntents := iter.NumCollectedIntents(); collectedIntents != len(expectedIntents) {
+		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), collectedIntents)
 	}
-	err := iter.TryGetIntentError()
+	err = iter.TryGetIntentError()
 	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
 		for i := range expectedIntents {
 			if !expectedIntents[i].Key.Equal(intentErr.Intents[i].Key) {
@@ -284,20 +286,21 @@ func ignoreTimeExpectErr(
 		StartTime: startTime,
 		EndTime:   endTime,
 	})
-	var next func()
+	var next func() (bool, error)
 	if nextKey {
 		next = iter.NextKeyIgnoringTime
 	} else {
 		next = iter.NextIgnoringTime
 	}
 	defer iter.Close()
-	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; next() {
-		if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+	ok, err := iter.SeekGE(MakeMVCCMetadataKey(startKey))
+	for ; ok; ok, err = next() {
+		if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
 		// pass
 	}
-	if _, err := iter.Valid(); !testutils.IsError(err, errString) {
+	if !testutils.IsError(err, errString) {
 		t.Fatalf("expected error %q but got %v", errString, err)
 	}
 }
@@ -366,7 +369,7 @@ func assertIteratedKVs(
 		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
 	})
 	defer iter.Close()
-	var iterFn func()
+	var iterFn func() (bool, error)
 	if revisions {
 		iterFn = iter.Next
 	} else {
@@ -850,8 +853,10 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 			IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 		})
 		defer iter.Close()
-		testIterWithNextFunc := func(nextFunc func()) {
-			iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+		testIterWithNextFunc := func(nextFunc func() (bool, error)) {
+			ok, err := iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+			require.True(t, ok)
+			require.NoError(t, err)
 			for _, kv := range []MVCCKeyValue{kv1_3_3, kv1_2_2, kv1_1_1} {
 				expectKeyValue(t, iter, kv)
 				nextFunc()
@@ -863,7 +868,10 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 			expectKeyValue(t, iter, kv2_1_1)
 		}
 		testIterWithNextFunc(iter.Next)
-		testIterWithNextFunc(iter.NextIgnoringTime)
+		testIterWithNextFunc(func() (bool, error) {
+			iter.NextIgnoringTime()
+			return iter.Valid()
+		})
 	})
 	t.Run("PolicyEmit ignores intents outside of time range", func(t *testing.T) {
 		iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{

@@ -101,21 +101,15 @@ func TestPebbleIterReuse(t *testing.T) {
 	iter1 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
 	valuesCount := 0
 	// Seek to a value before the lower bound. Identical to seeking to the lower bound.
-	iter1.SeekGE(MVCCKey{Key: []byte{30}})
-	for ; ; iter1.Next() {
-		ok, err := iter1.Valid()
-		if err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
+	ok, err := iter1.SeekGE(MVCCKey{Key: []byte{30}})
+	for ; ok; ok, err = iter1.Next() {
 		i := iter1.UnsafeKey().Key[0]
 		if i < 40 || i >= 50 {
 			t.Fatalf("iterator returned key out of bounds: %d", i)
 		}
-
 		valuesCount++
 	}
+	require.NoError(t, err)
 
 	if valuesCount != 10 {
 		t.Fatalf("expected 10 values, got %d", valuesCount)
@@ -133,21 +127,15 @@ func TestPebbleIterReuse(t *testing.T) {
 	// affect the behavior of MVCCIterators. This test is writing []byte{0}
 	// which precedes the localPrefix. Ignore the local and preceding keys in
 	// this seek.
-	iter2.SeekGE(MVCCKey{Key: []byte{2}})
-	for ; ; iter2.Next() {
-		ok, err := iter2.Valid()
-		if err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-
+	ok, err = iter2.SeekGE(MVCCKey{Key: []byte{2}})
+	for ; ok; ok, err = iter2.Next() {
 		i := iter2.UnsafeKey().Key[0]
 		if i >= 10 {
 			t.Fatalf("iterator returned key out of bounds: %d", i)
 		}
 		valuesCount++
 	}
+	require.NoError(t, err)
 
 	if valuesCount != 8 {
 		t.Fatalf("expected 8 values, got %d", valuesCount)
@@ -326,14 +314,12 @@ func TestPebbleIterConsistency(t *testing.T) {
 
 	checkMVCCIter := func(iter MVCCIterator) {
 		defer iter.Close()
-		iter.SeekGE(MVCCKey{Key: []byte("a")})
-		valid, err := iter.Valid()
+		valid, err := iter.SeekGE(MVCCKey{Key: []byte("a")})
 		require.Equal(t, true, valid)
 		require.NoError(t, err)
 		k := iter.UnsafeKey()
 		require.True(t, k1.Equal(k), "expected %s != actual %s", k1.String(), k.String())
-		iter.Next()
-		valid, err = iter.Valid()
+		valid, err = iter.Next()
 		require.False(t, valid)
 		require.NoError(t, err)
 	}
@@ -374,16 +360,12 @@ func TestPebbleIterConsistency(t *testing.T) {
 
 	checkIterSeesBothValues := func(iter MVCCIterator) {
 		defer iter.Close()
-		iter.SeekGE(MVCCKey{Key: []byte("a")})
 		count := 0
-		for ; ; iter.Next() {
-			valid, err := iter.Valid()
-			require.NoError(t, err)
-			if !valid {
-				break
-			}
+		valid, err := iter.SeekGE(MVCCKey{Key: []byte("a")})
+		for ; valid; valid, err = iter.Next() {
 			count++
 		}
+		require.NoError(t, err)
 		require.Equal(t, 2, count)
 	}
 	// The eng iterator will see both values.
@@ -1084,8 +1066,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 		v := mvccGetRaw(t, reader, k)
 		iter := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
 		defer iter.Close()
-		iter.SeekGE(k)
-		valid, err := iter.Valid()
+		valid, err := iter.SeekGE(k)
 		require.NoError(t, err)
 		require.Equal(t, v != nil, valid)
 		if valid {
@@ -1173,8 +1154,12 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 			i2 := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: b1.Key, UpperBound: keys.MaxKey})
 
 			// Make sure the iterators are independent.
-			i1.SeekGE(a1)
-			i2.SeekGE(a1)
+			ok1, err1 := i1.SeekGE(a1)
+			ok2, err2 := i2.SeekGE(a1)
+			require.True(t, ok1)
+			require.True(t, ok2)
+			require.NoError(t, err1)
+			require.NoError(t, err2)
 			require.Equal(t, a1, i1.UnsafeKey())
 			require.Equal(t, b1, i2.UnsafeKey()) // b1 because of LowerBound
 
@@ -1189,7 +1174,9 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 
 			// Closing one iterator shouldn't affect the other.
 			i1.Close()
-			i2.Next()
+			ok2, err2 = i2.Next()
+			require.True(t, ok2)
+			require.NoError(t, err2)
 			require.Equal(t, c1, i2.UnsafeKey())
 			i2.Close()
 

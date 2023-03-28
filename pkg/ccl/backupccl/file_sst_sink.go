@@ -225,7 +225,7 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	}
-	iter, err := storage.NewMemSSTIterator(dataSST, false, iterOpts)
+	iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(dataSST, false, iterOpts))
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	}
-	iter, err := storage.NewMemSSTIterator(dataSST, false, iterOpts)
+	iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(dataSST, false, iterOpts))
 	if err != nil {
 		return err
 	}

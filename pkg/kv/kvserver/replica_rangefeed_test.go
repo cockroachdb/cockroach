@@ -246,12 +246,10 @@ func TestReplicaRangefeed(t *testing.T) {
 				require.NoError(t, err)
 				defer sstIter.Close()
 
-				expIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
-				sstIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+				expOK, expErr := expIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+				sstOK, sstErr := sstIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 				for {
-					expOK, expErr := expIter.Valid()
 					require.NoError(t, expErr)
-					sstOK, sstErr := sstIter.Valid()
 					require.NoError(t, sstErr)
 					if !expOK {
 						require.False(t, sstOK)
@@ -271,8 +269,8 @@ func TestReplicaRangefeed(t *testing.T) {
 					// assert on the write timestamp instead.
 					require.Equal(t, sst.expectTS, sstKey.Timestamp)
 
-					expIter.Next()
-					sstIter.Next()
+					expOK, expErr = expIter.Next()
+					sstOK, sstErr = sstIter.Next()
 				}
 			}
 		}

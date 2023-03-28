@@ -84,13 +84,8 @@ func refreshRange(
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
-	for iter.SeekGE(storage.MVCCKey{Key: span.Key}); ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: span.Key})
+	for ; ok; ok, err = iter.Next() {
 		key := iter.UnsafeKey().Clone()
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
@@ -117,8 +112,7 @@ func refreshRange(
 				// Ignore the transaction's own intent and skip past the corresponding
 				// provisional key-value. To do this, iterate to the provisional
 				// key-value, validate its timestamp, then iterate again.
-				iter.Next()
-				if ok, err := iter.Valid(); err != nil {
+				if ok, err = iter.Next(); err != nil {
 					return errors.Wrap(err, "iterating to provisional value for intent")
 				} else if !ok {
 					return errors.Errorf("expected provisional value for intent")
@@ -137,5 +131,5 @@ func refreshRange(
 		return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 			key.Key, key.Timestamp)
 	}
-	return nil
+	return err
 }

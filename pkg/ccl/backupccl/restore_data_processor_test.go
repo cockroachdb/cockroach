@@ -74,7 +74,7 @@ func slurpSSTablesLatestKey(
 			LowerBound: keys.LocalMax,
 			UpperBound: keys.MaxKey,
 		}
-		sst, err := storage.NewSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts, false /* forwardOnly */)
+		sst, err := storage.WithDeprecatedAPI(storage.NewSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts, false /* forwardOnly */))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,10 +117,9 @@ func slurpSSTablesLatestKey(
 	var kvs []storage.MVCCKeyValue
 	it := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
-	for it.SeekGE(start); ; it.NextKey() {
-		if ok, err := it.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok || !it.UnsafeKey().Less(end) {
+	ok, err := it.SeekGE(start)
+	for ; ok; ok, err = it.NextKey() {
+		if !it.UnsafeKey().Less(end) {
 			break
 		}
 		val, err := storage.DecodeMVCCValueAndErr(it.Value())
@@ -128,6 +127,9 @@ func slurpSSTablesLatestKey(
 			t.Fatal(err)
 		}
 		kvs = append(kvs, storage.MVCCKeyValue{Key: it.UnsafeKey().Clone(), Value: val.Value.RawBytes})
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	return kvs
 }

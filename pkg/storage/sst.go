@@ -150,8 +150,7 @@ func CheckSSTConflicts(
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			UpperBound: end.Key,
 		})
-		nonPrefixIter.SeekGE(start)
-		valid, err := nonPrefixIter.Valid()
+		valid, err := nonPrefixIter.SeekGE(start)
 		nonPrefixIter.Close()
 		if !valid {
 			return statsDiff, err
@@ -162,11 +161,11 @@ func CheckSSTConflicts(
 	//
 	// TODO(bilal): Expose reader.Properties.NumRangeKeys() here, so we don't
 	// need to read the SST to figure out if it has range keys.
-	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
+	rkIter, err := WithDeprecatedAPI(NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		rkIter.Close()
 		return enginepb.MVCCStats{}, err
@@ -183,10 +182,10 @@ func CheckSSTConflicts(
 	}
 	rkIter.Close()
 
-	rkIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	rkIter = DeprecatedMVCCIterator{reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 		UpperBound: rightPeekBound,
 		KeyTypes:   IterKeyTypeRangesOnly,
-	})
+	})}
 	rkIter.SeekGE(start)
 
 	var engineHasRangeKeys bool
@@ -220,20 +219,20 @@ func CheckSSTConflicts(
 		// https://github.com/cockroachdb/cockroach/issues/92254
 		statsDiff.ContainsEstimates += 2
 	}
-	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	extIter := DeprecatedMVCCIterator{reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		LowerBound:           leftPeekBound,
 		UpperBound:           rightPeekBound,
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
-	})
+	})}
 	defer extIter.Close()
 
-	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
+	sstIter, err := WithDeprecatedAPI(NewMemSSTIterator(sst, false, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: end.Key,
-	})
+	}))
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -682,7 +681,7 @@ func CheckSSTConflicts(
 				// call PeekRangeKeyLeft, and then SeekGE the engine iterator back
 				// to its original position.
 				savedExtKey := extIter.UnsafeKey().Clone()
-				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter, sstRangeKeys.Bounds.Key)
+				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter.MVCCIterator, sstRangeKeys.Bounds.Key)
 				if err != nil {
 					return enginepb.MVCCStats{}, err
 				}
@@ -1196,7 +1195,7 @@ func CheckSSTConflicts(
 		if sstHasRange {
 			sstRangeKeys := sstIter.RangeKeys()
 			if !sstRangeKeys.Bounds.Equal(sstPrevRangeKeys.Bounds) {
-				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter, sstRangeKeys.Bounds.Key)
+				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter.MVCCIterator, sstRangeKeys.Bounds.Key)
 				if err != nil {
 					return enginepb.MVCCStats{}, err
 				}
@@ -1296,11 +1295,11 @@ func UpdateSSTTimestamps(
 	defer writer.Close()
 
 	// Rewrite point keys.
-	iter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
+	iter, err := WithDeprecatedAPI(NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		return nil, enginepb.MVCCStats{}, err
 	}
@@ -1328,11 +1327,11 @@ func UpdateSSTTimestamps(
 	}
 
 	// Rewrite range keys.
-	iter, err = NewMemSSTIterator(sst, false /* verify */, IterOptions{
+	iter, err = WithDeprecatedAPI(NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		return nil, enginepb.MVCCStats{}, err
 	}

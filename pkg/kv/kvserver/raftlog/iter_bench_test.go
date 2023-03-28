@@ -35,13 +35,13 @@ type mockStorageIter struct {
 	val []byte
 }
 
-func (m *mockStorageIter) SeekGE(storage.MVCCKey) {}
+func (m *mockStorageIter) SeekGE(storage.MVCCKey) (bool, error) { return true, nil }
 
 func (m *mockStorageIter) Valid() (bool, error) {
 	return true, nil
 }
 
-func (m *mockStorageIter) Next() {}
+func (m *mockStorageIter) Next() (bool, error) { return true, nil }
 
 func (m *mockStorageIter) Close() {}
 

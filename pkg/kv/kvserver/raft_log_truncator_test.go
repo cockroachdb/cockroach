@@ -202,8 +202,7 @@ func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
 		UpperBound: r.stateLoader.RaftLogKey(math.MaxUint64),
 	})
 	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{Key: r.stateLoader.RaftLogKey(0)})
-	valid, err := iter.Valid()
+	valid, err := iter.SeekGE(storage.MVCCKey{Key: r.stateLoader.RaftLogKey(0)})
 	require.NoError(t, err)
 	fmt.Fprintf(r.buf, "log entries:")
 	printPrefixStr := ""
@@ -213,8 +212,7 @@ func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
 		require.NoError(t, err)
 		fmt.Fprintf(r.buf, "%s %d", printPrefixStr, index)
 		printPrefixStr = ","
-		iter.Next()
-		valid, err = iter.Valid()
+		valid, err = iter.Next()
 		require.NoError(t, err)
 	}
 	fmt.Fprintf(r.buf, "\n")

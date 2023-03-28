@@ -2476,8 +2476,8 @@ type mvccIncrementalIteratorI interface {
 	storage.SimpleMVCCIterator
 	RangeKeysIgnoringTime() storage.MVCCRangeKeyStack
 	RangeKeyChangedIgnoringTime() bool
-	NextIgnoringTime()
-	NextKeyIgnoringTime()
+	NextIgnoringTime() (bool, error)
+	NextKeyIgnoringTime() (bool, error)
 	TryGetIntentError() error
 }
 

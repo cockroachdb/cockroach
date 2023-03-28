@@ -312,10 +312,10 @@ func assertExactlyEqualKVs(
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	it := storage.DeprecatedMVCCIterator{store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound: tenantPrefix,
 		UpperBound: tenantPrefix.PrefixEnd(),
-	})
+	})}
 	defer it.Close()
 	var prevKey roachpb.Key
 	var valueTimestampTuples []roachpb.KeyValue

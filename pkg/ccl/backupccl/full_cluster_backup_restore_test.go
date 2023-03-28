@@ -217,8 +217,7 @@ CREATE TABLE data2.foo (a int);
 			UpperBound: endKey,
 		})
 		defer it.Close()
-		it.SeekGE(storage.MVCCKey{Key: startKey})
-		hasKey, err := it.Valid()
+		hasKey, err := it.SeekGE(storage.MVCCKey{Key: startKey})
 		require.NoError(t, err)
 		require.False(t, hasKey, "did not expect to find a key, found %s", it.UnsafeKey())
 	})

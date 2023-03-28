@@ -313,12 +313,8 @@ func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo sto
 	})
 	defer iter.Close()
 
-	for iter.SeekGE(storage.MVCCKey{Key: rKeyInfo.StartKey}); ; iter.NextKey() {
-		ok, err := iter.Valid()
-		require.NoError(t, err)
-		if !ok {
-			break
-		}
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: rKeyInfo.StartKey})
+	for ; ok; ok, err = iter.NextKey() {
 		hasPoint, hashRange := iter.HasPointAndRange()
 		if !hasPoint && hashRange {
 			// PredicateDeleteRange should not have written any delete tombstones;
@@ -333,6 +329,7 @@ func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo sto
 		require.NoError(t, err)
 		require.True(t, value.IsTombstone())
 	}
+	require.NoError(t, err)
 }
 
 // checkDeleteRangeTombstone checks that the range tombstone was written successfully.
@@ -349,16 +346,10 @@ func checkDeleteRangeTombstone(
 		UpperBound: rangeKey.EndKey,
 	})
 	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{Key: rangeKey.StartKey})
 
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: rangeKey.StartKey})
 	var seen storage.MVCCRangeKeyValue
-	for {
-		ok, err := iter.Valid()
-		require.NoError(t, err)
-		if !ok {
-			break
-		}
-		require.True(t, ok)
+	for ok {
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
 			if v.Timestamp.Equal(rangeKey.Timestamp) {
@@ -371,8 +362,9 @@ func checkDeleteRangeTombstone(
 				break
 			}
 		}
-		iter.Next()
+		ok, err = iter.Next()
 	}
+	require.NoError(t, err)
 	if written {
 		require.Equal(t, rangeKey, seen.RangeKey)
 		value, err := storage.DecodeMVCCValue(seen.Value)

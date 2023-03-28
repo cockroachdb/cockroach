@@ -57,8 +57,10 @@ func (sl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) 
 	defer iter.Close()
 
 	var lastIndex uint64
-	iter.SeekLT(storage.MakeMVCCMetadataKey(keys.RaftLogKeyFromPrefix(prefix, math.MaxUint64)))
-	if ok, _ := iter.Valid(); ok {
+	ok, _ := iter.SeekLT(storage.MakeMVCCMetadataKey(keys.RaftLogKeyFromPrefix(prefix, math.MaxUint64)))
+	// TODO(jackson): Find out if it's intentional that we're ignore the error
+	// return value from the seek.
+	if ok {
 		key := iter.UnsafeKey().Key
 		if len(key) < len(prefix) {
 			log.Fatalf(ctx, "unable to decode Raft log index key: len(%s) < len(%s)", key.String(), prefix.String())

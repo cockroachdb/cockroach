@@ -307,11 +307,11 @@ func (w *Watcher) handleSSTable(ctx context.Context, data []byte) error {
 		return errors.AssertionFailedf("no SST data found")
 	}
 
-	iter, err := storage.NewMemSSTIterator(data, false /* verify */, storage.IterOptions{
+	iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(data, false /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		return err
 	}

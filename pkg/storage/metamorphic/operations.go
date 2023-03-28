@@ -154,6 +154,16 @@ func printIterState(iter storage.MVCCIterator) string {
 	return fmt.Sprintf("key = %s", iter.UnsafeKey().String())
 }
 
+func printKnownValidityIterState(iter storage.MVCCIterator, valid bool, err error) string {
+	if !valid || err != nil {
+		if err != nil {
+			return fmt.Sprintf("valid = %v, err = %s", valid, err.Error())
+		}
+		return "valid = false"
+	}
+	return fmt.Sprintf("key = %s", iter.UnsafeKey().String())
+}
+
 func addKeyToLockSpans(txn *roachpb.Transaction, key roachpb.Key) {
 	// Update the txn's lock spans to account for this intent being written.
 	newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
@@ -626,7 +636,7 @@ func (i iterOpenOp) run(ctx context.Context) string {
 		// pebble's iterator stays invalid while RocksDB's finds the key after
 		// the first key. This is a known difference. For now seek the iterator
 		// to standardize behavior for this test.
-		iter.SeekGE(storage.MakeMVCCMetadataKey(i.key))
+		_, _ = iter.SeekGE(storage.MakeMVCCMetadataKey(i.key))
 	}
 
 	return string(i.id)
@@ -666,13 +676,15 @@ func (i iterSeekOp) run(ctx context.Context) string {
 			i.key.Key = lowerBound
 		}
 	}
-	if i.seekLT {
-		iter.SeekLT(i.key)
-	} else {
-		iter.SeekGE(i.key)
-	}
 
-	return printIterState(iter)
+	var ok bool
+	var err error
+	if i.seekLT {
+		ok, err = iter.SeekLT(i.key)
+	} else {
+		ok, err = iter.SeekGE(i.key)
+	}
+	return printKnownValidityIterState(iter, ok, err)
 }
 
 type iterNextOp struct {
@@ -685,19 +697,23 @@ func (i iterNextOp) run(ctx context.Context) string {
 	iter := i.m.getIterInfo(i.iter).iter
 	// The rocksdb iterator does not treat kindly to a Next() if it is already
 	// invalid. Don't run next if that is the case.
+	// TODO(jackson): Remove this if we can, now that we don't use the rocksdb
+	// iterator.
 	if ok, err := iter.Valid(); !ok || err != nil {
 		if err != nil {
 			return fmt.Sprintf("valid = %v, err = %s", ok, err.Error())
 		}
 		return "valid = false"
 	}
-	if i.nextKey {
-		iter.NextKey()
-	} else {
-		iter.Next()
-	}
 
-	return printIterState(iter)
+	var ok bool
+	var err error
+	if i.nextKey {
+		ok, err = iter.NextKey()
+	} else {
+		ok, err = iter.Next()
+	}
+	return printKnownValidityIterState(iter, ok, err)
 }
 
 type iterPrevOp struct {
@@ -713,15 +729,17 @@ func (i iterPrevOp) run(ctx context.Context) string {
 	}
 	// The rocksdb iterator does not treat kindly to a Prev() if it is already
 	// invalid. Don't run prev if that is the case.
+	// TODO(jackson): Remove this if we can, now that we don't use the rocksdb
+	// iterator.
 	if ok, err := iter.Valid(); !ok || err != nil {
 		if err != nil {
 			return fmt.Sprintf("valid = %v, err = %s", ok, err.Error())
 		}
 		return "valid = false"
 	}
-	iter.Prev()
 
-	return printIterState(iter)
+	ok, err := iter.Prev()
+	return printKnownValidityIterState(iter, ok, err)
 }
 
 type clearRangeOp struct {
