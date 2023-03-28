@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -76,9 +77,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
 	willDistribute := physPlan.Distribution.WillDistribute()
+	recordingStats := execstats.ShouldCollectStats(params.ctx, params.p.instrumentation.collectExecStats)
 	n.run.lines, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
-		distSQLPlanner.gatewaySQLInstanceID, verbose, willDistribute,
+		distSQLPlanner.gatewaySQLInstanceID, verbose, willDistribute, recordingStats,
 	)
 	if err != nil {
 		return err
