@@ -1042,6 +1042,17 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 		return false, colI.(*scopeColumn)
 
+	case *tree.ColumnIDRef:
+		for _, scopeCol := range s.cols {
+			md := s.builder.factory.Metadata()
+			tblID := md.ColumnMeta(scopeCol.id).Table
+			c := md.Table(tblID).Column(scopeCol.tableOrdinal)
+			tbl := md.Table(tblID)
+			if int64(c.ColID()) == t.ColumnID && int64(tbl.ID()) == t.TableID {
+				return false, &scopeCol
+			}
+		}
+
 	case *tree.Placeholder:
 		// Replace placeholders that are references to function arguments with
 		// scope columns that represent those arguments.

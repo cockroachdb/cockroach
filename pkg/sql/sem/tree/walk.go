@@ -702,6 +702,10 @@ func (expr *ColumnItem) Walk(_ Visitor) Expr {
 	return expr
 }
 
+func (expr *ColumnIDRef) Walk(_ Visitor) Expr {
+	return expr
+}
+
 // Walk implements the Expr interface.
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 

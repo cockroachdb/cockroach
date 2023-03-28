@@ -1441,6 +1441,13 @@ func (expr *ColumnItem) TypeCheck(
 		"column %q does not exist", ErrString(expr))
 }
 
+func (expr *ColumnIDRef) TypeCheck(
+	_ context.Context, _ *SemaContext, _ *types.T,
+) (TypedExpr, error) {
+	return nil, pgerror.Newf(pgcode.UndefinedColumn,
+		"column %q does not exist", ErrString(expr))
+}
+
 // TypeCheck implements the Expr interface.
 func (expr UnqualifiedStar) TypeCheck(
 	_ context.Context, _ *SemaContext, desired *types.T,

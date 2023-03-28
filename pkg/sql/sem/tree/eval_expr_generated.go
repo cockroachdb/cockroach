@@ -33,6 +33,7 @@ type ExprEvaluator interface {
 	EvalCoalesceExpr(context.Context, *CoalesceExpr) (Datum, error)
 	EvalCollateExpr(context.Context, *CollateExpr) (Datum, error)
 	EvalColumnAccessExpr(context.Context, *ColumnAccessExpr) (Datum, error)
+	EvalColumnIDRef(context.Context, *ColumnIDRef) (Datum, error)
 	EvalColumnItem(context.Context, *ColumnItem) (Datum, error)
 	EvalComparisonExpr(context.Context, *ComparisonExpr) (Datum, error)
 	EvalDefaultVal(context.Context, *DefaultVal) (Datum, error)
@@ -109,6 +110,11 @@ func (node *CollateExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, erro
 // Eval is part of the TypedExpr interface.
 func (node *ColumnAccessExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return v.EvalColumnAccessExpr(ctx, node)
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *ColumnIDRef) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalColumnIDRef(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.

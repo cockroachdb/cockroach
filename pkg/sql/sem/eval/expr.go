@@ -243,6 +243,12 @@ func (e *evaluator) EvalColumnItem(ctx context.Context, expr *tree.ColumnItem) (
 	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
+func (e *evaluator) EvalColumnIDRef(
+	ctx context.Context, expr *tree.ColumnIDRef,
+) (tree.Datum, error) {
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
+}
+
 func (e *evaluator) EvalComparisonExpr(
 	ctx context.Context, expr *tree.ComparisonExpr,
 ) (tree.Datum, error) {

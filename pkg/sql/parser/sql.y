@@ -1516,9 +1516,10 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem index_elem_options create_as_param
-%type <tree.TableExpr> table_ref numeric_table_ref func_table
+%type <tree.TableExpr> table_ref numeric_table_ref func_table table_id_ref
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
+%type <tree.Expr> column_id_ref
 %type <tree.TableExpr> joined_table
 %type <*tree.UnresolvedObjectName> relation_expr
 %type <tree.TableExpr> table_expr_opt_alias_idx table_name_opt_idx
@@ -12816,6 +12817,16 @@ table_ref:
         As:         $4.aliasClause(),
     }
   }
+| table_id_ref opt_index_flags opt_ordinality opt_alias_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AliasedTableExpr{
+        Expr:       $1.tblExpr(),
+        IndexFlags: $2.indexFlags(),
+        Ordinality: $3.bool(),
+        As:         $4.aliasClause(),
+    }
+  }
 | relation_expr opt_index_flags opt_ordinality opt_alias_clause
   {
     name := $1.unresolvedObjectName().ToTableName()
@@ -14635,6 +14646,10 @@ d_expr:
     $$.val = $2.expr()
   }
 | GROUPING '(' expr_list ')' { return unimplemented(sqllex, "d_expr grouping") }
+| column_id_ref
+  {
+    $$.val = $1.expr()
+  }
 
 func_application:
   func_application_name '(' ')'
@@ -15674,6 +15689,10 @@ target_elem:
   {
     $$.val = tree.StarSelectExpr()
   }
+//| column_id_ref
+//  {
+//    $$.val = tree.SelectExpr{Expr: $1.expr()}
+//  }
 
 bare_col_label:
   IDENT
@@ -16113,6 +16132,26 @@ simple_db_object_name:
     res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
+  }
+
+table_id_ref:
+  '{' TABLE ':' iconst64 '}'
+  {
+    /* SKIP DOC */
+    $$.val = &tree.TableIDRef{
+      ID: $4.int64(),
+    }
+  }
+
+// TODO(chengxiong) this needs to be a expression type?
+column_id_ref:
+  '{' COLUMN ':' iconst64 ':' iconst64 '}'
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ColumnIDRef{
+      TableID: $4.int64(),
+      ColumnID: $6.int64(),
+    }
   }
 
 // complex_db_object_name is the part of db_object_name that recognizes

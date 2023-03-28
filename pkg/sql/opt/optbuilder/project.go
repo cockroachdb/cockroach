@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -126,6 +128,9 @@ func (b *Builder) analyzeReturningList(
 func (b *Builder) analyzeSelectList(
 	selects *tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
+	if b.insideFuncDef {
+		fmt.Println("hello")
+	}
 	var expansions tree.SelectExprs
 	for i, e := range *selects {
 		expanded := false
@@ -153,7 +158,16 @@ func (b *Builder) analyzeSelectList(
 						for _, expr := range exprs {
 							switch col := expr.(type) {
 							case *scopeColumn:
-								expansions = append(expansions, tree.SelectExpr{Expr: tree.NewColumnItem(&col.table, col.name.ReferenceName())})
+								expandedSelectExpr := tree.SelectExpr{}
+								md := b.factory.Metadata()
+								tblID := md.ColumnMeta(col.id).Table
+								c := md.Table(tblID).Column(col.tableOrdinal)
+								tbl := md.Table(tblID)
+								expandedSelectExpr.Expr = &tree.ColumnIDRef{
+									ColumnID: int64(c.ColID()),
+									TableID:  int64(tbl.ID()),
+								}
+								expansions = append(expansions, expandedSelectExpr)
 							case *tree.ColumnAccessExpr:
 								expansions = append(expansions, tree.SelectExpr{Expr: col})
 							default:
@@ -179,6 +193,25 @@ func (b *Builder) analyzeSelectList(
 			texpr = inScope.resolveType(e.Expr, desired)
 		}
 
+		if b.insideFuncDef {
+			rewrittenExpr, err := tree.SimpleVisit(texpr, func(colExpr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+				if scopeCol, ok := colExpr.(*scopeColumn); ok {
+					md := b.factory.Metadata()
+					tblID := md.ColumnMeta(scopeCol.id).Table
+					c := md.Table(tblID).Column(scopeCol.tableOrdinal)
+					tbl := md.Table(tblID)
+					return false, &tree.ColumnIDRef{
+						TableID:  int64(tbl.ID()),
+						ColumnID: int64(c.ColID()),
+					}, nil
+				}
+				return true, colExpr, nil
+			})
+			if err != nil {
+				panic(err)
+			}
+			e.Expr = rewrittenExpr
+		}
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
@@ -233,6 +266,19 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 			panic(resolveErr)
 		}
 		return srcMeta.(tree.TypedExpr)
+	}
+
+	colIDRef, ok := e.(*tree.ColumnIDRef)
+	if ok {
+		for _, scopeCol := range inScope.cols {
+			md := b.factory.Metadata()
+			tblID := md.ColumnMeta(scopeCol.id).Table
+			c := md.Table(tblID).Column(scopeCol.tableOrdinal)
+			tbl := md.Table(tblID)
+			if int64(c.ColID()) == colIDRef.ColumnID && int64(tbl.ID()) == colIDRef.TableID {
+				return &scopeCol
+			}
+		}
 	}
 	return nil
 }
