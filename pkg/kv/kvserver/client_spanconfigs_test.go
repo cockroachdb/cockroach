@@ -177,7 +177,7 @@ func (m *mockSpanConfigSubscriber) NeedsSplit(ctx context.Context, start, end ro
 
 func (m *mockSpanConfigSubscriber) ComputeSplitKey(
 	ctx context.Context, start, end roachpb.RKey,
-) roachpb.RKey {
+) (roachpb.RKey, error) {
 	return m.Store.ComputeSplitKey(ctx, start, end)
 }
 

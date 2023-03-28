@@ -121,7 +121,7 @@ func (m *manualSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RK
 
 func (m *manualSubscriber) ComputeSplitKey(
 	context.Context, roachpb.RKey, roachpb.RKey,
-) roachpb.RKey {
+) (roachpb.RKey, error) {
 	panic("unimplemented")
 }
 

@@ -50,8 +50,8 @@ func (n *noopKVSubscriber) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKe
 // ComputeSplitKey is part of the spanconfig.KVSubscriber interface.
 func (n *noopKVSubscriber) ComputeSplitKey(
 	context.Context, roachpb.RKey, roachpb.RKey,
-) roachpb.RKey {
-	return roachpb.RKey{}
+) (roachpb.RKey, error) {
+	return roachpb.RKey{}, nil
 }
 
 // GetSpanConfigForKey is part of the spanconfig.KVSubscriber interface.

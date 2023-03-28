@@ -3417,7 +3417,7 @@ func (m *mockSpanConfigReader) NeedsSplit(ctx context.Context, start, end roachp
 
 func (m *mockSpanConfigReader) ComputeSplitKey(
 	ctx context.Context, start, end roachpb.RKey,
-) roachpb.RKey {
+) (roachpb.RKey, error) {
 	panic("unimplemented")
 }
 

@@ -339,7 +339,9 @@ func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) 
 }
 
 // ComputeSplitKey is part of the spanconfig.KVSubscriber interface.
-func (s *KVSubscriber) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *KVSubscriber) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) (roachpb.RKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
