@@ -275,7 +275,7 @@ type StoreWriter interface {
 // adaptor interface for config.SystemConfig.
 type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
-	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
+	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) (roachpb.RKey, error)
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 

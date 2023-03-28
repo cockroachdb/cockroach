@@ -176,7 +176,9 @@ func (m *manualStore) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKey) bo
 }
 
 // ComputeSplitKey implements the spanconfig.Store interface.
-func (m *manualStore) ComputeSplitKey(context.Context, roachpb.RKey, roachpb.RKey) roachpb.RKey {
+func (m *manualStore) ComputeSplitKey(
+	context.Context, roachpb.RKey, roachpb.RKey,
+) (roachpb.RKey, error) {
 	panic("unimplemented")
 }
 

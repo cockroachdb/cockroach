@@ -279,7 +279,9 @@ func (s *mockCluster) NeedsSplit(ctx context.Context, start, end roachpb.RKey) b
 }
 
 // ComputeSplitKey implements spanconfig.StoreReader.
-func (s *mockCluster) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *mockCluster) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) (roachpb.RKey, error) {
 	return s.store.ComputeSplitKey(ctx, start, end)
 }
 
