@@ -44,7 +44,7 @@ func StorePlanDiagram(
 
 			const infoKey = "dsp-diag-url-%d"
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
-			return infoStorage.Write(ctx, []byte(fmt.Sprintf(infoKey, timeutil.Now().UnixNano())),
+			return infoStorage.Write(ctx, fmt.Sprintf(infoKey, timeutil.Now().UnixNano()),
 				[]byte(diagURL.String()))
 		})
 		if err != nil {
