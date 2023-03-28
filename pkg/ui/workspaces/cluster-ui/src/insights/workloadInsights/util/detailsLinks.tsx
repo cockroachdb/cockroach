@@ -13,14 +13,20 @@ import React from "react";
 import { HexStringToInt64String } from "../../../util";
 import { Link } from "react-router-dom";
 import { StatementLinkTarget } from "../../../statementsTable";
+import { TransactionLinkTarget } from "../../../transactionsTable";
 
 export function TransactionDetailsLink(
   transactionFingerprintID: string,
+  application?: string,
 ): React.ReactElement {
   const txnID = HexStringToInt64String(transactionFingerprintID);
-  const path = `/transaction/${txnID}`;
   return (
-    <Link to={path}>
+    <Link
+      to={TransactionLinkTarget({
+        transactionFingerprintId: txnID,
+        application,
+      })}
+    >
       <div>{String(transactionFingerprintID)}</div>
     </Link>
   );

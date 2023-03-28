@@ -67,7 +67,8 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<TxnInsightEve
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: item => TransactionDetailsLink(item.transactionFingerprintID),
+      cell: item =>
+        TransactionDetailsLink(item.transactionFingerprintID, item.application),
       sort: item => item.transactionFingerprintID,
     },
     {
