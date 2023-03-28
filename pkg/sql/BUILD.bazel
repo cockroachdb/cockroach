@@ -806,6 +806,7 @@ go_test(
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/sqllivenesstestutils",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
