@@ -18,6 +18,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -36,6 +37,12 @@ import (
 	"github.com/cockroachdb/pebble"
 	"go.etcd.io/raft/v3/raftpb"
 )
+
+func init() {
+	// Inject the TenantStorageMetricsSet available in the kvbase pkg to
+	// avoid import cycles.
+	kvbase.TenantsStorageMetricsSet = tenantsStorageMetricsSet()
+}
 
 var (
 	// Replica metrics.
@@ -2401,6 +2408,8 @@ func (ref *tenantMetricsRef) assert(ctx context.Context) {
 // call acquire and release to properly reference count the metrics for
 // individual tenants.
 type TenantsStorageMetrics struct {
+	// NB: If adding more metrics to this struct, be sure to
+	// also update tenantsStorageMetricsSet().
 	LiveBytes      *aggmetric.AggGauge
 	KeyBytes       *aggmetric.AggGauge
 	ValBytes       *aggmetric.AggGauge
@@ -2427,6 +2436,33 @@ type TenantsStorageMetrics struct {
 	// except that should one ever look at this map through a debugger
 	// the int64->uint64 conversion has to be done manually.
 	tenants syncutil.IntMap // map[int64(roachpb.TenantID)]*tenantStorageMetrics
+}
+
+// tenantsStorageMetricsSet returns the set of all metric names contained
+// within TenantsStorageMetrics.
+//
+// see kvbase.TenantsStorageMetricsSet for public access. Assigned in init().
+func tenantsStorageMetricsSet() map[string]struct{} {
+	return map[string]struct{}{
+		metaLiveBytes.Name:      {},
+		metaKeyBytes.Name:       {},
+		metaValBytes.Name:       {},
+		metaRangeKeyBytes.Name:  {},
+		metaRangeValBytes.Name:  {},
+		metaTotalBytes.Name:     {},
+		metaIntentBytes.Name:    {},
+		metaLiveCount.Name:      {},
+		metaKeyCount.Name:       {},
+		metaValCount.Name:       {},
+		metaRangeKeyCount.Name:  {},
+		metaRangeValCount.Name:  {},
+		metaIntentCount.Name:    {},
+		metaIntentAge.Name:      {},
+		metaGcBytesAge.Name:     {},
+		metaSysBytes.Name:       {},
+		metaSysCount.Name:       {},
+		metaAbortSpanBytes.Name: {},
+	}
 }
 
 var _ metric.Struct = (*TenantsStorageMetrics)(nil)

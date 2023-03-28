@@ -23,17 +23,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -238,6 +241,148 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	sort.Sort(byTimeAndName(expectedData))
 	if a, e := actualData, expectedData; !reflect.DeepEqual(a, e) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
+	}
+}
+
+func TestRegistryRecorder_RecordChild(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store1 := fakeStore{
+		storeID: roachpb.StoreID(1),
+		desc: roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(1),
+			Capacity: roachpb.StoreCapacity{
+				Capacity:  100,
+				Available: 50,
+				Used:      50,
+			},
+		},
+		registry: metric.NewRegistry(),
+	}
+	store2 := fakeStore{
+		storeID: roachpb.StoreID(2),
+		desc: roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(2),
+			Capacity: roachpb.StoreCapacity{
+				Capacity:  200,
+				Available: 75,
+				Used:      125,
+			},
+		},
+		registry: metric.NewRegistry(),
+	}
+	systemTenantNameContainer := roachpb.NewTenantNameContainer(catconstants.SystemTenantName)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	st := cluster.MakeTestingClusterSettings()
+	recorder := NewMetricsRecorder(roachpb.SystemTenantID, systemTenantNameContainer, nil, nil, manual, st)
+	recorder.AddStore(store1)
+	recorder.AddStore(store2)
+
+	tenantIDs := []string{"2", "3"}
+	type childMetric struct {
+		tenantID string
+		value    int64
+	}
+	type testMetric struct {
+		name     string
+		typ      string
+		children []childMetric
+	}
+	// Each registry will have a copy of the following metrics.
+	metrics := []testMetric{
+		{
+			name: "testAggGauge",
+			typ:  "agggauge",
+			children: []childMetric{
+				{
+					tenantID: "2",
+					value:    2,
+				},
+				{
+					tenantID: "3",
+					value:    5,
+				},
+			},
+		},
+		{
+			name: "testAggCounter",
+			typ:  "aggcounter",
+			children: []childMetric{
+				{
+					tenantID: "2",
+					value:    10,
+				},
+				{
+					tenantID: "3",
+					value:    17,
+				},
+			},
+		},
+	}
+
+	var expected []tspb.TimeSeriesData
+	// addExpected generates expected TimeSeriesData for all child metrics.
+	addExpected := func(storeID string, metric *testMetric) {
+		for _, child := range metric.children {
+			expect := tspb.TimeSeriesData{
+				Name:   "cr.store." + metric.name,
+				Source: tsutil.MakeTenantSource(storeID, child.tenantID),
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 100,
+						Value:          float64(child.value),
+					},
+				},
+			}
+			expected = append(expected, expect)
+		}
+	}
+
+	tIDLabel := multitenant.TenantIDLabel
+	for _, store := range []fakeStore{store1, store2} {
+		for _, m := range metrics {
+			switch m.typ {
+			case "aggcounter":
+				ac := aggmetric.NewCounter(metric.Metadata{Name: m.name}, tIDLabel)
+				store.registry.AddMetric(ac)
+				for _, cm := range m.children {
+					c := ac.AddChild(cm.tenantID)
+					c.Inc(cm.value)
+				}
+				addExpected(store.storeID.String(), &m)
+			case "agggauge":
+				ag := aggmetric.NewGauge(metric.Metadata{Name: m.name}, tIDLabel)
+				store.registry.AddMetric(ag)
+				for _, cm := range m.children {
+					c := ag.AddChild(cm.tenantID)
+					c.Inc(cm.value)
+				}
+				addExpected(store.storeID.String(), &m)
+			}
+		}
+	}
+	metricFilter := map[string]struct{}{
+		"testAggGauge":   {},
+		"testAggCounter": {},
+	}
+	actual := make([]tspb.TimeSeriesData, 0)
+	for _, store := range []fakeStore{store1, store2} {
+		for _, tID := range tenantIDs {
+			tenantStoreRecorder := registryRecorder{
+				registry:       store.registry,
+				format:         storeTimeSeriesPrefix,
+				source:         tsutil.MakeTenantSource(store.storeID.String(), tID),
+				timestampNanos: 100,
+			}
+			tenantStoreRecorder.recordChild(&actual, metricFilter, &prometheusgo.LabelPair{
+				Name:  &tIDLabel,
+				Value: &tID,
+			})
+		}
+	}
+	sort.Sort(byTimeAndName(actual))
+	sort.Sort(byTimeAndName(expected))
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("registryRecorder did not yield expected time series collection for child metrics; diff:\n %v", pretty.Diff(actual, expected))
 	}
 }
 
