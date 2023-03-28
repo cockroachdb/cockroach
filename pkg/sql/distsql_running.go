@@ -576,11 +576,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// and we do so in a separate goroutine.
 	//
 	// We need to synchronize the new goroutine with flow.Cleanup() being called
-	// for two reasons:
-	// - flow.Cleanup() is the last thing before DistSQLPlanner.Run returns at
-	// which point the rowResultWriter is no longer protected by the mutex of
-	// the DistSQLReceiver
-	// - flow.Cancel can only be called before flow.Cleanup.
+	// since flow.Cleanup() is the last thing before DistSQLPlanner.Run returns
+	// at which point the rowResultWriter is no longer protected by the mutex of
+	// the DistSQLReceiver.
 	cleanupCalledMu := struct {
 		syncutil.Mutex
 		called bool
@@ -608,8 +606,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 				seenError = true
 				func() {
 					cleanupCalledMu.Lock()
-					// Flow.Cancel cannot be called after or concurrently with
-					// Flow.Cleanup.
 					defer cleanupCalledMu.Unlock()
 					if cleanupCalledMu.called {
 						// Cleanup of the local flow has already been performed,

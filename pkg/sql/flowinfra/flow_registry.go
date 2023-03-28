@@ -462,7 +462,7 @@ func (fr *FlowRegistry) Drain(
 				// f.flow might be nil when ConnectInboundStream() was
 				// called, but the consumer of that inbound stream hasn't
 				// been scheduled yet.
-				f.flow.ctxCancel()
+				f.flow.Cancel()
 			}
 		}
 		fr.Unlock()
@@ -583,7 +583,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 			// query execution will fail, so we cancel the flow on this node. If
 			// this node is the gateway, this might actually be required for
 			// proper shutdown of the whole distributed plan.
-			flow.ctxCancel()
+			flow.Cancel()
 		}
 	}()
 
