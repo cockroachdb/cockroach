@@ -43,6 +43,7 @@ import {
   findClosestTimeScale,
   defaultTimeScaleOptions,
   TimeWindow,
+  WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
 
@@ -57,6 +58,7 @@ export interface LineGraphProps extends MetricsDataComponentProps {
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
+  timezone: string;
 }
 
 // touPlot formats our timeseries data into the format
@@ -153,7 +155,7 @@ export function fillGaps(
 // and store its ref in a global variable.
 // Once we receive updates to props, we push new data to the
 // uPlot object.
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+export class _LineGraph extends React.Component<LineGraphProps, {}> {
   constructor(props: LineGraphProps) {
     super(props);
 
@@ -302,6 +304,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     this.xAxisDomain = calculateXAxisDomain(
       util.NanoToMilli(this.props.timeInfo.start.toNumber()),
       util.NanoToMilli(this.props.timeInfo.end.toNumber()),
+      this.props.timezone,
     );
 
     const prevKeys =
@@ -372,3 +375,5 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     );
   }
 }
+
+export default WithTimezone(_LineGraph);

@@ -10,7 +10,10 @@
 
 import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
+import {
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration
+} from "src/util";
 import { ContentionDetails, ContentionEvent, InsightExecEnum } from "../types";
 import {
   insightsTableTitles,
@@ -19,6 +22,7 @@ import {
   TransactionDetailsLink,
 } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
+import {Timestamp} from "../../timestamp";
 
 interface InsightDetailsTableProps {
   data: ContentionEvent[];
@@ -69,8 +73,12 @@ export function makeInsightDetailsColumns(
     {
       name: "contentionStartTime",
       title: insightsTableTitles.contentionStartTime(execType),
-      cell: (item: ContentionEvent) =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      cell: (item: ContentionEvent) => item.startTime
+          ? <Timestamp
+              time={item.startTime}
+              format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+            />
+          : <>N/A</>,
       sort: (item: ContentionEvent) => item.startTime.unix(),
     },
     {

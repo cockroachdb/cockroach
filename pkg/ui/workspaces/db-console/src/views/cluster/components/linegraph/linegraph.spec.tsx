@@ -13,7 +13,8 @@ import React from "react";
 import uPlot from "uplot";
 import _ from "lodash";
 
-import { fillGaps, LineGraph, LineGraphProps } from "./index";
+import LineGraph, { _LineGraph } from "./index";
+import { fillGaps, LineGraphProps } from "./index";
 import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
@@ -36,6 +37,7 @@ describe("<LineGraph>", function () {
 
   beforeEach(() => {
     mockProps = {
+      timezone: "UTC",
       title: "Test Title",
       subtitle: "Test Subtitle",
       legend: false,
@@ -79,7 +81,7 @@ describe("<LineGraph>", function () {
 
   it("should set a new chart on update", () => {
     const wrapper = linegraph({ ...mockProps });
-    const instance = wrapper.instance() as any as LineGraph;
+    const instance = wrapper.instance() as any as _LineGraph;
     wrapper.setProps({
       data: {
         results: [
@@ -108,7 +110,7 @@ describe("<LineGraph>", function () {
       ...mockProps,
       data: { results: [{}], toJSON: jest.fn() },
     });
-    const instance = wrapper.instance() as unknown as LineGraph;
+    const instance = wrapper.instance() as unknown as _LineGraph;
     const mockFn = jest.fn();
     const mockMetrics = [
       {

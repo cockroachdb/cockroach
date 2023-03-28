@@ -28,12 +28,12 @@ import {
 } from "../../insightsTable/insightsTable";
 import classNames from "classnames/bind";
 import styles from "../statementDetails.module.scss";
-import { CockroachCloudContext } from "../../contexts";
+import {CockroachCloudContext} from "../../contexts";
 import { InsightRecommendation, InsightType } from "../../insights";
 import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 import {
   Count,
-  DATE_FORMAT_24_UTC,
+  DATE_FORMAT_24_TZ,
   Duration,
   formatNumberForDisplay,
   longToInt,
@@ -41,6 +41,7 @@ import {
   TimestampToMoment,
 } from "../../util";
 import { formatIndexes } from "./plansTable";
+import {Timestamp} from "../../timestamp";
 
 const cx = classNames.bind(styles);
 
@@ -163,9 +164,11 @@ function ExplainPlan({
           <SummaryCard className={cx("summary-card")}>
             <SummaryCardItem
               label="Last Execution Time"
-              value={TimestampToMoment(plan.stats.last_exec_timestamp).format(
-                DATE_FORMAT_24_UTC,
-              )}
+              value={
+                <Timestamp
+                  time={TimestampToMoment(plan.stats.last_exec_timestamp)}
+                  format={DATE_FORMAT_24_TZ} />
+              }
             />
             <SummaryCardItem
               label="Average Execution Time"

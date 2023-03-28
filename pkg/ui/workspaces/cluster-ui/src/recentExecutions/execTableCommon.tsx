@@ -13,8 +13,9 @@ import { Tooltip } from "@cockroachlabs/ui-components";
 import { ExecutionType, RecentExecution } from "./types";
 import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
-import { capitalize, DATE_FORMAT, Duration } from "src/util";
+import { capitalize, DATE_FORMAT_24_TZ, Duration } from "src/util";
 import { StatusIcon } from "./statusIcon";
+import {Timestamp} from "../timestamp";
 
 export type ExecutionsColumn =
   | "applicationName"
@@ -51,7 +52,7 @@ export const executionsColumnLabels: Record<
     }
   },
   retries: () => "Retries",
-  startTime: () => "Start Time (UTC)",
+  startTime: () => "Start Time",
   statementCount: () => "Statements",
   status: () => "Status",
   timeSpentBlocking: () => "Time Spent Blocking",
@@ -182,7 +183,7 @@ function makeRecentExecutionColumns(
     startTime: {
       name: "startTime",
       title: executionsTableTitles.startTime(execType),
-      cell: (item: RecentExecution) => item.start.format(DATE_FORMAT),
+      cell: (item: RecentExecution) => <Timestamp time={item.start} format={DATE_FORMAT_24_TZ} />,
       sort: (item: RecentExecution) => item.start.unix(),
     },
     elapsedTime: {

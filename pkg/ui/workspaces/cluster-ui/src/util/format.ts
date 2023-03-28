@@ -185,17 +185,14 @@ export const DurationFitScale =
   };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
-export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
-  "MMM DD, YYYY [at] H:mm:ss:ms";
 
 /**
  * Alternate 24 hour UTC formats
  */
-export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
-export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
+export const DATE_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm z";
 export const DATE_WITH_SECONDS_FORMAT_24_TZ = "MMM DD, YYYY [at] H:mm:ss z";
-export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC =
-  "MMM DD, YYYY [at] H:mm:ss:ms UTC";
+export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ =
+  "MMM DD, YYYY [at] H:mm:ss:ms z";
 
 export function FormatWithTimezone(
   m: moment.Moment,
