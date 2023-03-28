@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";

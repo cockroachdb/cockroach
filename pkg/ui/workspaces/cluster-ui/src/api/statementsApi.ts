@@ -18,7 +18,7 @@ import {
   stringToTimestamp,
 } from "src/util";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import { AggregateStatistics } from "../statementsTable";
 const STATEMENTS_PATH = "/_status/combinedstmts";

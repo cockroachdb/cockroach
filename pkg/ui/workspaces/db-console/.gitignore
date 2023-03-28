@@ -19,3 +19,4 @@ dist*/**
 cypress/screenshots/*
 cypress/videos/*
 cypress/snapshots/**/__diff_output__
+timezones

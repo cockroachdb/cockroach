@@ -13,7 +13,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../../timeScaleDropdown";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 

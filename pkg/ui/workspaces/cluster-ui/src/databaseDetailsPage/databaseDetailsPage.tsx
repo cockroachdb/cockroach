@@ -37,7 +37,7 @@ import { mvccGarbage, syncHistory, unique } from "../util";
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import { Moment } from "moment";
+import { Moment } from "moment-timezone";
 import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";

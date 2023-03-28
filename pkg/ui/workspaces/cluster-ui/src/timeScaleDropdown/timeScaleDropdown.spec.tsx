@@ -19,7 +19,7 @@ import {
   TimeScaleDropdown,
 } from "./timeScaleDropdown";
 import * as timescale from "./timeScaleTypes";
-import moment from "moment";
+import moment from "moment-timezone";
 import { MemoryRouter } from "react-router";
 import TimeFrameControls from "./timeFrameControls";
 import RangeSelect from "./rangeSelect";

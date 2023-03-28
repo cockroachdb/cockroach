@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 import React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";

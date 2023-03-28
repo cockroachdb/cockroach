@@ -17,7 +17,7 @@ import {
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
 import { generateStmtDetailsToID } from "../../util";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type SQLDetailsStatsState = {
   data: StatementDetailsResponse;

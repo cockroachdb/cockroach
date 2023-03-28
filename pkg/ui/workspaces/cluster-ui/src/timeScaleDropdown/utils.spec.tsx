@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { TimeScale } from "./timeScaleTypes";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   defaultTimeScaleOptions,
   findClosestTimeScale,
