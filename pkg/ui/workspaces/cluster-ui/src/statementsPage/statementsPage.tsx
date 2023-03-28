@@ -67,7 +67,6 @@ import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
-  timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
 
@@ -90,6 +89,7 @@ import {
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -604,7 +604,7 @@ export class StatementsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = timeScaleToString(this.props.timeScale);
+    const period = <FormattedTimescale ts={this.props.timeScale} />;
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Statement",

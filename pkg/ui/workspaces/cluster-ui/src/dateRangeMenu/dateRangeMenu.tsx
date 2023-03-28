@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { Alert, DatePicker, Icon, TimePicker } from "antd";
 import "antd/lib/time-picker/style";
 import "antd/lib/icon/style";
@@ -21,6 +21,8 @@ import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 
 import styles from "./dateRangeMenu.module.scss";
+import { TimezoneContext } from "../contexts";
+import { Timezone } from "src/timestamp";
 
 const cx = classNames.bind(styles);
 
@@ -44,6 +46,8 @@ export function DateRangeMenu({
   onCancel,
   onReturnToPresetOptionsClick,
 }: DateRangeMenuProps): React.ReactElement {
+  const timezone = useContext(TimezoneContext);
+
   /**
    * Local startMoment and endMoment state are stored here so that users can change the time before clicking "Apply".
    * They are re-initialized to startInit and endInit by re-mounting this component. It is thus the responsibility of
@@ -66,9 +70,11 @@ export function DateRangeMenu({
    *  the parent component to re-initialize this.
    */
   const [startMoment, setStartMoment] = useState<Moment>(
-    startInit || moment.utc(),
+    startInit ? startInit.tz(timezone) : moment.tz(timezone),
   );
-  const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.utc());
+  const [endMoment, setEndMoment] = useState<Moment>(
+    endInit ? endInit.tz(timezone) : moment.tz(timezone),
+  );
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);
@@ -99,7 +105,8 @@ export function DateRangeMenu({
   const isValid = errorMessage === undefined;
 
   const onApply = (): void => {
-    onSubmit(startMoment, endMoment);
+    // Idempotently set the start and end moments to UTC.
+    onSubmit(startMoment.utc(), endMoment.utc());
   };
 
   return (
@@ -111,7 +118,7 @@ export function DateRangeMenu({
         </a>
       </div>
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
-        Start (UTC)
+        Start <Timezone />
       </Text>
       <DatePicker
         disabledDate={isDisabled}
@@ -130,7 +137,7 @@ export function DateRangeMenu({
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
-        End (UTC)
+        End <Timezone />
       </Text>
       <DatePicker
         allowClear={false}
