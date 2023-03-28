@@ -35,9 +35,7 @@ interface TransactionInsightsTable {
   setTimeScale: (ts: TimeScale) => void;
 }
 
-export function makeTransactionInsightsColumns(
-  setTimeScale: (ts: TimeScale) => void,
-): ColumnDescriptor<TransactionInsightEvent>[] {
+export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {
@@ -53,13 +51,9 @@ export function makeTransactionInsightsColumns(
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: TransactionInsightEvent) =>
-        TransactionDetailsLink(
-          item.fingerprintID,
-          item.startTime,
-          setTimeScale,
-        ),
-      sort: (item: TransactionInsightEvent) => item.fingerprintID,
+      cell: item =>
+        TransactionDetailsLink(item.fingerprintID, item.application),
+      sort: item => item.fingerprintID,
     },
     {
       name: "query",
@@ -104,7 +98,7 @@ export function makeTransactionInsightsColumns(
 export const TransactionInsightsTable: React.FC<
   TransactionInsightsTable
 > = props => {
-  const columns = makeTransactionInsightsColumns(props.setTimeScale);
+  const columns = makeTransactionInsightsColumns();
   return (
     <SortedTable columns={columns} className="statements-table" {...props} />
   );

@@ -327,7 +327,7 @@ export function populateStatementInsightsFromProblemAndCauses(
     return [];
   }
 
-  const stmtsWithInsights: StatementInsights = statements.map(statement => {
+  return statements.map(statement => {
     // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
     const insights: Insight[] = [];
     switch (statement.problem) {
@@ -362,6 +362,4 @@ export function populateStatementInsightsFromProblemAndCauses(
 
     return { ...statement, insights };
   });
-
-  return stmtsWithInsights;
 }

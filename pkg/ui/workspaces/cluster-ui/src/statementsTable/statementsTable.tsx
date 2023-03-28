@@ -329,25 +329,6 @@ export function makeStatementsColumns(
   return columns;
 }
 
-export function makeNodesColumns(
-  statements: AggregateStatistics[],
-  nodeNames: NodeNames,
-  totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
-): ColumnDescriptor<AggregateStatistics>[] {
-  const original: ColumnDescriptor<AggregateStatistics>[] = [
-    {
-      name: "nodes",
-      title: null,
-      cell: StatementTableCell.nodeLink(nodeNames),
-    },
-  ];
-
-  return original.concat(
-    makeCommonColumns(statements, totalWorkload, nodeRegions, "statement"),
-  );
-}
-
 /**
  * For each statement, generate the list of regions and nodes it was
  * executed on. Each node is assigned to only one region and a region can

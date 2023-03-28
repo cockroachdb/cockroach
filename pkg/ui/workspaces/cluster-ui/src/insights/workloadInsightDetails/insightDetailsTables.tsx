@@ -40,11 +40,7 @@ export function makeInsightDetailsColumns(
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
       cell: (item: EventExecution) =>
-        TransactionDetailsLink(
-          item.fingerprintID,
-          item.startTime,
-          setTimeScale,
-        ),
+        TransactionDetailsLink(item.fingerprintID),
       sort: (item: EventExecution) => item.fingerprintID,
     },
     {

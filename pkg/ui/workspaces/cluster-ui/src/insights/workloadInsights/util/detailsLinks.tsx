@@ -15,23 +15,20 @@ import { Link } from "react-router-dom";
 import { StatementLinkTarget } from "../../../statementsTable";
 import moment from "moment/moment";
 import { TimeScale } from "../../../timeScaleDropdown";
-import { Moment } from "moment";
+import { TransactionLinkTarget } from "../../../transactionsTable";
 
 export function TransactionDetailsLink(
   transactionFingerprintID: string,
-  startTime: Moment,
-  setTimeScale: (tw: TimeScale) => void,
+  application?: string,
 ): React.ReactElement {
   const txnID = HexStringToInt64String(transactionFingerprintID);
-  const path = `/transaction/${txnID}`;
-  const timeScale: TimeScale = {
-    windowSize: moment.duration(65, "minutes"),
-    fixedWindowEnd: moment(startTime).add(1, "hour"),
-    sampleSize: moment.duration(1, "hour"),
-    key: "Custom",
-  };
   return (
-    <Link to={path} onClick={() => setTimeScale(timeScale)}>
+    <Link
+      to={TransactionLinkTarget({
+        transactionFingerprintId: txnID,
+        application,
+      })}
+    >
       <div>{String(transactionFingerprintID)}</div>
     </Link>
   );
