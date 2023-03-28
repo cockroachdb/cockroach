@@ -21,7 +21,7 @@ import (
 
 const addExecutionCountComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
-ADD COLUMN IF NOT EXISTS "execution_count" INT8 
+ADD COLUMN IF NOT EXISTS "execution_count" INT8 FAMILY "primary" 
 AS ((statistics->'statistics'->'cnt')::INT8) STORED
 `
 
@@ -33,7 +33,7 @@ aggregated_ts, app_name, execution_count DESC) WHERE app_name NOT LIKE
 
 const addServiceLatencyComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
-ADD COLUMN IF NOT EXISTS "service_latency" FLOAT 
+ADD COLUMN IF NOT EXISTS "service_latency" FLOAT FAMILY "primary" 
 AS ((statistics->'statistics'->'svcLat'->'mean')::FLOAT) STORED
 `
 
@@ -45,7 +45,7 @@ aggregated_ts, app_name, service_latency DESC) WHERE app_name NOT LIKE
 
 const addCpuSqlNanosComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
-ADD COLUMN IF NOT EXISTS "cpu_sql_nanos" FLOAT 
+ADD COLUMN IF NOT EXISTS "cpu_sql_nanos" FLOAT FAMILY "primary" 
 AS ((statistics->'execution_statistics'->'cpuSQLNanos'->'mean')::FLOAT) STORED
 `
 
@@ -57,7 +57,7 @@ aggregated_ts, app_name, cpu_sql_nanos DESC) WHERE app_name NOT LIKE
 
 const addContentionTimeComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
-ADD COLUMN IF NOT EXISTS "contention_time" FLOAT 
+ADD COLUMN IF NOT EXISTS "contention_time" FLOAT FAMILY "primary" 
 AS ((statistics->'execution_statistics'->'contentionTime'->'mean')::FLOAT) STORED
 `
 
@@ -69,7 +69,7 @@ aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE
 
 const addTotalEstimatedExecutionTimeComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
-ADD COLUMN IF NOT EXISTS "total_estimated_execution_time" FLOAT 
+ADD COLUMN IF NOT EXISTS "total_estimated_execution_time" FLOAT FAMILY "primary" 
 AS ((statistics->'statistics'->>'cnt')::FLOAT * (statistics->'statistics'->'svcLat'->>'mean')::FLOAT) STORED
 `
 
@@ -81,7 +81,7 @@ aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT
 
 const addP99LatencyComputedColStmtStats = `
 ALTER TABLE system.statement_statistics
-ADD COLUMN IF NOT EXISTS "p99_latency" FLOAT 
+ADD COLUMN IF NOT EXISTS "p99_latency" FLOAT FAMILY "primary" 
 AS ((statistics->'statistics'->'latencyInfo'->'p99')::FLOAT) STORED
 `
 
@@ -94,7 +94,7 @@ aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE
 // transaction_statistics
 const addExecutionCountComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
-ADD COLUMN IF NOT EXISTS "execution_count" INT8 
+ADD COLUMN IF NOT EXISTS "execution_count" INT8 FAMILY "primary"
 AS ((statistics->'statistics'->'cnt')::INT8) STORED
 `
 
@@ -106,7 +106,7 @@ aggregated_ts, app_name, execution_count DESC) WHERE app_name NOT LIKE
 
 const addServiceLatencyComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
-ADD COLUMN IF NOT EXISTS "service_latency" FLOAT 
+ADD COLUMN IF NOT EXISTS "service_latency" FLOAT FAMILY "primary" 
 AS ((statistics->'statistics'->'svcLat'->'mean')::FLOAT) STORED
 `
 
@@ -118,7 +118,7 @@ aggregated_ts, app_name, service_latency DESC) WHERE app_name NOT LIKE
 
 const addCpuSqlNanosComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
-ADD COLUMN IF NOT EXISTS "cpu_sql_nanos" FLOAT 
+ADD COLUMN IF NOT EXISTS "cpu_sql_nanos" FLOAT FAMILY "primary" 
 AS ((statistics->'execution_statistics'->'cpuSQLNanos'->'mean')::FLOAT) STORED
 `
 
@@ -130,7 +130,7 @@ aggregated_ts, app_name, cpu_sql_nanos DESC) WHERE app_name NOT LIKE
 
 const addContentionTimeComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
-ADD COLUMN IF NOT EXISTS "contention_time" FLOAT 
+ADD COLUMN IF NOT EXISTS "contention_time" FLOAT FAMILY "primary" 
 AS ((statistics->'execution_statistics'->'contentionTime'->'mean')::FLOAT) STORED
 `
 
@@ -141,7 +141,7 @@ aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE
 `
 const addTotalEstimatedExecutionTimeComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
-ADD COLUMN IF NOT EXISTS "total_estimated_execution_time" FLOAT 
+ADD COLUMN IF NOT EXISTS "total_estimated_execution_time" FLOAT FAMILY "primary" 
 AS ((statistics->'statistics'->>'cnt')::FLOAT * (
 statistics->'statistics'->'svcLat'->>'mean')::FLOAT) STORED
 `
@@ -154,7 +154,7 @@ aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT
 
 const addP99LatencyComputedColTxnStats = `
 ALTER TABLE system.transaction_statistics
-ADD COLUMN IF NOT EXISTS "p99_latency" FLOAT 
+ADD COLUMN IF NOT EXISTS "p99_latency" FLOAT FAMILY "primary" 
 AS ((statistics->'statistics'->'latencyInfo'->'p99')::FLOAT) STORED
 `
 

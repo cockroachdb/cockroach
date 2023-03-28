@@ -1083,6 +1083,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:          kvs{pointKV("oe", 11, "foo"), pointKV("oih", 12, "foo"), rangeKV("ods", "ogvh", 10, ""), rangeKV("ogvh", "ohl", 10, ""), rangeKV("ogvh", "ohl", 9, "")},
 			ignoreExpect: true,
 		},
+		"DisallowConflict maintains ext iter ahead of sst iter": {
+			noConflict:   true,
+			data:         kvs{pointKV("c", 6, "foo"), rangeKV("c", "e", 5, "")},
+			sst:          kvs{rangeKV("a", "b", 10, ""), pointKV("d", 9, "foo")},
+			ignoreExpect: true,
+		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
 		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {

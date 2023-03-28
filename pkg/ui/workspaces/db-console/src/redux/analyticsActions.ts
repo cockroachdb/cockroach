@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "src/interfaces/action";
+import { TimeScale } from "@cockroachlabs/cluster-ui";
 
 export const TRACK_STATEMENTS_SEARCH =
   "cockroachui/analytics/TRACK_STATEMENTS_SEARCH";
@@ -21,11 +22,19 @@ export const TRACK_CANCEL_DIAGNOSTIC_BUNDLE =
   "cockroachui/analytics/TRACK_CANCEL_DIAGNOSTIC_BUNDLE";
 export const TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION =
   "cockroachui/analytics/TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION";
+export const TRACK_APPLY_SEARCH_CRITERIA =
+  "cockroachui/analytics/TRACK_APPLY_SEARCH_CRITERIA";
 
 export interface TableSortActionPayload {
   tableName: string;
   columnName: string;
   ascending?: boolean;
+}
+
+export interface ApplySearchCriteriaPayload {
+  ts: TimeScale;
+  limit: number;
+  sort: string;
 }
 
 export function trackStatementsSearchAction(
@@ -85,5 +94,20 @@ export function trackStatementDetailsSubnavSelectionAction(
   return {
     type: TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
     payload: tabName,
+  };
+}
+
+export function trackApplySearchCriteriaAction(
+  ts: TimeScale,
+  limit: number,
+  sort: string,
+): PayloadAction<ApplySearchCriteriaPayload> {
+  return {
+    type: TRACK_APPLY_SEARCH_CRITERIA,
+    payload: {
+      ts,
+      limit,
+      sort,
+    },
   };
 }
