@@ -14,12 +14,13 @@ import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { StmtInsightEvent } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
 import {
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration,
   limitText,
 } from "src/util";
 import { Loading } from "src/loading";
 import { InsightsError } from "../insightsErrorComponent";
+import { Timestamp } from "../../timestamp";
 
 const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   {
@@ -52,16 +53,30 @@ const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   },
   {
     name: "startTime",
-    title: "Start Time (UTC)",
+    title: "Start Time",
     cell: (item: StmtInsightEvent) =>
-      item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      item.startTime ? (
+        <Timestamp
+          time={item.startTime}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+        />
+      ) : (
+        <>N/A</>
+      ),
     sort: (item: StmtInsightEvent) => item.startTime.unix(),
   },
   {
     name: "endTime",
-    title: "End Time (UTC)",
+    title: "End Time",
     cell: (item: StmtInsightEvent) =>
-      item.endTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      item.endTime ? (
+        <Timestamp
+          time={item.endTime}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+        />
+      ) : (
+        <>N/A</>
+      ),
     sort: (item: StmtInsightEvent) => item.endTime.unix(),
   },
   {

@@ -17,7 +17,7 @@ import {
 } from "src/sortedtable";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration,
   limitText,
   NO_SAMPLES_FOUND,
@@ -38,6 +38,7 @@ import classNames from "classnames/bind";
 import styles from "../util/workloadInsights.module.scss";
 import { TimeScale } from "../../../timeScaleDropdown";
 import { Badge } from "src/badge";
+import { Timestamp } from "../../../timestamp";
 
 const cx = classNames.bind(styles);
 
@@ -117,7 +118,14 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StmtInsightEven
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
       cell: (item: StmtInsightEvent) =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+        item.startTime ? (
+          <Timestamp
+            time={item.startTime}
+            format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+          />
+        ) : (
+          <>N/A</>
+        ),
       sort: (item: StmtInsightEvent) => item.startTime.unix(),
       showByDefault: true,
     },

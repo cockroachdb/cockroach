@@ -18,7 +18,7 @@ import { createSelector } from "reselect";
 import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import LineGraph from "src/views/cluster/components/linegraph";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";

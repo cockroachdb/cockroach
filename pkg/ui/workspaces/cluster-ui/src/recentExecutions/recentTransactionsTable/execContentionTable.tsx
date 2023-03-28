@@ -14,8 +14,9 @@ import { ContendedExecution, ExecutionType } from "../types";
 import { Link } from "react-router-dom";
 import { StatusIcon } from "../statusIcon";
 import { executionsTableTitles } from "../execTableCommon";
-import { DATE_FORMAT, Duration, limitText } from "../../util";
+import { DATE_FORMAT_24_TZ, Duration, limitText } from "../../util";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { Timestamp } from "../../timestamp";
 
 const getID = (item: ContendedExecution, execType: ExecutionType) =>
   execType === "transaction"
@@ -78,7 +79,7 @@ export function makeContentionColumns(
     {
       name: "startTime",
       title: executionsTableTitles.startTime(execType),
-      cell: item => item.start.format(DATE_FORMAT),
+      cell: item => <Timestamp time={item.start} format={DATE_FORMAT_24_TZ} />,
       sort: item => item.start.unix(),
     },
     {

@@ -22,7 +22,7 @@ import {
   unset,
   DurationCheckSample,
 } from "src/util";
-import { DATE_FORMAT, Duration } from "src/util/format";
+import { DATE_FORMAT_24_TZ, Duration } from "src/util/format";
 import {
   countBarChart,
   bytesReadBarChart,
@@ -53,6 +53,7 @@ type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
+import { Timestamp } from "../timestamp";
 const cx = classNames.bind(styles);
 
 export interface AggregateStatistics {
@@ -318,8 +319,12 @@ export function makeStatementsColumns(
     {
       name: "lastExecTimestamp",
       title: statisticsTableTitles.lastExecTimestamp(statType),
-      cell: (stmt: AggregateStatistics) =>
-        TimestampToMoment(stmt.stats.last_exec_timestamp).format(DATE_FORMAT),
+      cell: (stmt: AggregateStatistics) => (
+        <Timestamp
+          time={TimestampToMoment(stmt.stats.last_exec_timestamp)}
+          format={DATE_FORMAT_24_TZ}
+        />
+      ),
       sort: (stmt: AggregateStatistics) =>
         TimestampToNumber(stmt.stats.last_exec_timestamp),
       showByDefault: false,

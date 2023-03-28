@@ -66,7 +66,6 @@ import LoadingError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
 import {
   TimeScale,
-  timeScaleToString,
   timeScale1hMinOptions,
   getValidOption,
   toRoundedDateRange,
@@ -84,6 +83,7 @@ import {
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import { TimeScaleToString } from "../timeScaleDropdown/timeScaleToString";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -524,7 +524,7 @@ export class TransactionsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = timeScaleToString(this.props.timeScale);
+    const period = <TimeScaleToString ts={this.props.timeScale} />;
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Transaction",
