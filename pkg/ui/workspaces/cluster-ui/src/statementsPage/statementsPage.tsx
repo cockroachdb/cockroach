@@ -21,7 +21,7 @@ import {
   updateSortSettingQueryParamsOnTab,
 } from "src/sortedtable";
 import { Search } from "src/search";
-import { Pagination } from "src/pagination";
+import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -59,6 +59,7 @@ import {
   SqlStatsSortType,
   StatementsRequest,
   createCombinedStmtsRequest,
+  SqlStatsSortOptions,
 } from "src/api/statementsApi";
 import ClearStats from "../sqlActivity/clearStats";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -83,8 +84,9 @@ import {
   STATS_LONG_LOADING_DURATION,
   stmtRequestSortOptions,
   getSortLabel,
+  getSortColumn,
+  getSubsetWarning,
 } from "src/util/sqlActivityConstants";
-import { Button } from "src/button";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -125,6 +127,7 @@ export interface StatementsPageDispatchProps {
   onTimeScaleChange: (ts: TimeScale) => void;
   onChangeLimit: (limit: number) => void;
   onChangeReqSort: (sort: SqlStatsSortType) => void;
+  onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
 }
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
@@ -275,6 +278,13 @@ export class StatementsPage extends React.Component<
     }
   };
 
+  isSortSettingSameAsReqSort = (): boolean => {
+    return (
+      getSortColumn(this.state.reqSortSetting) ==
+      this.props.sortSetting.columnTitle
+    );
+  };
+
   changeTimeScale = (ts: TimeScale): void => {
     this.setState(prevState => ({
       ...prevState,
@@ -283,10 +293,30 @@ export class StatementsPage extends React.Component<
   };
 
   updateRequestParams = (): void => {
-    this.props.onChangeLimit(this.state.limit);
-    this.props.onChangeReqSort(this.state.reqSortSetting);
-    this.props.onTimeScaleChange(this.state.timeScale);
+    if (this.props.limit !== this.state.limit) {
+      this.props.onChangeLimit(this.state.limit);
+    }
+
+    if (this.props.reqSortSetting !== this.state.reqSortSetting) {
+      this.props.onChangeReqSort(this.state.reqSortSetting);
+    }
+
+    if (this.props.timeScale !== this.state.timeScale) {
+      this.props.onTimeScaleChange(this.state.timeScale);
+    }
+    if (this.props.onApplySearchCriteria) {
+      this.props.onApplySearchCriteria(
+        this.state.timeScale,
+        this.state.limit,
+        getSortLabel(this.state.reqSortSetting),
+      );
+    }
     this.refreshStatements();
+    const ss: SortSetting = {
+      ascending: false,
+      columnTitle: getSortColumn(this.state.reqSortSetting),
+    };
+    this.changeSortSetting(ss);
   };
 
   resetPagination = (): void => {
@@ -478,6 +508,16 @@ export class StatementsPage extends React.Component<
     this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
   };
 
+  hasReqSortOption = (): boolean => {
+    let found = false;
+    Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
+      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
+        found = true;
+      }
+    });
+    return found;
+  };
+
   renderStatements = (): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
@@ -598,6 +638,12 @@ export class StatementsPage extends React.Component<
               <p className={timeScaleStylesCx("time-label")}>
                 Showing aggregated stats from{" "}
                 <span className={timeScaleStylesCx("bold")}>{period}</span>
+                {", "}
+                <ResultsPerPageLabel
+                  pagination={{ ...pagination, total: data.length }}
+                  pageName={"Statements"}
+                  search={search}
+                />
               </p>
             </PageConfigItem>
             {hasAdminRole && (
@@ -620,6 +666,19 @@ export class StatementsPage extends React.Component<
             onRemoveFilter={this.onSubmitFilters}
             onClearFilters={this.onClearFilters}
           />
+          {!this.isSortSettingSameAsReqSort() && (
+            <InlineAlert
+              intent="warning"
+              title={getSubsetWarning(
+                "statement",
+                this.props.limit,
+                sortSettingLabel,
+                this.hasReqSortOption(),
+                this.props.sortSetting.columnTitle as StatisticTableColumnKeys,
+              )}
+              className={cx("margin-bottom")}
+            />
+          )}
           <StatementsSortedTable
             className="statements-table"
             data={data}

@@ -171,6 +171,16 @@ export const TransactionsPageConnected = withRouter(
           dispatch(updateTxnsPageLimitAction(limit)),
         onChangeReqSort: (sort: SqlStatsSortType) =>
           dispatch(updateTxnsPageReqSortAction(sort)),
+        onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) =>
+          dispatch(
+            analyticsActions.track({
+              name: "Apply Search Criteria",
+              page: "Transactions",
+              tsValue: ts.key,
+              limitValue: limit,
+              sortValue: sort,
+            }),
+          ),
       },
       activePageProps: mapDispatchToRecentTransactionsPageProps(dispatch),
     }),
