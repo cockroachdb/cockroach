@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.1-22.2
+
 # Test cases for defining default privileges on the schema.
 
 statement error pq: cannot use IN SCHEMA clause when using GRANT/REVOKE ON SCHEMAS
@@ -6,8 +8,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SCHEMAS TO root
 statement error pq: crdb_internal is not a physical schema
 ALTER DEFAULT PRIVILEGES IN SCHEMA crdb_internal GRANT SELECT ON TABLES TO root
 
+skipif config local-mixed-22.1-22.2
 statement ok
 CREATE USER testuser2
+
+# We need this hack for local-mixed-22.1-22.2, since the test is using the 22.2
+# system schema, even though the bootstrap version is 22.1. This limitation is
+# fixed in the 23.1 branch.
+onlyif config local-mixed-22.1-22.2
+statement ok
+INSERT INTO system.users VALUES ('testuser2', '', false, 101)
 
 statement ok
 GRANT CREATE ON DATABASE test TO testuser
@@ -286,3 +296,7 @@ query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA "'; drop database test; SELECT '";
 ----
 role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+
+onlyif config local-mixed-22.1-22.2
+statement error cannot alter default privileges for functions until cluster is upgraded to v22.2
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO testuser
