@@ -297,6 +297,8 @@ func (f *Factory) EvalContext() *eval.Context {
 func (f *Factory) CopyAndReplace(
 	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
+
 	if !f.mem.IsEmpty() {
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
@@ -465,6 +467,7 @@ func (f *Factory) ConstructZeroValues() memo.RelExpr {
 func (f *Factory) ConstructJoin(
 	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	switch joinOp {
 	case opt.InnerJoinOp:
 		return f.ConstructInnerJoin(left, right, on, private)
@@ -496,6 +499,7 @@ func (f *Factory) ConstructJoin(
 // Null operators require the static type to be specified, so that rewrites do
 // not change it.
 func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	if d == tree.DNull {
 		return f.ConstructNull(t)
 	}
@@ -513,6 +517,7 @@ func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 // of the given set of constant values. This is performed by either constructing
 // an equality expression or an IN expression.
 func (f *Factory) ConstructConstFilter(col opt.ColumnID, values tree.Datums) memo.FiltersItem {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 	if len(values) == 1 {
 		return f.ConstructFiltersItem(f.ConstructEq(
 			f.ConstructVariable(col),
@@ -543,6 +548,8 @@ func (f *Factory) ConstructConstFilter(col opt.ColumnID, values tree.Datums) mem
 // encountered in the input ScalarExpr that are not keys in colMap, they are not
 // remapped.
 func (f *Factory) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
+
 	// Recursively walk the scalar sub-tree looking for references to columns
 	// that need to be replaced and then replace them appropriately.
 	var replace ReplaceFunc
