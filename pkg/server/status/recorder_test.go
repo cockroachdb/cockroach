@@ -438,8 +438,8 @@ func TestMetricsRecorder(t *testing.T) {
 				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
-				for _, q := range recordHistogramQuantiles {
-					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, 10, reg.isNode)
+				for _, q := range metric.RecordHistogramQuantiles {
+					addExpected(reg.prefix, data.name+q.Suffix, reg.source, 100, 10, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 				addExpected(reg.prefix, data.name+"-avg", reg.source, 100, 9, reg.isNode)

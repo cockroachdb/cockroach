@@ -839,3 +839,23 @@ func ValueAtQuantileWindowed(histogram *prometheusgo.Histogram, q float64) float
 
 	return val
 }
+
+// Quantile is a quantile along with a string suffix to be attached to the metric
+// name upon recording into the internal TSDB.
+type Quantile struct {
+	Suffix   string
+	Quantile float64
+}
+
+// RecordHistogramQuantiles are the quantiles at which (windowed) histograms
+// are recorded into the internal TSDB.
+var RecordHistogramQuantiles = []Quantile{
+	{"-max", 100},
+	{"-p99.999", 99.999},
+	{"-p99.99", 99.99},
+	{"-p99.9", 99.9},
+	{"-p99", 99},
+	{"-p90", 90},
+	{"-p75", 75},
+	{"-p50", 50},
+}

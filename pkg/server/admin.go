@@ -367,7 +367,7 @@ func (s *adminServer) ChartCatalog(
 ) (*serverpb.ChartCatalogResponse, error) {
 	metricsMetadata := s.metricsRecorder.GetMetricsMetadata()
 
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata, false /* strict */)
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
