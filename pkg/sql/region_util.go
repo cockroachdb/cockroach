@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
@@ -2443,10 +2442,6 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 		"sqlliveness",
 		"sql_instances",
 		"lease",
-	}
-
-	if !systemschema.TestSupportMultiRegion() {
-		return errors.New("multi region system database is not supported")
 	}
 
 	// Retrieve the system database descriptor and ensure it supports

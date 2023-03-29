@@ -77,7 +77,6 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
