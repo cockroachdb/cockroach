@@ -1111,6 +1111,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
 	)
+	drain.serverCtl = sc
 
 	// Create the debug API server.
 	debugServer := debug.NewServer(

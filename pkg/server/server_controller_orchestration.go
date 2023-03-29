@@ -95,9 +95,14 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 			select {
 			case <-time.After(watchInterval):
 			case <-c.stopper.ShouldQuiesce():
+				// Expedited server shutdown of outer server.
 				return
 			}
-
+			if c.draining.Get() {
+				// The outer server has started a graceful drain: stop
+				// picking up new servers.
+				return
+			}
 			if err := c.scanTenantsForRunnableServices(ctx, ie); err != nil {
 				log.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
@@ -173,6 +178,9 @@ func (c *serverController) scanTenantsForRunnableServices(
 func (c *serverController) createServerEntryLocked(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (*serverEntry, error) {
+	if c.draining.Get() {
+		return nil, errors.New("server is draining")
+	}
 	entry, err := c.startControlledServer(ctx, tenantName)
 	if err != nil {
 		return nil, err
@@ -204,13 +212,19 @@ func (c *serverController) startControlledServer(
 	}
 
 	topCtx := ctx
+
 	// Use a different context for the tasks below, because the tenant
 	// stopper will have its own tracer which is incompatible with the
 	// tracer attached to the incoming context.
-
 	tenantCtx := logtags.AddTag(context.Background(), "tenant-orchestration", nil)
+	tenantCtx = logtags.AddTag(tenantCtx, "tenant", tenantName)
 
 	tenantStopper := stop.NewStopper()
+
+	// shutdownInterface enables the propagate-close task to
+	// initiate a graceful drain on the server started by the other
+	// task below.
+	var shutdownInterface tenantServerShutdownInterface
 
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
@@ -219,24 +233,43 @@ func (c *serverController) startControlledServer(
 		case <-tenantStopper.ShouldQuiesce():
 			// Tenant is terminating on their own; nothing else to do here.
 			log.Infof(ctx, "tenant %q terminating", tenantName)
+
 		case <-c.stopper.ShouldQuiesce():
 			// Surrounding server is stopping; propagate the stop to the
 			// control goroutine below.
+			// Note: we can't do a graceful drain in that case because
+			// the RPC service in the surrounding server may already
+			// be unavailable.
 			log.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
 			tenantStopper.Stop(tenantCtx)
+
 		case <-stopRequestCh:
-			// Someone requested a shutdown.
+			// Someone requested a graceful shutdown.
 			log.Infof(ctx, "received request for tenant %q to terminate", tenantName)
+
+			// Ensure that the graceful drain for the tenant serer aborts
+			// early if the Stopper for the surrounding server is
+			// prematurely shutting down. This is because once the surrounding node
+			// starts quiescing tasks, it won't be able to process KV requests
+			// by the tenant server any more.
+			drainCtx, cancel := c.stopper.WithCancelOnQuiesce(tenantCtx)
+			defer cancel()
+			shutdownInterface.maybeCallDrain(drainCtx)
+
 			tenantStopper.Stop(tenantCtx)
+
 		case <-topCtx.Done():
-			// Someone requested a shutdown.
+			// Someone requested a shutdown - probably a test.
+			// Note: we can't do a graceful drain in that case because
+			// the RPC service in the surrounding server may already
+			// be unavailable.
 			log.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
 			tenantStopper.Stop(tenantCtx)
 		}
 	}); err != nil {
 		// The goroutine above is responsible for stopping the
-		// tenantStopper. If it fails to stop, we stop it here
-		// to avoid leaking the stopper.
+		// tenantStopper. If it fails to start, we need to avoid leaking
+		// the stopper.
 		tenantStopper.Stop(ctx)
 		return nil, err
 	}
@@ -314,6 +347,7 @@ func (c *serverController) startControlledServer(
 		}))
 
 		// Indicate the server has started.
+		shutdownInterface.setServer(s)
 		entry.server = s
 		startedOrStoppedChAlreadyClosed = true
 		entry.state.started.Set(true)
@@ -418,6 +452,30 @@ func (c *serverController) startServerInternal(
 
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
+	entries := c.requestStopAll()
+
+	// Wait for shutdown for all servers.
+	for _, e := range entries {
+		<-e.state.stopped
+	}
+}
+
+func (c *serverController) drain(ctx context.Context) (stillRunning int) {
+	entries := c.requestStopAll()
+	// How many entries are _not_ stopped yet?
+	notStopped := 0
+	for _, e := range entries {
+		select {
+		case <-e.state.stopped:
+		default:
+			log.Infof(ctx, "server for tenant %q still running", e.nameContainer)
+			notStopped++
+		}
+	}
+	return notStopped
+}
+
+func (c *serverController) requestStopAll() []*serverEntry {
 	entries := func() (res []*serverEntry) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -432,11 +490,7 @@ func (c *serverController) Close() {
 	for _, e := range entries {
 		e.state.requestStop()
 	}
-
-	// Wait for shutdown for all servers.
-	for _, e := range entries {
-		<-e.state.stopped
-	}
+	return entries
 }
 
 type nodeEventLogger interface {
@@ -482,4 +536,46 @@ func (c *serverController) logStopEvent(
 	sharedDetails.TenantName = string(tenantName)
 
 	c.logger.logStructuredEvent(ctx, ev)
+}
+
+// tenantServerShutdownInterface coordinates the goroutine that starts
+// a tenant server and the goroutine that monitors async requests to
+// shut it down.
+type tenantServerShutdownInterface struct {
+	syncutil.Mutex
+	drainableServer drainableTenantServer
+}
+
+func (t *tenantServerShutdownInterface) setServer(s drainableTenantServer) {
+	t.Lock()
+	defer t.Unlock()
+	t.drainableServer = s
+}
+
+func (t *tenantServerShutdownInterface) getServer() drainableTenantServer {
+	t.Lock()
+	defer t.Unlock()
+	return t.drainableServer
+}
+
+// maybeCallDrain performs the graceful drain sequence for the server
+// if it has started already.
+func (t *tenantServerShutdownInterface) maybeCallDrain(ctx context.Context) {
+	s := t.getServer()
+	if s == nil {
+		log.Infof(ctx, "server not started yet; nothing to drain")
+		return
+	}
+	log.Infof(ctx, "starting graceful drain")
+	// Call the drain service on that tenant's server. This may take a
+	// while as it needs to wait for clients to disconnect and SQL
+	// activity to clear up, possibly waiting for various configurable
+	// timeouts.
+	CallDrainServerSide(ctx, s.gracefulDrain)
+}
+
+// drainableTenantServer is the subset of onDemandServer that is able
+// to call the graceful drain service.
+type drainableTenantServer interface {
+	gracefulDrain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
 }

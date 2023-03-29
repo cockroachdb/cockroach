@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"io"
+	"math"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -103,6 +105,7 @@ type drainServer struct {
 	grpc         *grpcServer
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
+	serverCtl    *serverController
 
 	kvServer struct {
 		nodeLiveness *liveness.NodeLiveness
@@ -306,6 +309,26 @@ func (s *drainServer) runDrain(
 func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
+	if s.serverCtl != nil {
+		// We are on a KV node, with a server controller.
+		//
+		// First tell the controller to stop starting new servers.
+		s.serverCtl.draining.Set(true)
+
+		// Then shut down tenant servers orchestrated from
+		// this node.
+		stillRunning := s.serverCtl.drain(ctx)
+		reporter(stillRunning, "tenant servers")
+		// If we still have tenant servers, we can't make progress on
+		// draining SQL clients (on the system tenant) and the KV node,
+		// because that would block the graceful drain of the tenant
+		// server(s).
+		if stillRunning > 0 {
+			return nil
+		}
+		log.Infof(ctx, "all tenant servers stopped")
+	}
+
 	// Drain the SQL layer.
 	// Drains all SQL connections, distributed SQL execution flows, and SQL table leases.
 	if err = s.drainClients(ctx, reporter); err != nil {
@@ -407,6 +430,7 @@ func (s *drainServer) drainNode(
 		// No KV subsystem. Nothing to do.
 		return nil
 	}
+
 	// Set the node's liveness status to "draining".
 	if err = s.kvServer.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err
@@ -432,3 +456,65 @@ func (s *drainServer) logOpenConns(ctx context.Context) error {
 		}
 	})
 }
+
+// CallDrainServerSide is a reference implementation for a server-side
+// function that wishes to shut down a server gracefully via the Drain
+// interface. The Drain interface is responsible for notifying clients
+// and shutting down systems in a particular order that prevents
+// client app disruptions. We generally prefer graceful drains to the
+// disorderly shutdown caused by either a process crash or a direct
+// call to the stopper's Stop() method.
+//
+// By default, this code will wait forever for a graceful drain to
+// complete. The caller can override this behavior by passing a context
+// with a deadline.
+//
+// For an example client-side implementation (drain client over RPC),
+// see the code in pkg/cli/node.go, doDrain().
+func CallDrainServerSide(ctx context.Context, drainFn ServerSideDrainFn) {
+	var (
+		prevRemaining = uint64(math.MaxUint64)
+		verbose       = false
+	)
+
+	ctx = logtags.AddTag(ctx, "call-graceful-drain", nil)
+	for {
+		// Let the caller interrupt the process via context cancellation
+		// if so desired.
+		select {
+		case <-ctx.Done():
+			log.Ops.Errorf(ctx, "drain interrupted by caller: %v", ctx.Err())
+			return
+		default:
+		}
+
+		remaining, _, err := drainFn(ctx, verbose)
+		if err != nil {
+			log.Ops.Errorf(ctx, "graceful drain failed: %v", err)
+			return
+		}
+		if remaining == 0 {
+			// No more work to do.
+			log.Ops.Infof(ctx, "graceful drain complete")
+			return
+		}
+
+		// If range lease transfer stalls or the number of
+		// remaining leases somehow increases, verbosity is set
+		// to help with troubleshooting.
+		if remaining >= prevRemaining {
+			verbose = true
+		}
+
+		// Avoid a busy wait with high CPU usage if the server replies
+		// with an incomplete drain too quickly.
+		time.Sleep(200 * time.Millisecond)
+
+		// Remember the remaining work to set the verbose flag in the next
+		// iteration.
+		prevRemaining = remaining
+	}
+}
+
+// ServerSideDrainFn is the interface of the server-side handler for the Drain logic.
+type ServerSideDrainFn func(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
