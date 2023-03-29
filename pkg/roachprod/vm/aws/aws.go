@@ -35,8 +35,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ProviderName is aws.
-const ProviderName = "aws"
+const (
+	// ProviderName is aws.
+	ProviderName = "aws"
+
+	defaultMachineType    = "m6i.xlarge"
+	defaultSSDMachineType = "m6id.xlarge"
+)
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
 var providerInstance = &Provider{}
@@ -198,8 +203,8 @@ func DefaultProviderOpts() *ProviderOpts {
 	defaultEBSVolumeValue.Disk.VolumeSize = ebsDefaultVolumeSizeGB
 	defaultEBSVolumeValue.Disk.VolumeType = defaultEBSVolumeType
 	return &ProviderOpts{
-		MachineType:      "m5.xlarge",
-		SSDMachineType:   "m5d.xlarge",
+		MachineType:      defaultMachineType,
+		SSDMachineType:   defaultSSDMachineType,
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
 		CreateRateLimit:  2,
@@ -248,11 +253,6 @@ type Provider struct {
 	// EC2 instances if non-empty.
 	IAMProfile string
 }
-
-const (
-	defaultSSDMachineType = "m5d.xlarge"
-	defaultMachineType    = "m5.xlarge"
-)
 
 var defaultConfig = func() (cfg *awsConfig) {
 	cfg = new(awsConfig)

@@ -595,12 +595,10 @@ func MachineTypeToCPUs(s string) int {
 			return 8
 		case "4xlarge":
 			return 16
-		case "9xlarge":
-			return 36
-		case "12xlarge":
-			return 48
-		case "18xlarge":
-			return 72
+		case "8xlarge":
+			return 32
+		case "16xlarge":
+			return 64
 		case "24xlarge":
 			return 96
 		}

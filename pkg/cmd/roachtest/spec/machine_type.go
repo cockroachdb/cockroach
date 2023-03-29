@@ -17,9 +17,9 @@ import "fmt"
 func AWSMachineType(cpus int, mem MemPerCPU) string {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
-	family := "c5d" // 2 GB RAM per CPU
+	family := "c6id" // 2 GB RAM per CPU
 	if mem == High {
-		family = "m5d" // 4 GB RAM per CPU
+		family = "m6id" // 4 GB RAM per CPU
 	} else if mem == Low {
 		panic("low memory per CPU not available for AWS")
 	}
@@ -34,19 +34,14 @@ func AWSMachineType(cpus int, mem MemPerCPU) string {
 		size = "2xlarge"
 	case cpus <= 16:
 		size = "4xlarge"
-	case cpus <= 36:
-		size = "9xlarge"
-	case cpus <= 72:
-		size = "18xlarge"
+	case cpus <= 32:
+		size = "8xlarge"
+	case cpus <= 64:
+		size = "16xlarge"
 	case cpus <= 96:
 		size = "24xlarge"
 	default:
 		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
-	}
-
-	// There is no c5d.24xlarge.
-	if family == "c5d" && size == "24xlarge" {
-		family = "m5d"
 	}
 
 	return fmt.Sprintf("%s.%s", family, size)
