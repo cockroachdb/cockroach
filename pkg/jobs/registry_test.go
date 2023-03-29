@@ -496,14 +496,18 @@ func TestBatchJobsCreation(t *testing.T) {
 
 				// Create a batch of job specifications.
 				var records []*Record
+				var jobIDStrings []string
 				for i := 0; i < test.batchSize; i++ {
+					jobID := r.MakeJobID()
+					jobIDStrings = append(jobIDStrings, fmt.Sprintf("%d", jobID))
 					records = append(records, &Record{
-						JobID:    r.MakeJobID(),
+						JobID:    jobID,
 						Details:  jobspb.ImportDetails{},
 						Progress: jobspb.ImportProgress{},
 						Username: username.RootUserName(),
 					})
 				}
+				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
 				// Create jobs in a batch.
 				var jobIDs []jobspb.JobID
 				require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -512,13 +516,13 @@ func TestBatchJobsCreation(t *testing.T) {
 					return err
 				}))
 				require.Equal(t, len(jobIDs), test.batchSize)
-				tdb.CheckQueryResults(t, "SELECT count(*) FROM [SHOW JOBS]",
+				tdb.CheckQueryResults(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id IN (%s)", jobIdsClause),
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
 
 				// Ensure that we are also writing the payload and progress to the job_info table.
-				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_payload'`,
+				tdb.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_payload' AND job_id IN (%s)`, jobIdsClause),
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
-				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_progress'`,
+				tdb.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_progress' AND job_id IN (%s)`, jobIdsClause),
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
 			}
 		})
