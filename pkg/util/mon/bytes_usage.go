@@ -443,8 +443,6 @@ func NewMonitorWithLimit(
 func NewMonitorInheritWithLimit(
 	name redact.RedactableString, limit int64, m *BytesMonitor,
 ) *BytesMonitor {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	return NewMonitorWithLimit(
 		name,
 		m.resource,
