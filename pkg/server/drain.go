@@ -378,6 +378,12 @@ func (s *drainServer) drainClients(
 	// given sessions a chance to finish ongoing work.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
+	// Wait for the job subsystem to shut down.
+	s.sqlServer.jobRegistry.WaitForRegistryShutdown(ctx)
+
+	// FIXME(Jeff): Add code here to remove the sql_instances row or
+	// something similar.
+
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil
 }
