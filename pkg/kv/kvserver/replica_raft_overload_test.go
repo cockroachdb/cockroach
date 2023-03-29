@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -53,7 +54,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			snapshotMap := map[roachpb.ReplicaID]struct{}{}
 			downMap := map[roachpb.ReplicaID]struct{}{}
 			match := map[roachpb.ReplicaID]uint64{}
-			minLiveMatchIndex := uint64(0) // accept all live followers by default
+			minLiveMatchIndex := kvpb.RaftIndex(0) // accept all live followers by default
 			for _, arg := range d.CmdArgs {
 				for i := range arg.Vals {
 					sl := strings.SplitN(arg.Vals[i], "@", 2)
@@ -67,7 +68,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 					arg.Scan(t, i, &id)
 					switch arg.Key {
 					case "min-live-match-index":
-						minLiveMatchIndex = id
+						minLiveMatchIndex = kvpb.RaftIndex(id)
 					case "self":
 						self = roachpb.ReplicaID(id)
 					case "voters", "learners":

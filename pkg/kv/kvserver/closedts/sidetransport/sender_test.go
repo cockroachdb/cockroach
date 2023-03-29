@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,7 +47,7 @@ type mockReplica struct {
 
 	canBump        bool
 	cantBumpReason CantCloseReason
-	lai            ctpb.LAI
+	lai            kvpb.LeaseAppliedIndex
 	policy         roachpb.RangeClosedTimestampPolicy
 }
 
