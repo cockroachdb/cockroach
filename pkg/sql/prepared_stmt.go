@@ -15,12 +15,14 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -130,15 +132,15 @@ type PortalPausablity int64
 
 const (
 	// PortalPausabilityDisabled is the default status of a portal when
-	// sql.pgwire.multiple_active_portals.enabled is false.
+	// the session variable multiple_active_portals_enabled is false.
 	PortalPausabilityDisabled PortalPausablity = iota
-	// PausablePortal is set when sql.pgwire.multiple_active_portals.enabled is
-	// set to true and the underlying statement is a read-only SELECT query with
-	// no sub-queries or post-queries.
+	// PausablePortal is set when the session variable multiple_active_portals_enabled
+	// is set to true and the underlying statement is a read-only SELECT query
+	// with no sub-queries or post-queries.
 	PausablePortal
 	// NotPausablePortalForUnsupportedStmt is used when the cluster setting
-	// sql.pgwire.multiple_active_portals.enabled is set to true, while we don't
-	// support underlying statement.
+	// the session variable multiple_active_portals_enabled is set to true, while
+	// we don't support underlying statement.
 	NotPausablePortalForUnsupportedStmt
 )
 
@@ -186,13 +188,14 @@ func (ex *connExecutor) makePreparedPortal(
 	// TODO(sql-session): address the compatibility of pausable portals and
 	// prepared_statements_cache_size.
 	// https://github.com/cockroachdb/cockroach/issues/99959
-	if EnableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) && ex.executorType != executorTypeInternal {
+	if ex.sessionData().MultipleActivePortalsEnabled && ex.executorType != executorTypeInternal {
+		telemetry.Inc(sqltelemetry.StmtTriedWithPausablePortals)
 		if tree.IsAllowedToPause(stmt.AST) {
 			portal.pauseInfo = &portalPauseInfo{queryStats: &topLevelQueryStats{}}
 			portal.portalPausablity = PausablePortal
 		} else {
-			// We have set sql.defaults.multiple_active_portals.enabled to true, but
-			// we don't support the underlying query for a pausable portal.
+			// We have set the session variable multiple_active_portals_enabled  to
+			// true, but we don't support the underlying query for a pausable portal.
 			portal.portalPausablity = NotPausablePortalForUnsupportedStmt
 		}
 	}
