@@ -50,7 +50,7 @@ func WriteInitialReplicaState(
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
-	s.TruncatedState = &roachpb.RaftTruncatedState{
+	s.TruncatedState = &kvserverpb.RaftTruncatedState{
 		Term:  raftInitialLogTerm,
 		Index: raftInitialLogIndex,
 	}
