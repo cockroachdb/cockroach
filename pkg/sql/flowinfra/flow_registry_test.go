@@ -724,9 +724,10 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 		err:                      errors.New("dummy error"),
 	}
 
+	receiver := &distsqlutils.RowBuffer{}
 	var wg sync.WaitGroup
 	streamInfo := &InboundStreamInfo{
-		receiver: RowInboundStreamHandler{&distsqlutils.RowBuffer{}, nil /* types */},
+		receiver: RowInboundStreamHandler{receiver, nil /* types */},
 		onFinish: wg.Done,
 	}
 	wg.Add(1)
@@ -779,5 +780,12 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 		// test is to ensure that no deadlocks happen, and we don't care that
 		// much about which particular error was returned.
 		t.Fatalf("unexpected error from ConnectInboundStream: %v", err)
+	}
+	// We expect that "no inbound stream connection" error is pushed into the
+	// receiver.
+	if len(receiver.Mu.Records) != 1 {
+		t.Fatalf("expected a single meta object with an error, got %v", receiver.Mu.Records)
+	} else if r := receiver.Mu.Records[0]; !IsNoInboundStreamConnectionError(r.Meta.Err) {
+		t.Fatalf("unexpected error: %v", r)
 	}
 }
