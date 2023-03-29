@@ -72,12 +72,21 @@ type stageExecStmt struct {
 	expectedOutput         string
 	observedOutput         string
 	schemaChangeErrorRegex *regexp.Regexp
+	// schemaChangeErrorRegexRollback will cause a rollback.
+	schemaChangeErrorRegexRollback *regexp.Regexp
 }
 
 // HasSchemaChangeError indicates if a schema change error will be observed,
 // if the current DML statement is executed.
 func (e *stageExecStmt) HasSchemaChangeError() bool {
 	return e.schemaChangeErrorRegex != nil
+}
+
+func (e *stageExecStmt) HasAnySchemaChangeError() *regexp.Regexp {
+	if e.schemaChangeErrorRegex != nil {
+		return e.schemaChangeErrorRegex
+	}
+	return e.schemaChangeErrorRegexRollback
 }
 
 // stageKeyOrdinalLatest targets the latest ordinal in a stage.
@@ -89,14 +98,16 @@ type stageKey struct {
 	minOrdinal int
 	maxOrdinal int
 	phase      scop.Phase
+	rollback   bool
 }
 
 // makeStageKey constructs a stage key targeting a single ordinal.
-func makeStageKey(phase scop.Phase, ordinal int) stageKey {
+func makeStageKey(phase scop.Phase, ordinal int, rollback bool) stageKey {
 	return stageKey{
 		phase:      phase,
 		minOrdinal: ordinal,
 		maxOrdinal: ordinal,
+		rollback:   rollback,
 	}
 }
 
@@ -151,6 +162,7 @@ func (m *stageExecStmtMap) getExecStmts(targetKey stageKey) []*stageExecStmt {
 	}
 	for _, key := range m.entries {
 		if key.stageKey.phase == targetKey.phase &&
+			key.stageKey.rollback == targetKey.rollback &&
 			targetKey.minOrdinal >= key.stageKey.minOrdinal &&
 			targetKey.minOrdinal <= key.stageKey.maxOrdinal {
 			stmts = append(stmts, key.stmt)
@@ -162,6 +174,12 @@ func (m *stageExecStmtMap) getExecStmts(targetKey stageKey) []*stageExecStmt {
 // AssertMapIsUsed asserts that all injected DML statements injected
 // at various stages.
 func (m *stageExecStmtMap) AssertMapIsUsed(t *testing.T) {
+	// If there is any rollback error, then not all stages will be used.
+	for _, e := range m.entries {
+		if e.stmt.schemaChangeErrorRegexRollback != nil {
+			return
+		}
+	}
 	if len(m.entries) != len(m.usedMap) {
 		for _, entry := range m.entries {
 			if _, ok := m.usedMap[entry.stmt]; !ok {
@@ -213,9 +231,9 @@ func (m *stageExecStmtMap) GetInjectionRanges(
 				panic("unknown phase type for latest")
 			}
 		}
-		if !key.stmt.HasSchemaChangeError() {
+		if !key.stmt.HasSchemaChangeError() && !key.rollback {
 			forcedSplitEntries = append(forcedSplitEntries, key)
-		} else {
+		} else if !key.rollback {
 			for i := key.minOrdinal; i <= key.maxOrdinal; i++ {
 				forcedSplitEntries = append(forcedSplitEntries,
 					stageKeyEntry{
@@ -223,6 +241,7 @@ func (m *stageExecStmtMap) GetInjectionRanges(
 							minOrdinal: i,
 							maxOrdinal: i,
 							phase:      key.phase,
+							rollback:   key.rollback,
 						},
 						stmt: key.stmt,
 					},
@@ -307,19 +326,25 @@ func (m *stageExecStmtMap) ParseStageExec(t *testing.T, d *datadriven.TestData) 
 // parseStageCommon common fields between stage-exec and stage-query, which
 // support the following keys:
 //   - phase - The phase in which this statement/query should be injected, of the
-//     string scop.Phase.
+//     string scop.Phase. Note: PreCommitPhase with stage 1 can be used to
+//     inject failures that will only happen for DML injection testing.
 //   - stage / stageStart / stageEnd - The ordinal for the stage where this
 //     statement should be injected. stageEnd accepts the special value
 //     latest which will map to the highest observed stage.
+//   - schemaChangeExecError a schema change execution error will be encountered
+//     by injecting at this stage.
+//   - schemaChangeExecErrorForRollback a schema change execution error that will
+//     be encountered at a future stage, leading to a rollback.
 //   - statements can refer to builtin variable names with a $
 //   - $stageKey - A unique identifier for stages and phases
 //   - $successfulStageCount - Number of stages of the that have been successfully
-//     executed with injections.
+//     executed with injections
 func (m *stageExecStmtMap) parseStageCommon(
 	t *testing.T, d *datadriven.TestData, execType stageExecType,
 ) {
 	var key stageKey
 	var schemaChangeErrorRegex *regexp.Regexp
+	var schemaChangeErrorRegexRollback *regexp.Regexp
 	stmts := strings.Split(d.Input, ";")
 	require.NotEmpty(t, stmts)
 	// Remove any trailing empty lines.
@@ -369,6 +394,14 @@ func (m *stageExecStmtMap) parseStageCommon(
 			}
 		case "schemaChangeExecError":
 			schemaChangeErrorRegex = regexp.MustCompile(strings.Join(cmdArgs.Vals, " "))
+			require.Nil(t, schemaChangeErrorRegexRollback, "future and current stage errors cannot be set concurrently")
+		case "schemaChangeExecErrorForRollback":
+			schemaChangeErrorRegexRollback = regexp.MustCompile(strings.Join(cmdArgs.Vals, " "))
+			require.Nil(t, schemaChangeErrorRegex, "rollback and current stage errors cannot be set concurrently")
+		case "rollback":
+			rollback, err := strconv.ParseBool(cmdArgs.Vals[0])
+			require.NoError(t, err)
+			key.rollback = rollback
 		default:
 			require.Failf(t, "unknown key encountered", "key was %s", cmdArgs.Key)
 		}
@@ -376,11 +409,12 @@ func (m *stageExecStmtMap) parseStageCommon(
 	entry := stageKeyEntry{
 		stageKey: key,
 		stmt: &stageExecStmt{
-			execType:               execType,
-			stmts:                  stmts,
-			observedOutput:         "",
-			expectedOutput:         d.Expected,
-			schemaChangeErrorRegex: schemaChangeErrorRegex,
+			execType:                       execType,
+			stmts:                          stmts,
+			observedOutput:                 "",
+			expectedOutput:                 d.Expected,
+			schemaChangeErrorRegex:         schemaChangeErrorRegex,
+			schemaChangeErrorRegexRollback: schemaChangeErrorRegexRollback,
 		},
 	}
 	m.entries = append(m.entries, entry)
@@ -814,31 +848,36 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 	}
 	testDMLInjectionCase = func(t *testing.T, setup, stmts []parser.Statement, injection stageKey) {
 		var schemaChangeErrorRegex *regexp.Regexp
+		var lastRollbackStageKey *stageKey
 		usedStages := make(map[int]struct{})
 		successfulStages := 0
 		var tdb *sqlutils.SQLRunner
 		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
-				// FIXME: Support rollback detection
 				s := p.Stages[stageIdx]
-				if !p.CurrentState.InRollback &&
-					!p.InRollback &&
-					injection.phase == p.Stages[stageIdx].Phase &&
+				if (injection.phase == p.Stages[stageIdx].Phase &&
 					p.Stages[stageIdx].Ordinal >= injection.minOrdinal &&
-					p.Stages[stageIdx].Ordinal <= injection.maxOrdinal {
+					p.Stages[stageIdx].Ordinal <= injection.maxOrdinal) ||
+					(p.InRollback || p.CurrentState.InRollback) || /* Rollbacks are always injected */
+					(p.Stages[stageIdx].Phase == scop.PreCommitPhase) {
 					jobErrorMutex.Lock()
 					defer jobErrorMutex.Unlock()
-					key := makeStageKey(s.Phase, s.Ordinal)
+					key := makeStageKey(s.Phase, s.Ordinal, p.InRollback || p.CurrentState.InRollback)
 					if _, ok := usedStages[key.AsInt()]; !ok {
-						successfulStages++
+						// Rollbacks don't count towards the successful count
+						if !p.InRollback && !p.CurrentState.InRollback &&
+							p.Stages[stageIdx].Phase != scop.PreCommitPhase {
+							successfulStages++
+						} else {
+							lastRollbackStageKey = &key
+						}
 						injectStmts := injectionFunc(key, tdb, successfulStages)
 						regexSetOnce := false
-						schemaChangeErrorRegex = nil
 						for _, injectStmt := range injectStmts {
 							if injectStmt != nil &&
-								injectStmt.HasSchemaChangeError() {
+								injectStmt.HasAnySchemaChangeError() != nil {
 								require.Falsef(t, regexSetOnce, "multiple statements are expecting errors in the same phase.")
-								schemaChangeErrorRegex = injectStmt.schemaChangeErrorRegex
+								schemaChangeErrorRegex = injectStmt.HasAnySchemaChangeError()
 								regexSetOnce = true
 								t.Logf("Expecting schema change error: %v", schemaChangeErrorRegex)
 							}
@@ -867,6 +906,12 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 		require.NoError(t, executeSchemaChangeTxn(
 			context.Background(), t, setup, stmts, db, nil, nil, onError,
 		))
+		// Re-inject anything from the rollback once the job transaction
+		// commits, this enforces any sanity checks one last time in
+		// the final descriptor state.
+		if lastRollbackStageKey != nil {
+			injectionFunc(*lastRollbackStageKey, tdb, successfulStages)
+		}
 		require.Equal(t, errorDetected, schemaChangeErrorRegex != nil)
 	}
 	cumulativeTest(t, relPath, testFunc)
