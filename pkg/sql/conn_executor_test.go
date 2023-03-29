@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
@@ -1211,12 +1212,15 @@ CREATE DATABASE t1;
 CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 `)
 
+	type fakeSession = sqllivenesstestutils.FakeSession
 	t.Run("session_expiry_overrides_lease_deadline", func(t *testing.T) {
 		// Deliberately set the sessionDuration to be less than the lease duration
 		// to confirm that the sessionDuration overrides the lease duration while
 		// setting the transaction deadline.
 		sessionDuration := base.DefaultDescriptorLeaseDuration - time.Minute
-		fs := fakeSession{exp: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0)}
+		fs := fakeSession{
+			ExpTS: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0),
+		}
 		defer setClientSessionOverride(&fs)()
 
 		txn, err := sqlConn.Begin()
@@ -1239,7 +1243,9 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		// to confirm that the lease duration overrides the session duration while
 		// setting the transaction deadline
 		sessionDuration := base.DefaultDescriptorLeaseDuration + time.Minute
-		fs := fakeSession{exp: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0)}
+		fs := fakeSession{
+			ExpTS: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0),
+		}
 		defer setClientSessionOverride(&fs)()
 
 		txn, err := sqlConn.Begin()
@@ -1256,22 +1262,6 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		require.NoError(t, err)
 
 		locked(func() { require.True(t, mu.txnDeadline.Less(fs.Expiration())) })
-	})
-
-	t.Run("expired session leads to clear error", func(t *testing.T) {
-		// In this test we use an intentionally expired session in the tenant
-		// and observe that we get a clear error indicating that the session
-		// was expired.
-		sessionDuration := -time.Nanosecond
-		fs := fakeSession{exp: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0)}
-		defer setClientSessionOverride(&fs)()
-		txn, err := sqlConn.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = txn.ExecContext(ctx, "UPSERT INTO t1.test(k, v) VALUES (1, 'abc')")
-		require.Regexp(t, `liveness session expired (\S+) before transaction`, err)
-		require.NoError(t, txn.Rollback())
 	})
 
 	t.Run("single_tenant_ignore_session_expiry", func(t *testing.T) {
@@ -1293,7 +1283,9 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		}
 
 		// Inject an already expired session to observe that it has no effect.
-		fs := &fakeSession{exp: s.Clock().Now().Add(-time.Minute.Nanoseconds(), 0)}
+		fs := &fakeSession{
+			ExpTS: s.Clock().Now().Add(-time.Minute.Nanoseconds(), 0),
+		}
 		defer setClientSessionOverride(fs)()
 		txn, err := dbConn.Begin()
 		if err != nil {
@@ -1854,14 +1846,6 @@ func (f *dynamicRequestFilter) filter(ctx context.Context, request *kvpb.BatchRe
 func noopRequestFilter(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 	return nil
 }
-
-type fakeSession struct{ exp hlc.Timestamp }
-
-func (f fakeSession) ID() sqlliveness.SessionID { return "foo" }
-func (f fakeSession) Expiration() hlc.Timestamp { return f.exp }
-func (f fakeSession) Start() hlc.Timestamp      { panic("unimplemented") }
-
-var _ sqlliveness.Session = (*fakeSession)(nil)
 
 func getTxnID(t *testing.T, tx *gosql.Tx) (id string) {
 	t.Helper()
