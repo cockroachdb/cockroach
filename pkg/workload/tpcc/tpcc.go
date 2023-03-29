@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -162,7 +162,6 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:                       {RuntimeOnly: true},
 			`mix`:                      {RuntimeOnly: true},
 			`partitions`:               {RuntimeOnly: true},
 			`client-partitions`:        {RuntimeOnly: true},
@@ -765,12 +764,12 @@ func (w *tpcc) Ops(
 
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
-	cfg := workload.MultiConnPoolCfg{
-		MaxTotalConnections: (w.numConns + len(urls) - 1) / len(urls), // round up
-		// Limit the number of connections per pool (otherwise preparing statements
-		// at startup can be slow).
-		MaxConnsPerPool: 50,
-	}
+	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
+	cfg.MaxTotalConnections = (w.numConns + len(urls) - 1) / len(urls) // round up
+
+	// Limit the number of connections per pool (otherwise preparing statements at
+	// startup can be slow).
+	cfg.MaxConnsPerPool = w.connFlags.Concurrency
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
 	dbs := make([]*workload.MultiConnPool, len(urls))
