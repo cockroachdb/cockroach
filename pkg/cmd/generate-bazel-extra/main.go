@@ -315,6 +315,8 @@ func excludeReallyEnormousTargets(targets []string) []string {
 		for _, toExclude := range []string{
 			"//pkg/ccl/sqlitelogictestccl",
 			"//pkg/sql/sqlitelogictest",
+			// acceptance is excluded because it's an integration test.
+			"//pkg/acceptance",
 		} {
 			if strings.HasPrefix(targets[i], toExclude) {
 				excluded = true
