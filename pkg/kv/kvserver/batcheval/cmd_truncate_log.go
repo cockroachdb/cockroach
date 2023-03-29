@@ -124,7 +124,7 @@ func TruncateLog(
 	}
 	ms.SysBytes = -ms.SysBytes // simulate the deletion
 
-	tState := &roachpb.RaftTruncatedState{
+	tState := &kvserverpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
 	}

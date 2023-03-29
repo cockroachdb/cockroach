@@ -10,14 +10,18 @@
 
 package apply
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+)
 
 // Command is a command that has been successfully replicated through raft
 // by being durably committed to the raft log of a quorum of peers in a raft
 // group.
 type Command interface {
 	// Index is the log index of the corresponding raft entry.
-	Index() uint64
+	Index() kvpb.RaftIndex
 	// IsTrivial returns whether the command can apply in a batch with other
 	// "trivial" commands. This is the case if the log entry represented by the
 	// Command is a simple write, as is the case for all user-issued mutations.

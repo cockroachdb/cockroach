@@ -817,7 +817,7 @@ func waitForApplication(
 	dialer *nodedialer.Dialer,
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
-	leaseIndex uint64,
+	leaseIndex kvpb.LeaseAppliedIndex,
 ) error {
 	g := ctxgroup.WithContext(ctx)
 	for _, repl := range replicas {
@@ -2815,7 +2815,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		SenderQueueName:      senderQueueName,
 		SenderQueuePriority:  senderQueuePriority,
 		Type:                 snapType,
-		Term:                 status.Term,
+		Term:                 kvpb.RaftTerm(status.Term),
 		DelegatedSender:      sender,
 		FirstIndex:           appliedIndex,
 		DescriptorGeneration: r.Desc().Generation,
@@ -2936,7 +2936,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 		// haven't woken up yet.
 		return errors.Errorf("raft status not initialized")
 	}
-	replTerm := status.Term
+	replTerm := kvpb.RaftTerm(status.Term)
 	r.mu.RUnlock()
 
 	// Delegate has a different term than the coordinator. This typically means
@@ -3087,9 +3087,9 @@ func (r *Replica) followerSendSnapshot(
 	// subject to mapping across replicas). The actual sending happens in
 	// kvBatchSnapshotStrategy.Send and results in no log entries being sent at
 	// all. Note that Metadata.Index is really the applied index of the replica.
-	snap.State.TruncatedState = &roachpb.RaftTruncatedState{
-		Index: snap.RaftSnap.Metadata.Index,
-		Term:  snap.RaftSnap.Metadata.Term,
+	snap.State.TruncatedState = &kvserverpb.RaftTruncatedState{
+		Index: kvpb.RaftIndex(snap.RaftSnap.Metadata.Index),
+		Term:  kvpb.RaftTerm(snap.RaftSnap.Metadata.Term),
 	}
 
 	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
@@ -3108,7 +3108,7 @@ func (r *Replica) followerSendSnapshot(
 				Type:     raftpb.MsgSnap,
 				From:     uint64(req.CoordinatorReplica.ReplicaID),
 				To:       uint64(req.RecipientReplica.ReplicaID),
-				Term:     req.Term,
+				Term:     uint64(req.Term),
 				Snapshot: &snap.RaftSnap,
 			},
 		},

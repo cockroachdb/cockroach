@@ -46,8 +46,8 @@ type testProposer struct {
 	syncutil.RWMutex
 	clock      *hlc.Clock
 	ds         destroyStatus
-	fi         uint64
-	lai        uint64
+	fi         kvpb.RaftIndex
+	lai        kvpb.LeaseAppliedIndex
 	enqueued   int
 	registered int
 
@@ -148,11 +148,11 @@ func (t *testProposer) destroyed() destroyStatus {
 	return t.ds
 }
 
-func (t *testProposer) firstIndex() uint64 {
+func (t *testProposer) firstIndex() kvpb.RaftIndex {
 	return t.fi
 }
 
-func (t *testProposer) leaseAppliedIndex() uint64 {
+func (t *testProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	return t.lai
 }
 
@@ -357,12 +357,12 @@ func TestProposalBuffer(t *testing.T) {
 	require.Equal(t, num, p.registered)
 	// We've flushed num requests, out of which one is a lease request (so that
 	// one did not increment the MLAI).
-	require.Equal(t, uint64(num)-1, b.assignedLAI)
+	require.Equal(t, kvpb.LeaseAppliedIndex(num-1), b.assignedLAI)
 	require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
 	require.Equal(t, 1, b.evalTracker.Count())
 	proposals := r.consumeProposals()
 	require.Len(t, proposals, propBufArrayMinSize)
-	var lai uint64
+	var lai kvpb.LeaseAppliedIndex
 	for i, p := range proposals {
 		if i != leaseReqIdx {
 			lai++
@@ -649,7 +649,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	ctx := context.Background()
 
 	proposer := uint64(1)
-	proposerFirstIndex := uint64(5)
+	proposerFirstIndex := kvpb.RaftIndex(5)
 	target := uint64(2)
 
 	// Each subtest will try to propose a lease transfer in a different Raft
@@ -659,7 +659,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		proposerState raft.StateType
 		// math.MaxUint64 if the target is not in the raft group.
 		targetState rafttracker.StateType
-		targetMatch uint64
+		targetMatch kvpb.RaftIndex
 
 		expRejection       bool
 		expRejectionReason raftutil.ReplicaNeedsSnapshotStatus
@@ -747,11 +747,11 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			if tc.proposerState == raft.StateLeader {
 				raftStatus.Lead = proposer
 				raftStatus.Progress = map[uint64]rafttracker.Progress{
-					proposer: {State: rafttracker.StateReplicate, Match: proposerFirstIndex},
+					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerFirstIndex)},
 				}
 				if tc.targetState != math.MaxUint64 {
 					raftStatus.Progress[target] = rafttracker.Progress{
-						State: tc.targetState, Match: tc.targetMatch,
+						State: tc.targetState, Match: uint64(tc.targetMatch),
 					}
 				}
 			}
