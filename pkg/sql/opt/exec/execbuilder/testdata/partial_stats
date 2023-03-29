@@ -17,7 +17,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = true
 
 statement ok
-CREATE TABLE g (b INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
+CREATE TABLE g (b INT PRIMARY KEY)
 
 statement ok
 ALTER TABLE g INJECT STATISTICS '[
@@ -447,7 +447,7 @@ WHERE stat->>'name' = '__forecast__';
 # updated to that of the partial statistic.
 
 statement ok
-CREATE TABLE h (h INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false);;
+CREATE TABLE h (h INT PRIMARY KEY)
 
 statement ok
 ALTER TABLE h INJECT STATISTICS '
@@ -573,7 +573,7 @@ WHERE stat->>'name' = '__merged__';
 # values to the start and end of our column.
 
 statement ok
-CREATE TABLE i (i INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false);
+CREATE TABLE i (i INT PRIMARY KEY)
 
 statement ok
 ALTER TABLE i INJECT STATISTICS '[
