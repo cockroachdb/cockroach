@@ -11,16 +11,21 @@
 package state
 
 import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 )
 
-func loadEventCPU(c tenantcostmodel.Config, le workload.LoadEvent, leaseholder bool) float64 {
-	var readCPU, writeCPU float64
-	if leaseholder {
-		readCPU = float64(c.KVReadCost(le.Reads, le.ReadSize))
-	}
-	writeCPU = float64(c.KVWriteCost(le.Writes, le.WriteSize))
+func loadEventRequestCPU(c config.ResourceCost, le workload.LoadEvent) float64 {
+	read := int64(math.Min(float64(le.Reads), 1))
+	write := int64(math.Min(float64(le.Writes), 1))
 
-	return readCPU + writeCPU
+	batchCost := read*c.ReadBatch + read*c.Read + write*c.WriteBatch
+	return float64(c.Read*le.Reads + c.ReadByte*le.Reads + batchCost)
+}
+
+func loadEventRaftCPU(c config.ResourceCost, le workload.LoadEvent) float64 {
+	write := int64(math.Min(float64(le.Writes), 1))
+	return float64(c.WriteByte*le.WriteSize + c.Write*write)
 }

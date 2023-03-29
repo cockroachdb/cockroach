@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,15 +49,8 @@ func TestingWorkloadSeed() int64 {
 // TestingSetRangeQPS sets the QPS for the range with ID rangeID. This will
 // show on the current leaseholder replica load for this range and persist
 // between transfers.
-func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) bool {
-	store, ok := s.LeaseholderStore(rangeID)
-	if !ok {
-		return false
-	}
-
-	rlc := s.ReplicaLoad(rangeID, store.StoreID()).(*ReplicaLoadCounter)
-	rlc.loadStats.TestingSetStat(load.Queries, qps)
-	return true
+func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) {
+	s.SetLHLoad(rangeID, allocator.RangeUsageInfo{QueriesPerSecond: qps})
 }
 
 // NewStorePool returns a store pool with no gossip instance and default values
@@ -121,9 +114,7 @@ func TestDistributeQPSCounts(s State, qpsCounts []float64) {
 
 		qpsPerRange := qpsCount / float64(len(lhs))
 		for _, rng := range lhs {
-			rl := s.ReplicaLoad(rng.RangeID(), storeID)
-			rlc := rl.(*ReplicaLoadCounter)
-			rlc.loadStats.TestingSetStat(load.Queries, qpsPerRange)
+			TestingSetRangeQPS(s, rng.RangeID(), qpsPerRange)
 		}
 	}
 }

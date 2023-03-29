@@ -10,6 +10,7 @@ go_library(
         "impl.go",
         "load.go",
         "new_state.go",
+        "resource_model.go",
         "split_decider.go",
         "state.go",
         "state_listener.go",

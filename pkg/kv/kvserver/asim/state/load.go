@@ -11,18 +11,95 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// type ClusterLoad interface {
+// 	ApplyLoad(RangeID, workload.LoadEvent)
+// 	SplitRange(RangeID)
+// 	TransferLease(RangeID, StoreID)
+// 	AddReplica(RangeID, StoreID)
+// 	RemoveReplica(RangeID, StoreID)
+// 	RangeUsageInfo(RangeID, StoreID) allocator.RangeUsageInfo
+// 	Capacity(StoreID) roachpb.StoreCapacity
+// }
+
+type RangeLoad struct {
+	replicaLoads map[StoreID]ReplicaLoad
+}
+
+func newRangeLoad() RangeLoad {
+	return RangeLoad{
+		replicaLoads: map[StoreID]ReplicaLoad{},
+	}
+}
+
+func (rl RangeLoad) AddReplica(storeID StoreID, clock *ManualSimClock) {
+	if _, ok := rl.replicaLoads[storeID]; ok {
+		panic(fmt.Sprintf(
+			"programming error: expected replica load tracking for storeID=%d "+
+				"not to exist",
+			storeID,
+		))
+	}
+	rl.replicaLoads[storeID] = NewReplicaLoadCounter(clock)
+}
+
+func (rl RangeLoad) RemoveReplica(storeID StoreID) {
+	// This will panic if the replica load doesn't exist, indicating a
+	// programming error.
+	delete(rl.replicaLoads, storeID)
+}
+
+func (rl RangeLoad) ApplyLoad(leaseholder StoreID, le workload.LoadEvent, c config.ResourceCost) {
+	// Check that the leaseholder store replica exists, ReplicaLoad will panic if
+	// not.
+	rl.ReplicaLoad(leaseholder)
+
+	for storeID, replicaLoad := range rl.replicaLoads {
+		if storeID == leaseholder {
+			rl.replicaLoads[storeID].ApplyLoad(true /* leaseholder */, le, c)
+			continue
+		}
+		replicaLoad.ApplyLoad(false /* leaseholder */, le, c)
+	}
+}
+
+func (rl RangeLoad) Split() RangeLoad {
+	otherReplicaLoads := make(map[StoreID]ReplicaLoad, len(rl.replicaLoads))
+	for storeID, replicaLoad := range rl.replicaLoads {
+		otherReplicaLoads[storeID] = replicaLoad.Split()
+	}
+	return RangeLoad{replicaLoads: otherReplicaLoads}
+}
+
+func (rl RangeLoad) ResetReplica(storeID StoreID) {
+	rl.ReplicaLoad(storeID).ResetLoad()
+}
+
+func (rl RangeLoad) ReplicaLoad(storeID StoreID) ReplicaLoad {
+	if _, ok := rl.replicaLoads[storeID]; !ok {
+		panic(fmt.Sprintf(
+			"programming error: expected replica load tracking for storeID=%d "+
+				"to exist",
+			storeID,
+		))
+	}
+	return rl.replicaLoads[storeID]
+}
+
 // ReplicaLoad defines the methods a datastructure is required to perform in
 // order to record and report load events.
 type ReplicaLoad interface {
 	// ApplyLoad applies a load event to a replica.
-	ApplyLoad(le workload.LoadEvent)
+	ApplyLoad(leaseholder bool, le workload.LoadEvent, c config.ResourceCost)
 	// Load translates the recorded load events into usage information of the
 	// replica.
 	Load() allocator.RangeUsageInfo
@@ -63,13 +140,22 @@ func NewReplicaLoadCounter(clock *ManualSimClock) *ReplicaLoadCounter {
 }
 
 // ApplyLoad applies a load event onto a replica load counter.
-func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
-	rl.ReadBytes += le.ReadSize
-	rl.ReadKeys += le.Reads
+func (rl *ReplicaLoadCounter) ApplyLoad(
+	leaseholder bool, le workload.LoadEvent, c config.ResourceCost,
+) {
+	// We assume that there are no follower reads, all reads go to the
+	// leaseholder. QPS and request CPU is likewise only recorded for the
+	// leaseholder. The raft CPU and writes apply uniformly across all replicas.
+	if leaseholder {
+		rl.ReadBytes += le.ReadSize
+		rl.ReadKeys += le.Reads
+		rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
+		rl.loadStats.RecordReqCPUNanos(loadEventRequestCPU(c, le))
+	}
+
 	rl.WriteBytes += le.WriteSize
 	rl.WriteKeys += le.Writes
-
-	rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
+	rl.loadStats.RecordRaftCPUNanos(loadEventRaftCPU(c, le))
 	// TODO(kvoli): Recording the load on every load counter is horribly
 	// inefficient at the moment. It multiplies the time taken per test almost
 	// linearly by the number of load stats counters we bump. The other load
@@ -83,9 +169,11 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 	stats := rl.loadStats.Stats()
 
 	return allocator.RangeUsageInfo{
-		LogicalBytes:     rl.WriteBytes,
-		QueriesPerSecond: stats.QueriesPerSecond,
-		WritesPerSecond:  float64(rl.WriteKeys),
+		LogicalBytes:             rl.WriteBytes,
+		QueriesPerSecond:         stats.QueriesPerSecond,
+		WritesPerSecond:          float64(rl.WriteKeys),
+		RaftCPUNanosPerSecond:    stats.RaftCPUNanosPerSecond,
+		RequestCPUNanosPerSecond: stats.RequestCPUNanosPerSecond,
 	}
 }
 
@@ -129,17 +217,14 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 		replicaID := repl.ReplicaID()
 		rng, _ := state.Range(rangeID)
 		if rng.Leaseholder() == replicaID {
-			// TODO(kvoli): We currently only consider load on the leaseholder
-			// replica for a range. The other replicas have an estimate that is
-			// calculated within the allocation algorithm. Adapt this to
-			// support follower reads, when added to the workload generator.
-			usage := state.ReplicaLoad(rng.RangeID(), storeID).Load()
-			capacity.QueriesPerSecond += usage.QueriesPerSecond
-			capacity.WritesPerSecond += usage.WritesPerSecond
-			capacity.LogicalBytes += usage.LogicalBytes
 			capacity.LeaseCount++
 		}
 
+		usage := state.ReplicaLoad(rng.RangeID(), storeID).Load()
+		capacity.QueriesPerSecond += usage.QueriesPerSecond
+		capacity.WritesPerSecond += usage.WritesPerSecond
+		capacity.LogicalBytes += usage.LogicalBytes
+		capacity.CPUPerSecond += (usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond)
 		capacity.RangeCount++
 	}
 	return capacity

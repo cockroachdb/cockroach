@@ -221,6 +221,7 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
 				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
 				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+				scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
 				return ""
 			case "plot":
 				var stat string

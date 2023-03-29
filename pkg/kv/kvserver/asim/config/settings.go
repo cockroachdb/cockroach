@@ -13,7 +13,7 @@ package config
 import "time"
 
 const (
-	defaultTickInteval             = 500 * time.Millisecond
+	defaultTickInteval             = 100 * time.Millisecond
 	defaultMetricsInterval         = 10 * time.Second
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
 	defaultReplicaAddDelayFactor   = 16
@@ -32,6 +32,8 @@ const (
 	defaultLBRebalancingInterval   = time.Minute
 	defaultLBRebalanceQPSThreshold = 0.1
 	defaultLBMinRequiredQPSDiff    = 200
+	defaultLBRebalanceCPUThreshold = 0.1
+	defaultLBRebalanceCPUDiff      = float64(50 * time.Millisecond)
 	defaultLBRebalancingObjective  = 0 // QPS
 )
 
@@ -40,6 +42,15 @@ var (
 	// runs. It isn't necessarily meaningful other than for logging and having
 	// "some" start time for components taking a time.Time.
 	defaultStartTime = time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+
+	defaultResourceCost = ResourceCost{
+		ReadBatch:  int64(500 * time.Microsecond),
+		ReadByte:   int64(16 * time.Nanosecond),
+		Read:       int64(126 * time.Microsecond),
+		WriteBatch: int64(256 * time.Microsecond),
+		WriteByte:  int64(1024 * time.Nanosecond),
+		Write:      int64(512 * time.Microsecond),
+	}
 )
 
 // SimulationSettings controls
@@ -114,33 +125,41 @@ type SimulationSettings struct {
 	// LBMinQPSDifferenceForTransfers is the minimum QPS difference that the store
 	// rebalancer would care to reconcile (via lease or replica rebalancing) between
 	// any two stores.
-	LBMinRequiredQPSDiff float64
+	LBMinRequiredQPSDiff      float64
+	LBRebalancingCPUThreshold float64
+	LBMinRequiredCPUDiff      float64
+	// ResourceCost contains the configuration info for mapping load events to
+	// resource cost.
+	ResourceCost ResourceCost
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
 func DefaultSimulationSettings() *SimulationSettings {
 	return &SimulationSettings{
-		StartTime:               defaultStartTime,
-		TickInterval:            defaultTickInteval,
-		MetricsInterval:         defaultMetricsInterval,
-		Seed:                    defaultSeed,
-		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
-		ReplicaAddRate:          defaultReplicaAddDelayFactor,
-		SplitQueueDelay:         defaultSplitQueueDelay,
-		RangeSizeSplitThreshold: defaultRangeSizeSplitThreshold,
-		RangeRebalanceThreshold: defaultRangeRebalanceThreshold,
-		PacerLoopInterval:       defaultPacerLoopInterval,
-		PacerMinIterInterval:    defaultPacerMinIterInterval,
-		PacerMaxIterIterval:     defaultPacerMaxIterIterval,
-		StateExchangeInterval:   defaultStateExchangeInterval,
-		StateExchangeDelay:      defaultStateExchangeDelay,
-		SplitQPSThreshold:       defaultSplitQPSThreshold,
-		SplitStatRetention:      defaultSplitStatRetention,
-		LBRebalancingMode:       defaultLBRebalancingMode,
-		LBRebalancingObjective:  defaultLBRebalancingObjective,
-		LBRebalancingInterval:   defaultLBRebalancingInterval,
-		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
-		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
+		StartTime:                 defaultStartTime,
+		TickInterval:              defaultTickInteval,
+		MetricsInterval:           defaultMetricsInterval,
+		Seed:                      defaultSeed,
+		ReplicaChangeBaseDelay:    defaultReplicaChangeBaseDelay,
+		ReplicaAddRate:            defaultReplicaAddDelayFactor,
+		SplitQueueDelay:           defaultSplitQueueDelay,
+		RangeSizeSplitThreshold:   defaultRangeSizeSplitThreshold,
+		RangeRebalanceThreshold:   defaultRangeRebalanceThreshold,
+		PacerLoopInterval:         defaultPacerLoopInterval,
+		PacerMinIterInterval:      defaultPacerMinIterInterval,
+		PacerMaxIterIterval:       defaultPacerMaxIterIterval,
+		StateExchangeInterval:     defaultStateExchangeInterval,
+		StateExchangeDelay:        defaultStateExchangeDelay,
+		SplitQPSThreshold:         defaultSplitQPSThreshold,
+		SplitStatRetention:        defaultSplitStatRetention,
+		LBRebalancingMode:         defaultLBRebalancingMode,
+		LBRebalancingObjective:    defaultLBRebalancingObjective,
+		LBRebalancingInterval:     defaultLBRebalancingInterval,
+		LBRebalanceQPSThreshold:   defaultLBRebalanceQPSThreshold,
+		LBMinRequiredQPSDiff:      defaultLBMinRequiredQPSDiff,
+		LBRebalancingCPUThreshold: defaultLBRebalanceCPUThreshold,
+		LBMinRequiredCPUDiff:      defaultLBRebalanceCPUDiff,
+		ResourceCost:              defaultResourceCost,
 	}
 }
 
@@ -179,4 +198,15 @@ func (s *SimulationSettings) SplitQPSRetentionFn() func() time.Duration {
 	return func() time.Duration {
 		return s.SplitStatRetention
 	}
+}
+
+// TODO(kvoli): comment this.
+type ResourceCost struct {
+	ReadBatch int64
+	Read      int64
+	ReadByte  int64
+
+	WriteBatch int64
+	Write      int64
+	WriteByte  int64
 }
