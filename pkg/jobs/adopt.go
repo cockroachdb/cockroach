@@ -422,6 +422,10 @@ func (r *Registry) addAdoptedJob(
 func (r *Registry) runJob(
 	ctx context.Context, resumer Resumer, job *Job, status Status, taskName string,
 ) error {
+	if r.IsDraining() {
+		return errors.Newf("refusing to start %q; job registry is draining", taskName)
+	}
+
 	job.mu.Lock()
 	var finalResumeError error
 	if job.mu.payload.FinalResumeError != nil {
