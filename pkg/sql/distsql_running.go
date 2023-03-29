@@ -1706,21 +1706,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	skipDistSQLDiagramGeneration bool,
 	mustUseLeafTxn bool,
 ) error {
-	subqueryMonitor := mon.NewMonitor(
-		"subquery",
-		mon.MemoryResource,
-		dsp.distSQLSrv.Metrics.CurBytesCount,
-		dsp.distSQLSrv.Metrics.MaxBytesHist,
-		-1, /* use default block size */
-		noteworthyMemoryUsageBytes,
-		dsp.distSQLSrv.Settings,
-	)
-	subqueryMonitor.StartNoReserved(ctx, evalCtx.Planner.Mon())
-	defer subqueryMonitor.Stop(ctx)
-
-	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
-	defer subqueryMemAccount.Close(ctx)
-
 	distributeSubquery := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		planner.SessionData().DistSQLMode, subqueryPlan.plan,
@@ -2109,21 +2094,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
-	postqueryMonitor := mon.NewMonitor(
-		"postquery",
-		mon.MemoryResource,
-		dsp.distSQLSrv.Metrics.CurBytesCount,
-		dsp.distSQLSrv.Metrics.MaxBytesHist,
-		-1, /* use default block size */
-		noteworthyMemoryUsageBytes,
-		dsp.distSQLSrv.Settings,
-	)
-	postqueryMonitor.StartNoReserved(ctx, planner.Mon())
-	defer postqueryMonitor.Stop(ctx)
-
-	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
-	defer postqueryMemAccount.Close(ctx)
-
 	distributePostquery := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		planner.SessionData().DistSQLMode, postqueryPlan,
