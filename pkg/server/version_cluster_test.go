@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -203,6 +204,8 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "test starts many goroutine and incurs timeout under deadlock checks")
 
 	ctx := context.Background()
 
