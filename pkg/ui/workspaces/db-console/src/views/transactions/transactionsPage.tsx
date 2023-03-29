@@ -67,7 +67,7 @@ export const selectData = createSelector(
 export const selectLastReset = createSelector(
   (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return "unknown";
     }
 

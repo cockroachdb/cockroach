@@ -11,7 +11,7 @@
 import { isNumber } from "lodash";
 
 function numberToString(n: number) {
-  return n.toString();
+  return n?.toString() || "";
 }
 
 export function formatNumberForDisplay(

@@ -424,9 +424,9 @@ export class DatabasesPage extends React.Component<
 
     // The regions and nodes selected from the filter dropdown.
     const regionsSelected =
-      filters.regions.length > 0 ? filters.regions.split(",") : [];
+      filters.regions?.length > 0 ? filters.regions.split(",") : [];
     const nodesSelected =
-      filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+      filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
 
     return databases
       .filter(db => (search ? filterBySearchQuery(db, search) : true))
@@ -438,13 +438,11 @@ export class DatabasesPage extends React.Component<
         let foundNode = nodesSelected.length == 0;
 
         db.nodes?.forEach(node => {
-          if (
-            foundRegion ||
-            regionsSelected.includes(nodeRegions[node.toString()])
-          ) {
+          const n = node?.toString() || "";
+          if (foundRegion || regionsSelected.includes(nodeRegions[n])) {
             foundRegion = true;
           }
-          if (foundNode || nodesSelected.includes("n" + node.toString())) {
+          if (foundNode || nodesSelected.includes("n" + n)) {
             foundNode = true;
           }
           if (foundNode && foundRegion) return true;
@@ -617,7 +615,7 @@ export class DatabasesPage extends React.Component<
             hideAppNames={true}
             regions={regions}
             hideTimeLabel={true}
-            nodes={nodes.map(n => "n" + n.toString())}
+            nodes={nodes.map(n => "n" + n?.toString())}
             activeFilters={activeFilters}
             filters={defaultFilters}
             onSubmitFilters={this.onSubmitFilters}

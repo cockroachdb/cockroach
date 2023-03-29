@@ -43,7 +43,7 @@ export const selectTxnColumns = createSelector(
   // return array of columns if user have customized it or `null` otherwise
   localStorage =>
     localStorage["showColumns/TransactionPage"]
-      ? localStorage["showColumns/TransactionPage"].split(",")
+      ? localStorage["showColumns/TransactionPage"]?.split(",")
       : null,
 );
 
