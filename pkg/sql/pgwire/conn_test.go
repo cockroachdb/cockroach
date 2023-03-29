@@ -1867,8 +1867,9 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	defer testServer.Stopper().Stop(ctx)
 
 	// Users.
-	admin := username.RootUser
+	rootUser := username.RootUser
 	nonAdmin := username.TestUser
+	admin := "testadmin"
 
 	// openConnWithUser opens a connection to the testServer for the given user
 	// and always returns an associated cleanup function, even in case of error,
@@ -1879,7 +1880,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 			testServer.ServingSQLAddr(),
 			t.Name(),
 			url.UserPassword(user, user),
-			user == admin,
+			user == rootUser,
 		)
 		defer cleanup()
 		conn, err := pgx.Connect(ctx, pgURL.String())
@@ -1923,7 +1924,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	}
 
 	getMaxConnections := func() int {
-		conn, cleanup := openConnWithUserSuccess(admin)
+		conn, cleanup := openConnWithUserSuccess(rootUser)
 		defer cleanup()
 		var maxConnections int
 		err := conn.QueryRow(ctx, "SHOW CLUSTER SETTING server.max_connections_per_gateway").Scan(&maxConnections)
@@ -1932,21 +1933,34 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	}
 
 	setMaxConnections := func(maxConnections int) {
-		conn, cleanup := openConnWithUserSuccess(admin)
+		conn, cleanup := openConnWithUserSuccess(rootUser)
 		defer cleanup()
 		_, err := conn.Exec(ctx, "SET CLUSTER SETTING server.max_connections_per_gateway = $1", maxConnections)
 		require.NoError(t, err)
 	}
 
-	createUser := func(user string) {
-		conn, cleanup := openConnWithUserSuccess(admin)
+	setMaxNonRootConnections := func(maxConnections int) {
+		conn, cleanup := openConnWithUserSuccess(rootUser)
 		defer cleanup()
-		_, err := conn.Exec(ctx, fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD '%[1]s'", user))
+		_, err := conn.Exec(ctx, "SET CLUSTER SETTING server.cockroach_cloud.max_client_connections_per_gateway = $1", maxConnections)
 		require.NoError(t, err)
 	}
 
+	createUser := func(user string, isAdmin bool) {
+		conn, cleanup := openConnWithUserSuccess(rootUser)
+		defer cleanup()
+		_, err := conn.Exec(ctx, fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD '%[1]s'", user))
+		require.NoError(t, err)
+
+		if isAdmin {
+			_, err := conn.Exec(ctx, fmt.Sprintf("grant admin to %[1]s", user))
+			require.NoError(t, err)
+		}
+	}
+
 	// create nonAdmin
-	createUser(nonAdmin)
+	createUser(nonAdmin, false)
+	createUser(admin, true)
 	requireConnectionCount(t, 0)
 
 	// assert default value
@@ -2010,6 +2024,33 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 		nonAdminCleanup1()
 		requireConnectionCount(t, 1)
 		nonAdminCleanup2()
+		requireConnectionCount(t, 0)
+	})
+
+	t.Run("0 max_non_root_connections", func(t *testing.T) {
+		setMaxNonRootConnections(0)
+		requireConnectionCount(t, 0)
+		// can connect with root
+		_, rootCleanup := openConnWithUserSuccess(rootUser)
+		requireConnectionCount(t, 1)
+		// can't connect with non root
+		openConnWithUserError(admin)
+		requireConnectionCount(t, 1)
+		rootCleanup()
+		requireConnectionCount(t, 0)
+	})
+
+	t.Run("1 max_non_root_connections", func(t *testing.T) {
+		setMaxNonRootConnections(1)
+		requireConnectionCount(t, 0)
+		// can connect with root
+		_, rootCleanup := openConnWithUserSuccess(rootUser)
+		requireConnectionCount(t, 1)
+		// can connect with non root
+		_, nonAdminCleanup := openConnWithUserSuccess(nonAdmin)
+		requireConnectionCount(t, 2)
+		rootCleanup()
+		nonAdminCleanup()
 		requireConnectionCount(t, 0)
 	})
 }
