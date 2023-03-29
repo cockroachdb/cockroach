@@ -81,6 +81,8 @@ func (c *rowContainerHelper) initMonitors(
 	ctx context.Context, evalContext *extendedEvalContext, opName redact.RedactableString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
+	// TODO(yuzefovich): currently the memory usage of c.memMonitor doesn't
+	// count against sql.mem.distsql.current metric. Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, evalContext.Planner.Mon(), distSQLCfg, evalContext.SessionData(),
 		redact.Sprintf("%s-limited", opName),
