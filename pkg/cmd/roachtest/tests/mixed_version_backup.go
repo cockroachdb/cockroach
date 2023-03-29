@@ -211,7 +211,7 @@ type (
 
 	// clusterBackup -- BACKUP ...
 	clusterBackup struct {
-		dbBackup     *databaseBackup
+		dbBackups    []*databaseBackup
 		systemTables []string
 	}
 
@@ -275,7 +275,6 @@ type (
 		cluster     cluster.Cluster
 		roachNode   int
 		db          *gosql.DB
-		name        string
 		table       string
 		columns     []string
 		rows        map[string]struct{}
@@ -387,9 +386,21 @@ func newBackupOptions(rng *rand.Rand) []backupOption {
 	return options
 }
 
-func newTableBackup(rng *rand.Rand, db string, tables []string) *tableBackup {
-	target := tables[rng.Intn(len(tables))]
-	return &tableBackup{db, target}
+func newTableBackup(rng *rand.Rand, dbs []string, tables [][]string) *tableBackup {
+	var targetDBIdx int
+	var targetDB string
+	// Avoid creating table backups for the tpcc database, as they often
+	// have foreign keys to other tables, making restoring them
+	// difficult. We could pass the `skip_missing_foreign_keys` option,
+	// but that would be a less interesting test.
+	for targetDB == "" || targetDB == "tpcc" {
+		targetDBIdx = rng.Intn(len(dbs))
+		targetDB = dbs[targetDBIdx]
+	}
+
+	dbTables := tables[targetDBIdx]
+	targetTable := dbTables[rng.Intn(len(dbTables))]
+	return &tableBackup{dbs[targetDBIdx], targetTable}
 }
 
 func (tb *tableBackup) Desc() string {
@@ -409,8 +420,9 @@ func (tb *tableBackup) TargetTables() []string {
 	return []string{fmt.Sprintf("%s.%s", tb.db, tb.target)}
 }
 
-func newDatabaseBackup(db string, tables []string) *databaseBackup {
-	return &databaseBackup{db, tables}
+func newDatabaseBackup(rng *rand.Rand, dbs []string, tables [][]string) *databaseBackup {
+	targetDBIdx := rng.Intn(len(dbs))
+	return &databaseBackup{dbs[targetDBIdx], tables[targetDBIdx]}
 }
 
 func (dbb *databaseBackup) Desc() string {
@@ -430,9 +442,13 @@ func (dbb *databaseBackup) TargetTables() []string {
 	return tableNamesWithDB(dbb.db, dbb.tables)
 }
 
-func newClusterBackup(db string, tables []string) *clusterBackup {
+func newClusterBackup(rng *rand.Rand, dbs []string, tables [][]string) *clusterBackup {
+	dbBackups := make([]*databaseBackup, 0, len(dbs))
+	for j, db := range dbs {
+		dbBackups = append(dbBackups, newDatabaseBackup(rng, []string{db}, [][]string{tables[j]}))
+	}
 	return &clusterBackup{
-		dbBackup:     newDatabaseBackup(db, tables),
+		dbBackups:    dbBackups,
 		systemTables: systemTablesInFullClusterBackup,
 	}
 }
@@ -442,7 +458,11 @@ func (cb *clusterBackup) BackupCommand() string                      { return "B
 func (cb *clusterBackup) RestoreCommand(_ string) (string, []string) { return "RESTORE", nil }
 
 func (cb *clusterBackup) TargetTables() []string {
-	return append(cb.dbBackup.TargetTables(), tableNamesWithDB("system", cb.systemTables)...)
+	var dbTargetTables []string
+	for _, dbb := range cb.dbBackups {
+		dbTargetTables = append(dbTargetTables, dbb.TargetTables()...)
+	}
+	return append(dbTargetTables, tableNamesWithDB("system", cb.systemTables)...)
 }
 
 func newFingerprintContents(db *gosql.DB, table string) *fingerprintContents {
@@ -860,24 +880,24 @@ type mixedVersionBackup struct {
 	roachNodes option.NodeListOption
 	// backup collections that are created along the test
 	collections []*backupCollection
-	// the db being backed up/restored
-	db     string
-	tables []string
+	// databases where user data is being inserted
+	dbs    []string
+	tables [][]string
 	// counter that is incremented atomically to provide unique
 	// identifiers to backups created during the test
 	currentBackupID int64
 
-	// stopWorkload can be called to stop the `bank` workload started in
+	// stopWorkloads can be called to stop the any workloads started in
 	// this test. Useful when restoring cluster backups, as we don't
 	// want a stream of errors in the workload due to the nodes
 	// stopping.
-	stopWorkload mixedversion.StopFunc
+	stopWorkloads mixedversion.StopFunc
 }
 
 func newMixedVersionBackup(
-	c cluster.Cluster, roachNodes option.NodeListOption, db string,
+	c cluster.Cluster, roachNodes option.NodeListOption, dbs ...string,
 ) *mixedVersionBackup {
-	mvb := &mixedVersionBackup{cluster: c, db: db, roachNodes: roachNodes}
+	mvb := &mixedVersionBackup{cluster: c, dbs: dbs, roachNodes: roachNodes}
 	return mvb
 }
 
@@ -885,9 +905,9 @@ func newMixedVersionBackup(
 // cluster) with equal probability.
 func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand) backupType {
 	possibleTypes := []backupType{
-		newTableBackup(rng, mvb.db, mvb.tables),
-		newDatabaseBackup(mvb.db, mvb.tables),
-		newClusterBackup(mvb.db, mvb.tables),
+		newTableBackup(rng, mvb.dbs, mvb.tables),
+		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
+		newClusterBackup(rng, mvb.dbs, mvb.tables),
 	}
 
 	return possibleTypes[rng.Intn(len(possibleTypes))]
@@ -908,27 +928,46 @@ func (*mixedVersionBackup) setShortJobIntervals(
 // with the given name.
 func (mvb *mixedVersionBackup) loadTables(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
-) ([]string, error) {
-	node, db := h.RandomDB(rng, mvb.roachNodes)
-	l.Printf("loading table information for DB %q via node %d", mvb.db, node)
-	query := fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s]", mvb.db)
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read tables for database %s: %w", mvb.db, err)
-	}
-	defer rows.Close()
+) error {
+	allTables := make([][]string, len(mvb.dbs))
+	eg, _ := errgroup.WithContext(ctx)
+	for j, dbName := range mvb.dbs {
+		j, dbName := j, dbName // capture range variables
+		eg.Go(func() error {
+			node, db := h.RandomDB(rng, mvb.roachNodes)
+			l.Printf("loading table information for DB %q via node %d", dbName, node)
+			query := fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s]", dbName)
+			rows, err := db.QueryContext(ctx, query)
+			if err != nil {
+				return fmt.Errorf("failed to read tables for database %s: %w", dbName, err)
+			}
+			defer rows.Close()
 
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("error scanning table_name for db %s: %w", mvb.db, err)
-		}
-		tables = append(tables, name)
+			var tables []string
+			for rows.Next() {
+				var name string
+				if err := rows.Scan(&name); err != nil {
+					return fmt.Errorf("error scanning table_name for db %s: %w", dbName, err)
+				}
+				tables = append(tables, name)
+			}
+
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("error iterating over table_name rows for database %s: %w", dbName, err)
+			}
+
+			allTables[j] = tables
+			l.Printf("database %q has %d tables", dbName, len(tables))
+			return nil
+		})
 	}
 
-	l.Printf("database %q has %d tables", mvb.db, len(tables))
-	return tables, nil
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	mvb.tables = allTables
+	return nil
 }
 
 // loadBackupData starts a CSV server in the background and runs
@@ -965,17 +1004,11 @@ func (mvb *mixedVersionBackup) loadBackupData(
 		return err
 	}
 
-	err := mvb.cluster.RunE(
+	return mvb.cluster.RunE(
 		ctx,
 		mvb.cluster.Node(importNode),
 		importBankCommand(currentRoach, rows, 0 /* ranges */, csvPort, importNode),
 	)
-	if err != nil {
-		return err
-	}
-
-	mvb.tables, err = mvb.loadTables(ctx, l, rng, h)
-	return err
 }
 
 // randomWait waits from 1s to 5m, to allow for the background
@@ -1386,6 +1419,13 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	tc := h.Context() // test context
 	l.Printf("current context: %#v", tc)
 
+	if len(mvb.tables) == 0 {
+		l.Printf("planning backups for the first time; loading all user tables")
+		if err := mvb.loadTables(ctx, l, rng, h); err != nil {
+			return fmt.Errorf("error loading user tables: %w", err)
+		}
+	}
+
 	onPrevious := labeledNodes{
 		Nodes: tc.FromVersionNodes, Version: sanitizeVersionForBackup(tc.FromVersion),
 	}
@@ -1457,8 +1497,8 @@ func (mvb *mixedVersionBackup) resetCluster(ctx context.Context, l *logger.Logge
 func (mvb *mixedVersionBackup) verifyBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	l.Printf("stopping workload")
-	mvb.stopWorkload()
+	l.Printf("stopping background workloads")
+	mvb.stopWorkloads()
 
 	l.Printf("verifying %d collections created during this test", len(mvb.collections))
 	for _, collection := range mvb.collections {
@@ -1553,19 +1593,36 @@ func registerBackupMixedVersion(r registry.Registry) {
 			workloadNode := c.Node(c.Spec().NodeCount)
 
 			uploadVersion(ctx, t, c, workloadNode, clusterupgrade.MainVersion)
+			// numWarehouses is picked as a number that provides enough work
+			// for the cluster used in this test without overloading it,
+			// which can make the backups take much longer to finish.
+			const numWarehouses = 100
+			tpccInit := roachtestutil.NewCommand("./cockroach workload init tpcc").
+				Arg("{pgurl%s}", roachNodes).
+				Flag("warehouses", numWarehouses)
+			tpccRun := roachtestutil.NewCommand("./cockroach workload run tpcc").
+				Arg("{pgurl%s}", roachNodes).
+				Flag("warehouses", numWarehouses).
+				Option("tolerate-errors")
 			bankRun := roachtestutil.NewCommand("./cockroach workload run bank").
 				Arg("{pgurl%s}", roachNodes).
 				Option("tolerate-errors")
 
+			var stopBank, stopTPCC mixedversion.StopFunc
 			mvt := mixedversion.NewTest(ctx, t, t.L(), c, roachNodes)
-			mvb := newMixedVersionBackup(c, roachNodes, "bank")
+			mvb := newMixedVersionBackup(c, roachNodes, "bank", "tpcc")
 			mvt.OnStartup("set short job interval", mvb.setShortJobIntervals)
 			mvt.OnStartup("load backup data", mvb.loadBackupData)
-			mvb.stopWorkload = mvt.Workload("bank", workloadNode, nil /* initCmd */, bankRun)
+			stopBank = mvt.Workload("bank", workloadNode, nil /* initCmd */, bankRun)
+			stopTPCC = mvt.Workload("tpcc", workloadNode, tpccInit, tpccRun)
 
 			mvt.InMixedVersion("plan and run backups", mvb.planAndRunBackups)
 			mvt.AfterUpgradeFinalized("verify backups", mvb.verifyBackups)
 
+			mvb.stopWorkloads = func() {
+				stopBank()
+				stopTPCC()
+			}
 			mvt.Run()
 		},
 	})
