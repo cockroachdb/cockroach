@@ -463,8 +463,12 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "decommissionedSince",
       title: "decommissioned on",
-      render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        <Timestamp time={record.decommissionedDate} format={util.DATE_FORMAT_24_TZ}/>
+      render: (_text: string, record: DecommissionedNodeStatusRow) => (
+        <Timestamp
+          time={record.decommissionedDate}
+          format={util.DATE_FORMAT_24_TZ}
+        />
+      ),
     },
     {
       key: "status",

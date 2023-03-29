@@ -13,7 +13,7 @@ import React from "react";
 import uPlot from "uplot";
 import _ from "lodash";
 
-import LineGraph, {_LineGraph} from "./index";
+import LineGraph, { _LineGraph } from "./index";
 import { fillGaps, LineGraphProps } from "./index";
 import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";

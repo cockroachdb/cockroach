@@ -89,7 +89,12 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
       title: "Decommissioned On",
       sorter: sortByDecommissioningDate,
       render: (_text, record) => {
-        return <Timestamp time={record.decommissionedDate} format={util.DATE_FORMAT_24_TZ}/>;
+        return (
+          <Timestamp
+            time={record.decommissionedDate}
+            format={util.DATE_FORMAT_24_TZ}
+          />
+        );
       },
     },
   ];

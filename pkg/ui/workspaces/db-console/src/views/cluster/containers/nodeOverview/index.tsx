@@ -307,7 +307,10 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               <SummaryValue
                 title="Last Update"
                 value={
-                  <Timestamp time={util.LongToMoment(node.updated_at)} format={DATE_FORMAT_24_TZ}/>
+                  <Timestamp
+                    time={util.LongToMoment(node.updated_at)}
+                    format={DATE_FORMAT_24_TZ}
+                  />
                 }
               />
               <SummaryValue title="Build" value={node.build_info.tag} />

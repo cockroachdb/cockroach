@@ -96,8 +96,9 @@ class StatementDiagnosticsHistoryView extends React.Component<
     {
       title: "Activated on",
       name: "activated_on",
-      cell: record =>
-        <Timestamp time={record.requested_at} format={util.DATE_FORMAT_24_TZ} />,
+      cell: record => (
+        <Timestamp time={record.requested_at} format={util.DATE_FORMAT_24_TZ} />
+      ),
       sort: record => {
         return moment.utc(record.requested_at).unix();
       },

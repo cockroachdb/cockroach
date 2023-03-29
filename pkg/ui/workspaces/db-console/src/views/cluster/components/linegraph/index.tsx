@@ -43,7 +43,7 @@ import {
   findClosestTimeScale,
   defaultTimeScaleOptions,
   TimeWindow,
-  WithTimezone
+  WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
 
@@ -376,4 +376,4 @@ export class _LineGraph extends React.Component<LineGraphProps, {}> {
   }
 }
 
-export default WithTimezone<LineGraphProps>(_LineGraph)
+export default WithTimezone(_LineGraph);

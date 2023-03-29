@@ -110,9 +110,14 @@ export class Settings extends React.Component<SettingsProps, SettingsState> {
         name: "lastUpdated",
         title: "Last Updated",
         cell: (setting: IterableSetting) =>
-          setting.last_updated
-            ? <Timestamp time={setting.last_updated} format={util.DATE_FORMAT_24_TZ}/>
-            : "No overrides",
+          setting.last_updated ? (
+            <Timestamp
+              time={setting.last_updated}
+              format={util.DATE_FORMAT_24_TZ}
+            />
+          ) : (
+            "No overrides"
+          ),
         sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
       },
       {

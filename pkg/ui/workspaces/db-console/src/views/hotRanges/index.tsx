@@ -10,12 +10,18 @@
 
 import { cockroach } from "src/js/protos";
 import { useDispatch, useSelector } from "react-redux";
-import React, {useRef, useEffect, useState, useContext} from "react";
+import React, { useRef, useEffect, useState, useContext } from "react";
 import { Helmet } from "react-helmet";
 import { refreshHotRanges } from "src/redux/apiReducers";
 import HotRangesTable from "./hotRangesTable";
 import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
-import { Loading, Text, Anchor, util, TimezoneContext } from "@cockroachlabs/cluster-ui";
+import {
+  Loading,
+  Text,
+  Anchor,
+  util,
+  TimezoneContext,
+} from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import styles from "./hotRanges.module.styl";
 import {
@@ -92,7 +98,12 @@ const HotRangesPage = () => {
             <HotRangesTable
               hotRangesList={filteredHotRanges}
               lastUpdate={
-                lastSetAt && util.FormatWithTimezone(lastSetAt, util.DATE_FORMAT_24_TZ, timezone)
+                lastSetAt &&
+                util.FormatWithTimezone(
+                  lastSetAt,
+                  util.DATE_FORMAT_24_TZ,
+                  timezone,
+                )
               }
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}

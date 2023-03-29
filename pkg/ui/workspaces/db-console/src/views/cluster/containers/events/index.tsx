@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import moment from "moment-timezone";
-import React, {useContext} from "react";
+import React, { useContext } from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
@@ -57,9 +57,17 @@ export interface EventRowProps {
   event: clusterUiApi.EventColumns;
 }
 
-export function getEventInfo(e: clusterUiApi.EventColumns, timezone: string): SimplifiedEvent {
+export function getEventInfo(
+  e: clusterUiApi.EventColumns,
+  timezone: string,
+): SimplifiedEvent {
   return {
-    fromNowString: util.FormatWithTimezone(moment.utc(e.timestamp), util.DATE_FORMAT_24_TZ, timezone)
+    fromNowString: util
+      .FormatWithTimezone(
+        moment.utc(e.timestamp),
+        util.DATE_FORMAT_24_TZ,
+        timezone,
+      )
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{getEventDescription(e)}</span>,
@@ -81,7 +89,7 @@ export const EventRow = (props: EventRowProps) => {
       </td>
     </tr>
   );
-}
+};
 
 export interface EventBoxProps {
   events: clusterUiApi.EventsResponse;
