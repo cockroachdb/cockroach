@@ -178,3 +178,18 @@ message NormalizedSpan {
   map<string, OperationMetadata> children_metadata = 9 [(gogoproto.nullable) = false];
   repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }
+
+message CapturedStack {
+  option (gogoproto.goproto_stringer) = false;
+  // Stack is the strack trace, or distinct prefix of the stack trace if a previous
+  // capture of this stack is also being recorded.
+  string stack = 1;
+  // SharedSuffix indicates the length of the elided suffix of this stack that 
+  // was identical to the previous capture of this stack.
+  int32 shared_suffix = 2;
+  // SharedLines indicated how many newlines were in the elided shared suffix.
+  int32 shared_lines = 3;
+  // Age indicates the duration prior to being recorded that this stack was captured.
+  int64 age = 4 [(gogoproto.casttype) = "time.Duration"];
+  // NEXT ID: 5.
+}

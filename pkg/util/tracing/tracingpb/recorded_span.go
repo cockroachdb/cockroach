@@ -138,3 +138,14 @@ func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
 	}
 	s.Print("}")
 }
+
+func (c CapturedStack) String() string {
+	age := c.Age.Seconds()
+	if c.Stack == "" && c.SharedSuffix > 0 {
+		return fmt.Sprintf("stack as of %.1fs ago had not changed from previous stack", age)
+	}
+	if c.SharedLines > 0 {
+		return fmt.Sprintf("stack as of %.1fs ago: %s\n ...+%d lines matching previous stack", age, c.Stack, c.SharedLines)
+	}
+	return fmt.Sprintf("stack as of %.1fs ago: %s", age, c.Stack)
+}

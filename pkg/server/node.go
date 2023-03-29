@@ -162,6 +162,13 @@ var (
 		"controls if server side traces are redacted for tenant operations",
 		true,
 	).WithPublic()
+
+	slowRequestHistoricalStackThreshold = settings.RegisterDurationSetting(
+		settings.SystemOnly,
+		"kv.trace.slow_request_stacks.threshold",
+		`duration spent in processing above any available stack history is appended to its trace, if automatic trace snapshots are enabled`,
+		time.Second*30,
+	)
 )
 
 type nodeMetrics struct {
@@ -1100,6 +1107,10 @@ func (n *Node) batchInternal(
 	if br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 	}
+	if timeutil.Since(tStart) > slowRequestHistoricalStackThreshold.Get(&n.storeCfg.Settings.SV) {
+		tracing.SpanFromContext(ctx).MaybeRecordStackHistory(tStart)
+	}
+
 	n.metrics.callComplete(timeutil.Since(tStart), pErr)
 	br.Error = pErr
 

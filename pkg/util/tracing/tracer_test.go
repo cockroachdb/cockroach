@@ -17,10 +17,13 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
@@ -889,11 +892,125 @@ func TestTracerSnapshots(t *testing.T) {
 	require.Equal(t, SnapshotID(3), s3.ID)
 	require.Equal(t, 3, len(tr.GetSnapshots()))
 
-	for _, i := range []SnapshotID{2, 1, 3} {
-		s, err := tr.GetSnapshot(i)
+	b1 := tr.SaveAutomaticSnapshot()
+	require.Equal(t, SnapshotID(1), b1.ID)
+	b2 := tr.SaveAutomaticSnapshot()
+	require.Equal(t, SnapshotID(2), b2.ID)
+	require.Equal(t, 3, len(tr.GetSnapshots()))
+	require.Equal(t, 2, len(tr.GetAutomaticSnapshots()))
+
+	for _, i := range []SnapshotID{1, 2, 3} {
+		_, err := tr.GetSnapshot(i)
 		require.NoError(t, err)
-		for _, s := range s.Stacks {
-			require.Less(t, len(s), 5<<10, s)
+	}
+	for _, i := range []SnapshotID{1, 2} {
+		_, err := tr.GetAutomaticSnapshot(i)
+		require.NoError(t, err)
+	}
+}
+
+func TestTracerSnapshotLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tr := NewTracer()
+	ctx := context.Background()
+
+	sv := settings.Values{}
+	periodicSnapshotInterval.Override(ctx, &sv, 0)
+
+	setting, done, testKnob := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	defer close(done)
+	defer close(testKnob)
+
+	go tr.runPeriodicSnapshotsLoop(&sv, setting, done, testKnob)
+
+	// Verify our snapshot loop is running by sending rate-change notifications
+	// and then verify it is not snapshotting since it is disabled.
+	setting <- struct{}{}
+	setting <- struct{}{}
+	require.Empty(t, tr.GetAutomaticSnapshots())
+
+	periodicSnapshotInterval.Override(ctx, &sv, time.Microsecond)
+	for sent := false; !sent; {
+		select {
+		case setting <- struct{}{}:
+		case testKnob <- struct{}{}:
+			sent = true
+		}
+	}
+
+	snaps := tr.GetAutomaticSnapshots()
+	require.NotEmpty(t, snaps)
+}
+
+// helper that blocks long enough to appear in the stack.
+func blockingFunc1(ch chan<- struct{}) {
+	ch <- struct{}{} // allow snapshot to start.
+	ch <- struct{}{} // wait for snapshot to be done.
+}
+
+// helper that blocks long enough to appear in the stack.
+func blockingFunc2(ch chan<- struct{}) {
+	ch <- struct{}{}
+	ch <- struct{}{}
+}
+
+// helper that blocks long enough to appear in the stack.
+func blockingFunc3(ch chan<- struct{}) {
+	ch <- struct{}{}
+	ch <- struct{}{}
+}
+
+func blockingCaller(ch chan<- struct{}) {
+	blockingFunc2(ch)
+}
+
+// TestTracerStackHistory tests MaybeRecordStackHistory.
+func TestTracerStackHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tr := NewTracer()
+
+	for _, verbose := range []bool{true, false} {
+		sp := tr.StartSpan("test", WithRecording(tracingpb.RecordingStructured))
+		if verbose {
+			sp = tr.StartSpan("test", WithRecording(tracingpb.RecordingVerbose))
+		}
+		ch := make(chan struct{})
+		defer close(ch)
+		go func() {
+			for range ch {
+				tr.SaveAutomaticSnapshot()
+				<-ch // read again to unpark func.
+			}
+		}()
+
+		blockingFunc1(ch)
+		started := timeutil.Now()
+		blockingFunc2(ch)
+		blockingFunc3(ch)
+		blockingCaller(ch)
+
+		sp.MaybeRecordStackHistory(started)
+
+		rec := sp.FinishAndGetConfiguredRecording()[0]
+		require.Len(t, rec.StructuredRecords, 3)
+		stacks := make([]string, 3)
+		for i, rec := range rec.StructuredRecords {
+			var stack tracingpb.CapturedStack
+			require.NoError(t, types.UnmarshalAny(rec.Payload, &stack))
+			stacks[i] = stack.Stack
+		}
+		require.Contains(t, stacks[0], "tracing.blockingFunc2")
+		require.Contains(t, stacks[1], "tracing.blockingFunc3")
+		require.Contains(t, stacks[2], "tracing.blockingCaller")
+
+		if verbose {
+			require.Len(t, rec.Logs, 3)
+			for i := range rec.Logs {
+				require.NotContains(t, rec.Logs[i].Message, "tracing.blockingFunc1")
+			}
+			require.Contains(t, rec.Logs[0].Message, "tracing.blockingFunc2")
+			require.Contains(t, rec.Logs[1].Message, "tracing.blockingFunc3")
+			require.Contains(t, rec.Logs[2].Message, "tracing.blockingCaller")
 		}
 	}
 }
