@@ -15,8 +15,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -44,10 +42,10 @@ go_test(
     embed = [":spanconfigstore"],
     deps = [
         "//pkg/keys",
-        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
         "//pkg/util/hlc",

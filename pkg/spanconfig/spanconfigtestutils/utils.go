@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
@@ -282,14 +282,20 @@ func ParseConfig(t testing.TB, conf string) roachpb.SpanConfig {
 	}
 }
 
+// BoundsUpdate ..
+type BoundsUpdate struct {
+	TenantID roachpb.TenantID
+	Bounds   spanconfigbounds.Bounds
+	Deleted  bool
+}
+
 // ParseDeclareBoundsArguments parses datadriven test input to a list of
 // tenantcapabilities.Updates that can be applied to a
 // tenantcapabilities.Reader. The input is of the following form:
 //
 // delete ten-10
 // set ten-10:{GC.ttl_start=5, GC.ttl_end=30}
-func ParseDeclareBoundsArguments(t *testing.T, input string) []tenantcapabilities.Update {
-	var updates []tenantcapabilities.Update
+func ParseDeclareBoundsArguments(t *testing.T, input string) (updates []BoundsUpdate) {
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -305,23 +311,21 @@ func ParseDeclareBoundsArguments(t *testing.T, input string) []tenantcapabilitie
 			require.Len(t, parts, 2)
 			tenantID := parseTenant(t, parts[0])
 			bounds := parseBounds(t, parts[1])
-			updates = append(updates, tenantcapabilities.Update{
-				Entry: tenantcapabilities.Entry{
-					TenantID: tenantID,
-					TenantCapabilities: &tenantcapabilitiespb.TenantCapabilities{
-						SpanConfigBounds: bounds,
-					},
-				},
+			updates = append(updates, BoundsUpdate{
+				TenantID: tenantID,
+				Bounds:   bounds,
 			})
+
 		case strings.HasPrefix(line, deletePrefix):
 			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
 			tenantID := parseTenant(t, line)
-			updates = append(updates, tenantcapabilities.Update{
-				Entry: tenantcapabilities.Entry{
+			updates = append(updates,
+				BoundsUpdate{
 					TenantID: tenantID,
+					Bounds:   spanconfigbounds.Bounds{},
+					Deleted:  true,
 				},
-				Deleted: true,
-			})
+			)
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
 				line, setPrefix, deletePrefix)
@@ -331,8 +335,8 @@ func ParseDeclareBoundsArguments(t *testing.T, input string) []tenantcapabilitie
 }
 
 // parseBounds parses a string that looks like {GC.ttl_start=5, GC.ttl_end=40}
-// into a SpanConfigBoudns struct.
-func parseBounds(t *testing.T, input string) *tenantcapabilitiespb.SpanConfigBounds {
+// into a spanconfigbounds.Bounds struct.
+func parseBounds(t *testing.T, input string) spanconfigbounds.Bounds {
 	require.True(t, boundsRe.MatchString(input))
 
 	matches := boundsRe.FindStringSubmatch(input)
@@ -341,12 +345,12 @@ func parseBounds(t *testing.T, input string) *tenantcapabilitiespb.SpanConfigBou
 	gcTTLEnd, err := strconv.Atoi(matches[2])
 	require.NoError(t, err)
 
-	return &tenantcapabilitiespb.SpanConfigBounds{
+	return spanconfigbounds.MakeBounds(&tenantcapabilitiespb.SpanConfigBounds{
 		GCTTLSeconds: &tenantcapabilitiespb.SpanConfigBounds_Int32Range{
 			Start: int32(gcTTLStart),
 			End:   int32(gcTTLEnd),
 		},
-	}
+	})
 }
 
 // ParseSpanConfigRecord is helper function that constructs a
