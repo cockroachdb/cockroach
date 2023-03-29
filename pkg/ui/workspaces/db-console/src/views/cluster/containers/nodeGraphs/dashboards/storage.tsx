@@ -53,6 +53,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Live Bytes"
+      isKvGraph={false}
       sources={storeSources}
       tooltip={<LiveBytesGraphTooltip tooltipSelection={tooltipSelection} />}
     >
