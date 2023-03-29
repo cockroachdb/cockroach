@@ -43,7 +43,7 @@ type CandidateReplica interface {
 	RaftStatus() *raft.Status
 	// GetFirstIndex returns the index of the first entry in the replica's Raft
 	// log.
-	GetFirstIndex() uint64
+	GetFirstIndex() roachpb.RaftIndex
 	// DescAndSpanConfig returns the authoritative range descriptor as well
 	// as the span config for the replica.
 	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)

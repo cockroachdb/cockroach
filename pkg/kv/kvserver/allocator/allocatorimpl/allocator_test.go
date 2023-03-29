@@ -1893,7 +1893,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 	return raftStatus
 }
 
-func (r *mockRepl) GetFirstIndex() uint64 {
+func (r *mockRepl) GetFirstIndex() roachpb.RaftIndex {
 	return 0
 }
 

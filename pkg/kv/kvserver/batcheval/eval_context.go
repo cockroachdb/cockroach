@@ -62,9 +62,9 @@ type EvalContext interface {
 	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
-	GetFirstIndex() uint64
-	GetTerm(uint64) (uint64, error)
-	GetLeaseAppliedIndex() uint64
+	GetFirstIndex() roachpb.RaftIndex
+	GetTerm(index roachpb.RaftIndex) (roachpb.RaftTerm, error)
+	GetLeaseAppliedIndex() roachpb.LeaseSequence
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -172,7 +172,8 @@ type MockEvalCtx struct {
 	CPU                  float64
 	AbortSpan            *abortspan.AbortSpan
 	GCThreshold          hlc.Timestamp
-	Term, FirstIndex     uint64
+	Term                 roachpb.RaftTerm
+	FirstIndex           roachpb.RaftIndex
 	CanCreateTxnRecordFn func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn     func() hlc.Timestamp
 	Lease                roachpb.Lease
@@ -228,13 +229,13 @@ func (m *mockEvalCtxImpl) GetRangeID() roachpb.RangeID {
 func (m *mockEvalCtxImpl) IsFirstRange() bool {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetFirstIndex() uint64 {
+func (m *mockEvalCtxImpl) GetFirstIndex() roachpb.RaftIndex {
 	return m.FirstIndex
 }
-func (m *mockEvalCtxImpl) GetTerm(uint64) (uint64, error) {
+func (m *mockEvalCtxImpl) GetTerm(roachpb.RaftIndex) (roachpb.RaftTerm, error) {
 	return m.Term, nil
 }
-func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
+func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() roachpb.LeaseSequence {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {

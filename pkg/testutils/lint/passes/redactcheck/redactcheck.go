@@ -80,7 +80,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"Method": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
-						"LAI":    {},
 						"SeqNum": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation": {
@@ -112,6 +111,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"StoreID":           {},
 						"TenantID":          {},
 						"TransactionStatus": {},
+						"RaftIndex":         {},
+						"RaftTerm":          {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/rpc": {
 						"ConnectionClass": {},

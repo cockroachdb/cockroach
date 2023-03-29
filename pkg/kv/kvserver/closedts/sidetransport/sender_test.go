@@ -46,7 +46,7 @@ type mockReplica struct {
 
 	canBump        bool
 	cantBumpReason CantCloseReason
-	lai            ctpb.LAI
+	lai            roachpb.LeaseSequence
 	policy         roachpb.RangeClosedTimestampPolicy
 }
 

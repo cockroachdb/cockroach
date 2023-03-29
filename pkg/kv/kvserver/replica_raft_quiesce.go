@@ -194,7 +194,7 @@ type quiescer interface {
 	isRaftLeaderRLocked() bool
 	raftSparseStatusRLocked() *raftSparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
-	raftLastIndexRLocked() uint64
+	raftLastIndexRLocked() roachpb.RaftIndex
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
@@ -380,7 +380,7 @@ func shouldReplicaQuiesce(
 		return nil, nil, false
 	}
 	lastIndex := q.raftLastIndexRLocked()
-	if status.Commit != lastIndex {
+	if roachpb.RaftIndex(status.Commit) != lastIndex {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
 				status.Commit, lastIndex)

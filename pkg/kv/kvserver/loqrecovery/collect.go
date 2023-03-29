@@ -194,7 +194,7 @@ func visitStoreReplicas(
 			NodeID:                   nodeID,
 			Desc:                     desc,
 			RaftAppliedIndex:         rstate.RaftAppliedIndex,
-			RaftCommittedIndex:       hstate.Commit,
+			RaftCommittedIndex:       roachpb.RaftIndex(hstate.Commit),
 			RaftLogDescriptorChanges: rangeUpdates,
 			LocalAssumesLeaseholder:  localIsLeaseholder,
 		})
@@ -208,7 +208,7 @@ func visitStoreReplicas(
 // lo (inclusive) and hi (exclusive) and searches for changes to range
 // descriptors, as identified by presence of a commit trigger.
 func GetDescriptorChangesFromRaftLog(
-	rangeID roachpb.RangeID, lo, hi uint64, reader storage.Reader,
+	rangeID roachpb.RangeID, lo, hi roachpb.RaftIndex, reader storage.Reader,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
 	if err := raftlog.Visit(reader, rangeID, lo, hi, func(ent raftpb.Entry) error {

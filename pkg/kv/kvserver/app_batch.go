@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -179,7 +180,7 @@ func (b *appBatch) runPostAddTriggers(
 			env.st,
 			env.eng,
 			env.sideloaded,
-			cmd.Term,
+			roachpb.RaftTerm(cmd.Term),
 			cmd.Index(),
 			*res.AddSSTable,
 			env.bulkLimiter,

@@ -29,7 +29,7 @@ import (
 // TODO(pavelkalinnikov): integrate with kvstorage.Replica.
 type LoadedReplicaState struct {
 	ReplicaID roachpb.ReplicaID
-	LastIndex uint64
+	LastIndex roachpb.RaftIndex
 	ReplState kvserverpb.ReplicaState
 
 	hardState raftpb.HardState

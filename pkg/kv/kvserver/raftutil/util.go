@@ -128,7 +128,7 @@ func (s ReplicaNeedsSnapshotStatus) String() string {
 // indicates that our local replica is not the raft leader, we pessimistically
 // assume that replicaID may need a snapshot.
 func ReplicaMayNeedSnapshot(
-	st *raft.Status, firstIndex uint64, replicaID roachpb.ReplicaID,
+	st *raft.Status, firstIndex roachpb.RaftIndex, replicaID roachpb.ReplicaID,
 ) ReplicaNeedsSnapshotStatus {
 	if st == nil {
 		// Testing only.
@@ -158,7 +158,7 @@ func ReplicaMayNeedSnapshot(
 	default:
 		panic("unknown tracker.StateType")
 	}
-	if progress.Match+1 < firstIndex {
+	if roachpb.RaftIndex(progress.Match+1) < firstIndex {
 		// Even if the follower is in StateReplicate, it could have been cut off
 		// from the log by a recent log truncation that hasn't been recognized yet
 		// by raft. Confirm that this is not the case.
