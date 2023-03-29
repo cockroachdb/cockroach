@@ -135,17 +135,17 @@ func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 func (b *Builder) buildVariable(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
-	return b.indexedVar(ctx, b.mem.Metadata(), *scalar.Private().(*opt.ColumnID)), nil
+	return b.indexedVar(ctx, b.mem.Metadata(), *scalar.Private().(*opt.ColumnID))
 }
 
 func (b *Builder) indexedVar(
 	ctx *buildScalarCtx, md *opt.Metadata, colID opt.ColumnID,
-) tree.TypedExpr {
+) (tree.TypedExpr, error) {
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
-		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", redact.Safe(colID)))
+		return nil, errors.AssertionFailedf("cannot map variable %d to an indexed var", redact.Safe(colID))
 	}
-	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)
+	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type), nil
 }
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
@@ -226,7 +226,7 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 		return tree.NewTypedIsNotNullExpr(expr), nil
 
 	default:
-		panic(errors.AssertionFailedf("invalid op %s", redact.Safe(scalar.Op())))
+		return nil, errors.AssertionFailedf("invalid op %s", redact.Safe(scalar.Op()))
 	}
 }
 
@@ -292,7 +292,10 @@ func (b *Builder) buildFunction(
 			return nil, err
 		}
 	}
-	funcRef := b.wrapFunction(fn.Name)
+	funcRef, err := b.wrapFunction(fn.Name)
+	if err != nil {
+		return nil, err
+	}
 	return tree.NewTypedFuncExpr(
 		funcRef,
 		0, /* aggQualifier */
@@ -373,7 +376,10 @@ func (b *Builder) buildAssignmentCast(
 		return input, nil
 	}
 	const fnName = "crdb_internal.assignment_cast"
-	funcRef := b.wrapFunction(fnName)
+	funcRef, err := b.wrapFunction(fnName)
+	if err != nil {
+		return nil, err
+	}
 	props, overloads := builtinsregistry.GetBuiltinProperties(fnName)
 	return tree.NewTypedFuncExpr(
 		funcRef,
@@ -492,7 +498,7 @@ func (b *Builder) buildArrayFlatten(
 	// The subquery here should always be uncorrelated: if it were not, we would
 	// have converted it to an aggregation.
 	if !af.Input.Relational().OuterCols.Empty() {
-		panic(errors.AssertionFailedf("input to ArrayFlatten should be uncorrelated"))
+		return nil, errors.AssertionFailedf("input to ArrayFlatten should be uncorrelated")
 	}
 
 	if b.planLazySubqueries {
@@ -632,7 +638,11 @@ func (b *Builder) buildExistsSubquery(
 		// arguments of the routine.
 		args := make(tree.TypedExprs, len(params))
 		for i := range args {
-			args[i] = b.indexedVar(ctx, b.mem.Metadata(), params[i])
+			indexedVar, err := b.indexedVar(ctx, b.mem.Metadata(), params[i])
+			if err != nil {
+				return nil, err
+			}
+			args[i] = indexedVar
 		}
 
 		// Create a new column for the boolean result.
@@ -732,7 +742,11 @@ func (b *Builder) buildSubquery(
 		// The arguments are indexed variables representing the outer columns.
 		args := make(tree.TypedExprs, len(params))
 		for i := range args {
-			args[i] = b.indexedVar(ctx, b.mem.Metadata(), params[i])
+			indexedVar, err := b.indexedVar(ctx, b.mem.Metadata(), params[i])
+			if err != nil {
+				return nil, err
+			}
+			args[i] = indexedVar
 		}
 
 		// Create a single-element RelListExpr representing the subquery.

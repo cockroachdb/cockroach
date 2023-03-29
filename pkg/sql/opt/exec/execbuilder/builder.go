@@ -263,17 +263,17 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
-func (b *Builder) wrapFunction(fnName string) tree.ResolvableFunctionReference {
+func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference, error) {
 	if b.evalCtx != nil && b.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(fnName)
 		fnDef, err := b.catalog.ResolveFunction(
 			context.Background(), &unresolved, &b.evalCtx.SessionData().SearchPath)
 		if err != nil {
-			panic(err)
+			return tree.ResolvableFunctionReference{}, err
 		}
-		return tree.ResolvableFunctionReference{FunctionReference: fnDef}
+		return tree.ResolvableFunctionReference{FunctionReference: fnDef}, nil
 	}
-	return tree.WrapFunction(fnName)
+	return tree.WrapFunction(fnName), nil
 }
 
 func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
