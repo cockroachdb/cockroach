@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -114,7 +115,7 @@ type connTestingKnobs struct {
 // trackedRange contains the information that the side-transport last published
 // about a particular range.
 type trackedRange struct {
-	lai    ctpb.LAI
+	lai    kvpb.LeaseAppliedIndex
 	policy roachpb.RangeClosedTimestampPolicy
 }
 
@@ -167,7 +168,7 @@ type BumpSideTransportClosedResult struct {
 	// Fields only set when ok.
 
 	// The range's current LAI, to be associated with the closed timestamp.
-	LAI ctpb.LAI
+	LAI kvpb.LeaseAppliedIndex
 	// The range's current policy.
 	Policy roachpb.RangeClosedTimestampPolicy
 }

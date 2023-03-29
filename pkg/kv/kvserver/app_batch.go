@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -179,7 +180,7 @@ func (b *appBatch) runPostAddTriggers(
 			env.st,
 			env.eng,
 			env.sideloaded,
-			cmd.Term,
+			kvpb.RaftTerm(cmd.Term),
 			cmd.Index(),
 			*res.AddSSTable,
 			env.bulkLimiter,

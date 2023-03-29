@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -194,7 +195,7 @@ type quiescer interface {
 	isRaftLeaderRLocked() bool
 	raftSparseStatusRLocked() *raftSparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
-	raftLastIndexRLocked() uint64
+	raftLastIndexRLocked() kvpb.RaftIndex
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
@@ -380,7 +381,7 @@ func shouldReplicaQuiesce(
 		return nil, nil, false
 	}
 	lastIndex := q.raftLastIndexRLocked()
-	if status.Commit != lastIndex {
+	if kvpb.RaftIndex(status.Commit) != lastIndex {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
 				status.Commit, lastIndex)

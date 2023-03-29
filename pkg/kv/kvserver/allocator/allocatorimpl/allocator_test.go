@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -1893,7 +1894,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 	return raftStatus
 }
 
-func (r *mockRepl) GetFirstIndex() uint64 {
+func (r *mockRepl) GetFirstIndex() kvpb.RaftIndex {
 	return 0
 }
 
