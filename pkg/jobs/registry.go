@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -163,6 +164,9 @@ type Registry struct {
 		draining bool
 	}
 
+	drainJobs                chan struct{}
+	startedControllerTasksWG sync.WaitGroup
+
 	// withSessionEvery ensures that logging when failing to get a live session
 	// is not too loud.
 	withSessionEvery log.EveryN
@@ -236,6 +240,7 @@ func MakeRegistry(
 		// if a notification is already queued.
 		adoptionCh:       make(chan adoptionNotice, 1),
 		withSessionEvery: log.Every(time.Second),
+		drainJobs:        make(chan struct{}),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -1065,7 +1070,10 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 	})
 
+	r.startedControllerTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(ctx, "jobs/cancel", func(ctx context.Context) {
+		defer r.startedControllerTasksWG.Done()
+
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
@@ -1080,6 +1088,10 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// Note: the jobs are cancelled by virtue of being run with a
 				// WithCancelOnQuesce context. See the resumeJob() function.
 				return
+			case <-r.drainJobs:
+				log.Warningf(ctx, "canceling all adopted jobs due to graceful drain request")
+				r.cancelAllAdoptedJobs()
+				return
 			case <-lc.timer.C:
 				lc.timer.Read = true
 				cancelLoopTask(ctx)
@@ -1087,9 +1099,14 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		}
 	}); err != nil {
+		r.startedControllerTasksWG.Done()
 		return err
 	}
+
+	r.startedControllerTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(ctx, "jobs/gc", func(ctx context.Context) {
+		defer r.startedControllerTasksWG.Done()
+
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
@@ -1110,6 +1127,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				lc.onUpdate()
 			case <-stopper.ShouldQuiesce():
 				return
+			case <-r.drainJobs:
+				return
 			case <-lc.timer.C:
 				lc.timer.Read = true
 				old := timeutil.Now().Add(-1 * retentionDuration())
@@ -1120,9 +1139,14 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		}
 	}); err != nil {
+		r.startedControllerTasksWG.Done()
 		return err
 	}
-	return stopper.RunAsyncTask(ctx, "jobs/adopt", func(ctx context.Context) {
+
+	r.startedControllerTasksWG.Add(1)
+	if err := stopper.RunAsyncTask(ctx, "jobs/adopt", func(ctx context.Context) {
+		defer r.startedControllerTasksWG.Done()
+
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 		lc, cleanup := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
@@ -1132,6 +1156,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case <-lc.updated:
 				lc.onUpdate()
 			case <-stopper.ShouldQuiesce():
+				return
+			case <-r.drainJobs:
 				return
 			case shouldClaim := <-r.adoptionCh:
 				// Try to adopt the most recently created job.
@@ -1146,7 +1172,11 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				lc.onExecute()
 			}
 		}
-	})
+	}); err != nil {
+		r.startedControllerTasksWG.Done()
+		return err
+	}
+	return nil
 }
 
 func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
@@ -1915,14 +1945,25 @@ func (r *Registry) IsDraining() bool {
 	return r.mu.draining
 }
 
+// WaitForJobShutdown(ctx context.Context) {
+func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
+	log.Infof(ctx, "starting to wait for job registry to shut down")
+	defer log.Infof(ctx, "job registry tasks successfully shut down")
+	r.startedControllerTasksWG.Wait()
+}
+
 // SetDraining informs the job system if the node is draining.
 //
 // NB: Check the implementation of drain before adding code that would
 // make this block.
-func (r *Registry) SetDraining(draining bool) {
+func (r *Registry) SetDraining() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.draining = draining
+	alreadyDraining := r.mu.draining
+	r.mu.draining = true
+	if !alreadyDraining {
+		close(r.drainJobs)
+	}
 }
 
 // TestingIsJobIdle returns true if the job is adopted and currently idle.
