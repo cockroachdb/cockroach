@@ -1294,6 +1294,17 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 func (t *logicTest) newCluster(
 	serverArgs TestServerArgs, clusterOpts []clusterOpt, knobOpts []knobOpt, toa tenantOverrideArgs,
 ) {
+	makeClusterSettings := func() *cluster.Settings {
+		st := cluster.MakeTestingClusterSettings()
+		// Disable the automatic stats collection on system tables on the server
+		// that owns the give settings. This needs to be done before the cluster
+		// is started, otherwise there is a race condition where stats may be
+		// collected before we can disable them with `SET CLUSTER SETTING`. We
+		// disable stats collection on system tables in order to have
+		// deterministic tests.
+		stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+		return st
+	}
 	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
 	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
 		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
@@ -1327,7 +1338,7 @@ func (t *logicTest) newCluster(
 		ServerArgs: base.TestServerArgs{
 			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
 			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
-				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
+				makeClusterSettings(), tempStorageDiskLimit,
 			),
 			DefaultTestTenant: defaultTestTenant,
 			Knobs: base.TestingKnobs{
@@ -1416,6 +1427,7 @@ func (t *logicTest) newCluster(
 		} else {
 			require.Lenf(t.rootT, cfg.Localities, 0, "node %d does not have a locality set", i+1)
 		}
+		nodeParams.Settings = makeClusterSettings()
 		paramsPerNode[i] = nodeParams
 	}
 	params.ServerArgsPerNode = paramsPerNode
@@ -1426,14 +1438,6 @@ func (t *logicTest) newCluster(
 	// TODO(radu): replace these with testing knobs.
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
-
-	// Disable stats collection on system tables before the cluster is started,
-	// otherwise there is a race condition where stats may be collected before we
-	// can disable them with `SET CLUSTER SETTING`. We disable stats collection on
-	// system tables in order to have deterministic tests.
-	stats.AutomaticStatisticsOnSystemTables.Override(
-		context.Background(), &params.ServerArgs.TempStorageConfig.Settings.SV, false,
-	)
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
 	if cfg.UseFakeSpanResolver {
@@ -1447,6 +1451,7 @@ func (t *logicTest) newCluster(
 		for i := 0; i < cfg.NumNodes; i++ {
 			tenantArgs := base.TestTenantArgs{
 				TenantID: serverutils.TestTenantID(),
+				Settings: makeClusterSettings(),
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						DeterministicExplain:            true,
