@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -25,13 +26,6 @@ type SeqNum int64
 
 // SafeValue implements the redact.SafeValue interface.
 func (SeqNum) SafeValue() {}
-
-// LAI is an int64 denoting a lease applied index with its own type to avoid
-// mix-ups in positional arguments.
-type LAI int64
-
-// SafeValue implements the redact.SafeValue interface.
-func (LAI) SafeValue() {}
 
 func (m *Update) String() string {
 	sb := &strings.Builder{}

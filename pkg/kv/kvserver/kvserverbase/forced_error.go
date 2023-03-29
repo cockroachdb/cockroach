@@ -45,7 +45,7 @@ var NoopOnProbeCommandErr = kvpb.NewErrorf("no-op on ProbeRequest")
 
 // ForcedErrResult is the output from CheckForcedErr.
 type ForcedErrResult struct {
-	LeaseIndex  uint64
+	LeaseIndex  kvpb.LeaseAppliedIndex
 	Rejection   ProposalRejectionType
 	ForcedError *kvpb.Error
 }

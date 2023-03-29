@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -93,7 +94,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// After the proposal quota is enabled all entries applied by this replica
 			// will be appended to the quotaReleaseQueue. The proposalQuotaBaseIndex
 			// and the quotaReleaseQueue together track status.Applied exactly.
-			r.mu.proposalQuotaBaseIndex = status.Applied
+			r.mu.proposalQuotaBaseIndex = kvpb.RaftIndex(status.Applied)
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 			}
@@ -138,12 +139,12 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	now := timeutil.Now()
 	// commitIndex is used to determine whether a newly added replica has fully
 	// caught up.
-	commitIndex := status.Commit
+	commitIndex := kvpb.RaftIndex(status.Commit)
 	// Initialize minIndex to the currently applied index. The below progress
 	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
 	// cannot correspond to values beyond the applied index there's no reason
 	// to consider progress beyond it as meaningful.
-	minIndex := status.Applied
+	minIndex := kvpb.RaftIndex(status.Applied)
 
 	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
@@ -203,7 +204,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// Only consider followers who are in advance of the quota base
 		// index. This prevents a follower from coming back online and
 		// preventing throughput to the range until it has caught up.
-		if progress.Match < r.mu.proposalQuotaBaseIndex {
+		if kvpb.RaftIndex(progress.Match) < r.mu.proposalQuotaBaseIndex {
 			return
 		}
 		if _, paused := r.mu.pausedFollowers[roachpb.ReplicaID(id)]; paused {
@@ -214,13 +215,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// See #79215.
 			return
 		}
-		if progress.Match > 0 && progress.Match < minIndex {
-			minIndex = progress.Match
+		if progress.Match > 0 && kvpb.RaftIndex(progress.Match) < minIndex {
+			minIndex = kvpb.RaftIndex(progress.Match)
 		}
 		// If this is the most recently added replica, and it has caught up, clear
 		// our state that was tracking it. This is unrelated to managing proposal
 		// quota, but this is a convenient place to do so.
-		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {
+		if rep.ReplicaID == r.mu.lastReplicaAdded && kvpb.RaftIndex(progress.Match) >= commitIndex {
 			r.mu.lastReplicaAdded = 0
 			r.mu.lastReplicaAddedTime = time.Time{}
 		}
@@ -245,8 +246,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// correspond to applied entries. It should not be possible for the base
 	// index and the not yet released applied entries to not equal the applied
 	// index.
-	releasableIndex := r.mu.proposalQuotaBaseIndex + uint64(len(r.mu.quotaReleaseQueue))
-	if releasableIndex != status.Applied {
+	releasableIndex := r.mu.proposalQuotaBaseIndex + kvpb.RaftIndex(len(r.mu.quotaReleaseQueue))
+	if releasableIndex != kvpb.RaftIndex(status.Applied) {
 		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
 			" must equal the applied index (%d)",
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,

@@ -13,6 +13,7 @@ package raftlog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -59,8 +60,8 @@ func (c *ReplicatedCmd) Decode(e *raftpb.Entry) error {
 
 // Index implements apply.Command. It returns the index of the log entry that
 // this Command applies.
-func (c *ReplicatedCmd) Index() uint64 {
-	return c.Entry.Index
+func (c *ReplicatedCmd) Index() kvpb.RaftIndex {
+	return kvpb.RaftIndex(c.Entry.Index)
 }
 
 // IsTrivial implements apply.Command. Trivial commands may be batched in an

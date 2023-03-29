@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -178,7 +179,7 @@ func BenchmarkVisit(b *testing.B) {
 	defer eng.Close()
 
 	ent, metaB := mkBenchEnt(b)
-	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, ent.Index), metaB))
+	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, kvpb.RaftIndex(ent.Index)), metaB))
 
 	b.ReportAllocs()
 	b.ResetTimer()

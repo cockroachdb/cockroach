@@ -384,7 +384,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 
 	type seenT struct {
 		rangeID   roachpb.RangeID
-		tombstone roachpb.RangeTombstone
+		tombstone kvserverpb.RangeTombstone
 	}
 
 	// Next, write the keys we're planning to see again.
@@ -398,7 +398,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 				continue
 			}
 
-			tombstone := roachpb.RangeTombstone{
+			tombstone := kvserverpb.RangeTombstone{
 				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
 			}
 
@@ -423,7 +423,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	})
 
 	var seen []seenT
-	var tombstone roachpb.RangeTombstone
+	var tombstone kvserverpb.RangeTombstone
 
 	handleTombstone := func(rangeID roachpb.RangeID) error {
 		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
@@ -4018,7 +4018,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	require.True(t, created)
 	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
 	require.NoError(t, err)
-	require.Equal(t, &roachpb.RaftReplicaID{ReplicaID: 7}, replicaID)
+	require.Equal(t, &kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

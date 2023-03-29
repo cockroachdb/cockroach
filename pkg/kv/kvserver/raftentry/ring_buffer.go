@@ -13,6 +13,7 @@ package raftentry
 import (
 	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
@@ -34,20 +35,20 @@ const (
 // given that ents may overlap with existing entries or may be rejected from
 // the buffer. ents must not be empty.
 func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
-	if it := last(b); it.valid(b) && ents[0].Index > it.index(b)+1 {
+	if it := last(b); it.valid(b) && kvpb.RaftIndex(ents[0].Index) > it.index(b)+1 {
 		// If ents is non-contiguous and later than the currently cached range then
 		// remove the current entries and add ents in their place.
 		removedBytes, removedEntries := b.clearTo(it.index(b) + 1)
 		addedBytes, addedEntries = -1*removedBytes, -1*removedEntries
 	}
-	before, after, ok := computeExtension(b, ents[0].Index, ents[len(ents)-1].Index)
+	before, after, ok := computeExtension(b, kvpb.RaftIndex(ents[0].Index), kvpb.RaftIndex(ents[len(ents)-1].Index))
 	if !ok {
 		return
 	}
 	extend(b, before, after)
 	it := first(b)
 	if before == 0 && after != b.len { // skip unchanged prefix
-		it, _ = iterateFrom(b, ents[0].Index) // safe by construction
+		it, _ = iterateFrom(b, kvpb.RaftIndex(ents[0].Index)) // safe by construction
 	}
 	firstNewAfter := len(ents) - after
 	for i, e := range ents {
@@ -65,7 +66,7 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 // truncateFrom clears all entries from the ringBuf with index equal to or
 // greater than lo. The method returns the aggregate size and count of entries
 // removed. Note that lo itself may or may not be in the cache.
-func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
+func (b *ringBuf) truncateFrom(lo kvpb.RaftIndex) (removedBytes, removedEntries int32) {
 	if b.len == 0 {
 		return
 	}
@@ -103,7 +104,7 @@ func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
 
 // clearTo clears all entries from the ringBuf with index less than hi. The
 // method returns the aggregate size and count of entries removed.
-func (b *ringBuf) clearTo(hi uint64) (removedBytes, removedEntries int32) {
+func (b *ringBuf) clearTo(hi kvpb.RaftIndex) (removedBytes, removedEntries int32) {
 	if b.len == 0 || hi < first(b).index(b) {
 		return
 	}
@@ -128,7 +129,7 @@ func (b *ringBuf) clearTo(hi uint64) (removedBytes, removedEntries int32) {
 	return
 }
 
-func (b *ringBuf) get(index uint64) (e raftpb.Entry, ok bool) {
+func (b *ringBuf) get(index kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
 	it, ok := iterateFrom(b, index)
 	if !ok {
 		return e, ok
@@ -137,8 +138,8 @@ func (b *ringBuf) get(index uint64) (e raftpb.Entry, ok bool) {
 }
 
 func (b *ringBuf) scan(
-	ents []raftpb.Entry, lo, hi, maxBytes uint64,
-) (_ []raftpb.Entry, bytes uint64, nextIdx uint64, exceededMaxBytes bool) {
+	ents []raftpb.Entry, lo kvpb.RaftIndex, hi kvpb.RaftIndex, maxBytes uint64,
+) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
 	var it iterator
 	nextIdx = lo
 	it, ok := iterateFrom(b, lo)
@@ -203,7 +204,7 @@ func extend(b *ringBuf, before, after int) {
 // after are counts, not indices, of number of entries which precede and follow
 // the currently cached range. If [lo, hi] is not overlapping or directly
 // adjacent to the current cache bounds, ok will be false.
-func computeExtension(b *ringBuf, lo, hi uint64) (before, after int, ok bool) {
+func computeExtension(b *ringBuf, lo, hi kvpb.RaftIndex) (before, after int, ok bool) {
 	if b.len == 0 {
 		return 0, int(hi) - int(lo) + 1, true
 	}
@@ -223,7 +224,7 @@ func computeExtension(b *ringBuf, lo, hi uint64) (before, after int, ok bool) {
 // iterator indexes into a ringBuf. A value of -1 is not valid.
 type iterator int
 
-func iterateFrom(b *ringBuf, index uint64) (_ iterator, ok bool) {
+func iterateFrom(b *ringBuf, index kvpb.RaftIndex) (_ iterator, ok bool) {
 	if b.len == 0 {
 		return -1, false
 	}
@@ -257,8 +258,8 @@ func (it iterator) valid(b *ringBuf) bool {
 }
 
 // index returns the index of the entry at iterator's curent position.
-func (it iterator) index(b *ringBuf) uint64 {
-	return b.buf[it].Index
+func (it iterator) index(b *ringBuf) kvpb.RaftIndex {
+	return kvpb.RaftIndex(b.buf[it].Index)
 }
 
 // entry returns the entry at iterator's curent position.

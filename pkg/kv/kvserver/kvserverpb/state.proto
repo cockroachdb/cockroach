@@ -13,10 +13,10 @@ package cockroach.kv.kvserver.storagepb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb";
 
 import "storage/enginepb/mvcc.proto";
-import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
+import "kv/kvserver/kvserverpb/internal_raft.proto";
 
 import "gogoproto/gogo.proto";
 
@@ -35,9 +35,9 @@ message ReplicaState {
   option (gogoproto.equal) = true;
 
   // The highest (and last) index applied to the state machine.
-  uint64 raft_applied_index = 1;
+  uint64 raft_applied_index = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
   // The highest (and last) lease index applied to the state machine.
-  uint64 lease_applied_index = 2;
+  int64 lease_applied_index = 2  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
   // The Range descriptor.
   // The pointer may change, but the referenced RangeDescriptor struct itself
   // must be treated as immutable; it is leaked out of the lock.
@@ -53,7 +53,7 @@ message ReplicaState {
   // as part of ReplicatedEvalResult.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
-  roachpb.RaftTruncatedState truncated_state = 5;
+  RaftTruncatedState truncated_state = 5;
   // GCThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
@@ -136,7 +136,7 @@ message ReplicaState {
 
   // The term corresponding to RaftAppliedIndex. This is derived from
   // RangeAppliedState.RaftAppliedIndexTerm.
-  uint64 raft_applied_index_term = 14;
+  uint64 raft_applied_index_term = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
 
   // GCHint contains GC hint information for the replica. If hint
   // timestamp is set that means all data in the range is expected to be
@@ -154,7 +154,7 @@ message RangeInfo {
 
   ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The highest (and last) index in the Raft log.
-  uint64 last_index = 2;
+  uint64 last_index = 2 [(gogoproto.casttype) ="github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
   uint64 num_pending = 3;
   reserved 4; // previously last verification timestamp for verify queue.
   uint64 num_dropped = 5;
@@ -203,9 +203,75 @@ message RangeSideTransportInfo {
 
   util.hlc.Timestamp replica_closed = 1 [(gogoproto.nullable) = false];
   int64 replica_lai = 2 [(gogoproto.customname) = "ReplicaLAI",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
 
   util.hlc.Timestamp central_closed = 3 [(gogoproto.nullable) = false];
   int64 central_lai = 4 [(gogoproto.customname) = "CentralLAI",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
 }
+
+
+// RangeAppliedState combines the raft and lease applied indices with
+// mvcc stats. These are all persisted on each transition of the Raft
+// state machine (i.e. on each Raft application), so they are stored
+// in the same RocksDB key for efficiency.
+message RangeAppliedState {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // raft_applied_index is the highest (and last) index applied to the Raft
+  // state machine.
+  uint64 raft_applied_index = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  // lease_applied_index is the highest (and last) lease index applied to the
+  // Raft state machine.
+  uint64 lease_applied_index = 2  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+  // range_stats is the set of mvcc stats that accounts for the current value
+  // of the Raft state machine.
+  MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+
+  // raft_closed_timestamp is the largest timestamp that is known to have been
+  // closed through Raft commands as of this lease applied index. This means
+  // that the current leaseholder (if any) and any future leaseholder will not
+  // evaluate writes at or below this timestamp, and also that any in-flight
+  // commands that can still apply are writing at higher timestamps.
+  // Non-leaseholder replicas are free to serve "follower reads" at or below
+  // this timestamp.
+  util.hlc.Timestamp raft_closed_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // raft_applied_index_term is the term corresponding to raft_applied_index.
+  // The serialized proto will not contain this field until code starts
+  // setting it to a value > 0 (in v22.1). This is desirable since we don't
+  // want a mixed version cluster (v21.2 and v22.1) to have divergent replica
+  // state simply because we have introduced this field.
+  uint64 raft_applied_index_term = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+}
+// MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
+// width encodings for most fields that make it efficient to store positive
+// values but inefficient to store negative values. This makes the encodings
+// incompatible.
+message MVCCPersistentStats {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  int64 contains_estimates = 14; // must never go negative absent a bug
+  sfixed64 last_update_nanos = 1;
+  sfixed64 intent_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  int64 live_bytes = 4;
+  int64 live_count = 5;
+  int64 key_bytes = 6;
+  int64 key_count = 7;
+  int64 val_bytes = 8;
+  int64 val_count = 9;
+  int64 intent_bytes = 10;
+  int64 intent_count = 11;
+  int64 separated_intent_count = 16;
+  int64 range_key_count = 17;
+  int64 range_key_bytes = 18;
+  int64 range_val_count = 19;
+  int64 range_val_bytes = 20;
+  int64 sys_bytes = 12;
+  int64 sys_count = 13;
+  int64 abort_span_bytes = 15;
+}
+

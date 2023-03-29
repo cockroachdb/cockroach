@@ -356,21 +356,21 @@ func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
-func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
+func RaftLogKey(rangeID roachpb.RangeID, logIndex kvpb.RaftIndex) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLogKey(logIndex)
 }
 
 // RaftLogKeyFromPrefix returns a system-local key for a Raft log entry, using
 // the provided Raft log prefix.
-func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex uint64) roachpb.Key {
-	return encoding.EncodeUint64Ascending(raftLogPrefix, logIndex)
+func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex kvpb.RaftIndex) roachpb.Key {
+	return encoding.EncodeUint64Ascending(raftLogPrefix, uint64(logIndex))
 }
 
 // DecodeRaftLogKeyFromSuffix parses the suffix of a system-local key for a Raft
 // log entry and returns the entry's log index.
-func DecodeRaftLogKeyFromSuffix(raftLogSuffix []byte) (uint64, error) {
+func DecodeRaftLogKeyFromSuffix(raftLogSuffix []byte) (kvpb.RaftIndex, error) {
 	_, logIndex, err := encoding.DecodeUint64Ascending(raftLogSuffix)
-	return logIndex, err
+	return kvpb.RaftIndex(logIndex), err
 }
 
 // RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
@@ -1092,7 +1092,7 @@ func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
-func (b RangeIDPrefixBuf) RaftLogKey(logIndex uint64) roachpb.Key {
+func (b RangeIDPrefixBuf) RaftLogKey(logIndex kvpb.RaftIndex) roachpb.Key {
 	return RaftLogKeyFromPrefix(b.RaftLogPrefix(), logIndex)
 }
 

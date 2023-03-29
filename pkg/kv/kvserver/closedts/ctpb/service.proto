@@ -84,7 +84,7 @@ message Update {
   // being included in the added_or_updated field of a future snapshot.
   message RangeUpdate {
     uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-    int64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "LAI"];
+    uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
     roachpb.RangeClosedTimestampPolicy policy = 3;
   }
   repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];

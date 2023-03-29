@@ -14,6 +14,7 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +44,7 @@ type CandidateReplica interface {
 	RaftStatus() *raft.Status
 	// GetFirstIndex returns the index of the first entry in the replica's Raft
 	// log.
-	GetFirstIndex() uint64
+	GetFirstIndex() kvpb.RaftIndex
 	// DescAndSpanConfig returns the authoritative range descriptor as well
 	// as the span config for the replica.
 	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)

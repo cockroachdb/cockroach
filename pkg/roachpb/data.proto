@@ -654,7 +654,7 @@ message Lease {
   // (see Lease.Equivalent). Two adjacent leases that are equivalent will have
   // the same sequence number and two adjacent leases that are not equivalent
   // will have different sequence numbers.
-  int64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
+  uint64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
 
   // The type of acquisition event that result in this lease (transfer or
   // request).

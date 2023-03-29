@@ -407,16 +407,16 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 		msg = &roachpb.Version{}
 
 	case bytes.Equal(suffix, keys.LocalRangeTombstoneSuffix):
-		msg = &roachpb.RangeTombstone{}
+		msg = &kvserverpb.RangeTombstone{}
 
 	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
-		msg = &roachpb.RaftTruncatedState{}
+		msg = &kvserverpb.RaftTruncatedState{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
 		msg = &roachpb.Lease{}
 
 	case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
-		msg = &enginepb.RangeAppliedState{}
+		msg = &kvserverpb.RangeAppliedState{}
 
 	case bytes.Equal(suffix, keys.LocalRangeStatsLegacySuffix):
 		msg = &enginepb.MVCCStats{}

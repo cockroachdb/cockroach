@@ -14,6 +14,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -92,7 +94,9 @@ func (p *pendingLogTruncations) computePostTruncLogSize(raftLogSize int64) int64
 // computePostTruncFirstIndex computes the first log index that is not
 // truncated, under the pretense that the pending truncations have been
 // enacted.
-func (p *pendingLogTruncations) computePostTruncFirstIndex(firstIndex uint64) uint64 {
+func (p *pendingLogTruncations) computePostTruncFirstIndex(
+	firstIndex kvpb.RaftIndex,
+) kvpb.RaftIndex {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.iterateLocked(func(_ int, trunc pendingTruncation) {
@@ -150,7 +154,7 @@ func (p *pendingLogTruncations) capacity() int {
 type pendingTruncation struct {
 	// The pending truncation will truncate entries up to
 	// RaftTruncatedState.Index, inclusive.
-	roachpb.RaftTruncatedState
+	kvserverpb.RaftTruncatedState
 
 	// The logDeltaBytes are computed under the assumption that the
 	// truncation is deleting [expectedFirstIndex,RaftTruncatedState.Index]. It
@@ -167,14 +171,14 @@ type pendingTruncation struct {
 	//   are making an effort to have consecutive TruncateLogRequests provide us
 	//   stats for index intervals that are adjacent and non-overlapping, but
 	//   that behavior is best-effort.
-	expectedFirstIndex uint64
+	expectedFirstIndex kvpb.RaftIndex
 	// logDeltaBytes includes the bytes from sideloaded files. Like
 	// ReplicatedEvalResult.RaftLogDelta, this is <= 0.
 	logDeltaBytes  int64
 	isDeltaTrusted bool
 }
 
-func (pt *pendingTruncation) firstIndexAfterTrunc() uint64 {
+func (pt *pendingTruncation) firstIndexAfterTrunc() kvpb.RaftIndex {
 	// Reminder: RaftTruncatedState.Index is inclusive.
 	return pt.Index + 1
 }
@@ -246,10 +250,10 @@ type replicaForTruncator interface {
 	// Returns the Range ID.
 	getRangeID() roachpb.RangeID
 	// Returns the current truncated state.
-	getTruncatedState() roachpb.RaftTruncatedState
+	getTruncatedState() kvserverpb.RaftTruncatedState
 	// Updates the replica state after the truncation is enacted.
 	setTruncatedStateAndSideEffects(
-		_ context.Context, _ *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+		_ context.Context, _ *kvserverpb.RaftTruncatedState, expectedFirstIndexPreTruncation kvpb.RaftIndex,
 	) (expectedFirstIndexWasAccurate bool)
 	// Updates the stats related to the raft log size after the truncation is
 	// enacted.
@@ -260,7 +264,7 @@ type replicaForTruncator interface {
 	// Returns the sideloaded bytes that would be freed if we were to truncate
 	// [from, to).
 	sideloadedBytesIfTruncatedFromTo(
-		_ context.Context, from, to uint64) (freed int64, _ error)
+		_ context.Context, from, to kvpb.RaftIndex) (freed int64, _ error)
 	getStateLoader() stateloader.StateLoader
 	// NB: Setting the persistent raft state is via the Engine exposed by
 	// storeForTruncator.
@@ -272,8 +276,8 @@ type replicaForTruncator interface {
 func (t *raftLogTruncator) addPendingTruncation(
 	ctx context.Context,
 	r replicaForTruncator,
-	trunc roachpb.RaftTruncatedState,
-	raftExpectedFirstIndex uint64,
+	trunc kvserverpb.RaftTruncatedState,
+	raftExpectedFirstIndex kvpb.RaftIndex,
 	raftLogDelta int64,
 ) {
 	pendingTrunc := pendingTruncation{

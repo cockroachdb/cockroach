@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/apply",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverbase",
@@ -40,6 +41,7 @@ go_test(
     embed = [":raftlog"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",

@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -46,12 +48,15 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 
-		var prevTruncatedState roachpb.RaftTruncatedState
+		var prevTruncatedState kvserverpb.RaftTruncatedState
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "prev":
-				d.ScanArgs(t, "index", &prevTruncatedState.Index)
-				d.ScanArgs(t, "term", &prevTruncatedState.Term)
+				var v uint64
+				d.ScanArgs(t, "index", &v)
+				prevTruncatedState.Index = kvpb.RaftIndex(v)
+				d.ScanArgs(t, "term", &v)
+				prevTruncatedState.Term = kvpb.RaftTerm(v)
 				return ""
 
 			case "put":
@@ -59,9 +64,9 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
 
-				truncState := &roachpb.RaftTruncatedState{
-					Index: index,
-					Term:  term,
+				truncState := &kvserverpb.RaftTruncatedState{
+					Index: kvpb.RaftIndex(index),
+					Term:  kvpb.RaftTerm(term),
 				}
 
 				require.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
@@ -73,16 +78,16 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
 
-				suggestedTruncatedState := &roachpb.RaftTruncatedState{
-					Index: index,
-					Term:  term,
+				suggestedTruncatedState := &kvserverpb.RaftTruncatedState{
+					Index: kvpb.RaftIndex(index),
+					Term:  kvpb.RaftTerm(term),
 				}
 				currentTruncatedState, err := loader.LoadRaftTruncatedState(ctx, eng)
 				require.NoError(t, err)
 
 				// Write log entries at start, middle, end, and above the truncated interval.
 				if suggestedTruncatedState.Index > currentTruncatedState.Index {
-					indexes := []uint64{
+					indexes := []kvpb.RaftIndex{
 						currentTruncatedState.Index + 1,                                       // start
 						(suggestedTruncatedState.Index + currentTruncatedState.Index + 1) / 2, // middle
 						suggestedTruncatedState.Index,                                         // end
@@ -90,7 +95,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 					}
 					for _, idx := range indexes {
 						meta := enginepb.MVCCMetadata{RawBytes: make([]byte, 8)}
-						binary.BigEndian.PutUint64(meta.RawBytes, idx)
+						binary.BigEndian.PutUint64(meta.RawBytes, uint64(idx))
 						value, err := protoutil.Marshal(&meta)
 						require.NoError(t, err)
 						require.NoError(t, eng.PutUnversioned(prefixBuf.RaftLogKey(idx), value))
@@ -104,7 +109,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 
 				// Check the truncated state.
 				key := keys.RaftTruncatedStateKey(rangeID)
-				var truncatedState roachpb.RaftTruncatedState
+				var truncatedState kvserverpb.RaftTruncatedState
 				ok, err := storage.MVCCGetProto(ctx, eng, key, hlc.Timestamp{}, &truncatedState, storage.MVCCGetOptions{})
 				require.NoError(t, err)
 				require.True(t, ok)
