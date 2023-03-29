@@ -115,7 +115,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   storage: {
     label: "Storage",
     component: storageDashboard,
-    isKvDashboard: true,
+    isKvDashboard: false,
   },
   replication: {
     label: "Replication",
