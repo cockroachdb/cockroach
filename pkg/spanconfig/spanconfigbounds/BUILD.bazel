@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "bool_field.go",
         "bounds.go",
+        "bounds_reader.go",
         "constraints_field.go",
         "doc.go",
         "fields.go",
@@ -21,6 +22,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/util/protoutil",

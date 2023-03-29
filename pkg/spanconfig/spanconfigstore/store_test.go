@@ -17,10 +17,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -117,14 +117,14 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	capabilitiesReader := newMockCapabilitiesReader()
+	boundsReader := newMockBoundsReader()
 	settings := cluster.MakeTestingClusterSettings()
 	boundsEnabled.Override(ctx, &settings.SV, true)
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		store := New(
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
 			settings,
-			capabilitiesReader,
+			boundsReader,
 			&spanconfig.TestingKnobs{
 				StoreIgnoreCoalesceAdjacentExceptions: true,
 				StoreInternConfigsInDryRuns:           true,
@@ -218,7 +218,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "declare-bounds":
 				updates := spanconfigtestutils.ParseDeclareBoundsArguments(t, d.Input)
-				capabilitiesReader.apply(updates)
+				boundsReader.apply(updates)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
@@ -228,38 +228,31 @@ func TestDataDriven(t *testing.T) {
 	})
 }
 
-type mockCapabilitiesReader struct {
-	capabilities map[roachpb.TenantID]tenantcapabilities.TenantCapabilities
+type mockBoundsReader struct {
+	bounds map[roachpb.TenantID]spanconfigbounds.Bounds
 }
 
-func newMockCapabilitiesReader() *mockCapabilitiesReader {
-	m := mockCapabilitiesReader{
-		capabilities: make(map[roachpb.TenantID]tenantcapabilities.TenantCapabilities),
+func newMockBoundsReader() *mockBoundsReader {
+	m := mockBoundsReader{
+		bounds: make(map[roachpb.TenantID]spanconfigbounds.Bounds),
 	}
 	return &m
 }
 
-// GetCapabilities implements the tenantcapabilities.Reader interface.
-func (m *mockCapabilitiesReader) GetCapabilities(
-	id roachpb.TenantID,
-) (tenantcapabilities.TenantCapabilities, bool) {
-	caps, found := m.capabilities[id]
-	return caps, found
+// Bounds implements the spanconfigbounds.Reader interface.
+func (m *mockBoundsReader) Bounds(id roachpb.TenantID) (spanconfigbounds.Bounds, bool) {
+	bounds, found := m.bounds[id]
+	return bounds, found
 }
 
-// GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
-func (m *mockCapabilitiesReader) GetGlobalCapabilityState() map[roachpb.TenantID]tenantcapabilities.TenantCapabilities {
-	panic("unimplemented")
-}
-
-func (m *mockCapabilitiesReader) apply(updates []tenantcapabilities.Update) {
+func (m *mockBoundsReader) apply(updates []spanconfigtestutils.BoundsUpdate) {
 	for _, update := range updates {
 		if update.Deleted {
-			delete(m.capabilities, update.TenantID)
+			delete(m.bounds, update.TenantID)
 			continue
 		}
 
-		m.capabilities[update.TenantID] = update.TenantCapabilities
+		m.bounds[update.TenantID] = update.Bounds
 	}
 }
 
@@ -309,7 +302,7 @@ func TestStoreClone(t *testing.T) {
 	original := New(
 		roachpb.TestingDefaultSpanConfig(),
 		cluster.MakeClusterSettings(),
-		tenantcapabilities.NewEmptyReader(),
+		spanconfigbounds.NewEmptyReader(),
 		nil,
 	)
 	original.Apply(ctx, false, updates...)
@@ -347,7 +340,7 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 			store := New(
 				roachpb.SpanConfig{},
 				cluster.MakeClusterSettings(),
-				tenantcapabilities.NewEmptyReader(),
+				spanconfigbounds.NewEmptyReader(),
 				&spanconfig.TestingKnobs{
 					StoreIgnoreCoalesceAdjacentExceptions: true,
 				},
