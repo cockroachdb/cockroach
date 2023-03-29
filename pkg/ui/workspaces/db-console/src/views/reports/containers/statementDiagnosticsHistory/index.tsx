@@ -46,6 +46,7 @@ import {
   SortSetting,
   ColumnDescriptor,
   util,
+  Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
@@ -96,7 +97,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
       title: "Activated on",
       name: "activated_on",
       cell: record =>
-        moment.utc(record.requested_at).format(util.DATE_FORMAT_24_UTC),
+        <Timestamp time={record.requested_at} format={util.DATE_FORMAT_24_TZ} />,
       sort: record => {
         return moment.utc(record.requested_at).unix();
       },

@@ -18,7 +18,7 @@ import {
   longToInt,
   TimestampToMoment,
   RenderCount,
-  DATE_FORMAT_24_UTC,
+  DATE_FORMAT_24_TZ,
   explainPlan,
   limitText,
   Count,
@@ -31,6 +31,7 @@ import { Anchor } from "../../anchor";
 import classNames from "classnames/bind";
 import styles from "./plansTable.module.scss";
 import { Link } from "react-router-dom";
+import {Timestamp} from "../../contexts";
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
@@ -295,9 +296,9 @@ export function makeExplainPlanColumns(
       name: "lastExecTime",
       title: planDetailsTableTitles.lastExecTime(),
       cell: (item: PlanHashStats) =>
-        TimestampToMoment(item.stats.last_exec_timestamp).format(
-          DATE_FORMAT_24_UTC,
-        ),
+        <Timestamp
+          time={TimestampToMoment(item.stats.last_exec_timestamp)}
+          format={DATE_FORMAT_24_TZ} />,
       sort: (item: PlanHashStats) =>
         TimestampToMoment(item.stats.last_exec_timestamp).unix(),
     },

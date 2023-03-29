@@ -17,7 +17,7 @@ import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration,
 } from "src/util/format";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
@@ -37,7 +37,7 @@ import {
 } from "../types";
 
 import classNames from "classnames/bind";
-import { CockroachCloudContext } from "../../contexts";
+import {CockroachCloudContext, Timestamp} from "../../contexts";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
@@ -145,15 +145,19 @@ the maximum number of statements was reached in the console.`;
                   <SummaryCard>
                     <SummaryCardItem
                       label="Start Time"
-                      value={txnDetails.startTime.format(
-                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-                      )}
+                      value={
+                        <Timestamp
+                          time={txnDetails.startTime}
+                          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ} />
+                      }
                     />
                     <SummaryCardItem
                       label="End Time"
-                      value={txnDetails.endTime.format(
-                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-                      )}
+                      value={
+                        <Timestamp
+                          time={txnDetails.endTime}
+                          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ} />
+                      }
                     />
                     <SummaryCardItem
                       label="Elapsed Time"

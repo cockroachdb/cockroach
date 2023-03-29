@@ -10,6 +10,8 @@
 
 import React from "react";
 import { createContext, useContext } from "react";
+import {Moment} from "moment-timezone";
+import {FormatWithTimezone} from "../util";
 
 export const TimezoneContext = createContext<string>("UTC");
 
@@ -29,4 +31,15 @@ export function WithTimezone<T>(
     const timezone = useContext(TimezoneContext);
     return <Component timezone={timezone} {...props} />;
   };
+}
+
+export function Timezone(props: any) {
+  const timezone = useContext(TimezoneContext);
+  return <>{timezone}</>
+}
+
+export function Timestamp(props: {time: Moment, format: string}) {
+  const timezone = useContext(TimezoneContext);
+  const { time, format } = props;
+  return <>{FormatWithTimezone(time, format, timezone)}</>
 }

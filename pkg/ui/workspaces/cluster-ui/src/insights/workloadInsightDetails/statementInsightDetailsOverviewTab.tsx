@@ -17,11 +17,11 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { capitalize, Duration } from "src/util";
 import {
   Count,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util/format";
 import { StmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
-import { CockroachCloudContext } from "../../contexts";
+import {CockroachCloudContext, Timestamp} from "../../contexts";
 
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
@@ -102,15 +102,19 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Start Time"
-              value={insightDetails.startTime.format(
-                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-              )}
+              value={
+                <Timestamp
+                  time={insightDetails.startTime}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ} />
+              }
             />
             <SummaryCardItem
               label="End Time"
-              value={insightDetails.endTime.format(
-                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-              )}
+              value={
+                <Timestamp
+                  time={insightDetails.endTime}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ} />
+              }
             />
             <SummaryCardItem
               label="Elapsed Time"
