@@ -11,6 +11,7 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -33,6 +34,7 @@ go_test(
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/tests",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
@@ -44,6 +46,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
