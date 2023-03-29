@@ -172,8 +172,8 @@ func (rsl StateLoader) SetLease(
 // LoadRangeAppliedState loads the Range applied state.
 func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader storage.Reader,
-) (*enginepb.RangeAppliedState, error) {
-	var as enginepb.RangeAppliedState
+) (*kvserverpb.RangeAppliedState, error) {
+	var as kvserverpb.RangeAppliedState
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
 		storage.MVCCGetOptions{})
 	return &as, err
@@ -200,19 +200,21 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
+	appliedIndex roachpb.RaftIndex,
+	leaseAppliedIndex roachpb.LeaseAppliedIndex,
+	appliedIndexTerm roachpb.RaftTerm,
 	newMS *enginepb.MVCCStats,
 	raftClosedTimestamp hlc.Timestamp,
-	asAlloc *enginepb.RangeAppliedState, // optional
+	asAlloc *kvserverpb.RangeAppliedState, // optional
 ) error {
 	if asAlloc == nil {
-		asAlloc = new(enginepb.RangeAppliedState)
+		asAlloc = new(kvserverpb.RangeAppliedState)
 	}
 	as := asAlloc
-	*as = enginepb.RangeAppliedState{
+	*as = kvserverpb.RangeAppliedState{
 		RaftAppliedIndex:     appliedIndex,
 		LeaseAppliedIndex:    leaseAppliedIndex,
-		RangeStats:           newMS.ToPersistentStats(),
+		RangeStats:           kvserverpb.MVCCPersistentStats(*newMS),
 		RaftClosedTimestamp:  raftClosedTimestamp,
 		RaftAppliedIndexTerm: appliedIndexTerm,
 	}

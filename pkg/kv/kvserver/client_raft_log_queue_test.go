@@ -87,7 +87,7 @@ func TestRaftLogQueue(t *testing.T) {
 		}
 	}
 
-	var afterTruncationIndex uint64
+	var afterTruncationIndex roachpb.RaftIndex
 	testutils.SucceedsSoon(t, func() error {
 		// Force a truncation check.
 		for i := range tc.Servers {

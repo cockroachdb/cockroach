@@ -53,7 +53,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			snapshotMap := map[roachpb.ReplicaID]struct{}{}
 			downMap := map[roachpb.ReplicaID]struct{}{}
 			match := map[roachpb.ReplicaID]uint64{}
-			minLiveMatchIndex := uint64(0) // accept all live followers by default
+			minLiveMatchIndex := roachpb.RaftIndex(0) // accept all live followers by default
 			for _, arg := range d.CmdArgs {
 				for i := range arg.Vals {
 					sl := strings.SplitN(arg.Vals[i], "@", 2)
@@ -67,7 +67,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 					arg.Scan(t, i, &id)
 					switch arg.Key {
 					case "min-live-match-index":
-						minLiveMatchIndex = id
+						minLiveMatchIndex = roachpb.RaftIndex(id)
 					case "self":
 						self = roachpb.ReplicaID(id)
 					case "voters", "learners":

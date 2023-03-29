@@ -70,7 +70,7 @@ func (sr *simulatorReplica) RaftStatus() *raft.Status {
 
 // GetFirstIndex returns the index of the first entry in the replica's Raft
 // log.
-func (sr *simulatorReplica) GetFirstIndex() uint64 {
+func (sr *simulatorReplica) GetFirstIndex() roachpb.RaftIndex {
 	// TODO(kvoli): We always return 2 here as RaftStatus is unimplemented.
 	// When it is implmeneted, this may become variable.
 	return 2

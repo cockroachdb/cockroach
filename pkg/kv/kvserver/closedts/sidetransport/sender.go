@@ -114,7 +114,7 @@ type connTestingKnobs struct {
 // trackedRange contains the information that the side-transport last published
 // about a particular range.
 type trackedRange struct {
-	lai    ctpb.LAI
+	lai    roachpb.LeaseAppliedIndex
 	policy roachpb.RangeClosedTimestampPolicy
 }
 
@@ -167,7 +167,7 @@ type BumpSideTransportClosedResult struct {
 	// Fields only set when ok.
 
 	// The range's current LAI, to be associated with the closed timestamp.
-	LAI ctpb.LAI
+	LAI roachpb.LeaseAppliedIndex
 	// The range's current policy.
 	Policy roachpb.RangeClosedTimestampPolicy
 }

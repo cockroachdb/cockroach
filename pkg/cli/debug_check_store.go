@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -80,11 +81,11 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 }
 
 type replicaCheckInfo struct {
-	truncatedIndex uint64
-	appliedIndex   uint64
-	firstIndex     uint64
-	lastIndex      uint64
-	committedIndex uint64
+	truncatedIndex roachpb.RaftIndex
+	appliedIndex   roachpb.RaftIndex
+	firstIndex     roachpb.RaftIndex
+	lastIndex      roachpb.RaftIndex
+	committedIndex roachpb.RaftIndex
 }
 
 type checkInput struct {
@@ -251,7 +252,7 @@ func checkStoreRaftState(
 				if err := kv.Value.GetProto(&hs); err != nil {
 					return err
 				}
-				getReplicaInfo(rangeID).committedIndex = hs.Commit
+				getReplicaInfo(rangeID).committedIndex = roachpb.RaftIndex(hs.Commit)
 			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
@@ -259,13 +260,14 @@ func checkStoreRaftState(
 				}
 				getReplicaInfo(rangeID).truncatedIndex = trunc.Index
 			case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
-				var state enginepb.RangeAppliedState
+				var state kvserverpb.RangeAppliedState
 				if err := kv.Value.GetProto(&state); err != nil {
 					return err
 				}
 				getReplicaInfo(rangeID).appliedIndex = state.RaftAppliedIndex
 			case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
-				_, index, err := encoding.DecodeUint64Ascending(detail)
+				_, uIndex, err := encoding.DecodeUint64Ascending(detail)
+				index := roachpb.RaftIndex(uIndex)
 				if err != nil {
 					return err
 				}

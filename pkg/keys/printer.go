@@ -305,7 +305,7 @@ func raftLogKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key
 	if err != nil {
 		panic(err)
 	}
-	return "", RaftLogKey(rangeID, index)
+	return "", RaftLogKey(rangeID, roachpb.RaftIndex(index))
 }
 
 func raftLogKeyPrint(buf *redact.StringBuilder, key roachpb.Key) {

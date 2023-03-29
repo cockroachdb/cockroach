@@ -1741,7 +1741,7 @@ func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
 }
 
 // LeaseSequence is a custom type for a lease sequence number.
-type LeaseSequence int64
+type LeaseSequence uint64
 
 // SafeValue implements the redact.SafeValue interface.
 func (s LeaseSequence) SafeValue() {}
@@ -2481,3 +2481,22 @@ func (tid *TenantID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return unmarshal(tid)
 	}
 }
+
+// RaftTerm represents the term of a raft message. This corresponds to Term in
+// HardState.Term in the Raft library. That type is a uint64, so it is necessary
+// to cast to/from that type when dealing with the Raft library, however
+// internally RaftTerm is used for all fields in CRDB.
+type RaftTerm uint64
+
+// RaftIndex represents the term of a raft message. This corresponds to Index in
+// HardState.Index in the Raft library. That type is a uint64, so it is
+// necessary to cast to/from that type when dealing with the Raft library,
+// however internally RaftIndex is used for all fields in CRDB.
+type RaftIndex uint64
+
+type LeaseAppliedIndex uint64
+
+// SafeValue implements the redact.SafeValue interface.
+func (s RaftTerm) SafeValue()          {}
+func (s RaftIndex) SafeValue()         {}
+func (s LeaseAppliedIndex) SafeValue() {}

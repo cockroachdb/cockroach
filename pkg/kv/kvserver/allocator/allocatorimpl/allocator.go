@@ -1957,7 +1957,7 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() roachpb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
 	opts allocator.TransferLeaseOptions,
@@ -2132,7 +2132,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() roachpb.RaftIndex
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 ) bool {
@@ -2217,7 +2217,7 @@ func (a *Allocator) TransferLeaseTarget(
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() roachpb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2485,7 +2485,7 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() roachpb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2852,7 +2852,10 @@ func FilterBehindReplicas(
 // Other replicas may be filtered out if this function is called with the
 // `raftStatus` of a non-raft leader replica.
 func excludeReplicasInNeedOfSnapshots(
-	ctx context.Context, st *raft.Status, firstIndex uint64, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	st *raft.Status,
+	firstIndex roachpb.RaftIndex,
+	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {
