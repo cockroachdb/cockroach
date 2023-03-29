@@ -68,6 +68,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":enginepb"],
     deps = [
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils/zerofields",

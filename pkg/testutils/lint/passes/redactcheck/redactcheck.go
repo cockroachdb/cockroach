@@ -83,6 +83,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LAI":    {},
 						"SeqNum": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation": {
+						"Level": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock": {
 						"Durability": {},
 						"Mode":       {},
