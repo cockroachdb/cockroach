@@ -1,4 +1,8 @@
-# LogicTest: !metamorphic-batch-sizes
+# LogicTest: local !local !metamorphic-batch-sizes
+
+# TODO(yuzefovich): at the moment the tests below that assert a particular set
+# of statistics are flaky, so we disable this file by using a contradictory
+# config set. Once #99751 is addressed, "local !local" part should be removed.
 
 # Disable automatic stats
 statement ok
