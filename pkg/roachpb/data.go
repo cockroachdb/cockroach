@@ -1737,12 +1737,6 @@ func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
 	return crt.InternalRemovedReplicas
 }
 
-// LeaseSequence is a custom type for a lease sequence number.
-type LeaseSequence int64
-
-// SafeValue implements the redact.SafeValue interface.
-func (s LeaseSequence) SafeValue() {}
-
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {

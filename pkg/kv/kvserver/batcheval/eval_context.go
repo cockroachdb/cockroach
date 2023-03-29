@@ -62,9 +62,9 @@ type EvalContext interface {
 	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
-	GetFirstIndex() uint64
-	GetTerm(uint64) (uint64, error)
-	GetLeaseAppliedIndex() uint64
+	GetFirstIndex() enginepb.RaftIndex
+	GetTerm(index enginepb.RaftIndex) (enginepb.RaftTerm, error)
+	GetLeaseAppliedIndex() enginepb.LeaseSequence
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -118,7 +118,7 @@ type EvalContext interface {
 	// RevokeLease stops the replica from using its current lease, if that lease
 	// matches the provided lease sequence. All future calls to leaseStatus on
 	// this node with the current lease will now return a PROSCRIBED status.
-	RevokeLease(context.Context, roachpb.LeaseSequence)
+	RevokeLease(context.Context, enginepb.LeaseSequence)
 
 	// WatchForMerge arranges to block all requests until the in-progress merge
 	// completes. Returns an error if no in-progress merge is detected.
@@ -172,13 +172,14 @@ type MockEvalCtx struct {
 	CPU                  float64
 	AbortSpan            *abortspan.AbortSpan
 	GCThreshold          hlc.Timestamp
-	Term, FirstIndex     uint64
+	Term                 enginepb.RaftTerm
+	FirstIndex           enginepb.RaftIndex
 	CanCreateTxnRecordFn func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn     func() hlc.Timestamp
 	Lease                roachpb.Lease
 	CurrentReadSummary   rspb.ReadSummary
 	ClosedTimestamp      hlc.Timestamp
-	RevokedLeaseSeq      roachpb.LeaseSequence
+	RevokedLeaseSeq      enginepb.LeaseSequence
 	MaxBytes             int64
 	ApproxDiskBytes      uint64
 }
@@ -228,13 +229,13 @@ func (m *mockEvalCtxImpl) GetRangeID() roachpb.RangeID {
 func (m *mockEvalCtxImpl) IsFirstRange() bool {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetFirstIndex() uint64 {
+func (m *mockEvalCtxImpl) GetFirstIndex() enginepb.RaftIndex {
 	return m.FirstIndex
 }
-func (m *mockEvalCtxImpl) GetTerm(uint64) (uint64, error) {
+func (m *mockEvalCtxImpl) GetTerm(enginepb.RaftIndex) (enginepb.RaftTerm, error) {
 	return m.Term, nil
 }
-func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
+func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() enginepb.LeaseSequence {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
@@ -293,7 +294,7 @@ func (m *mockEvalCtxImpl) GetCurrentClosedTimestamp(ctx context.Context) hlc.Tim
 	return m.ClosedTimestamp
 }
 
-func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequence) {
+func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq enginepb.LeaseSequence) {
 	m.RevokedLeaseSeq = seq
 }
 func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {

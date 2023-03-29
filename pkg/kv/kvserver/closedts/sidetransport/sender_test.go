@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +47,7 @@ type mockReplica struct {
 
 	canBump        bool
 	cantBumpReason CantCloseReason
-	lai            ctpb.LAI
+	lai            enginepb.LeaseSequence
 	policy         roachpb.RangeClosedTimestampPolicy
 }
 

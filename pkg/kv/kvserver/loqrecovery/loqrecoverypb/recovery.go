@@ -12,6 +12,7 @@ package loqrecoverypb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -24,6 +25,9 @@ import (
 // yaml serializable. Caution must be taken to use produced
 // representation outside of tests.
 type RecoveryKey roachpb.RKey
+
+// Force import of enginepb in this package.
+var _ = enginepb.RaftIndex(0)
 
 // MarshalYAML implements Marshaler interface.
 func (r RecoveryKey) MarshalYAML() (interface{}, error) {

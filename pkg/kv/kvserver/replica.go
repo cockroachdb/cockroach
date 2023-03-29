@@ -405,7 +405,8 @@ type Replica struct {
 		// thus invalid) even when lastIndexNotDurable is known, in which case the
 		// term will have to be retrieved from the Raft log entry. Use the
 		// invalidLastTerm constant for this case.
-		lastIndexNotDurable, lastTermNotDurable uint64
+		lastIndexNotDurable enginepb.RaftIndex
+		lastTermNotDurable  enginepb.RaftTerm
 		// A map of raft log index of pending snapshots to deadlines.
 		// Used to prohibit raft log truncations that would leave a gap between
 		// the snapshot and the new first index. The map entry has a zero
@@ -705,7 +706,7 @@ type Replica struct {
 		// The base index is the index up to (including) which quota was already
 		// released. That is, the first element in quotaReleaseQueue below is
 		// released as the base index moves up by one, etc.
-		proposalQuotaBaseIndex uint64
+		proposalQuotaBaseIndex enginepb.RaftIndex
 
 		// Once the leader observes a proposal come 'out of Raft', we add the size
 		// of the associated command to a queue of quotas we have yet to release

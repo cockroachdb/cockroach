@@ -102,7 +102,7 @@ func incrementArgs(key roachpb.Key, inc int64) *kvpb.IncrementRequest {
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *kvpb.TruncateLogRequest {
+func truncateLogArgs(index enginepb.RaftIndex, rangeID roachpb.RangeID) *kvpb.TruncateLogRequest {
 	return &kvpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,

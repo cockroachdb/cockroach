@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -98,7 +99,7 @@ func (s *Receiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) erro
 // for closed timestamp info about this range.
 func (s *Receiver) GetClosedTimestamp(
 	ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
-) (hlc.Timestamp, ctpb.LAI) {
+) (hlc.Timestamp, enginepb.LeaseSequence) {
 	s.mu.RLock()
 	conn, ok := s.mu.conns[leaseholderNode]
 	s.mu.RUnlock()
@@ -190,7 +191,7 @@ type Stores interface {
 	// ForwardSideTransportClosedTimestampForRange forwards the side-transport
 	// closed timestamp for the local replica(s) of the given range.
 	ForwardSideTransportClosedTimestampForRange(
-		ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai ctpb.LAI)
+		ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai enginepb.LeaseSequence)
 }
 
 func newIncomingStream(s *Receiver, stores Stores) *incomingStream {
@@ -208,7 +209,7 @@ func newIncomingStream(s *Receiver, stores Stores) *incomingStream {
 // does not have state for the range.
 func (r *incomingStream) GetClosedTimestamp(
 	ctx context.Context, rangeID roachpb.RangeID,
-) (hlc.Timestamp, ctpb.LAI) {
+) (hlc.Timestamp, enginepb.LeaseSequence) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.mu.tracked[rangeID]

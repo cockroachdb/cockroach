@@ -436,7 +436,7 @@ func (m *managerImpl) FinishReq(g *Guard) {
 
 // HandleWriterIntentError implements the ContentionHandler interface.
 func (m *managerImpl) HandleWriterIntentError(
-	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.WriteIntentError,
+	ctx context.Context, g *Guard, seq enginepb.LeaseSequence, t *kvpb.WriteIntentError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
 		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
@@ -548,7 +548,7 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
+func (m *managerImpl) OnRangeLeaseUpdated(seq enginepb.LeaseSequence, isLeaseholder bool) {
 	if isLeaseholder {
 		m.lt.Enable(seq)
 		m.twq.Enable(seq)

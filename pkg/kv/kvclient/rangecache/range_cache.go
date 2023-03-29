@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -376,7 +377,7 @@ func (et EvictionToken) Lease() *roachpb.Lease {
 
 // LeaseSeq returns the sequence of the cached lease. If no lease is cached, or
 // the cached lease is speculative, 0 is returned.
-func (et EvictionToken) LeaseSeq() roachpb.LeaseSequence {
+func (et EvictionToken) LeaseSeq() enginepb.LeaseSequence {
 	if !et.Valid() {
 		panic("invalid LeaseSeq() call on empty EvictionToken")
 	}

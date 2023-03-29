@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -439,7 +438,7 @@ type closedTimestampSetterInfo struct {
 	// lease represents the lease under which the command is being applied.
 	lease *roachpb.Lease
 	// leaseIdx is the LAI of the command.
-	leaseIdx ctpb.LAI
+	leaseIdx enginepb.LeaseSequence
 	// leaseReq is set if the request that generated this command was a
 	// RequestLeaseRequest. This is only ever set on the leaseholder replica since
 	// only the leaseholder has information about the request corresponding to a
@@ -457,7 +456,7 @@ type closedTimestampSetterInfo struct {
 // timestamp.
 func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Lease) {
 	*s = closedTimestampSetterInfo{}
-	s.leaseIdx = ctpb.LAI(cmd.LeaseIndex)
+	s.leaseIdx = cmd.LeaseIndex
 	s.lease = lease
 	if !cmd.IsLocal() {
 		return

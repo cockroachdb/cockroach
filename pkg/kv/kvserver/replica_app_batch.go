@@ -510,11 +510,11 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
 ) {
 	b.state.RaftAppliedIndex = cmd.Index()
-	b.state.RaftAppliedIndexTerm = cmd.Term
+	b.state.RaftAppliedIndexTerm = enginepb.RaftTerm(cmd.Term)
 
-	// NB: since the command is "trivial" we know the LeaseIndex field is set to
+	// NB: since the command is "trivial" we know the LeaseSequence field is set to
 	// something meaningful if it's nonzero (e.g. cmd is not a lease request). For
-	// a rejected command, cmd.LeaseIndex was zeroed out earlier.
+	// a rejected command, cmd.LeaseSequence was zeroed out earlier.
 	if leaseAppliedIndex := cmd.LeaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}

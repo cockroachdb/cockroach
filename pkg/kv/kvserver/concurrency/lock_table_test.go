@@ -467,7 +467,7 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("consult-finalized-txn-cache") {
 					d.ScanArgs(t, "consult-finalized-txn-cache", &consultFinalizedTxnCache)
 				}
-				leaseSeq := roachpb.LeaseSequence(seq)
+				leaseSeq := enginepb.LeaseSequence(seq)
 				if _, err := lt.AddDiscoveredLock(
 					&intent, leaseSeq, consultFinalizedTxnCache, g); err != nil {
 					return err.Error()
@@ -594,7 +594,7 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
 				}
-				lt.Enable(roachpb.LeaseSequence(seq))
+				lt.Enable(enginepb.LeaseSequence(seq))
 				return ""
 
 			case "clear":

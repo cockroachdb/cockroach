@@ -229,7 +229,7 @@ type ContentionHandler interface {
 	// lock table and observes the lock on key K, so it enters the lock's
 	// wait-queue and waits for it to be resolved.
 	HandleWriterIntentError(
-		context.Context, *Guard, roachpb.LeaseSequence, *kvpb.WriteIntentError,
+		context.Context, *Guard, enginepb.LeaseSequence, *kvpb.WriteIntentError,
 	) (*Guard, *Error)
 
 	// HandleTransactionPushError consumes a TransactionPushError thrown by a
@@ -291,7 +291,7 @@ type RangeStateListener interface {
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
-	OnRangeLeaseUpdated(_ roachpb.LeaseSequence, isLeaseholder bool)
+	OnRangeLeaseUpdated(_ enginepb.LeaseSequence, isLeaseholder bool)
 
 	// OnRangeSplit informs the concurrency manager that its range has split off
 	// a new range to its RHS.
@@ -644,7 +644,7 @@ type lockTable interface {
 	// true) or whether it was ignored because the lockTable is currently
 	// disabled (false).
 	AddDiscoveredLock(
-		intent *roachpb.Intent, seq roachpb.LeaseSequence, consultFinalizedTxnCache bool,
+		intent *roachpb.Intent, seq enginepb.LeaseSequence, consultFinalizedTxnCache bool,
 		guard lockTableGuard) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
@@ -1001,7 +1001,7 @@ type requestQueuer interface {
 	// Enable allows requests to be queued. The method is idempotent.
 	// The lease sequence is used to avoid mixing incompatible requests
 	// or other state from different leasing periods.
-	Enable(roachpb.LeaseSequence)
+	Enable(enginepb.LeaseSequence)
 
 	// Clear empties the queue(s) and causes all waiting requests to
 	// return. If disable is true, future requests must not be enqueued.

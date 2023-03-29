@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"go.etcd.io/raft/v3/raftpb"
 )
@@ -60,7 +61,7 @@ type Iterator struct {
 type IterOptions struct {
 	// Hi ensures the Iterator never seeks to any entry with index >= Hi. This is
 	// useful when the caller is interested in a slice [Lo, Hi) of the raft log.
-	Hi uint64
+	Hi enginepb.RaftIndex
 }
 
 // NewIterator initializes an Iterator that reads the raft log for the given
@@ -107,7 +108,7 @@ func (it *Iterator) load() (bool, error) {
 // SeekGE positions the Iterator at the first raft log with index greater than
 // or equal to idx. Returns (true, nil) on success, (false, nil) if no such
 // entry exists.
-func (it *Iterator) SeekGE(idx uint64) (bool, error) {
+func (it *Iterator) SeekGE(idx enginepb.RaftIndex) (bool, error) {
 	it.iter.SeekGE(storage.MakeMVCCMetadataKey(it.prefixBuf.RaftLogKey(idx)))
 	return it.load()
 }
@@ -134,7 +135,9 @@ func (it *Iterator) Entry() raftpb.Entry {
 //
 // The closure may return iterutil.StopIteration(), which will stop iteration
 // without returning an error.
-func Visit(eng Reader, rangeID roachpb.RangeID, lo, hi uint64, fn func(raftpb.Entry) error) error {
+func Visit(
+	eng Reader, rangeID roachpb.RangeID, lo, hi enginepb.RaftIndex, fn func(raftpb.Entry) error,
+) error {
 	it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 	defer it.Close()
 	ok, err := it.SeekGE(lo)

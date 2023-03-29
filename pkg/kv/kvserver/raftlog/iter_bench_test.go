@@ -178,7 +178,7 @@ func BenchmarkVisit(b *testing.B) {
 	defer eng.Close()
 
 	ent, metaB := mkBenchEnt(b)
-	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, ent.Index), metaB))
+	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, enginepb.RaftIndex(ent.Index)), metaB))
 
 	b.ReportAllocs()
 	b.ResetTimer()

@@ -331,7 +331,9 @@ func (r *Replica) handleLeaseResult(
 }
 
 func (r *Replica) handleTruncatedStateResult(
-	ctx context.Context, t *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+	ctx context.Context,
+	t *roachpb.RaftTruncatedState,
+	expectedFirstIndexPreTruncation enginepb.RaftIndex,
 ) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
 	expectedFirstIndexWasAccurate =

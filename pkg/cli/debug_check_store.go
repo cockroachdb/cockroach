@@ -80,11 +80,11 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 }
 
 type replicaCheckInfo struct {
-	truncatedIndex uint64
-	appliedIndex   uint64
-	firstIndex     uint64
-	lastIndex      uint64
-	committedIndex uint64
+	truncatedIndex enginepb.RaftIndex
+	appliedIndex   enginepb.RaftIndex
+	firstIndex     enginepb.RaftIndex
+	lastIndex      enginepb.RaftIndex
+	committedIndex enginepb.RaftIndex
 }
 
 type checkInput struct {
@@ -251,7 +251,7 @@ func checkStoreRaftState(
 				if err := kv.Value.GetProto(&hs); err != nil {
 					return err
 				}
-				getReplicaInfo(rangeID).committedIndex = hs.Commit
+				getReplicaInfo(rangeID).committedIndex = enginepb.RaftIndex(hs.Commit)
 			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
@@ -265,7 +265,8 @@ func checkStoreRaftState(
 				}
 				getReplicaInfo(rangeID).appliedIndex = state.RaftAppliedIndex
 			case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
-				_, index, err := encoding.DecodeUint64Ascending(detail)
+				_, uIndex, err := encoding.DecodeUint64Ascending(detail)
+				index := enginepb.RaftIndex(uIndex)
 				if err != nil {
 					return err
 				}

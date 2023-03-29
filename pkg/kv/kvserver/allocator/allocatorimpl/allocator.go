@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1957,7 +1958,7 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() enginepb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
 	opts allocator.TransferLeaseOptions,
@@ -2132,7 +2133,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() enginepb.RaftIndex
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 ) bool {
@@ -2217,7 +2218,7 @@ func (a *Allocator) TransferLeaseTarget(
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() enginepb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2485,7 +2486,7 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() uint64
+		GetFirstIndex() enginepb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2852,7 +2853,10 @@ func FilterBehindReplicas(
 // Other replicas may be filtered out if this function is called with the
 // `raftStatus` of a non-raft leader replica.
 func excludeReplicasInNeedOfSnapshots(
-	ctx context.Context, st *raft.Status, firstIndex uint64, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	st *raft.Status,
+	firstIndex enginepb.RaftIndex,
+	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {

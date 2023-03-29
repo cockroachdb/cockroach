@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 	sl := make([]raftpb.Entry, 0, len(inds))
 	for _, ind := range inds {
 		cmd := kvserverpb.RaftCommand{
-			MaxLeaseIndex: ind, // just to have something nontrivial in here
+			MaxLeaseIndex: enginepb.LeaseSequence(ind), // just to have something nontrivial in here
 		}
 		b, err := protoutil.Marshal(&cmd)
 		if err != nil {
@@ -99,7 +100,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 type modelIter struct {
 	idx  int
 	ents []raftpb.Entry
-	hi   uint64
+	hi   enginepb.RaftIndex
 }
 
 func (it *modelIter) load() (raftpb.Entry, error) {
@@ -113,12 +114,12 @@ func (it *modelIter) check() error {
 	return err
 }
 
-func (it *modelIter) SeekGE(lo uint64) (bool, error) {
+func (it *modelIter) SeekGE(lo enginepb.RaftIndex) (bool, error) {
 	for {
-		if it.idx >= len(it.ents) || (it.hi > 0 && it.ents[it.idx].Index >= it.hi) {
+		if it.idx >= len(it.ents) || (it.hi > 0 && enginepb.RaftIndex(it.ents[it.idx].Index) >= it.hi) {
 			return false, nil
 		}
-		if ind := it.ents[it.idx].Index; ind >= lo && (it.hi == 0 || ind < it.hi) {
+		if ind := enginepb.RaftIndex(it.ents[it.idx].Index); ind >= lo && (it.hi == 0 || ind < it.hi) {
 			if err := it.check(); err != nil {
 				return false, err
 			}
@@ -133,7 +134,7 @@ func (it *modelIter) Next() (bool, error) {
 	if it.idx >= len(it.ents) {
 		return false, nil
 	}
-	if it.hi > 0 && it.ents[it.idx].Index >= it.hi {
+	if it.hi > 0 && enginepb.RaftIndex(it.ents[it.idx].Index) >= it.hi {
 		return false, nil
 	}
 	err := it.check()
@@ -152,7 +153,7 @@ func TestIteratorEmptyLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	eng := storage.NewDefaultInMemForTesting()
-	for _, hi := range []uint64{0, 1} {
+	for _, hi := range []enginepb.RaftIndex{0, 1} {
 		it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 		ok, err := it.SeekGE(0)
 		it.Close()
@@ -186,7 +187,7 @@ func TestIterator(t *testing.T) {
 			ents: ents(math.MaxUint64-1, math.MaxUint64),
 		},
 	} {
-		indToName := func(ind uint64) string {
+		indToName := func(ind enginepb.RaftIndex) string {
 			if ind > math.MaxUint64/2 {
 				if ind == math.MaxUint64 {
 					return "max"
@@ -197,7 +198,7 @@ func TestIterator(t *testing.T) {
 		}
 		var inds []string
 		for _, ent := range tc.ents {
-			inds = append(inds, indToName(ent.Index))
+			inds = append(inds, indToName(enginepb.RaftIndex(ent.Index)))
 		}
 		if len(inds) == 0 {
 			inds = []string{"empty"}
@@ -214,17 +215,17 @@ func TestIterator(t *testing.T) {
 				require.NoError(t, err)
 				metaB, err := e.ToRawBytes()
 				require.NoError(t, err)
-				require.NoError(t, eng.PutUnversioned(keys.RaftLogKey(rangeID, ent.Index), metaB))
+				require.NoError(t, eng.PutUnversioned(keys.RaftLogKey(rangeID, enginepb.RaftIndex(ent.Index)), metaB))
 			}
 
 			// Rather than handcrafting some invocations, just run all possible ones
 			// and verify against our expectations. There's no need to hard-code them
 			// since they're so simple to express.
-			var fi uint64 // firstIndex
-			var li uint64 // lastIndex
+			var fi enginepb.RaftIndex // firstIndex
+			var li enginepb.RaftIndex // lastIndex
 			if n := len(tc.ents); n > 0 {
-				fi = tc.ents[0].Index
-				li = tc.ents[n-1].Index
+				fi = enginepb.RaftIndex(tc.ents[0].Index)
+				li = enginepb.RaftIndex(tc.ents[n-1].Index)
 			} else {
 				// Make sure we do some bogus scans on the empty log as well.
 				fi = 1
@@ -274,12 +275,12 @@ func TestIterator(t *testing.T) {
 }
 
 type iter interface {
-	SeekGE(idx uint64) (bool, error)
+	SeekGE(idx enginepb.RaftIndex) (bool, error)
 	Next() (bool, error)
 	Entry() raftpb.Entry
 }
 
-func consumeIter(it iter, lo uint64) ([]uint64, error) {
+func consumeIter(it iter, lo enginepb.RaftIndex) ([]uint64, error) {
 	var sl []uint64
 
 	ok, err := it.SeekGE(lo)

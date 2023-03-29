@@ -200,7 +200,9 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
+	appliedIndex enginepb.RaftIndex,
+	leaseAppliedIndex enginepb.LeaseSequence,
+	appliedIndexTerm enginepb.RaftTerm,
 	newMS *enginepb.MVCCStats,
 	raftClosedTimestamp hlc.Timestamp,
 	asAlloc *enginepb.RangeAppliedState, // optional

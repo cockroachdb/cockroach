@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -32,30 +33,30 @@ type SideloadStorage interface {
 	Dir() string
 	// Writes the given contents to the file specified by the given index and
 	// term. Overwrites the file if it already exists.
-	Put(_ context.Context, index, term uint64, contents []byte) error
+	Put(_ context.Context, index enginepb.RaftIndex, term enginepb.RaftTerm, contents []byte) error
 	// Load the file at the given index and term. Return errSideloadedFileNotFound when no
 	// such file is present.
-	Get(_ context.Context, index, term uint64) ([]byte, error)
+	Get(_ context.Context, index enginepb.RaftIndex, term enginepb.RaftTerm) ([]byte, error)
 	// Purge removes the file at the given index and term. It may also
 	// remove any leftover files at the same index and earlier terms, but
 	// is not required to do so. When no file at the given index and term
 	// exists, returns errSideloadedFileNotFound.
 	//
 	// Returns the total size of the purged payloads.
-	Purge(_ context.Context, index, term uint64) (int64, error)
+	Purge(_ context.Context, index enginepb.RaftIndex, term enginepb.RaftTerm) (int64, error)
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index strictly smaller than
 	// the given one. Returns the number of bytes freed, the number of bytes in
 	// files that remain, or an error.
-	TruncateTo(_ context.Context, index uint64) (freed, retained int64, _ error)
+	TruncateTo(_ context.Context, index enginepb.RaftIndex) (freed, retained int64, _ error)
 	// BytesIfTruncatedFromTo returns the number of bytes that would be freed,
 	// if one were to truncate [from, to). Additionally, it returns the the
 	// number of bytes that would be retained >= to.
-	BytesIfTruncatedFromTo(_ context.Context, from, to uint64) (freed, retained int64, _ error)
+	BytesIfTruncatedFromTo(_ context.Context, from enginepb.RaftIndex, to enginepb.RaftIndex) (freed, retained int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
-	Filename(_ context.Context, index, term uint64) (string, error)
+	Filename(_ context.Context, index enginepb.RaftIndex, term enginepb.RaftTerm) (string, error)
 }
 
 // MaybeSideloadEntries optimizes handling for AddSST requests. AddSST are
@@ -133,7 +134,7 @@ func MaybeSideloadEntries(
 		}
 
 		log.Eventf(ctx, "writing payload at index=%d term=%d", outputEnt.Index, outputEnt.Term)
-		if err := sideloaded.Put(ctx, outputEnt.Index, outputEnt.Term, dataToSideload); err != nil { // TODO could verify checksum here
+		if err := sideloaded.Put(ctx, enginepb.RaftIndex(outputEnt.Index), enginepb.RaftTerm(outputEnt.Term), dataToSideload); err != nil { // TODO could verify checksum here
 			return nil, 0, 0, 0, err
 		}
 		sideloadedEntriesSize += int64(len(dataToSideload))
@@ -173,7 +174,7 @@ func MaybeInlineSideloadedRaftCommand(
 	// are very likely to have appended it recently, in which case
 	// we can save work.
 	cachedSingleton, _, _, _ := entryCache.Scan(
-		nil, rangeID, ent.Index, ent.Index+1, 1<<20,
+		nil, rangeID, enginepb.RaftIndex(ent.Index), enginepb.RaftIndex(ent.Index+1), 1<<20,
 	)
 
 	if len(cachedSingleton) > 0 {
@@ -204,7 +205,7 @@ func MaybeInlineSideloadedRaftCommand(
 		return &ent, nil
 	}
 
-	sideloadedData, err := sideloaded.Get(ctx, ent.Index, ent.Term)
+	sideloadedData, err := sideloaded.Get(ctx, enginepb.RaftIndex(ent.Index), enginepb.RaftTerm(ent.Term))
 	if err != nil {
 		return nil, errors.Wrap(err, "loading sideloaded data")
 	}
@@ -251,7 +252,10 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 // and returns the total number of bytes removed. Nonexistent entries are
 // silently skipped over.
 func maybePurgeSideloaded(
-	ctx context.Context, ss SideloadStorage, firstIndex, lastIndex uint64, term uint64,
+	ctx context.Context,
+	ss SideloadStorage,
+	firstIndex, lastIndex enginepb.RaftIndex,
+	term enginepb.RaftTerm,
 ) (int64, error) {
 	var totalSize int64
 	for i := firstIndex; i <= lastIndex; i++ {

@@ -1510,7 +1510,7 @@ func internalMergeArgs(key []byte, value roachpb.Value) kvpb.MergeRequest {
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID roachpb.RangeID) kvpb.TruncateLogRequest {
+func truncateLogArgs(index enginepb.RaftIndex, rangeID roachpb.RangeID) kvpb.TruncateLogRequest {
 	return kvpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,
@@ -6550,7 +6550,7 @@ func TestAppliedIndex(t *testing.T) {
 	sc.TestingKnobs.DisableCanAckBeforeApplication = true
 	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
-	var appliedIndex uint64
+	var appliedIndex enginepb.RaftIndex
 	var sum int64
 	for i := int64(1); i <= 10; i++ {
 		args := incrementArgs([]byte("a"), i)
@@ -7205,10 +7205,10 @@ func TestEntries(t *testing.T) {
 
 		repl := tc.repl
 		rangeID := repl.RangeID
-		var indexes []uint64
+		var indexes []enginepb.RaftIndex
 
-		populateLogs := func(from, to int) []uint64 {
-			var newIndexes []uint64
+		populateLogs := func(from, to int) []enginepb.RaftIndex {
+			var newIndexes []enginepb.RaftIndex
 			for i := from; i < to; i++ {
 				args := incrementArgs([]byte("a"), int64(i))
 				if _, pErr := tc.SendWrapped(args); pErr != nil {
@@ -7237,8 +7237,8 @@ func TestEntries(t *testing.T) {
 		indexes = append(indexes, populateLogs(0, 10)...)
 
 		for i, tc := range []struct {
-			lo             uint64
-			hi             uint64
+			lo             enginepb.RaftIndex
+			hi             enginepb.RaftIndex
 			maxBytes       uint64
 			expResultCount int
 			expCacheCount  int
@@ -7328,7 +7328,7 @@ func TestEntries(t *testing.T) {
 			if len(ents) != tc.expResultCount {
 				t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
 			} else if tc.expResultCount > 0 {
-				expHitLimit := ents[len(ents)-1].Index < tc.hi-1
+				expHitLimit := enginepb.RaftIndex(ents[len(ents)-1].Index) < tc.hi-1
 				if hitLimit != expHitLimit {
 					t.Errorf("%d: unexpected hit limit: %t", i, hitLimit)
 				}
@@ -7363,7 +7363,7 @@ func TestTerm(t *testing.T) {
 		rangeID := repl.RangeID
 
 		// Populate the log with 10 entries. Save the LastIndex after each write.
-		var indexes []uint64
+		var indexes []enginepb.RaftIndex
 		for i := 0; i < 10; i++ {
 			args := incrementArgs([]byte("a"), int64(i))
 
@@ -7685,11 +7685,11 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	type magicKey struct{}
 
-	var c int32                // updated atomically
-	var wrongLeaseIndex uint64 // populated below
+	var c int32                                // updated atomically
+	var wrongLeaseIndex enginepb.LeaseSequence // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride enginepb.LeaseSequence) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
 				return wrongLeaseIndex
@@ -8136,7 +8136,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
 	}
 	assigned := false
-	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) enginepb.LeaseSequence {
 		if p == proposal && !assigned {
 			assigned = true
 			t.Logf("assigned wrong LAI %d", ai-1)
@@ -8221,7 +8221,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 
 	var curFlushAttempt, curInsertAttempt int32 // updated atomically
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) enginepb.LeaseSequence {
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			flushAttempts := atomic.AddInt32(&curFlushAttempt, 1)
 			switch flushAttempts {
@@ -8231,7 +8231,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 				// write. Two requests can't have the same lease applied index,
 				// so this will cause it to be rejected beneath raft with an
 				// illegal lease index error.
-				wrongLeaseIndex := uint64(1)
+				wrongLeaseIndex := enginepb.LeaseSequence(1)
 				return wrongLeaseIndex
 			default:
 				// Unexpected. Asserted against below.
@@ -8325,7 +8325,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	r := tc.repl
 	r.mu.Lock()
-	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) enginepb.LeaseSequence {
 		// We're going to recognize the first time the commnand for the EndTxn is
 		// proposed and we're going to hackily force a low MaxLeaseIndex, so that
 		// the processing gets rejected further on.
@@ -9900,7 +9900,7 @@ type testQuiescer struct {
 	numProposals    int
 	pendingQuota    bool
 	status          *raftSparseStatus
-	lastIndex       uint64
+	lastIndex       enginepb.RaftIndex
 	raftReady       bool
 	leaseStatus     kvserverpb.LeaseStatus
 	storeID         roachpb.StoreID
@@ -9928,7 +9928,7 @@ func (q *testQuiescer) raftBasicStatusRLocked() raft.BasicStatus {
 	return q.status.BasicStatus
 }
 
-func (q *testQuiescer) raftLastIndexRLocked() uint64 {
+func (q *testQuiescer) raftLastIndexRLocked() enginepb.RaftIndex {
 	return q.lastIndex
 }
 

@@ -325,7 +325,7 @@ message WriteIntentError {
   // operating under. Used on the server to avoid adding discovered locks
   // which were discovered under old leases to the lock table.
   optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
   enum Reason {
     // The reason for the WriteIntentError is unspecified. This will
     // always be the case for errors returned from MVCC.

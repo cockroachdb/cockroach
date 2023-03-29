@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "@io_etcd_go_raft_v3//:raft",
         "@io_etcd_go_raft_v3//tracker",
     ],

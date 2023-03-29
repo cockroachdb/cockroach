@@ -1061,7 +1061,7 @@ func TestLeaseEqual(t *testing.T) {
 		DeprecatedStartStasis *hlc.Timestamp
 		ProposedTS            *hlc.ClockTimestamp
 		Epoch                 int64
-		Sequence              LeaseSequence
+		Sequence              enginepb.LeaseSequence
 		AcquisitionType       LeaseAcquisitionType
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile

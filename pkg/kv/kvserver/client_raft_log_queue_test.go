@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -87,7 +88,7 @@ func TestRaftLogQueue(t *testing.T) {
 		}
 	}
 
-	var afterTruncationIndex uint64
+	var afterTruncationIndex enginepb.RaftIndex
 	testutils.SucceedsSoon(t, func() error {
 		// Force a truncation check.
 		for i := range tc.Servers {

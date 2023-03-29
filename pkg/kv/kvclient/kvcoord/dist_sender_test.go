@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -813,7 +814,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var sequences []roachpb.LeaseSequence
+	var sequences []enginepb.LeaseSequence
 	var testFn simpleSendFn = func(_ context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		reply := &kvpb.BatchResponse{}
 		if len(sequences) > 0 {
@@ -856,12 +857,12 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
 	for i, c := range []struct {
-		leaseSequences []roachpb.LeaseSequence
+		leaseSequences []enginepb.LeaseSequence
 		expected       int64
 	}{
-		{[]roachpb.LeaseSequence{2, 1, 2, 3}, 2},
-		{[]roachpb.LeaseSequence{0}, 0},
-		{[]roachpb.LeaseSequence{2, 1, 2, 3, 2}, 3},
+		{[]enginepb.LeaseSequence{2, 1, 2, 3}, 2},
+		{[]enginepb.LeaseSequence{0}, 0},
+		{[]enginepb.LeaseSequence{2, 1, 2, 3, 2}, 3},
 	} {
 		t.Run("", func(t *testing.T) {
 			sequences = c.leaseSequences
@@ -1189,7 +1190,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 			}
 			if tc.nlheLeaseSequence != 0 {
 				nlhe.Lease = &roachpb.Lease{
-					Sequence: roachpb.LeaseSequence(tc.nlheLeaseSequence),
+					Sequence: enginepb.LeaseSequence(tc.nlheLeaseSequence),
 					Replica:  roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				}
 			} else {
@@ -1202,7 +1203,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 
 			cachedLease := roachpb.Lease{
 				Replica:  desc.InternalReplicas[1],
-				Sequence: roachpb.LeaseSequence(tc.cachedLeaseSequence),
+				Sequence: enginepb.LeaseSequence(tc.cachedLeaseSequence),
 			}
 
 			// The cache starts with a lease on node 2, so the first request will be
@@ -1415,7 +1416,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 			// The client has cleared the lease in the cache after the failure of the
 			// first RPC.
 			assert.Equal(t, desc.Generation, ba.ClientRangeInfo.DescriptorGeneration)
-			assert.Equal(t, roachpb.LeaseSequence(0), ba.ClientRangeInfo.LeaseSequence)
+			assert.Equal(t, enginepb.LeaseSequence(0), ba.ClientRangeInfo.LeaseSequence)
 			assert.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ba.ClientRangeInfo.ClosedTimestampPolicy)
 			contacted2 = true
 			br := ba.CreateReply()

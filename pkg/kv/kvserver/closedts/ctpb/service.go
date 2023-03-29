@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -26,12 +27,8 @@ type SeqNum int64
 // SafeValue implements the redact.SafeValue interface.
 func (SeqNum) SafeValue() {}
 
-// LAI is an int64 denoting a lease applied index with its own type to avoid
-// mix-ups in positional arguments.
-type LAI int64
-
-// SafeValue implements the redact.SafeValue interface.
-func (LAI) SafeValue() {}
+// Force import of LeaseSequence in this package.
+var _ = enginepb.LeaseSequence(0)
 
 func (m *Update) String() string {
 	sb := &strings.Builder{}

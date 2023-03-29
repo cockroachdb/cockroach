@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,13 +33,13 @@ type mockStores struct {
 type rangeUpdate struct {
 	rid      roachpb.RangeID
 	closedTS hlc.Timestamp
-	lai      ctpb.LAI
+	lai      enginepb.LeaseSequence
 }
 
 var _ Stores = &mockStores{}
 
 func (m *mockStores) ForwardSideTransportClosedTimestampForRange(
-	ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai ctpb.LAI,
+	ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai enginepb.LeaseSequence,
 ) {
 	upd := rangeUpdate{
 		rid:      rangeID,
@@ -64,12 +65,12 @@ var ts12 = hlc.Timestamp{WallTime: 12}
 var ts20 = hlc.Timestamp{WallTime: 20, Synthetic: true}
 var ts21 = hlc.Timestamp{WallTime: 21, Synthetic: true}
 var ts22 = hlc.Timestamp{WallTime: 22, Synthetic: true}
-var laiZero = ctpb.LAI(0)
+var laiZero = enginepb.LeaseSequence(0)
 
-const lai100 = ctpb.LAI(100)
-const lai101 = ctpb.LAI(101)
-const lai102 = ctpb.LAI(102)
-const lai103 = ctpb.LAI(102)
+const lai100 = enginepb.LeaseSequence(100)
+const lai101 = enginepb.LeaseSequence(101)
+const lai102 = enginepb.LeaseSequence(102)
+const lai103 = enginepb.LeaseSequence(103)
 
 func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()

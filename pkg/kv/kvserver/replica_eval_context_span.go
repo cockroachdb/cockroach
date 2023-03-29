@@ -85,17 +85,17 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 }
 
 // GetFirstIndex returns the first index.
-func (rec *SpanSetReplicaEvalContext) GetFirstIndex() uint64 {
+func (rec *SpanSetReplicaEvalContext) GetFirstIndex() enginepb.RaftIndex {
 	return rec.i.GetFirstIndex()
 }
 
 // GetTerm returns the term for the given index in the Raft log.
-func (rec *SpanSetReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
+func (rec *SpanSetReplicaEvalContext) GetTerm(i enginepb.RaftIndex) (enginepb.RaftTerm, error) {
 	return rec.i.GetTerm(i)
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
-func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
+func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() enginepb.LeaseSequence {
 	return rec.i.GetLeaseAppliedIndex()
 }
 
@@ -245,7 +245,7 @@ func (rec *SpanSetReplicaEvalContext) GetClosedTimestampOlderThanStorageSnapshot
 }
 
 // RevokeLease stops the replica from using its current lease.
-func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
+func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq enginepb.LeaseSequence) {
 	rec.i.RevokeLease(ctx, seq)
 }
 

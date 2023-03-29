@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,7 +43,7 @@ func TestShouldTruncate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		truncatableIndexes uint64
+		truncatableIndexes enginepb.RaftIndex
 		raftLogSize        int64
 		expected           bool
 	}{
@@ -77,12 +78,12 @@ func TestComputeTruncateDecision(t *testing.T) {
 	// truncate: false", because these tests don't simulate enough data to be over
 	// the truncation threshold.
 	testCases := []struct {
-		commit          uint64
+		commit          enginepb.RaftIndex
 		progress        []uint64
 		raftLogSize     int64
-		firstIndex      uint64
-		lastIndex       uint64
-		pendingSnapshot uint64
+		firstIndex      enginepb.RaftIndex
+		lastIndex       enginepb.RaftIndex
+		pendingSnapshot enginepb.RaftIndex
 		exp             string
 	}{
 		{
@@ -183,7 +184,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 					Next:         v + 1,
 				}
 			}
-			status.Commit = c.commit
+			status.Commit = uint64(c.commit)
 			input := truncateDecisionInput{
 				RaftStatus:           status,
 				LogSize:              c.raftLogSize,
@@ -248,8 +249,8 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			status := raft.Status{
 				Progress: make(map[uint64]tracker.Progress),
 			}
-			progress := []uint64{100, 200, 300, 400, 500}
-			lastIndex := uint64(500)
+			progress := []enginepb.RaftIndex{100, 200, 300, 400, 500}
+			lastIndex := enginepb.RaftIndex(500)
 			status.Commit = 300
 
 			for i, v := range progress {
@@ -262,12 +263,12 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 						RecentActive: active,
 						State:        tracker.StateProbe,
 						Match:        0,
-						Next:         v,
+						Next:         uint64(v),
 					}
 				} else { // everyone else
 					pr = tracker.Progress{
-						Match:        v,
-						Next:         v + 1,
+						Match:        uint64(v),
+						Next:         uint64(v + 1),
 						RecentActive: true,
 						State:        tracker.StateReplicate,
 					}
@@ -472,7 +473,7 @@ func TestNewTruncateDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	getIndexes := func() (uint64, int, uint64, error) {
+	getIndexes := func() (enginepb.RaftIndex, int, enginepb.RaftIndex, error) {
 		d, err := newTruncateDecision(ctx, r)
 		if err != nil {
 			return 0, 0, 0, err
@@ -518,7 +519,7 @@ func TestNewTruncateDecision(t *testing.T) {
 
 	// There can be a delay from when the truncation command is issued and the
 	// indexes updating.
-	var cFirst, cOldest uint64
+	var cFirst, cOldest enginepb.RaftIndex
 	var numTruncatable int
 	testutils.SucceedsSoon(t, func() error {
 		var err error
@@ -666,7 +667,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 
 	// Helper that grabs the min constraint index (which can trigger GC as a
 	// byproduct) and asserts.
-	assertMin := func(exp uint64, now time.Time) {
+	assertMin := func(exp enginepb.RaftIndex, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
 		if _, maxIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore, false /* initialOnly */); maxIndex != exp {
@@ -718,7 +719,7 @@ func TestTruncateLog(t *testing.T) {
 		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
 		// Populate the log with 10 entries. Save the LastIndex after each write.
-		var indexes []uint64
+		var indexes []enginepb.RaftIndex
 		for i := 0; i < 10; i++ {
 			args := incrementArgs([]byte("a"), int64(i))
 
@@ -913,7 +914,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 }
 
 func waitForTruncationForTesting(
-	t *testing.T, r *Replica, newFirstIndex uint64, looselyCoupled bool,
+	t *testing.T, r *Replica, newFirstIndex enginepb.RaftIndex, looselyCoupled bool,
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		if looselyCoupled {

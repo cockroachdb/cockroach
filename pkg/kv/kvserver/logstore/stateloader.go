@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -50,13 +51,15 @@ func NewStateLoader(rangeID roachpb.RangeID) StateLoader {
 }
 
 // LoadLastIndex loads the last index.
-func (sl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
+func (sl StateLoader) LoadLastIndex(
+	ctx context.Context, reader storage.Reader,
+) (enginepb.RaftIndex, error) {
 	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
 	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
 	defer iter.Close()
 
-	var lastIndex uint64
+	var lastIndex enginepb.RaftIndex
 	iter.SeekLT(storage.MakeMVCCMetadataKey(keys.RaftLogKeyFromPrefix(prefix, math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
 		key := iter.UnsafeKey().Key
@@ -154,13 +157,13 @@ func (sl StateLoader) SynthesizeHardState(
 	readWriter storage.ReadWriter,
 	oldHS raftpb.HardState,
 	truncState roachpb.RaftTruncatedState,
-	raftAppliedIndex uint64,
+	raftAppliedIndex enginepb.RaftIndex,
 ) error {
 	newHS := raftpb.HardState{
-		Term: truncState.Term,
+		Term: uint64(truncState.Term),
 		// Note that when applying a Raft snapshot, the applied index is
 		// equal to the Commit index represented by the snapshot.
-		Commit: raftAppliedIndex,
+		Commit: uint64(raftAppliedIndex),
 	}
 
 	if oldHS.Commit > newHS.Commit {

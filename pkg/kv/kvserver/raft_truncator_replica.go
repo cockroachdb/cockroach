@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 // Implementation of the replicaForTruncator interface.
@@ -34,7 +35,9 @@ func (r *raftTruncatorReplica) getTruncatedState() roachpb.RaftTruncatedState {
 }
 
 func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
-	ctx context.Context, trunc *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+	ctx context.Context,
+	trunc *roachpb.RaftTruncatedState,
+	expectedFirstIndexPreTruncation enginepb.RaftIndex,
 ) (expectedFirstIndexWasAccurate bool) {
 	_, expectedFirstIndexAccurate := (*Replica)(r).handleTruncatedStateResult(
 		ctx, trunc, expectedFirstIndexPreTruncation)
@@ -64,7 +67,7 @@ func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
 }
 
 func (r *raftTruncatorReplica) sideloadedBytesIfTruncatedFromTo(
-	ctx context.Context, from, to uint64,
+	ctx context.Context, from, to enginepb.RaftIndex,
 ) (freed int64, err error) {
 	freed, _, err = r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, from, to)
 	return freed, err

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
@@ -29,7 +30,7 @@ import (
 // TODO(pavelkalinnikov): integrate with kvstorage.Replica.
 type LoadedReplicaState struct {
 	ReplicaID roachpb.ReplicaID
-	LastIndex uint64
+	LastIndex enginepb.RaftIndex
 	ReplState kvserverpb.ReplicaState
 
 	hardState raftpb.HardState

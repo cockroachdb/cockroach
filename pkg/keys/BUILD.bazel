@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "//pkg/util/encoding",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -37,6 +38,7 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/bitarray",
         "//pkg/util/duration",

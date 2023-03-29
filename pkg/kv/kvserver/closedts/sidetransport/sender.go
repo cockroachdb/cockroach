@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -114,7 +115,7 @@ type connTestingKnobs struct {
 // trackedRange contains the information that the side-transport last published
 // about a particular range.
 type trackedRange struct {
-	lai    ctpb.LAI
+	lai    enginepb.LeaseSequence
 	policy roachpb.RangeClosedTimestampPolicy
 }
 
@@ -122,7 +123,7 @@ type trackedRange struct {
 // the sender and can send closed timestamp updates through the side transport.
 type leaseholder struct {
 	Replica
-	leaseSeq roachpb.LeaseSequence
+	leaseSeq enginepb.LeaseSequence
 }
 
 // Replica represents a *Replica object, but with only the capabilities needed
@@ -167,7 +168,7 @@ type BumpSideTransportClosedResult struct {
 	// Fields only set when ok.
 
 	// The range's current LAI, to be associated with the closed timestamp.
-	LAI ctpb.LAI
+	LAI enginepb.LeaseSequence
 	// The range's current policy.
 	Policy roachpb.RangeClosedTimestampPolicy
 }
@@ -266,7 +267,7 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 // on, until the replica is unregistered, the side-transport will try to advance
 // this replica's closed timestamp.
 func (s *Sender) RegisterLeaseholder(
-	ctx context.Context, r Replica, leaseSeq roachpb.LeaseSequence,
+	ctx context.Context, r Replica, leaseSeq enginepb.LeaseSequence,
 ) {
 	s.leaseholdersMu.Lock()
 	defer s.leaseholdersMu.Unlock()

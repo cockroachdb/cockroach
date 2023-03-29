@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -114,11 +115,11 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		highTerm
 	)
 
-	file := func(i uint64) []byte { // take uint64 for convenience
-		return []byte("content-" + strconv.Itoa(int(i)))
+	file := func(index enginepb.RaftIndex, term enginepb.RaftTerm) []byte { // take uint64 for convenience
+		return []byte("content-" + strconv.Itoa(int(index)*int(term)))
 	}
 
-	if err := ss.Put(ctx, 1, highTerm, file(1)); err != nil {
+	if err := ss.Put(ctx, 1, highTerm, file(1, 1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,19 +127,19 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
 		t.Fatal(err)
-	} else if exp := file(1); !bytes.Equal(c, exp) {
+	} else if exp := file(1, 1); !bytes.Equal(c, exp) {
 		t.Fatalf("got %q, wanted %q", c, exp)
 	}
 
 	// Overwrites the occupied slot.
-	if err := ss.Put(ctx, 1, highTerm, file(12345)); err != nil {
+	if err := ss.Put(ctx, 1, highTerm, file(12345, 1)); err != nil {
 		t.Fatal(err)
 	}
 
 	// ... consequently the old entry is gone.
 	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
 		t.Fatal(err)
-	} else if exp := file(12345); !bytes.Equal(c, exp) {
+	} else if exp := file(12345, 1); !bytes.Equal(c, exp) {
 		t.Fatalf("got %q, wanted %q", c, exp)
 	}
 
@@ -192,10 +193,10 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	// Write some payloads at various indexes. Note that this tests Put
 	// on a recently Clear()ed storage. Randomize order for fun.
-	payloads := []uint64{3, 5, 7, 9, 10}
+	payloads := []enginepb.RaftIndex{3, 5, 7, 9, 10}
 	for n := range rand.Perm(len(payloads)) {
 		i := payloads[n]
-		if err := ss.Put(ctx, i, highTerm, file(i*highTerm)); err != nil {
+		if err := ss.Put(ctx, i, highTerm, file(i, highTerm)); err != nil {
 			t.Fatalf("%d: %+v", i, err)
 		}
 	}
@@ -203,19 +204,19 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	assertCreated(true)
 
 	// Write some more payloads, overlapping, at the past term.
-	pastPayloads := append([]uint64{81}, payloads...)
+	pastPayloads := append([]enginepb.RaftIndex{81}, payloads...)
 	for _, i := range pastPayloads {
-		if err := ss.Put(ctx, i, lowTerm, file(i*lowTerm)); err != nil {
+		if err := ss.Put(ctx, i, lowTerm, file(i, lowTerm)); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Just a sanity check that for the overlapping terms, we see both entries.
-	for _, term := range []uint64{lowTerm, highTerm} {
+	for _, term := range []enginepb.RaftTerm{lowTerm, highTerm} {
 		index := payloads[0] // exists at both lowTerm and highTerm
 		if c, err := ss.Get(ctx, index, term); err != nil {
 			t.Fatal(err)
-		} else if exp := file(term * index); !bytes.Equal(c, exp) {
+		} else if exp := file(index, term); !bytes.Equal(c, exp) {
 			t.Fatalf("got %q, wanted %q", c, exp)
 		}
 	}
@@ -238,7 +239,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		require.Equal(t, retainedByTruncateTo, retained)
 		// Index payloads[n] and above are still there (truncation is exclusive)
 		// at both terms.
-		for _, term := range []uint64{lowTerm, highTerm} {
+		for _, term := range []enginepb.RaftTerm{lowTerm, highTerm} {
 			for _, i := range payloads[n:] {
 				if _, err := ss.Get(ctx, i, term); err != nil {
 					t.Fatalf("%d.%d: %+v", n, i, err)
@@ -286,10 +287,10 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 		// Repopulate with some random indexes to test deletion when there are a
 		// non-zero number of filepath.Glob matches.
-		payloads := []uint64{3, 5, 7, 9, 10}
+		payloads := []enginepb.RaftIndex{3, 5, 7, 9, 10}
 		for n := range rand.Perm(len(payloads)) {
 			i := payloads[n]
-			require.NoError(t, ss.Put(ctx, i, highTerm, file(i*highTerm)))
+			require.NoError(t, ss.Put(ctx, i, highTerm, file(i, highTerm)))
 		}
 		assertCreated(true)
 		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
@@ -323,7 +324,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	// Repopulate with a few entries at indexes=1,2,4 and term 10 to test `maybePurgeSideloaded`
 	// with.
-	for index := uint64(1); index < 5; index++ {
+	for index := enginepb.RaftIndex(1); index < 5; index++ {
 		if index == 3 {
 			continue
 		}
@@ -332,7 +333,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	}
 
 	// Term too high and too low, respectively. Shouldn't delete anything.
-	for _, term := range []uint64{9, 11} {
+	for _, term := range []enginepb.RaftTerm{9, 11} {
 		if size, err := maybePurgeSideloaded(ctx, ss, 1, 10, term); err != nil || size != 0 {
 			t.Fatalf("expected noop for term %d, got (%d, %v)", term, size, err)
 		}

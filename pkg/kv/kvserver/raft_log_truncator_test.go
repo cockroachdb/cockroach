@@ -149,7 +149,7 @@ func (r *replicaTruncatorTest) setTruncationDeltaAndTrusted(deltaBytes int64, is
 }
 
 func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
-	_ context.Context, from, to uint64,
+	_ context.Context, from, to enginepb.RaftIndex,
 ) (freed int64, _ error) {
 	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n", r.rangeID, from, to)
 	return r.sideloadedFreed, r.sideloadedErr
@@ -161,7 +161,9 @@ func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 }
 
 func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
-	_ context.Context, truncState *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+	_ context.Context,
+	truncState *roachpb.RaftTruncatedState,
+	expectedFirstIndexPreTruncation enginepb.RaftIndex,
 ) (expectedFirstIndexWasAccurate bool) {
 	expectedFirstIndexWasAccurate = r.truncState.Index+1 == expectedFirstIndexPreTruncation
 	r.truncState = *truncState
@@ -172,7 +174,7 @@ func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
-	t *testing.T, eng storage.Engine, truncIndex uint64, lastLogEntry uint64,
+	t *testing.T, eng storage.Engine, truncIndex enginepb.RaftIndex, lastLogEntry enginepb.RaftIndex,
 ) {
 	require.NoError(t, r.stateLoader.SetRaftTruncatedState(context.Background(), eng,
 		&roachpb.RaftTruncatedState{Index: truncIndex}))
@@ -182,7 +184,7 @@ func (r *replicaTruncatorTest) writeRaftStateToEngine(
 }
 
 func (r *replicaTruncatorTest) writeRaftAppliedIndex(
-	t *testing.T, eng storage.Engine, raftAppliedIndex uint64, flush bool,
+	t *testing.T, eng storage.Engine, raftAppliedIndex enginepb.RaftIndex, flush bool,
 ) {
 	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
 		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, hlc.Timestamp{}, nil))
@@ -299,8 +301,8 @@ func TestRaftLogTruncator(t *testing.T) {
 				var lastLogEntry uint64
 				d.ScanArgs(t, "last-log-entry", &lastLogEntry)
 				r := makeReplicaTT(rangeID, &buf)
-				r.truncState.Index = truncIndex
-				r.writeRaftStateToEngine(t, eng, truncIndex, lastLogEntry)
+				r.truncState.Index = enginepb.RaftIndex(truncIndex)
+				r.writeRaftStateToEngine(t, eng, enginepb.RaftIndex(truncIndex), enginepb.RaftIndex(lastLogEntry))
 				store.replicas[rangeID] = r
 				return flushAndReset()
 
@@ -326,7 +328,7 @@ func TestRaftLogTruncator(t *testing.T) {
 				}
 				r.sideloadedFreed = int64(sideloadedBytes)
 				truncator.addPendingTruncation(context.Background(), r,
-					roachpb.RaftTruncatedState{Index: truncIndex}, firstIndex, int64(deltaBytes))
+					roachpb.RaftTruncatedState{Index: enginepb.RaftIndex(truncIndex)}, enginepb.RaftIndex(firstIndex), int64(deltaBytes))
 				printTruncatorState(t, &buf, truncator)
 				r.sideloadedErr = nil
 				return flushAndReset()
@@ -348,7 +350,7 @@ func TestRaftLogTruncator(t *testing.T) {
 				if d.HasArg("no-flush") {
 					d.ScanArgs(t, "no-flush", &noFlush)
 				}
-				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, raftAppliedIndex, !noFlush)
+				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, enginepb.RaftIndex(raftAppliedIndex), !noFlush)
 				return flushAndReset()
 
 			case "add-replica-to-truncator":

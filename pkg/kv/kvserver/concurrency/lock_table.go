@@ -187,7 +187,7 @@ type lockTableImpl struct {
 	// may no longer be accurate.
 	enabled    bool
 	enabledMu  syncutil.RWMutex
-	enabledSeq roachpb.LeaseSequence
+	enabledSeq enginepb.LeaseSequence
 
 	// A sequence number is assigned to each request seen by the lockTable. This
 	// is to preserve fairness despite the design choice of allowing
@@ -2571,7 +2571,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 // finalizedTxnCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
 	intent *roachpb.Intent,
-	seq roachpb.LeaseSequence,
+	seq enginepb.LeaseSequence,
 	consultFinalizedTxnCache bool,
 	guard lockTableGuard,
 ) (added bool, _ error) {
@@ -2895,7 +2895,7 @@ func (t *lockTableImpl) TransactionIsFinalized(txn *roachpb.Transaction) {
 }
 
 // Enable implements the lockTable interface.
-func (t *lockTableImpl) Enable(seq roachpb.LeaseSequence) {
+func (t *lockTableImpl) Enable(seq enginepb.LeaseSequence) {
 	// Avoid disrupting other requests if the lockTable is already enabled.
 	// NOTE: This may be a premature optimization, but it can't hurt.
 	t.enabledMu.RLock()

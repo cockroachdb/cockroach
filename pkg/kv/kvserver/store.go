@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -280,11 +281,15 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 }
 
 func newRaftConfig(
-	strg raft.Storage, id uint64, appliedIndex uint64, storeCfg StoreConfig, logger raft.Logger,
+	strg raft.Storage,
+	id uint64,
+	appliedIndex enginepb.RaftIndex,
+	storeCfg StoreConfig,
+	logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                        id,
-		Applied:                   appliedIndex,
+		Applied:                   uint64(appliedIndex),
 		AsyncStorageWrites:        true,
 		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
 		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
@@ -3610,7 +3615,7 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 // registerLeaseholder registers the provided replica as a leaseholder in the
 // node's closed timestamp side transport.
 func (s *Store) registerLeaseholder(
-	ctx context.Context, r *Replica, leaseSeq roachpb.LeaseSequence,
+	ctx context.Context, r *Replica, leaseSeq enginepb.LeaseSequence,
 ) {
 	if s.ctSender != nil {
 		s.ctSender.RegisterLeaseholder(ctx, r, leaseSeq)

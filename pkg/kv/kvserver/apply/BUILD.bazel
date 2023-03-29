@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/storage/enginepb",
         "@com_github_cockroachdb_errors//:errors",
         "@io_etcd_go_raft_v3//raftpb",
     ],
@@ -26,6 +27,7 @@ go_test(
     args = ["-test.timeout=55s"],
     deps = [
         ":apply",
+        "//pkg/storage/enginepb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
         "@io_etcd_go_raft_v3//raftpb",

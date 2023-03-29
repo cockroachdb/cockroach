@@ -151,7 +151,7 @@ message ReplicatedEvalResult {
   // RaftExpectedFirstIndex is populated starting at cluster version
   // LooselyCoupledRaftLogTruncation. When this is not populated, the replica
   // should not delay enacting the truncation.
-  uint64 raft_expected_first_index = 25;
+  uint64 raft_expected_first_index = 25  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"];
 
   // MVCCHistoryMutation describes mutations of MVCC history that may violate
   // the closed timestamp, timestamp cache, and guarantees that rely on these
@@ -267,7 +267,7 @@ message RaftCommand {
   // - the command applies on replica 1
   // - replica 2 serves anomalous reads which don't see the write
   // - the command applies on replica 2
-  int64 proposer_lease_sequence = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+  int64 proposer_lease_sequence = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
 
   // deprecated_proposer_lease served the same purpose as proposer_lease_seq.
   // As of VersionLeaseSequence, it is no longer in use.
@@ -316,7 +316,7 @@ message RaftCommand {
   // max_lease_index is a primitive type, so it does not get encoded when zero.
   // This alone ensures that the field is not encoded twice in the combined
   // RaftCommand+MaxLeaseFooter proto.
-  uint64 max_lease_index = 4;
+  int64 max_lease_index = 4  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
 
   // The closed timestamp carried by this command. Once a follower is told to
   // apply this command, it knows that there will be no further writes at
@@ -384,7 +384,7 @@ message RaftCommand {
 // appended to the marshaled byte buffer. This minimizes the memory allocation
 // and marshaling work performed under lock.
 message RaftCommandFooter {
-  uint64 max_lease_index = 4;
+  uint64 max_lease_index = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
   // NOTE: unlike in RaftCommand, there's no reason to make this field nullable
   // and so we make it non-nullable in order to save allocations. This means
   // that the field on a decoded RaftCommand will also never be nil, but we

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"go.etcd.io/raft/v3"
@@ -43,7 +44,7 @@ type CandidateReplica interface {
 	RaftStatus() *raft.Status
 	// GetFirstIndex returns the index of the first entry in the replica's Raft
 	// log.
-	GetFirstIndex() uint64
+	GetFirstIndex() enginepb.RaftIndex
 	// DescAndSpanConfig returns the authoritative range descriptor as well
 	// as the span config for the replica.
 	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)

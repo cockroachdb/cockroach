@@ -51,8 +51,8 @@ message ReplicaInfo {
   int32 store_id = 2 [(gogoproto.customname) = "StoreID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
   roachpb.RangeDescriptor desc = 3 [(gogoproto.nullable) = false];
-  uint64 raft_applied_index = 4;
-  uint64 raft_committed_index = 5;
+  uint64 raft_applied_index = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"] ;
+  uint64 raft_committed_index = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"];
   repeated DescriptorChangeInfo raft_log_descriptor_changes = 6 [(gogoproto.nullable) = false,
     (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
   bool local_assumes_leaseholder = 7 [

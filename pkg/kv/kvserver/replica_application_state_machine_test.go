@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -94,7 +95,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Stage a command with the ChangeReplicas trigger.
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: r.mu.state.RaftAppliedIndex + 1,
+				Index: uint64(r.mu.state.RaftAppliedIndex + 1),
 				Type:  raftpb.EntryConfChange,
 			},
 			ID: makeIDKey(),
@@ -198,7 +199,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		// byte size of 1.
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: raftAppliedIndex + 1,
+				Index: uint64(raftAppliedIndex + 1),
 				Type:  raftpb.EntryNormal,
 			},
 			ID: makeIDKey(),
@@ -285,7 +286,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			require.NoError(t, pErr.GoError())
 		}
 
-		raftLogSize, truncatedIndex := func() (_rls int64, truncIdx uint64) {
+		raftLogSize, truncatedIndex := func() (_rls int64, truncIdx enginepb.RaftIndex) {
 			// Lock the replica. We do this early to avoid interference from any other
 			// moving parts on the Replica, whatever they may be. For example, we don't
 			// want a skewed lease applied index because commands are applying concurrently
@@ -317,7 +318,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			// byte size of 1.
 			ent := &raftlog.Entry{
 				Entry: raftpb.Entry{
-					Index: raftAppliedIndex + 1,
+					Index: uint64(raftAppliedIndex + 1),
 					Type:  raftpb.EntryNormal,
 				},
 				ID: makeIDKey(),
@@ -448,7 +449,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 		req, repr := descWriteRepr(s)
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: raftAppliedIndex + 1,
+				Index: uint64(raftAppliedIndex + 1),
 				Type:  raftpb.EntryNormal,
 			},
 			ID: makeIDKey(),

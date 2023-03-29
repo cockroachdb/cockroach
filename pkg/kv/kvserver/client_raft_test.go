@@ -826,7 +826,9 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	}
 }
 
-func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstIndex uint64) {
+func waitForTruncationForTesting(
+	t *testing.T, r *kvserver.Replica, newFirstIndex enginepb.RaftIndex,
+) {
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.
 		require.NoError(t, r.Store().TODOEngine().Flush())
@@ -1032,7 +1034,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 					// to make the test pass reliably.
 					// NB: the Index on the message is the log index that _precedes_ any of the
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
+					return req.Message.Type == raftpb.MsgApp && enginepb.RaftIndex(req.Message.Index) < index
 				},
 				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
@@ -3149,8 +3151,8 @@ func TestReplicaGCRace(t *testing.T) {
 			return errors.Errorf("%+v has not yet advanced", progress)
 		}
 		for i := range hbReq.Heartbeats {
-			hbReq.Heartbeats[i].Term = status.Term
-			hbReq.Heartbeats[i].Commit = progress.Match
+			hbReq.Heartbeats[i].Term = enginepb.RaftTerm(status.Term)
+			hbReq.Heartbeats[i].Commit = enginepb.RaftIndex(progress.Match)
 		}
 		return nil
 	})
@@ -4617,7 +4619,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 		_, err := targets[2].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
 			StoreRequestHeader: targets[2].header,
 			RangeID:            desc.RangeID,
-			LeaseIndex:         math.MaxUint64,
+			LeaseIndex:         math.MaxInt64,
 		})
 		errChs[2] <- err
 	}()
@@ -4646,7 +4648,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 		_, err := targets[0].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
 			StoreRequestHeader: targets[0].header,
 			RangeID:            desc.RangeID,
-			LeaseIndex:         math.MaxUint64,
+			LeaseIndex:         math.MaxInt64,
 		})
 		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
 			t.Fatalf("expected %q error, but got %v", exp, err)
@@ -5680,7 +5682,7 @@ func TestElectionAfterRestart(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for rangeID := range rangeIDs {
 				var err error
-				var lastIndex uint64
+				var lastIndex enginepb.RaftIndex
 				for _, srv := range tc.Servers {
 					_ = srv.Stores().VisitStores(func(s *kvserver.Store) error {
 						s.VisitReplicas(func(replica *kvserver.Replica) (more bool) {

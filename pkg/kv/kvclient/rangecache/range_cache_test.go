@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1536,7 +1537,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, desc2, *tok.Desc())
 	require.NotNil(t, tok.Leaseholder())
 	require.Equal(t, rep1, *tok.Leaseholder())
-	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
+	require.Equal(t, enginepb.LeaseSequence(1), tok.LeaseSeq())
 	require.Equal(t, lag, tok.ClosedTimestampPolicy(lead))
 
 	// EvictAndReplace() with a new closed timestamp policy.
@@ -1547,7 +1548,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, desc2, *tok.Desc())
 	require.NotNil(t, tok.Leaseholder())
 	require.Equal(t, rep1, *tok.Leaseholder())
-	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
+	require.Equal(t, enginepb.LeaseSequence(1), tok.LeaseSeq())
 	require.Equal(t, lead, tok.ClosedTimestampPolicy(lag))
 
 	// EvictAndReplace() with a speculative descriptor. Should update decriptor,
@@ -1937,7 +1938,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.True(t, updatedLeaseholder)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep2, tok.Leaseholder())
-				require.Equal(t, roachpb.LeaseSequence(0), tok.Lease().Sequence)
+				require.Equal(t, enginepb.LeaseSequence(0), tok.Lease().Sequence)
 			},
 		},
 	}
@@ -2151,7 +2152,7 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	require.Equal(t, roachpb.LeaseSequence(2), e.Lease().Sequence)
+	require.Equal(t, enginepb.LeaseSequence(2), e.Lease().Sequence)
 	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc3)
 	require.True(t, updated)
 	require.False(t, updatedLease)

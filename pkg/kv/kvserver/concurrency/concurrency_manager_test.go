@@ -327,7 +327,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					seq := roachpb.LeaseSequence(leaseSeq)
+					seq := enginepb.LeaseSequence(leaseSeq)
 					wiErr := &kvpb.WriteIntentError{Intents: intents}
 					guard, err := m.HandleWriterIntentError(ctx, prev, seq, wiErr)
 					if err != nil {
@@ -509,7 +509,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					} else {
 						log.Event(ctx, "released")
 					}
-					m.OnRangeLeaseUpdated(roachpb.LeaseSequence(leaseSeq), isLeaseholder)
+					m.OnRangeLeaseUpdated(enginepb.LeaseSequence(leaseSeq), isLeaseholder)
 				})
 				return c.waitAndCollect(t, mon)
 

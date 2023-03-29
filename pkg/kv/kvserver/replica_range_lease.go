@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -993,7 +994,7 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 // RevokeLease stops the replica from using its current lease, if that lease
 // matches the provided lease sequence. All future calls to leaseStatus on this
 // node with the current lease will now return a PROSCRIBED status.
-func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
+func (r *Replica) RevokeLease(ctx context.Context, seq enginepb.LeaseSequence) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.state.Lease.Sequence == seq {

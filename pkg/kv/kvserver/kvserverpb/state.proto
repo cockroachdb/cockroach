@@ -35,9 +35,9 @@ message ReplicaState {
   option (gogoproto.equal) = true;
 
   // The highest (and last) index applied to the state machine.
-  uint64 raft_applied_index = 1;
+  uint64 raft_applied_index = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"];
   // The highest (and last) lease index applied to the state machine.
-  uint64 lease_applied_index = 2;
+  int64 lease_applied_index = 2  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
   // The Range descriptor.
   // The pointer may change, but the referenced RangeDescriptor struct itself
   // must be treated as immutable; it is leaked out of the lock.
@@ -136,7 +136,7 @@ message ReplicaState {
 
   // The term corresponding to RaftAppliedIndex. This is derived from
   // RangeAppliedState.RaftAppliedIndexTerm.
-  uint64 raft_applied_index_term = 14;
+  uint64 raft_applied_index_term = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftTerm"];
 
   // GCHint contains GC hint information for the replica. If hint
   // timestamp is set that means all data in the range is expected to be
@@ -154,7 +154,7 @@ message RangeInfo {
 
   ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The highest (and last) index in the Raft log.
-  uint64 last_index = 2;
+  uint64 last_index = 2 [(gogoproto.casttype) ="github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"];
   uint64 num_pending = 3;
   reserved 4; // previously last verification timestamp for verify queue.
   uint64 num_dropped = 5;
@@ -203,9 +203,9 @@ message RangeSideTransportInfo {
 
   util.hlc.Timestamp replica_closed = 1 [(gogoproto.nullable) = false];
   int64 replica_lai = 2 [(gogoproto.customname) = "ReplicaLAI",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
 
   util.hlc.Timestamp central_closed = 3 [(gogoproto.nullable) = false];
   int64 central_lai = 4 [(gogoproto.customname) = "CentralLAI",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
 }

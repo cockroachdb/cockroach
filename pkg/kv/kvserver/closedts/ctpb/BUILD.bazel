@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "//pkg/util/timeutil",
     ],
 )

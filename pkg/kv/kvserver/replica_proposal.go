@@ -509,7 +509,8 @@ func addSSTablePreApply(
 	st *cluster.Settings,
 	eng storage.Engine,
 	sideloaded logstore.SideloadStorage,
-	term, index uint64,
+	term enginepb.RaftTerm,
+	index enginepb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
 ) bool {

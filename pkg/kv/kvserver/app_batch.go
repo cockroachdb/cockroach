@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
@@ -179,7 +180,7 @@ func (b *appBatch) runPostAddTriggers(
 			env.st,
 			env.eng,
 			env.sideloaded,
-			cmd.Term,
+			enginepb.RaftTerm(cmd.Term),
 			cmd.Index(),
 			*res.AddSSTable,
 			env.bulkLimiter,

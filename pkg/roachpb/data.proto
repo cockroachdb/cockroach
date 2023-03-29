@@ -654,7 +654,7 @@ message Lease {
   // (see Lease.Equivalent). Two adjacent leases that are equivalent will have
   // the same sequence number and two adjacent leases that are not equivalent
   // will have different sequence numbers.
-  int64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
+  int64 sequence = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
 
   // The type of acquisition event that result in this lease (transfer or
   // request).
@@ -769,7 +769,7 @@ enum RangeClosedTimestampPolicy {
 // will return a RangeInfo with up-to-date information.
 message ClientRangeInfo {
   int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
-  int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
+  int64 lease_sequence = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.LeaseSequence"];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
   // ExplicitlyRequested causes range info to be returned even if other fields
   // are up-to-date.

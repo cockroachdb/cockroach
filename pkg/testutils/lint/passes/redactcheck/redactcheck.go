@@ -80,7 +80,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"Method": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
-						"LAI":    {},
 						"SeqNum": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation": {
@@ -102,7 +101,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"StreamID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/roachpb": {
-						"LeaseSequence":     {},
 						"NodeID":            {},
 						"RangeGeneration":   {},
 						"RangeID":           {},
@@ -153,6 +151,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"MVCCStatsDelta": {},
 						"TxnEpoch":       {},
 						"TxnSeq":         {},
+						"RaftIndex":      {},
+						"RaftTerm":       {},
+						"LeaseSequence":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},

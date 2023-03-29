@@ -286,10 +286,12 @@ message RangeAppliedState {
 
   // raft_applied_index is the highest (and last) index applied to the Raft
   // state machine.
-  uint64 raft_applied_index = 1;
+  uint64 raft_applied_index = 1 [(gogoproto.casttype) = "RaftIndex"];
   // lease_applied_index is the highest (and last) lease index applied to the
   // Raft state machine.
-  uint64 lease_applied_index = 2;
+  // NB: The LeaseSequence is a int64, but this field is a uint64 for
+  // compatibility reasons.
+  uint64 lease_applied_index = 2  [(gogoproto.casttype) = "LeaseSequence"];
   // range_stats is the set of mvcc stats that accounts for the current value
   // of the Raft state machine.
   MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
@@ -308,7 +310,7 @@ message RangeAppliedState {
   // setting it to a value > 0 (in v22.1). This is desirable since we don't
   // want a mixed version cluster (v21.2 and v22.1) to have divergent replica
   // state simply because we have introduced this field.
-  uint64 raft_applied_index_term = 5;
+  uint64 raft_applied_index_term = 5 [(gogoproto.casttype) = "RaftTerm"];
 }
 
 // MVCCWriteValueOp corresponds to a value being written outside of a

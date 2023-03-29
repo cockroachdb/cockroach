@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -125,7 +125,7 @@ func (ls *Stores) RemoveStore(s *Store) {
 // ForwardSideTransportClosedTimestampForRange forwards the side-transport
 // closed timestamp for the local replicas of the given range.
 func (ls *Stores) ForwardSideTransportClosedTimestampForRange(
-	ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai ctpb.LAI,
+	ctx context.Context, rangeID roachpb.RangeID, closedTS hlc.Timestamp, lai enginepb.LeaseSequence,
 ) {
 	if err := ls.VisitStores(func(s *Store) error {
 		r := s.GetReplicaIfExists(rangeID)

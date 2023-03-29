@@ -59,6 +59,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",

@@ -33,8 +33,8 @@ message RaftHeartbeat {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
   uint32 to_replica_id = 3 [(gogoproto.customname) = "ToReplicaID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
-  uint64 term = 4;
-  uint64 commit = 5;
+  uint64 term = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftTerm"];
+  uint64 commit = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"];
   bool quiesce = 6;
   reserved 7;
   repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
@@ -292,10 +292,10 @@ message DelegateSendSnapshotRequest {
 
   // The Raft term of the coordinator (in most cases the leaseholder) replica.
   // The term is used during snapshot receiving to reject messages from an older term.
-  uint64 term = 7;
+  uint64 term = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftTerm"];
 
   // The first index of the Raft log on the coordinator replica.
-  uint64 first_index = 8;
+  uint64 first_index = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.RaftIndex"];
 
   // The sending queue's name.
   SnapshotRequest.QueueName sender_queue_name = 9;

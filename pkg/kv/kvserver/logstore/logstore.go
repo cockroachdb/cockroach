@@ -68,8 +68,8 @@ func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
 
 // RaftState stores information about the last entry and the size of the log.
 type RaftState struct {
-	LastIndex uint64
-	LastTerm  uint64
+	LastIndex enginepb.RaftIndex
+	LastTerm  enginepb.RaftTerm
 	ByteSize  int64
 }
 
@@ -161,7 +161,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	prevLastIndex := state.LastIndex
 	overwriting := false
 	if len(m.Entries) > 0 {
-		firstPurge := m.Entries[0].Index // first new entry written
+		firstPurge := enginepb.RaftIndex(m.Entries[0].Index) // first new entry written
 		overwriting = firstPurge <= prevLastIndex
 		stats.Begin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
@@ -283,8 +283,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// entries that we didn't overwrite). Remove any such leftover on-disk
 		// payloads (we can do that now because we've committed the deletion
 		// just above).
-		firstPurge := m.Entries[0].Index // first new entry written
-		purgeTerm := m.Entries[0].Term - 1
+		firstPurge := enginepb.RaftIndex(m.Entries[0].Index) // first new entry written
+		purgeTerm := enginepb.RaftTerm(m.Entries[0].Term - 1)
 		lastPurge := prevLastIndex // old end of the log, include in deletion
 		purgedSize, err := maybePurgeSideloaded(ctx, s.Sideload, firstPurge, lastPurge, purgeTerm)
 		if err != nil {
@@ -374,14 +374,14 @@ func logAppend(
 	defer valPool.Put(value)
 	for i := range entries {
 		ent := &entries[i]
-		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, ent.Index)
+		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, enginepb.RaftIndex(ent.Index))
 
 		if err := value.SetProto(ent); err != nil {
 			return RaftState{}, err
 		}
 		value.InitChecksum(key)
 		var err error
-		if ent.Index > prev.LastIndex {
+		if enginepb.RaftIndex(ent.Index) > prev.LastIndex {
 			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
 		} else {
 			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
@@ -391,7 +391,7 @@ func logAppend(
 		}
 	}
 
-	newLastIndex := entries[len(entries)-1].Index
+	newLastIndex := enginepb.RaftIndex(entries[len(entries)-1].Index)
 	// Delete any previously appended log entries which never committed.
 	if prev.LastIndex > 0 {
 		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
@@ -406,7 +406,7 @@ func logAppend(
 	}
 	return RaftState{
 		LastIndex: newLastIndex,
-		LastTerm:  entries[len(entries)-1].Term,
+		LastTerm:  enginepb.RaftTerm(entries[len(entries)-1].Term),
 		ByteSize:  prev.ByteSize + diff.SysBytes,
 	}, nil
 }
@@ -419,11 +419,11 @@ func LoadTerm(
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	index uint64,
-) (uint64, error) {
+	index enginepb.RaftIndex,
+) (enginepb.RaftTerm, error) {
 	entry, found := eCache.Get(rangeID, index)
 	if found {
-		return entry.Term, nil
+		return enginepb.RaftTerm(entry.Term), nil
 	}
 
 	reader := eng.NewReadOnly(storage.StandardDurability)
@@ -442,7 +442,7 @@ func LoadTerm(
 
 	if found {
 		// Found an entry. Double-check that it has a correct index.
-		if got, want := entry.Index, index; got != want {
+		if got, want := enginepb.RaftIndex(entry.Index), index; got != want {
 			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
 		}
 		// Cache the entry except if it is sideloaded. We don't load/inline the
@@ -456,7 +456,7 @@ func LoadTerm(
 		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
-		return entry.Term, nil
+		return enginepb.RaftTerm(entry.Term), nil
 	}
 	// Otherwise, the entry at the given index is not found. This can happen if
 	// the index is ahead of lastIndex, or it has been compacted away.
@@ -495,7 +495,8 @@ func LoadEntries(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
-	lo, hi, maxBytes uint64,
+	lo, hi enginepb.RaftIndex,
+	maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -511,7 +512,7 @@ func LoadEntries(
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
-	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
+	if enginepb.RaftIndex(len(ents)) == hi-lo || exceededMaxBytes {
 		return ents, nil
 	}
 
@@ -521,7 +522,7 @@ func LoadEntries(
 
 	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
-		if ent.Index != expectedIndex {
+		if enginepb.RaftIndex(ent.Index) != expectedIndex {
 			return iterutil.StopIteration()
 		}
 		expectedIndex++
@@ -564,7 +565,7 @@ func LoadEntries(
 	eCache.Add(rangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
-	if uint64(len(ents)) == hi-lo {
+	if enginepb.RaftIndex(len(ents)) == hi-lo {
 		return ents, nil
 	}
 

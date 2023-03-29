@@ -35,6 +35,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

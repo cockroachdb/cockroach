@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
@@ -194,7 +195,7 @@ func visitStoreReplicas(
 			NodeID:                   nodeID,
 			Desc:                     desc,
 			RaftAppliedIndex:         rstate.RaftAppliedIndex,
-			RaftCommittedIndex:       hstate.Commit,
+			RaftCommittedIndex:       enginepb.RaftIndex(hstate.Commit),
 			RaftLogDescriptorChanges: rangeUpdates,
 			LocalAssumesLeaseholder:  localIsLeaseholder,
 		})
@@ -208,7 +209,7 @@ func visitStoreReplicas(
 // lo (inclusive) and hi (exclusive) and searches for changes to range
 // descriptors, as identified by presence of a commit trigger.
 func GetDescriptorChangesFromRaftLog(
-	rangeID roachpb.RangeID, lo, hi uint64, reader storage.Reader,
+	rangeID roachpb.RangeID, lo, hi enginepb.RaftIndex, reader storage.Reader,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
 	if err := raftlog.Visit(reader, rangeID, lo, hi, func(ent raftpb.Entry) error {

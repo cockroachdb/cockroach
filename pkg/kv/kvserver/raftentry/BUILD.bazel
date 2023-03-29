@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
@@ -31,6 +32,7 @@ go_test(
     embed = [":raftentry"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/storage/enginepb",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
         "@io_etcd_go_raft_v3//raftpb",

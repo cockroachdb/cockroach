@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -66,7 +67,7 @@ var (
 	// have grown abnormally large. RaftLogTruncationThreshold will typically not
 	// trigger it, unless the average log entry is <= 160 bytes. The key size is
 	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
-	raftLogTruncationClearRangeThreshold = uint64(util.ConstantWithMetamorphicTestRange(
+	raftLogTruncationClearRangeThreshold = enginepb.RaftIndex(util.ConstantWithMetamorphicTestRange(
 		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
 )
 
@@ -233,7 +234,7 @@ func (r *Replica) evalAndPropose(
 		// The remaining requests that skip a lease check (at the time of writing
 		// ProbeRequest) will assign a zero lease sequence and thus won't be able
 		// to mutate state.
-		var seq roachpb.LeaseSequence
+		var seq enginepb.LeaseSequence
 		switch t := ba.Requests[0].GetInner().(type) {
 		case *kvpb.RequestLeaseRequest:
 			seq = t.PrevLease.Sequence
@@ -356,7 +357,7 @@ func (r *Replica) propose(
 	// Failure to propose will propagate to the client. An invariant of this
 	// package is that proposals which are finished carry a raft command with a
 	// MaxLeaseIndex equal to the proposal command's max lease index.
-	defer func(prev uint64) {
+	defer func(prev enginepb.LeaseSequence) {
 		if pErr != nil {
 			p.command.MaxLeaseIndex = prev
 		}
@@ -1464,8 +1465,8 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		RangeID:                           r.RangeID,
 		ToReplicaID:                       toReplica.ReplicaID,
 		FromReplicaID:                     fromReplica.ReplicaID,
-		Term:                              msg.Term,
-		Commit:                            msg.Commit,
+		Term:                              enginepb.RaftTerm(msg.Term),
+		Commit:                            enginepb.RaftIndex(msg.Commit),
 		Quiesce:                           quiesce,
 		LaggingFollowersOnQuiesce:         lagging,
 		LaggingFollowersOnQuiesceAccurate: quiesce,
@@ -1783,7 +1784,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 }
 
 type snapTruncationInfo struct {
-	index          uint64
+	index          enginepb.RaftIndex
 	recipientStore roachpb.StoreID
 	initial        bool
 }
@@ -1805,7 +1806,7 @@ type snapTruncationInfo struct {
 // queue to a new replica; some callers only care about these snapshots.
 func (r *Replica) addSnapshotLogTruncationConstraint(
 	ctx context.Context, snapUUID uuid.UUID, initial bool, recipientStore roachpb.StoreID,
-) (uint64, func()) {
+) (enginepb.RaftIndex, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	appliedIndex := r.mu.state.RaftAppliedIndex
@@ -1854,7 +1855,7 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 // to new replicas are considered.
 func (r *Replica) getSnapshotLogTruncationConstraintsRLocked(
 	recipientStore roachpb.StoreID, initialOnly bool,
-) (_ []snapTruncationInfo, minSnapIndex uint64) {
+) (_ []snapTruncationInfo, minSnapIndex enginepb.RaftIndex) {
 	var sl []snapTruncationInfo
 	for _, item := range r.mu.snapshotLogTruncationConstraints {
 		if initialOnly && !item.initial {

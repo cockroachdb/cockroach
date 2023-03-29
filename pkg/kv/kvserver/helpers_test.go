@@ -264,7 +264,7 @@ func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
 }
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
-func (r *Replica) LastAssignedLeaseIndex() uint64 {
+func (r *Replica) LastAssignedLeaseIndex() enginepb.LeaseSequence {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
@@ -272,7 +272,7 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 
 // LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
 // b.mu to be held in read mode.
-func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
+func (b *propBuf) LastAssignedLeaseIndexRLocked() enginepb.LeaseSequence {
 	return b.assignedLAI
 }
 
@@ -283,9 +283,9 @@ func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
 func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var appliedIndex uint64
+	var appliedIndex enginepb.RaftIndex
 	err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
-		appliedIndex = r.BasicStatus().Applied
+		appliedIndex = enginepb.RaftIndex(r.BasicStatus().Applied)
 		return false, nil
 	})
 	if err != nil {
@@ -357,7 +357,7 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 
 // GetCachedLastTerm returns the cached last term value. May return
 // invalidLastTerm if the cache is not set.
-func (r *Replica) GetCachedLastTerm() uint64 {
+func (r *Replica) GetCachedLastTerm() enginepb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.lastTermNotDurable

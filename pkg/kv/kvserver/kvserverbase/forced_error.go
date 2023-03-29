@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -45,7 +46,7 @@ var NoopOnProbeCommandErr = kvpb.NewErrorf("no-op on ProbeRequest")
 
 // ForcedErrResult is the output from CheckForcedErr.
 type ForcedErrResult struct {
-	LeaseIndex  uint64
+	LeaseIndex  enginepb.LeaseSequence
 	Rejection   ProposalRejectionType
 	ForcedError *kvpb.Error
 }

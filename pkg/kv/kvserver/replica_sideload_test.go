@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -205,7 +206,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		}
 		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
 		require.NoError(t, err)
-		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, ent.Index, ent.Term)
+		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, enginepb.RaftIndex(ent.Index), enginepb.RaftTerm(ent.Term))
 		require.NoError(t, err)
 		require.Equal(t, origSSTData, sst)
 		break
@@ -229,7 +230,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 
 		const count = 10
 
-		var indexes []uint64
+		var indexes []enginepb.RaftIndex
 		addLastIndex := func() {
 			lastIndex := tc.repl.GetLastIndex()
 			indexes = append(indexes, lastIndex)

@@ -368,3 +368,25 @@ var FormatBytesAsKey = func(k []byte) redact.RedactableString {
 var FormatBytesAsValue = func(v []byte) redact.RedactableString {
 	return redact.Sprint(string(v))
 }
+
+// RaftTerm represents the term of a raft message. This corresponds to Term in
+// HardState.Term in the Raft library. That type is a uint64, so it is necessary
+// to cast to/from that type when dealing with the Raft library, however
+// internally RaftTerm is used for all fields in CRDB.
+type RaftTerm uint64
+
+// RaftIndex represents the term of a raft message. This corresponds to Index in
+// HardState.Index in the Raft library. That type is a uint64, so it is
+// necessary to cast to/from that type when dealing with the Raft library,
+// however internally RaftIndex is used for all fields in CRDB.
+type RaftIndex uint64
+
+// LeaseSequence is a custom type for a lease sequence number.
+// It starts at 0, but was initially created as an int, so it is staying that
+// way to avoid any compatibility considerations.
+type LeaseSequence int64
+
+// SafeValue implements the redact.SafeValue interface.
+func (s RaftTerm) SafeValue()      {}
+func (s RaftIndex) SafeValue()     {}
+func (s LeaseSequence) SafeValue() {}
