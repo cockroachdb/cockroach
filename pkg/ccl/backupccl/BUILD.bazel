@@ -167,6 +167,7 @@ go_test(
         "bench_test.go",
         "create_scheduled_backup_test.go",
         "datadriven_test.go",
+        "file_sst_sink_test.go",
         "full_cluster_backup_restore_test.go",
         "key_rewriter_test.go",
         "main_test.go",
