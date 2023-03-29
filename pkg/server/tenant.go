@@ -49,8 +49,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -150,6 +153,19 @@ func (s *SQLServerWrapper) Drain(
 	return s.drainServer.runDrain(ctx, verbose)
 }
 
+// tenantServerDeps holds dependencies for the SQL server that we want
+// to vary based on whether we are in a shared process or separate
+// process tenant.
+type tenantServerDeps struct {
+	instanceIDContainer *base.SQLIDContainer
+
+	// The following should eventually be connected to tenant
+	// capabilities.
+	costControllerFactory costControllerFactory
+	spanLimiterFactory    spanLimiterFactory
+}
+
+type spanLimiterFactory func(isql.Executor, *cluster.Settings, *spanconfig.TestingKnobs) spanconfig.Limiter
 type costControllerFactory func(*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider) (multitenant.TenantSideCostController, error)
 
 // NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
@@ -165,9 +181,15 @@ func NewSeparateProcessTenantServer(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 ) (*SQLServerWrapper, error) {
-	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance()
-	costControllerBuilder := NewTenantSideCostController
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer, costControllerBuilder)
+	deps := tenantServerDeps{
+		instanceIDContainer:   baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance(),
+		costControllerFactory: NewTenantSideCostController,
+		spanLimiterFactory: func(ie isql.Executor, st *cluster.Settings, knobs *spanconfig.TestingKnobs) spanconfig.Limiter {
+			return spanconfiglimiter.New(ie, st, knobs)
+		},
+	}
+
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
 }
 
 // NewSharedProcessTenantServer creates a tenant-specific, SQL-only
@@ -186,16 +208,22 @@ func NewSharedProcessTenantServer(
 	if baseCfg.IDContainer.Get() == 0 {
 		return nil, errors.AssertionFailedf("programming error: NewSharedProcessTenantServer called before NodeID was assigned.")
 	}
-	instanceIDContainer := base.NewSQLIDContainerForNode(baseCfg.IDContainer)
-	// TODO(ssd): The cost controller should instead be able to
-	// read from the capability system and return immediately if
-	// the tenant is exempt. For now we are turning off the
-	// tenant-side cost controller for shared-memory tenants until
-	// we have the abilility to read capabilities tenant-side.
-	//
-	// https://github.com/cockroachdb/cockroach/issues/84586
-	costControllerBuilder := NewNoopTenantSideCostController
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer, costControllerBuilder)
+
+	deps := tenantServerDeps{
+		instanceIDContainer: base.NewSQLIDContainerForNode(baseCfg.IDContainer),
+		// TODO(ssd): The cost controller should instead be able to
+		// read from the capability system and return immediately if
+		// the tenant is exempt. For now we are turning off the
+		// tenant-side cost controller for shared-memory tenants until
+		// we have the abilility to read capabilities tenant-side.
+		//
+		// https://github.com/cockroachdb/cockroach/issues/84586
+		costControllerFactory: NewNoopTenantSideCostController,
+		spanLimiterFactory: func(isql.Executor, *cluster.Settings, *spanconfig.TestingKnobs) spanconfig.Limiter {
+			return spanconfiglimiter.NoopLimiter{}
+		},
+	}
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
 }
 
 // newTenantServer constructs a SQLServerWrapper.
@@ -207,8 +235,7 @@ func newTenantServer(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
-	instanceIDContainer *base.SQLIDContainer,
-	costControllerFactory costControllerFactory,
+	deps tenantServerDeps,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -220,7 +247,7 @@ func newTenantServer(
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, instanceIDContainer, costControllerFactory)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -905,8 +932,7 @@ func makeTenantSQLServerArgs(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
-	instanceIDContainer *base.SQLIDContainer,
-	costControllerFactory costControllerFactory,
+	deps tenantServerDeps,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -999,7 +1025,7 @@ func makeTenantSQLServerArgs(
 		tenantKnobs.OverrideTokenBucketProvider != nil {
 		provider = tenantKnobs.OverrideTokenBucketProvider(provider)
 	}
-	costController, err := costControllerFactory(st, sqlCfg.TenantID, provider)
+	costController, err := deps.costControllerFactory(st, sqlCfg.TenantID, provider)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
@@ -1041,7 +1067,7 @@ func makeTenantSQLServerArgs(
 	)
 
 	dbCtx := kv.DefaultDBContext(stopper)
-	dbCtx.NodeID = instanceIDContainer
+	dbCtx.NodeID = deps.instanceIDContainer
 	db := kv.NewDBWithContext(baseCfg.AmbientCtx, tcsFactory, clock, dbCtx)
 
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
@@ -1156,13 +1182,14 @@ func makeTenantSQLServerArgs(
 			externalStorageFromURI: externalStorageFromURI,
 			// Set instance ID to 0 and node ID to nil to indicate
 			// that the instance ID will be bound later during preStart.
-			nodeIDContainer:      instanceIDContainer,
+			nodeIDContainer:      deps.instanceIDContainer,
 			spanConfigKVAccessor: tenantConnect,
 			kvStoresIterator:     kvserverbase.UnsupportedStoresIterator{},
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
-			tenantConnect:    tenantConnect,
-			promRuleExporter: promRuleExporter,
+			spanLimiterFactory: deps.spanLimiterFactory,
+			tenantConnect:      tenantConnect,
+			promRuleExporter:   promRuleExporter,
 		},
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
