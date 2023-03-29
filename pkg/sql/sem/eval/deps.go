@@ -196,6 +196,10 @@ type Planner interface {
 	tree.FunctionReferenceResolver
 
 	// Mon returns the Planner's monitor.
+	//
+	// TODO(yuzefovich): memory usage against this monitor doesn't count against
+	// sql.mem.distsql.current metric, audit the callers to see whether this is
+	// undesirable in some places.
 	Mon() *mon.BytesMonitor
 
 	// ExecutorConfig returns *ExecutorConfig
