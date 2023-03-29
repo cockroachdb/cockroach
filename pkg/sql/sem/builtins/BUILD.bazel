@@ -9,6 +9,7 @@ go_library(
         "all_builtins.go",
         "builtins.go",
         "compression.go",
+        "fingerprint_builtins.go",
         "fixed_oids.go",
         "generator_builtins.go",
         "generator_probe_ranges.go",
