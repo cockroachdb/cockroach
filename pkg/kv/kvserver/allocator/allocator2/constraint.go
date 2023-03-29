@@ -306,11 +306,12 @@ func (rac *rangeAnalyzedConstraints) stateForInit() *analyzeConstraintsBuf {
 	return &rac.buf
 }
 
-type storeMatchesConstraintFunc func(
-	storeID roachpb.StoreID, constraintConj []roachpb.Constraint) bool
+type storeMatchesConstraintInterface interface {
+	storeMatches(storeID roachpb.StoreID, constraintConj []roachpb.Constraint) bool
+}
 
 func (rac *rangeAnalyzedConstraints) finishInit(
-	spanConfig *normalizedSpanConfig, constraintFunc storeMatchesConstraintFunc,
+	spanConfig *normalizedSpanConfig, constraintMatcher storeMatchesConstraintInterface,
 ) {
 	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
@@ -327,7 +328,8 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 				rac.buf.replicaConstraintIndices[kind] =
 					extend2DSlice(rac.buf.replicaConstraintIndices[kind])
 				for j, c := range ac.constraints {
-					if len(c.Constraints) == 0 || constraintFunc(store.StoreID, c.Constraints) {
+					if len(c.Constraints) == 0 ||
+						constraintMatcher.storeMatches(store.StoreID, c.Constraints) {
 						rac.buf.replicaConstraintIndices[kind][i] =
 							append(rac.buf.replicaConstraintIndices[kind][i], int32(j))
 					}
@@ -449,6 +451,21 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 
 // Disjunction of conjunctions.
 type constraintsDisj []roachpb.ConstraintsConjunction
+
+func (cd *constraintsDisj) toString() string {
+	n := len(*cd)
+	if n == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		if i != 0 {
+			b.WriteRune('∩')
+		}
+		fmt.Fprintf(&b, "%s", (*cd)[i].String())
+	}
+	return b.String()
+}
 
 // Usage for a range that may need attention:
 //
@@ -819,10 +836,10 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 		for i, c := range rac.constraints.constraints {
 			neededReplicas := int(c.NumReplicas)
 			actualVoterReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i])
-			actualNonVoterReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i])
+			actualNonVoterReplicas := len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])
 			if neededReplicas > actualVoterReplicas+actualNonVoterReplicas {
 				toAdd = append(toAdd, c)
-			} else if neededReplicas < actualNonVoterReplicas {
+			} else if neededReplicas < actualVoterReplicas {
 				toRemoveVoters = append(
 					toRemoveVoters, rac.constraints.satisfiedByReplica[voterIndex][i]...)
 			}
@@ -1032,6 +1049,97 @@ func (s *storeIDPostingList) intersect(b storeIDPostingList) {
 		}
 	}
 	*s = a[:k]
+}
+
+func (s *storeIDPostingList) isEqual(b storeIDPostingList) bool {
+	a := *s
+	n := len(a)
+	m := len(b)
+	if n != m {
+		return false
+	}
+	for i := range b {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Returns true iff found (and successfully removed).
+func (s *storeIDPostingList) remove(storeID roachpb.StoreID) bool {
+	a := *s
+	n := len(a)
+	found := false
+	for i := range a {
+		if a[i] == storeID {
+			// INVARIANT: i < n, so i <= n-1 and i+1 <= n.
+			copy(a[i:n-1], a[i+1:n])
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false
+	}
+	*s = a[:n-1]
+	return true
+}
+
+// Returns true iff the storeID was not already in the set.
+func (s *storeIDPostingList) insert(storeID roachpb.StoreID) bool {
+	a := *s
+	n := len(a)
+	var pos int
+	for pos := range a {
+		if storeID < a[pos] {
+			break
+		} else if storeID == a[pos] {
+			return false
+		}
+	}
+	var b storeIDPostingList
+	if cap(a) > n {
+		b = a[:n+1]
+	} else {
+		m := 2 * cap(a)
+		const minLength = 10
+		if m < minLength {
+			m = minLength
+		}
+		b = make([]roachpb.StoreID, n+1, m)
+		if pos > 0 {
+			copy(b[:pos-1], a[:pos-1])
+		}
+	}
+	copy(b[pos+1:n+1], a[pos:n])
+	b[pos] = storeID
+	*s = b
+	return true
+}
+
+func (s *storeIDPostingList) contains(storeID roachpb.StoreID) bool {
+	n := len(*s)
+	index := sort.Search(n, func(i int) bool { return (*s)[i] >= storeID })
+	return index != n && (*s)[index] == storeID
+}
+
+const (
+	// offset64 is the initial hash value, and is taken from fnv.go
+	offset64 = 14695981039346656037
+
+	// prime64 is a large-ish prime number used in hashing and taken from fnv.go.
+	prime64 = 1099511628211
+)
+
+// FNV-1a hash algorithm.
+func (s *storeIDPostingList) hash() uint64 {
+	h := uint64(offset64)
+	for _, storeID := range *s {
+		h ^= uint64(storeID)
+		h *= prime64
+	}
+	return h
 }
 
 type storeIDIncreasing []roachpb.StoreID
