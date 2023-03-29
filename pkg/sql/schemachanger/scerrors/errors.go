@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -129,6 +130,8 @@ type concurrentSchemaChangeError struct {
 	// from the builder.
 	descID descpb.ID
 }
+
+var _ pgerror.ClientVisibleRetryError = (*concurrentSchemaChangeError)(nil)
 
 // ClientVisibleRetryError is detected by the pgwire layer and will convert
 // this error into a serialization error to be retried. See

@@ -10,7 +10,10 @@
 
 package execinfra
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
+)
 
 // QueryNotRunningInHomeRegionMessagePrefix is the common message prefix for
 // erroring out queries with no home region when the enforce_home_region session
@@ -28,6 +31,8 @@ type dynamicQueryHasNoHomeRegionError struct {
 func NewDynamicQueryHasNoHomeRegionError(err error) error {
 	return &dynamicQueryHasNoHomeRegionError{err: err}
 }
+
+var _ pgerror.ClientVisibleRetryError = (*dynamicQueryHasNoHomeRegionError)(nil)
 
 // dynamicQueryHasNoHomeRegionError implements the error interface.
 func (e *dynamicQueryHasNoHomeRegionError) Error() string {
