@@ -55,6 +55,8 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	skip.WithIssue(t, 99974, "flaky test")
+
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
 		clusterversion.ByKey(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn-1),
