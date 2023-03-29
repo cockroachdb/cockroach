@@ -38,7 +38,7 @@ export const filterTransactionInsights = (
     txn?.application?.startsWith(internalAppNamePrefix);
   if (filters.app) {
     filteredTransactions = filteredTransactions.filter(txn => {
-      const apps = filters.app.toString().split(",");
+      const apps = filters.app?.toString().split(",");
       let showInternal = false;
       if (apps.includes(internalAppNamePrefix)) {
         showInternal = true;
@@ -108,8 +108,8 @@ export const filterSchemaInsights = (
 
   if (filters.database) {
     const databases =
-      filters.database.toString().length > 0
-        ? filters.database.toString().split(",")
+      filters.database?.toString().length > 0
+        ? filters.database?.toString().split(",")
         : [];
     if (databases.includes(unset)) {
       databases.push("");

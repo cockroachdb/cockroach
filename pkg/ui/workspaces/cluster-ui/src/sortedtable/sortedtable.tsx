@@ -427,7 +427,9 @@ export function longListWithTooltip(
     <Tooltip
       placement="bottom"
       content={
-        <pre className={cx("break-line")}>{value.split(", ").join("\r\n")}</pre>
+        <pre className={cx("break-line")}>
+          {value?.split(", ").join("\r\n")}
+        </pre>
       }
     >
       <div className="cl-table-link__tooltip-hover-area">{summary}</div>
@@ -490,7 +492,7 @@ export const updateSortSettingQueryParamsOnTab = (
   const currentTab = searchParams.get("tab") || "";
   const ascending =
     (searchParams.get("ascending") ||
-      defaultSortSetting.ascending.toString()) === "true";
+      defaultSortSetting.ascending?.toString()) === "true";
   const columnTitle =
     searchParams.get("columnTitle") || defaultSortSetting.columnTitle;
   if (
@@ -499,7 +501,7 @@ export const updateSortSettingQueryParamsOnTab = (
       sortSetting.ascending != ascending)
   ) {
     const params = {
-      ascending: sortSetting.ascending.toString(),
+      ascending: sortSetting.ascending?.toString(),
       columnTitle: sortSetting.columnTitle,
     };
     const nextSearchParams = new URLSearchParams(history.location.search);
@@ -510,7 +512,7 @@ export const updateSortSettingQueryParamsOnTab = (
         nextSearchParams.set(key, value);
       }
     });
-    history.location.search = nextSearchParams.toString();
+    history.location.search = nextSearchParams?.toString();
     history.replace(history.location);
   }
 };

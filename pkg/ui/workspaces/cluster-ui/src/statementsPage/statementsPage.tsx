@@ -197,7 +197,7 @@ export function filterBySearchQuery(
   }
 
   return search
-    .toLowerCase()
+    ?.toLowerCase()
     .split(" ")
     .every(
       val => matchString.includes(val) || matchFingerPrintId.includes(val),
@@ -268,7 +268,7 @@ export class StatementsPage extends React.Component<
   changeSortSetting = (ss: SortSetting): void => {
     syncHistory(
       {
-        ascending: ss.ascending.toString(),
+        ascending: ss.ascending?.toString(),
         columnTitle: ss.columnTitle,
       },
       this.props.history,
@@ -452,7 +452,7 @@ export class StatementsPage extends React.Component<
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
-        fullScan: filters.fullScan.toString(),
+        fullScan: filters.fullScan?.toString(),
         sqlType: filters.sqlType,
         database: filters.database,
         regions: filters.regions,
@@ -549,7 +549,7 @@ export class StatementsPage extends React.Component<
     const regions = unique(
       isTenant
         ? flatMap(statements, statement => statement.stats.regions)
-        : nodes.map(node => nodeRegions[node.toString()]),
+        : nodes.map(node => nodeRegions[node?.toString()]),
     ).sort();
 
     // If the cluster is a tenant cluster we don't show info
@@ -561,7 +561,7 @@ export class StatementsPage extends React.Component<
     // hiding columns that won't be displayed for tenants.
     const columns = makeStatementsColumns(
       statements,
-      filters.app.split(","),
+      filters.app?.split(","),
       this.props.stmtsTotalRuntimeSecs,
       "statement",
       isTenant,

@@ -95,7 +95,7 @@ function createIndexRecommendationsToSchemaInsight(
 
   txn_result.rows.forEach(row => {
     row.index_recommendations.forEach(rec => {
-      const recSplit = rec.split(" : ");
+      const recSplit = rec?.split(" : ");
       const recType = recSplit[0];
       const recQuery = recSplit[1];
       let idxType: InsightType;

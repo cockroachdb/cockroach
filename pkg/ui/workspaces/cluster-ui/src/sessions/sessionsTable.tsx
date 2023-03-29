@@ -284,7 +284,7 @@ export function makeSessionsColumns(
               onTerminateSessionClick && onTerminateSessionClick();
               terminateSessionRef?.current?.showModalFor({
                 session_id: session.id,
-                node_id: session.node_id.toString(),
+                node_id: session.node_id?.toString(),
               });
               break;
             case "cancelStatement":
@@ -292,7 +292,7 @@ export function makeSessionsColumns(
                 onTerminateStatementClick && onTerminateStatementClick();
                 terminateQueryRef?.current?.showModalFor({
                   query_id: session.active_queries[0].id,
-                  node_id: session.node_id.toString(),
+                  node_id: session.node_id?.toString(),
                 });
               }
               break;

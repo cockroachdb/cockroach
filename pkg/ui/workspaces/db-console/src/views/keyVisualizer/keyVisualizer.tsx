@@ -249,7 +249,7 @@ export default class KeyVisualizer extends React.PureComponent<
 
     for (const [timestring, xOffset] of Object.entries(xAxisLabels)) {
       // split timestring and render each part
-      const [s1, s2] = timestring.split("T");
+      const [s1, s2] = timestring?.split("T");
 
       this.ctx.fillText(
         s1,

@@ -145,7 +145,7 @@ function shouldHideNode(nodeName: string): boolean {
 // hyphens to camel case. '(anti)' is also removed from the resulting string.
 export function standardizeKey(str: string): string {
   return str
-    .toLowerCase()
+    ?.toLowerCase()
     .split(/[ -]+/)
     .filter(str => str !== "(anti)")
     .map((str, i) =>
@@ -268,12 +268,12 @@ export function PlanView({
   const globalAttrs: FlatPlanNodeAttribute[] = [
     {
       key: "distribution",
-      values: [globalProperties.distribution.toString()],
+      values: [globalProperties.distribution?.toString()],
       warn: false, // distribution is never warned
     },
     {
       key: "vectorized",
-      values: [globalProperties.vectorized.toString()],
+      values: [globalProperties.vectorized?.toString()],
       warn: false, // vectorized is never warned
     },
   ];

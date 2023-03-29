@@ -186,7 +186,7 @@ function AppLink(props: { app: string }) {
   return (
     <Link
       className={cx("text-link")}
-      to={`/sql-activity?tab=Statements&${searchParams.toString()}`}
+      to={`/sql-activity?tab=Statements&${searchParams?.toString()}`}
     >
       {props.app}
     </Link>
@@ -357,7 +357,7 @@ export class StatementDetails extends React.Component<
     searchParams.set("tab", tabId);
     history.replace({
       ...history.location,
-      search: searchParams.toString(),
+      search: searchParams?.toString(),
     });
     this.setState({
       currentTab: tabId,
@@ -550,7 +550,7 @@ export class StatementDetails extends React.Component<
       this.props.statementDetails;
 
     const nodes: string[] = unique(
-      (stats.nodes || []).map(node => node.toString()),
+      (stats.nodes || []).map(node => node?.toString()),
     ).sort();
     const regions = unique(
       isTenant

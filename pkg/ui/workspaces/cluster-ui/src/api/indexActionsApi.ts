@@ -26,7 +26,7 @@ export function executeIndexRecAction(
   databaseName: string,
 ): Promise<IndexActionResponse> {
   const statements = stmts
-    .split(";")
+    ?.split(";")
     .filter(stmt => stmt.trim().length != 0)
     .map(stmt => {
       return { sql: stmt.trim() };

@@ -392,7 +392,7 @@ export function populateRegionNodeForStatements(
     // E.g. {"gcp-us-east1" : [1,3,4]}
     if (stmt.stats.nodes) {
       stmt.stats.nodes.forEach(node => {
-        const region = nodeRegions[node.toString()];
+        const region = nodeRegions[node?.toString()];
         if (region) {
           if (Object.keys(regions).includes(region)) {
             regions[region].add(longToInt(node));
@@ -412,7 +412,7 @@ export function populateRegionNodeForStatements(
           Array.from(regions[region])
             .sort()
             .map(n => "n" + n)
-            .toString() +
+            ?.toString() +
           ")",
       );
     });

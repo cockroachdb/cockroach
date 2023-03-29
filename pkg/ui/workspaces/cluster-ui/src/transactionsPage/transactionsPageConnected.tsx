@@ -143,7 +143,7 @@ export const TransactionsPageConnected = withRouter(
               name: "Filter Clicked",
               page: "Transactions",
               filterName: "filters",
-              value: value.toString(),
+              value: value?.toString(),
             }),
           );
           dispatch(

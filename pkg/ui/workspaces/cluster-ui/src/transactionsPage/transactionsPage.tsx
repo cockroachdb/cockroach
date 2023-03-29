@@ -282,7 +282,7 @@ export class TransactionsPage extends React.Component<
   onChangeSortSetting = (ss: SortSetting): void => {
     syncHistory(
       {
-        ascending: ss.ascending.toString(),
+        ascending: ss.ascending?.toString(),
         columnTitle: ss.columnTitle,
       },
       this.props.history,
@@ -493,7 +493,7 @@ export class TransactionsPage extends React.Component<
     const regions = unique(
       isTenant
         ? flatMap(statements, statement => statement.stats.regions)
-        : nodes.map(node => nodeRegions[node.toString()]),
+        : nodes.map(node => nodeRegions[node?.toString()]),
     ).sort();
 
     // Creates a list of all possible columns,

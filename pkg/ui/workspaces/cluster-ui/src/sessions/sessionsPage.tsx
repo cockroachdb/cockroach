@@ -184,7 +184,7 @@ export class SessionsPage extends React.Component<
 
     syncHistory(
       {
-        ascending: ss.ascending.toString(),
+        ascending: ss.ascending?.toString(),
         columnTitle: ss.columnTitle,
       },
       this.props.history,

@@ -194,7 +194,7 @@ export const handleFiltersFromQueryString = (
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
-        fullScan: filters.fullScan.toString(),
+        fullScan: filters.fullScan?.toString(),
         sqlType: filters.sqlType,
         database: filters.database,
         regions: filters.regions,
@@ -237,7 +237,7 @@ export const updateFiltersQueryParamsOnTab = (
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
-        fullScan: filters.fullScan.toString(),
+        fullScan: filters.fullScan?.toString(),
         sqlType: filters.sqlType,
         database: filters.database,
         regions: filters.regions,
@@ -482,7 +482,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const usernameValue = usernameOptions.filter(option => {
-      return filters.username.split(",").includes(option.label);
+      return filters.username?.split(",").includes(option.label);
     });
     const usernameFilter = (
       <div>
@@ -508,7 +508,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const sessionStatusValue = sessionStatusOptions.filter(option => {
-      return filters.sessionStatus.split(",").includes(option.label);
+      return filters.sessionStatus?.split(",").includes(option.label);
     });
     const sessionStatusFilter = (
       <div>
@@ -536,7 +536,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const executionStatusValue = executionStatusOptions.filter(option =>
-      filters.executionStatus.split(",").includes(option.label),
+      filters.executionStatus?.split(",").includes(option.label),
     );
     const executionStatusFilter = (
       <div>
@@ -564,7 +564,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option => {
-      return filters.schemaInsightType.split(",").includes(option.label);
+      return filters.schemaInsightType?.split(",").includes(option.label);
     });
     const schemaInsightTypeFilter = (
       <div>
@@ -619,7 +619,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const regionsValue = regionsOptions.filter(option =>
-      filters.regions.split(",").includes(option.label),
+      filters.regions?.split(",").includes(option.label),
     );
     const regionsFilter = (
       <div>
@@ -642,7 +642,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const nodesValue = nodesOptions.filter(option => {
-      return filters.nodes.split(",").includes(option.label);
+      return filters.nodes?.split(",").includes(option.label);
     });
     const nodesFilter = (
       <div>
@@ -836,7 +836,7 @@ interface FilterBadgeProps {
 function FilterBadge(props: FilterBadgeProps): React.ReactElement {
   const { filters, name, values, onRemoveFilter } = props;
   const unit = name === "timeNumber" ? props.unit : "";
-  let value = `${getLabelFromKey(name)}: ${values.toString()} ${unit}`;
+  let value = `${getLabelFromKey(name)}: ${values?.toString()} ${unit}`;
   if (value.length > 100) {
     value = value.substring(0, 100) + "...";
   }

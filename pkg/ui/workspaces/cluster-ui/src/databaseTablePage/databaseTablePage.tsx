@@ -298,7 +298,7 @@ export class DatabaseTablePage extends React.Component<
 
     searchParams.set(columnTitleAttr, sortSetting.columnTitle);
     searchParams.set(ascendingAttr, String(sortSetting.ascending));
-    history.location.search = searchParams.toString();
+    history.location.search = searchParams?.toString();
     history.replace(history.location);
   }
 

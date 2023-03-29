@@ -173,7 +173,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                     if (session.active_queries?.length > 0) {
                       this.terminateQueryRef?.current?.showModalFor({
                         query_id: session.active_queries[0].id,
-                        node_id: session.node_id.toString(),
+                        node_id: session.node_id?.toString(),
                       });
                     }
                   }}
@@ -187,7 +187,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                     onTerminateSessionClick && onTerminateSessionClick();
                     this.terminateSessionRef?.current?.showModalFor({
                       session_id: session.id,
-                      node_id: session.node_id.toString(),
+                      node_id: session.node_id?.toString(),
                     });
                   }}
                   type="secondary"
@@ -385,12 +385,12 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                     this.props.uiConfig?.showGatewayNodeLink ? (
                       <div className={cx("session-details-link")}>
                         <NodeLink
-                          nodeId={session.node_id.toString()}
+                          nodeId={session.node_id?.toString()}
                           nodeNames={this.props.nodeNames}
                         />
                       </div>
                     ) : (
-                      session.node_id.toString()
+                      session.node_id?.toString()
                     )
                   }
                 />

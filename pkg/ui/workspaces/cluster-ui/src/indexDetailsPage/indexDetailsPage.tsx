@@ -423,7 +423,7 @@ export class IndexDetailsPage extends React.Component<
       statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX);
 
     if (filters.app && filters.app !== "All") {
-      const criteria = decodeURIComponent(filters.app).split(",");
+      const criteria = decodeURIComponent(filters.app)?.split(",");
       let showInternal = false;
       if (criteria.includes(INTERNAL_APP_NAME_PREFIX)) {
         showInternal = true;
@@ -465,7 +465,7 @@ export class IndexDetailsPage extends React.Component<
     const regions = unique(
       isTenant
         ? flatMap(statements, statement => statement.stats.regions)
-        : nodes.map(node => nodeRegions[node.toString()]),
+        : nodes.map(node => nodeRegions[node?.toString()]),
     ).sort();
 
     const filteredStmts = this.filteredStatements();

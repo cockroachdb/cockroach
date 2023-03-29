@@ -241,7 +241,7 @@ function formatIdxRecommendations(
   for (let i = 0; i < idxRecs.length; i++) {
     const rec = idxRecs[i];
     let idxType: InsightType;
-    const t = rec.split(" : ")[0];
+    const t = rec?.split(" : ")[0];
     switch (t) {
       case "creation":
         idxType = "CreateIndex";
@@ -259,7 +259,7 @@ function formatIdxRecommendations(
     const idxRec: InsightRecommendation = {
       type: idxType,
       database: database,
-      query: rec.split(" : ")[1],
+      query: rec?.split(" : ")[1],
       execution: {
         statement: query,
         summary: query.length > 120 ? query.slice(0, 120) + "..." : query,

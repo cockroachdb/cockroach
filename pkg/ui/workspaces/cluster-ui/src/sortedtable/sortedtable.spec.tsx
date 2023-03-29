@@ -37,7 +37,7 @@ const columns: ColumnDescriptor<TestRow>[] = [
   {
     name: "second",
     title: "second",
-    cell: tr => tr.value.toString(),
+    cell: tr => tr.value?.toString(),
     sort: tr => tr.value,
     rollup: trs => _.sumBy(trs, tr => tr.value),
   },
@@ -130,7 +130,7 @@ describe("<SortedTable>", function () {
         );
         assert.equal(
           row.childAt(0).childAt(1).text(),
-          rowData.value.toString(),
+          rowData.value?.toString(),
           "second columns match",
         );
       });

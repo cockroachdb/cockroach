@@ -96,7 +96,7 @@ export const selectContentionDetailsForStatement = createSelector(
 export const selectAppName = createSelector(
   (state: AppState) => state.adminUI?.sessions,
   response => {
-    if (!response.data) return null;
+    if (!response?.data) return null;
     return response.data.internal_app_name_prefix;
   },
 );

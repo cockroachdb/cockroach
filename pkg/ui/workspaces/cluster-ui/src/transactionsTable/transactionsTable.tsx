@@ -148,7 +148,7 @@ export function makeTransactionsColumns(
             ) || "Transaction query unavailable.",
           aggregatedTs: TimestampToString(item.stats_data.aggregated_ts),
           transactionFingerprintId:
-            item.stats_data.transaction_fingerprint_id.toString(),
+            item.stats_data.transaction_fingerprint_id?.toString(),
           search,
         }),
       sort: (item: TransactionInfo) =>

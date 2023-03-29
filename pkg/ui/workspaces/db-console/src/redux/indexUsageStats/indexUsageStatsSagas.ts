@@ -36,7 +36,7 @@ export const selectIndexStatsKeys = createSelector(
 );
 
 export const KeyToTableRequest = (key: string): TableIndexStatsRequest => {
-  const s = key.split("/");
+  const s = key?.split("/");
   const database = s[0];
   const table = s[1];
   return new TableIndexStatsRequest({ database, table });

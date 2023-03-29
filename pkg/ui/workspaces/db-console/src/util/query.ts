@@ -28,7 +28,7 @@ export function propsToQueryString(props: { [k: string]: any }): string {
   return _.compact(
     _.map(props, (v: any, k: string) =>
       !_.isNull(v) && !_.isUndefined(v)
-        ? `${encodeURIComponent(k)}=${encodeURIComponent(v.toString())}`
+        ? `${encodeURIComponent(k)}=${encodeURIComponent(v?.toString())}`
         : null,
     ),
   ).join("&");

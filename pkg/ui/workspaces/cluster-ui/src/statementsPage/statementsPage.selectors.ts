@@ -64,12 +64,12 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
   let sawBlank = false;
   let sawInternal = false;
   const apps: { [app: string]: boolean } = {};
-  sqlStatsState.data.statements.forEach(
+  sqlStatsState?.data?.statements.forEach(
     (statement: ICollectedStatementStatistics) => {
       if (
-        sqlStatsState.data.internal_app_name_prefix &&
-        statement.key.key_data.app.startsWith(
-          sqlStatsState.data.internal_app_name_prefix,
+        sqlStatsState?.data?.internal_app_name_prefix &&
+        statement?.key?.key_data.app.startsWith(
+          sqlStatsState?.data?.internal_app_name_prefix,
         )
       ) {
         sawInternal = true;
@@ -81,18 +81,18 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
     },
   );
   return []
-    .concat(sawInternal ? [sqlStatsState.data.internal_app_name_prefix] : [])
+    .concat(sawInternal ? [sqlStatsState?.data.internal_app_name_prefix] : [])
     .concat(sawBlank ? [unset] : [])
     .concat(Object.keys(apps).sort());
 });
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(databasesListSelector, state => {
-  if (!state.data) {
+  if (!state?.data) {
     return [];
   }
 
-  return state.data.databases
+  return state?.data.databases
     .filter((dbName: string) => dbName !== null && dbName.length > 0)
     .sort();
 });
@@ -102,7 +102,7 @@ export const selectDatabases = createSelector(databasesListSelector, state => {
 export const selectTotalFingerprints = createSelector(
   sqlStatsSelector,
   state => {
-    if (!state.data) {
+    if (!state?.data) {
       return 0;
     }
     const aggregated = aggregateStatementStats(state.data.statements);
@@ -113,7 +113,7 @@ export const selectTotalFingerprints = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(sqlStatsSelector, state => {
-  if (!state.data) {
+  if (!state?.data) {
     return "";
   }
 
@@ -144,18 +144,18 @@ export const selectStatements = createSelector(
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
     // State is valid if we successfully fetched data, and the data has not yet been invalidated.
-    if (!state.data || !state.valid) {
+    if (!state?.data || !state?.valid) {
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
     const app = queryByName(props.location, appAttr);
     const isInternal = (statement: ExecutionStatistics) =>
-      statement.app.startsWith(state.data.internal_app_name_prefix);
+      statement.app.startsWith(state?.data.internal_app_name_prefix);
 
     if (app && app !== "All") {
       const criteria = decodeURIComponent(app).split(",");
       let showInternal = false;
-      if (criteria.includes(state.data.internal_app_name_prefix)) {
+      if (criteria.includes(state?.data.internal_app_name_prefix)) {
         showInternal = true;
       }
       if (criteria.includes(unset)) {
@@ -229,7 +229,7 @@ export const selectColumns = createSelector(
   // return array of columns if user have customized it or `null` otherwise
   localStorage =>
     localStorage["showColumns/StatementsPage"]
-      ? localStorage["showColumns/StatementsPage"].split(",")
+      ? localStorage["showColumns/StatementsPage"]?.split(",")
       : null,
 );
 

@@ -155,7 +155,7 @@ function filterBySearchQuery(
   }
 
   return search
-    .toLowerCase()
+    ?.toLowerCase()
     .split(" ")
     .every(val => matchString.includes(val));
 }
@@ -329,7 +329,7 @@ export class DatabasesPage extends React.Component<
   changeSortSetting = (ss: SortSetting): void => {
     syncHistory(
       {
-        ascending: ss.ascending.toString(),
+        ascending: ss.ascending?.toString(),
         columnTitle: ss.columnTitle,
       },
       this.props.history,
@@ -424,9 +424,9 @@ export class DatabasesPage extends React.Component<
 
     // The regions and nodes selected from the filter dropdown.
     const regionsSelected =
-      filters.regions.length > 0 ? filters.regions.split(",") : [];
+      filters.regions?.length > 0 ? filters.regions?.split(",") : [];
     const nodesSelected =
-      filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+      filters.nodes?.length > 0 ? filters.nodes?.split(",") : [];
 
     return databases
       .filter(db => (search ? filterBySearchQuery(db, search) : true))
@@ -440,11 +440,11 @@ export class DatabasesPage extends React.Component<
         db.nodes?.forEach(node => {
           if (
             foundRegion ||
-            regionsSelected.includes(nodeRegions[node.toString()])
+            regionsSelected.includes(nodeRegions[node?.toString()])
           ) {
             foundRegion = true;
           }
-          if (foundNode || nodesSelected.includes("n" + node.toString())) {
+          if (foundNode || nodesSelected.includes("n" + node?.toString())) {
             foundNode = true;
           }
           if (foundNode && foundRegion) return true;
@@ -617,7 +617,7 @@ export class DatabasesPage extends React.Component<
             hideAppNames={true}
             regions={regions}
             hideTimeLabel={true}
-            nodes={nodes.map(n => "n" + n.toString())}
+            nodes={nodes.map(n => "n" + n?.toString())}
             activeFilters={activeFilters}
             filters={defaultFilters}
             onSubmitFilters={this.onSubmitFilters}

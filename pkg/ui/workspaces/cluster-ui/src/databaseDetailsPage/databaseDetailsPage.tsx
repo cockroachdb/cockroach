@@ -181,7 +181,7 @@ function filterBySearchQuery(
   }
 
   const res = search
-    .toLowerCase()
+    ?.toLowerCase()
     .split(" ")
     .every(val => matchString.includes(val));
 
@@ -279,7 +279,7 @@ export class DatabaseDetailsPage extends React.Component<
   changeSortSetting = (ss: SortSetting): void => {
     syncHistory(
       {
-        ascending: ss.ascending.toString(),
+        ascending: ss.ascending?.toString(),
         columnTitle: ss.columnTitle,
       },
       this.props.history,
@@ -378,9 +378,9 @@ export class DatabaseDetailsPage extends React.Component<
     const { search, tables, filters, nodeRegions } = this.props;
 
     const regionsSelected =
-      filters.regions.length > 0 ? filters.regions.split(",") : [];
+      filters.regions?.length > 0 ? filters.regions?.split(",") : [];
     const nodesSelected =
-      filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+      filters.nodes?.length > 0 ? filters.nodes?.split(",") : [];
 
     return tables
       .filter(table => (search ? filterBySearchQuery(table, search) : true))
@@ -394,11 +394,11 @@ export class DatabaseDetailsPage extends React.Component<
         table.details.nodes?.forEach(node => {
           if (
             foundRegion ||
-            regionsSelected.includes(nodeRegions[node.toString()])
+            regionsSelected.includes(nodeRegions[node?.toString()])
           ) {
             foundRegion = true;
           }
-          if (foundNode || nodesSelected.includes("n" + node.toString())) {
+          if (foundNode || nodesSelected.includes("n" + node?.toString())) {
             foundNode = true;
           }
           if (foundNode && foundRegion) return true;
@@ -411,7 +411,7 @@ export class DatabaseDetailsPage extends React.Component<
   private changeViewMode(viewMode: ViewMode) {
     syncHistory(
       {
-        viewMode: viewMode.toString(),
+        viewMode: viewMode?.toString(),
       },
       this.props.history,
     );
@@ -738,7 +738,7 @@ export class DatabaseDetailsPage extends React.Component<
             hideAppNames={true}
             regions={regions}
             hideTimeLabel={true}
-            nodes={nodes.map(n => "n" + n.toString())}
+            nodes={nodes.map(n => "n" + n?.toString())}
             activeFilters={activeFilters}
             filters={defaultFilters}
             onSubmitFilters={this.onSubmitFilters}

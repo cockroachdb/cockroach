@@ -205,7 +205,7 @@ export const ConnectedStatementsPage = withRouter(
               name: "Filter Clicked",
               page: "Statements",
               filterName: "filters",
-              value: value.toString(),
+              value: value?.toString(),
             }),
           );
           dispatch(

@@ -203,7 +203,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
     if (!indexes[i].includes("@")) {
       continue;
     }
-    indexInfo = indexes[i].split("@");
+    indexInfo = indexes[i]?.split("@");
     tableName = indexInfo[0];
     idxName = indexInfo[1];
     if (indexMap.has(tableName)) {

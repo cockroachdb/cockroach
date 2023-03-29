@@ -277,7 +277,7 @@ export class TransactionDetails extends React.Component<
     return (
       statements?.filter(
         s =>
-          s.key.key_data.transaction_fingerprint_id.toString() ===
+          s.key.key_data.transaction_fingerprint_id?.toString() ===
           this.props.transactionFingerprintId,
       ) ?? []
     );

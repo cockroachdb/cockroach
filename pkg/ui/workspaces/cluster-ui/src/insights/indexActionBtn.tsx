@@ -198,7 +198,7 @@ function addIdxName(statement: string): string {
     return statement;
   }
   let result = "";
-  const statements = statement.split(";");
+  const statements = statement?.split(";");
   for (let i = 0; i < statements.length; i++) {
     if (statements[i].trim().toUpperCase().startsWith("CREATE INDEX ON ")) {
       result = `${result}${createIdxName(statements[i])}; `;
@@ -241,7 +241,7 @@ export function createIdxName(statement: string): string {
   }
   info = info.substring(0, i - 1);
 
-  const variables = info.split(",");
+  const variables = info?.split(",");
   let expressions = 0;
   let value;
   for (let i = 0; i < variables.length; i++) {

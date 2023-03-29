@@ -355,7 +355,7 @@ export function statementKey(stmt: ExecutionStatistics): string {
 export function transactionScopedStatementKey(
   stmt: ExecutionStatistics,
 ): string {
-  return statementKey(stmt) + stmt.transaction_fingerprint_id.toString();
+  return statementKey(stmt) + stmt.transaction_fingerprint_id?.toString();
 }
 
 export const generateStmtDetailsToID = (
@@ -377,7 +377,7 @@ export const generateStmtDetailsToID = (
         apps[i] = "";
       }
     }
-    appNames = unique(apps).sort().toString();
+    appNames = unique(apps)?.sort()?.toString();
   }
   let generatedID = fingerprintID;
   if (appNames) {

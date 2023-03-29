@@ -67,7 +67,7 @@ export const selectTransaction = createSelector(
 
     const transaction = transactions.filter(
       txn =>
-        txn.stats_data.transaction_fingerprint_id.toString() ==
+        txn.stats_data.transaction_fingerprint_id?.toString() ==
         txnFingerprintId,
     )[0];
     return {

@@ -267,8 +267,8 @@ export const limitStringArray = (arr: string[], limit: number): string => {
 function add(a: string, b: string): string {
   let c = 0;
   const r = [];
-  const x = a.split("").map(Number);
-  const y = b.split("").map(Number);
+  const x = a?.split("").map(Number);
+  const y = b?.split("").map(Number);
   while (x.length || y.length) {
     const s = (x.pop() || 0) + (y.pop() || 0) + c;
     r.unshift(s < 10 ? s : s - 10);
@@ -282,7 +282,7 @@ function add(a: string, b: string): string {
 // to an int64 (in string form).
 export function HexStringToInt64String(s: string): string {
   let dec = "0";
-  s.split("").forEach(function (chr: string) {
+  s?.split("").forEach(function (chr: string) {
     const n = parseInt(chr, 16);
     for (let t = 8; t; t >>= 1) {
       dec = add(dec, dec);
@@ -376,7 +376,7 @@ export function FormatQuery(query: string): string {
   Object.keys(breakLinesKeywords).forEach(key => {
     query = query.replace(new RegExp(key, "g"), `\n${breakLinesKeywords[key]}`);
   });
-  const lines = query.split("\n").map(line => {
+  const lines = query?.split("\n").map(line => {
     if (line.length <= LINE_BREAK_LIMIT) {
       return line;
     }

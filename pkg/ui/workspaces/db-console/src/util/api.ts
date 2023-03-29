@@ -627,7 +627,7 @@ export function getRangeLog(
   timeout?: moment.Duration,
 ): Promise<RangeLogResponseMessage> {
   const rangeID = FixLong(req.range_id);
-  const rangeIDQuery = rangeID.eq(0) ? "" : `/${rangeID.toString()}`;
+  const rangeIDQuery = rangeID.eq(0) ? "" : `/${rangeID?.toString()}`;
   const limit = !_.isNil(req.limit) ? `?limit=${req.limit}` : "";
   return timeoutFetch(
     serverpb.RangeLogResponse,
