@@ -13,7 +13,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = true
 
 statement ok
-CREATE TABLE g (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
+CREATE TABLE g (a INT PRIMARY KEY)
 
 statement ok
 ALTER TABLE g INJECT STATISTICS '[
@@ -211,7 +211,7 @@ scan g
 # shrinks at a constant rate.
 
 statement ok
-CREATE TABLE s (b INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
+CREATE TABLE s (b INT PRIMARY KEY)
 
 statement ok
 ALTER TABLE s INJECT STATISTICS '[
@@ -430,7 +430,7 @@ scan s
 # changes at a constant rate.
 
 statement ok
-CREATE TABLE c (h TIMESTAMPTZ PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
+CREATE TABLE c (h TIMESTAMPTZ PRIMARY KEY)
 
 statement ok
 ALTER TABLE c INJECT STATISTICS '[
@@ -608,7 +608,7 @@ scan c
 # Test for issue 86344.
 
 statement ok
-CREATE TABLE x (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false);
+CREATE TABLE x (a INT PRIMARY KEY)
 
 statement ok
 ALTER TABLE x INJECT STATISTICS '[
@@ -745,8 +745,7 @@ WHERE stat->>'name' = '__forecast__';
 # Test that we can disable forecasts for individual tables.
 
 statement ok
-CREATE TABLE d (d DATE PRIMARY KEY)
-WITH (sql_stats_automatic_collection_enabled = false, sql_stats_forecasts_enabled = false)
+CREATE TABLE d (d DATE PRIMARY KEY) WITH (sql_stats_forecasts_enabled = false)
 
 statement ok
 ALTER TABLE d INJECT STATISTICS '[
@@ -1281,7 +1280,7 @@ CREATE TABLE t (
   b INT,
   INDEX (a) STORING (b),
   INDEX (b) STORING (a)
-) WITH (sql_stats_automatic_collection_enabled = false)
+)
 
 statement ok
 ALTER TABLE t INJECT STATISTICS '[
