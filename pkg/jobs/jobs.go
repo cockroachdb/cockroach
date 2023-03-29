@@ -977,8 +977,10 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
 
-	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
-		sj.execErr = sj.registry.runJob(sj.resumerCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
+	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(_ context.Context) {
+		resumeCtx, cancel := sj.registry.stopper.WithCancelOnQuiesce(sj.resumerCtx)
+		defer cancel()
+		sj.execErr = sj.registry.runJob(resumeCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
 		close(sj.execDone)
 	}); err != nil {
 		return err
