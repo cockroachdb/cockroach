@@ -135,7 +135,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Capacity"
-      isKvGraph={false}
+      isKvGraph={true}
       sources={storeSources}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
       preCalcGraphSize={true}
