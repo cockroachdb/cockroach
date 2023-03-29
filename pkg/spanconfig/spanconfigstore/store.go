@@ -14,8 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -88,8 +86,8 @@ type Store struct {
 
 	knobs *spanconfig.TestingKnobs
 
-	// capabilitiesReader provides a handle to the global tenant capability state.
-	capabilitiesReader tenantcapabilities.Reader
+	// boundsReader provides a handle to the global SpanConfigBounds state.
+	boundsReader spanconfigbounds.Reader
 }
 
 var _ spanconfig.Store = &Store{}
@@ -98,17 +96,17 @@ var _ spanconfig.Store = &Store{}
 func New(
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
-	capabilitiesReader tenantcapabilities.Reader,
+	boundsReader spanconfigbounds.Reader,
 	knobs *spanconfig.TestingKnobs,
 ) *Store {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	s := &Store{
-		settings:           settings,
-		fallback:           fallback,
-		capabilitiesReader: capabilitiesReader,
-		knobs:              knobs,
+		settings:     settings,
+		fallback:     fallback,
+		boundsReader: boundsReader,
+		knobs:        knobs,
 	}
 	s.mu.spanConfigStore = newSpanConfigStore(settings, s.knobs)
 	s.mu.systemSpanConfigStore = newSystemSpanConfigStore()
@@ -170,16 +168,11 @@ func (s *Store) getSpanConfigForKeyRLocked(
 		// SpanConfig bounds do not apply to the system tenant.
 		return conf, nil
 	}
-	capabilities, found := s.capabilitiesReader.GetCapabilities(tenID)
+
+	bounds, found := s.boundsReader.Bounds(tenID)
 	if !found {
 		return conf, nil
 	}
-
-	boundspb := capabilities.Cap(tenantcapabilities.TenantSpanConfigBounds).Get().Unwrap().(*tenantcapabilitiespb.SpanConfigBounds)
-	if boundspb == nil {
-		return conf, nil
-	}
-	bounds := spanconfigbounds.MakeBounds(boundspb)
 
 	clamped := bounds.Clamp(&conf)
 
@@ -227,7 +220,7 @@ func (s *Store) Clone() *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	clone := New(s.fallback, s.settings, s.capabilitiesReader, s.knobs)
+	clone := New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	clone.mu.spanConfigStore = s.mu.spanConfigStore.clone()
 	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.clone()
 	return clone

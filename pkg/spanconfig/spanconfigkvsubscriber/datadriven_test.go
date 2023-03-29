@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -148,7 +148,7 @@ func TestDataDriven(t *testing.T) {
 			10<<20, /* 10 MB */
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
 			tc.Server(0).ClusterSettings(),
-			tenantcapabilities.NewEmptyReader(),
+			spanconfigbounds.NewEmptyReader(),
 			&spanconfig.TestingKnobs{
 				KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
 					OnTimestampAdvance: func(ts hlc.Timestamp) {
