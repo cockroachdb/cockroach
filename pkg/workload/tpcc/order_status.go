@@ -15,13 +15,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/exp/rand"
 )
 
@@ -109,7 +109,7 @@ func createOrderStatus(
 		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
 	)
 
-	if err := o.sr.Init(ctx, "order-status", mcp, config.connFlags); err != nil {
+	if err := o.sr.Init(ctx, "order-status", mcp); err != nil {
 		return nil, err
 	}
 
