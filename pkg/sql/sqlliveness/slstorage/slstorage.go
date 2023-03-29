@@ -168,8 +168,11 @@ func NewStorage(
 	settings *cluster.Settings,
 	settingsWatcher *settingswatcher.SettingsWatcher,
 ) *Storage {
-	return NewTestingStorage(ambientCtx, stopper, clock, db, codec, settings, settingsWatcher, systemschema.SqllivenessTable(),
-		timeutil.DefaultTimeSource{}.NewTimer)
+	return NewTestingStorage(
+		ambientCtx, stopper, clock, db, codec, settings, settingsWatcher,
+		systemschema.SqllivenessTable(),
+		timeutil.DefaultTimeSource{}.NewTimer,
+	)
 }
 
 // Metrics returns the associated metrics struct.

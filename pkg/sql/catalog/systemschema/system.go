@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -3989,14 +3988,3 @@ var (
 
 // SpanConfigurationsTableName represents system.span_configurations.
 var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))
-
-// TestSupportMultiRegion returns true if the cluster should support multi-region
-// optimized system databases.
-//
-// TODO(jeffswenson): remove TestSupportMultiRegion after implementing
-// migrations and version gates to migrate to the new regional by row
-// compatible schemas. The helper exists to allow e2e testing of the in
-// development multi-region system database features.
-func TestSupportMultiRegion() bool {
-	return envutil.EnvOrDefaultBool("COCKROACH_MR_SYSTEM_DATABASE", false)
-}
