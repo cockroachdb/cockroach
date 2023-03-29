@@ -4086,6 +4086,12 @@ func TestTransferRaftLeadership(t *testing.T) {
 	}
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
 
+	// NB: if we don't wait until node 2 applies the config change and becomes
+	// voter, it may refuse to campaign for leadership. The large Raft election
+	// timeout set in this test will prevent the current leader from retrying the
+	// transfer. See issue #99213.
+	require.NoError(t, tc.WaitForVoters(key, tc.Target(1)))
+
 	repl1 := store1.LookupReplica(keys.MustAddr(key))
 	if repl1 == nil {
 		t.Fatalf("no replica found for key '%s'", key)
@@ -4094,6 +4100,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	require.Equal(t, roachpb.VOTER_FULL, rd1.Type)
 
 	getArgs := getArgs(key)
 	if _, pErr := kv.SendWrappedWith(
