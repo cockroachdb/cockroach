@@ -1681,14 +1681,23 @@ func (s *SQLServer) preStart(
 	// shutdown; but may be a sign of a problem in production or for
 	// tests that need to restart a server.
 	stopper.AddCloser(stop.CloserFn(func() {
+		var sk *TestingKnobs
+		if knobs.Server != nil {
+			sk, _ = knobs.Server.(*TestingKnobs)
+		}
+
 		if !s.gracefulDrainComplete.Get() {
 			warnCtx := s.AnnotateCtx(context.Background())
 
-			if knobs.Server != nil && knobs.Server.(*TestingKnobs).RequireGracefulDrain {
+			if sk != nil && sk.RequireGracefulDrain {
 				log.Fatalf(warnCtx, "drain required but not performed")
 			}
 
 			log.Warningf(warnCtx, "server shutdown without a prior graceful drain")
+		}
+
+		if sk != nil && sk.DrainReportCh != nil {
+			sk.DrainReportCh <- struct{}{}
 		}
 	}))
 

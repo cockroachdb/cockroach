@@ -1121,40 +1121,13 @@ func startShutdownAsync(
 		drainCtx := logtags.AddTag(s.AnnotateCtx(context.Background()), "server drain process", nil)
 
 		if shouldDrain {
-			// Perform a graceful drain. We keep retrying forever, in
-			// case there are many range leases or some unavailability
-			// preventing progress. If the operator wants to expedite
-			// the shutdown, they will need to make it ungraceful
-			// via a 2nd signal.
-			var (
-				remaining     = uint64(math.MaxUint64)
-				prevRemaining = uint64(math.MaxUint64)
-				verbose       = false
-			)
-
-			for ; ; prevRemaining = remaining {
-				var err error
-				remaining, _, err = s.Drain(drainCtx, verbose)
-				if err != nil {
-					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
-					break
-				}
-				if remaining == 0 {
-					// No more work to do.
-					break
-				}
-
-				// If range lease transfer stalls or the number of
-				// remaining leases somehow increases, verbosity is set
-				// to help with troubleshooting.
-				if remaining >= prevRemaining {
-					verbose = true
-				}
-
-				// Avoid a busy wait with high CPU usage if the server replies
-				// with an incomplete drain too quickly.
-				time.Sleep(200 * time.Millisecond)
-			}
+			// Perform a graceful drain. This function keeps retrying and
+			// the call might never complete (e.g. due to some
+			// unavailability preventing progress). This is intentional. If
+			// the operator wants to expedite the shutdown, they will need
+			// to make it ungraceful by sending a second signal to the
+			// process, which will tickle the shortcut in waitForShutdown().
+			server.CallDrainServerSide(drainCtx, s.Drain)
 		}
 
 		stopper.Stop(drainCtx)
