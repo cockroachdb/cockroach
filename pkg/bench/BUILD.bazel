@@ -59,6 +59,7 @@ go_test(
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_go_sql_driver_mysql//:mysql",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
