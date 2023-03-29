@@ -22,7 +22,7 @@ export function filteredStatementsData(
 ): AggregateStatistics[] {
   const timeValue = getTimeValueInSeconds(filters);
   const sqlTypes =
-    filters.sqlType.length > 0
+    filters.sqlType?.length > 0
       ? filters.sqlType.split(",").map(function (sqlType: string) {
           // Adding "Type" to match the value on the Statement
           // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
@@ -30,12 +30,12 @@ export function filteredStatementsData(
         })
       : [];
   const databases =
-    filters.database.length > 0 ? filters.database.split(",") : [];
+    filters.database?.length > 0 ? filters.database.split(",") : [];
   if (databases.includes(unset)) {
     databases.push("");
   }
-  const regions = filters.regions.length > 0 ? filters.regions.split(",") : [];
-  const nodes = filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+  const regions = filters.regions?.length > 0 ? filters.regions.split(",") : [];
+  const nodes = filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
 
   // Return statements filtered by the values selected on the filter and
   // the search text. A statement must match all selected filters to be
