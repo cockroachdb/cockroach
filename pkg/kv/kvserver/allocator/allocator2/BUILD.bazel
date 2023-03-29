@@ -4,8 +4,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "allocator2",
     srcs = [
+        "allocator_state.go",
+        "cluster_state.go",
         "constraint.go",
+        "constraint_matcher.go",
+        "load.go",
         "memo_helper.go",
+        "messages.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocator2",
     visibility = ["//visibility:public"],
