@@ -347,9 +347,6 @@ func (s *drainServer) drainClients(
 		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
-	// Inform the job system that the node is draining.
-	s.sqlServer.jobRegistry.SetDraining(true)
-
 	// Wait for users to close the existing SQL connections.
 	// During this phase, the server is rejecting new SQL connections.
 	// The server exits this phase either once all SQL connections are closed,
@@ -357,6 +354,9 @@ func (s *drainServer) drainClients(
 	if err := s.sqlServer.pgServer.WaitForSQLConnsToClose(ctx, connectionWait.Get(&s.sqlServer.execCfg.Settings.SV), s.stopper); err != nil {
 		return err
 	}
+
+	// Inform the job system that the node is draining.
+	s.sqlServer.jobRegistry.SetDraining()
 
 	// Drain any remaining SQL connections.
 	// The queryWait duration is a timeout for waiting for SQL queries to finish.
@@ -374,9 +374,16 @@ func (s *drainServer) drainClients(
 	// Flush in-memory SQL stats into the statement stats system table.
 	s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 
+	// Inform the job system that the node is draining and wait for task
+	// shutdown.
+	s.sqlServer.jobRegistry.WaitForRegistryShutdown(ctx)
+
 	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
+
+	// FIXME(Jeff): Add code here to remove the sql_instances row or
+	// something similar.
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil
