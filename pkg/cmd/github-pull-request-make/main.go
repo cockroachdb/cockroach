@@ -227,24 +227,37 @@ func main() {
 			var args []string
 			if bazel.BuiltWithBazel() || forceBazel {
 				args = append(args, "test")
-				// NB: We use a pretty dumb technique to list the bazel test
-				// targets: we ask bazel query to enumerate all the tests in this
-				// package. bazel queries can take a second or so to run, so it's
-				// conceivable that the delay introduced by this could be
-				// noticeable. For packages that have two or more test targets, the
-				// test filters should mean that we don't execute more tests than
-				// we need to. This should be refactored to improve performance and
-				// to strip out the unnecessary calls to `bazel`, but that might
-				// better be saved for when we no longer need `make` support and
-				// don't have to worry about accidentally breaking it.
-				out, err := exec.Command(
-					"bazel",
-					"query",
-					fmt.Sprintf("kind(go_test, //%s:all) except attr(tags, \"integration\", //%s:all)", name, name),
-					"--output=label").Output()
-				if err != nil {
-					log.Fatal(err)
+
+				tries := 0
+				var out []byte
+				var err error
+				for {
+					// NB: We use a pretty dumb technique to list the bazel test
+					// targets: we ask bazel query to enumerate all the tests in this
+					// package. bazel queries can take a second or so to run, so it's
+					// conceivable that the delay introduced by this could be
+					// noticeable. For packages that have two or more test targets, the
+					// test filters should mean that we don't execute more tests than
+					// we need to. This should be refactored to improve performance and
+					// to strip out the unnecessary calls to `bazel`, but that might
+					// better be saved for when we no longer need `make` support and
+					// don't have to worry about accidentally breaking it.
+					out, err = exec.Command(
+						"bazel",
+						"query",
+						fmt.Sprintf("kind(go_test, //%s:all) except attr(tags, \"integration\", //%s:all)", name, name),
+						"--output=label").Output()
+					if err == nil {
+						break
+					} else {
+						fmt.Printf("bazel query failed; got output %s\n", string(out))
+						if tries == 3 {
+							log.Fatal(err)
+						}
+					}
+					tries += 1
 				}
+
 				numTargets := 0
 				for _, target := range strings.Split(string(out), "\n") {
 					target = strings.TrimSpace(target)
