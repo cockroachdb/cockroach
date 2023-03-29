@@ -510,23 +510,35 @@ const (
 	// that are optimized for the console.
 	V23_1AddSystemActivityTables
 
-	// V23_1ChangeSQLStatsTTL is the version where the gc TTL was updated to all
-	// SQL Stats tables.
-	V23_1ChangeSQLStatsTTL
+	// V23_1StopWritingPayloadAndProgressToSystemJobs is the version where the
+	// payload and progress columns are no longer written to system.jobs.
+	V23_1StopWritingPayloadAndProgressToSystemJobs
+
+  // V23_1ChangeSQLStatsTTL is the version where the gc TTL was updated to all
+  // SQL Stats tables.
+  V23_1ChangeSQLStatsTTL
+
+  // **********************************************************
+	// ** If we haven't yet selected a final 23.1 RC candidate **
+	// Step 1a: Add new versions for release-23.1 branch above here.
+	// **********************************************************
+	// Where to add new versions?
+	// - If the version gate is being backported to release-23.1, add the new version above this comment.
+	//   This can be done during 23.1 Stability until we select a final RC.
+	// - If the version gate is for 23.2 development (not being backported to release-23.1), add the
+	//   new version above "Step 1b"
+	// - Do not add new versions to a patch release.
+	// *************************************************
 
 	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
 	V23_1
 
-	// V23_2_Start demarcates the start of cluster versions stepped through during
+	// V23_2Start demarcates the start of cluster versions stepped through during
 	// the process of upgrading from previous supported releases to 23.2.
 	V23_2Start
 
-	// V23_2StopWritingPayloadAndProgressToSystemJobs is the version where the
-	// payload and progress columns are no longer written to system.jobs.
-	V23_2StopWritingPayloadAndProgressToSystemJobs
-
 	// *************************************************
-	// Step (1): Add new versions here.
+	// Step 1b: Add new version for 23.2 development here.
 	// Do not add new versions to a patch release.
 	// *************************************************
 )
@@ -899,9 +911,26 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
 	},
 	{
-		Key:     V23_1ChangeSQLStatsTTL,
+		Key:     V23_1StopWritingPayloadAndProgressToSystemJobs,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
 	},
+  {
+    Key:     V23_1ChangeSQLStatsTTL,
+    Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
+  },
+
+	// **********************************************************
+	// ** If we haven't yet selected a final 23.1 RC candidate **
+	// Step 2a: Add new versions for release-23.1 branch above here.
+	// **********************************************************
+	// Where to add new versions?
+	// - If the version gate is being backported to release-23.1, add the new version above this comment.
+	//   This can be done during 23.1 Stability until we select a final RC.
+	// - If the version gate is for 23.2 development (not being backported to release-23.1), add the
+	//   new version above "Step 2b"
+	// - Do not add new versions to a patch release.
+	// *************************************************
+
 	{
 		Key:     V23_1,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 0},
@@ -910,13 +939,9 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2Start,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
 	},
-	{
-		Key:     V23_2StopWritingPayloadAndProgressToSystemJobs,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
-	},
 
 	// *************************************************
-	// Step (2): Add new versions here.
+	// Step 2b: Add new version gates for 23.2 development here.
 	// Do not add new versions to a patch release.
 	// *************************************************
 }

@@ -220,7 +220,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		}
 	}
 
-	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
 		if payloadBytes != nil {
 			addSetter("payload", payloadBytes)
 		}

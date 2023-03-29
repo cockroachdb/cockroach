@@ -219,76 +219,76 @@ This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
 sql.defaults.zigzag_join.enabled	boolean	true	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
-sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	tenant-rw
-sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	tenant-rw
-sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	tenant-rw
-sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	tenant-rw
-sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	tenant-rw
-sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	tenant-rw
-sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights	tenant-rw
-sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem	tenant-rw
-sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.	tenant-rw
-sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.	tenant-rw
-sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.	tenant-rw
-sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node	tenant-rw
-sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics	tenant-rw
-sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory	tenant-rw
-sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	tenant-rw
-sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory	tenant-rw
-sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory	tenant-rw
-sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared	tenant-rw
-sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics	tenant-rw
-sql.metrics.statement_details.gateway_node.enabled	boolean	true	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	tenant-rw
-sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID	tenant-rw
-sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory	tenant-rw
-sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint	tenant-rw
-sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected	tenant-rw
-sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.	tenant-rw
-sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics	tenant-rw
-sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)	tenant-rw
-sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region	tenant-rw
-sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	tenant-rw
-sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	tenant-rw
-sql.pgwire.multiple_active_portals.enabled	boolean	false	if true, portals with read-only SELECT query without sub/post queries can be executed in interleaving manner, but with local execution plan	tenant-rw
-sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	tenant-ro
-sql.show_ranges_deprecated_behavior.enabled	boolean	true	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.	tenant-rw
-sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	tenant-rw
-sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	tenant-rw
-sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	tenant-rw
-sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	tenant-rw
-sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	tenant-rw
-sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	tenant-rw
-sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	tenant-rw
-sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	tenant-rw
-sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	tenant-rw
-sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	tenant-rw
-sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	tenant-rw
-sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables	tenant-rw
-sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	tenant-rw
-sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	tenant-rw
-sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	tenant-rw
-sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	tenant-rw
-sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables	tenant-rw
-sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel	tenant-rw
-sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	tenant-rw
-sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	tenant-rw
-sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements	tenant-rw
-sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a negative performance impact	tenant-rw
-sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	tenant-rw
-sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	tenant-rw
-sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	tenant-rw
-sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.	tenant-rw
-sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job	tenant-rw
-sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	tenant-rw
-sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	tenant-rw
-timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere	tenant-rw
-timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	tenant-rw
-timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	tenant-rw
-trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	tenant-rw
-trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.	tenant-rw
-trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	tenant-rw
-trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	tenant-rw
-trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	tenant-rw
-trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	tenant-rw
-version	version	1000023.1-4	set the active cluster version in the format '<major>.<minor>'	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
+sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage
+sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable
+sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable
+sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection
+sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification
+sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies
+sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights
+sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem
+sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.
+sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.
+sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.
+sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node
+sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics
+sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory
+sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory
+sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory
+sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory
+sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared
+sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
+sql.metrics.statement_details.gateway_node.enabled	boolean	true	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.
+sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID
+sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory
+sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint
+sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
+sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
+sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics
+sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)
+sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
+sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
+sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
+sql.pgwire.multiple_active_portals.enabled	boolean	false	if true, portals with read-only SELECT query without sub/post queries can be executed in interleaving manner, but with local execution plan
+sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job
+sql.show_ranges_deprecated_behavior.enabled	boolean	true	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.
+sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
+sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode
+sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh
+sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh
+sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job
+sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk
+sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour
+sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables
+sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode
+sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode
+sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns
+sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables
+sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job
+sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request
+sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages
+sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer
+sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables
+sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel
+sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects
+sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up
+sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements
+sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a negative performance impact
+sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold
+sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)
+sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job
+sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.
+sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job
+sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled
+sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored
+timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
+timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.
+timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.
+trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
+trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
+trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
+trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured
+trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
+trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
+version	version	1000023.1-2	set the active cluster version in the format '<major>.<minor>'
