@@ -159,6 +159,11 @@ type TestServerArgs struct {
 	// within tenants.
 	DisableDefaultTestTenant bool
 
+	// DefaultTestTenantMode specifies the mode in which the default test
+	// tenant will be started, if the test tenant is not disabled. See
+	// TestTenantMode for more details.
+	DefaultTestTenantMode TestTenantMode
+
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
 	// CockroachDB upgrades and periodically reports diagnostics to
@@ -169,6 +174,22 @@ type TestServerArgs struct {
 	// If empty, exporting events is inhibited.
 	ObsServiceAddr string
 }
+
+// TestTenantMode specifies in which mode to start the default test tenant.
+type TestTenantMode int
+
+const (
+	// TestTenantModeProbabilistic means that the test tenant will
+	// probabilistically be started in either shared or separate process mode.
+	// This is the default.
+	TestTenantModeProbabilistic TestTenantMode = iota
+	// TestTenantModeSharedProcess means that the test tenant will be started in the
+	// same process as the test server.
+	TestTenantModeSharedProcess
+	// TestTenantModeSeparateProcess means that the test tenant will be started in
+	// a separate process.
+	TestTenantModeSeparateProcess
+)
 
 // TestClusterArgs contains the parameters one can set when creating a test
 // cluster. It contains a TestServerArgs instance which will be copied over to

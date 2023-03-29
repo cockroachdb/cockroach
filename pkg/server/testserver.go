@@ -538,31 +538,52 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		return nil
 	}
 
-	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
-	params := base.TestTenantArgs{
-		// Currently, all the servers leverage the same tenant ID. We may
-		// want to change this down the road, for more elaborate testing.
-		TenantID:                  serverutils.TestTenantID(),
-		MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
-		TempStorageConfig:         &tempStorageConfig,
-		Locality:                  ts.params.Locality,
-		ExternalIODir:             ts.params.ExternalIODir,
-		ExternalIODirConfig:       ts.params.ExternalIODirConfig,
-		ForceInsecure:             ts.Insecure(),
-		UseDatabase:               ts.params.UseDatabase,
-		SSLCertsDir:               ts.params.SSLCertsDir,
-		TestingKnobs:              ts.params.Knobs,
-		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
-		Settings:                  ts.params.Settings,
+	// TODO(herko): replace this with a function that probabilistically selects a
+	// tenant mode if the default is set to random. For now this is to run unit
+	// tests and see what fails under the shared process mode.
+	ts.params.DefaultTestTenantMode = base.TestTenantModeSharedProcess
+
+	var err error
+	var tenant serverutils.TestTenantInterface
+	switch ts.params.DefaultTestTenantMode {
+	case base.TestTenantModeSeparateProcess:
+		tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
+		params := base.TestTenantArgs{
+			// Currently, all the servers leverage the same tenant ID. We may
+			// want to change this down the road, for more elaborate testing.
+			TenantID:                  serverutils.TestTenantID(),
+			MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
+			TempStorageConfig:         &tempStorageConfig,
+			Locality:                  ts.params.Locality,
+			ExternalIODir:             ts.params.ExternalIODir,
+			ExternalIODirConfig:       ts.params.ExternalIODirConfig,
+			ForceInsecure:             ts.Insecure(),
+			UseDatabase:               ts.params.UseDatabase,
+			SSLCertsDir:               ts.params.SSLCertsDir,
+			TestingKnobs:              ts.params.Knobs,
+			StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
+			Settings:                  ts.params.Settings,
+		}
+		// Since we're creating a tenant, it doesn't make sense to pass through the
+		// Server testing knobs, since the bulk of them only apply to the system
+		// tenant. Any remaining knobs which are required by the tenant should be
+		// setup in StartTenant below (like the BlobClientFactory).
+		params.TestingKnobs.Server = &TestingKnobs{}
+		tenant, err = ts.StartTenant(ctx, params)
+	case base.TestTenantModeSharedProcess:
+		params := base.TestSharedProcessTenantArgs{
+			TenantName:  "test",
+			TenantID:    serverutils.TestTenantID(),
+			Knobs:       ts.params.Knobs,
+			UseDatabase: ts.params.UseDatabase,
+		}
+		// See comment above on separate process tenant regarding the testing knobs.
+		params.Knobs.Server = &TestingKnobs{}
+		tenant, _, err = ts.StartSharedProcessTenant(ctx, params)
+	default:
+		return errors.Errorf("unknown default test tenant mode %v", ts.params.DefaultTestTenantMode)
 	}
 
-	// Since we're creating a tenant, it doesn't make sense to pass through the
-	// Server testing knobs, since the bulk of them only apply to the system
-	// tenant. Any remaining knobs which are required by the tenant should be
-	// setup in StartTenant below (like the BlobClientFactory).
-	params.TestingKnobs.Server = &TestingKnobs{}
-
-	tenant, err := ts.StartTenant(ctx, params)
 	if err != nil {
 		return err
 	}
@@ -1629,6 +1650,13 @@ func (ts *TestServer) TenantOrServer() serverutils.TestTenantInterface {
 		return ts.testTenants[0]
 	}
 	return ts
+}
+
+func (ts *TestServer) IsInProcessTenant() bool {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].SQLAddr() == ts.ServingSQLAddr()
+	}
+	return false
 }
 
 // TracerI is part of the TestServerInterface.
