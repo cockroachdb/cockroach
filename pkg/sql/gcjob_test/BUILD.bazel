@@ -35,6 +35,7 @@ go_test(
         "//pkg/sql/gcjob/gcjobnotifier",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sqlutil",
+        "//pkg/sql/tests",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
