@@ -16,8 +16,8 @@ block_labels = ["do-not-merge"]
 # Number of seconds from when a merge commit is created to when its statuses
 # must pass.
 #
-# Set to 4 hours
-timeout_sec = 14400
+# Set to 40 minutes
+timeout_sec = 2400
 required_approvals = 1
 
 [committer]
