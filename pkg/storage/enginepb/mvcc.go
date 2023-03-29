@@ -348,9 +348,10 @@ func (t TxnMeta) SafeFormat(w redact.SafePrinter, _ rune) {
 	// Compute priority as a floating point number from 0-100 for readability.
 	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
 	w.Printf(
-		"id=%s key=%s pri=%.8f epo=%d ts=%s min=%s seq=%d",
+		"id=%s key=%s iso=%s pri=%.8f epo=%d ts=%s min=%s seq=%d",
 		t.Short(),
 		FormatBytesAsKey(t.Key),
+		t.IsoLevel,
 		floatPri,
 		t.Epoch,
 		t.WriteTimestamp,

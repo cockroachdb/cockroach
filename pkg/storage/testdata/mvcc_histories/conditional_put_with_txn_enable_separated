@@ -2,7 +2,7 @@ run ok
 txn_begin t=A ts=123
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
 
 # Write value1.
 
@@ -14,8 +14,8 @@ with t=A
 >> cput k=k v=v t=A
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+58 live_count=+1 live_bytes=+72 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=-23
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/123.000000000,0 -> /BYTES/v
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=58 live_count=1 live_bytes=72 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=-23
 
@@ -30,8 +30,8 @@ with t=A
 >> cput k=k v=v2 cond=v t=A
 stats: val_bytes=+11 live_bytes=+11 intent_bytes=+1
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} ts=123.000000000,0 del=false klen=12 vlen=7 ih={{1 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} ts=123.000000000,0 del=false klen=12 vlen=7 ih={{1 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v2
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=69 live_count=1 live_bytes=83 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=-23
 
@@ -46,8 +46,8 @@ with t=A
 >> cput k=k v=v3 t=A
 stats: val_bytes=-10 live_bytes=-10
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v3
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=59 live_count=1 live_bytes=73 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=-23
 
@@ -102,8 +102,8 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+10 live_count=+1 live_
 >> cput k=c v=cput cond=value t=A
 stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+49 gc_bytes_age=+2156 intent_count=+1 intent_bytes=+21 separated_intent_count=+1 intent_age=+98
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
+meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/2.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
 stats: key_count=1 key_bytes=26 val_count=2 val_bytes=69 live_count=1 live_bytes=73 gc_bytes_age=2156 intent_count=1 intent_bytes=21 separated_intent_count=1 intent_age=98
@@ -117,12 +117,12 @@ with t=A
   cput k=c v=cput cond=value
 ----
 >> txn_restart ts=3 t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 >> txn_step t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 >> cput k=c v=cput cond=value t=A
 called PutIntent("c", _, 00000000-0000-0000-0000-000000000002)
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "c"/3.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
 stats: gc_bytes_age=-22 intent_age=-1

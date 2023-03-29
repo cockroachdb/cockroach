@@ -8,10 +8,10 @@ with t=A k=a
   txn_remove
 ----
 >> txn_begin ts=22 t=A k=a
-txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=22.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=22.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=22.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=22.000000000,0 wto=false gul=0,0
 >> put v=cde t=A k=a
 called PutIntent("a", _, 00000000-0000-0000-0000-000000000001)
-meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=22.000000000,0 min=0,0 seq=0} ts=22.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=22.000000000,0 min=0,0 seq=0} ts=22.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/22.000000000,0 -> /BYTES/cde
 >> resolve_intent status=ABORTED t=A k=a
 called ClearIntent("a", TDNUM(false), 00000000-0000-0000-0000-000000000001)

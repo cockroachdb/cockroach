@@ -10,8 +10,8 @@ with t=B
   put   k=a v=zzz
 ----
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} ts=33.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "B" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} ts=33.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/33.000000000,0 -> /BYTES/xyz
 error: (*kvpb.WriteIntentError:) conflicting intents on "a"
 
@@ -21,5 +21,5 @@ run ok
 with t=B
   get k=a inconsistent
 ----
-get: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0}
+get: "a" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0}
 get: "a" -> <no data>
