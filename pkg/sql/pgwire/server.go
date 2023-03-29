@@ -82,7 +82,11 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
-var maxNumConnections = settings.RegisterIntSetting(
+// TODO(alyshan): This setting is enforcing max number of connections with superusers not being affected by
+// the limit. However, admin users connections are counted towards the max count. So we should either update the
+// description to say "the maximum number of connections per gateway ... Superusers are not affected by this limit"
+// or stop counting superuser connections towards the max count.
+var maxNumNonAdminConnections = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"server.max_connections_per_gateway",
 	"the maximum number of non-superuser SQL connections per gateway allowed at a given time "+
@@ -90,6 +94,20 @@ var maxNumConnections = settings.RegisterIntSetting(
 		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
 	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
 ).WithPublic()
+
+// Note(alyshan): One might suggest this cluster setting be named server.max_non_root_connections_per_gateway
+// as that reflects its current behaviour of excluding root connections from being limited. However, I chose
+// to use the term "external" so that this setting can be extended to exclude connections from an arbitrary
+// list of users.
+// Note(alyshan): This setting is not public.
+var maxNumExternalConnections = settings.RegisterIntSetting(
+	settings.TenantReadOnly,
+	"server.max_external_connections_per_gateway",
+	"the maximum number of external SQL connections per gateway allowed at a given time" +
+		"(note: this will only limit future connection attempts and will not affect already established connections). "+
+		"Negative values result in unlimited number of connections. The root user is not affected by this limit.",
+	-1,
+	)
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a

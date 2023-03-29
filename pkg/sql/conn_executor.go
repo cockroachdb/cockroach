@@ -325,6 +325,7 @@ type Server struct {
 	mu struct {
 		syncutil.Mutex
 		connectionCount int64
+		rootConnectionCount int64
 	}
 }
 
@@ -784,20 +785,28 @@ func (s *Server) SetupConn(
 }
 
 // IncrementConnectionCount increases connectionCount by 1.
-func (s *Server) IncrementConnectionCount() {
+// If isRoot is true then it also increases rootConnectionCount by 1.
+func (s *Server) IncrementConnectionCount(isRoot bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.connectionCount++
+	if isRoot {
+		s.mu.rootConnectionCount++
+	}
 }
 
 // DecrementConnectionCount decreases connectionCount by 1.
-func (s *Server) DecrementConnectionCount() {
+// If isRoot is true then it also decreases rootConnectionCount by 1.
+func (s *Server) DecrementConnectionCount(isRoot bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.connectionCount--
+	if isRoot {
+		s.mu.rootConnectionCount--
+	}
 }
 
-// IncrementConnectionCountIfLessThan increases connectionCount by and returns true if allowedConnectionCount < max,
+// IncrementConnectionCountIfLessThan increases connectionCount by 1 and returns true if connectionCount < max,
 // otherwise it does nothing and returns false.
 func (s *Server) IncrementConnectionCountIfLessThan(max int64) bool {
 	s.mu.Lock()
@@ -814,6 +823,13 @@ func (s *Server) GetConnectionCount() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.connectionCount
+}
+
+// GetNonRootConnectionCount returns the current number of non root connections.
+func (s *Server) GetNonRootConnectionCount() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.connectionCount - s.mu.rootConnectionCount
 }
 
 // ConnectionHandler is the interface between the result of SetupConn

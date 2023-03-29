@@ -232,16 +232,35 @@ func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err e
 }
 
 func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
-	if c.sessionArgs.IsSuperuser {
-		// This user is a super user and is therefore not affected by connection limits.
-		sqlServer.IncrementConnectionCount()
+	// Root user is not affected by connection limits.
+	if c.sessionArgs.User.IsRootUser() {
+		sqlServer.IncrementConnectionCount(true)
 		return nil
 	}
 
-	maxNumConnectionsValue := maxNumConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	// First check maxNumExternalConnections.
+	maxExternalConnectionsValue := maxNumExternalConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxExternalConnectionsValue >= 0 && sqlServer.GetNonRootConnectionCount() >= maxExternalConnectionsValue {
+		// TODO(alyshan): Add another cluster setting that supplements the error message, so that
+		// clients can know *why* this ReadOnly setting is set and limiting their connections.
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.New(pgcode.TooManyConnections, "cluster connections are limited"),
+			"the maximum number of allowed connections is %d",
+			maxExternalConnectionsValue,
+		))
+	}
+
+	// Then check maxNumNonAdminConnections.
+	if c.sessionArgs.IsSuperuser {
+		// This user is a super user and is therefore not affected by maxNumNonAdminConnections.
+		sqlServer.IncrementConnectionCount(false)
+		return nil
+	}
+
+	maxNumConnectionsValue := maxNumNonAdminConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
 	if maxNumConnectionsValue < 0 {
 		// Unlimited connections are allowed.
-		sqlServer.IncrementConnectionCount()
+		sqlServer.IncrementConnectionCount(false)
 		return nil
 	}
 	if !sqlServer.IncrementConnectionCountIfLessThan(maxNumConnectionsValue) {
@@ -249,7 +268,7 @@ func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) e
 			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
 			"the maximum number of allowed connections is %d and can be modified using the %s config key",
 			maxNumConnectionsValue,
-			maxNumConnections.Key(),
+			maxNumNonAdminConnections.Key(),
 		))
 	}
 	return nil
@@ -702,7 +721,8 @@ func (c *conn) processCommandsAsync(
 		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
 			return
 		}
-		defer sqlServer.DecrementConnectionCount()
+		defer sqlServer.DecrementConnectionCount(c.sessionArgs.User.IsRootUser())
+
 
 		if retErr = c.authOKMessage(); retErr != nil {
 			return
