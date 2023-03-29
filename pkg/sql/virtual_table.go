@@ -125,11 +125,6 @@ func setupGenerator(
 			case <-comm:
 			}
 			err := worker(ctx, funcRowPusher(addRow))
-			// If the query was canceled, next() will already return a
-			// QueryCanceledError, so just exit here.
-			if errors.Is(err, cancelchecker.QueryCanceledError) {
-				return
-			}
 			// Notify that we are done sending rows.
 			select {
 			case <-ctx.Done():
