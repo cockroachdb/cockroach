@@ -95,6 +95,9 @@ function createIndexRecommendationsToSchemaInsight(
 
   txn_result.rows.forEach(row => {
     row.index_recommendations.forEach(rec => {
+      if (!rec.includes(" : ")) {
+        return;
+      }
       const recSplit = rec.split(" : ");
       const recType = recSplit[0];
       const recQuery = recSplit[1];

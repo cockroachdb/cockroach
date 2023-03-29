@@ -46,7 +46,7 @@ export const selectActiveStatement = createSelector(
 export const selectAppName = createSelector(
   (state: AdminUIState) => state.cachedData.sessions,
   (state?: CachedDataReducerState<SessionsResponseMessage>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return null;
     }
     return state.data.internal_app_name_prefix;
