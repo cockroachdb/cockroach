@@ -94,7 +94,8 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 					}
 
 					localRawVal := []byte(s.Get(&st.SV))
-					if !bytes.Equal(localRawVal, kvRawVal) {
+					if !bytes.Equal(localRawVal, kvRawVal) &&
+						!localIsNextFence(localRawVal, kvRawVal) {
 						// NB: errors.Wrapf(nil, ...) returns nil.
 						// nolint:errwrap
 						return errors.Errorf(
@@ -111,6 +112,28 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 	}
 
 	return res, nil
+}
+
+// localIsNextFenceVersion returns true if both the arguments are valid encoded
+// cluster versions and the local version is a fence version which follows
+// the stored KV version.
+func localIsNextFence(localRawVal, kvRawVal []byte) bool {
+	if len(kvRawVal) == 0 || len(localRawVal) == 0 {
+		return false
+	}
+	var decodedLocal, decodedKV clusterversion.ClusterVersion
+	if err := protoutil.Unmarshal(localRawVal, &decodedLocal); err != nil {
+		return false
+	}
+	if isFence := decodedLocal.Internal%2 == 1; !isFence {
+		return false
+	}
+	if err := protoutil.Unmarshal(kvRawVal, &decodedKV); err != nil {
+		return false
+	}
+	predecessor := decodedLocal
+	predecessor.Internal--
+	return predecessor.Equal(decodedKV)
 }
 
 func (p *planner) ShowClusterSetting(
