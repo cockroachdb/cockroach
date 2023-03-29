@@ -942,7 +942,11 @@ func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	clock := hlc.NewClockForTesting(nil)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	clock := hlc.NewClockForTesting(manual)
+
+	txn1 := makeTxnProto("foo")
+	txn2 := makeTxnProto("bar")
 
 	var events []*kvpb.ContentionEvent
 
@@ -950,11 +954,10 @@ func TestContentionEventTracer(t *testing.T) {
 	h.SetOnContentionEvent(func(ev *kvpb.ContentionEvent) {
 		events = append(events, ev)
 	})
-	txn := makeTxnProto("foo")
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("a"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn1.TxnMeta,
 	})
 	require.Zero(t, h.tag.mu.lockWait)
 	require.NotZero(t, h.tag.mu.waitStart)
@@ -966,63 +969,84 @@ func TestContentionEventTracer(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "1", val)
 	_, ok = lockTagGroup.FindTag(tagWaited)
+	require.False(t, ok)
+	val, ok = lockTagGroup.FindTag(tagWaitKey)
 	require.True(t, ok)
-	_, ok = lockTagGroup.FindTag(tagWaitKey)
+	require.Equal(t, "\"a\"", val)
+	val, ok = lockTagGroup.FindTag(tagWaitStart)
 	require.True(t, ok)
-	_, ok = lockTagGroup.FindTag(tagWaitStart)
+	require.Equal(t, "00:00:00.1112", val)
+	val, ok = lockTagGroup.FindTag(tagLockHolderTxn)
 	require.True(t, ok)
-	_, ok = lockTagGroup.FindTag(tagLockHolderTxn)
-	require.True(t, ok)
+	require.Equal(t, txn1.ID.String(), val)
 
 	// Another event for the same txn/key should not mutate
-	// or emitLocked an event.
+	// or emit an event.
 	prevNumLocks := h.tag.mu.numLocks
+	manual.Advance(10)
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn1.TxnMeta,
 	})
 	require.Empty(t, events)
 	require.Zero(t, h.tag.mu.lockWait)
 	require.Equal(t, prevNumLocks, h.tag.mu.numLocks)
 
+	// Another event for the same key but different txn should
+	// emitLocked an event.
+	manual.Advance(11)
+	h.notify(ctx, waitingState{
+		kind: waitFor,
+		key:  roachpb.Key("a"),
+		txn:  &txn2.TxnMeta,
+	})
+	require.Equal(t, time.Duration(21) /* 10+11 */, h.tag.mu.lockWait)
+	require.Len(t, events, 1)
+	ev := events[0]
+	require.Equal(t, txn1.TxnMeta, ev.TxnMeta)
+	require.Equal(t, roachpb.Key("a"), ev.Key)
+	require.Equal(t, time.Duration(21) /* 10+11 */, ev.Duration)
+
+	// Another event for the same txn but different key should
+	// emit an event.
+	manual.Advance(12)
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn2.TxnMeta,
 	})
-	require.Zero(t, h.tag.mu.lockWait)
-	require.Len(t, events, 1)
-	require.Equal(t, txn.TxnMeta, events[0].TxnMeta)
-	require.Equal(t, roachpb.Key("a"), events[0].Key)
-	require.NotZero(t, events[0].Duration)
-
-	h.notify(ctx, waitingState{kind: doneWaiting})
-	require.NotZero(t, h.tag.mu.lockWait)
+	require.Equal(t, time.Duration(33) /* 10+11+12 */, h.tag.mu.lockWait)
 	require.Len(t, events, 2)
+	ev = events[1]
+	require.Equal(t, txn2.TxnMeta, ev.TxnMeta)
+	require.Equal(t, roachpb.Key("a"), ev.Key)
+	require.Equal(t, time.Duration(12), ev.Duration)
 
-	lockWaitBefore := h.tag.mu.lockWait
+	manual.Advance(13)
+	h.notify(ctx, waitingState{kind: doneWaiting})
+	require.Equal(t, time.Duration(46) /* 10+11+12+13 */, h.tag.mu.lockWait)
+	require.Len(t, events, 3)
+
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("b"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn1.TxnMeta,
 	})
+	manual.Advance(14)
 	h.notify(ctx, waitingState{
 		kind: doneWaiting,
 	})
-	require.Len(t, events, 3)
-	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
+	require.Equal(t, time.Duration(60) /* 10+11+12+13+14 */, h.tag.mu.lockWait)
+	require.Len(t, events, 4)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	lockTagGroup = rec[0].FindTagGroup(tagContentionTracer)
 	require.NotNil(t, lockTagGroup)
-
 	val, ok = lockTagGroup.FindTag(tagNumLocks)
 	require.True(t, ok)
-	require.Equal(t, "3", val)
-
+	require.Equal(t, "4", val)
 	_, ok = lockTagGroup.FindTag(tagWaited)
 	require.True(t, ok)
-
 	_, ok = lockTagGroup.FindTag(tagWaitKey)
 	require.False(t, ok)
 	_, ok = lockTagGroup.FindTag(tagWaitStart)
