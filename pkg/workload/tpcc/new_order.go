@@ -18,11 +18,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
 	"golang.org/x/exp/rand"
 )
@@ -123,7 +123,7 @@ func createNewOrder(
 		VALUES ($1, $2, $3)`,
 	)
 
-	if err := n.sr.Init(ctx, "new-order", mcp, config.connFlags); err != nil {
+	if err := n.sr.Init(ctx, "new-order", mcp); err != nil {
 		return nil, err
 	}
 
