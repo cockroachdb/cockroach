@@ -4072,33 +4072,28 @@ func TestTransferRaftLeadership(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				RaftConfig: base.RaftConfig{
-					// Suppress timeout-based elections (which also includes a previous
-					// leader stepping down due to a quorum check). Running tests on a
-					// heavily loaded CPU is enough to reach the raft election timeout
-					// and cause leadership to change hands in ways this test doesn't
-					// expect.
-					RaftElectionTimeoutTicks: 100000,
-				},
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				// Suppress timeout-based elections (which also includes a previous
+				// leader stepping down due to a quorum check). Running tests on a
+				// heavily loaded CPU is enough to reach the raft election timeout and
+				// cause leadership to change hands in ways this test doesn't expect.
+				RaftElectionTimeoutTicks: 100000,
 			},
-		})
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 	store0 := tc.GetFirstStoreFromServer(t, 0)
 	store1 := tc.GetFirstStoreFromServer(t, 1)
 
 	key := tc.ScratchRangeWithExpirationLease(t)
 	repl0 := store0.LookupReplica(keys.MustAddr(key))
-	if repl0 == nil {
-		t.Fatalf("no replica found for key '%s'", key)
-	}
+	require.NotNil(t, repl0, "no replica found for key '%s'", key)
 	rd0, err := repl0.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
 
 	// NB: if we don't wait until node 2 applies the config change and becomes
@@ -4108,44 +4103,36 @@ func TestTransferRaftLeadership(t *testing.T) {
 	require.NoError(t, tc.WaitForVoters(key, tc.Target(1)))
 
 	repl1 := store1.LookupReplica(keys.MustAddr(key))
-	if repl1 == nil {
-		t.Fatalf("no replica found for key '%s'", key)
-	}
+	require.NotNil(t, repl1, "no replica found for key '%s'", key)
 	rd1, err := repl1.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	require.Equal(t, roachpb.VOTER_FULL, rd1.Type)
 
-	getArgs := getArgs(key)
-	if _, pErr := kv.SendWrappedWith(
-		context.Background(), store0, kvpb.Header{RangeID: repl0.RangeID}, getArgs,
-	); pErr != nil {
-		t.Fatalf("expect get nil, actual get %v ", pErr)
-	}
+	_, pErr := kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, getArgs(key))
+	require.NoError(t, pErr.GoError())
 
 	status := repl0.RaftStatus()
-	if status == nil || status.Lead != uint64(rd0.ReplicaID) {
-		t.Fatalf("raft leader should be %d, but got status %+v", rd0.ReplicaID, status)
-	}
+	require.NotNil(t, status)
+	require.Equal(t, uint64(rd0.ReplicaID), status.Lead)
 
 	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	// Transfer the lease. We'll then check that the leadership follows
 	// automatically.
 	transferLeaseArgs := adminTransferLeaseArgs(key, store1.StoreID())
-	_, pErr := kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, transferLeaseArgs)
+	_, pErr = kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, transferLeaseArgs)
 	require.NoError(t, pErr.GoError())
 
 	// Verify leadership is transferred.
 	testutils.SucceedsSoon(t, func() error {
-		if a, e := repl0.RaftStatus().Lead, uint64(rd1.ReplicaID); a != e {
+		if status := repl0.RaftStatus(); status == nil {
+			return errors.New("raft status is nil")
+		} else if a, e := status.Lead, uint64(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
-		}
-		if a, e := store0.Metrics().RangeRaftLeaderTransfers.Count()-origCount0, int64(1); a < e {
-			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
 		}
 		return nil
 	})
+	// And metrics are updated.
+	require.Greater(t, store0.Metrics().RangeRaftLeaderTransfers.Count(), origCount0)
 }
 
 // Test that a single blocked replica does not block other replicas.
