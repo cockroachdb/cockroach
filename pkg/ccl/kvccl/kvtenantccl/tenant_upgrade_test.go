@@ -407,6 +407,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 	skip.UnderStressRace(t)
 	// Test takes 30s to run
 	skip.UnderShort(t)
+
+	skip.WithIssue(t, 99593, "flaky test")
+
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
