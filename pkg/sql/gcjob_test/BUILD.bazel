@@ -29,6 +29,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
         "//pkg/sql/gcjob/gcjobnotifier",
+        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

@@ -142,6 +142,9 @@ func updateStatusForGCElements(
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
 			markTableGCed(ctx, tableID, progress)
+			for indexID := range indexDropTimes {
+				markIndexGCed(ctx, indexID, progress)
+			}
 			return false, true, maxDeadline
 		}
 		log.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
