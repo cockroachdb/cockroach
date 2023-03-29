@@ -1034,6 +1034,91 @@ func (s *storeIDPostingList) intersect(b storeIDPostingList) {
 	*s = a[:k]
 }
 
+func (s *storeIDPostingList) isEqual(b storeIDPostingList) bool {
+	a := *s
+	n := len(a)
+	m := len(b)
+	if n != m {
+		return false
+	}
+	for i := range b {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Returns true iff found (and successfully removed).
+func (s *storeIDPostingList) remove(storeID roachpb.StoreID) bool {
+	a := *s
+	n := len(a)
+	found := false
+	for i := range a {
+		if a[i] == storeID {
+			// INVARIANT: i < n, so i <= n-1 and i+1 <= n.
+			copy(a[i:n-1], a[i+1:n])
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false
+	}
+	*s = a[:n-1]
+	return true
+}
+
+// Returns true iff the storeID was not already in the set.
+func (s *storeIDPostingList) insert(storeID roachpb.StoreID) bool {
+	a := *s
+	n := len(a)
+	var pos int
+	for pos := range a {
+		if storeID < a[pos] {
+			break
+		} else if storeID == a[pos] {
+			return false
+		}
+	}
+	var b storeIDPostingList
+	if cap(a) > n {
+		b = a[:n+1]
+	} else {
+		m := 2 * cap(a)
+		const minLength = 10
+		if m < minLength {
+			m = minLength
+		}
+		b = make([]roachpb.StoreID, n+1, m)
+		if pos > 0 {
+			copy(b[:pos-1], a[:pos-1])
+		}
+	}
+	copy(b[pos+1:n+1], a[pos:n])
+	b[pos] = storeID
+	*s = b
+	return true
+}
+
+const (
+	// offset64 is the initial hash value, and is taken from fnv.go
+	offset64 = 14695981039346656037
+
+	// prime64 is a large-ish prime number used in hashing and taken from fnv.go.
+	prime64 = 1099511628211
+)
+
+// FNV-1a hash algorithm.
+func (s *storeIDPostingList) hash() uint64 {
+	h := uint64(offset64)
+	for _, storeID := range *s {
+		h ^= uint64(storeID)
+		h *= prime64
+	}
+	return h
+}
+
 type storeIDIncreasing []roachpb.StoreID
 
 func (s storeIDIncreasing) Len() int {
