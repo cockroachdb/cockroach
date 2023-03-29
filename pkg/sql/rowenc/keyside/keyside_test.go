@@ -239,7 +239,7 @@ func genEncodingDirection() gopter.Gen {
 func hasKeyEncoding(typ *types.T) bool {
 	// Only some types are round-trip key encodable.
 	switch typ.Family() {
-	case types.JsonFamily, types.CollatedStringFamily, types.TupleFamily, types.DecimalFamily,
+	case types.CollatedStringFamily, types.TupleFamily, types.DecimalFamily,
 		types.GeographyFamily, types.GeometryFamily, types.TSVectorFamily, types.TSQueryFamily:
 		return false
 	case types.ArrayFamily:
