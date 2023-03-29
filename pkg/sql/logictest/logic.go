@@ -1408,6 +1408,8 @@ func (t *logicTest) newCluster(
 		} else {
 			require.Lenf(t.rootT, cfg.Localities, 0, "node %d does not have a locality set", i+1)
 		}
+		nodeParams.Settings = cluster.MakeTestingClusterSettings()
+		disableAutoStats(nodeParams.Settings)
 		paramsPerNode[i] = nodeParams
 	}
 	params.ServerArgsPerNode = paramsPerNode
@@ -1418,14 +1420,6 @@ func (t *logicTest) newCluster(
 	// TODO(radu): replace these with testing knobs.
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
-
-	// Disable stats collection on system tables before the cluster is started,
-	// otherwise there is a race condition where stats may be collected before we
-	// can disable them with `SET CLUSTER SETTING`. We disable stats collection on
-	// system tables in order to have deterministic tests.
-	stats.AutomaticStatisticsOnSystemTables.Override(
-		context.Background(), &params.ServerArgs.TempStorageConfig.Settings.SV, false,
-	)
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
 	if cfg.UseFakeSpanResolver {
@@ -1439,6 +1433,7 @@ func (t *logicTest) newCluster(
 		for i := 0; i < cfg.NumNodes; i++ {
 			tenantArgs := base.TestTenantArgs{
 				TenantID: serverutils.TestTenantID(),
+				Settings: cluster.MakeTestingClusterSettings(),
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						DeterministicExplain:            true,
@@ -1456,6 +1451,8 @@ func (t *logicTest) newCluster(
 				// Give every tenant its own ExternalIO directory.
 				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
 			}
+
+			disableAutoStats(tenantArgs.Settings)
 
 			for _, opt := range knobOpts {
 				t.rootT.Logf("apply knob opt %T to tenant", opt)
@@ -1917,6 +1914,15 @@ var _ knobOpt = knobOptDisableCorpusGeneration{}
 
 func (c knobOptDisableCorpusGeneration) apply(args *base.TestingKnobs) {
 	args.SQLDeclarativeSchemaChanger = nil
+}
+
+// disableAutoStats disables the automatic stats collection on the server that
+// owns the give settings. This needs to be done before the cluster is started,
+// otherwise there is a race condition where stats may be collected before we
+// can disable them with `SET CLUSTER SETTING`. We disable stats collection on
+// system tables in order to have deterministic tests.
+func disableAutoStats(settings *cluster.Settings) {
+	stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &settings.SV, false)
 }
 
 // parseDirectiveOptions looks around the beginning of the file for a line
