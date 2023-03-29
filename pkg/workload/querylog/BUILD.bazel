@@ -17,7 +17,7 @@ go_library(
         "//pkg/workload/histogram",
         "//pkg/workload/rand",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
     ],

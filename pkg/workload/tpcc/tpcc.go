@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -162,27 +162,33 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:                       {RuntimeOnly: true},
-			`mix`:                      {RuntimeOnly: true},
-			`partitions`:               {RuntimeOnly: true},
+			`active-warehouses`:        {RuntimeOnly: true},
 			`client-partitions`:        {RuntimeOnly: true},
+			`conn-healthcheck-period`:  {RuntimeOnly: true},
+			`conns`:                    {RuntimeOnly: true},
+			`db`:                       {RuntimeOnly: true},
+			`deprecated-fk-indexes`:    {RuntimeOnly: true},
+			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`idle-conns`:               {RuntimeOnly: true},
+			`local-warehouses`:         {RuntimeOnly: true},
+			`max-conn-idle-time`:       {RuntimeOnly: true},
+			`max-conn-lifetime-jitter`: {RuntimeOnly: true},
+			`max-conn-lifetime`:        {RuntimeOnly: true},
+			`min-conns`:                {RuntimeOnly: true},
+			`mix`:                      {RuntimeOnly: true},
 			`partition-affinity`:       {RuntimeOnly: true},
 			`partition-strategy`:       {RuntimeOnly: true},
-			`zones`:                    {RuntimeOnly: true},
-			`active-warehouses`:        {RuntimeOnly: true},
+			`partitions`:               {RuntimeOnly: true},
+			`regions`:                  {RuntimeOnly: true},
+			`replicate-static-columns`: {RuntimeOnly: true},
 			`scatter`:                  {RuntimeOnly: true},
 			`serializable`:             {RuntimeOnly: true},
 			`split`:                    {RuntimeOnly: true},
-			`wait`:                     {RuntimeOnly: true},
-			`workers`:                  {RuntimeOnly: true},
-			`conns`:                    {RuntimeOnly: true},
-			`idle-conns`:               {RuntimeOnly: true},
-			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
-			`local-warehouses`:         {RuntimeOnly: true},
-			`regions`:                  {RuntimeOnly: true},
 			`survival-goal`:            {RuntimeOnly: true},
-			`replicate-static-columns`: {RuntimeOnly: true},
-			`deprecated-fk-indexes`:    {RuntimeOnly: true},
+			`wait`:                     {RuntimeOnly: true},
+			`warmup-conns`:             {RuntimeOnly: true},
+			`workers`:                  {RuntimeOnly: true},
+			`zones`:                    {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -765,12 +771,12 @@ func (w *tpcc) Ops(
 
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
-	cfg := workload.MultiConnPoolCfg{
-		MaxTotalConnections: (w.numConns + len(urls) - 1) / len(urls), // round up
-		// Limit the number of connections per pool (otherwise preparing statements
-		// at startup can be slow).
-		MaxConnsPerPool: 50,
-	}
+	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
+	cfg.MaxTotalConnections = (w.numConns + len(urls) - 1) / len(urls) // round up
+
+	// Limit the number of connections per pool (otherwise preparing statements at
+	// startup can be slow).
+	cfg.MaxConnsPerPool = w.connFlags.Concurrency
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
 	dbs := make([]*workload.MultiConnPool, len(urls))
