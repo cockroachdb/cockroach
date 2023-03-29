@@ -1,0 +1,947 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+
+/* test */
+EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k)  STORED;
+----
+• Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›) STORED;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 8 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Column:{DescID: 106, ColumnID: 3}
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 3}
+│       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   │ ABSENT → BACKFILL_ONLY
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │   │     rule: "column existence precedes index existence"
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │   │     rule: "column existence precedes column dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   └── • IndexData:{DescID: 106, IndexID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │             rule: "index data exists as soon as index accepts backfills"
+│       │
+│       ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+│       │   │
+│       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │   │     rule: "column existence precedes temp index existence"
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │       │     rule: "column existence precedes column dependents"
+│       │       │
+│       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │             rule: "temp index existence precedes index dependents"
+│       │
+│       └── • 11 Mutation operations
+│           │
+│           ├── • MakeAbsentColumnDeleteOnly
+│           │     Column:
+│           │       ColumnID: 3
+│           │       PgAttributeNum: 3
+│           │       TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 3
+│           │     Name: j
+│           │     TableID: 106
+│           │
+│           ├── • SetAddedColumnType
+│           │     ColumnType:
+│           │       ColumnID: 3
+│           │       ComputeExpr:
+│           │         expr: k
+│           │         referencedColumnIds:
+│           │         - 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
+│           │       TableID: 106
+│           │       TypeT:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • MakeAbsentIndexBackfilling
+│           │     Index:
+│           │       ConstraintID: 2
+│           │       IndexID: 2
+│           │       IsUnique: true
+│           │       SourceIndexID: 1
+│           │       TableID: 106
+│           │       TemporaryIndexID: 3
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     Ordinal: 1
+│           │     TableID: 106
+│           │
+│           ├── • MakeAbsentTempIndexDeleteOnly
+│           │     Index:
+│           │       ConstraintID: 3
+│           │       IndexID: 3
+│           │       IsUnique: true
+│           │       SourceIndexID: 1
+│           │       TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 3
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           └── • AddColumnToIndex
+│                 ColumnID: 3
+│                 IndexID: 3
+│                 Kind: 2
+│                 Ordinal: 1
+│                 TableID: 106
+│
+├── • PreCommitPhase
+│   │
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 8 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 3}
+│   │   │   │     DELETE_ONLY → ABSENT
+│   │   │   │
+│   │   │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   │     BACKFILL_ONLY → ABSENT
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   └── • IndexData:{DescID: 106, IndexID: 2}
+│   │   │         PUBLIC → ABSENT
+│   │   │
+│   │   ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+│   │   │   │
+│   │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │   │     DELETE_ONLY → ABSENT
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+│   │   │         PUBLIC → ABSENT
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
+│       │
+│       ├── • 8 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Column:{DescID: 106, ColumnID: 3}
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 3}
+│       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   │ ABSENT → BACKFILL_ONLY
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │   │     rule: "column existence precedes index existence"
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │   │     rule: "column existence precedes column dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   └── • IndexData:{DescID: 106, IndexID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │             rule: "index data exists as soon as index accepts backfills"
+│       │
+│       ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+│       │   │
+│       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │   │   │     rule: "column existence precedes temp index existence"
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│       │       │     rule: "column existence precedes column dependents"
+│       │       │
+│       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │             rule: "temp index existence precedes index dependents"
+│       │
+│       └── • 15 Mutation operations
+│           │
+│           ├── • MakeAbsentColumnDeleteOnly
+│           │     Column:
+│           │       ColumnID: 3
+│           │       PgAttributeNum: 3
+│           │       TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 3
+│           │     Name: j
+│           │     TableID: 106
+│           │
+│           ├── • SetAddedColumnType
+│           │     ColumnType:
+│           │       ColumnID: 3
+│           │       ComputeExpr:
+│           │         expr: k
+│           │         referencedColumnIds:
+│           │         - 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
+│           │       TableID: 106
+│           │       TypeT:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • MakeAbsentIndexBackfilling
+│           │     Index:
+│           │       ConstraintID: 2
+│           │       IndexID: 2
+│           │       IsUnique: true
+│           │       SourceIndexID: 1
+│           │       TableID: 106
+│           │       TemporaryIndexID: 3
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     Ordinal: 1
+│           │     TableID: 106
+│           │
+│           ├── • MakeAbsentTempIndexDeleteOnly
+│           │     Index:
+│           │       ConstraintID: 3
+│           │       IndexID: 3
+│           │       IsUnique: true
+│           │       SourceIndexID: 1
+│           │       TableID: 106
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 3
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     Ordinal: 1
+│           │     TableID: 106
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 106
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 106
+│                 JobID: 1
+│                 RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
+│                 Statements:
+│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED
+│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL
+│                     AS (‹k›) STORED
+│                   statementtag: ALTER TABLE
+│
+├── • PostCommitPhase
+│   │
+│   ├── • Stage 1 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 2 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 3}
+│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
+│   │   │   │   │
+│   │   │   │   └── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+│   │   │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │   │
+│   │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+│   │   │       │ ABSENT → WRITE_ONLY
+│   │   │       │
+│   │   │       ├── • SameStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
+│   │   │       │     rule: "column writable right before column constraint is enforced."
+│   │   │       │
+│   │   │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+│   │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
+│   │   │
+│   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
+│   │   │   │
+│   │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
+│   │   │   │   │
+│   │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
+│   │   │   │   │     rule: "column is WRITE_ONLY before temporary index is WRITE_ONLY"
+│   │   │   │   │
+│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │   │   │
+│   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+│   │   │   │   │     rule: "index-column added to index before temp index receives writes"
+│   │   │   │   │
+│   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+│   │   │   │   │     rule: "index-column added to index before temp index receives writes"
+│   │   │   │   │
+│   │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+│   │   │   │         rule: "index-column added to index before temp index receives writes"
+│   │   │   │
+│   │   │   └── • IndexData:{DescID: 106, IndexID: 3}
+│   │   │       │ ABSENT → PUBLIC
+│   │   │       │
+│   │   │       └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │             rule: "temp index data exists as soon as temp index accepts writes"
+│   │   │
+│   │   └── • 5 Mutation operations
+│   │       │
+│   │       ├── • MakeDeleteOnlyColumnWriteOnly
+│   │       │     ColumnID: 3
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
+│   │       │     IndexID: 3
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • MakeAbsentColumnNotNullWriteOnly
+│   │       │     ColumnID: 3
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 2 of 7 with 1 BackfillType op pending
+│   │
+│   ├── • Stage 2 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │ BACKFILL_ONLY → BACKFILLED
+│   │   │       │
+│   │   │       ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
+│   │   │       │
+│   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+│   │   │       │     rule: "index-column added to index before index is backfilled"
+│   │   │       │
+│   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │       │     rule: "index-column added to index before index is backfilled"
+│   │   │       │
+│   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+│   │   │       │     rule: "index-column added to index before index is backfilled"
+│   │   │       │
+│   │   │       └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │             rule: "temp index is WRITE_ONLY before backfill"
+│   │   │
+│   │   └── • 1 Backfill operation
+│   │       │
+│   │       └── • BackfillIndex
+│   │             IndexID: 2
+│   │             SourceIndexID: 1
+│   │             TableID: 106
+│   │
+│   ├── • Stage 3 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │ BACKFILLED → DELETE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousStagePrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeBackfillingIndexDeleteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 4 of 7 with 1 MutationType op pending
+│   │
+│   ├── • Stage 4 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │ DELETE_ONLY → MERGE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeBackfilledIndexMerging
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 5 of 7 with 1 BackfillType op pending
+│   │
+│   ├── • Stage 5 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │ MERGE_ONLY → MERGED
+│   │   │       │
+│   │   │       └── • PreviousStagePrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
+│   │   │
+│   │   └── • 1 Backfill operation
+│   │       │
+│   │       └── • MergeIndex
+│   │             BackfilledIndexID: 2
+│   │             TableID: 106
+│   │             TemporaryIndexID: 3
+│   │
+│   ├── • Stage 6 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │ MERGED → WRITE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousStagePrecedence dependency from MERGED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeMergedIndexWriteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 2 ValidationType ops pending
+│   │
+│   └── • Stage 7 of 7 in PostCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   │ WRITE_ONLY → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+│       │   │
+│       │   └── • ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+│       │       │ WRITE_ONLY → VALIDATED
+│       │       │
+│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │       │     rule: "index is ready to be validated before we validate constraint on it"
+│       │       │
+│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+│       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+│       │
+│       └── • 2 Validation operations
+│           │
+│           ├── • ValidateIndex
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           └── • ValidateColumnNotNull
+│                 ColumnID: 3
+│                 IndexIDForValidation: 2
+│                 TableID: 106
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 4 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 106, ColumnID: 3}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
+    │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │     rule: "swapped primary index public before column"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │   │     rule: "primary index swap"
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │     rule: "primary index named right before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
+    │   │   │         rule: "index dependents exist before index becomes public"
+    │   │   │
+    │   │   ├── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+    │   │   │   │ ABSENT → PUBLIC
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index existence precedes index dependents"
+    │   │   │
+    │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+    │   │       │ VALIDATED → PUBLIC
+    │   │       │
+    │   │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 3}
+    │   │       │     rule: "column existence precedes column dependents"
+    │   │       │
+    │   │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 106, ColumnID: 3, IndexID: 2}
+    │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │
+    │   ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+    │   │   │   │ PUBLIC → TRANSIENT_ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │   │ PUBLIC → TRANSIENT_ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+    │   │       │ PUBLIC → TRANSIENT_ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
+    │   │
+    │   ├── • 2 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │   │ PUBLIC → VALIDATED
+    │   │   │   │
+    │   │   │   └── • PreviousStagePrecedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+    │   │   │
+    │   │   └── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │             rule: "index no longer public before dependents, excluding columns"
+    │   │
+    │   └── • 13 Mutation operations
+    │       │
+    │       ├── • MakePublicPrimaryIndexWriteOnly
+    │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 1
+    │       │     Name: crdb_internal_index_1_name_placeholder
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 2
+    │       │     Name: tbl_pkey
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     Ordinal: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeValidatedColumnNotNullPublic
+    │       │     ColumnID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeValidatedPrimaryIndexPublic
+    │       │     IndexID: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeWriteOnlyColumnPublic
+    │       │     ColumnID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 106
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending
+    │
+    ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+    │   │   │
+    │   │   └── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+    │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+    │   │       │
+    │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+    │   │       │     rule: "dependents removed before index"
+    │   │       │
+    │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │       │     rule: "dependents removed before index"
+    │   │       │
+    │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+    │   │             rule: "dependents removed before index"
+    │   │
+    │   ├── • 3 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │       │ VALIDATED → DELETE_ONLY
+    │   │       │
+    │   │       └── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │             rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
+    │   │
+    │   └── • 6 Mutation operations
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 1
+    │       │     Kind: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 106
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops pending
+    │
+    └── • Stage 3 of 3 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward TRANSIENT_ABSENT
+        │   │
+        │   └── • IndexData:{DescID: 106, IndexID: 3}
+        │       │ PUBLIC → TRANSIENT_ABSENT
+        │       │
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 106, IndexID: 1}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
+        │
+        ├── • 2 elements transitioning toward ABSENT
+        │   │
+        │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • IndexData:{DescID: 106, IndexID: 1}
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+        │             rule: "index removed before garbage collection"
+        │
+        └── • 5 Mutation operations
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 1
+            │     TableID: 106
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
+            │     StatementForDropJob:
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED
+            │     TableID: 106
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 3
+            │     StatementForDropJob:
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED
+            │     TableID: 106
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 106
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 106
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed
