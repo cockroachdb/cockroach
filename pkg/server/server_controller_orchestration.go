@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -212,6 +213,28 @@ func (c *serverController) startControlledServer(
 
 	tenantStopper := stop.NewStopper()
 
+	var shutdownInterface struct {
+		syncutil.Mutex
+		drainableServer interface {
+			gracefulDrain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
+		}
+	}
+	gracefulDrain := func(ctx context.Context) {
+		drainServer := func() interface {
+			gracefulDrain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
+		} {
+			shutdownInterface.Lock()
+			defer shutdownInterface.Unlock()
+			return shutdownInterface.drainableServer
+		}()
+		if drainServer == nil {
+			// Server not started yet. No graceful drain possible.
+			return
+		}
+		log.Infof(ctx, "gracefully draining tenant %q", tenantName)
+		doGracefulDrain(ctx, drainServer.gracefulDrain)
+	}
+
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
 	if err := c.stopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
@@ -222,21 +245,28 @@ func (c *serverController) startControlledServer(
 		case <-c.stopper.ShouldQuiesce():
 			// Surrounding server is stopping; propagate the stop to the
 			// control goroutine below.
+			// Note: we can't do a graceful drain in that case because
+			// the RPC service in the surrounding server may already
+			// be unavailable.
 			log.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
 			tenantStopper.Stop(tenantCtx)
 		case <-stopRequestCh:
-			// Someone requested a shutdown.
+			// Someone requested a graceful shutdown.
 			log.Infof(ctx, "received request for tenant %q to terminate", tenantName)
+			gracefulDrain(tenantCtx)
 			tenantStopper.Stop(tenantCtx)
 		case <-topCtx.Done():
-			// Someone requested a shutdown.
+			// Someone requested a shutdown - probably a test.
+			// Note: we can't do a graceful drain in that case because
+			// the RPC service in the surrounding server may already
+			// be unavailable.
 			log.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
 			tenantStopper.Stop(tenantCtx)
 		}
 	}); err != nil {
 		// The goroutine above is responsible for stopping the
-		// tenantStopper. If it fails to stop, we stop it here
-		// to avoid leaking the stopper.
+		// tenantStopper. If it fails to start, we need to avoid leaking
+		// the stopper.
 		tenantStopper.Stop(ctx)
 		return nil, err
 	}
@@ -314,6 +344,11 @@ func (c *serverController) startControlledServer(
 		}))
 
 		// Indicate the server has started.
+		func() {
+			shutdownInterface.Lock()
+			defer shutdownInterface.Unlock()
+			shutdownInterface.drainableServer = s
+		}()
 		entry.server = s
 		startedOrStoppedChAlreadyClosed = true
 		entry.state.started.Set(true)
@@ -418,6 +453,30 @@ func (c *serverController) startServerInternal(
 
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
+	entries := c.requestStopAll()
+
+	// Wait for shutdown for all servers.
+	for _, e := range entries {
+		<-e.state.stopped
+	}
+}
+
+func (c *serverController) drain(ctx context.Context) (stillRunning int) {
+	entries := c.requestStopAll()
+	// How many entries are _not_ stopped yet?
+	notStopped := 0
+	for _, e := range entries {
+		select {
+		case <-e.state.stopped:
+		default:
+			log.Infof(ctx, "server for tenant %q still running", e.nameContainer)
+			notStopped++
+		}
+	}
+	return notStopped
+}
+
+func (c *serverController) requestStopAll() []*serverEntry {
 	entries := func() (res []*serverEntry) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -432,11 +491,7 @@ func (c *serverController) Close() {
 	for _, e := range entries {
 		e.state.requestStop()
 	}
-
-	// Wait for shutdown for all servers.
-	for _, e := range entries {
-		<-e.state.stopped
-	}
+	return entries
 }
 
 type nodeEventLogger interface {
@@ -482,4 +537,48 @@ func (c *serverController) logStopEvent(
 	sharedDetails.TenantName = string(tenantName)
 
 	c.logger.logStructuredEvent(ctx, ev)
+}
+
+// doGracefulDrain performs a graceful drain.
+//
+// FIXME(knz): This is the same code as in cli/start.go,
+// startShutdownAsync. Maybe we could have a single function used by
+// both.
+func doGracefulDrain(
+	ctx context.Context,
+	drainFn func(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error),
+) {
+	// Perform a graceful drain.
+	// FIXME(knz): This code currently keeps retrying forever. Is this reasonable?
+	var (
+		remaining     = uint64(math.MaxUint64)
+		prevRemaining = uint64(math.MaxUint64)
+		verbose       = true // false
+	)
+
+	drainCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+
+	for ; ; prevRemaining = remaining {
+		var err error
+		remaining, _, err = drainFn(drainCtx, verbose)
+		if err != nil {
+			log.Ops.Errorf(ctx, "graceful drain failed: %v", err)
+			break
+		}
+		if remaining == 0 {
+			// No more work to do.
+			break
+		}
+
+		// If range lease transfer stalls or the number of
+		// remaining leases somehow increases, verbosity is set
+		// to help with troubleshooting.
+		if remaining >= prevRemaining {
+			verbose = true
+		}
+
+		// Avoid a busy wait with high CPU usage if the server replies
+		// with an incomplete drain too quickly.
+		time.Sleep(200 * time.Millisecond)
+	}
 }

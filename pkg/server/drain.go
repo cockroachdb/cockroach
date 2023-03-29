@@ -103,6 +103,7 @@ type drainServer struct {
 	grpc         *grpcServer
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
+	serverCtl    *serverController
 
 	kvServer struct {
 		nodeLiveness *liveness.NodeLiveness
@@ -306,6 +307,23 @@ func (s *drainServer) runDrain(
 func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
+	if s.serverCtl != nil {
+		// We are on a KV node, with a server controller.
+		//
+		// So we need to first shut down tenant servers orchestrated from
+		// this node.
+		stillRunning := s.serverCtl.drain(ctx)
+		reporter(stillRunning, "tenant servers")
+		// If we still have tenant servers, we can't make progress on
+		// draining SQL clients (on the system tenant) and the KV node,
+		// because that would block the graceful drain of the tenant
+		// server(s).
+		if stillRunning > 0 {
+			return nil
+		}
+		log.Infof(ctx, "all tenant servers stopped")
+	}
+
 	// Drain the SQL layer.
 	// Drains all SQL connections, distributed SQL execution flows, and SQL table leases.
 	if err = s.drainClients(ctx, reporter); err != nil {
@@ -397,6 +415,7 @@ func (s *drainServer) drainNode(
 		// No KV subsystem. Nothing to do.
 		return nil
 	}
+
 	// Set the node's liveness status to "draining".
 	if err = s.kvServer.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err

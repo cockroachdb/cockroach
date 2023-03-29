@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 // onDemandServer represents a server that can be started on demand.
@@ -54,6 +55,9 @@ type onDemandServer interface {
 
 	// shutdownRequested returns the shutdown request channel.
 	shutdownRequested() <-chan ShutdownRequest
+
+	// gracefulDrain drains the server.
+	gracefulDrain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
 }
 
 type serverEntry struct {
@@ -212,6 +216,13 @@ func (s *tenantServerWrapper) shutdownRequested() <-chan ShutdownRequest {
 	return s.server.sqlServer.ShutdownRequested()
 }
 
+func (s *tenantServerWrapper) gracefulDrain(
+	ctx context.Context, verbose bool,
+) (uint64, redact.RedactableString, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	return s.server.Drain(ctx, verbose)
+}
+
 // systemServerWrapper implements the onDemandServer interface for Server.
 //
 // (We can imagine a future where the SQL service for the system
@@ -254,4 +265,11 @@ func (s *systemServerWrapper) getInstanceID() base.SQLInstanceID {
 
 func (s *systemServerWrapper) shutdownRequested() <-chan ShutdownRequest {
 	return nil
+}
+
+func (s *systemServerWrapper) gracefulDrain(
+	ctx context.Context, verbose bool,
+) (uint64, redact.RedactableString, error) {
+	// The controller is not responsible for draining the system tenant.
+	return 0, "", nil
 }
