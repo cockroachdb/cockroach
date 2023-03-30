@@ -92,6 +92,10 @@ type TestSpec struct {
 
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
+
+	// True iff results from this test should not be published externally,
+	// e.g. to GitHub.
+	RedactResults bool
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
