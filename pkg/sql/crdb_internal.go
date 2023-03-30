@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -7764,7 +7765,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		type tenantCapabilitiesEntry struct {
 			tenantID           roachpb.TenantID
-			tenantCapabilities tenantcapabilities.TenantCapabilities
+			tenantCapabilities *tenantcapabilitiespb.TenantCapabilities
 		}
 		tenantCapabilitiesMap := tenantCapabilitiesReader.GetGlobalCapabilityState()
 		tenantCapabilitiesEntries := make([]tenantCapabilitiesEntry, 0, len(tenantCapabilitiesMap))
@@ -7779,16 +7780,20 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		// Sort by tenant ID.
 		sort.Slice(tenantCapabilitiesEntries, func(i, j int) bool {
-			return tenantCapabilitiesEntries[i].tenantID.ToUint64() < tenantCapabilitiesEntries[j].tenantID.ToUint64()
+			return tenantCapabilitiesEntries[i].tenantID.ToUint64() <
+				tenantCapabilitiesEntries[j].tenantID.ToUint64()
 		})
 		for _, tenantCapabilitiesEntry := range tenantCapabilitiesEntries {
 			tenantID := tree.NewDInt(tree.DInt(tenantCapabilitiesEntry.tenantID.ToUint64()))
-			for _, capabilityID := range tenantcapabilities.CapabilityIDs {
-				capabilityValue := tenantCapabilitiesEntry.tenantCapabilities.Cap(capabilityID).Get().String()
+			for _, capabilityID := range tenantcapabilities.IDs {
+				value := tenantcapabilities.MustGetValueByID(
+					tenantCapabilitiesEntry.tenantCapabilities,
+					capabilityID,
+				)
 				if err := addRow(
 					tenantID,
 					tree.NewDString(capabilityID.String()),
-					tree.NewDString(capabilityValue),
+					tree.NewDString(value.String()),
 				); err != nil {
 					return err
 				}

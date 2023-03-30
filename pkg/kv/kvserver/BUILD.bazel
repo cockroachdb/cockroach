@@ -401,7 +401,6 @@ go_test(
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
-        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql",
