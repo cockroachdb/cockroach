@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -88,6 +89,7 @@ func (r *raftLogger) Warning(v ...interface{}) {
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
 	log.WarningfDepth(r.ctx, 1, format, v...)
+	log.WarningfDepth(r.ctx, 1, "stack: %s", debug.Stack())
 }
 
 func (r *raftLogger) Error(v ...interface{}) {

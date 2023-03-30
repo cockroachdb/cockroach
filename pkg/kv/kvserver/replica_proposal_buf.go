@@ -934,7 +934,9 @@ func maybeLogErrProposalDropped(
 ) error {
 	var bytes int
 	if len(ents) != len(props) {
-		return errors.AssertionFailedf("have %d ents but %d proposals", len(ents), len(props))
+		err := errors.AssertionFailedf("have %d ents but %d proposals", len(ents), len(props))
+		panic(err) // HACK
+		//return err
 	}
 	for i := range ents {
 		bytes += ents[i].Size()
@@ -943,7 +945,7 @@ func maybeLogErrProposalDropped(
 			log.Eventf(p.ctx, "proposal dropped")
 		}
 	}
-	if everyErrProposalDropped.ShouldLog() {
+	if true || everyErrProposalDropped.ShouldLog() {
 		log.Infof(ctx, "dropped %d proposals (%s)", len(ents), humanizeutil.IBytes(int64(bytes)))
 	}
 	return nil
