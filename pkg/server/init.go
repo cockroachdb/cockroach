@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -370,7 +371,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 		if err != nil {
 			// Try the next node if unsuccessful.
 
-			if IsWaitingForInit(err) {
+			if grpcutil.IsWaitingForInit(err) {
 				log.Infof(ctx, "%s is itself waiting for init, will retry", addr)
 			} else {
 				log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
@@ -416,7 +417,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 				// could match against connection errors to generate nicer
 				// logging. See grpcutil.connectionRefusedRe.
 
-				if IsWaitingForInit(err) {
+				if grpcutil.IsWaitingForInit(err) {
 					log.Infof(ctx, "%s is itself waiting for init, will retry", addr)
 				} else {
 					log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
