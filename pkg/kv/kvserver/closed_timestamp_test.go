@@ -680,12 +680,12 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Settings: cs,
 					RaftConfig: base.RaftConfig{
-						// We set the raft election timeout to a small duration. This should
-						// result in the node liveness duration being ~3.6 seconds. Note that
+						// We set the raft election timeout to a small duration. Note that
 						// if we set this too low, the test may flake due to the test
 						// cluster's nodes frequently missing their liveness heartbeats.
 						RaftHeartbeatIntervalTicks: 5,
 						RaftElectionTimeoutTicks:   6,
+						RangeLeaseDuration:         3 * time.Second,
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
