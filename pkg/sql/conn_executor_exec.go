@@ -1082,9 +1082,9 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		// home regions does not have to read rows from remote regions.
 		p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
 		if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
-			return errors.AssertionFailedf(
-				"problem setting follower read timestamp for enforce_home_region dynamic error checking",
-			)
+			// If the table was just created, we may not be able to set a historical
+			// timestamp.
+			return execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
 		}
 	}
 	asOf, err := p.isAsOf(ctx, stmt)
