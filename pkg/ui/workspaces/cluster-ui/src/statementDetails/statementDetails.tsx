@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode, useEffect } from "react";
+import React, { ReactNode } from "react";
 import { Col, Row, Tabs } from "antd";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Text, InlineAlert } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Location } from "history";
-import _, { isNil } from "lodash";
+import { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
