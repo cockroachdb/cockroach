@@ -579,9 +579,36 @@ func cmpJSONTypes(a Type, b Type) int {
 	return 0
 }
 
-func (j jsonNull) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
-func (j jsonFalse) Compare(other JSON) (int, error) { return cmpJSONTypes(j.Type(), other.Type()), nil }
-func (j jsonTrue) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
+func (j jsonNull) Compare(other JSON) (int, error) {
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
+	return cmpJSONTypes(j.Type(), other.Type()), nil
+}
+func (j jsonFalse) Compare(other JSON) (int, error) {
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
+	return cmpJSONTypes(j.Type(), other.Type()), nil
+}
+func (j jsonTrue) Compare(other JSON) (int, error) {
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
+	return cmpJSONTypes(j.Type(), other.Type()), nil
+}
 
 func decodeIfNeeded(j JSON) (JSON, error) {
 	if enc, ok := j.(*jsonEncoded); ok {
@@ -595,6 +622,13 @@ func decodeIfNeeded(j JSON) (JSON, error) {
 }
 
 func (j jsonNumber) Compare(other JSON) (int, error) {
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -609,6 +643,13 @@ func (j jsonNumber) Compare(other JSON) (int, error) {
 }
 
 func (j jsonString) Compare(other JSON) (int, error) {
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -628,7 +669,27 @@ func (j jsonString) Compare(other JSON) (int, error) {
 	return 0, nil
 }
 
+// isJSONArrayEmpty checks if the input JSON is:
+// 1. A JSON Array
+// 2. An Empty JSON Array.
+func isJSONArrayEmpty(j jsonArray) bool {
+	return j.Len() == 0
+}
+
 func (j jsonArray) Compare(other JSON) (int, error) {
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) && !isJSONArrayEmpty(j) {
+			return 1, nil
+		} else if isJSONArrayEmpty(j) && !isJSONArrayEmpty(otherArray) {
+			return -1, nil
+		}
+	} else {
+		if isJSONArrayEmpty(j) {
+			return -1, nil
+		}
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -660,6 +721,12 @@ func (j jsonArray) Compare(other JSON) (int, error) {
 }
 
 func (j jsonObject) Compare(other JSON) (int, error) {
+	otherArray, ok := other.(jsonArray)
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -1978,7 +2045,7 @@ func (j jsonTrue) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte
 }
 
 func (j jsonArray) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
-	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir)
+	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir, int64(len(j)))
 	buf = encoding.EncodeJSONValueLength(buf, dir, int64(len(j)))
 
 	var err error
