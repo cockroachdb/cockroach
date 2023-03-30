@@ -275,8 +275,8 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			if !sr.subscribedToSpanConfigs() {
 				continue
 			}
-			hottestRanges := sr.replicaRankings.TopLoad()
 			objective := sr.RebalanceObjective()
+			hottestRanges := sr.replicaRankings.TopLoad(objective.ToDimension())
 			options := sr.scorerOptions(ctx, objective.ToDimension())
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, mode)
 			sr.rebalanceStore(ctx, rctx)
