@@ -125,12 +125,12 @@ func (n *showTenantNode) getTenantValues(
 
 	// Add capabilities if requested.
 	if n.withCapabilities {
-		capabilities := tenantInfo.Capabilities
-		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilities.CapabilityIDs))
-		for _, capabilityID := range tenantcapabilities.CapabilityIDs {
+		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilities.IDs))
+		for _, id := range tenantcapabilities.IDs {
+			value := tenantcapabilities.MustGetValueByID(&tenantInfo.Capabilities, id)
 			showTenantNodeCapabilities = append(showTenantNodeCapabilities, showTenantNodeCapability{
-				name:  capabilityID.String(),
-				value: capabilities.Cap(capabilityID).Get().String(),
+				name:  id.String(),
+				value: value.String(),
 			})
 		}
 		values.capabilities = showTenantNodeCapabilities
