@@ -278,9 +278,14 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	var engineStats serverpb.EngineStatsResponse
-	if err := getStatusJSONProto(s, "enginestats/local", &engineStats); err != nil {
-		t.Fatal(err)
-	}
+	// Using SucceedsSoon because we have seen in the wild that
+	// occasionally requests don't go through with error "transport:
+	// error while dialing: connection interrupted (did the remote node
+	// shut down or are there networking issues?)"
+	testutils.SucceedsSoon(t, func() error {
+		return getStatusJSONProto(s, "enginestats/local", &engineStats)
+	})
+
 	if len(engineStats.Stats) != 1 {
 		t.Fatal(errors.Errorf("expected one engine stats, got: %v", engineStats))
 	}
