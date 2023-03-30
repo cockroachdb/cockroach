@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -48,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -542,23 +546,15 @@ func TestGCTenant(t *testing.T) {
 	})
 }
 
-// This test exercises code whereby an index GC job is running, and, in the
+// This test exercises code whereby an GC job is running, and, in the
 // meantime, the descriptor is removed. We want to ensure that the GC job
-// finishes without an error.
-func TestDropIndexWithDroppedDescriptor(t *testing.T) {
+// finishes without an error. We want to test this both for index drops
+// and for table drops.
+func TestDropWithDeletedDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The way the GC job works is that it initially clears the index
-	// data, then it waits for the background MVCC GC to run and remove
-	// the underlying tombstone, and then finally it removes any relevant
-	// zone configurations for the index from system.zones. In the first
-	// and final phases, the job resolves the descriptor. This test ensures
-	// that the code is robust to the descriptor being removed both before
-	// the initial DelRange, and after, when going to remove the zone config.
-	testutils.RunTrueAndFalse(t, "before DelRange", func(
-		t *testing.T, beforeDelRange bool,
-	) {
+	runTest := func(t *testing.T, dropIndex bool, beforeDelRange bool) {
 		ctx, cancel := context.WithCancel(context.Background())
 		gcJobID := make(chan jobspb.JobID)
 		knobs := base.TestingKnobs{
@@ -628,7 +624,12 @@ SELECT descriptor_id, index_id
  WHERE descriptor_name = 'foo'
    AND index_name = 'foo_j_i_idx';`).Scan(&tableID, &indexID)
 		// Drop the index.
-		tdb.Exec(t, "DROP INDEX foo@foo_j_i_idx")
+		if dropIndex {
+			tdb.Exec(t, "DROP INDEX foo@foo_j_i_idx")
+		} else {
+			tdb.Exec(t, "DROP TABLE foo")
+		}
+
 		codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
 		tablePrefix.Store(codec.TablePrefix(uint32(tableID)))
 
@@ -654,5 +655,94 @@ SELECT descriptor_id, index_id
 		// Ensure that the job completes successfully in either case.
 		jr := s.JobRegistry().(*jobs.Registry)
 		require.NoError(t, jr.WaitForJobs(ctx, []jobspb.JobID{jobID}))
+	}
+
+	// The way the GC job works is that it initially clears the index
+	// data, then it waits for the background MVCC GC to run and remove
+	// the underlying tombstone, and then finally it removes any relevant
+	// zone configurations for the index from system.zones. In the first
+	// and final phases, the job resolves the descriptor. This test ensures
+	// that the code is robust to the descriptor being removed both before
+	// the initial DelRange, and after, when going to remove the zone config.
+	testutils.RunTrueAndFalse(t, "before DelRange", func(
+		t *testing.T, beforeDelRange bool,
+	) {
+		testutils.RunTrueAndFalse(t, "drop index", func(t *testing.T, dropIndex bool) {
+			runTest(t, dropIndex, beforeDelRange)
+		})
+	})
+}
+
+func TestLegacyIndexGCSucceedsWithMissingDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	// Override binary version to be older.
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+		// Need to disable MVCC since this test is testing the legacy GC path.
+		BinaryVersionOverride: clusterversion.ByKey(clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled - 1),
+	}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false`)
+	tDB.Exec(t, `CREATE TABLE t(a INT)`)
+	tDB.Exec(t, `INSERT INTO t VALUES (1), (2)`)
+	tDB.Exec(t, `TRUNCATE TABLE t`)
+
+	var truncateJobID string
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT job_id, status, running_status FROM [SHOW JOBS] WHERE description = 'GC for TRUNCATE TABLE defaultdb.public.t'`)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][1] != "running" {
+			return errors.New("job not running yet")
+		}
+		if rslt[0][2] != "waiting for GC TTL" {
+			return errors.New("not waiting for gc yet")
+		}
+		truncateJobID = rslt[0][0]
+		return nil
+	})
+
+	tDB.Exec(t, `PAUSE JOB `+truncateJobID)
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = `+truncateJobID)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][0] != "paused" {
+			return errors.New("job not paused yet")
+		}
+		return nil
+	})
+
+	tDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;`)
+	tDB.Exec(t, `DROP TABLE t`)
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE description = 'GC for DROP TABLE defaultdb.public.t'`)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][0] != "succeeded" {
+			return errors.New("job not running yet")
+		}
+		return nil
+	})
+
+	tDB.Exec(t, `RESUME JOB `+truncateJobID)
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = `+truncateJobID)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][0] != "succeeded" {
+			return errors.New("job not running")
+		}
+		return nil
 	})
 }

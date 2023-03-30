@@ -110,7 +110,7 @@ type FingerprintStmtsResponseColumns = {
 const fingerprintStmtsQuery = (stmtFingerprintIDs: string[]): string => `
 SELECT
   DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
-  prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
+  (metadata ->> 'query') AS query
 FROM crdb_internal.statement_statistics
 WHERE encode(fingerprint_id, 'hex') =
       ANY ARRAY[ ${stmtFingerprintIDs.map(id => `'${id}'`).join(",")} ]`;
@@ -384,7 +384,7 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
     transactionExecutionID: row.txn_id,
     transactionFingerprintID: row.txn_fingerprint_id,
     implicitTxn: row.implicit_txn,
-    query: row.query.split(" ; ").join("\n"),
+    query: row.query?.split(" ; ").join("\n") || "",
     startTime,
     endTime,
     elapsedTimeMillis: endTime.diff(startTime, "milliseconds"),

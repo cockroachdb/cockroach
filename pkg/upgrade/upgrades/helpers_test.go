@@ -30,11 +30,12 @@ import (
 )
 
 var (
-	HasColumn         = hasColumn
-	HasIndex          = hasIndex
-	DoesNotHaveIndex  = doesNotHaveIndex
-	HasColumnFamily   = hasColumnFamily
-	CreateSystemTable = createSystemTable
+	HasColumn           = hasColumn
+	HasIndex            = hasIndex
+	DoesNotHaveIndex    = doesNotHaveIndex
+	HasColumnFamily     = hasColumnFamily
+	CreateSystemTable   = createSystemTable
+	OnlyHasColumnFamily = onlyHasColumnFamily
 )
 
 type Schema struct {

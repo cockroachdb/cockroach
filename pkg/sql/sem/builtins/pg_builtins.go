@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
@@ -988,12 +989,10 @@ var pgBuiltins = map[string]builtinDefinition{
 					typ, err = evalCtx.Planner.ResolveTypeByOID(ctx, oid)
 					if err != nil {
 						// If the error is a descriptor does not exist error, then swallow it.
-						unknown := tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg))
 						switch {
-						case errors.Is(err, catalog.ErrDescriptorNotFound):
-							return unknown, nil
-						case pgerror.GetPGCode(err) == pgcode.UndefinedObject:
-							return unknown, nil
+						case sqlerrors.IsMissingDescriptorError(err),
+							errors.Is(err, catalog.ErrDescriptorNotFound):
+							return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 						default:
 							return nil, err
 						}

@@ -217,7 +217,7 @@ var tsearchBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.TSQuery),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
 				input := string(tree.MustBeDString(args[0]))
 				query, err := tsearch.PhraseToTSQuery(config, input)
@@ -337,7 +337,7 @@ func getWeights(arr *tree.DArray) ([]float32, error) {
 	if arr.Len() < len(ret) {
 		return ret, pgerror.New(pgcode.ArraySubscript, "array of weight is too short (must be at least 4)")
 	}
-	for i, d := range arr.Array {
+	for i, d := range arr.Array[:len(ret)] {
 		if d == tree.DNull {
 			return ret, pgerror.New(pgcode.NullValueNotAllowed, "array of weight must not contain null")
 		}

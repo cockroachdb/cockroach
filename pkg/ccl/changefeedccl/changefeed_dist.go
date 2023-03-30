@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -314,6 +315,8 @@ func startDistChangefeed(
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
 		}
 
+		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		// p is the physical plan, recv is the distsqlreceiver
@@ -353,8 +356,15 @@ func makePlan(
 			distMode = sql.DistributionTypeNone
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode))
+		var locFilter roachpb.Locality
+		if loc := details.Opts[changefeedbase.OptExecutionLocality]; loc != "" {
+			if err := locFilter.Set(loc); err != nil {
+				return nil, nil, err
+			}
+		}
+
+		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
+			sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err

@@ -716,6 +716,10 @@ func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
 	// DisableBuffering is not supported by the InternalExecutor
 	// which uses streamingCommandResults.
 	sd.LocalOnlySessionData.AvoidBuffering = false
+	// At the moment, we disable the usage of the Streamer API in the internal
+	// executor to avoid possible concurrency with the "outer" query (which
+	// might be using the RootTxn).
+	sd.LocalOnlySessionData.StreamerEnabled = false
 }
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
@@ -1195,12 +1199,12 @@ func (icc *internalClientComm) CreateEmptyQueryResult(pos CmdPos) EmptyQueryResu
 }
 
 // CreateCopyInResult is part of the ClientComm interface.
-func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
+func (icc *internalClientComm) CreateCopyInResult(cmd CopyIn, pos CmdPos) CopyInResult {
 	panic("unimplemented")
 }
 
 // CreateCopyOutResult is part of the ClientComm interface.
-func (icc *internalClientComm) CreateCopyOutResult(pos CmdPos) CopyOutResult {
+func (icc *internalClientComm) CreateCopyOutResult(cmd CopyOut, pos CmdPos) CopyOutResult {
 	panic("unimplemented")
 }
 

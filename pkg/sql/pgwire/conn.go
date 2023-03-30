@@ -380,7 +380,7 @@ func (c *conn) serveImpl(
 		defer reserved.Close(ctx)
 		var err error
 		for param, value := range testingStatusReportParams {
-			err = c.sendParamStatus(param, value)
+			err = c.bufferParamStatus(param, value)
 			if err != nil {
 				break
 			}
@@ -395,7 +395,12 @@ func (c *conn) serveImpl(
 		close(dummyCh)
 		procCh = dummyCh
 
-		if err := c.sendReadyForQuery(0 /* queryCancelKey */); err != nil {
+		if err := c.bufferInitialReadyForQuery(0 /* queryCancelKey */); err != nil {
+			return
+		}
+		// We don't have a CmdPos to pass in, since we haven't received any commands
+		// yet, so we just use the initial lastFlushed value.
+		if err := c.Flush(c.writerState.fi.lastFlushed); err != nil {
 			return
 		}
 	}
@@ -735,13 +740,6 @@ func (c *conn) processCommandsAsync(
 	return retCh
 }
 
-func (c *conn) sendParamStatus(param, value string) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
-	c.msgBuilder.writeTerminatedString(param)
-	c.msgBuilder.writeTerminatedString(value)
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
 func (c *conn) bufferParamStatus(param, value string) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
 	c.msgBuilder.writeTerminatedString(param)
@@ -778,37 +776,42 @@ func (c *conn) sendInitialConnData(
 	for _, param := range statusReportParams {
 		param := param
 		value := connHandler.GetParamStatus(ctx, param)
-		if err := c.sendParamStatus(param, value); err != nil {
+		if err := c.bufferParamStatus(param, value); err != nil {
 			return sql.ConnectionHandler{}, err
 		}
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
-	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
+	if err := c.bufferParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 
-	if err := c.sendReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
+	if err := c.bufferInitialReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
+		return sql.ConnectionHandler{}, err
+	}
+	// We don't have a CmdPos to pass in, since we haven't received any commands
+	// yet, so we just use the initial lastFlushed value.
+	if err := c.Flush(c.writerState.fi.lastFlushed); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 	return connHandler, nil
 }
 
-// sendReadyForQuery sends the final messages of the connection handshake.
-// This includes a BackendKeyData message and a ServerMsgReady
+// bufferInitialReadyForQuery sends the final messages of the connection
+// handshake. This includes a BackendKeyData message and a ServerMsgReady
 // message indicating that there is no active transaction.
-func (c *conn) sendReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
+func (c *conn) bufferInitialReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
 	// Send our BackendKeyData to the client, so they can cancel the connection.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
 	c.msgBuilder.putInt64(int64(queryCancelKey))
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		return err
 	}
 
 	// An initial ServerMsgReady message is part of the handshake.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(byte(sql.IdleTxnBlock))
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		return err
 	}
 	return nil
@@ -897,7 +900,6 @@ func (c *conn) handleSimpleQuery(
 			if err := c.stmtBuf.Push(
 				ctx,
 				sql.CopyOut{
-					Conn:         c,
 					ParsedStmt:   stmts[i],
 					Stmt:         cp,
 					TimeReceived: timeReceived,
@@ -1261,40 +1263,6 @@ func (c *conn) BeginCopyIn(
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// BeginCopyOut is part of the pgwirebase.Conn interface.
-func (c *conn) BeginCopyOut(
-	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
-) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyOutResponse)
-	c.msgBuilder.writeByte(byte(format))
-	c.msgBuilder.putInt16(int16(len(columns)))
-	for range columns {
-		c.msgBuilder.putInt16(int16(format))
-	}
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-// SendCopyData is part of the pgwirebase.Conn interface.
-func (c *conn) SendCopyData(ctx context.Context, copyData []byte) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDataCommand)
-	if _, err := c.msgBuilder.Write(copyData); err != nil {
-		return err
-	}
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-// SendCopyDone is part of the pgwirebase.Conn interface.
-func (c *conn) SendCopyDone(ctx context.Context) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-// SendCommandComplete is part of the pgwirebase.Conn interface.
-func (c *conn) SendCommandComplete(tag []byte) error {
-	c.bufferCommandComplete(tag)
-	return nil
-}
-
 // Rd is part of the pgwirebase.Conn interface.
 func (c *conn) Rd() pgwirebase.BufferedReader {
 	return &pgwireReader{conn: c}
@@ -1342,7 +1310,7 @@ func cookTag(
 	tag := append(buf, tagStr...)
 
 	switch stmtType {
-	case tree.RowsAffected:
+	case tree.RowsAffected, tree.CopyIn, tree.CopyOut:
 		tag = append(tag, ' ')
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
@@ -1358,10 +1326,6 @@ func cookTag(
 			tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 		}
 
-	case tree.CopyIn, tree.CopyOut:
-		// Nothing to do. The CommandComplete message has been sent elsewhere.
-		panic(errors.AssertionFailedf("Copy statements should have been handled elsewhere " +
-			"and not produce results"))
 	default:
 		panic(errors.AssertionFailedf("unexpected result type %v", stmtType))
 	}
@@ -1389,9 +1353,13 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
 	}
-	return c.maybeFlush(r.pos, r.bufferingDisabled)
+	if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer")
+	}
+	c.maybeReallocate()
+	return nil
 }
 
 // bufferBatch serializes a batch and adds all the rows from it to the buffer.
@@ -1432,6 +1400,7 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
 				return err
 			}
+			c.maybeReallocate()
 		}
 	}
 	return nil
@@ -1648,6 +1617,36 @@ func (c *conn) bufferNoDataMsg() {
 	}
 }
 
+func (c *conn) bufferCopyOut(columns []colinfo.ResultColumn, format pgwirebase.FormatCode) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyOutResponse)
+	c.msgBuilder.writeByte(byte(format))
+	c.msgBuilder.putInt16(int16(len(columns)))
+	for range columns {
+		c.msgBuilder.putInt16(int16(format))
+	}
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
+func (c *conn) bufferCopyData(copyData []byte, res *commandResult) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDataCommand)
+	if _, err := c.msgBuilder.Write(copyData); err != nil {
+		return err
+	}
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		return err
+	}
+	if err := c.maybeFlush(res.pos, res.bufferingDisabled); err != nil {
+		return err
+	}
+	c.maybeReallocate()
+	return nil
+}
+
+func (c *conn) bufferCopyDone() error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
 // writeRowDescription writes a row description to the given writer.
 //
 // formatCodes specifies the format for each column. It can be nil, in which
@@ -1849,13 +1848,19 @@ func (c *conn) CreateErrorResult(pos sql.CmdPos) sql.ErrorResult {
 }
 
 // CreateCopyInResult is part of the sql.ClientComm interface.
-func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
-	return c.newMiscResult(pos, noCompletionMsg)
+func (c *conn) CreateCopyInResult(cmd sql.CopyIn, pos sql.CmdPos) sql.CopyInResult {
+	res := c.newMiscResult(pos, commandComplete)
+	res.stmtType = cmd.Stmt.StatementReturnType()
+	res.cmdCompleteTag = cmd.Stmt.StatementTag()
+	return res
 }
 
 // CreateCopyOutResult is part of the sql.ClientComm interface.
-func (c *conn) CreateCopyOutResult(pos sql.CmdPos) sql.CopyOutResult {
-	return c.newMiscResult(pos, noCompletionMsg)
+func (c *conn) CreateCopyOutResult(cmd sql.CopyOut, pos sql.CmdPos) sql.CopyOutResult {
+	res := c.newMiscResult(pos, commandComplete)
+	res.stmtType = cmd.Stmt.StatementReturnType()
+	res.cmdCompleteTag = cmd.Stmt.StatementTag()
+	return res
 }
 
 // pgwireReader is an io.Reader that wraps a conn, maintaining its metrics as

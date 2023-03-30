@@ -1747,6 +1747,19 @@ deprules
     - $column-type-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
+- name: column type removed before column family
+  from: column-type-Node
+  kind: Precedence
+  to: column-family-Node
+  query:
+    - $column-type[Type] = '*scpb.ColumnType'
+    - $column-family[Type] = '*scpb.ColumnFamily'
+    - joinOnColumnFamilyID($column-type, $column-family, $table-id, $family-id)
+    - toAbsent($column-type-Target, $column-family-Target)
+    - $column-type-Node[CurrentStatus] = ABSENT
+    - $column-family-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
+    - joinTargetNode($column-family, $column-family-Target, $column-family-Node)
 - name: column type removed right before column when not dropping relation
   from: column-type-Node
   kind: SameStagePrecedence

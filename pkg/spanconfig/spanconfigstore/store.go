@@ -96,20 +96,21 @@ func New(
 }
 
 // NeedsSplit is part of the spanconfig.StoreReader interface.
-func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
-	return len(s.ComputeSplitKey(ctx, start, end)) > 0
+func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
+	splits, err := s.ComputeSplitKey(ctx, start, end)
+	if err != nil {
+		return false, err
+	}
+
+	return len(splits) > 0, nil
 }
 
 // ComputeSplitKey is part of the spanconfig.StoreReader interface.
-func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *Store) ComputeSplitKey(_ context.Context, start, end roachpb.RKey) (roachpb.RKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	splitKey, err := s.mu.spanConfigStore.computeSplitKey(start, end)
-	if err != nil {
-		log.FatalfDepth(ctx, 3, "unable to compute split key: %v", err)
-	}
-	return splitKey
+	return s.mu.spanConfigStore.computeSplitKey(start, end)
 }
 
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.

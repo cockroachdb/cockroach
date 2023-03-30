@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -137,6 +138,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.Settings == nil {
 		st = cluster.MakeClusterSettings()
 	}
+
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(
+		context.TODO(), &st.SV,
+		// In unit tests, we exercise the new behavior.
+		false)
+
 	st.ExternalIODir = params.ExternalIODir
 	tr := params.Tracer
 	if params.Tracer == nil {
@@ -1001,6 +1010,13 @@ func (ts *TestServer) StartTenant(
 		st = cluster.MakeTestingClusterSettings()
 	}
 
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(
+		context.TODO(), &st.SV,
+		// In unit tests, we exercise the new behavior.
+		false)
+
 	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
@@ -1747,6 +1763,15 @@ func (ts *TestServer) Codec() keys.SQLCodec {
 // RangeDescIteratorFactory is part of the TestServerInterface.
 func (ts *TestServer) RangeDescIteratorFactory() interface{} {
 	return ts.sqlServer.execCfg.RangeDescIteratorFactory
+}
+
+// BinaryVersionOverride is part of the TestServerInterface.
+func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
+	knobs := ts.TestingKnobs().Server
+	if knobs == nil {
+		return roachpb.Version{}
+	}
+	return knobs.(*TestingKnobs).BinaryVersionOverride
 }
 
 type testServerFactoryImpl struct{}

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1054,11 +1055,50 @@ func (s *adminServer) tableDetailsHelper(
 	}
 
 	// MVCC Garbage result.
-	row, cols, err = s.internalExecutor.QueryRowExWithCols(
-		ctx, "admin-show-mvcc-garbage-info", nil,
-		sessiondata.InternalExecutorOverride{User: userName},
-		fmt.Sprintf(
+
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	if deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Get(&s.st.SV) {
+		// NOTE: this query is deprecated. See the "else" branch below for
+		// the current code.
+		//
+		// This query is unable to handle table names with a schema qualification.
+		// If a user complains about this, tell them to opt out of the deprecated
+		// SHOW RANGES behavior, which will enable the proper semantics below.
+		tbName := strings.TrimPrefix(req.Table, "public.")
+		row, cols, err = s.internalExecutor.QueryRowExWithCols(
+			ctx, "admin-show-mvcc-garbage-info", nil,
+			sessiondata.InternalExecutorOverride{User: userName},
 			`WITH
+			range_stats AS (
+				SELECT crdb_internal.range_stats(start_key) AS d
+				FROM crdb_internal.ranges_no_leases WHERE database_name = $1 AND table_name = $2
+			),
+			aggregated AS (
+				SELECT
+					sum((d->>'live_bytes')::INT8) AS live,
+					sum(
+						(d->>'key_bytes')::INT8 + 
+						(d->>'val_bytes')::INT8 + 
+						COALESCE((d->>'range_key_bytes')::INT8, 0) +
+						COALESCE((d->>'range_val_bytes')::INT8, 0) +
+						(d->>'sys_bytes')::INT8) AS total
+				FROM
+					range_stats
+			)
+			SELECT
+				COALESCE(total, 0)::INT8 as total_bytes,
+				COALESCE(live, 0)::INT8 as live_bytes,
+				COALESCE(live / NULLIF(total,0), 0)::FLOAT8 as live_percentage
+			FROM aggregated`,
+			req.Database, tbName,
+		)
+	} else {
+		row, cols, err = s.internalExecutor.QueryRowExWithCols(
+			ctx, "admin-show-mvcc-garbage-info", nil,
+			sessiondata.InternalExecutorOverride{User: userName},
+			fmt.Sprintf(
+				`WITH
 			range_stats AS (
 				SELECT crdb_internal.range_stats(raw_start_key) AS d
 				FROM [SHOW RANGES FROM TABLE %s WITH KEYS]
@@ -1080,8 +1120,9 @@ func (s *adminServer) tableDetailsHelper(
 				COALESCE(live, 0)::INT8 as live_bytes,
 				COALESCE(live / NULLIF(total,0), 0)::FLOAT8 as live_percentage
 			FROM aggregated`,
-			escQualTable),
-	)
+				escQualTable),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -3081,6 +3122,17 @@ func (s *adminServer) dataDistributionHelper(
 			_, tenID, err := keys.DecodeTenantPrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {
 				return err
+			}
+
+			// A range descriptor for a secondary tenant may not contain
+			// a table prefix. Often, the start key for a tenant will be just
+			// the tenant prefix itself, e.g. `/Tenant/2`. Once the tenant prefix
+			// is stripped inside `DecodeTablePrefix`, nothing (aka `/Min`) is left.
+			keySansPrefix, _ := keys.MakeSQLCodec(tenID).StripTenantPrefix(rangeDesc.StartKey.AsRawKey())
+			if keys.MinKey.Equal(keySansPrefix) {
+				// There's no table prefix to be decoded.
+				// Try the next descriptor.
+				continue
 			}
 			_, tableID, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {

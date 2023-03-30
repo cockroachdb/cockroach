@@ -268,6 +268,22 @@ SELECT * FROM phraseto_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4
 ----
 'hello' <-> 'this' <-> 'is' <-> 'a' <-> 'parsi' <-> 'ng' <-> 't' <-> 'est' <-> '1' <-> '234' <-> '4' <-> 'case324'
 
+
+query T
+SELECT phraseto_tsquery('No hardcoded configuration')
+----
+'hardcod' <-> 'configur'
+
+query T
+SELECT plainto_tsquery('No hardcoded configuration')
+----
+'hardcod' & 'configur'
+
+query T
+SELECT to_tsquery('No | hardcoded | configuration')
+----
+'hardcod' | 'configur'
+
 query T
 SELECT * FROM to_tsquery('simple', 'a | b & c <-> d')
 ----
@@ -334,3 +350,13 @@ LIMIT 10
 ----
 0.075990885  0.15198177  0.00042217158  8.555783e-05  'ari':6 'base':3,13 'concept':17 'data':12,21 'form':10 'introduc':24 'model':2 'n':5 'normal':9 'relat':7,14 'sublanguag':22 'univers':20
 0.06079271   0.12158542  0.0003101669   6.095758e-05  '2':3 'appli':15 'certain':4 'consist':22 'discuss':13 'infer':11 'logic':10 'model':27 'oper':5 'problem':18 'redund':20 'relat':7 'section':2 'user':25
+
+# Regression test for #99334. Truncate arrays longer than 4 elements that are
+# passed to ts_rank to avoid an internal error.
+query F
+SELECT
+	ts_rank(ARRAY[1.0039,2.37098,-0.022,0.4277,0.00387]::FLOAT8[], '''AoS'' ''HXfAX'' ''HeWdr'' ''MIHLoJM'' ''UfIQOM'' ''bw'' ''o'''::TSVECTOR, '''QqJVCgwp'''::TSQUERY)
+LIMIT
+	2
+----
+0

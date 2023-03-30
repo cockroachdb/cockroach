@@ -378,9 +378,9 @@ export class DatabaseDetailsPage extends React.Component<
     const { search, tables, filters, nodeRegions } = this.props;
 
     const regionsSelected =
-      filters.regions.length > 0 ? filters.regions.split(",") : [];
+      filters.regions?.length > 0 ? filters.regions.split(",") : [];
     const nodesSelected =
-      filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+      filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
 
     return tables
       .filter(table => (search ? filterBySearchQuery(table, search) : true))
@@ -392,13 +392,11 @@ export class DatabaseDetailsPage extends React.Component<
         let foundNode = nodesSelected.length == 0;
 
         table.details.nodes?.forEach(node => {
-          if (
-            foundRegion ||
-            regionsSelected.includes(nodeRegions[node.toString()])
-          ) {
+          const n = node?.toString() || "";
+          if (foundRegion || regionsSelected.includes(nodeRegions[n])) {
             foundRegion = true;
           }
-          if (foundNode || nodesSelected.includes("n" + node.toString())) {
+          if (foundNode || nodesSelected.includes("n" + n)) {
             foundNode = true;
           }
           if (foundNode && foundRegion) return true;
@@ -738,7 +736,7 @@ export class DatabaseDetailsPage extends React.Component<
             hideAppNames={true}
             regions={regions}
             hideTimeLabel={true}
-            nodes={nodes.map(n => "n" + n.toString())}
+            nodes={nodes.map(n => "n" + n?.toString())}
             activeFilters={activeFilters}
             filters={defaultFilters}
             onSubmitFilters={this.onSubmitFilters}
@@ -860,7 +858,7 @@ export class DatabaseDetailsPage extends React.Component<
         <Pagination
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
-          total={this.props.tables.length}
+          total={tablesToDisplay.length}
           onChange={this.changePage.bind(this)}
         />
       </div>

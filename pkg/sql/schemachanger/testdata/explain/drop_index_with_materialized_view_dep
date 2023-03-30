@@ -39,7 +39,6 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.ColumnFamil..."}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":106}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":106}
@@ -56,7 +55,8 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
- │              └── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              └── AssertColumnFamilyIsRemoved {"TableID":106}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 24 elements transitioning toward ABSENT
@@ -118,7 +118,6 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.ColumnFamil..."}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":106}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":106}
@@ -140,6 +139,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":106}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":106}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":106}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":106}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}

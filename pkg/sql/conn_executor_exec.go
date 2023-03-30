@@ -453,12 +453,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		name := e.Name.String()
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 		if !ok {
-			err := pgerror.Newf(
-				pgcode.InvalidSQLStatementName,
-				"prepared statement %q does not exist", name,
-			)
-			return makeErrEvent(err)
+			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
+		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
+
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
 		if err != nil {
@@ -1248,7 +1246,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	err := ex.makeExecPlan(ctx, planner)
 	defer planner.curPlan.close(ctx)
 
-	// include gist in error reports
+	// Include gist in error reports.
 	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
 	if planner.extendedEvalCtx.TxnImplicit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
@@ -1256,7 +1254,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Certain statements want their results to go to the client
 	// directly. Configure this here.
-	if planner.curPlan.avoidBuffering || ex.sessionData().AvoidBuffering {
+	if ex.executorType != executorTypeInternal && (planner.curPlan.avoidBuffering || ex.sessionData().AvoidBuffering) {
 		res.DisableBuffering()
 	}
 
@@ -1280,6 +1278,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Finally, process the planning error from above.
 	if err != nil {
+		err = addPlanningErrorHints(ctx, err, &stmt, ex.server.cfg.Settings, planner)
 		res.SetError(err)
 		return nil
 	}
@@ -2086,7 +2085,7 @@ func (ex *connExecutor) sessionStateBase64() (tree.Datum, error) {
 	// we look at CurState() directly.
 	_, isNoTxn := ex.machine.CurState().(stateNoTxn)
 	state, err := serializeSessionState(
-		!isNoTxn, ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
+		!isNoTxn, &ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
 		ex.server.cfg,
 	)
 	if err != nil {

@@ -282,7 +282,7 @@ function add(a: string, b: string): string {
 // to an int64 (in string form).
 export function HexStringToInt64String(s: string): string {
   let dec = "0";
-  s.split("").forEach(function (chr: string) {
+  s?.split("").forEach(function (chr: string) {
     const n = parseInt(chr, 16);
     for (let t = 8; t; t >>= 1) {
       dec = add(dec, dec);
@@ -351,4 +351,52 @@ export function EncodeDatabaseTableIndexUri(
 
 export function EncodeDatabaseUri(db: string): string {
   return `/database/${EncodeUriName(db)}`;
+}
+
+interface BreakLineReplacement {
+  [key: string]: string;
+}
+
+const breakLinesKeywords: BreakLineReplacement = {
+  " FROM ": " FROM ",
+  " WHERE ": "   WHERE ",
+  " AND ": "    AND ",
+  " ORDER ": " ORDER ",
+  " LIMIT ": " LIMIT ",
+  " JOIN ": "   JOIN ",
+  " ON ": "    ON ",
+  " VALUES ": "   VALUES ",
+};
+const LINE_BREAK_LIMIT = 100;
+
+export function FormatQuery(query: string): string {
+  if (query == null) {
+    return "";
+  }
+  Object.keys(breakLinesKeywords).forEach(key => {
+    query = query.replace(new RegExp(key, "g"), `\n${breakLinesKeywords[key]}`);
+  });
+  const lines = query.split("\n").map(line => {
+    if (line.length <= LINE_BREAK_LIMIT) {
+      return line;
+    }
+    return breakLongLine(line, LINE_BREAK_LIMIT);
+  });
+
+  return lines.join("\n");
+}
+
+function breakLongLine(line: string, limit: number): string {
+  if (line.length <= limit) {
+    return line;
+  }
+  const idxComma = line.indexOf(",", limit);
+  if (idxComma == -1) {
+    return line;
+  }
+
+  return `${line.substring(0, idxComma + 1)}\n${breakLongLine(
+    line.substring(idxComma + 1).trim(),
+    limit,
+  )}`;
 }

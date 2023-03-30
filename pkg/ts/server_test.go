@@ -341,7 +341,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 		{
 			Name:   "test.metric",
-			Source: "1-10",
+			Source: "1-2",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
@@ -355,7 +355,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 		{
 			Name:   "test.metric",
-			Source: "2",
+			Source: "10",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
@@ -369,7 +369,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 		{
 			Name:   "test.metric",
-			Source: "2-10",
+			Source: "10-2",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
@@ -407,7 +407,7 @@ func TestServerQueryTenant(t *testing.T) {
 			{
 				Query: tspb.Query{
 					Name:    "test.metric",
-					Sources: []string{"1", "2"},
+					Sources: []string{"1", "10"},
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
@@ -451,7 +451,7 @@ func TestServerQueryTenant(t *testing.T) {
 	require.Equal(t, expectedSystemResult, systemResponse)
 
 	// App tenant should only report metrics with its tenant ID in the secondary source field
-	tenantID := roachpb.MustMakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(2)
 	expectedTenantResponse := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -474,7 +474,7 @@ func TestServerQueryTenant(t *testing.T) {
 			{
 				Query: tspb.Query{
 					Name:     "test.metric",
-					Sources:  []string{"1", "2"},
+					Sources:  []string{"1", "10"},
 					TenantID: tenantID,
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
@@ -492,7 +492,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	tenant, _ := serverutils.StartTenant(t, testCluster.Server(0), base.TestTenantArgs{TenantID: tenantID})
-	_, err = systemDB.Exec("ALTER TENANT [10] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
+	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
 	if err != nil {
 		t.Fatal(err)
 	}

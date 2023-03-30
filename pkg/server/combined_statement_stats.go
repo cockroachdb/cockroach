@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -732,15 +731,7 @@ func getTotalStatementDetails(
 		return statement, serverError(ctx, err)
 	}
 
-	queryTree, err := parser.ParseOne(aggregatedMetadata.Query)
-	if err != nil {
-		return statement, serverError(ctx, err)
-	}
-	cfg := tree.DefaultPrettyCfg()
-	cfg.Align = tree.PrettyAlignOnly
-	cfg.LineWidth = tree.ConsoleLineWidth
-	aggregatedMetadata.FormattedQuery = cfg.Pretty(queryTree.AST)
-
+	aggregatedMetadata.FormattedQuery = aggregatedMetadata.Query
 	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[3]))
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{

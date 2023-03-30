@@ -284,7 +284,8 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, cmdArg.Key, &spanStr)
 					span := spanconfigtestutils.ParseSpan(t, spanStr)
 					start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
-					splitKey := kvSubscriber.ComputeSplitKey(ctx, start, end)
+					splitKey, err := kvSubscriber.ComputeSplitKey(ctx, start, end)
+					require.NoError(t, err)
 					return string(splitKey)
 
 				case "needs-split":
@@ -292,7 +293,8 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, cmdArg.Key, &spanStr)
 					span := spanconfigtestutils.ParseSpan(t, spanStr)
 					start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
-					result := kvSubscriber.NeedsSplit(ctx, start, end)
+					result, err := kvSubscriber.NeedsSplit(ctx, start, end)
+					require.NoError(t, err)
 					return fmt.Sprintf("%t", result)
 
 				default:

@@ -45,13 +45,20 @@ func registerDiskStalledDetection(r registry.Registry) {
 			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write"}, logsToo: true}
 		},
 	}
+	makeSpec := func() spec.ClusterSpec {
+		s := r.MakeClusterSpec(4, spec.ReuseNone())
+		// Use PDs in an attempt to work around flakes encountered when using SSDs.
+		// See #97968.
+		s.PreferLocalSSD = false
+		return s
+	}
 	for name, makeStaller := range stallers {
 		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("disk-stalled/%s", name),
 			Owner:   registry.OwnerStorage,
-			Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
-			Timeout: 20 * time.Minute,
+			Cluster: makeSpec(),
+			Timeout: 30 * time.Minute,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
@@ -76,7 +83,8 @@ func registerDiskStalledDetection(r registry.Registry) {
 					stallLogDir, stallDataDir,
 				),
 				Owner:   registry.OwnerStorage,
-				Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
+				Cluster: makeSpec(),
+				Timeout: 30 * time.Minute,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, &fuseDiskStaller{
 						t:         t,
@@ -375,9 +383,9 @@ func (s *cgroupDiskStaller) device() (major, minor int) {
 	//    `cat /proc/partitions` and find `deviceName`
 	switch s.c.Spec().Cloud {
 	case spec.GCE:
-		// ls -l /dev/nvme0n1
-		// brw-rw---- 1 root disk 259, 0 Jan 26 20:05 /dev/nvme0n1
-		return 259, 0
+		// ls -l /dev/sdb
+		// brw-rw---- 1 root disk 8, 16 Mar 27 22:08 /dev/sdb
+		return 8, 16
 	default:
 		s.t.Fatalf("unsupported cloud %q", s.c.Spec().Cloud)
 		return 0, 0
@@ -454,7 +462,7 @@ func (s *fuseDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOpti
 func getDevice(t test.Test, s spec.ClusterSpec) string {
 	switch s.Cloud {
 	case spec.GCE:
-		return "/dev/nvme0n1"
+		return "/dev/sdb"
 	case spec.AWS:
 		return "/dev/nvme1n1"
 	default:

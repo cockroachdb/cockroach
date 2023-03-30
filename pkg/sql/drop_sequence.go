@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -83,6 +84,12 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, toDel := range n.td {
 		droppedDesc := toDel.desc
+		// Exit early with an error if the table is undergoing a declarative schema
+		// change, before we try to get job IDs and update job statuses later. See
+		// createOrUpdateSchemaChangeJob.
+		if catalog.HasConcurrentDeclarativeSchemaChange(droppedDesc) {
+			return scerrors.ConcurrentSchemaChangeError(droppedDesc)
+		}
 		err := params.p.dropSequenceImpl(
 			ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()), n.n.DropBehavior,
 		)

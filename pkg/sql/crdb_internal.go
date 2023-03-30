@@ -894,8 +894,8 @@ const (
 	// found.
 	systemJobsAndJobInfoBaseQuery = `
 WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'::BYTES),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress'::BYTES)
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress')
 	SELECT 
 		id, status, created, payload.value AS payload, progress.value AS progress,
 		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
@@ -1502,7 +1502,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
 			anonymized := tree.DNull
-			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query)
+			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query, p)
 			if ok {
 				anonymized = tree.NewDString(anonStr)
 			}
@@ -6393,7 +6393,13 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
           statistics,
           plan,
           index_recommendations,
-          indexes_usage
+          indexes_usage,
+          execution_count,
+          service_latency,
+          cpu_sql_nanos,
+          contention_time,
+          total_estimated_execution_time,
+          p99_latency
       FROM
           system.statement_statistics`,
 	resultColumns: colinfo.ResultColumns{
@@ -6409,6 +6415,12 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 		{Name: "plan", Typ: types.Jsonb},
 		{Name: "index_recommendations", Typ: types.StringArray},
 		{Name: "indexes_usage", Typ: types.Jsonb},
+		{Name: "execution_count", Typ: types.Int},
+		{Name: "service_latency", Typ: types.Float},
+		{Name: "cpu_sql_nanos", Typ: types.Float},
+		{Name: "contention_time", Typ: types.Float},
+		{Name: "total_estimated_execution_time", Typ: types.Float},
+		{Name: "p99_latency", Typ: types.Float},
 	},
 }
 
@@ -6623,7 +6635,13 @@ CREATE VIEW crdb_internal.transaction_statistics_persisted AS
         node_id,
         agg_interval,
         metadata,
-        statistics
+        statistics,
+        execution_count,
+        service_latency,
+        cpu_sql_nanos,
+        contention_time,
+        total_estimated_execution_time,
+        p99_latency
       FROM
         system.transaction_statistics`,
 	resultColumns: colinfo.ResultColumns{
@@ -6634,6 +6652,12 @@ CREATE VIEW crdb_internal.transaction_statistics_persisted AS
 		{Name: "agg_interval", Typ: types.Interval},
 		{Name: "metadata", Typ: types.Jsonb},
 		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "execution_count", Typ: types.Int},
+		{Name: "service_latency", Typ: types.Float},
+		{Name: "cpu_sql_nanos", Typ: types.Float},
+		{Name: "contention_time", Typ: types.Float},
+		{Name: "total_estimated_execution_time", Typ: types.Float},
+		{Name: "p99_latency", Typ: types.Float},
 	},
 }
 

@@ -20,6 +20,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
@@ -60,7 +62,13 @@ const (
 	advertiseAddrLabelKey = "advertise-addr"
 	httpAddrLabelKey      = "http-addr"
 	sqlAddrLabelKey       = "sql-addr"
+
+	disableNodeAndTenantLabelsEnvVar = "COCKROACH_DISABLE_NODE_AND_TENANT_METRIC_LABELS"
 )
+
+// This option is provided as an escape hatch for customers who have
+// custom scrape logic that adds relevant labels already.
+var disableNodeAndTenantLabels = envutil.EnvOrDefaultBool(disableNodeAndTenantLabelsEnvVar, false)
 
 type quantile struct {
 	suffix   string
@@ -130,6 +138,7 @@ type MetricsRecorder struct {
 	// RLock on it.
 	mu struct {
 		syncutil.RWMutex
+		sync.Once
 		// nodeRegistry contains, as subregistries, the multiple component-specific
 		// registries which are recorded as "node level" metrics.
 		nodeRegistry *metric.Registry
@@ -187,6 +196,14 @@ func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *met
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
+	if !disableNodeAndTenantLabels {
+		// If there are no in-process tenants running, we don't set the
+		// tenant label on the system tenant metrics until a seconary
+		// tenant is initialized.
+		mr.mu.Do(func() {
+			mr.mu.nodeRegistry.AddLabel("tenant", catconstants.SystemTenantName)
+		})
+	}
 	mr.mu.tenantRegistries[tenantID] = rec
 }
 
@@ -226,7 +243,21 @@ func (mr *MetricsRecorder) AddNode(
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)
-	reg.AddLabel("tenant", mr.tenantNameContainer)
+
+	if !disableNodeAndTenantLabels {
+		nodeIDInt := int(desc.NodeID)
+		if nodeIDInt != 0 {
+			reg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+			// We assume that all stores have been added to the registry
+			// prior to calling `AddNode`.
+			for _, s := range mr.mu.storeRegistries {
+				s.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+			}
+		}
+		if mr.tenantNameContainer != nil && mr.tenantNameContainer.String() != catconstants.SystemTenantName {
+			reg.AddLabel("tenant", mr.tenantNameContainer)
+		}
+	}
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry

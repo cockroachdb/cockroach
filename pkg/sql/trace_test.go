@@ -50,6 +50,7 @@ func TestTrace(t *testing.T) {
 		"outbox",
 		"request range lease",
 		"range lookup",
+		"local proposal",
 	}
 
 	testData := []struct {

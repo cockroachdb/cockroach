@@ -1521,6 +1521,34 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_drop_tenant`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableDropTenant), nil
+		},
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_drop_tenant", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableDropTenant(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			// Note:
+			// - We use a cluster setting here instead of a default role option
+			//   because we need this to be settable also for the 'admin' role.
+			// - The cluster setting is named "enable" because boolean cluster
+			//   settings are all ".enabled" -- we do not have ".disabled"
+			//   settings anywhere.
+			// - The session var is named "disable_" because we want the Go
+			//   default value (false) to mean that tenant deletion is enabled.
+			//   This is needed for backward-compatibility with Cockroach Cloud.
+			return formatBoolAsPostgresSetting(!enableDropTenant.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`allow_prepare_as_opt_plan`: {
 		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
@@ -2583,6 +2611,43 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowRoleMembershipsToChangeDuringTransaction), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`prepared_statements_cache_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			limit, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			m.SetPreparedStatementsCacheSize(limit)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().PreparedStatementsCacheSize)), nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return string(humanizeutil.IBytes(0))
+		},
+	},
+
+	// CockroachDB extension.
+	`streamer_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`streamer_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("streamer_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetStreamerEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().StreamerEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(execinfra.UseStreamerEnabled.Get(sv))
+		},
 	},
 }
 
