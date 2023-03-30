@@ -118,12 +118,10 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	boundsReader := newMockBoundsReader()
-	settings := cluster.MakeTestingClusterSettings()
-	boundsEnabled.Override(ctx, &settings.SV, true)
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		store := New(
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
-			settings,
+			cluster.MakeClusterSettings(),
 			boundsReader,
 			&spanconfig.TestingKnobs{
 				StoreIgnoreCoalesceAdjacentExceptions: true,
