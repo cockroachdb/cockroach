@@ -57,7 +57,7 @@ export const selectStatementsLastUpdated = createSelector(
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
 export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
-  if (!sqlStatsState.data || !sqlStatsState.valid) {
+  if (!sqlStatsState?.data || !sqlStatsState?.valid) {
     return [];
   }
 
@@ -88,7 +88,7 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(databasesListSelector, state => {
-  if (!state.data) {
+  if (!state?.data) {
     return [];
   }
 
@@ -102,7 +102,7 @@ export const selectDatabases = createSelector(databasesListSelector, state => {
 export const selectTotalFingerprints = createSelector(
   sqlStatsSelector,
   state => {
-    if (!state.data) {
+    if (!state?.data) {
       return 0;
     }
     const aggregated = aggregateStatementStats(state.data.statements);
@@ -113,7 +113,7 @@ export const selectTotalFingerprints = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(sqlStatsSelector, state => {
-  if (!state.data) {
+  if (!state?.data) {
     return "";
   }
 
@@ -144,7 +144,7 @@ export const selectStatements = createSelector(
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
     // State is valid if we successfully fetched data, and the data has not yet been invalidated.
-    if (!state.data || !state.valid) {
+    if (!state?.data || !state?.valid) {
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
@@ -229,7 +229,7 @@ export const selectColumns = createSelector(
   // return array of columns if user have customized it or `null` otherwise
   localStorage =>
     localStorage["showColumns/StatementsPage"]
-      ? localStorage["showColumns/StatementsPage"].split(",")
+      ? localStorage["showColumns/StatementsPage"]?.split(",")
       : null,
 );
 

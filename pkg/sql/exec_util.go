@@ -747,6 +747,25 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
 
+// enableDropTenant (or rather, its inverted boolean value) defines
+// the default value for the session var "disable_drop_tenant".
+//
+// Note:
+//   - We use a cluster setting here instead of a default role option
+//     because we need this to be settable also for the 'admin' role.
+//   - The cluster setting is named "enable" because boolean cluster
+//     settings are all ".enabled" -- we do not have ".disabled"
+//     settings anywhere.
+//   - The session var is named "disable_" because we want the Go
+//     default value (false) to mean that tenant deletion is enabled.
+//     This is needed for backward-compatibility with Cockroach Cloud.
+var enableDropTenant = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sql.drop_tenant.enabled",
+	"default value (inverted) for the disable_drop_tenant session setting",
+	true,
+)
+
 // Fully-qualified names for metrics.
 var (
 	MetaSQLExecLatency = metric.Metadata{
@@ -3154,6 +3173,10 @@ func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondatapb.Serial
 
 func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
+}
+
+func (m *sessionDataMutator) SetDisableDropTenant(val bool) {
+	m.data.DisableDropTenant = val
 }
 
 func (m *sessionDataMutator) SetCheckFunctionBodies(val bool) {

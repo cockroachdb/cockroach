@@ -48,6 +48,7 @@
 /pkg/sql/stats/              @cockroachdb/sql-queries
 
 /pkg/sql/col*                @cockroachdb/sql-queries
+/pkg/sql/create_stats*       @cockroachdb/sql-queries
 /pkg/sql/distsql*.go         @cockroachdb/sql-queries
 /pkg/sql/exec*               @cockroachdb/sql-queries
 #!/pkg/sql/exec_log*.go        @cockroachdb/sql-queries-noreview

@@ -171,8 +171,8 @@ export const filterTransactions = (
       activeFilters: 0,
     };
   const timeValue = getTimeValueInSeconds(filters);
-  const regions = filters.regions.length > 0 ? filters.regions.split(",") : [];
-  const nodes = filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+  const regions = filters.regions?.length > 0 ? filters.regions.split(",") : [];
+  const nodes = filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
 
   const activeFilters = calculateActiveFilters(filters);
 

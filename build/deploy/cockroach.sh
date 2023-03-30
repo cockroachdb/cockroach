@@ -295,4 +295,10 @@ _main() {
   esac
 }
 
-_main "$@"
+set_env_var "COCKROACH_ARGS"
+
+if [[ -n "$COCKROACH_ARGS" ]]; then
+  _main "$COCKROACH_ARGS"
+else
+  _main "$@"
+fi

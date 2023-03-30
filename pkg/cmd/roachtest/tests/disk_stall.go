@@ -47,6 +47,8 @@ func registerDiskStalledDetection(r registry.Registry) {
 	}
 	makeSpec := func() spec.ClusterSpec {
 		s := r.MakeClusterSpec(4, spec.ReuseNone())
+		// Use PDs in an attempt to work around flakes encountered when using SSDs.
+		// See #97968.
 		s.PreferLocalSSD = false
 		return s
 	}
