@@ -336,7 +336,6 @@ go_test(
         "node_tombstone_storage_test.go",
         "pagination_test.go",
         "purge_auth_session_test.go",
-        "servemode_test.go",
         "server_http_test.go",
         "server_import_ts_test.go",
         "server_internal_executor_factory_test.go",
