@@ -1679,12 +1679,6 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaClosedTimestampFailuresToClose = metric.Metadata{
-		Name:        "kv.closed_timestamp.failures_to_close",
-		Help:        "Number of times the min prop tracker failed to close timestamps due to epoch mismatch or pending evaluations",
-		Measurement: "Attempts",
-		Unit:        metric.Unit_COUNT,
-	}
 
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCurTripped = metric.Metadata{

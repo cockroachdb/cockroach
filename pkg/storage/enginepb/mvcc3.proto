@@ -51,11 +51,9 @@ message TxnMeta {
   // Note that reads do not occur at this timestamp; they instead occur at
   // ReadTimestamp, which is tracked in the containing roachpb.Transaction.
   //
-  // Writes used to be performed at the txn's read timestamp, which was
-  // necessary to avoid lost update anomalies in snapshot isolation mode. We no
-  // longer support snapshot isolation mode, and there are now several important
-  // reasons that writes are performed at this timestamp instead of the txn's
-  // original timestamp:
+  // Writes used to be performed at the txn's read timestamp before 57d02014.
+  // However, there are now several important reasons to perform writes at the
+  // write timestamp instead of the txn's read timestamp:
   //
   //    1. This timestamp is forwarded by the timestamp cache when this
   //       transaction attempts to write beneath a more recent read. Leaving the
