@@ -101,6 +101,12 @@ VALUES (
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions", [][]string{{strconv.Itoa(numUsers)}})
 
+	// Drop a user to test that migration deletes orphaned rows.
+	if numUsers > 0 {
+		tdb.Exec(t, "DROP USER testuser0")
+		numUsers -= 1
+	}
+
 	// Run migrations.
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn).String())
