@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -92,7 +92,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		1<<20, /* 1 MB */
 		roachpb.SpanConfig{},
 		cluster.MakeTestingClusterSettings(),
-		spanconfigbounds.NewEmptyReader(),
+		spanconfigstore.NewEmptyBoundsReader(),
 		nil,
 		nil,
 	)

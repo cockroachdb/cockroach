@@ -29,7 +29,7 @@ func (f boolField) String() string {
 	return config.Field(f).String()
 }
 
-func (f boolField) FieldBound(b Bounds) ValueBounds {
+func (f boolField) FieldBound(b *Bounds) ValueBounds {
 	return unbounded{}
 }
 

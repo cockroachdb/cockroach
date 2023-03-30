@@ -30,13 +30,13 @@ func (f int64Field) SafeFormat(s redact.SafePrinter, verb rune) {
 	s.Print(config.Field(f))
 }
 
-func (f int64Field) FieldBound(b Bounds) ValueBounds {
+func (f int64Field) FieldBound(b *Bounds) ValueBounds {
 	getBound := func() *tenantcapabilitiespb.SpanConfigBounds_Int64Range {
 		switch f {
 		case rangeMaxBytes:
-			return b.b.RangeMaxBytes
+			return b.RangeMaxBytes
 		case rangeMinBytes:
-			return b.b.RangeMinBytes
+			return b.RangeMinBytes
 		default:
 			// This is safe because we test that all the fields in the proto have
 			// a corresponding field, and we call this for each of them, and the user

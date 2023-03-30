@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -142,7 +141,7 @@ type KVSubscriber struct {
 	metrics *Metrics
 
 	// boundsReader provides a handle to the global SpanConfigBounds state.
-	boundsReader spanconfigbounds.Reader
+	boundsReader spanconfigstore.BoundsReader
 }
 
 var _ spanconfig.KVSubscriber = &KVSubscriber{}
@@ -190,7 +189,7 @@ func New(
 	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
-	boundsReader spanconfigbounds.Reader,
+	boundsReader spanconfigstore.BoundsReader,
 	knobs *spanconfig.TestingKnobs,
 	registry *metric.Registry,
 ) *KVSubscriber {
