@@ -69,6 +69,8 @@ var CloseRequestCounter = telemetry.GetCounterOnce("pgwire.command.close")
 // is made.
 var FlushRequestCounter = telemetry.GetCounterOnce("pgwire.command.flush")
 
-// MultipleActivePortalCounter is to be incremented every time the cluster setting
-// sql.pgwire.multiple_active_portals.enabled is set true.
-var MultipleActivePortalCounter = telemetry.GetCounterOnce("pgwire.multiple_active_portals")
+// StmtsTriedWithPausablePortals is to be incremented every time there's a
+// not-internal statement executed with a pgwire portal and the session variable
+// multiple_active_portals_enabled has been set to true.
+// The statement might not satisfy the restriction for a pausable portal.
+var StmtsTriedWithPausablePortals = telemetry.GetCounterOnce("pgwire.pausable_portal_stmts")
