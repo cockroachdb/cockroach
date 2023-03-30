@@ -733,14 +733,6 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-var EnableMultipleActivePortals = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.pgwire.multiple_active_portals.enabled",
-	"if true, portals with read-only SELECT query without sub/post queries "+
-		"can be executed in interleaving manner, but with local execution plan",
-	false,
-).WithPublic()
-
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -3533,6 +3525,10 @@ func (m *sessionDataMutator) SetPreparedStatementsCacheSize(val int64) {
 
 func (m *sessionDataMutator) SetStreamerEnabled(val bool) {
 	m.data.StreamerEnabled = val
+}
+
+func (m *sessionDataMutator) SetMultipleActivePortalsEnabled(val bool) {
+	m.data.MultipleActivePortalsEnabled = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
