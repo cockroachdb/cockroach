@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 )
@@ -37,6 +38,17 @@ type BuildOptions struct {
 	// The zero value is appropriate in "real" scenarios but for
 	// tests you can update ExecFn.MockExecFn.
 	ExecFn ExecFn
+
+	// Channel represents the telemetry channel
+	Channel string
+}
+
+// ChannelFromPlatform retrurns the telemetry channel used for a particular platform.
+func ChannelFromPlatform(platform Platform) string {
+	if platform == PlatformLinuxFIPS {
+		return build.FIPSTelemetryChannel
+	}
+	return build.DefaultTelemetryChannel
 }
 
 // SuffixFromPlatform returns the suffix that will be appended to the
@@ -143,6 +155,9 @@ func MakeWorkload(opts BuildOptions, pkgDir string) error {
 
 // MakeRelease makes the release binary and associated files.
 func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
+	if !(opts.Channel == build.DefaultTelemetryChannel || opts.Channel == build.FIPSTelemetryChannel) {
+		return errors.Newf("cannot set the telemetry channel to %s, supported channels: %s and %s", opts.Channel, build.DefaultTelemetryChannel, build.FIPSTelemetryChannel)
+	}
 	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//pkg/cmd/cockroach-sql"}
 	if platform != PlatformMacOSArm {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
@@ -152,12 +167,12 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		if opts.BuildTag == "" {
 			return errors.Newf("must set BuildTag if Release is set")
 		}
-		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary release", targetTriple))
+		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel))
 	} else {
 		if opts.BuildTag != "" {
 			return errors.Newf("cannot set BuildTag if Release is not set")
 		}
-		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary", targetTriple))
+		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel))
 	}
 	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
