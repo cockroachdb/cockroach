@@ -356,13 +356,16 @@ func (n *createTableNode) startExec(params runParams) error {
 	// TODO(ajwerner): remove the timestamp from newTableDesc and its friends,
 	// it's	currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Tables,
 	)
+	if err != nil {
+		return err
+	}
 	if n.n.As() {
 		asCols := planColumns(n.sourcePlan)
 		if !n.n.AsHasUserSpecifiedPrimaryKey() {

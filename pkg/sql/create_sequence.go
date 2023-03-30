@@ -110,13 +110,16 @@ func doCreateSequence(
 		return nil, err
 	}
 
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
 		sessionData.User(),
 		privilege.Sequences,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	if persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)

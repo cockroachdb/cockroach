@@ -71,12 +71,16 @@ func MaybeFixPrivileges(
 	parentID, parentSchemaID descpb.ID,
 	objectType privilege.ObjectType,
 	objectName string,
-) bool {
+) (bool, error) {
 	if *ptr == nil {
 		*ptr = &catpb.PrivilegeDescriptor{}
 	}
 	p := *ptr
-	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
+	privList, err := privilege.GetValidPrivilegesForObject(objectType)
+	if err != nil {
+		return false, err
+	}
+	allowedPrivilegesBits := privList.ToBitField()
 	systemPrivs := SystemSuperuserPrivileges(descpb.NameInfo{
 		ParentID:       parentID,
 		ParentSchemaID: parentSchemaID,
@@ -137,5 +141,5 @@ func MaybeFixPrivileges(
 		p.SetVersion(catpb.Version21_2)
 		changed = true
 	}
-	return changed
+	return changed, nil
 }

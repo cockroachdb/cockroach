@@ -933,7 +933,11 @@ func backupShowerDefault(
 						row = append(row, createStmtDatum)
 					}
 					if opts.Privileges {
-						row = append(row, tree.NewDString(showPrivileges(ctx, desc)))
+						showPrivs, err := showPrivileges(ctx, desc)
+						if err != nil {
+							return nil, err
+						}
+						row = append(row, tree.NewDString(showPrivs))
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
@@ -1150,7 +1154,7 @@ func showRegions(typeDesc catalog.TypeDescriptor, dbname string) (string, error)
 	return regionsStringBuilder.String(), nil
 }
 
-func showPrivileges(ctx context.Context, desc catalog.Descriptor) string {
+func showPrivileges(ctx context.Context, desc catalog.Descriptor) (string, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.showPrivileges")
 	defer span.Finish()
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
@@ -1158,14 +1162,18 @@ func showPrivileges(ctx context.Context, desc catalog.Descriptor) string {
 	var privStringBuilder strings.Builder
 
 	if desc == nil {
-		return ""
+		return "", nil
 	}
 	privDesc := desc.GetPrivileges()
 	objectType := desc.GetObjectType()
 	if privDesc == nil {
-		return ""
+		return "", nil
 	}
-	for _, userPriv := range privDesc.Show(objectType, false /* showImplicitOwnerPrivs */) {
+	showList, err := privDesc.Show(objectType, false /* showImplicitOwnerPrivs */)
+	if err != nil {
+		return "", err
+	}
+	for _, userPriv := range showList {
 		privs := userPriv.Privileges
 		if len(privs) == 0 {
 			continue
@@ -1207,7 +1215,7 @@ func showPrivileges(ctx context.Context, desc catalog.Descriptor) string {
 		}
 	}
 
-	return privStringBuilder.String()
+	return privStringBuilder.String(), nil
 }
 
 var backupShowerRanges = backupShower{

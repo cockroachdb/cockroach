@@ -258,25 +258,33 @@ func (pl List) Contains(k Kind) bool {
 
 // ListFromBitField takes a bitfield of privileges and a ObjectType
 // returns a List. It is ordered in increasing value of privilege.Kind.
-func ListFromBitField(m uint64, objectType ObjectType) List {
+func ListFromBitField(m uint64, objectType ObjectType) (List, error) {
 	ret := List{}
 
-	privileges := GetValidPrivilegesForObject(objectType)
+	privileges, err := GetValidPrivilegesForObject(objectType)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, p := range privileges {
 		if m&p.Mask() != 0 {
 			ret = append(ret, p)
 		}
 	}
-	return ret
+	return ret, nil
 }
 
 // PrivilegesFromBitFields takes a bitfield of privilege kinds, a bitfield of grant options, and an ObjectType
 // returns a List. It is ordered in increasing value of privilege.Kind.
-func PrivilegesFromBitFields(kindBits, grantOptionBits uint64, objectType ObjectType) []Privilege {
+func PrivilegesFromBitFields(
+	kindBits, grantOptionBits uint64, objectType ObjectType,
+) ([]Privilege, error) {
 	var ret []Privilege
 
-	kinds := GetValidPrivilegesForObject(objectType)
+	kinds, err := GetValidPrivilegesForObject(objectType)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, kind := range kinds {
 		if mask := kind.Mask(); kindBits&mask != 0 {
@@ -286,7 +294,7 @@ func PrivilegesFromBitFields(kindBits, grantOptionBits uint64, objectType Object
 			})
 		}
 	}
-	return ret
+	return ret, nil
 }
 
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.
@@ -310,7 +318,10 @@ func ListFromStrings(strs []string) (List, error) {
 // ValidatePrivileges returns an error if any privilege in
 // privileges cannot be granted on the given objectType.
 func ValidatePrivileges(privileges List, objectType ObjectType) error {
-	validPrivs := GetValidPrivilegesForObject(objectType)
+	validPrivs, err := GetValidPrivilegesForObject(objectType)
+	if err != nil {
+		return err
+	}
 	for _, priv := range privileges {
 		if validPrivs.ToBitField()&priv.Mask() == 0 {
 			return pgerror.Newf(pgcode.InvalidGrantOperation,
@@ -323,30 +334,30 @@ func ValidatePrivileges(privileges List, objectType ObjectType) error {
 
 // GetValidPrivilegesForObject returns the list of valid privileges for the
 // specified object type.
-func GetValidPrivilegesForObject(objectType ObjectType) List {
+func GetValidPrivilegesForObject(objectType ObjectType) (List, error) {
 	switch objectType {
 	case Table:
-		return TablePrivileges
+		return TablePrivileges, nil
 	case Schema:
-		return SchemaPrivileges
+		return SchemaPrivileges, nil
 	case Database:
-		return DBPrivileges
+		return DBPrivileges, nil
 	case Type:
-		return TypePrivileges
+		return TypePrivileges, nil
 	case Sequence:
-		return SequencePrivileges
+		return SequencePrivileges, nil
 	case Any:
-		return AllPrivileges
+		return AllPrivileges, nil
 	case Function:
-		return FunctionPrivileges
+		return FunctionPrivileges, nil
 	case Global:
-		return GlobalPrivileges
+		return GlobalPrivileges, nil
 	case VirtualTable:
-		return VirtualTablePrivileges
+		return VirtualTablePrivileges, nil
 	case ExternalConnection:
-		return ExternalConnectionPrivileges
+		return ExternalConnectionPrivileges, nil
 	default:
-		panic(errors.AssertionFailedf("unknown object type %s", objectType))
+		return nil, errors.AssertionFailedf("unknown object type %s", objectType)
 	}
 }
 
@@ -370,19 +381,26 @@ var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE, 
 // See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
 //
 //	for privileges and their ACL abbreviations.
-func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
+func (pl List) ListToACL(grantOptions List, objectType ObjectType) (string, error) {
 	privileges := pl
 	// If ALL is present, explode ALL into the underlying privileges.
 	if pl.Contains(ALL) {
-		privileges = GetValidPrivilegesForObject(objectType)
+		var err error
+		privileges, err = GetValidPrivilegesForObject(objectType)
+		if err != nil {
+			return "", err
+		}
 		if grantOptions.Contains(ALL) {
-			grantOptions = GetValidPrivilegesForObject(objectType)
+			grantOptions, err = GetValidPrivilegesForObject(objectType)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 	chars := make([]string, len(privileges))
 	for _, privilege := range orderedPrivs {
 		if _, ok := privToACL[privilege]; !ok {
-			panic(errors.AssertionFailedf("unknown privilege type %s", privilege.String()))
+			return "", errors.AssertionFailedf("unknown privilege type %s", privilege.String())
 		}
 		if privileges.Contains(privilege) {
 			chars = append(chars, privToACL[privilege])
@@ -392,7 +410,7 @@ func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 		}
 	}
 
-	return strings.Join(chars, "")
+	return strings.Join(chars, ""), nil
 
 }
 

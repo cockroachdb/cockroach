@@ -58,14 +58,20 @@ func (s *accumulator) addRow(path, user tree.DString, privArr, grantOptionArr *t
 	if err != nil {
 		return err
 	}
-	privsWithGrantOption := privilege.ListFromBitField(
+	privsWithGrantOption, err := privilege.ListFromBitField(
 		privs.ToBitField()&grantOptions.ToBitField(),
 		s.objectType,
 	)
-	privsWithoutGrantOption := privilege.ListFromBitField(
+	if err != nil {
+		return err
+	}
+	privsWithoutGrantOption, err := privilege.ListFromBitField(
 		privs.ToBitField()&^privsWithGrantOption.ToBitField(),
 		s.objectType,
 	)
+	if err != nil {
+		return err
+	}
 	s.desc.Grant(
 		username.MakeSQLUsernameFromPreNormalizedString(string(user)),
 		privsWithGrantOption,

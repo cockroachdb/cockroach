@@ -128,7 +128,15 @@ VALUES ($1, $2, $3, $4, (
 					continue
 				}
 
-				_, err := params.p.InternalSQLTxn().ExecEx(
+				privList, err := privilege.ListFromBitField(userPrivs.Privileges, n.grantOn)
+				if err != nil {
+					return err
+				}
+				grantOptionList, err := privilege.ListFromBitField(userPrivs.WithGrantOption, n.grantOn)
+				if err != nil {
+					return err
+				}
+				if _, err := params.p.InternalSQLTxn().ExecEx(
 					params.ctx,
 					`insert-system-privilege`,
 					params.p.txn,
@@ -136,17 +144,18 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privilege.ListFromBitField(userPrivs.Privileges, n.grantOn).SortedNames(),
-					privilege.ListFromBitField(userPrivs.WithGrantOption, n.grantOn).SortedNames(),
-				)
-				if err != nil {
+					privList.SortedNames(),
+					grantOptionList.SortedNames(),
+				); err != nil {
 					return err
 				}
 			}
 		} else {
 			// Handle revoke case.
 			for _, user := range n.grantees {
-				syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, n.withGrantOption)
+				if err := syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, n.withGrantOption); err != nil {
+					return err
+				}
 				userPrivs, found := syntheticPrivDesc.FindUser(user)
 
 				// For Public role and virtual tables, leave an empty
@@ -187,7 +196,15 @@ VALUES ($1, $2, $3, $4, (
 					continue
 				}
 
-				_, err := params.p.InternalSQLTxn().ExecEx(
+				privList, err := privilege.ListFromBitField(userPrivs.Privileges, n.grantOn)
+				if err != nil {
+					return err
+				}
+				grantOptionList, err := privilege.ListFromBitField(userPrivs.WithGrantOption, n.grantOn)
+				if err != nil {
+					return err
+				}
+				if _, err := params.p.InternalSQLTxn().ExecEx(
 					params.ctx,
 					`insert-system-privilege`,
 					params.p.txn,
@@ -195,10 +212,9 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privilege.ListFromBitField(userPrivs.Privileges, n.grantOn).SortedNames(),
-					privilege.ListFromBitField(userPrivs.WithGrantOption, n.grantOn).SortedNames(),
-				)
-				if err != nil {
+					privList.SortedNames(),
+					grantOptionList.SortedNames(),
+				); err != nil {
 					return err
 				}
 			}

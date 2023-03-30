@@ -44,13 +44,16 @@ func (g *testSchemaGenerator) genMultipleTables(
 	}()
 
 	// Compute the shared table privileges just once.
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		db.GetDefaultPrivilegeDescriptor(),
 		sc.GetDefaultPrivilegeDescriptor(),
 		db.GetID(),
 		g.cfg.user,
 		privilege.Tables,
 	)
+	if err != nil {
+		panic(genError{err: err})
+	}
 
 	// Compute the names ahead of time; this also takes care of
 	// avoiding duplicates.

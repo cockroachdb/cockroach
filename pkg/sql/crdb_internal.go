@@ -5741,7 +5741,10 @@ func makeClusterDatabasePrivilegesFromDescriptor(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error,
 ) func(catalog.DatabaseDescriptor) error {
 	return func(db catalog.DatabaseDescriptor) error {
-		privs := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
+		privs, err := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
+		if err != nil {
+			return err
+		}
 		dbNameStr := tree.NewDString(db.GetName())
 		// TODO(knz): This should filter for the current user, see
 		// https://github.com/cockroachdb/cockroach/issues/35572
@@ -6073,7 +6076,10 @@ CREATE TABLE crdb_internal.default_privileges (
 							privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 							for _, userPrivs := range privs.Users {
 								grantee := tree.NewDString(userPrivs.User().Normalized())
-								privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
+								privList, err := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
+								if err != nil {
+									return err
+								}
 								for _, priv := range privList {
 									if err := addRow(
 										database, // database_name
