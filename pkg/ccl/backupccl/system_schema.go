@@ -248,7 +248,7 @@ func roleMembersRestoreFunc(
 
 	// It's enough to just check if role_id exists since member_id was added at
 	// the same time.
-	hasIDColumns, err := tableHasColumnName(ctx, txn, tempTableName, "role_id")
+	hasIDColumns, err := tableHasNotNullColumn(ctx, txn, tempTableName, "role_id")
 	if err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func systemPrivilegesRestoreFunc(
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
-	hasUserIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "user_id")
+	hasUserIDColumn, err := tableHasNotNullColumn(ctx, txn, tempTableName, "user_id")
 	if err != nil {
 		return err
 	}
@@ -428,7 +428,7 @@ func systemDatabaseRoleSettingsRestoreFunc(
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
-	hasRoleIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "role_id")
+	hasRoleIDColumn, err := tableHasNotNullColumn(ctx, txn, tempTableName, "role_id")
 	if err != nil {
 		return err
 	}
@@ -483,7 +483,7 @@ func systemExternalConnectionsRestoreFunc(
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
-	hasOwnerIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "owner_id")
+	hasOwnerIDColumn, err := tableHasNotNullColumn(ctx, txn, tempTableName, "owner_id")
 	if err != nil {
 		return err
 	}
@@ -532,6 +532,22 @@ func tableHasColumnName(
 	}
 	hasColumn := tree.MustBeDBool(row[0])
 	return bool(hasColumn), nil
+}
+
+func tableHasNotNullColumn(
+	ctx context.Context, txn isql.Txn, tableName string, columnName string,
+) (bool, error) {
+	hasNotNullColumnQuery := fmt.Sprintf(
+		`SELECT IFNULL((SELECT NOT is_nullable FROM [SHOW COLUMNS FROM %s] WHERE column_name = '%s'), false)`,
+		tableName, columnName,
+	)
+	row, err := txn.QueryRowEx(ctx, "has-not-null-column", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, hasNotNullColumnQuery)
+	if err != nil {
+		return false, err
+	}
+	hasNotNullColumn := bool(tree.MustBeDBool(row[0]))
+	return hasNotNullColumn, nil
 }
 
 // When restoring the settings table, we want to make sure to not override the
