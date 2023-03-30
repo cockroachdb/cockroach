@@ -539,7 +539,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 				RangeLeaseRenewalFraction: -1,
 				// Also make expiration-based leases last for a long time, as the test
 				// wants a valid lease after cluster start.
-				RaftElectionTimeoutTicks: 1000,
+				RangeLeaseDuration: time.Minute,
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
