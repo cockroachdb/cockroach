@@ -2023,6 +2023,129 @@ project
       ├── key: (1)
       └── fd: (1)-->(2)
 
+exec-ddl
+CREATE TABLE t100206 (
+        a INT NOT NULL,
+        b INT NOT NULL,
+        c INT NOT NULL AS (a+b) VIRTUAL,
+        d INT,
+        CONSTRAINT pkey PRIMARY KEY (c ASC, b ASC, a ASC));
+----
+
+# This should derive the value of c from a and b.
+opt expect=GenerateConstrainedScans
+SELECT a,b,c FROM t100206 WHERE (a,b) IN ((3,4), (5,6))
+----
+scan t100206
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── constraint: /3/2/1
+ │    ├── [/7/4/3 - /7/4/3]
+ │    └── [/11/6/5 - /11/6/5]
+ ├── cardinality: [0 - 2]
+ ├── key: (1,2)
+ └── fd: (1,2)-->(3)
+
+# This should derive the value of c from a and b.
+opt expect=GenerateConstrainedScans
+SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) AND d > 4
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1,2)
+ ├── fd: (1-3)-->(4), (1,2)-->(3)
+ ├── scan t100206
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/7/4/3 - /7/4/3]
+ │    │    └── [/11/6/5 - /11/6/5]
+ │    ├── cardinality: [0 - 2]
+ │    ├── key: (1,2)
+ │    └── fd: (1-3)-->(4), (1,2)-->(3)
+ └── filters
+      └── d:4 > 4 [outer=(4), constraints=(/4: [/5 - ]; tight)]
+
+# TODO(msirek): Derive predicates on computed columns using ORed predicates.
+opt expect-not=GenerateConstrainedScans
+SELECT * FROM t100206 WHERE (a = 3 AND b = 4) OR (a = 5 AND b = 6)
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── key: (1,2)
+ ├── fd: (1-3)-->(4), (1,2)-->(3)
+ ├── scan t100206
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── computed column expressions
+ │    │    └── c:3
+ │    │         └── a:1 + b:2
+ │    ├── key: (1,2)
+ │    └── fd: (1-3)-->(4), (1,2)-->(3)
+ └── filters
+      └── ((a:1 = 3) AND (b:2 = 4)) OR ((a:1 = 5) AND (b:2 = 6)) [outer=(1,2), constraints=(/1: [/3 - /3] [/5 - /5]; /2: [/4 - /4] [/6 - /6])]
+
+# TODO(msirek): Derive predicates on computed columns using ORed predicates.
+# The 'OR c=1' term triggers GenerateConstrainedScans as a disjunction of scans,
+# but we should be able to build a single constrained scan.
+opt expect=GenerateConstrainedScans expect=SplitDisjunction
+SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) OR c=1
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── grouping columns: a:1!null b:2!null
+ ├── key: (1,2)
+ ├── fd: (1-3)-->(4), (1,2)-->(3)
+ ├── union-all
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── left columns: a:7 b:8 c:9 d:10
+ │    ├── right columns: a:13 b:14 c:15 d:16
+ │    ├── scan t100206
+ │    │    ├── columns: a:7!null b:8!null c:9!null d:10
+ │    │    ├── constraint: /9/8/7
+ │    │    │    ├── [/7/4/3 - /7/4/3]
+ │    │    │    └── [/11/6/5 - /11/6/5]
+ │    │    ├── cardinality: [0 - 2]
+ │    │    ├── key: (7,8)
+ │    │    └── fd: (7-9)-->(10), (7,8)-->(9)
+ │    └── scan t100206
+ │         ├── columns: a:13!null b:14!null c:15!null d:16
+ │         ├── constraint: /15/14/13: [/1 - /1]
+ │         ├── key: (13,14)
+ │         └── fd: ()-->(15), (13,14)-->(16)
+ └── aggregations
+      ├── const-agg [as=c:3, outer=(3)]
+      │    └── c:3
+      └── const-agg [as=d:4, outer=(4)]
+           └── d:4
+
+exec-ddl
+CREATE TABLE t100206b (
+        a INT NOT NULL,
+        b INT NOT NULL,
+        c INT NOT NULL AS (a+b) VIRTUAL,
+        CHECK ((a,b) IN ((1,2),(3,4),(5,6))),
+        CONSTRAINT pkey PRIMARY KEY (c ASC, b ASC, a ASC));
+----
+
+# This should derive the value of c from a and b.
+opt expect=GenerateConstrainedScans
+SELECT * FROM t100206b WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(3)
+ ├── scan t100206b
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/3/2/1 - /3/2/1]
+ │    │    ├── [/7/4/3 - /7/4/3]
+ │    │    └── [/11/6/5 - /11/6/5]
+ │    ├── cardinality: [0 - 3]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      └── a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
 # Constrained partial index scan with an indexed virtual computed column also in
 # the predicate.
 # TODO(mgartner): Teach indexConstraintCtx.simplifyFilter to remove b=140 from
