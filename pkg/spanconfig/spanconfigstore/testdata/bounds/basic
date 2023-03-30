@@ -1,0 +1,72 @@
+apply
+set [/Tenant/10/a,/Tenant/10/b):GC.ttl=10
+set [/Tenant/10/f,/Tenant/10/h):GC.ttl=20
+set [/Tenant/10/h,/Tenant/10/j):GC.ttl=35
+----
+added [/Tenant/10/a,/Tenant/10/b):GC.ttl=10
+added [/Tenant/10/f,/Tenant/10/h):GC.ttl=20
+added [/Tenant/10/h,/Tenant/10/j):GC.ttl=35
+
+apply
+set [/Tenant/20/a,/Tenant/20/b):GC.ttl=55
+set [/Tenant/20/c,/Tenant/20/d):GC.ttl=25
+set [/Tenant/20/e,/Tenant/20/f):GC.ttl=3
+----
+added [/Tenant/20/a,/Tenant/20/b):GC.ttl=55
+added [/Tenant/20/c,/Tenant/20/d):GC.ttl=25
+added [/Tenant/20/e,/Tenant/20/f):GC.ttl=3
+
+declare-bounds
+set /Tenant/10:{GC.ttl_start=15, GC.ttl_end=30}
+set /Tenant/20:{GC.ttl_start=5, GC.ttl_end=50}
+----
+
+# Ensure GC TTL is clamped correctly for tenant 10.
+overlapping span=[/Tenant/10/a,/Tenant/10/j)
+----
+[/Tenant/10/a,/Tenant/10/b):GC.ttl=15
+[/Tenant/10/f,/Tenant/10/h):GC.ttl=20
+[/Tenant/10/h,/Tenant/10/j):GC.ttl=30
+
+get key=/Tenant/10/a
+----
+conf=GC.ttl=15
+
+
+# Ditto for tenant 20.
+overlapping span=[/Tenant/20/a,/Tenant/20/f)
+----
+[/Tenant/20/a,/Tenant/20/b):GC.ttl=50
+[/Tenant/20/c,/Tenant/20/d):GC.ttl=25
+[/Tenant/20/e,/Tenant/20/f):GC.ttl=5
+
+get key=/Tenant/20/e
+----
+conf=GC.ttl=5
+
+# Delete bounds for tenant 10.
+declare-bounds
+delete /Tenant/10
+----
+
+# Ensure GC TTL values are no longer clamped for tenant 10.
+overlapping span=[/Tenant/10/a,/Tenant/10/j)
+----
+[/Tenant/10/a,/Tenant/10/b):GC.ttl=10
+[/Tenant/10/f,/Tenant/10/h):GC.ttl=20
+[/Tenant/10/h,/Tenant/10/j):GC.ttl=35
+
+get key=/Tenant/10/a
+----
+conf=GC.ttl=10
+
+# However, this shouldn't affect tenant 20.
+overlapping span=[/Tenant/20/a,/Tenant/20/f)
+----
+[/Tenant/20/a,/Tenant/20/b):GC.ttl=50
+[/Tenant/20/c,/Tenant/20/d):GC.ttl=25
+[/Tenant/20/e,/Tenant/20/f):GC.ttl=5
+
+get key=/Tenant/20/e
+----
+conf=GC.ttl=5

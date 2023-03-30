@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -22,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/errors/oserror"
 )
 
 // loadTestData writes numKeys keys in numBatches separate batches. Keys are
@@ -44,85 +43,82 @@ import (
 // The creation of the database is time consuming, so the caller can choose
 // whether to use a temporary or permanent location.
 func loadTestData(
-	dirPrefix string, numKeys, numBatches, batchTimeSpan, valueBytes int,
-) (storage.Engine, error) {
+	tb testing.TB, dirPrefix string, numKeys, numBatches, batchTimeSpan, valueBytes int,
+) storage.Engine {
 	ctx := context.Background()
 
 	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
-	dir := fmt.Sprintf("%s_v%s_%d_%d_%d_%d", dirPrefix, verStr, numKeys, numBatches, batchTimeSpan, valueBytes)
+	name := fmt.Sprintf("%s_v%s_%d_%d_%d_%d", dirPrefix, verStr, numKeys, numBatches, batchTimeSpan, valueBytes)
+	dir := testfixtures.ReuseOrGenerate(tb, name, func(dir string) {
+		eng, err := storage.Open(
+			ctx,
+			storage.Filesystem(dir),
+			cluster.MakeTestingClusterSettings())
+		if err != nil {
+			tb.Fatal(err)
+		}
 
-	exists := true
-	if _, err := os.Stat(dir); oserror.IsNotExist(err) {
-		exists = false
-	}
+		log.Infof(context.Background(), "creating test data: %s", dir)
 
+		// Generate the same data every time.
+		rng := rand.New(rand.NewSource(1449168817))
+
+		keys := make([]roachpb.Key, numKeys)
+		for i := 0; i < numKeys; i++ {
+			keys[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+		}
+
+		sstTimestamps := make([]int64, numBatches)
+		for i := 0; i < len(sstTimestamps); i++ {
+			sstTimestamps[i] = int64((i + 1) * batchTimeSpan)
+		}
+
+		var batch storage.Batch
+		var minWallTime int64
+		for i, key := range keys {
+			if scaled := len(keys) / numBatches; (i % scaled) == 0 {
+				if i > 0 {
+					log.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
+					if err := batch.Commit(false /* sync */); err != nil {
+						tb.Fatal(err)
+					}
+					batch.Close()
+					if err := eng.Flush(); err != nil {
+						tb.Fatal(err)
+					}
+				}
+				batch = eng.NewBatch()
+				minWallTime = sstTimestamps[i/scaled]
+			}
+			timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
+			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
+			value.InitChecksum(key)
+			if err := storage.MVCCPut(ctx, batch, nil, key, timestamp, hlc.ClockTimestamp{}, value, nil); err != nil {
+				tb.Fatal(err)
+			}
+		}
+		if err := batch.Commit(false /* sync */); err != nil {
+			tb.Fatal(err)
+		}
+		batch.Close()
+		if err := eng.Flush(); err != nil {
+			tb.Fatal(err)
+		}
+		eng.Close()
+	})
+
+	log.Infof(context.Background(), "using test data: %s", dir)
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(dir),
-		cluster.MakeTestingClusterSettings())
+		cluster.MakeTestingClusterSettings(),
+		storage.MustExist,
+	)
 	if err != nil {
-		return nil, err
+		tb.Fatal(err)
 	}
-
-	absPath, err := filepath.Abs(dir)
-	if err != nil {
-		absPath = dir
-	}
-
-	if exists {
-		log.Infof(context.Background(), "using existing test data: %s", absPath)
-		testutils.ReadAllFiles(filepath.Join(dir, "*"))
-		return eng, nil
-	}
-
-	log.Infof(context.Background(), "creating test data: %s", absPath)
-
-	// Generate the same data every time.
-	rng := rand.New(rand.NewSource(1449168817))
-
-	keys := make([]roachpb.Key, numKeys)
-	for i := 0; i < numKeys; i++ {
-		keys[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
-	}
-
-	sstTimestamps := make([]int64, numBatches)
-	for i := 0; i < len(sstTimestamps); i++ {
-		sstTimestamps[i] = int64((i + 1) * batchTimeSpan)
-	}
-
-	var batch storage.Batch
-	var minWallTime int64
-	for i, key := range keys {
-		if scaled := len(keys) / numBatches; (i % scaled) == 0 {
-			if i > 0 {
-				log.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
-				if err := batch.Commit(false /* sync */); err != nil {
-					return nil, err
-				}
-				batch.Close()
-				if err := eng.Flush(); err != nil {
-					return nil, err
-				}
-			}
-			batch = eng.NewBatch()
-			minWallTime = sstTimestamps[i/scaled]
-		}
-		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
-		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
-		value.InitChecksum(key)
-		if err := storage.MVCCPut(ctx, batch, nil, key, timestamp, hlc.ClockTimestamp{}, value, nil); err != nil {
-			return nil, err
-		}
-	}
-	if err := batch.Commit(false /* sync */); err != nil {
-		return nil, err
-	}
-	batch.Close()
-	if err := eng.Flush(); err != nil {
-		return nil, err
-	}
-
-	return eng, nil
+	testutils.ReadAllFiles(filepath.Join(dir, "*"))
+	return eng
 }
 
 // runIterate benchmarks iteration over the entire keyspace within time bounds
@@ -140,10 +136,7 @@ func runIterate(
 
 	// Store the database in this directory so we don't have to regenerate it on
 	// each benchmark run.
-	eng, err := loadTestData("mvcc_data", numKeys, numBatches, batchTimeSpan, valueBytes)
-	if err != nil {
-		b.Fatal(err)
-	}
+	eng := loadTestData(b, "mvcc_data", numKeys, numBatches, batchTimeSpan, valueBytes)
 	defer eng.Close()
 
 	b.SetBytes(int64(numKeys * valueBytes))

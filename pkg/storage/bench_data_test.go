@@ -16,16 +16,17 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
@@ -67,73 +68,45 @@ var latestReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) er
 	return nil
 }
 
-// getInitialStateEngine constructs an Engine with an initial database
-// state necessary for a benchmark. The initial states are cached on the
-// filesystem to avoid expensive reconstruction when possible. The return value
-// of Key() must be unique for each unique initial database configuration,
-// because the Key() value is used to key cached intial databases.
+// getInitialStateEngine constructs an Engine with an initial database state
+// necessary for a benchmark. The initial states are cached on the filesystem to
+// avoid expensive reconstruction when possible (see
+// testfixtures.ReuseOrGenerate).
 //
-// TODO(jackson): Initial states are NOT cached across ./dev bench invocations,
-// because the initial states are written to the temporary bazel sandbox and not
-// copied out. See #83599.
+// The return value of initial.Key() must be unique for each unique initial database
+// configuration, because the Key() value is used to key cached initial databases.
 func getInitialStateEngine(
 	ctx context.Context, b *testing.B, initial initialState, inMemory bool,
 ) engineWithLocation {
-	const initialStatesDir = `testdata/initial`
-
-	require.NoError(b, os.MkdirAll(initialStatesDir, os.ModePerm))
-	dir := filepath.Join(append([]string{initialStatesDir}, initial.Key()...)...)
+	name := strings.Join(initial.Key(), "-")
+	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {
+		buildInitialState(ctx, b, initial, dir)
+	})
 	dataDir := filepath.Join(dir, "data")
-	completedFile := filepath.Join(dir, "completed")
-
-	var buildFS vfs.FS
-	if _, err := os.Stat(completedFile); oserror.IsNotExist(err) {
-		// There's no completed existing engine state for these initial
-		// condtions.  Produce it.
-		b.Logf("%q does not exist; building initial state first", completedFile)
-		buildFS = buildInitialState(ctx, b, initial, dir)
-	} else if err != nil {
-		b.Fatal(err)
-	}
 
 	opts := append([]ConfigOption{
 		MustExist,
 		latestReleaseFormatMajorVersionOpt,
 	}, initial.ConfigOptions()...)
 
-	if !inMemory {
-		// The callers wants a durable engine. Copy the seed data to a temporary
-		// directory on the filesystem.
-		testRunDir := b.TempDir()
-		ok, err := vfs.Clone(vfs.Default, vfs.Default, dataDir, testRunDir, vfs.CloneSync)
-		require.NoError(b, err)
-		require.True(b, ok)
-
-		// Load all the files into the OS buffer cache for better determinism.
-		testutils.ReadAllFiles(filepath.Join(testRunDir, "*"))
-
-		loc := Filesystem(testRunDir)
-		e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
-		require.NoError(b, err)
-		return engineWithLocation{Engine: e, Location: loc}
-	}
-
-	var fs vfs.FS
-
-	// If the caller requests an in-memory engine and we just built the initial
-	// state using an in-memory filesystem, use the existing filesystem already
-	// ready.
-	if buildFS != nil {
-		fs = buildFS
+	var loc Location
+	if inMemory {
+		loc = InMemory()
 	} else {
-		// Load the initial state off the filesystem.
-		fs = vfs.NewMem()
-		ok, err := vfs.Clone(vfs.Default, fs, dataDir, "")
-		require.NoError(b, err)
-		require.True(b, ok)
+		// The caller wants a durable engine; use a temp directory.
+		loc = Filesystem(b.TempDir())
 	}
 
-	loc := Location{fs: fs}
+	// We now copy the initial state to the desired FS.
+	ok, err := vfs.Clone(vfs.Default, loc.fs, dataDir, loc.dir, vfs.CloneSync)
+	require.NoError(b, err)
+	require.True(b, ok)
+
+	if !inMemory {
+		// Load all the files into the OS buffer cache for better determinism.
+		testutils.ReadAllFiles(filepath.Join(loc.dir, "*"))
+	}
+
 	e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
 	require.NoError(b, err)
 	return engineWithLocation{Engine: e, Location: loc}
@@ -178,11 +151,6 @@ func buildInitialState(
 	ok, err := vfs.Clone(buildFS, vfs.Default, "", dataDir, vfs.CloneSync)
 	require.NoError(b, err)
 	require.True(b, ok)
-
-	// Create a marker file signalling that the persisted state is complete.
-	f, err := vfs.Default.Create(filepath.Join(dir, "completed"))
-	require.NoError(b, err)
-	require.NoError(b, f.Close())
 
 	return buildFS
 }

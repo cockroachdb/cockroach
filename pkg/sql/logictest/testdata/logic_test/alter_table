@@ -3184,3 +3184,13 @@ INSERT INTO t_98269 VALUES (0);
 
 statement error pgcode 0A000 .* cluster_logical_timestamp\(\): nil txn in cluster context
 ALTER TABLE t_98269 ADD COLUMN j DECIMAL NOT NULL DEFAULT cluster_logical_timestamp();
+
+# In #99185, we saw test failures that result from adding a foreign key
+# constraint to a non-existent table with IF EXISTS because we require all tables
+# in the stmt should be marked as non-existent or fully resolved. We didn't do
+# anything to the referenced table name, so the validation logic complained that
+# referenced table name is not fully resolved nor marked as non-existent.
+subtest alter_non_existent_table_with_if_exists
+
+statement ok
+ALTER TABLE IF EXISTS t_non_existent_99185 ADD FOREIGN KEY (i) REFERENCES t_other_99185 (i);

@@ -178,6 +178,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigjob",
         "//pkg/spanconfig/spanconfigkvaccessor",
         "//pkg/spanconfig/spanconfigkvsubscriber",

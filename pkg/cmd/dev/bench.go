@@ -12,6 +12,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -154,8 +156,23 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, goTestArgs...)
 	}
+	args = append(args, d.getGoTestEnvArgs()...)
 	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+}
+
+func (d *dev) getGoTestEnvArgs() []string {
+	var goTestEnv []string
+	// Make the `$HOME/.cache/crdb-test-fixtures` directory available for reusable
+	// test fixtures, if available. See testfixtures.ReuseOrGenerate().
+	if cacheDir, err := os.UserCacheDir(); err == nil {
+		dir := filepath.Join(cacheDir, "crdb-test-fixtures")
+		if err := os.MkdirAll(dir, 0755); err == nil {
+			goTestEnv = append(goTestEnv, "--test_env", fmt.Sprintf("COCKROACH_TEST_FIXTURES_DIR=%s", dir))
+			goTestEnv = append(goTestEnv, fmt.Sprintf("--sandbox_writable_path=%s", dir))
+		}
+	}
+	return goTestEnv
 }

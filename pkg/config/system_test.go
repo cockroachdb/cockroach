@@ -332,7 +332,8 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 		Values: kvs,
 	}
 	for tcNum, tc := range testCases {
-		splitKey := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		splitKey, err := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		require.NoError(t, err)
 		expected := roachpb.RKey(tc.split)
 		if !splitKey.Equal(expected) {
 			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, expected)
@@ -443,7 +444,8 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		splitKey := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		splitKey, err := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		require.NoError(t, err)
 		if !splitKey.Equal(tc.split) {
 			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, tc.split)
 		}
@@ -530,7 +532,8 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		splitKey := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		splitKey, err := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
+		require.NoError(t, err)
 		if !splitKey.Equal(tc.split) {
 			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, tc.split)
 		}

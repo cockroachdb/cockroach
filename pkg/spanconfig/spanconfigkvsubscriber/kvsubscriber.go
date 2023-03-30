@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -139,6 +140,9 @@ type KVSubscriber struct {
 
 	clock   *hlc.Clock
 	metrics *Metrics
+
+	// boundsReader provides a handle to the global SpanConfigBounds state.
+	boundsReader spanconfigbounds.Reader
 }
 
 var _ spanconfig.KVSubscriber = &KVSubscriber{}
@@ -186,6 +190,7 @@ func New(
 	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
+	boundsReader spanconfigbounds.Reader,
 	knobs *spanconfig.TestingKnobs,
 	registry *metric.Registry,
 ) *KVSubscriber {
@@ -200,12 +205,13 @@ func New(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	spanConfigStore := spanconfigstore.New(fallback, settings, knobs)
+	spanConfigStore := spanconfigstore.New(fallback, settings, boundsReader, knobs)
 	s := &KVSubscriber{
-		fallback: fallback,
-		knobs:    knobs,
-		settings: settings,
-		clock:    clock,
+		fallback:     fallback,
+		knobs:        knobs,
+		settings:     settings,
+		clock:        clock,
+		boundsReader: boundsReader,
 	}
 	var rfCacheKnobs *rangefeedcache.TestingKnobs
 	if knobs != nil {
@@ -331,7 +337,7 @@ func (s *KVSubscriber) LastUpdated() hlc.Timestamp {
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.
-func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -339,7 +345,9 @@ func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) 
 }
 
 // ComputeSplitKey is part of the spanconfig.KVSubscriber interface.
-func (s *KVSubscriber) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *KVSubscriber) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) (roachpb.RKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -395,7 +403,7 @@ func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update
 func (s *KVSubscriber) handleCompleteUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
-	freshStore := spanconfigstore.New(s.fallback, s.settings, s.knobs)
+	freshStore := spanconfigstore.New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	for _, ev := range events {
 		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}

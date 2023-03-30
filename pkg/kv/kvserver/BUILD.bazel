@@ -406,6 +406,7 @@ go_test(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql",

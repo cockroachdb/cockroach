@@ -1,7 +1,6 @@
 # Do not add environment-specific entries here (see the top-level .gitignore
 # for reasoning and alternatives).
 #
-# Old benchmark data:
+# Old benchmark data.
 mvcc_data_*
-# New benchmark data:
 testdata/initial
