@@ -30,9 +30,6 @@ func (f int32Field) SafeFormat(s redact.SafePrinter, verb rune) {
 
 func (f int32Field) FieldBound(b Bounds) ValueBounds {
 	getBound := func() *tenantcapabilitiespb.SpanConfigBounds_Int32Range {
-		if b.b.ConstraintBounds == nil {
-			return nil
-		}
 		switch f {
 		case numReplicas:
 			return b.b.NumReplicas

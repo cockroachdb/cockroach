@@ -166,6 +166,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/testutils/skip",
+        "//pkg/testutils/testfixtures",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/admission",

@@ -274,8 +274,8 @@ type StoreWriter interface {
 // StoreReader is the read-only portion of the Store interface. It doubles as an
 // adaptor interface for config.SystemConfig.
 type StoreReader interface {
-	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
-	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
+	NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error)
+	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) (roachpb.RKey, error)
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 

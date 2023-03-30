@@ -666,13 +666,20 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		repl.maybeInitializeRaftGroup(ctx)
 	}
 
-	if !bq.acceptsUnsplitRanges && confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey) {
-		// Range needs to be split due to span configs, but queue does not
-		// accept unsplit ranges.
-		if log.V(1) {
-			log.Infof(ctx, "split needed; not adding")
+	if !bq.acceptsUnsplitRanges {
+		// Queue does not accept unsplit ranges. Check to see if the range needs to
+		// be split because of spanconfigs.
+		needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
+		if err != nil {
+			log.Warningf(ctx, "unable to compute whether split is needed; not adding")
+			return
 		}
-		return
+		if needsSplit {
+			if log.V(1) {
+				log.Infof(ctx, "split needed; not adding")
+			}
+			return
+		}
 	}
 
 	if bq.needsLease {
@@ -945,11 +952,18 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		}
 	}
 
-	if !bq.acceptsUnsplitRanges && confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey) {
-		// Range needs to be split due to zone configs, but queue does
-		// not accept unsplit ranges.
-		log.VEventf(ctx, 3, "split needed; skipping")
-		return nil
+	if !bq.acceptsUnsplitRanges {
+		// Queue does not accept unsplit ranges. Check to see if the range needs to
+		// be spilt because of a span config.
+		needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
+		if err != nil {
+			log.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
+			return nil
+		}
+		if needsSplit {
+			log.VEventf(ctx, 3, "split needed; skipping")
+			return nil
+		}
 	}
 
 	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())

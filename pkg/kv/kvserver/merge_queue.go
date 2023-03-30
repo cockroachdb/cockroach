@@ -147,7 +147,17 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	if confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey.Next()) {
+	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey.Next())
+	if err != nil {
+		log.Warningf(
+			ctx,
+			"could not compute if extending range would result in a split (err=%v); skipping merge for range %s",
+			err,
+			desc.RangeID,
+		)
+		return false, 0
+	}
+	if needsSplit {
 		// This range would need to be split if it extended just one key further.
 		// There is thus no possible right-hand neighbor that it could be merged
 		// with.

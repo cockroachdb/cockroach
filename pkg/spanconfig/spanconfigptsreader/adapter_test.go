@@ -115,13 +115,13 @@ func (m *manualSubscriber) Start(context.Context, *stop.Stopper) error {
 	panic("unimplemented")
 }
 
-func (m *manualSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+func (m *manualSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
 	panic("unimplemented")
 }
 
 func (m *manualSubscriber) ComputeSplitKey(
 	context.Context, roachpb.RKey, roachpb.RKey,
-) roachpb.RKey {
+) (roachpb.RKey, error) {
 	panic("unimplemented")
 }
 

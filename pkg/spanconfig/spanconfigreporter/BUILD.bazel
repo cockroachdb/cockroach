@@ -41,6 +41,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",

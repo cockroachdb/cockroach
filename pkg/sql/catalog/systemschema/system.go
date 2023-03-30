@@ -913,7 +913,7 @@ CREATE TABLE system.task_payloads (
 	SystemJobInfoTableSchema = `
 CREATE TABLE system.job_info (
 	job_id INT8 NOT NULL,
-	info_key BYTES NOT NULL,
+	info_key STRING NOT NULL,
 	-- written is in the PK for this table to give it mvcc-over-sql semantics, so
 	-- that revisions to the value for the logical job/key pair are separate SQL
 	-- rows. This is done because we do not allow KV ranges to split between the
@@ -3801,7 +3801,7 @@ var (
 			descpb.InvalidID, // dynamically assigned
 			[]descpb.ColumnDescriptor{
 				{Name: "job_id", ID: 1, Type: types.Int},
-				{Name: "info_key", ID: 2, Type: types.Bytes},
+				{Name: "info_key", ID: 2, Type: types.String},
 				{Name: "written", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 				{Name: "value", ID: 4, Type: types.Bytes, Nullable: true},
 			},

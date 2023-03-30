@@ -3411,13 +3411,15 @@ type mockSpanConfigReader struct {
 	overrides map[string]roachpb.SpanConfig
 }
 
-func (m *mockSpanConfigReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+func (m *mockSpanConfigReader) NeedsSplit(
+	ctx context.Context, start, end roachpb.RKey,
+) (bool, error) {
 	panic("unimplemented")
 }
 
 func (m *mockSpanConfigReader) ComputeSplitKey(
 	ctx context.Context, start, end roachpb.RKey,
-) roachpb.RKey {
+) (roachpb.RKey, error) {
 	panic("unimplemented")
 }
 

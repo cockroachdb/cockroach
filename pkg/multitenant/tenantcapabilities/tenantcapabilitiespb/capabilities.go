@@ -29,8 +29,14 @@ func (b boolCapValue) SafeFormat(p redact.SafePrinter, verb rune) {
 	p.Print(redact.Safe(bool(b)))
 }
 
-// Unwrap implements the tenantcapabilities.Value interface.
 func (b boolCapValue) Unwrap() interface{} { return bool(b) }
+
+// Unwrap implements the tenantcapabilities.Value interface.
+func (m *SpanConfigBounds) Unwrap() interface{} { return m }
+
+func (m *SpanConfigBounds) SafeFormat(p redact.SafePrinter, verb rune) {
+	p.Print(redact.SafeString(m.String()))
+}
 
 // boolCap is an accessor struct for boolean capabilities.
 type boolCap struct {
@@ -73,6 +79,26 @@ func (i invertedBoolCap) Set(val interface{}) {
 	*i.cap = !bval
 }
 
+// spanConfigBoundsCap is an accessor struct for SpanConfigBounds that are
+// stored on the underlying TenantCapabilities proto.
+type spanConfigBoundsCap struct {
+	cap *SpanConfigBounds
+}
+
+// Get implements the tenantcapabilities.Capability interface.
+func (s spanConfigBoundsCap) Get() tenantcapabilities.Value {
+	return s.cap
+}
+
+// Set implements the tenantcapabilities.Capability interface.
+func (s spanConfigBoundsCap) Set(val interface{}) {
+	scfgBoundsVal, ok := val.(SpanConfigBounds)
+	if !ok {
+		panic(errors.AssertionFailedf("invalid value type: %T", val))
+	}
+	*s.cap = scfgBoundsVal
+}
+
 // Cap implements the tenantcapabilities.TenantCapabilities interface.
 func (t *TenantCapabilities) Cap(
 	capabilityID tenantcapabilities.CapabilityID,
@@ -92,6 +118,8 @@ func (t *TenantCapabilities) Cap(
 		return boolCap{&t.CanViewTSDBMetrics}
 	case tenantcapabilities.ExemptFromRateLimiting:
 		return boolCap{&t.ExemptFromRateLimiting}
+	case tenantcapabilities.TenantSpanConfigBounds:
+		return spanConfigBoundsCap{t.SpanConfigBounds}
 
 	default:
 		panic(errors.AssertionFailedf("unknown capability: %q", capabilityID.String()))

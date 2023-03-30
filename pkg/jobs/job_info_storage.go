@@ -66,7 +66,7 @@ func (i InfoStorage) checkClaimSession(ctx context.Context) error {
 	return nil
 }
 
-func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, error) {
+func (i InfoStorage) get(ctx context.Context, infoKey string) ([]byte, bool, error) {
 	if i.txn == nil {
 		return nil, false, errors.New("cannot access the job info table without an associated txn")
 	}
@@ -82,7 +82,7 @@ func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 	row, err := i.txn.QueryRowEx(
 		ctx, "job-info-get", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 ORDER BY written LIMIT 1",
+		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = $2 ORDER BY written LIMIT 1",
 		j.ID(), infoKey,
 	)
 
@@ -102,13 +102,13 @@ func (i InfoStorage) get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 	return []byte(*value), true, nil
 }
 
-func (i InfoStorage) write(ctx context.Context, infoKey, value []byte) error {
+func (i InfoStorage) write(ctx context.Context, infoKey string, value []byte) error {
 	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
 		// First clear out any older revisions of this info.
 		_, err := txn.ExecEx(
 			ctx, "write-job-info-delete", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
-			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
+			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key::string = $2",
 			j.ID(), infoKey,
 		)
 		if err != nil {
@@ -156,8 +156,8 @@ func (i InfoStorage) doWrite(
 func (i InfoStorage) iterate(
 	ctx context.Context,
 	iterMode iterateMode,
-	infoPrefix []byte,
-	fn func(infoKey, value []byte) error,
+	infoPrefix string,
+	fn func(infoKey string, value []byte) error,
 ) (retErr error) {
 	if i.txn == nil {
 		return errors.New("cannot iterate over the job info table without an associated txn")
@@ -184,14 +184,14 @@ func (i InfoStorage) iterate(
 		FROM system.job_info
 		WHERE job_id = $1 AND info_key >= $2 AND info_key < $3
 		`+iterConfig,
-		i.j.ID(), infoPrefix, roachpb.Key(infoPrefix).PrefixEnd(),
+		i.j.ID(), infoPrefix, string(roachpb.Key(infoPrefix).PrefixEnd()),
 	)
 	if err != nil {
 		return err
 	}
 	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(rows)
 
-	var prevKey []byte
+	var prevKey string
 	var ok bool
 	for ok, err = rows.Next(ctx); ok; ok, err = rows.Next(ctx) {
 		if err != nil {
@@ -199,16 +199,16 @@ func (i InfoStorage) iterate(
 		}
 		row := rows.Cur()
 
-		key, ok := row[0].(*tree.DBytes)
+		key, ok := row[0].(*tree.DString)
 		if !ok {
-			return errors.AssertionFailedf("job info: expected info_key to be DBytes (was %T)", row[0])
+			return errors.AssertionFailedf("job info: expected info_key to be string (was %T)", row[0])
 		}
-		infoKey := []byte(*key)
+		infoKey := string(*key)
 
-		if bytes.Equal(infoKey, prevKey) {
+		if infoKey == prevKey {
 			continue
 		}
-		prevKey = append(prevKey[:0], infoKey...)
+		prevKey = infoKey
 
 		value, ok := row[1].(*tree.DBytes)
 		if !ok {
@@ -223,7 +223,7 @@ func (i InfoStorage) iterate(
 }
 
 // Get fetches the latest info record for the given job and infoKey.
-func (i InfoStorage) Get(ctx context.Context, infoKey []byte) ([]byte, bool, error) {
+func (i InfoStorage) Get(ctx context.Context, infoKey string) ([]byte, bool, error) {
 	return i.get(ctx, infoKey)
 }
 
@@ -231,21 +231,21 @@ func (i InfoStorage) Get(ctx context.Context, infoKey []byte) ([]byte, bool, err
 // infoKey after removing any existing info records for that job and infoKey
 // using the same transaction, effectively replacing any older row with a row
 // with the new value.
-func (i InfoStorage) Write(ctx context.Context, infoKey, value []byte) error {
+func (i InfoStorage) Write(ctx context.Context, infoKey string, value []byte) error {
 	if value == nil {
-		return errors.AssertionFailedf("missing value (infoKey %q)", string(infoKey))
+		return errors.AssertionFailedf("missing value (infoKey %q)", infoKey)
 	}
 	return i.write(ctx, infoKey, value)
 }
 
 // Delete removes the info record for the provided infoKey.
-func (i InfoStorage) Delete(ctx context.Context, infoKey []byte) error {
+func (i InfoStorage) Delete(ctx context.Context, infoKey string) error {
 	return i.write(ctx, infoKey, nil /* value */)
 }
 
 // DeleteRange removes the info records between the provided
 // start key (inclusive) and end key (exclusive).
-func (i InfoStorage) DeleteRange(ctx context.Context, startInfoKey, endInfoKey []byte) error {
+func (i InfoStorage) DeleteRange(ctx context.Context, startInfoKey, endInfoKey string) error {
 	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
 		_, err := txn.ExecEx(
 			ctx, "write-job-info-delete", txn.KV(),
@@ -259,7 +259,7 @@ func (i InfoStorage) DeleteRange(ctx context.Context, startInfoKey, endInfoKey [
 
 // Iterate iterates though the info records for a given job and info key prefix.
 func (i InfoStorage) Iterate(
-	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
+	ctx context.Context, infoPrefix string, fn func(infoKey string, value []byte) error,
 ) (retErr error) {
 	return i.iterate(ctx, iterateAll, infoPrefix, fn)
 }
@@ -267,7 +267,7 @@ func (i InfoStorage) Iterate(
 // GetLast calls fn on the last info record whose key matches the
 // given prefix.
 func (i InfoStorage) GetLast(
-	ctx context.Context, infoPrefix []byte, fn func(infoKey, value []byte) error,
+	ctx context.Context, infoPrefix string, fn func(infoKey string, value []byte) error,
 ) (retErr error) {
 	return i.iterate(ctx, getLast, infoPrefix, fn)
 }
@@ -286,32 +286,32 @@ const (
 
 // GetLegacyPayloadKey returns the info_key whose value is the jobspb.Payload of
 // the job.
-func GetLegacyPayloadKey() []byte {
-	return []byte(legacyPayloadKey)
+func GetLegacyPayloadKey() string {
+	return legacyPayloadKey
 }
 
 // GetLegacyProgressKey returns the info_key whose value is the jobspb.Progress
 // of the job.
-func GetLegacyProgressKey() []byte {
-	return []byte(legacyProgressKey)
+func GetLegacyProgressKey() string {
+	return legacyProgressKey
 }
 
 // GetLegacyPayload returns the job's Payload from the system.jobs_info table.
 func (i InfoStorage) GetLegacyPayload(ctx context.Context) ([]byte, bool, error) {
-	return i.Get(ctx, []byte(legacyPayloadKey))
+	return i.Get(ctx, legacyPayloadKey)
 }
 
 // WriteLegacyPayload writes the job's Payload to the system.jobs_info table.
 func (i InfoStorage) WriteLegacyPayload(ctx context.Context, payload []byte) error {
-	return i.Write(ctx, []byte(legacyPayloadKey), payload)
+	return i.Write(ctx, legacyPayloadKey, payload)
 }
 
 // GetLegacyProgress returns the job's Progress from the system.jobs_info table.
 func (i InfoStorage) GetLegacyProgress(ctx context.Context) ([]byte, bool, error) {
-	return i.Get(ctx, []byte(legacyProgressKey))
+	return i.Get(ctx, legacyProgressKey)
 }
 
 // WriteLegacyProgress writes the job's Progress to the system.jobs_info table.
 func (i InfoStorage) WriteLegacyProgress(ctx context.Context, progress []byte) error {
-	return i.Write(ctx, []byte(legacyProgressKey), progress)
+	return i.Write(ctx, legacyProgressKey, progress)
 }

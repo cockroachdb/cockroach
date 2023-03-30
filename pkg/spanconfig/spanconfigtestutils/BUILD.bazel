@@ -11,10 +11,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/sql/catalog/descpb",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
