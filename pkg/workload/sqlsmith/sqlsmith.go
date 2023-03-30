@@ -81,13 +81,16 @@ func (g *sqlSmith) Tables() []workload.Table {
 	var tables []workload.Table
 	for idx := 0; idx < g.tables; idx++ {
 		schema := randgen.RandCreateTable(rng, "table", idx, false /* isMultiRegion */)
+		// workload expects the schema to be missing the 'CREATE TABLE "name"', so
+		// we only want to format the schema, not the whole statement.
+		fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
+		schema.FormatBody(fmtCtx)
+		schemaSQL := fmtCtx.CloseAndGetString()
+
 		table := workload.Table{
 			Name:   string(schema.Table.ObjectName),
-			Schema: tree.Serialize(schema),
+			Schema: schemaSQL,
 		}
-		// workload expects the schema to be missing the CREATE TABLE "name", so
-		// drop everything before the first `(`.
-		table.Schema = table.Schema[strings.Index(table.Schema, `(`):]
 		tables = append(tables, table)
 	}
 	return tables
