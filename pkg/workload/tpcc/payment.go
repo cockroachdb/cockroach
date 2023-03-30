@@ -16,12 +16,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 	"golang.org/x/exp/rand"
 )
 
@@ -142,7 +142,7 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 	)
 
-	if err := p.sr.Init(ctx, "payment", mcp); err != nil {
+	if err := p.sr.Init(ctx, "payment", mcp, config.connFlags); err != nil {
 		return nil, err
 	}
 
