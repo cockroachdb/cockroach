@@ -1,0 +1,78 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+# Verify that all nodes are running 22.2 binaries.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+upgrade 1
+
+# Test that there are no problems reading from insights tables in mixed version state.
+
+# Insert some insights into nodes of both versions.
+
+user root nodeidx=1
+
+query B
+select pg_sleep(1)
+----
+true
+
+user root nodeidx=0
+
+query B
+select pg_sleep(1)
+----
+true
+
+
+# Sleep to ensure our queries above are written to the insights system.
+sleep 3s
+
+
+# Verify we have insights in each node.
+
+user root nodeidx=0
+
+
+query B
+SELECT count(*) > 0 FROM crdb_internal.node_execution_insights
+----
+true
+
+
+user root nodeidx=1
+
+query B
+SELECT count(*) > 0 FROM crdb_internal.node_execution_insights
+----
+true
+
+user root nodeidx=0
+
+# Verify issuing insights cluster-wide fanout from 22.2 causes no problems.
+query B
+SELECT count(*) > 0 FROM crdb_internal.cluster_execution_insights
+----
+true
+
+
+user root nodeidx=1
+
+# Verify issuing insights cluster-wide fanout from 23.1 causes no problems.
+query B
+SELECT count(*) > 0 FROM crdb_internal.cluster_execution_insights
+----
+true

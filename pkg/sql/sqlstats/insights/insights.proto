@@ -135,7 +135,14 @@ message Insight {
   Session session = 1 [(gogoproto.nullable) = false];
   Transaction transaction = 2;
   repeated Statement statements = 6;
-  reserved 3;
-  reserved 4;
-  reserved 5;
+
+  // This field is deprecated, but we have to keep it around for 22.2
+  // backwards compatibility. 22.2 actually expects this as non-null
+  // when generating the exec insights virtual table. Removing this will
+  // cause a nil pointer deref on versions <= 22.2.6.
+  // TODO: Move these fields to 'reserved' at 23.2.
+  Statement statement = 3;
+
+  reserved  4; // Previously problem.
+  reserved 5; // Previously causes.
 }
