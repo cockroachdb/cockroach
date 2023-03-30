@@ -22,7 +22,7 @@ import {
   TransactionDetailsLink,
 } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 interface InsightDetailsTableProps {
   data: ContentionEvent[];

@@ -22,7 +22,7 @@ import { DATE_FORMAT_24_TZ } from "src/util/format";
 
 import styles from "../schedules.module.scss";
 import classNames from "classnames/bind";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 const cx = classNames.bind(styles);
 
 class SchedulesSortedTable extends SortedTable<Schedule> {}

@@ -53,13 +53,14 @@ import { Search as IndexIcon } from "@cockroachlabs/icons";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
 import { performanceTuningRecipes } from "src/util/docs";
-import {CockroachCloudContext, Timestamp} from "../contexts";
+import {CockroachCloudContext} from "../contexts";
 import IdxRecAction from "../insights/indexActionBtn";
 import { RecommendationType } from "../indexDetailsPage";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { UIConfigState } from "../store";
 import { QuoteIdentifier } from "../api/safesql";
+import {Timestamp} from "../timestamp";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);

@@ -87,8 +87,9 @@ import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
-import {CockroachCloudContext, Timestamp} from "../contexts";
+import {CockroachCloudContext} from "../contexts";
 import {TimeScaleToString} from "../timeScaleDropdown/timeScaleToString";
+import {Timestamp} from "../timestamp";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;

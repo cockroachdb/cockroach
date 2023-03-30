@@ -37,7 +37,7 @@ import {
 } from "../types";
 
 import classNames from "classnames/bind";
-import {CockroachCloudContext, Timestamp} from "../../contexts";
+import {CockroachCloudContext} from "../../contexts";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
@@ -48,6 +48,7 @@ import { Loading } from "src/loading";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import { InsightsError } from "../insightsErrorComponent";
+import {Timestamp} from "../../timestamp";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);

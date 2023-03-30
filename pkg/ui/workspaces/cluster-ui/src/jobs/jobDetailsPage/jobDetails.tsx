@@ -37,7 +37,7 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import jobStyles from "src/jobs/jobs.module.scss";
 
 import classNames from "classnames/bind";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const jobCx = classNames.bind(jobStyles);

@@ -33,7 +33,7 @@ import { JobDescriptionCell } from "./jobDescriptionCell";
 
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 const cx = classNames.bind(styles);
 
 type Job = cockroach.server.serverpb.IJobResponse;

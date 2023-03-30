@@ -39,7 +39,7 @@ import { commonStyles } from "src/common";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

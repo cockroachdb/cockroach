@@ -21,7 +21,7 @@ import {
 } from "src/util/format";
 import { StmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
-import {CockroachCloudContext, Timestamp} from "../../contexts";
+import {CockroachCloudContext} from "../../contexts";
 
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
@@ -39,6 +39,7 @@ import { ContentionStatementDetailsTable } from "./insightDetailsTables";
 import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
 import { Heading } from "@cockroachlabs/ui-components";
 import { SortSetting } from "../../sortedtable";
+import {Timestamp} from "../../timestamp";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);

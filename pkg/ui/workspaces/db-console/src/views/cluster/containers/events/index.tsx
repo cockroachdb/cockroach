@@ -32,6 +32,7 @@ import {
   util,
   api as clusterUiApi,
   TimezoneContext,
+  WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import "./events.styl";
@@ -77,7 +78,7 @@ export function getEventInfo(
 
 export const EventRow = (props: EventRowProps) => {
   const { event } = props;
-  const timezone = useContext(TimezoneContext);
+  const timezone = useContext(TimezoneContext) as string;
   const e = getEventInfo(event, timezone);
   return (
     <tr>
@@ -144,6 +145,7 @@ export interface EventPageProps {
   setSort: typeof eventsSortSetting.set;
   lastError: Error;
   maxSizeApiReached: boolean;
+  timezone: string;
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
@@ -159,7 +161,9 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 
   renderContent() {
     const { events, sortSetting, maxSizeApiReached } = this.props;
-    const simplifiedEvents = _.map(events, getEventInfo);
+    const simplifiedEvents = _.map(events, (event) => {
+      return getEventInfo(event, this.props.timezone);
+    });
 
     return (
       <>
@@ -250,7 +254,7 @@ const eventPageConnected = withRouter(
       refreshEvents,
       setSort: eventsSortSetting.set,
     },
-  )(EventPageUnconnected),
+  )(WithTimezone<EventPageProps>(EventPageUnconnected)),
 );
 
 export { eventBoxConnected as EventBox };

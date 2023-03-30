@@ -15,7 +15,7 @@ import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
 import { capitalize, DATE_FORMAT_24_TZ, Duration } from "src/util";
 import { StatusIcon } from "./statusIcon";
-import {Timestamp} from "../contexts";
+import {Timestamp} from "../timestamp";
 
 export type ExecutionsColumn =
   | "applicationName"

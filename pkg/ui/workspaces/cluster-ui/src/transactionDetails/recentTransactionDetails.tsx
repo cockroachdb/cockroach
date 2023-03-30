@@ -33,7 +33,7 @@ import { executionIdAttr, DATE_FORMAT_24_TZ } from "src/util";
 import styles from "../statementDetails/statementDetails.module.scss";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { capitalize, Duration } from "../util/format";
-import {Timestamp} from "../contexts";
+import {Timestamp} from "../timestamp";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 

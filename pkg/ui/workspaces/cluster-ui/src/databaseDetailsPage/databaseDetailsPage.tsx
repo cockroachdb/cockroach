@@ -51,7 +51,7 @@ import {
 } from "src/queryFilter";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
-import {Timestamp, Timezone} from "../contexts";
+import {Timestamp, Timezone} from "../timestamp";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

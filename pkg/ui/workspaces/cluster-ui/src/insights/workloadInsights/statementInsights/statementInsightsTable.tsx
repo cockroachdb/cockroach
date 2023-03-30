@@ -38,7 +38,7 @@ import classNames from "classnames/bind";
 import styles from "../util/workloadInsights.module.scss";
 import { TimeScale } from "../../../timeScaleDropdown";
 import { Badge } from "src/badge";
-import {Timestamp} from "../../../contexts";
+import {Timestamp} from "../../../timestamp";
 
 const cx = classNames.bind(styles);
 

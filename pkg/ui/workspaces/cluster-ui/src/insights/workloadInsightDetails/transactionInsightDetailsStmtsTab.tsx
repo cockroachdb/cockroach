@@ -20,7 +20,7 @@ import {
 } from "src/util";
 import { Loading } from "src/loading";
 import { InsightsError } from "../insightsErrorComponent";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   {

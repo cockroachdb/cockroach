@@ -44,7 +44,7 @@ import {
   statisticsTableTitles,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
-import {Timestamp} from "../contexts";
+import {Timestamp} from "../timestamp";
 
 const cx = classNames.bind(styles);
 

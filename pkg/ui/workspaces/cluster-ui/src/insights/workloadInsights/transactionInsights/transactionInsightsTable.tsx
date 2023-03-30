@@ -30,7 +30,7 @@ import {
 import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
 import { Badge } from "src/badge";
-import {Timestamp} from "../../../contexts";
+import {Timestamp} from "../../../timestamp";
 
 function txnStatusToString(status: TransactionStatus) {
   switch (status) {

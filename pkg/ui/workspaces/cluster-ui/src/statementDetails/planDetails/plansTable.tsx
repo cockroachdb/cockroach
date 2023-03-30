@@ -31,7 +31,7 @@ import { Anchor } from "../../anchor";
 import classNames from "classnames/bind";
 import styles from "./plansTable.module.scss";
 import { Link } from "react-router-dom";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;

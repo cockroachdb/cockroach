@@ -28,7 +28,7 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 import styles from "./statementDetails.module.scss";
-import {Timestamp} from "../contexts";
+import {Timestamp} from "../timestamp";
 const cx = classNames.bind(styles);
 
 type Props = {

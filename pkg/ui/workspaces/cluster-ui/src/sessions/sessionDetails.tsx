@@ -56,7 +56,7 @@ import { commonStyles } from "src/common";
 import { CircleFilled } from "../icon";
 import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
 import moment from "moment-timezone";
-import {Timestamp} from "../contexts";
+import {Timestamp} from "../timestamp";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);

@@ -52,7 +52,7 @@ type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
-import {Timestamp} from "../contexts";
+import {Timestamp} from "../timestamp";
 const cx = classNames.bind(styles);
 
 export interface AggregateStatistics {

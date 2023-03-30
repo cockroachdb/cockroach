@@ -28,7 +28,7 @@ import {
 } from "../../insightsTable/insightsTable";
 import classNames from "classnames/bind";
 import styles from "../statementDetails.module.scss";
-import {CockroachCloudContext, Timestamp} from "../../contexts";
+import {CockroachCloudContext} from "../../contexts";
 import { InsightRecommendation, InsightType } from "../../insights";
 import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 import {
@@ -41,6 +41,7 @@ import {
   TimestampToMoment,
 } from "../../util";
 import { formatIndexes } from "./plansTable";
+import {Timestamp} from "../../timestamp";
 
 const cx = classNames.bind(styles);
 

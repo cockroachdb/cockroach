@@ -16,7 +16,7 @@ import { StatusIcon } from "../statusIcon";
 import { executionsTableTitles } from "../execTableCommon";
 import { DATE_FORMAT_24_TZ, Duration, limitText } from "../../util";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 const getID = (item: ContendedExecution, execType: ExecutionType) =>
   execType === "transaction"

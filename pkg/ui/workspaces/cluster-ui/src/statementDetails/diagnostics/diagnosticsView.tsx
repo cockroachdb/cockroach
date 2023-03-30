@@ -31,7 +31,7 @@ import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath, StatementDiagnosticsReport } from "../../api";
 import { DATE_FORMAT_24_TZ } from "../../util";
-import {Timestamp} from "../../contexts";
+import {Timestamp} from "../../timestamp";
 
 export interface DiagnosticsViewStateProps {
   hasData: boolean;
