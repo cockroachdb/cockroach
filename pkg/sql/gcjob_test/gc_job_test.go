@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -771,3 +772,70 @@ func (f *fakeSystemConfigProvider) numCalls() int {
 }
 
 var _ config.SystemConfigProvider = (*fakeSystemConfigProvider)(nil)
+
+func TestLegacyIndexGCSucceedsWithMissingDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `CREATE TABLE t(a INT)`)
+	tDB.Exec(t, `INSERT INTO t VALUES (1), (2)`)
+	tDB.Exec(t, `TRUNCATE TABLE t`)
+
+	var truncateJobID string
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT job_id, status, running_status FROM [SHOW JOBS] WHERE description = 'GC for TRUNCATE TABLE defaultdb.public.t'`)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][1] != "running" {
+			return errors.New("job not running yet")
+		}
+		if rslt[0][2] != "waiting for GC TTL" {
+			return errors.New("not waiting for gc yet")
+		}
+		truncateJobID = rslt[0][0]
+		return nil
+	})
+
+	tDB.Exec(t, `PAUSE JOB `+truncateJobID)
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = `+truncateJobID)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][0] != "paused" {
+			return errors.New("job not paused yet")
+		}
+		return nil
+	})
+
+	tDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;`)
+	tDB.Exec(t, `DROP TABLE t`)
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE description = 'GC for DROP TABLE defaultdb.public.t'`)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][0] != "succeeded" {
+			return errors.New("job not running yet")
+		}
+		return nil
+	})
+
+	tDB.Exec(t, `RESUME JOB `+truncateJobID)
+	testutils.SucceedsSoon(t, func() error {
+		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = `+truncateJobID)
+		if len(rslt) != 1 {
+			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
+		}
+		if rslt[0][0] != "succeeded" {
+			return errors.New("job not running")
+		}
+		return nil
+	})
+}
