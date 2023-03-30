@@ -5175,6 +5175,7 @@ WHERE
       'distsql_workmem',
       'copy_fast_path_enabled',
       'direct_columnar_scans_enabled'
+      'multiple_active_portals_enabled'
     );
 ----
 variable                                              value
@@ -5207,6 +5208,7 @@ default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
 default_with_oids                                     off
 descriptor_validation                                 on
+direct_columnar_scans_enabled                         on
 disable_drop_tenant                                   off
 disable_hoist_projection_in_join_limitation           off
 disable_partially_distributed_plans                   off
@@ -5265,6 +5267,7 @@ lock_timeout                                          0
 log_timezone                                          UTC
 max_identifier_length                                 128
 max_index_keys                                        32
+multiple_active_portals_enabled                       off
 node_id                                               1
 null_ordered_last                                     off
 on_update_rehome_row_enabled                          on
