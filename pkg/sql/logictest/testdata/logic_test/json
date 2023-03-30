@@ -1382,12 +1382,12 @@ INSERT INTO t VALUES
 query T
 SELECT x FROM t ORDER BY x;
 ----
+[]
 null
 "crdb"
 1
 false
 true
-[]
 [null]
 [1]
 [{"a": "b"}]
@@ -1430,12 +1430,12 @@ SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
 query T
 SELECT x FROM t GROUP BY x ORDER BY x;
 ----
+[]
 null
 "crdb"
 1
 false
 true
-[]
 [null]
 [1]
 [{"a": "b"}]

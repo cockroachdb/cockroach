@@ -1978,7 +1978,7 @@ func (j jsonTrue) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte
 }
 
 func (j jsonArray) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
-	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir)
+	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir, int64(len(j)))
 	buf = encoding.EncodeJSONValueLength(buf, dir, int64(len(j)))
 
 	var err error
