@@ -39,8 +39,14 @@ func (i *immediateVisitor) UpdateUserPrivileges(
 	privs := desc.GetPrivileges()
 	user := username.SQLUsernameProto(op.Privileges.UserName).Decode()
 	privs.RemoveUser(user)
-	privList := privilege.ListFromBitField(op.Privileges.Privileges, desc.GetObjectType())
-	grantList := privilege.ListFromBitField(op.Privileges.WithGrantOption, desc.GetObjectType())
+	privList, err := privilege.ListFromBitField(op.Privileges.Privileges, desc.GetObjectType())
+	if err != nil {
+		return err
+	}
+	grantList, err := privilege.ListFromBitField(op.Privileges.WithGrantOption, desc.GetObjectType())
+	if err != nil {
+		return err
+	}
 	for _, priv := range privList {
 		privs.Grant(
 			user,

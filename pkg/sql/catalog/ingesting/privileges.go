@@ -163,9 +163,12 @@ func getIngestingPrivilegesForTableOrSchema(
 			return nil, errors.Newf("unexpected privilege type %T", privilegeType)
 		}
 
-		updatedPrivileges = catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		updatedPrivileges, err = catprivilege.CreatePrivilegesFromDefaultPrivileges(
 			dbDefaultPrivileges, schemaDefaultPrivileges, parentDB.GetID(), user, targetObject,
 		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return updatedPrivileges, nil
 }
