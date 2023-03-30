@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -405,6 +407,12 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// Step can dramatically reduce the number of messages required to commit
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
+	defer func() {
+		for i := range buf {
+			buf[i] = nil
+		}
+	}()
+
 	ents := make([]raftpb.Entry, 0, used)
 
 	// Compute the closed timestamp target, which will be used to assign a closed
@@ -421,7 +429,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			log.Fatalf(ctx, "unexpected nil proposal in buffer")
 			return 0, nil // unreachable, for linter
 		}
-		buf[i] = nil // clear buffer
 		reproposal := !p.tok.stillTracked()
 
 		// Conditionally reject the proposal based on the state of the raft group.
@@ -490,7 +497,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			if err := proposeBatch(raftGroup, b.p.getReplicaID(), ents); err != nil {
+			var ps []*ProposalData
+			if i > 0 {
+				ps = buf[i-1-len(ents) : len(ents)]
+			}
+			if err := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, ps); err != nil {
 				firstErr = err
 				continue
 			}
@@ -515,11 +526,28 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			if err := raftGroup.ProposeConfChange(
 				cc,
 			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
+				droppedErr := err
+				_, entBytes, err := raftpb.MarshalConfChange(cc)
+				if err != nil {
+					firstErr = errors.WithSecondaryError(droppedErr, err)
+					continue
+				}
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.
 				// https://github.com/cockroachdb/cockroach/issues/21849
-				firstErr = err
+				//
+				// TODO(tbg): the above comment seems incorrect - we're not
+				// silently ignoring the error here. I think we are at the
+				// caller; maybe? Look into this.
+				//
+				// TODO(during review): why does this lint fire on the line below:
+				// `this value of firstErr is never used (SA4006)`
+				firstErr = droppedErr
+				_ = firstErr // HACK
+				if err := maybeLogErrProposalDropped(ctx, []raftpb.Entry{{Data: entBytes}}, buf[i:i+1]); err != nil {
+					firstErr = errors.CombineErrors(firstErr, err)
+				}
 				continue
 			}
 		} else {
@@ -540,7 +568,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	if firstErr != nil {
 		return 0, firstErr
 	}
-	return used, proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+	return used, proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, buf[len(buf)-len(ents):])
 }
 
 // maybeRejectUnsafeProposalLocked conditionally rejects proposals that are
@@ -899,7 +927,35 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
-func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
+var everyErrProposalDropped = log.Every(time.Second)
+
+func maybeLogErrProposalDropped(
+	ctx context.Context, ents []raftpb.Entry, props []*ProposalData,
+) error {
+	var bytes int
+	if len(ents) != len(props) {
+		return errors.AssertionFailedf("have %d ents but %d proposals", len(ents), len(props))
+	}
+	for i := range ents {
+		bytes += ents[i].Size()
+		p := props[i]
+		if props[i].ctx != nil {
+			log.Eventf(p.ctx, "proposal dropped")
+		}
+	}
+	if everyErrProposalDropped.ShouldLog() {
+		log.Infof(ctx, "dropped %d proposals (%s)", len(ents), humanizeutil.IBytes(int64(bytes)))
+	}
+	return nil
+}
+
+func proposeBatch(
+	ctx context.Context,
+	raftGroup proposerRaft,
+	replID roachpb.ReplicaID,
+	ents []raftpb.Entry,
+	props []*ProposalData, // must line up with `ents`
+) error {
 	if len(ents) == 0 {
 		return nil
 	}
@@ -912,7 +968,7 @@ func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftp
 		// ignored prior to the introduction of ErrProposalDropped).
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
-		return nil
+		return maybeLogErrProposalDropped(ctx, ents, props)
 	} else if err != nil {
 		return err
 	}
