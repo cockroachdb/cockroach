@@ -47,6 +47,8 @@ func keyVisualizerTablesMigration(
 		}
 	}
 
+	// These migrations are skipped for backup tests because these tables are not part
+	// of the backup.
 	shouldBootstrapJob := true
 	shouldConfigureTTL := true
 

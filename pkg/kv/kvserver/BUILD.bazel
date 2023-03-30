@@ -415,6 +415,7 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
