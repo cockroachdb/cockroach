@@ -1372,6 +1372,8 @@ func (ef *execFactory) ConstructInsert(
 		},
 	}
 
+	ins.run.setupEnforceHomeRegion(ef.planner, table, cols)
+
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
 		returnCols := makeColList(table, returnColOrdSet)
@@ -1442,6 +1444,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 			},
 		},
 	}
+
+	ins.run.setupEnforceHomeRegion(ef.planner, table, cols)
 
 	if len(fkChecks) > 0 {
 		ins.run.fkChecks = make([]insertFastPathFKCheck, len(fkChecks))
@@ -1557,6 +1561,8 @@ func (ef *execFactory) ConstructUpdate(
 			numPassthrough: len(passthrough),
 		},
 	}
+
+	upd.run.setupEnforceHomeRegion(ef.planner, table, ru.UpdateCols)
 
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {

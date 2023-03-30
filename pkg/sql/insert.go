@@ -16,9 +16,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/errors"
 )
 
 var insertNodePool = sync.Pool{
@@ -82,6 +88,14 @@ type insertRun struct {
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
+
+	// regionMustBeLocalColID indicates the id of the column which must insert a
+	// home region matching the gateway region in a REGIONAL BY ROW table.
+	regionMustBeLocalColID descpb.ColumnID
+
+	// gatewayRegion is the string representation of the gateway region when
+	// regionMustBeLocalColID is non-zero.
+	gatewayRegion string
 }
 
 func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
@@ -120,6 +134,24 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 	}
 }
 
+// setupEnforceHomeRegion sets regionMustBeLocalColID and the gatewayRegion
+// name if we're enforcing a home region for this insert run.
+func (r *insertRun) setupEnforceHomeRegion(p *planner, table cat.Table, cols []catalog.Column) {
+	if p.EnforceHomeRegion() {
+		if gatewayRegion, ok := p.EvalContext().Locality.Find("region"); ok {
+			if homeRegionColName, ok := table.HomeRegionColName(); ok {
+				for _, col := range cols {
+					if col.ColName() == tree.Name(homeRegionColName) {
+						r.regionMustBeLocalColID = col.GetID()
+						r.gatewayRegion = gatewayRegion
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
@@ -154,6 +186,27 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 			return err
 		}
 		rowVals = rowVals[:len(r.insertCols)]
+	}
+
+	// Error out the insert if the enforce_home_region session setting is on and
+	// the row's locality doesn't match the gateway region.
+	if r.regionMustBeLocalColID != 0 {
+		if regionColIdx, ok := r.ti.ri.InsertColIDtoRowIndex.Get(r.regionMustBeLocalColID); ok {
+			if regionEnum, regionColIsEnum := rowVals[regionColIdx].(*tree.DEnum); regionColIsEnum {
+				if regionEnum.LogicalRep != r.gatewayRegion {
+					return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+						`INSERT has no home region. Try running the INSERT from region '%s'. %s`,
+						regionEnum.LogicalRep,
+						sqlerrors.EnforceHomeRegionFurtherInfo,
+					)
+				}
+			} else {
+				return errors.AssertionFailedf(
+					`expected REGIONAL BY ROW AS column id %d to be an enum but found: %v`,
+					r.regionMustBeLocalColID, rowVals[regionColIdx].ResolvedType(),
+				)
+			}
+		}
 	}
 
 	// Queue the insert in the KV batch.

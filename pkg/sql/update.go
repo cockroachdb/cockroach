@@ -16,7 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -119,6 +123,32 @@ type updateRun struct {
 	// columns of the target table being returned, that we must pass through
 	// from the input node.
 	numPassthrough int
+
+	// regionMustBeLocalColID indicates the id of the column which must insert a
+	// home region matching the gateway region in a REGIONAL BY ROW table.
+	regionMustBeLocalColID descpb.ColumnID
+
+	// gatewayRegion is the string representation of the gateway region when
+	// regionMustBeLocalColID is non-zero.
+	gatewayRegion string
+}
+
+// setupEnforceHomeRegion sets regionMustBeLocalColID and the gatewayRegion
+// name if we're enforcing a home region for this update run.
+func (r *updateRun) setupEnforceHomeRegion(p *planner, table cat.Table, cols []catalog.Column) {
+	if p.EnforceHomeRegion() {
+		if gatewayRegion, ok := p.EvalContext().Locality.Find("region"); ok {
+			if homeRegionColName, ok := table.HomeRegionColName(); ok {
+				for _, col := range cols {
+					if col.ColName() == tree.Name(homeRegionColName) {
+						r.regionMustBeLocalColID = col.GetID()
+						r.gatewayRegion = gatewayRegion
+						break
+					}
+				}
+			}
+		}
+	}
 }
 
 func (u *updateNode) startExec(params runParams) error {
@@ -307,6 +337,27 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {
 			return err
+		}
+	}
+
+	// Error out the update if the enforce_home_region session setting is on and
+	// the row's locality doesn't match the gateway region.
+	if u.run.regionMustBeLocalColID != 0 {
+		if regionColIdx, ok := u.run.tu.ru.UpdateColIDtoRowIndex.Get(u.run.regionMustBeLocalColID); ok {
+			if regionEnum, regionColIsEnum := u.run.updateValues[regionColIdx].(*tree.DEnum); regionColIsEnum {
+				if regionEnum.LogicalRep != u.run.gatewayRegion {
+					return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+						`UPDATE has no home region. Try running the UPDATE from region '%s'. %s`,
+						regionEnum.LogicalRep,
+						sqlerrors.EnforceHomeRegionFurtherInfo,
+					)
+				}
+			} else {
+				return errors.AssertionFailedf(
+					`expected REGIONAL BY ROW AS column id %d to be an enum but found: %v`,
+					u.run.regionMustBeLocalColID, u.run.updateValues[regionColIdx].ResolvedType(),
+				)
+			}
 		}
 	}
 
