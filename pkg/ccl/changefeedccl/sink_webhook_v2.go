@@ -54,6 +54,7 @@ type webhookSinkClient struct {
 }
 
 var _ SinkClient = (*webhookSinkClient)(nil)
+var _ SinkPayload = (*http.Request)(nil)
 
 func makeWebhookSinkClient(
 	ctx context.Context,
@@ -264,14 +265,14 @@ type webhookCSVBuffer struct {
 var _ BatchBuffer = (*webhookCSVBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (cb *webhookCSVBuffer) Append(key []byte, value []byte, topic string) {
+func (cb *webhookCSVBuffer) Append(key []byte, value []byte) {
 	cb.bytes = append(cb.bytes, value...)
 	cb.messageCount += 1
 }
 
 // ShouldFlush implements the BatchBuffer interface
 func (cb *webhookCSVBuffer) ShouldFlush() bool {
-	return cb.sc.shouldFlush(len(cb.bytes), cb.messageCount)
+	return shouldFlushBatch(len(cb.bytes), cb.messageCount, cb.sc.batchCfg)
 }
 
 // Close implements the BatchBuffer interface
@@ -288,14 +289,14 @@ type webhookJSONBuffer struct {
 var _ BatchBuffer = (*webhookJSONBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (jb *webhookJSONBuffer) Append(key []byte, value []byte, topic string) {
+func (jb *webhookJSONBuffer) Append(key []byte, value []byte) {
 	jb.messages = append(jb.messages, value)
 	jb.numBytes += len(value)
 }
 
 // ShouldFlush implements the BatchBuffer interface
 func (jb *webhookJSONBuffer) ShouldFlush() bool {
-	return jb.sc.shouldFlush(jb.numBytes, len(jb.messages))
+	return shouldFlushBatch(jb.numBytes, len(jb.messages), jb.sc.batchCfg)
 }
 
 // Close implements the BatchBuffer interface
@@ -319,7 +320,7 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 }
 
 // MakeBatchBuffer implements the SinkClient interface
-func (sc *webhookSinkClient) MakeBatchBuffer() BatchBuffer {
+func (sc *webhookSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	if sc.format == changefeedbase.OptFormatCSV {
 		return &webhookCSVBuffer{sc: sc}
 	} else {
@@ -327,22 +328,6 @@ func (sc *webhookSinkClient) MakeBatchBuffer() BatchBuffer {
 			sc:       sc,
 			messages: make([][]byte, 0, sc.batchCfg.Messages),
 		}
-	}
-}
-
-func (sc *webhookSinkClient) shouldFlush(bytes int, messages int) bool {
-	switch {
-	// all zero values is interpreted as flush every time
-	case sc.batchCfg.Messages == 0 && sc.batchCfg.Bytes == 0 && sc.batchCfg.Frequency == 0:
-		return true
-	// messages threshold has been reached
-	case sc.batchCfg.Messages > 0 && messages >= sc.batchCfg.Messages:
-		return true
-	// bytes threshold has been reached
-	case sc.batchCfg.Bytes > 0 && bytes >= sc.batchCfg.Bytes:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -356,7 +341,7 @@ func makeWebhookSink(
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
-	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig)
+	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
 	if err != nil {
 		return nil, err
 	}

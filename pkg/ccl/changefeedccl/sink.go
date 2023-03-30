@@ -156,14 +156,24 @@ func getAndDialSink(
 	return sink, sink.Dial()
 }
 
-// NewWebhookSinkEnabled determines whether or not the refactored Webhook sink
+// WebhookV2Enabled determines whether or not the refactored Webhook sink
 // or the deprecated sink should be used.
-var NewWebhookSinkEnabled = settings.RegisterBoolSetting(
+var WebhookV2Enabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
 	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+)
+
+// PubsubV2Enabled determines whether or not the refactored Webhook sink
+// or the deprecated sink should be used.
+var PubsubV2Enabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.new_pubsub_sink_enabled",
+	"if enabled, this setting enables a new implementation of the pubsub sink"+
+		" that allows for a higher throughput",
+	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink_enabled", false),
 )
 
 func getSink(
@@ -227,7 +237,7 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
-			if NewWebhookSinkEnabled.Get(&serverCfg.Settings.SV) {
+			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
@@ -239,8 +249,16 @@ func getSink(
 				})
 			}
 		case isPubsubSink(u):
-			// TODO: add metrics to pubsubsink
-			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered))
+			var testingKnobs *TestingKnobs
+			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+				testingKnobs = knobs
+			}
+			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
+				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered),
+					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
+			} else {
+				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
+			}
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				// Placeholder id for canary sink
@@ -737,11 +755,11 @@ func defaultRetryConfig() retry.Options {
 }
 
 func getSinkConfigFromJson(
-	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	jsonStr changefeedbase.SinkSpecificJSONConfig, baseConfig sinkJSONConfig,
 ) (batchCfg sinkBatchConfig, retryCfg retry.Options, err error) {
 	retryCfg = defaultRetryConfig()
 
-	var cfg = sinkJSONConfig{}
+	var cfg = baseConfig
 	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
 	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
 	if jsonStr != `` {
@@ -852,6 +870,22 @@ func newCPUPacerFactory(ctx context.Context, cfg *execinfra.ServerConfig) func()
 
 func nilPacerFactory() *admission.Pacer {
 	return nil
+}
+
+func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
+	switch {
+	// all zero values is interpreted as flush every time
+	case config.Messages == 0 && config.Bytes == 0 && config.Frequency == 0:
+		return true
+	// messages threshold has been reached
+	case config.Messages > 0 && messages >= config.Messages:
+		return true
+	// bytes threshold has been reached
+	case config.Bytes > 0 && bytes >= config.Bytes:
+		return true
+	default:
+		return false
+	}
 }
 
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
