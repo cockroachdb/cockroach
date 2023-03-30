@@ -29,8 +29,8 @@ spawn $argv demo --no-line-editor --format=csv --auto-enable-rangefeeds=false
 # We should start in a populated database.
 eexpect "movr>"
 
-# initial_scan=only prevents the changefeed from hanging waiting for more changes. 
-send "CREATE CHANGEFEED FOR users WITH initial_scan='only';\r"
+# changefeed should exist since rangefeed not enabled.
+send "CREATE CHANGEFEED FOR users;\r"
 
 # changefeed should fail fast with an informative error.
 eexpect "ERROR: rangefeeds require the kv.rangefeed.enabled setting."
