@@ -146,7 +146,12 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	})
 	_, target, tbl := scpb.FindTable(elts)
 	if tbl == nil {
-		b.MarkNameAsNonExistent(&tn)
+		// Mark all table names (`tn` and others) in this ALTER TABLE stmt as non-existent.
+		tree.NewFmtCtx(tree.FmtSimple, tree.FmtReformatTableNames(func(
+			ctx *tree.FmtCtx, name *tree.TableName,
+		) {
+			b.MarkNameAsNonExistent(name)
+		})).FormatNode(n)
 		return
 	}
 	if target != scpb.ToPublic {
