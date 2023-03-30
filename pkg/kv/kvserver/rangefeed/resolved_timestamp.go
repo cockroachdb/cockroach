@@ -300,8 +300,8 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS h
 // the transaction on a given range.
 type unresolvedTxn struct {
 	txnID           uuid.UUID
-	txnKey          roachpb.Key
-	txnMinTimestamp hlc.Timestamp
+	txnKey          roachpb.Key   // unset if refCount < 0
+	txnMinTimestamp hlc.Timestamp // unset if refCount < 0
 	timestamp       hlc.Timestamp
 	refCount        int // count of unresolved intents
 
@@ -312,6 +312,12 @@ type unresolvedTxn struct {
 
 // asTxnMeta returns a TxnMeta representation of the unresolved transaction.
 func (t *unresolvedTxn) asTxnMeta() enginepb.TxnMeta {
+	if t.refCount <= 0 {
+		// An unresolvedTxn with a non-positive reference count may have an
+		// uninitialized txnKey and txnMinTimestamp. When in this state, we disallow
+		// the construction of a TxnMeta.
+		panic("asTxnMeta called on unresolvedTxn with negative reference count")
+	}
 	return enginepb.TxnMeta{
 		ID:             t.txnID,
 		Key:            t.txnKey,
@@ -469,12 +475,17 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 	// Will changes to the txn advance the queue's earliest timestamp?
 	wasMin := txn.index == 0
 
+	if delta < -1 || delta > 1 {
+		// Require that |delta| <= 1, which simplifies the logic here because it
+		// ensures that negative reference counts never switch to positive without
+		// passing through zero and positive reference counts never switch to
+		// negative without passing through zero. Passing through zero ensures that
+		// we hit the `!ok` branch above.
+		panic("unsupported reference count delta")
+	}
 	txn.refCount += delta
-	if txn.refCount == 0 || (txn.refCount < 0 && !uiq.allowNegRefCount) {
+	if txn.refCount == 0 {
 		// Remove txn from the queue.
-		// NB: the txn.refCount < 0 case is not exercised by the external
-		// interface of this type because currently |delta| <= 1, but it
-		// is included for robustness.
 		delete(uiq.txns, txn.txnID)
 		heap.Remove(&uiq.minHeap, txn.index)
 		return wasMin
