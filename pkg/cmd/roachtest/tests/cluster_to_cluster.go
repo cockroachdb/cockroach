@@ -638,7 +638,6 @@ func c2cRegisterWrapper(
 ) {
 
 	clusterOps := make([]spec.Option, 0)
-	clusterOps = append(clusterOps, spec.CPU(sp.cpus))
 	if sp.cpus != 0 {
 		clusterOps = append(clusterOps, spec.CPU(sp.cpus))
 	}
