@@ -606,9 +606,19 @@ func (j *jsonEncoded) AreKeysSorted() bool {
 	return decoded.AreKeysSorted()
 }
 
-func (j *jsonEncoded) Compare(other JSON) (int, error) {
+func (j *jsonEncoded) Compare(other JSON) (_ int, err error) {
 	if other == nil {
 		return -1, nil
+	}
+	// We must first check for the special case of empty arrays, which are the
+	// minimum JSON value.
+	switch {
+	case isEmptyArray(j) && isEmptyArray(other):
+		return 0, nil
+	case isEmptyArray(j):
+		return -1, nil
+	case isEmptyArray(other):
+		return 1, nil
 	}
 	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {
 		return cmp, nil
