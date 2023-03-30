@@ -165,6 +165,7 @@ const (
 
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig   = `kafka_sink_config`
+	OptPubsubSinkConfig  = `pubsub_sink_config`
 	OptWebhookSinkConfig = `webhook_sink_config`
 
 	// OptSink allows users to alter the Sink URI of an existing changefeed.
@@ -333,6 +334,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptProtectDataFromGCOnPause: flagOption,
 	OptExpirePTSAfter:           durationOption.thatCanBeZero(),
 	OptKafkaSinkConfig:          jsonOption,
+	OptPubsubSinkConfig:         jsonOption,
 	OptWebhookSinkConfig:        jsonOption,
 	OptWebhookAuthHeader:        stringOption,
 	OptWebhookClientTimeout:     durationOption,
@@ -369,7 +371,7 @@ var CloudStorageValidOptions = makeStringSet(OptCompression)
 var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
 
 // PubsubValidOptions is options exclusive to pubsub sink
-var PubsubValidOptions = makeStringSet()
+var PubsubValidOptions = makeStringSet(OptPubsubSinkConfig)
 
 // ExternalConnectionValidOptions is options exclusive to the external
 // connection sink.
@@ -886,6 +888,12 @@ func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
 // by the kafka sink.
 func (s StatementOptions) GetKafkaConfigJSON() SinkSpecificJSONConfig {
 	return s.getJSONValue(OptKafkaSinkConfig)
+}
+
+// GetPubsubConfigJSON returns arbitrary json to be interpreted
+// by the pubsub sink.
+func (s StatementOptions) GetPubsubConfigJSON() SinkSpecificJSONConfig {
+	return s.getJSONValue(OptPubsubSinkConfig)
 }
 
 // GetResolvedTimestampInterval gets the best-effort interval at which resolved timestamps
