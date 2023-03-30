@@ -17,15 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,6 +35,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.V23_1TenantNamesStateAndServiceMode - 1),
 				},
@@ -82,8 +76,6 @@ func TestUpdateTenantsTable(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Inject the old copy of the descriptor.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.TenantsTable, getDeprecatedTenantsDescriptor)
 	// Validate that the table sql_instances has the old schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -122,47 +114,4 @@ func TestUpdateTenantsTable(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("ALTER TENANT foo START SERVICE SHARED")
 	require.NoError(t, err)
-}
-
-// getDeprecatedTenantsDescriptor returns the system.tenants
-// table descriptor that was being used before adding a new column in the
-// current version.
-func getDeprecatedTenantsDescriptor() *descpb.TableDescriptor {
-	trueBoolString := "true"
-	return &descpb.TableDescriptor{
-		Name:                    string(catconstants.TenantsTableName),
-		ID:                      keys.TenantsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int},
-			{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
-			{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ID:          0,
-				ColumnNames: []string{"id", "active", "info"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
-			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "id",
-			ID:                  1,
-			ConstraintID:        1,
-			Unique:              true,
-			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1},
-		},
-		NextIndexID:      2,
-		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
-		NextMutationID:   1,
-		NextConstraintID: 2,
-		FormatVersion:    descpb.InterleavedFormatVersion,
-	}
 }

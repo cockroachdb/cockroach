@@ -17,16 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,6 +34,7 @@ func TestCreateIndexOnIndexUsageOnSystemStatementStatistics(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.V23_1_AlterSystemStatementStatisticsAddIndexesUsage - 1),
 				},
@@ -65,8 +58,6 @@ func TestCreateIndexOnIndexUsageOnSystemStatementStatistics(t *testing.T) {
 		}
 	)
 
-	// Inject the old copy of the descriptor.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementStatisticsTable, getStatementStatisticsNoIndexDescriptor)
 	// Validate that the table statement_statistics has the old schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -99,116 +90,4 @@ func TestCreateIndexOnIndexUsageOnSystemStatementStatistics(t *testing.T) {
 		validationSchemas,
 		true, /* expectExists */
 	)
-}
-
-// getStatementStatisticsNoIndexDescriptor returns the system.statement_statistics
-// table descriptor that was being used before adding a new column in the
-// current version.
-func getStatementStatisticsNoIndexDescriptor() *descpb.TableDescriptor {
-	sqlStmtHashComputeExpr := `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
-	defaultIndexRec := "ARRAY[]:::STRING[]"
-
-	return &descpb.TableDescriptor{
-		Name:                    string(catconstants.StatementStatisticsTableName),
-		ID:                      keys.StatementStatisticsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
-			{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
-			{Name: "transaction_fingerprint_id", ID: 3, Type: types.Bytes, Nullable: false},
-			{Name: "plan_hash", ID: 4, Type: types.Bytes, Nullable: false},
-			{Name: "app_name", ID: 5, Type: types.String, Nullable: false},
-			{Name: "node_id", ID: 6, Type: types.Int, Nullable: false},
-			{Name: "agg_interval", ID: 7, Type: types.Interval, Nullable: false},
-			{Name: "metadata", ID: 8, Type: types.Jsonb, Nullable: false},
-			{Name: "statistics", ID: 9, Type: types.Jsonb, Nullable: false},
-			{Name: "plan", ID: 10, Type: types.Jsonb, Nullable: false},
-			{
-				Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
-				ID:          11,
-				Type:        types.Int4,
-				Nullable:    false,
-				ComputeExpr: &sqlStmtHashComputeExpr,
-				Hidden:      true,
-			},
-			{Name: "index_recommendations", ID: 12, Type: types.StringArray, Nullable: false, DefaultExpr: &defaultIndexRec},
-		},
-		NextColumnID: 13,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
-					"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
-					"agg_interval", "metadata", "statistics", "plan", "index_recommendations",
-				},
-				ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12},
-				DefaultColumnID: 0,
-			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:   tabledesc.LegacyPrimaryKeyIndexName,
-			ID:     1,
-			Unique: true,
-			KeyColumnNames: []string{
-				"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
-				"aggregated_ts",
-				"fingerprint_id",
-				"transaction_fingerprint_id",
-				"plan_hash",
-				"app_name",
-				"node_id",
-			},
-			KeyColumnDirections: []catenumpb.IndexColumn_Direction{
-				catenumpb.IndexColumn_ASC,
-				catenumpb.IndexColumn_ASC,
-				catenumpb.IndexColumn_ASC,
-				catenumpb.IndexColumn_ASC,
-				catenumpb.IndexColumn_ASC,
-				catenumpb.IndexColumn_ASC,
-				catenumpb.IndexColumn_ASC,
-			},
-			KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
-			Sharded: catpb.ShardedDescriptor{
-				IsSharded:    true,
-				Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
-				ShardBuckets: 8,
-				ColumnNames: []string{
-					"aggregated_ts",
-					"app_name",
-					"fingerprint_id",
-					"node_id",
-					"plan_hash",
-					"transaction_fingerprint_id",
-				},
-			},
-		},
-		Indexes: []descpb.IndexDescriptor{
-			{
-				Name:   "fingerprint_stats_idx",
-				ID:     2,
-				Unique: false,
-				KeyColumnNames: []string{
-					"fingerprint_id",
-					"transaction_fingerprint_id",
-				},
-				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
-					catenumpb.IndexColumn_ASC,
-					catenumpb.IndexColumn_ASC,
-				},
-				KeyColumnIDs:       []descpb.ColumnID{2, 3},
-				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
-				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
-			},
-		},
-		NextIndexID:    4,
-		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
-		NextMutationID: 1,
-		FormatVersion:  3,
-	}
 }
