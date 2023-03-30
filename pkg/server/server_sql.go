@@ -1204,6 +1204,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		var c upgrade.Cluster
 		var systemDeps upgrade.SystemDeps
 		keyVisKnobs, _ := cfg.TestingKnobs.KeyVisualizer.(*keyvisualizer.TestingKnobs)
+		sqlStatsKnobs, _ := cfg.TestingKnobs.SQLStatsKnobs.(*sqlstats.TestingKnobs)
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
 				NodeLiveness:     nodeLiveness,
@@ -1220,12 +1221,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				})
 		}
 		systemDeps = upgrade.SystemDeps{
-			Cluster:     c,
-			DB:          cfg.internalDB,
-			Settings:    cfg.Settings,
-			JobRegistry: jobRegistry,
-			Stopper:     cfg.stopper,
-			KeyVisKnobs: keyVisKnobs,
+			Cluster:       c,
+			DB:            cfg.internalDB,
+			Settings:      cfg.Settings,
+			JobRegistry:   jobRegistry,
+			Stopper:       cfg.stopper,
+			KeyVisKnobs:   keyVisKnobs,
+			SQLStatsKnobs: sqlStatsKnobs,
 		}
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
