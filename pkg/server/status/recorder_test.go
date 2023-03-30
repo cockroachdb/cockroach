@@ -154,15 +154,15 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	err = recorder.PrintAsText(buf)
 	require.NoError(t, err)
 
-	require.Contains(t, buf.String(), `some_metric{tenant="system",node_id="7"} 123`)
-	require.Contains(t, buf.String(), `some_metric{tenant="application",node_id="7"} 456`)
+	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
+	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application"} 456`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
 	err = recorderTenant.PrintAsText(bufTenant)
 	require.NoError(t, err)
 
-	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system",node_id="7"} 123`)
-	require.Contains(t, bufTenant.String(), `some_metric{tenant="application",node_id="7"} 456`)
+	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
+	require.Contains(t, bufTenant.String(), `some_metric{node_id="7",tenant="application"} 456`)
 
 	// Update app name in container and ensure
 	// output changes accordingly.
@@ -172,15 +172,15 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	err = recorder.PrintAsText(buf)
 	require.NoError(t, err)
 
-	require.Contains(t, buf.String(), `some_metric{tenant="system",node_id="7"} 123`)
-	require.Contains(t, buf.String(), `some_metric{tenant="application2",node_id="7"} 456`)
+	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
+	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application2"} 456`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
 	err = recorderTenant.PrintAsText(bufTenant)
 	require.NoError(t, err)
 
-	require.NotContains(t, bufTenant.String(), `some_metric{tenant="system",node_id="7"} 123`)
-	require.Contains(t, bufTenant.String(), `some_metric{tenant="application2",node_id="7"} 456`)
+	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
+	require.Contains(t, bufTenant.String(), `some_metric{node_id="7",tenant="application2"} 456`)
 
 	// ========================================
 	// Verify that the recorder processes tenant time series registries
