@@ -140,6 +140,7 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 		consumer(enginepb.MVCCWriteIntentOp{
 			TxnID:           meta.Txn.ID,
 			TxnKey:          meta.Txn.Key,
+			TxnIsoLevel:     meta.Txn.IsoLevel,
 			TxnMinTimestamp: meta.Txn.MinTimestamp,
 			Timestamp:       meta.Txn.WriteTimestamp,
 		})
@@ -208,6 +209,7 @@ func (l *LegacyIntentScanner) ConsumeIntents(
 			consumer(enginepb.MVCCWriteIntentOp{
 				TxnID:           meta.Txn.ID,
 				TxnKey:          meta.Txn.Key,
+				TxnIsoLevel:     meta.Txn.IsoLevel,
 				TxnMinTimestamp: meta.Txn.MinTimestamp,
 				Timestamp:       meta.Txn.WriteTimestamp,
 			})

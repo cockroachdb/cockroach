@@ -15,6 +15,7 @@ import (
 	"container/heap"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -148,7 +149,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 
 	case *enginepb.MVCCWriteIntentOp:
 		rts.assertOpAboveRTS(op, t.Timestamp)
-		return rts.intentQ.IncRef(t.TxnID, t.TxnKey, t.TxnMinTimestamp, t.Timestamp)
+		return rts.intentQ.IncRef(t.TxnID, t.TxnKey, t.TxnIsoLevel, t.TxnMinTimestamp, t.Timestamp)
 
 	case *enginepb.MVCCUpdateIntentOp:
 		return rts.intentQ.UpdateTS(t.TxnID, t.Timestamp)
@@ -300,8 +301,9 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS h
 // the transaction on a given range.
 type unresolvedTxn struct {
 	txnID           uuid.UUID
-	txnKey          roachpb.Key   // unset if refCount < 0
-	txnMinTimestamp hlc.Timestamp // unset if refCount < 0
+	txnKey          roachpb.Key     // unset if refCount < 0
+	txnIsoLevel     isolation.Level // unset if refCount < 0
+	txnMinTimestamp hlc.Timestamp   // unset if refCount < 0
 	timestamp       hlc.Timestamp
 	refCount        int // count of unresolved intents
 
@@ -314,13 +316,14 @@ type unresolvedTxn struct {
 func (t *unresolvedTxn) asTxnMeta() enginepb.TxnMeta {
 	if t.refCount <= 0 {
 		// An unresolvedTxn with a non-positive reference count may have an
-		// uninitialized txnKey and txnMinTimestamp. When in this state, we disallow
-		// the construction of a TxnMeta.
+		// uninitialized txnKey, txnIsoLevel, and txnMinTimestamp. When in this
+		// state, we disallow the construction of a TxnMeta.
 		panic("asTxnMeta called on unresolvedTxn with negative reference count")
 	}
 	return enginepb.TxnMeta{
 		ID:             t.txnID,
 		Key:            t.txnKey,
+		IsoLevel:       t.txnIsoLevel,
 		MinTimestamp:   t.txnMinTimestamp,
 		WriteTimestamp: t.timestamp,
 	}
@@ -428,27 +431,31 @@ func (uiq *unresolvedIntentQueue) Before(ts hlc.Timestamp) []*unresolvedTxn {
 // returns whether the update advanced the timestamp of the oldest transaction
 // in the queue.
 func (uiq *unresolvedIntentQueue) IncRef(
-	txnID uuid.UUID, txnKey roachpb.Key, txnMinTS, ts hlc.Timestamp,
+	txnID uuid.UUID, txnKey roachpb.Key, txnIsoLevel isolation.Level, txnMinTS, ts hlc.Timestamp,
 ) bool {
-	return uiq.updateTxn(txnID, txnKey, txnMinTS, ts, +1)
+	return uiq.updateTxn(txnID, txnKey, txnIsoLevel, txnMinTS, ts, +1)
 }
 
 // DecrRef decrements the reference count of the specified transaction. It
 // returns whether the update advanced the timestamp of the oldest transaction
 // in the queue.
 func (uiq *unresolvedIntentQueue) DecrRef(txnID uuid.UUID, ts hlc.Timestamp) bool {
-	return uiq.updateTxn(txnID, nil, hlc.Timestamp{}, ts, -1)
+	return uiq.updateTxn(txnID, nil, 0, hlc.Timestamp{}, ts, -1)
 }
 
 // UpdateTS updates the timestamp of the specified transaction without modifying
 // its intent reference count. It returns whether the update advanced the
 // timestamp of the oldest transaction in the queue.
 func (uiq *unresolvedIntentQueue) UpdateTS(txnID uuid.UUID, ts hlc.Timestamp) bool {
-	return uiq.updateTxn(txnID, nil, hlc.Timestamp{}, ts, 0)
+	return uiq.updateTxn(txnID, nil, 0, hlc.Timestamp{}, ts, 0)
 }
 
 func (uiq *unresolvedIntentQueue) updateTxn(
-	txnID uuid.UUID, txnKey roachpb.Key, txnMinTS, ts hlc.Timestamp, delta int,
+	txnID uuid.UUID,
+	txnKey roachpb.Key,
+	txnIsoLevel isolation.Level,
+	txnMinTS, ts hlc.Timestamp,
+	delta int,
 ) bool {
 	txn, ok := uiq.txns[txnID]
 	if !ok {
@@ -461,6 +468,7 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 		txn = &unresolvedTxn{
 			txnID:           txnID,
 			txnKey:          txnKey,
+			txnIsoLevel:     txnIsoLevel,
 			txnMinTimestamp: txnMinTS,
 			timestamp:       ts,
 			refCount:        delta,
