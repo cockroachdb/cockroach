@@ -802,7 +802,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 	})
 }
 
-const heartbeatFailureLogFormat = `failed node liveness heartbeat: %+v
+const heartbeatFailureLogFormat = `failed node liveness heartbeat: %v
 
 An inability to maintain liveness will prevent a node from participating in a
 cluster. If this problem persists, it may be a sign of resource starvation or
