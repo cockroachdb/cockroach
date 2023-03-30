@@ -29,5 +29,5 @@ func hottestRanges(
 		accumulator.AddReplica(candidateReplica)
 	}
 	replRankings.Update(accumulator)
-	return replRankings.TopLoad()
+	return replRankings.TopLoad(dim)
 }

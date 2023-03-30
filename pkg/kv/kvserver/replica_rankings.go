@@ -102,10 +102,15 @@ func NewReplicaRankings() *ReplicaRankings {
 // TODO(kvoli): When adding another load dimension to be balanced upon, it will
 // be necessary to clarify the semantics of this API. This is especially true
 // since the UI is coupled to this function.
-func NewReplicaAccumulator(dimension load.Dimension) *RRAccumulator {
-	res := &RRAccumulator{}
-	res.dim.val = func(r CandidateReplica) float64 {
-		return r.RangeUsageInfo().Load().Dim(dimension)
+func NewReplicaAccumulator(dims ...load.Dimension) *RRAccumulator {
+	res := &RRAccumulator{
+		dims: map[load.Dimension]*rrPriorityQueue{},
+	}
+	for _, dim := range dims {
+		res.dims[dim] = &rrPriorityQueue{}
+		res.dims[dim].val = func(r CandidateReplica) float64 {
+			return r.RangeUsageInfo().Load().Dim(dim)
+		}
 	}
 	return res
 }
@@ -118,13 +123,13 @@ func (rr *ReplicaRankings) Update(acc *RRAccumulator) {
 }
 
 // TopLoad returns the highest load CandidateReplicas that are tracked.
-func (rr *ReplicaRankings) TopLoad() []CandidateReplica {
+func (rr *ReplicaRankings) TopLoad(dimension load.Dimension) []CandidateReplica {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
 	// If we have a new set of data, consume it. Otherwise, just return the most
 	// recently consumed data.
-	if rr.mu.dimAccumulator != nil && rr.mu.dimAccumulator.dim.Len() > 0 {
-		rr.mu.byDim = consumeAccumulator(&rr.mu.dimAccumulator.dim)
+	if rr.mu.dimAccumulator != nil && rr.mu.dimAccumulator.dims[dimension].Len() > 0 {
+		rr.mu.byDim = consumeAccumulator(rr.mu.dimAccumulator.dims[dimension])
 	}
 	return rr.mu.byDim
 }
@@ -138,23 +143,33 @@ func (rr *ReplicaRankings) TopLoad() []CandidateReplica {
 // prevents concurrent loaders of data from messing with each other -- the last
 // `update`d accumulator will win.
 type RRAccumulator struct {
-	dim rrPriorityQueue
+	dims map[load.Dimension]*rrPriorityQueue
 }
 
 // AddReplica adds a replica to the replica accumulator.
 func (a *RRAccumulator) AddReplica(repl CandidateReplica) {
+	for dim := range a.dims {
+		a.addReplicaForDimension(repl, dim)
+
+	}
+}
+
+func (a *RRAccumulator) addReplicaForDimension(repl CandidateReplica, dim load.Dimension) {
+	rr := a.dims[dim]
 	// If the heap isn't full, just push the new replica and return.
-	if a.dim.Len() < numTopReplicasToTrack {
-		heap.Push(&a.dim, repl)
+	if rr.Len() < numTopReplicasToTrack {
+
+		heap.Push(a.dims[dim], repl)
 		return
 	}
 
 	// Otherwise, conditionally push if the new replica is more deserving than
 	// the current tip of the heap.
-	if a.dim.val(repl) > a.dim.val(a.dim.entries[0]) {
-		heap.Pop(&a.dim)
-		heap.Push(&a.dim, repl)
+	if rr.val(repl) > rr.val(rr.entries[0]) {
+		heap.Pop(rr)
+		heap.Push(rr, repl)
 	}
+
 }
 
 func consumeAccumulator(pq *rrPriorityQueue) []CandidateReplica {
