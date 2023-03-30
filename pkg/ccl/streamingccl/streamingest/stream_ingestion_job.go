@@ -189,6 +189,48 @@ func updateRunningStatusInternal(
 	ju.UpdateProgress(md.Progress)
 }
 
+func completeIngestion(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	ingestionJob *jobs.Job,
+	client streamclient.Client,
+) error {
+	log.Infof(ctx,
+		"reverting to the specified cutover timestamp for stream ingestion job %d",
+		ingestionJob.ID())
+	if err := revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
+		return err
+	}
+	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
+	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
+	if err := activateTenant(ctx, execCtx, details.DestinationTenantID); err != nil {
+		return err
+	}
+
+	streamID := details.StreamID
+	log.Infof(ctx, "completing the producer job %d", streamID)
+	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationCuttingOver,
+		"completing the producer job in the source cluster")
+	// Completes the producer job in the source cluster on best effort.
+	if err := client.Complete(ctx, streampb.StreamID(streamID), true /* successfulIngestion */); err != nil {
+		log.Warningf(ctx, "encountered error when completing the source cluster producer job %d: %s", streamID, err.Error())
+	}
+	// Now that we have completed the cutover we can release the protected
+	// timestamp record on the destination tenant's keyspace.
+	if details.ProtectedTimestampRecordID != nil {
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
+			ptp := execCtx.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
+			return releaseDestinationTenantProtectedTimestamp(
+				ctx, ptp, *details.ProtectedTimestampRecordID,
+			)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
 	// Cutover should be the *first* thing checked upon resumption as it is the
 	// most critical task in disaster recovery.
@@ -200,141 +242,28 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		log.Infof(ctx, "job completed cutover on resume")
 		return nil
 	}
-
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
 		if err := knobs.BeforeIngestionStart(ctx); err != nil {
 			return err
 		}
 	}
-
-	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
-	progress := ingestionJob.Progress()
-	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-
-	var previousHighWater, heartbeatTimestamp hlc.Timestamp
-	initialScanTimestamp := details.ReplicationStartTime
-	// Start from the last checkpoint if it exists.
-	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		previousHighWater = *h
-		heartbeatTimestamp = previousHighWater
-	} else {
-		heartbeatTimestamp = initialScanTimestamp
-	}
-
-	// Initialize a stream client and resolve topology.
 	client, err := connectToActiveClient(ctx, ingestionJob)
 	if err != nil {
 		return err
 	}
-	ingestWithClient := func() error {
-		streamID := streampb.StreamID(details.StreamID)
-		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.InitializingReplication,
-			fmt.Sprintf("connecting to the producer job %d and creating a stream replication plan", streamID))
-		if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
-			return err
+	defer func() {
+		if err := client.Close(ctx); err != nil {
+			log.Warningf(ctx, "stream ingestion client did not shut down properly: %s", err.Error())
 		}
-
-		log.Infof(ctx, "producer job %d is active, creating a stream replication plan", streamID)
-		topology, err := client.Plan(ctx, streamID)
-		if err != nil {
-			return err
-		}
-
-		// TODO(casper): update running status
-		err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			md.Progress.GetStreamIngest().StreamAddresses = topology.StreamAddresses()
-			ju.UpdateProgress(md.Progress)
-			return nil
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to update job progress")
-		}
-
-		if previousHighWater.IsEmpty() {
-			log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
-				ingestionJob.ID(), initialScanTimestamp)
-		} else {
-			log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
-				ingestionJob.ID(), previousHighWater)
-		}
-
-		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
-		checkpoint := ingestProgress.Checkpoint
-
-		evalCtx := execCtx.ExtendedEvalContext()
-		dsp := execCtx.DistSQLPlanner()
-
-		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
-
-		if err != nil {
-			return err
-		}
-
-		// Construct stream ingestion processor specs.
-		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, initialScanTimestamp, previousHighWater, checkpoint,
-			ingestionJob.ID(), streamID, topology.SourceTenantID, details.DestinationTenantID)
-		if err != nil {
-			return err
-		}
-
-		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterReplicationFlowPlan != nil {
-			knobs.AfterReplicationFlowPlan(streamIngestionSpecs, streamIngestionFrontierSpec)
-		}
-
-		// Plan and run the DistSQL flow.
-		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
-			ingestionJob.ID())
-		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.Replicating,
-			"running the SQL flow for the stream ingestion job")
-		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, planCtx, dsp,
-			streamIngestionSpecs, streamIngestionFrontierSpec); err != nil {
-			return err
-		}
-
-		// A nil error is only possible if the job was signaled to cutover and the
-		// processors shut down gracefully, i.e stopped ingesting any additional
-		// events from the replication stream. At this point it is safe to revert to
-		// the cutoff time to leave the cluster in a consistent state.
-		log.Infof(ctx,
-			"starting to revert to the specified cutover timestamp for stream ingestion job %d",
-			ingestionJob.ID())
-		if err = revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
-			return err
-		}
-
-		log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
-		// Activate the tenant as it is now in a usable state.
-		if err = activateTenant(ctx, execCtx, details.DestinationTenantID); err != nil {
-			return err
-		}
-
-		log.Infof(ctx, "starting to complete the producer job %d", streamID)
-		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationCuttingOver,
-			"completing the producer job in the source cluster")
-		// Completes the producer job in the source cluster on best effort.
-		if err = client.Complete(ctx, streamID, true /* successfulIngestion */); err != nil {
-			log.Warningf(ctx, "encountered error when completing the source cluster producer job %d", streamID)
-		}
-
-		// Now that we have completed the cutover we can release the protected
-		// timestamp record on the destination tenant's keyspace.
-		if details.ProtectedTimestampRecordID != nil {
-			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
-				ctx context.Context, txn isql.Txn,
-			) error {
-				ptp := execCtx.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
-				return releaseDestinationTenantProtectedTimestamp(
-					ctx, ptp, *details.ProtectedTimestampRecordID,
-				)
-			}); err != nil {
-				return err
-			}
-		}
-
-		return nil
+	}()
+	if err = startDistIngestion(ctx, execCtx, ingestionJob, client); err != nil {
+		return err
 	}
-	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
+	// A nil error is only possible if the job was signaled to cutover and the
+	// processors shut down gracefully, i.e stopped ingesting any additional
+	// events from the replication stream. At this point it is safe to revert to
+	// the cutoff time to leave the cluster in a consistent state.
+	return completeIngestion(ctx, execCtx, ingestionJob, client)
 }
 
 func ingestWithRetries(
