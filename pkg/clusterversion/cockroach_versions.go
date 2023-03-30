@@ -514,6 +514,10 @@ const (
 	// payload and progress columns are no longer written to system.jobs.
 	V23_1StopWritingPayloadAndProgressToSystemJobs
 
+	// V23_1ChangeSQLStatsTTL is the version where the gc TTL was updated to all
+	// SQL Stats tables.
+	V23_1ChangeSQLStatsTTL
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -890,6 +894,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1StopWritingPayloadAndProgressToSystemJobs,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
+	},
+	{
+		Key:     V23_1ChangeSQLStatsTTL,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
 	},
 
 	// *************************************************
