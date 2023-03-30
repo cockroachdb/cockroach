@@ -106,18 +106,6 @@ export const selectDatabases = createSelector(
   },
 );
 
-// selectTotalFingerprints returns the count of distinct statement fingerprints
-// present in the data.
-export const selectTotalFingerprints = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state?.data) {
-      return 0;
-    }
-    return state.data.statements?.length ?? 0;
-  },
-);
-
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(
@@ -258,7 +246,6 @@ export default withRouter(
         isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
-        totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),

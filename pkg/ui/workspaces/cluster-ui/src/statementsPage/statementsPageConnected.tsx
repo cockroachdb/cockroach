@@ -33,7 +33,6 @@ import {
   selectStatementsDataValid,
   selectStatementsDataInFlight,
   selectStatementsLastError,
-  selectTotalFingerprints,
   selectColumns,
   selectTimeScale,
   selectSortSetting,
@@ -117,7 +116,6 @@ export const ConnectedStatementsPage = withRouter(
         isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
-        totalFingerprints: selectTotalFingerprints(state),
         limit: selectStmtsPageLimit(state),
         reqSortSetting: selectStmtsPageReqSort(state),
         stmtsTotalRuntimeSecs:
