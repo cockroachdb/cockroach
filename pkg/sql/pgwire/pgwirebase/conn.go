@@ -30,19 +30,4 @@ type Conn interface {
 	// subprotocol (COPY ... FROM STDIN). This message informs the client about
 	// the columns that are expected for the rows to be inserted.
 	BeginCopyIn(ctx context.Context, columns []colinfo.ResultColumn, format FormatCode) error
-
-	// BeginCopyOut sends the message server message initiating the Copy-in
-	// subprotocol (COPY ... TO STDOUT). This message informs the client about
-	// the columns that are expected for the rows to be output in CopyData format.
-	BeginCopyOut(ctx context.Context, columns []colinfo.ResultColumn, format FormatCode) error
-
-	// SendCopyData sends CopyData out to the connection.
-	SendCopyData(ctx context.Context, copyData []byte) error
-
-	// SendCopyDone sends CopyDone to the connection.
-	SendCopyDone(ctx context.Context) error
-
-	// SendCommandComplete sends a serverMsgCommandComplete with the given
-	// payload.
-	SendCommandComplete(tag []byte) error
 }

@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -590,13 +589,7 @@ Loop:
 		}
 	}
 
-	// Finalize execution by sending the statement tag and number of rows
-	// inserted.
-	dummy := tree.CopyFrom{}
-	tag := []byte(dummy.StatementTag())
-	tag = append(tag, ' ')
-	tag = strconv.AppendInt(tag, int64(c.insertedRows), 10 /* base */)
-	return c.conn.SendCommandComplete(tag)
+	return nil
 }
 
 const (

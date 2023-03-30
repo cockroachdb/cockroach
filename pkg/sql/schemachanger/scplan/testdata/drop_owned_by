@@ -156,9 +156,6 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 109
@@ -222,9 +219,6 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 105
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 108
@@ -509,6 +503,10 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 109
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 108
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], ABSENT] -> PUBLIC
@@ -779,9 +777,6 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 109
@@ -845,9 +840,6 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 105
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 108
@@ -1183,6 +1175,8 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 109
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
       TableID: 109
@@ -1195,6 +1189,8 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 109
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 108
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
       TableID: 108
