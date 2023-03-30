@@ -556,8 +556,12 @@ SELECT * FROM "".crdb_internal.kv_catalog_zones
 22   {"gc": {"ttlSeconds": 600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
 25   {"gc": {"ttlSeconds": 600}}
 27   {"gc": {"ttlSeconds": 600}}
+42   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+43   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
 45   {"gc": {"ttlSeconds": 7200}}
 57   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+60   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+61   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
 106  {"gc": {"ttlSeconds": 7200}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
 111  {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
 
