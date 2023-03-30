@@ -19,15 +19,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 type tpceSpec struct {
-	loadNode         option.NodeListOption
+	loadNode         int
 	roachNodes       option.NodeListOption
 	roachNodeIPFlags []string
 }
@@ -39,32 +41,25 @@ type tpceCmdOptions struct {
 	threads   int
 }
 
-func (to tpceCmdOptions) String() string {
-	var builder strings.Builder
-	if to.customers != 0 {
-		builder.WriteString(fmt.Sprintf(" --customers=%d", to.customers))
-	}
-	if to.racks != 0 {
-		builder.WriteString(fmt.Sprintf(" --racks=%d", to.racks))
-	}
-	if to.duration != 0 {
-		builder.WriteString(fmt.Sprintf(" --duration=%s", to.duration))
-	}
-	if to.threads != 0 {
-		builder.WriteString(fmt.Sprintf(" --threads=%d", to.threads))
-	}
-	return builder.String()
+func (to tpceCmdOptions) AddCommandOptions(cmd *roachtestutil.Command) {
+	cmd.MaybeFlag(to.customers != 0, "customers", to.customers)
+	cmd.MaybeFlag(to.racks != 0, "racks", to.racks)
+	cmd.MaybeFlag(to.duration != 0, "duration", to.duration)
+	cmd.MaybeFlag(to.threads != 0, "threads", to.threads)
 }
 
 func initTPCESpec(
-	ctx context.Context, t test.Test, c cluster.Cluster, loadNode,
+	ctx context.Context,
+	l *logger.Logger,
+	c cluster.Cluster,
+	loadNode int,
 	roachNodes option.NodeListOption,
 ) (*tpceSpec, error) {
-	t.Status("installing docker")
-	if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
+	l.Printf("Installing docker")
+	if err := c.Install(ctx, l, c.Nodes(loadNode), "docker"); err != nil {
 		return nil, err
 	}
-	roachNodeIPs, err := c.InternalIP(ctx, t.L(), roachNodes)
+	roachNodeIPs, err := c.InternalIP(ctx, l, roachNodes)
 	if err != nil {
 		return nil, err
 	}
@@ -79,23 +74,25 @@ func initTPCESpec(
 	}, nil
 }
 
-func (ts *tpceSpec) dockerCmdPrefix() string {
-	return `sudo docker run cockroachdb/tpc-e:latest`
+func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
+	cmd := roachtestutil.NewCommand(`sudo docker run cockroachdb/tpc-e:latest`)
+	o.AddCommandOptions(cmd)
+	return cmd
 }
 
 // init initializes an empty cluster with a tpce database. This includes a bulk
 // import of the data and schema creation.
 func (ts *tpceSpec) init(ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions) {
-	c.Run(ctx, ts.loadNode, fmt.Sprintf("%s %s --init %s", ts.dockerCmdPrefix(), o.String(), ts.roachNodeIPFlags[0]))
+	cmd := ts.newCmd(o).Flag("init", "")
+	c.Run(ctx, c.Node(ts.loadNode), fmt.Sprintf("%s %s", cmd, ts.roachNodeIPFlags[0]))
 }
 
 // run runs the tpce workload on cluster that has been initialized with the tpce schema.
 func (ts *tpceSpec) run(
 	ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions,
 ) (install.RunResultDetails, error) {
-	cmd := fmt.Sprintf("%s %s %s",
-		ts.dockerCmdPrefix(), o.String(), strings.Join(ts.roachNodeIPFlags, " "))
-	return c.RunWithDetailsSingleNode(ctx, t.L(), ts.loadNode, cmd)
+	cmd := fmt.Sprintf("%s %s", ts.newCmd(o), strings.Join(ts.roachNodeIPFlags, " "))
+	return c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(ts.loadNode), cmd)
 }
 
 func registerTPCE(r registry.Registry) {
@@ -112,7 +109,7 @@ func registerTPCE(r registry.Registry) {
 
 	runTPCE := func(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
 		roachNodes := c.Range(1, opts.nodes)
-		loadNode := c.Node(opts.nodes + 1)
+		loadNode := opts.nodes + 1
 		racks := opts.nodes
 
 		t.Status("installing cockroach")
@@ -123,7 +120,7 @@ func registerTPCE(r registry.Registry) {
 		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 
-		tpceSpec, err := initTPCESpec(ctx, t, c, loadNode, roachNodes)
+		tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, roachNodes)
 		require.NoError(t, err)
 
 		// Configure to increase the speed of the import.
