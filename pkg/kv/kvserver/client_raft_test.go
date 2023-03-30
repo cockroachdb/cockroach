@@ -2093,10 +2093,10 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 				},
 			},
 			RaftConfig: base.RaftConfig{
-				// Don't timeout raft leaders or range leases (see the relation between
-				// RaftElectionTimeoutTicks and RangeLeaseActiveDuration). This test expects
+				// Don't timeout raft leaders or range leases. This test expects
 				// tc.Servers[0] to hold the range lease for the range under test.
 				RaftElectionTimeoutTicks: 1000000,
+				RangeLeaseDuration:       time.Minute,
 			},
 		}
 	}
