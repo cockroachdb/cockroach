@@ -29,7 +29,8 @@ import (
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
 	MakeResolvedPayload(body []byte, topic string) (SinkPayload, error)
-	MakeBatchBuffer() BatchBuffer
+	// Batches can only hold messages for one unique topic
+	MakeBatchBuffer(topic string) BatchBuffer
 	Flush(context.Context, SinkPayload) error
 	Close() error
 }
@@ -37,7 +38,7 @@ type SinkClient interface {
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
 // to the sink.
 type BatchBuffer interface {
-	Append(key []byte, value []byte, topic string)
+	Append(key []byte, value []byte)
 	ShouldFlush() bool
 
 	// Once all data has been Append'ed, Close can be called to return a finalized
@@ -90,9 +91,9 @@ type flushReq struct {
 }
 
 type rowEvent struct {
-	key   []byte
-	val   []byte
-	topic string
+	key             []byte
+	val             []byte
+	topicDescriptor TopicDescriptor
 
 	alloc kvevent.Alloc
 	mvcc  hlc.Timestamp
@@ -176,7 +177,7 @@ func (s *batchingSink) EmitRow(
 	payload := newRowEvent()
 	payload.key = key
 	payload.val = value
-	payload.topic = "" // unimplemented for now
+	payload.topicDescriptor = topic
 	payload.mvcc = mvcc
 	payload.alloc = alloc
 
@@ -277,7 +278,7 @@ func (sb *sinkBatch) Append(e *rowEvent) {
 		sb.bufferTime = timeutil.Now()
 	}
 
-	sb.buffer.Append(e.key, e.val, e.topic)
+	sb.buffer.Append(e.key, e.val)
 
 	sb.keys.Add(hashToInt(sb.hasher, e.key))
 	sb.numMessages += 1
@@ -296,9 +297,9 @@ func (s *batchingSink) handleError(err error) {
 	}
 }
 
-func (s *batchingSink) newBatchBuffer() *sinkBatch {
+func (s *batchingSink) newBatchBuffer(topic string) *sinkBatch {
 	batch := newSinkBatch()
-	batch.buffer = s.client.MakeBatchBuffer()
+	batch.buffer = s.client.MakeBatchBuffer(topic)
 	batch.hasher = s.hasher
 	return batch
 }
@@ -306,7 +307,12 @@ func (s *batchingSink) newBatchBuffer() *sinkBatch {
 // runBatchingWorker combines 1 or more row events into batches, sending the IO
 // requests out either once the batch is full or a flush request arrives.
 func (s *batchingSink) runBatchingWorker(ctx context.Context) {
-	batchBuffer := s.newBatchBuffer()
+	// topicBatches stores per-topic sinkBatches which are flushed individually
+	// when one reaches its size limit, but are all flushed together if the
+	// frequency timer triggers.  Messages for different topics cannot be allowed
+	// to be batched together as the data may need to end up at a specific
+	// endpoint for that topic.
+	topicBatches := make(map[string]*sinkBatch)
 
 	// Once finalized, batches are sent to a parallelIO struct which handles
 	// performing multiple Flushes in parallel while maintaining Keys() ordering.
@@ -347,14 +353,14 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		freeSinkBatchEvent(batch)
 	}
 
-	tryFlushBatch := func() error {
-		if batchBuffer.isEmpty() {
+	tryFlushBatch := func(topic string) error {
+		batchBuffer, ok := topicBatches[topic]
+		if !ok || batchBuffer.isEmpty() {
 			return nil
 		}
-		toFlush := batchBuffer
-		batchBuffer = s.newBatchBuffer()
+		topicBatches[topic] = s.newBatchBuffer(topic)
 
-		if err := toFlush.FinalizePayload(); err != nil {
+		if err := batchBuffer.FinalizePayload(); err != nil {
 			return err
 		}
 
@@ -364,7 +370,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ioEmitter.requestCh <- toFlush:
+			case ioEmitter.requestCh <- batchBuffer:
 			case result := <-ioEmitter.resultCh:
 				handleResult(result)
 				continue
@@ -376,8 +382,22 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		return nil
 	}
 
+	flushAll := func() error {
+		for topic := range topicBatches {
+			if err := tryFlushBatch(topic); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// flushTimer is used to ensure messages do not remain batched longer than a
+	// given timeout. Every minFlushFrequency seconds after the first event for
+	// any topic has arrived, batches for all topics are flushed out immediately
+	// and the timer once again waits for the first message to arrive.
 	flushTimer := s.ts.NewTimer()
 	defer flushTimer.Stop()
+	isTimerPending := false
 
 	for {
 		select {
@@ -396,11 +416,29 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 				inflight += 1
 
-				// If we're about to append to an empty batch, start the timer to
-				// guarantee the messages do not stay buffered longer than the
-				// configured frequency.
-				if batchBuffer.isEmpty() && s.minFlushFrequency > 0 {
+				var topic string
+				var err error
+				if s.topicNamer != nil {
+					topic, err = s.topicNamer.Name(r.topicDescriptor)
+					if err != nil {
+						s.handleError(err)
+						continue
+					}
+				}
+
+				// If the timer isn't pending then this message is the first message to
+				// arrive either ever or since the timer last triggered a flush,
+				// therefore we're going from 0 messages batched to 1, and should
+				// restart the timer.
+				if !isTimerPending && s.minFlushFrequency > 0 {
 					flushTimer.Reset(s.minFlushFrequency)
+					isTimerPending = true
+				}
+
+				batchBuffer, ok := topicBatches[topic]
+				if !ok {
+					batchBuffer = s.newBatchBuffer(topic)
+					topicBatches[topic] = batchBuffer
 				}
 
 				batchBuffer.Append(r)
@@ -414,7 +452,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 				if batchBuffer.buffer.ShouldFlush() {
 					s.metrics.recordSizeBasedFlush()
-					if err := tryFlushBatch(); err != nil {
+					if err := tryFlushBatch(topic); err != nil {
 						s.handleError(err)
 					}
 				}
@@ -423,7 +461,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 					close(r.waiter)
 				} else {
 					sinkFlushWaiter = r.waiter
-					if err := tryFlushBatch(); err != nil {
+					if err := flushAll(); err != nil {
 						s.handleError(err)
 					}
 				}
@@ -434,7 +472,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 			handleResult(result)
 		case <-flushTimer.Ch():
 			flushTimer.MarkRead()
-			if err := tryFlushBatch(); err != nil {
+			isTimerPending = false
+			if err := flushAll(); err != nil {
 				s.handleError(err)
 			}
 		case <-ctx.Done():

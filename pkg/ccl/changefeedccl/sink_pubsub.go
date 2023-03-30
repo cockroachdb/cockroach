@@ -11,42 +11,25 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"hash/crc32"
 	"net/url"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const credentialsParam = "CREDENTIALS"
-
-// GcpScheme to be used in testfeed and sink.go
-const GcpScheme = "gcpubsub"
-const gcpScope = "https://www.googleapis.com/auth/pubsub"
-const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
-const globalGCPEndpoint = "pubsub.googleapis.com:443"
-
 // TODO: make numOfWorkers configurable
 const numOfWorkers = 128
 
-// isPubsubSInk returns true if url contains scheme with valid pubsub sink
-func isPubsubSink(u *url.URL) bool {
-	return u.Scheme == GcpScheme
-}
-
-type pubsubClient interface {
+type deprecatedPubsubClient interface {
 	init() error
 	closeTopics()
 	flushTopics()
@@ -73,9 +56,10 @@ type pubsubMessage struct {
 	alloc   kvevent.Alloc
 	message payload
 	isFlush bool
+	mvcc    hlc.Timestamp
 }
 
-type gcpPubsubClient struct {
+type deprecatedGcpPubsubClient struct {
 	client     *pubsub.Client
 	ctx        context.Context
 	projectID  string
@@ -89,9 +73,11 @@ type gcpPubsubClient struct {
 		publishError    error
 		topics          map[string]*pubsub.Topic
 	}
+
+	knobs *TestingKnobs
 }
 
-type pubsubSink struct {
+type deprecatedPubsubSink struct {
 	numWorkers int
 
 	workerCtx   context.Context
@@ -106,88 +92,27 @@ type pubsubSink struct {
 	// errChan is written to indicate an error while sending message.
 	errChan chan error
 
-	client     pubsubClient
+	client     deprecatedPubsubClient
 	topicNamer *TopicNamer
 
 	format changefeedbase.FormatType
+
+	metrics metricsRecorder
 }
 
-func (p *pubsubSink) getConcreteType() sinkType {
+func (p *deprecatedPubsubSink) getConcreteType() sinkType {
 	return sinkTypePubsub
 }
 
-// TODO: unify gcp credentials code with gcp cloud storage credentials code
-// getGCPCredentials returns gcp credentials parsed out from url
-func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, error) {
-	const authParam = "AUTH"
-	const assumeRoleParam = "ASSUME_ROLE"
-	const authSpecified = "specified"
-	const authImplicit = "implicit"
-	const authDefault = "default"
-
-	var credsJSON []byte
-	var creds *google.Credentials
-	var err error
-	authOption := u.consumeParam(authParam)
-	assumeRoleOption := u.consumeParam(assumeRoleParam)
-	authScope := gcpScope
-	if assumeRoleOption != "" {
-		// If we need to assume a role, the credentials need to have the scope to
-		// impersonate instead.
-		authScope = cloudPlatformScope
-	}
-
-	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
-	switch authOption {
-	case authImplicit:
-		creds, err = google.FindDefaultCredentials(ctx, authScope)
-		if err != nil {
-			return nil, err
-		}
-	case authSpecified:
-		fallthrough
-	case authDefault:
-		fallthrough
-	default:
-		if u.q.Get(credentialsParam) == "" {
-			return nil, errors.New("missing credentials parameter")
-		}
-		err := u.decodeBase64(credentialsParam, &credsJSON)
-		if err != nil {
-			return nil, errors.Wrap(err, "decoding credentials json")
-		}
-		creds, err = google.CredentialsFromJSON(ctx, credsJSON, authScope)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating credentials from json")
-		}
-	}
-
-	credsOpt := option.WithCredentials(creds)
-	if assumeRoleOption != "" {
-		assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleOption)
-		cfg := impersonate.CredentialsConfig{
-			TargetPrincipal: assumeRole,
-			Scopes:          []string{gcpScope},
-			Delegates:       delegateRoles,
-		}
-
-		ts, err := impersonate.CredentialsTokenSource(ctx, cfg, credsOpt)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating impersonate credentials")
-		}
-		return option.WithTokenSource(ts), nil
-	}
-
-	return credsOpt, nil
-}
-
-// MakePubsubSink returns the corresponding pubsub sink based on the url given
-func MakePubsubSink(
+// makeDeprecatedPubsubSink returns the corresponding pubsub sink based on the url given
+func makeDeprecatedPubsubSink(
 	ctx context.Context,
 	u *url.URL,
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
 	unordered bool,
+	mb metricsRecorderBuilder,
+	knobs *TestingKnobs,
 ) (Sink, error) {
 
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
@@ -212,11 +137,12 @@ func MakePubsubSink(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	p := &pubsubSink{
+	p := &deprecatedPubsubSink{
 		workerCtx:   ctx,
 		numWorkers:  numOfWorkers,
 		exitWorkers: cancel,
 		format:      formatType,
+		metrics:     mb(requiresResourceAccounting),
 	}
 
 	// creates custom pubsub object based on scheme
@@ -244,12 +170,13 @@ func MakePubsubSink(
 		if err != nil {
 			return nil, err
 		}
-		g := &gcpPubsubClient{
+		g := &deprecatedGcpPubsubClient{
 			topicNamer: tn,
 			ctx:        ctx,
 			projectID:  projectID,
 			endpoint:   endpoint,
 			url:        pubsubURL,
+			knobs:      knobs,
 		}
 		p.client = g
 		p.topicNamer = tn
@@ -259,13 +186,13 @@ func MakePubsubSink(
 	}
 }
 
-func (p *pubsubSink) Dial() error {
+func (p *deprecatedPubsubSink) Dial() error {
 	p.setupWorkers()
 	return p.client.init()
 }
 
 // EmitRow pushes a message to event channel where it is consumed by workers
-func (p *pubsubSink) EmitRow(
+func (p *deprecatedPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
@@ -273,12 +200,14 @@ func (p *pubsubSink) EmitRow(
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
+	p.metrics.recordMessageSize(int64(len(key) + len(value)))
+
 	topicName, err := p.topicNamer.Name(topic)
 	if err != nil {
 		return err
 	}
 	m := pubsubMessage{
-		alloc: alloc, isFlush: false, message: payload{
+		alloc: alloc, isFlush: false, mvcc: mvcc, message: payload{
 			Key:   key,
 			Value: value,
 			Topic: topicName,
@@ -302,7 +231,7 @@ func (p *pubsubSink) EmitRow(
 }
 
 // EmitResolvedTimestamp sends resolved timestamp message
-func (p *pubsubSink) EmitResolvedTimestamp(
+func (p *deprecatedPubsubSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
@@ -314,14 +243,16 @@ func (p *pubsubSink) EmitResolvedTimestamp(
 }
 
 // Flush blocks until all messages in the event channels are sent
-func (p *pubsubSink) Flush(ctx context.Context) error {
+func (p *deprecatedPubsubSink) Flush(ctx context.Context) error {
 	if err := p.flush(ctx); err != nil {
 		return errors.CombineErrors(p.client.connectivityErrorLocked(), err)
 	}
 	return nil
 }
 
-func (p *pubsubSink) flush(ctx context.Context) error {
+func (p *deprecatedPubsubSink) flush(ctx context.Context) error {
+	defer p.metrics.recordFlushRequestCallback()()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -346,7 +277,7 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 }
 
 // Close closes all the channels and shutdowns the topic
-func (p *pubsubSink) Close() error {
+func (p *deprecatedPubsubSink) Close() error {
 	p.client.closeTopics()
 	p.exitWorkers()
 	_ = p.workerGroup.Wait()
@@ -366,11 +297,11 @@ func (p *pubsubSink) Close() error {
 
 // Topics gives the names of all topics that have been initialized
 // and will receive resolved timestamps.
-func (p *pubsubSink) Topics() []string {
+func (p *deprecatedPubsubSink) Topics() []string {
 	return p.topicNamer.DisplayNamesSlice()
 }
 
-func (p *gcpPubsubClient) cacheTopicLocked(name string, topic *pubsub.Topic) {
+func (p *deprecatedGcpPubsubClient) cacheTopicLocked(name string, topic *pubsub.Topic) {
 	//TODO (zinger): Investigate whether changing topics to a sync.Map would be
 	//faster here, I think it would.
 	p.mu.Lock()
@@ -378,14 +309,14 @@ func (p *gcpPubsubClient) cacheTopicLocked(name string, topic *pubsub.Topic) {
 	p.mu.topics[name] = topic
 }
 
-func (p *gcpPubsubClient) getTopicLocked(name string) (t *pubsub.Topic, ok bool) {
+func (p *deprecatedGcpPubsubClient) getTopicLocked(name string) (t *pubsub.Topic, ok bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	t, ok = p.mu.topics[name]
 	return t, ok
 }
 
-func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
+func (p *deprecatedGcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
 	if topic, ok := p.getTopicLocked(name); ok {
 		return topic, nil
 	}
@@ -398,7 +329,7 @@ func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
 }
 
 // setupWorkers sets up the channels used by the sink and starts a goroutine for every worker
-func (p *pubsubSink) setupWorkers() {
+func (p *deprecatedPubsubSink) setupWorkers() {
 	// setup events channels to send to workers and the worker group
 	p.eventsChans = make([]chan pubsubMessage, p.numWorkers)
 	p.workerGroup = ctxgroup.WithContext(p.workerCtx)
@@ -421,7 +352,7 @@ func (p *pubsubSink) setupWorkers() {
 }
 
 // workerLoop consumes any message sent to the channel corresponding to the worker index
-func (p *pubsubSink) workerLoop(workerIndex int) {
+func (p *deprecatedPubsubSink) workerLoop(workerIndex int) {
 	for {
 		select {
 		case <-p.workerCtx.Done():
@@ -448,17 +379,19 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				content = msg.message.Value
 			}
 
+			updateMetrics := p.metrics.recordOneMessage()
 			err = p.client.sendMessage(content, msg.message.Topic, string(msg.message.Key))
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
 			msg.alloc.Release(p.workerCtx)
+			updateMetrics(msg.mvcc, len(msg.message.Key)+len(msg.message.Value)+len(msg.message.Topic), sinkDoesNotCompress)
 		}
 	}
 }
 
 // exitWorkersWithError sends an error to the sink error channel
-func (p *pubsubSink) exitWorkersWithError(err error) {
+func (p *deprecatedPubsubSink) exitWorkersWithError(err error) {
 	// errChan has buffer size 1, first error will be saved to the buffer and
 	// subsequent errors will be ignored
 	select {
@@ -469,7 +402,7 @@ func (p *pubsubSink) exitWorkersWithError(err error) {
 }
 
 // sinkError checks if there is an error in the error channel
-func (p *pubsubSink) sinkErrorLocked() error {
+func (p *deprecatedPubsubSink) sinkErrorLocked() error {
 	select {
 	case err := <-p.errChan:
 		return err
@@ -479,12 +412,12 @@ func (p *pubsubSink) sinkErrorLocked() error {
 }
 
 // workerIndex hashes key to return a worker index
-func (p *pubsubSink) workerIndex(key []byte) uint32 {
+func (p *deprecatedPubsubSink) workerIndex(key []byte) uint32 {
 	return crc32.ChecksumIEEE(key) % uint32(p.numWorkers)
 }
 
 // flushWorkers sends a flush message to every worker channel and then signals sink that flush is done
-func (p *pubsubSink) flushWorkers() error {
+func (p *deprecatedPubsubSink) flushWorkers() error {
 	for i := 0; i < p.numWorkers; i++ {
 		//flush message will be blocked until all the messages in the channel are processed
 		select {
@@ -507,7 +440,14 @@ func (p *pubsubSink) flushWorkers() error {
 }
 
 // init opens a gcp client
-func (p *gcpPubsubClient) init() error {
+func (p *deprecatedGcpPubsubClient) init() error {
+	p.mu.topics = make(map[string]*pubsub.Topic)
+
+	if p.client != nil {
+		// Already set by unit test
+		return nil
+	}
+
 	var client *pubsub.Client
 	var err error
 
@@ -530,14 +470,13 @@ func (p *gcpPubsubClient) init() error {
 		return errors.Wrap(err, "opening client")
 	}
 	p.client = client
-	p.mu.topics = make(map[string]*pubsub.Topic)
 
 	return nil
 
 }
 
 // openTopic optimistically creates the topic
-func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
+func (p *deprecatedGcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
 	t, err := p.client.CreateTopic(p.ctx, topicName)
 	if err != nil {
 		switch status.Code(err) {
@@ -557,7 +496,7 @@ func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
 	return t, nil
 }
 
-func (p *gcpPubsubClient) closeTopics() {
+func (p *deprecatedGcpPubsubClient) closeTopics() {
 	_ = p.forEachTopic(func(_ string, t *pubsub.Topic) error {
 		t.Stop()
 		return nil
@@ -565,7 +504,7 @@ func (p *gcpPubsubClient) closeTopics() {
 }
 
 // sendMessage sends a message to the topic
-func (p *gcpPubsubClient) sendMessage(m []byte, topic string, key string) error {
+func (p *deprecatedGcpPubsubClient) sendMessage(m []byte, topic string, key string) error {
 	t, err := p.getTopicClient(topic)
 	if err != nil {
 		return err
@@ -586,7 +525,7 @@ func (p *gcpPubsubClient) sendMessage(m []byte, topic string, key string) error 
 	return nil
 }
 
-func (p *gcpPubsubClient) sendMessageToAllTopics(m []byte) error {
+func (p *deprecatedGcpPubsubClient) sendMessageToAllTopics(m []byte) error {
 	return p.forEachTopic(func(_ string, t *pubsub.Topic) error {
 		res := t.Publish(p.ctx, &pubsub.Message{
 			Data: m,
@@ -599,14 +538,16 @@ func (p *gcpPubsubClient) sendMessageToAllTopics(m []byte) error {
 	})
 }
 
-func (p *gcpPubsubClient) flushTopics() {
+func (p *deprecatedGcpPubsubClient) flushTopics() {
 	_ = p.forEachTopic(func(_ string, t *pubsub.Topic) error {
 		t.Flush()
 		return nil
 	})
 }
 
-func (p *gcpPubsubClient) forEachTopic(f func(name string, topicClient *pubsub.Topic) error) error {
+func (p *deprecatedGcpPubsubClient) forEachTopic(
+	f func(name string, topicClient *pubsub.Topic) error,
+) error {
 	return p.topicNamer.Each(func(n string) error {
 		t, err := p.getTopicClient(n)
 		if err != nil {
@@ -616,20 +557,20 @@ func (p *gcpPubsubClient) forEachTopic(f func(name string, topicClient *pubsub.T
 	})
 }
 
-func (p *gcpPubsubClient) recordAutocreateErrorLocked(e error) {
+func (p *deprecatedGcpPubsubClient) recordAutocreateErrorLocked(e error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.autocreateError = e
 }
 
-func (p *gcpPubsubClient) recordPublishErrorLocked(e error) {
+func (p *deprecatedGcpPubsubClient) recordPublishErrorLocked(e error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.publishError = e
 }
 
 // connectivityError returns any errors encountered while writing to gcp.
-func (p *gcpPubsubClient) connectivityErrorLocked() error {
+func (p *deprecatedGcpPubsubClient) connectivityErrorLocked() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if status.Code(p.mu.publishError) == codes.NotFound && p.mu.autocreateError != nil {
@@ -639,11 +580,4 @@ func (p *gcpPubsubClient) connectivityErrorLocked() error {
 			"Create topics in advance or grant this service account the pubsub.editor role on your project.")
 	}
 	return errors.CombineErrors(p.mu.publishError, p.mu.autocreateError)
-}
-
-// Generate the cloud endpoint that's specific to a region (e.g. us-east1).
-// Ideally this would be discoverable via API but doesn't seem to be.
-// A hardcoded approach looks to be correct right now.
-func gcpEndpointForRegion(region string) string {
-	return fmt.Sprintf("%s-pubsub.googleapis.com:443", region)
 }
