@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -208,7 +209,7 @@ func TestDataDriven(t *testing.T) {
 				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
-					Capabilities: caps,
+					Capabilities: tenantcapabilitiespb.TenantCapabilities(*caps),
 				}
 				buf, err := protoutil.Marshal(&info)
 				require.NoError(t, err)

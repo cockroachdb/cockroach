@@ -40,13 +40,13 @@ func (f constraintsConjunctionField) FieldValue(sc *roachpb.SpanConfig) Value {
 	return nil
 }
 
-func (f constraintsConjunctionField) FieldBound(b Bounds) ValueBounds {
-	if b.b.ConstraintBounds == nil {
+func (f constraintsConjunctionField) FieldBound(b *Bounds) ValueBounds {
+	if b.ConstraintBounds == nil {
 		return unbounded{}
 	}
 	switch f {
 	case constraints, voterConstraints:
-		return (*constraintsConjunctionBounds)(b.b.ConstraintBounds)
+		return (*constraintsConjunctionBounds)(b.ConstraintBounds)
 	default:
 		// This is safe because we test that all the fields in the proto have
 		// a corresponding field, and we call this for each of them, and the user
