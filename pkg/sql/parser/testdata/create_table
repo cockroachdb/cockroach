@@ -2062,6 +2062,14 @@ CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT (*) FROM b -- fully pare
 CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b -- literals removed
 CREATE TABLE IF NOT EXISTS _ (_, _ FAMILY _) AS SELECT * FROM _ -- identifiers removed
 
+parse
+CREATE TABLE a WITH (fillfactor=100) AS SELECT * FROM b
+----
+CREATE TABLE a WITH (fillfactor = 100) AS SELECT * FROM b -- normalized!
+CREATE TABLE a WITH (fillfactor = (100)) AS SELECT (*) FROM b -- fully parenthesized
+CREATE TABLE a WITH (fillfactor = _) AS SELECT * FROM b -- literals removed
+CREATE TABLE _ WITH (_ = 100) AS SELECT * FROM _ -- identifiers removed
+
 error
 CREATE TABLE test (
   foo INT8 FAMILY a FAMILY b

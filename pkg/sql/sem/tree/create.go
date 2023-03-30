@@ -1524,6 +1524,11 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 			ctx.FormatNode(&node.Defs)
 			ctx.WriteByte(')')
 		}
+		if node.StorageParams != nil {
+			ctx.WriteString(` WITH (`)
+			ctx.FormatNode(&node.StorageParams)
+			ctx.WriteByte(')')
+		}
 		ctx.WriteString(" AS ")
 		ctx.FormatNode(node.AsSource)
 	} else {
