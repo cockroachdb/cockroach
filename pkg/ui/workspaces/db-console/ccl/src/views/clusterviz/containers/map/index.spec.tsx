@@ -10,6 +10,7 @@ import React from "react";
 import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router-dom";
+import { refreshCluster } from "src/redux/apiReducers";
 
 import { ClusterVisualization } from "./index";
 import { Breadcrumbs } from "./breadcrumbs";
@@ -40,6 +41,7 @@ describe("ClusterVisualization", () => {
           enterpriseEnabled={true}
           licenseDataExists={true}
           match={match}
+          refreshCluster={refreshCluster}
         />,
       );
       history.push("/overview/map");
@@ -57,6 +59,7 @@ describe("ClusterVisualization", () => {
           enterpriseEnabled={true}
           licenseDataExists={true}
           match={match}
+          refreshCluster={refreshCluster}
         />,
       );
 

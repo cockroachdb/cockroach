@@ -153,6 +153,10 @@ sysctl --system  # reload sysctl settings
 # validation logic that relies on this -- see comment on cluster_synced.go
 sudo hostnamectl set-hostname {{.VMName}}
 
+{{ if .EnableFIPS }}
+sudo ua enable fips --assume-yes
+{{ end }}
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -162,15 +166,21 @@ sudo touch /mnt/data1/.roachprod-initialized
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(name string, extraMountOpts string, useMultiple bool) (string, error) {
+func writeStartupScript(
+	name string, extraMountOpts string, useMultiple bool, enableFips bool,
+) (string, error) {
 	type tmplParams struct {
 		VMName           string
 		ExtraMountOpts   string
 		UseMultipleDisks bool
+		EnableFIPS       bool
 	}
 
 	args := tmplParams{
-		VMName: name, ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple,
+		VMName:           name,
+		ExtraMountOpts:   extraMountOpts,
+		UseMultipleDisks: useMultiple,
+		EnableFIPS:       enableFips,
 	}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
