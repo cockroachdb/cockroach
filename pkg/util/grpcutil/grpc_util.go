@@ -156,7 +156,8 @@ func IsWaitingForInit(err error) bool {
 func RequestDidNotStart(err error) bool {
 	if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
 		errors.Is(err, circuit.ErrBreakerOpen) ||
-		IsConnectionRejected(err) {
+		IsConnectionRejected(err) ||
+		IsWaitingForInit(err) {
 		return true
 	}
 	_, ok := status.FromError(errors.Cause(err))
