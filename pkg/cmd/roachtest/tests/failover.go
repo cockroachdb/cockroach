@@ -45,11 +45,20 @@ func registerFailover(r registry.Registry) {
 		failureModeDiskStall,
 	} {
 		failureMode := failureMode // pin loop variable
+		makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
+			s := r.MakeClusterSpec(nNodes, spec.CPU(nCPU))
+			if failureMode == failureModeDiskStall {
+				// Use PDs in an attempt to work around flakes encountered when using
+				// SSDs. See #97968.
+				s.PreferLocalSSD = false
+			}
+			return s
+		}
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("failover/non-system/%s", failureMode),
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
+			Cluster: makeSpec(7 /* nodes */, 4 /* cpus */),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverNonSystem(ctx, t, c, failureMode)
 			},
@@ -58,7 +67,7 @@ func registerFailover(r registry.Registry) {
 			Name:    fmt.Sprintf("failover/liveness/%s", failureMode),
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(5, spec.CPU(4)),
+			Cluster: makeSpec(5 /* nodes */, 4 /* cpus */),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverLiveness(ctx, t, c, failureMode)
 			},
@@ -67,7 +76,7 @@ func registerFailover(r registry.Registry) {
 			Name:    fmt.Sprintf("failover/system-non-liveness/%s", failureMode),
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
+			Cluster: makeSpec(7 /* nodes */, 4 /* cpus */),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverSystemNonLiveness(ctx, t, c, failureMode)
 			},

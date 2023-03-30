@@ -37,7 +37,7 @@ export default function getHighlightedText(
     })
     .join("|");
   const parts = isOriginalText
-    ? text.split(new RegExp(`(${search})`, "gi"))
+    ? text?.split(new RegExp(`(${search})`, "gi"))
     : rebaseText(text, highlight).split(new RegExp(`(${search})`, "gi"));
   const highlightClass = hasDarkBkg ? "_text-bold-light" : "_text-bold";
   return parts.map((part, i) => {

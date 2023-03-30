@@ -384,7 +384,7 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
     transactionExecutionID: row.txn_id,
     transactionFingerprintID: row.txn_fingerprint_id,
     implicitTxn: row.implicit_txn,
-    query: row.query.split(" ; ").join("\n"),
+    query: row.query?.split(" ; ").join("\n") || "",
     startTime,
     endTime,
     elapsedTimeMillis: endTime.diff(startTime, "milliseconds"),
