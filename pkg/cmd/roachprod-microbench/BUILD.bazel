@@ -38,13 +38,19 @@ go_binary(
 
 go_test(
     name = "roachprod-microbench_test",
-    srcs = ["benchmark_test.go"],
+    srcs = [
+        "benchmark_test.go",
+        "compare_test.go",
+    ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":roachprod-microbench_lib"],
     deps = [
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//maps",
+        "@org_golang_x_perf//benchstat",
     ],
 )
 
