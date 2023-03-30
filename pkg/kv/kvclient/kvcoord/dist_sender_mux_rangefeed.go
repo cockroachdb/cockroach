@@ -462,10 +462,19 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		return err
 	}
 
-	if errInfo.resolveSpan {
-		return divideSpanOnRangeBoundaries(ctx, m.ds, rs, active.startAfter, m.startSingleRangeFeed)
-	}
-	return m.startSingleRangeFeed(ctx, rs, active.startAfter, active.token)
+	// Restart rangefeed on another go routine.  There are two reasons for doing this
+	// under muxer context group.
+	//   1. Restart might be a bit expensive, particularly if we have to resolve span.
+	//      We do not want to block receiveEventsFromNode for too long.
+	//   2. Most importantly: the context passed to this function may be canceled if
+	//      the restart is happening because node mux is exiting.
+	m.g.GoCtx(func(ctx context.Context) error {
+		if errInfo.resolveSpan {
+			return divideSpanOnRangeBoundaries(ctx, m.ds, rs, active.startAfter, m.startSingleRangeFeed)
+		}
+		return m.startSingleRangeFeed(ctx, rs, active.startAfter, active.token)
+	})
+	return nil
 }
 
 // startRangeFeed initiates rangefeed for the specified request running
