@@ -395,7 +395,15 @@ func (b *baseStatusServer) localExecutionInsights(
 
 	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
 	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
-		response.Insights = append(response.Insights, *insight)
+		if insight == nil {
+			return
+		}
+
+		// Versions <=22.2.6 expects that Statement is not null when building the exec insights virtual table.
+		insightWithStmt := *insight
+		insightWithStmt.Statement = &insights.Statement{}
+
+		response.Insights = append(response.Insights, insightWithStmt)
 	})
 
 	return &response, nil
