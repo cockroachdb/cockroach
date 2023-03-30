@@ -510,6 +510,10 @@ const (
 	// that are optimized for the console.
 	V23_1AddSystemActivityTables
 
+	// V23_1ChangeSQLStatsTTL is the version where the gc TTL was updated to all
+	// SQL Stats tables.
+	V23_1ChangeSQLStatsTTL
+
 	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
 	V23_1
 
@@ -893,6 +897,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AddSystemActivityTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     V23_1ChangeSQLStatsTTL,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
 	},
 	{
 		Key:     V23_1,
