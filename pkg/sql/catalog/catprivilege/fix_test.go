@@ -143,261 +143,32 @@ func TestFixPrivileges(t *testing.T) {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
 
-		catprivilege.MaybeFixPrivileges(
+		if _, err := catprivilege.MaybeFixPrivileges(
 			&desc,
 			descpb.InvalidID,
 			descpb.InvalidID,
 			privilege.Database,
-			testCase.name)
+			testCase.name,
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		if a, e := len(desc.Users), len(testCase.output); a != e {
 			t.Errorf("#%d: expected %d users (%v), got %d (%v)", num, e, testCase.output, a, desc.Users)
 			continue
 		}
 
-		for u, p := range testCase.output {
+		for u, expected := range testCase.output {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
-				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, e, a)
+			actual, err := privilege.ListFromBitField(outputUser.Privileges, privilege.Any)
+			if err != nil {
+				t.Fatal(err)
 			}
-		}
-	}
-}
-
-// TestMaybeFixUsageAndZoneConfigPrivilege checks that Table and DB descriptors
-// on created on v20.1 or prior (PrivilegeDescVersion InitialVersion) with
-// USAGE privilege have its privilege correctly updated.
-// The bit representing USAGE privilege in 20.2 for Tables/DBs should actually
-// be ZONECONFIG privilege and should be updated.
-func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
-
-	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := username.MakeSQLUsernameFromPreNormalizedString("bar")
-	bazUser := username.MakeSQLUsernameFromPreNormalizedString("baz")
-
-	type userPrivileges map[username.SQLUsername]privilege.List
-
-	testCases := []struct {
-		input           userPrivileges
-		modified        bool
-		output          userPrivileges
-		objectType      privilege.ObjectType
-		privDescVersion catpb.PrivilegeDescVersion
-		description     string
-		isValid         bool
-	}{
-		// Cases for Tables and Databases.
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			privilege.Table,
-			catpb.InitialVersion,
-			"A privilege descriptor from a table created in v20.1 or prior " +
-				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			privilege.Database,
-			catpb.InitialVersion,
-			"A privilege descriptor from a database created in v20.1 or prior " +
-				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.ALL},
-			},
-			false,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ALL},
-			},
-			privilege.Table,
-			catpb.InitialVersion,
-			"ALL should stay as ALL",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-			},
-			false,
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-			},
-			privilege.Table,
-			catpb.OwnerVersion,
-			"A privilege descriptor from a table created in v20.2 onwards " +
-				"(OwnerVersion) should not be modified.",
-			false,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-			},
-			false,
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-			},
-			privilege.Database,
-			catpb.OwnerVersion,
-			"A privilege descriptor from a Database created in v20.2 onwards " +
-				"(OwnerVersion) should not be modified.",
-			false,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			false,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			privilege.Table,
-			catpb.OwnerVersion,
-			"A privilege descriptor from a table created in v20.2 onwards " +
-				"(OwnerVersion) should not be modified.",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			false,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			privilege.Database,
-			catpb.OwnerVersion,
-			"A privilege descriptor from a Database created in v20.2 onwards " +
-				"(OwnerVersion) should not be modified.",
-			true,
-		},
-		// Fix privileges for multiple users.
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE, privilege.SELECT},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.SELECT},
-			},
-			privilege.Table,
-			catpb.InitialVersion,
-			"A privilege descriptor from a table created in v20.1 or prior " +
-				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
-			},
-			privilege.Database,
-			catpb.InitialVersion,
-			"A privilege descriptor from a table created in v20.1 or prior " +
-				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
-			},
-			privilege.Database,
-			catpb.InitialVersion,
-			"A privilege descriptor from a database created in v20.1 or prior " +
-				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
-			true,
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
-				bazUser: privilege.List{privilege.ALL, privilege.USAGE},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
-				bazUser: privilege.List{privilege.ALL},
-			},
-			privilege.Database,
-			catpb.InitialVersion,
-			"A privilege descriptor from a table created in v20.1 or prior " +
-				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
-			true,
-		},
-		// Test case where the privilege descriptor has ZONECONFIG and USAGE.
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.USAGE, privilege.ZONECONFIG},
-			},
-			true,
-			userPrivileges{
-				fooUser: privilege.List{privilege.ZONECONFIG},
-			},
-			privilege.Table,
-			catpb.InitialVersion,
-			"If the descriptor has USAGE and ZONECONFIG, it should become just " +
-				"ZONECONFIG",
-			true,
-		},
-	}
-
-	for num, tc := range testCases {
-		desc := &catpb.PrivilegeDescriptor{Version: tc.privDescVersion}
-		for u, p := range tc.input {
-			desc.Grant(u, p, false /* withGrantOption */)
-		}
-		modified := catprivilege.MaybeFixUsagePrivForTablesAndDBs(&desc)
-
-		if tc.modified != modified {
-			t.Errorf("expected modifed to be %v, was %v", tc.modified, modified)
-		}
-
-		for u, p := range tc.output {
-			outputUser, ok := desc.FindUser(u)
-			if !ok {
-				t.Errorf("#%d: expected user %s in output, but not found (%v)\n%s",
-					num, u, desc.Users, tc.description,
-				)
-			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
-				t.Errorf("#%d: user %s: expected privileges %v, got %v\n%s",
-					num, u, e, a, tc.description,
-				)
-			}
-
-			err := privilege.ValidatePrivileges(p, tc.objectType)
-			if tc.isValid && err != nil {
-				t.Errorf("%s\n%s", err.Error(), tc.description)
+			if actual.ToBitField() != expected.ToBitField() {
+				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, expected, actual)
 			}
 		}
 	}
@@ -473,28 +244,33 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
 		testParentID := descpb.ID(bootstrap.TestingMinNonDefaultUserDescID())
-		catprivilege.MaybeFixPrivileges(&desc,
+		if _, err := catprivilege.MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,
 			privilege.Schema,
 			"whatever",
-		)
+		); err != nil {
+			t.Fatal(err)
+		}
 
-		for u, p := range tc.output {
+		for u, expected := range tc.output {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Errorf("#%d: expected user %s in output, but not found (%v)",
 					num, u, desc.Users,
 				)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
+			actual, err := privilege.ListFromBitField(outputUser.Privileges, privilege.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if actual.ToBitField() != expected.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v",
-					num, u, e, a,
+					num, u, expected, actual,
 				)
 			}
 
-			err := privilege.ValidatePrivileges(p, privilege.Schema)
-			if err != nil {
+			if err := privilege.ValidatePrivileges(expected, privilege.Schema); err != nil {
 				t.Errorf("%s\n", err.Error())
 			}
 		}
