@@ -18,13 +18,13 @@ INSERT INTO t VALUES
 query T
 SELECT x FROM t ORDER BY x
 ----
+[]
 "a"
 "aa"
 "abcdefghi"
 "b"
 1
 100
-[]
 {"a": "b"}
 
 
@@ -36,13 +36,13 @@ INSERT INTO t VALUES
 query T
 SELECT x FROM t@t_pkey ORDER BY x
 ----
+[]
 "a"
 "aa"
 "abcdefghi"
 "b"
 1
 100
-[]
 {"a": "b"}
 
 # Use the index for point lookups.
@@ -75,12 +75,12 @@ query T
 SELECT x FROM t@t_pkey WHERE x > '1' ORDER BY x
 ----
 100
-[]
 {"a": "b"}
 
 query T
 SELECT x FROM t@t_pkey WHERE x < '1' ORDER BY x
 ----
+[]
 "a"
 "aa"
 "abcdefghi"
@@ -90,12 +90,12 @@ SELECT x FROM t@t_pkey WHERE x < '1' ORDER BY x
 query T
 SELECT x FROM t@t_pkey WHERE x > '1' OR x < '1' ORDER BY x
 ----
+[]
 "a"
 "aa"
 "abcdefghi"
 "b"
 100
-[]
 {"a": "b"}
 
 query T
@@ -107,12 +107,12 @@ query T
 SELECT x FROM t@t_pkey WHERE x > '1' OR x < '1' ORDER BY x DESC
 ----
 {"a": "b"}
-[]
 100
 "b"
 "abcdefghi"
 "aa"
 "a"
+[]
 
 # Adding more primitive JSON values.
 statement ok
@@ -127,6 +127,7 @@ INSERT INTO t VALUES
 query T
 SELECT x FROM t@t_pkey ORDER BY x
 ----
+[]
 null
 "Testing Punctuation?!."
 "a"
@@ -139,18 +140,17 @@ null
 100
 false
 true
-[]
 {"a": "b"}
 
 query T
 SELECT x FROM t@t_pkey WHERE x > 'true' ORDER BY x
 ----
-[]
 {"a": "b"}
 
 query T
 SELECT x FROM t@t_pkey WHERE x < 'false' ORDER BY x
 ----
+[]
 null
 "Testing Punctuation?!."
 "a"
@@ -444,12 +444,12 @@ INSERT INTO t VALUES
 query T
 SELECT x FROM t@i ORDER BY x;
 ----
+[]
 null
 "crdb"
 1
 false
 true
-[]
 [null]
 [1]
 [{"a": "b"}]
@@ -483,4 +483,3 @@ query T rowsort
 SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
 ----
 [1, [2, 3]]
-
