@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/status"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -146,8 +145,21 @@ func TestRequestDidNotStart(t *testing.T) {
 	}
 }
 
-func TestRequestDidNotStart_OpenBreaker(t *testing.T) {
-	err := errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", 42)
-	res := grpcutil.RequestDidNotStart(err)
-	assert.True(t, res)
+func TestRequestDidNotStart_Errors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := map[string]struct {
+		err    error
+		expect bool
+	}{
+		"breaker":          {errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", 42), true},
+		"waiting for init": {errors.Wrapf(server.NewWaitingForInitError("foo"), "failed"), true},
+		"plain":            {errors.New("foo"), false},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, grpcutil.RequestDidNotStart(tc.err))
+		})
+	}
 }
