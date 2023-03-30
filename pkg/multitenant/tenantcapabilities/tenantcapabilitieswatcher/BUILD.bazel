@@ -19,6 +19,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/systemschema",

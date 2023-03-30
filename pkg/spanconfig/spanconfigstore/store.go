@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -87,7 +86,7 @@ type Store struct {
 	knobs *spanconfig.TestingKnobs
 
 	// boundsReader provides a handle to the global SpanConfigBounds state.
-	boundsReader spanconfigbounds.Reader
+	boundsReader BoundsReader
 }
 
 var _ spanconfig.Store = &Store{}
@@ -96,7 +95,7 @@ var _ spanconfig.Store = &Store{}
 func New(
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
-	boundsReader spanconfigbounds.Reader,
+	boundsReader BoundsReader,
 	knobs *spanconfig.TestingKnobs,
 ) *Store {
 	if knobs == nil {

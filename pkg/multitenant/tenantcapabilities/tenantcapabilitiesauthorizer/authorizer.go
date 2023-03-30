@@ -99,7 +99,8 @@ func (a *Authorizer) HasCapabilityForBatch(
 				return newTenantDoesNotHaveCapabilityError(requiredCap, request)
 			}
 		}
-		if !hasCap || requiredCap == onlySystemTenant || !cp.GetBool(requiredCap) {
+		if !hasCap || requiredCap == onlySystemTenant ||
+			!tenantcapabilities.MustGetBoolByID(cp, requiredCap) {
 			// All allowable request types must be explicitly opted into the
 			// reqMethodToCap map. If a request type is missing from the map
 			// (!hasCap), we must be conservative and assume it is
@@ -116,13 +117,11 @@ func (a *Authorizer) HasCapabilityForBatch(
 	return nil
 }
 
-func newTenantDoesNotHaveCapabilityError(
-	cap tenantcapabilities.CapabilityID, req kvpb.Request,
-) error {
+func newTenantDoesNotHaveCapabilityError(cap tenantcapabilities.ID, req kvpb.Request) error {
 	return errors.Newf("client tenant does not have capability %q (%T)", cap, req)
 }
 
-var reqMethodToCap = map[kvpb.Method]tenantcapabilities.CapabilityID{
+var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	// The following requests are authorized for all workloads.
 	kvpb.AddSSTable:         noCapCheckNeeded,
 	kvpb.Barrier:            noCapCheckNeeded,
@@ -200,7 +199,9 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 			tenID,
 		)
 	}
-	if !found || !cp.GetBool(tenantcapabilities.CanViewNodeInfo) {
+	if !found || !tenantcapabilities.MustGetBoolByID(
+		cp, tenantcapabilities.CanViewNodeInfo,
+	) {
 		return errors.Newf("client tenant does not have capability to query cluster node metadata")
 	}
 	return nil
@@ -217,7 +218,9 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 			tenID,
 		)
 	}
-	if !found || !cp.GetBool(tenantcapabilities.CanViewTSDBMetrics) {
+	if !found || !tenantcapabilities.MustGetBoolByID(
+		cp, tenantcapabilities.CanViewTSDBMetrics,
+	) {
 		return errors.Newf("client tenant does not have capability to query timeseries data")
 	}
 	return nil
@@ -254,7 +257,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 		return false
 	}
 	if cp, found := a.capabilitiesReader.GetCapabilities(tenID); found {
-		return cp.GetBool(tenantcapabilities.ExemptFromRateLimiting)
+		return tenantcapabilities.MustGetBoolByID(cp, tenantcapabilities.ExemptFromRateLimiting)
 	}
 	return false
 }

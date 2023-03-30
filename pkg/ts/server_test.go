@@ -496,7 +496,7 @@ func TestServerQueryTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	capability := map[tenantcapabilities.CapabilityID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
+	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
 	testCluster.WaitForTenantCapabilities(t, tenantID, capability)
 	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, tsrv.NodeID(), rpc.DefaultClass).Connect(context.Background())
 	if err != nil {

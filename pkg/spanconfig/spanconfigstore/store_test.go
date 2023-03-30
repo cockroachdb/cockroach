@@ -229,18 +229,18 @@ func TestDataDriven(t *testing.T) {
 }
 
 type mockBoundsReader struct {
-	bounds map[roachpb.TenantID]spanconfigbounds.Bounds
+	bounds map[roachpb.TenantID]*spanconfigbounds.Bounds
 }
 
 func newMockBoundsReader() *mockBoundsReader {
 	m := mockBoundsReader{
-		bounds: make(map[roachpb.TenantID]spanconfigbounds.Bounds),
+		bounds: make(map[roachpb.TenantID]*spanconfigbounds.Bounds),
 	}
 	return &m
 }
 
 // Bounds implements the spanconfigbounds.Reader interface.
-func (m *mockBoundsReader) Bounds(id roachpb.TenantID) (spanconfigbounds.Bounds, bool) {
+func (m *mockBoundsReader) Bounds(id roachpb.TenantID) (*spanconfigbounds.Bounds, bool) {
 	bounds, found := m.bounds[id]
 	return bounds, found
 }
@@ -302,7 +302,7 @@ func TestStoreClone(t *testing.T) {
 	original := New(
 		roachpb.TestingDefaultSpanConfig(),
 		cluster.MakeClusterSettings(),
-		spanconfigbounds.NewEmptyReader(),
+		NewEmptyBoundsReader(),
 		nil,
 	)
 	original.Apply(ctx, false, updates...)
@@ -340,7 +340,7 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 			store := New(
 				roachpb.SpanConfig{},
 				cluster.MakeClusterSettings(),
-				spanconfigbounds.NewEmptyReader(),
+				NewEmptyBoundsReader(),
 				&spanconfig.TestingKnobs{
 					StoreIgnoreCoalesceAdjacentExceptions: true,
 				},

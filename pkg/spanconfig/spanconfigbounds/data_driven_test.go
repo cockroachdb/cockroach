@@ -70,7 +70,7 @@ import (
 //     field retrieval and printing logic for configs.
 func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		bounds := make(map[string]spanconfigbounds.Bounds)
+		bounds := make(map[string]*spanconfigbounds.Bounds)
 		configs := make(map[string]*roachpb.SpanConfig)
 		vars := make(map[string]string)
 		variableRegexp := regexp.MustCompile(`(?P<prefix>^|\s)(?P<name>\$[A-Za-z][A-Za-z0-9_]*)(?P<suffix>$|\s)`)
@@ -89,7 +89,7 @@ func TestDataDriven(t *testing.T) {
 					return submatches[variablePrefixIndex] + vars[name] + submatches[variableSuffixIndex]
 				})
 			}
-			getBounds := func() spanconfigbounds.Bounds {
+			getBounds := func() *spanconfigbounds.Bounds {
 				var boundsName string
 				d.ScanArgs(tt, "bounds", &boundsName)
 				require.Contains(t, bounds, boundsName, "bounds")
@@ -101,7 +101,7 @@ func TestDataDriven(t *testing.T) {
 				require.Contains(t, configs, configName, "config")
 				return configs[configName]
 			}
-			getBoundsAndConfig := func() (spanconfigbounds.Bounds, *roachpb.SpanConfig) {
+			getBoundsAndConfig := func() (*spanconfigbounds.Bounds, *roachpb.SpanConfig) {
 				var cfg *roachpb.SpanConfig
 				if d.HasArg("config") {
 					require.Zero(t, d.Input)
@@ -127,7 +127,7 @@ func TestDataDriven(t *testing.T) {
 				require.NotContains(t, bounds, name)
 				var b tenantcapabilitiespb.SpanConfigBounds
 				require.NoError(t, proto.UnmarshalText(expand(d.Input), &b))
-				bounds[name] = spanconfigbounds.MakeBounds(&b)
+				bounds[name] = spanconfigbounds.New(&b)
 				return ""
 			case "config":
 				// I guess what I'm going to do is go yaml to json to protobuf and pray.
@@ -157,9 +157,9 @@ func TestDataDriven(t *testing.T) {
 				return out
 			case "conforms":
 				return fmt.Sprint(
-					spanconfigbounds.Bounds.Conforms(getBoundsAndConfig()))
+					(*spanconfigbounds.Bounds).Conforms(getBoundsAndConfig()))
 			case "check":
-				err := spanconfigbounds.Bounds.Check(getBoundsAndConfig()).AsError()
+				err := (*spanconfigbounds.Bounds).Check(getBoundsAndConfig()).AsError()
 				// Exercise both the short and long form of the error.
 				return fmt.Sprintf("%v\n%+v", err, err)
 			case "bounds-fields":
