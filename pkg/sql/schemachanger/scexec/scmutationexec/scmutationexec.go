@@ -57,9 +57,9 @@ func (i *immediateVisitor) NotImplementedForPublicObjects(
 	ctx context.Context, op scop.NotImplementedForPublicObjects,
 ) error {
 	desc := i.MaybeGetCheckedOutDescriptor(op.DescID)
-	if desc.Dropped() {
+	if desc == nil || desc.Dropped() {
 		return nil
 	}
-	return errors.AssertionFailedf("not implemented operation was hit " +
-		"unexpectedly, no dropped descriptor was found.")
+	return errors.AssertionFailedf("not implemented operation was hit "+
+		"unexpectedly, no dropped descriptor was found. %v", op.ElementType)
 }

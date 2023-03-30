@@ -74,7 +74,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
- │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.ColumnFamil..."}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
@@ -97,6 +96,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
@@ -234,7 +234,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
- │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.ColumnFamil..."}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
@@ -257,6 +256,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":108}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}

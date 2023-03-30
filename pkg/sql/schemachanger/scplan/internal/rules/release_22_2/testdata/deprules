@@ -25,6 +25,10 @@ fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL($fromTarget, $fromEl, $toEl):
         - $n[Type] = '*screl.Node'
         - $n[Target] = $fromTarget
         - nodeHasNoPublicStatus($n)
+joinOnColumnFamilyID($a, $b, $desc-id, $family-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[ColumnFamilyID] = $family-id
+    - $b[ColumnFamilyID] = $family-id
 joinOnColumnID($a, $b, $desc-id, $col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id

@@ -35,7 +35,6 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         └── 20 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.ColumnFamil..."}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
@@ -52,7 +51,8 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"t","SchemaID":101}}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
- │              └── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+ │              └── AssertColumnFamilyIsRemoved {"TableID":105}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 23 elements transitioning toward ABSENT
@@ -111,7 +111,6 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         └── 36 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.ColumnFamil..."}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
@@ -133,6 +132,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":105}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":105}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":105}

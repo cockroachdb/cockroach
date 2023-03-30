@@ -111,6 +111,11 @@ func JoinOnColumnID(a, b NodeVars, relationIDVar, columnIDVar rel.Var) rel.Claus
 	return joinOnColumnIDUntyped(a.El, b.El, relationIDVar, columnIDVar)
 }
 
+// JoinOnColumnFamilyID joins elements on column ID.
+func JoinOnColumnFamilyID(a, b NodeVars, relationIDVar, columnFamilyIDVar rel.Var) rel.Clause {
+	return joinOnColumnFamilyIDUntyped(a.El, b.El, relationIDVar, columnFamilyIDVar)
+}
+
 // JoinOnIndexID joins elements on index ID.
 func JoinOnIndexID(a, b NodeVars, relationIDVar, indexIDVar rel.Var) rel.Clause {
 	return joinOnIndexIDUntyped(a.El, b.El, relationIDVar, indexIDVar)
@@ -203,6 +208,16 @@ var (
 			return rel.Clauses{
 				JoinOnDescIDUntyped(a, b, descID),
 				colID.Entities(screl.ColumnID, a, b),
+			}
+		},
+	)
+	joinOnColumnFamilyIDUntyped = screl.Schema.Def4(
+		"joinOnColumnFamilyID", "a", "b", "desc-id", "family-id", func(
+			a, b, descID, familyID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				JoinOnDescIDUntyped(a, b, descID),
+				familyID.Entities(screl.ColumnFamilyID, a, b),
 			}
 		},
 	)
