@@ -286,6 +286,9 @@ CREATE TABLE data2.foo (a int);
 			case systemschema.CommentsTable.GetName():
 				query := fmt.Sprintf("SELECT comment FROM system.%s", table)
 				verificationQueries[i] = query
+			case systemschema.ScheduledJobsTable.GetName():
+				query := fmt.Sprintf("SELECT schedule_id, schedule_name FROM system.%s", table)
+				verificationQueries[i] = query
 			default:
 				query := fmt.Sprintf("SELECT * FROM system.%s", table)
 				verificationQueries[i] = query
