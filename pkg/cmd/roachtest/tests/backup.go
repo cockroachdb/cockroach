@@ -153,10 +153,20 @@ func importBankCommand(cockroach string, rows, ranges, csvPort, node int) string
 func waitForPort(
 	ctx context.Context, nodes option.NodeListOption, port int, c cluster.Cluster,
 ) error {
-	if err := retry.WithMaxAttempts(ctx, retry.Options{
+	// TODO(ssd): An alternative here would be to try to connect
+	// using some go code rather than calling lsof.
+	maybeSudo := "sudo "
+	if c.IsLocal() {
+		maybeSudo = ""
+	}
+	cmd := fmt.Sprintf("%slsof -i:%d | grep -q LISTEN", maybeSudo, port)
+
+	retryConfig := retry.Options{
 		MaxBackoff: 500 * time.Millisecond,
-	}, 10, func() error {
-		return c.RunE(ctx, nodes, fmt.Sprintf("sudo lsof -i:%d | grep -q LISTEN", port))
+	}
+
+	if err := retry.WithMaxAttempts(ctx, retryConfig, 10, func() error {
+		return c.RunE(ctx, nodes, cmd)
 	}); err != nil {
 		return fmt.Errorf("timed out waiting for port %d: %w", port, err)
 	}
