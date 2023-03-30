@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -100,7 +101,6 @@ import (
 // Text of the form [a,b) and [a,b):C correspond to spans and span config
 // records; see spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more
 // details.
-// TODO(arul): Add ability to express tenant spans to this datadriven test.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -148,6 +148,7 @@ func TestDataDriven(t *testing.T) {
 			10<<20, /* 10 MB */
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
 			tc.Server(0).ClusterSettings(),
+			spanconfigbounds.NewEmptyReader(),
 			&spanconfig.TestingKnobs{
 				KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
 					OnTimestampAdvance: func(ts hlc.Timestamp) {

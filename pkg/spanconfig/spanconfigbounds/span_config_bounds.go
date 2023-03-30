@@ -77,7 +77,7 @@ func (b Bounds) Check(c *roachpb.SpanConfig) Violations {
 
 func (b Bounds) clamp(c *roachpb.SpanConfig, reporter func(Field)) (changed bool) {
 	for _, f := range fields {
-		if b := f.FieldBound(b); !b.clamp(c, f) {
+		if bb := f.FieldBound(b); !bb.clamp(c, f) {
 			continue
 		}
 		changed = true

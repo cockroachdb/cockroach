@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -104,6 +105,11 @@ func (s *spanConfigStore) TestingSplitKeys(tb testing.TB, start, end roachpb.RKe
 //	A (refs = 2)
 //	B (refs = 1)
 //
+// declare-bounds
+// set /Tenant/20:{GC.ttl_start=15, GC.ttl_end=30}
+// delete /Tenant/10
+// ----
+//
 // Text of the form [a,b), {entire-keyspace}, {source=1,target=20}, and [a,b):C
 // correspond to targets {spans, system targets} and span config records; see
 // spanconfigtestutils.Parse{Target,Config,SpanConfigRecord} for more details.
@@ -111,10 +117,14 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
+	boundsReader := newMockBoundsReader()
+	settings := cluster.MakeTestingClusterSettings()
+	boundsEnabled.Override(ctx, &settings.SV, true)
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		store := New(
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
-			cluster.MakeTestingClusterSettings(),
+			settings,
+			boundsReader,
 			&spanconfig.TestingKnobs{
 				StoreIgnoreCoalesceAdjacentExceptions: true,
 				StoreInternConfigsInDryRuns:           true,
@@ -147,7 +157,8 @@ func TestDataDriven(t *testing.T) {
 
 			case "get":
 				d.ScanArgs(t, "key", &keyStr)
-				config, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(keyStr))
+				key, _ := spanconfigtestutils.ParseKey(t, keyStr)
+				config, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(key))
 				require.NoError(t, err)
 				return fmt.Sprintf("conf=%s", spanconfigtestutils.PrintSpanConfig(config))
 
@@ -207,6 +218,9 @@ func TestDataDriven(t *testing.T) {
 				}
 				return b.String()
 
+			case "declare-bounds":
+				updates := spanconfigtestutils.ParseDeclareBoundsArguments(t, d.Input)
+				boundsReader.apply(updates)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
@@ -214,6 +228,34 @@ func TestDataDriven(t *testing.T) {
 			return ""
 		})
 	})
+}
+
+type mockBoundsReader struct {
+	bounds map[roachpb.TenantID]spanconfigbounds.Bounds
+}
+
+func newMockBoundsReader() *mockBoundsReader {
+	m := mockBoundsReader{
+		bounds: make(map[roachpb.TenantID]spanconfigbounds.Bounds),
+	}
+	return &m
+}
+
+// Bounds implements the spanconfigbounds.Reader interface.
+func (m *mockBoundsReader) Bounds(id roachpb.TenantID) (spanconfigbounds.Bounds, bool) {
+	bounds, found := m.bounds[id]
+	return bounds, found
+}
+
+func (m *mockBoundsReader) apply(updates []spanconfigtestutils.BoundsUpdate) {
+	for _, update := range updates {
+		if update.Deleted {
+			delete(m.bounds, update.TenantID)
+			continue
+		}
+
+		m.bounds[update.TenantID] = update.Bounds
+	}
 }
 
 // TestStoreClone verifies that a cloned store contains the same contents as the
@@ -259,7 +301,12 @@ func TestStoreClone(t *testing.T) {
 		),
 	}
 
-	original := New(roachpb.TestingDefaultSpanConfig(), cluster.MakeClusterSettings(), nil)
+	original := New(
+		roachpb.TestingDefaultSpanConfig(),
+		cluster.MakeClusterSettings(),
+		spanconfigbounds.NewEmptyReader(),
+		nil,
+	)
 	original.Apply(ctx, false, updates...)
 	clone := original.Clone()
 
@@ -295,6 +342,7 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 			store := New(
 				roachpb.SpanConfig{},
 				cluster.MakeClusterSettings(),
+				spanconfigbounds.NewEmptyReader(),
 				&spanconfig.TestingKnobs{
 					StoreIgnoreCoalesceAdjacentExceptions: true,
 				},

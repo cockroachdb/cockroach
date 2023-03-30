@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -44,6 +45,16 @@ var FallbackConfigOverride = settings.RegisterProtobufSetting(
 	"spanconfig.store.fallback_config_override",
 	"override the fallback used for ranges with no explicit span configs set",
 	&roachpb.SpanConfig{},
+)
+
+// BoundsEnabled is a hidden cluster setting which controls whether
+// SpanConfigBounds should be consulted (to perform clamping of secondary tenant
+// span configurations) before serving span configs.
+var boundsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.bounds.enabled",
+	"dictates whether span config bounds are consulted when serving span configs for secondary tenants",
+	false,
 )
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
@@ -74,21 +85,28 @@ type Store struct {
 	fallback roachpb.SpanConfig
 
 	knobs *spanconfig.TestingKnobs
+
+	// boundsReader provides a handle to the global SpanConfigBounds state.
+	boundsReader spanconfigbounds.Reader
 }
 
 var _ spanconfig.Store = &Store{}
 
 // New instantiates a span config store with the given fallback.
 func New(
-	fallback roachpb.SpanConfig, settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
+	fallback roachpb.SpanConfig,
+	settings *cluster.Settings,
+	boundsReader spanconfigbounds.Reader,
+	knobs *spanconfig.TestingKnobs,
 ) *Store {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	s := &Store{
-		settings: settings,
-		fallback: fallback,
-		knobs:    knobs,
+		settings:     settings,
+		fallback:     fallback,
+		boundsReader: boundsReader,
+		knobs:        knobs,
 	}
 	s.mu.spanConfigStore = newSpanConfigStore(settings, s.knobs)
 	s.mu.systemSpanConfigStore = newSystemSpanConfigStore()
@@ -132,7 +150,37 @@ func (s *Store) getSpanConfigForKeyRLocked(
 	if !found {
 		conf = s.getFallbackConfig()
 	}
-	return s.mu.systemSpanConfigStore.combine(key, conf)
+	var err error
+	conf, err = s.mu.systemSpanConfigStore.combine(key, conf)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+
+	// No need to perform clamping if SpanConfigBounds are not enabled.
+	if !boundsEnabled.Get(&s.settings.SV) {
+		return conf, nil
+	}
+
+	_, tenID, err := keys.DecodeTenantPrefix(roachpb.Key(key))
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	if tenID.IsSystem() {
+		// SpanConfig bounds do not apply to the system tenant.
+		return conf, nil
+	}
+
+	bounds, found := s.boundsReader.Bounds(tenID)
+	if !found {
+		return conf, nil
+	}
+
+	clamped := bounds.Clamp(&conf)
+
+	if clamped {
+		log.VInfof(ctx, 3, "span config for tenant clamped to %v", conf)
+	}
+	return conf, nil
 }
 
 func (s *Store) getFallbackConfig() roachpb.SpanConfig {
@@ -173,7 +221,7 @@ func (s *Store) Clone() *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	clone := New(s.fallback, s.settings, s.knobs)
+	clone := New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	clone.mu.spanConfigStore = s.mu.spanConfigStore.clone()
 	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.clone()
 	return clone

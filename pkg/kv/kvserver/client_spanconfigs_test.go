@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -41,6 +42,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	spanConfigStore := spanconfigstore.New(
 		roachpb.TestingDefaultSpanConfig(),
 		cluster.MakeTestingClusterSettings(),
+		spanconfigbounds.NewEmptyReader(),
 		nil,
 	)
 	var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -107,7 +109,9 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	spanConfigStore := spanconfigstore.New(roachpb.TestingDefaultSpanConfig(), st, nil)
+	spanConfigStore := spanconfigstore.New(
+		roachpb.TestingDefaultSpanConfig(), st, spanconfigbounds.NewEmptyReader(), nil,
+	)
 	var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	mockSubscriber := newMockSpanConfigSubscriber(t0, spanConfigStore)
 
