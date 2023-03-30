@@ -56,6 +56,8 @@ func interestingGoroutines() map[int64]string {
 			strings.Contains(stack, ").writeLoop(") ||
 			// Ignore the Sentry client, which is created lazily on first use.
 			strings.Contains(stack, "sentry-go.(*HTTPTransport).worker") ||
+			// Ignore the opensensus worker, which is created by the event exporter.
+			strings.Contains(stack, "go.opencensus.io/stats/view.(*worker).start") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Ignore intentionally long-running logging goroutines that live for the
