@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 )
 
@@ -347,8 +347,9 @@ func (w *kv) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
-	cfg.MaxTotalConnections = w.connFlags.Concurrency + 1
+	cfg := workload.MultiConnPoolCfg{
+		MaxTotalConnections: w.connFlags.Concurrency + 1,
+	}
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -444,7 +445,7 @@ func (w *kv) Ops(
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
 		op.delStmt = op.sr.Define(delStmtStr)
-		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
+		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
@@ -556,11 +557,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
 		var tx pgx.Tx
-		tx, err := o.mcp.Get().BeginTx(ctx, pgx.TxOptions{})
-		if err != nil {
+		if tx, err = o.mcp.Get().Begin(ctx); err != nil {
 			return err
 		}
-
 		defer func() {
 			rollbackErr := tx.Rollback(ctx)
 			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
