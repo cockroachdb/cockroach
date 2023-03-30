@@ -173,15 +173,19 @@ func (c *Cache) readFromStorage(
 
 	// We use InvalidID to skip checks on the root/admin roles having
 	// privileges.
+	validPrivs, err := privilege.GetValidPrivilegesForObject(spo.GetObjectType())
+	if err != nil {
+		return nil, err
+	}
 	if err := privDesc.Validate(
 		descpb.InvalidID,
 		spo.GetObjectType(),
 		spo.GetPath(),
-		privilege.GetValidPrivilegesForObject(spo.GetObjectType()),
+		validPrivs,
 	); err != nil {
 		return nil, err
 	}
-	return privDesc, err
+	return privDesc, nil
 }
 
 // Start starts the cache by pre-fetching the synthetic privileges.

@@ -165,12 +165,17 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
-		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.privileges, tc.grantees, tc.targetObject, false /* withGrantOption */)
+		if err := defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.privileges, tc.grantees, tc.targetObject, false /* withGrantOption */); err != nil {
+			t.Fatal(err)
+		}
 
-		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
+		newPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
 			nonSystemDatabaseID, tc.objectCreator, tc.targetObject,
 		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		for _, grantee := range tc.grantees {
 			for _, privilege := range tc.privileges {
@@ -276,13 +281,24 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
-		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.grantPrivileges, tc.grantees, tc.targetObject, false /* withGrantOption */)
-		defaultPrivileges.RevokeDefaultPrivileges(tc.defaultPrivilegesRole, tc.revokePrivileges, tc.grantees, tc.targetObject, false /* grantOptionFor */)
+		if err := defaultPrivileges.GrantDefaultPrivileges(
+			tc.defaultPrivilegesRole, tc.grantPrivileges, tc.grantees, tc.targetObject, false, /* withGrantOption */
+		); err != nil {
+			t.Fatal(err)
+		}
+		if err := defaultPrivileges.RevokeDefaultPrivileges(
+			tc.defaultPrivilegesRole, tc.revokePrivileges, tc.grantees, tc.targetObject, false, /* grantOptionFor */
+		); err != nil {
+			t.Fatal(err)
+		}
 
-		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
+		newPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
 			nonSystemDatabaseID, tc.objectCreator, tc.targetObject,
 		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		for _, grantee := range tc.grantees {
 			for _, privilege := range tc.expectedPrivileges {
@@ -301,14 +317,21 @@ func TestRevokeDefaultPrivilegesFromEmptyList(t *testing.T) {
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := username.MakeSQLUsernameFromPreNormalizedString("creator")
 	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
-	defaultPrivileges.RevokeDefaultPrivileges(catpb.DefaultPrivilegesRole{
-		Role: creatorUser,
-	}, privilege.List{privilege.ALL}, []username.SQLUsername{fooUser}, privilege.Tables, false /* grantOptionFor */)
+	if err := defaultPrivileges.RevokeDefaultPrivileges(
+		catpb.DefaultPrivilegesRole{
+			Role: creatorUser,
+		}, privilege.List{privilege.ALL}, []username.SQLUsername{fooUser}, privilege.Tables, false, /* grantOptionFor */
+	); err != nil {
+		t.Fatal(err)
+	}
 
-	newPrivileges := CreatePrivilegesFromDefaultPrivileges(
+	newPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
 		nonSystemDatabaseID, creatorUser, privilege.Tables,
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if newPrivileges.AnyPrivilege(fooUser) {
 		t.Errorf("expected %s to not have any privileges", fooUser)
@@ -321,10 +344,13 @@ func TestCreatePrivilegesFromDefaultPrivilegesForSystemDatabase(t *testing.T) {
 	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := username.MakeSQLUsernameFromPreNormalizedString("creator")
-	newPrivileges := CreatePrivilegesFromDefaultPrivileges(
+	newPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
 		keys.SystemDatabaseID, creatorUser, privilege.Tables,
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if !newPrivileges.Owner().IsNodeUser() {
 		t.Errorf("expected owner to be node, owner was %s", newPrivileges.Owner())
@@ -340,10 +366,13 @@ func TestPresetDefaultPrivileges(t *testing.T) {
 
 	targetObjectTypes := privilege.GetTargetObjectTypes()
 	for _, targetObject := range targetObjectTypes {
-		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
+		newPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
 			nonSystemDatabaseID, creatorUser, targetObject,
 		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		if !newPrivileges.CheckPrivilege(creatorUser, privilege.ALL) {
 			t.Errorf("expected creator to have ALL privileges on %s", targetObject)
@@ -366,10 +395,13 @@ func TestPresetDefaultPrivilegesInSchema(t *testing.T) {
 
 	targetObjectTypes := privilege.GetTargetObjectTypes()
 	for _, targetObject := range targetObjectTypes {
-		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
+		newPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
 			nonSystemDatabaseID, creatorUser, targetObject,
 		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// The owner always has ALL privileges.
 		if !newPrivileges.CheckPrivilege(creatorUser, privilege.ALL) {
@@ -659,31 +691,38 @@ func TestDefaultPrivileges(t *testing.T) {
 		schemaDefaultPrivileges := NewMutableDefaultPrivileges(schemaPrivilegeDescriptor)
 
 		for _, userAndGrant := range tc.userAndGrants {
-			defaultPrivileges.GrantDefaultPrivileges(
+			if err := defaultPrivileges.GrantDefaultPrivileges(
 				catpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
 				userAndGrant.grants,
 				[]username.SQLUsername{userAndGrant.user},
 				tc.targetObject, false, /* withGrantOption */
-			)
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		for _, userAndGrant := range tc.userAndGrantsInSchema {
-			schemaDefaultPrivileges.GrantDefaultPrivileges(
+			if err := schemaDefaultPrivileges.GrantDefaultPrivileges(
 				catpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
 				userAndGrant.grants,
 				[]username.SQLUsername{userAndGrant.user},
 				tc.targetObject,
 				false, /* withGrantOption */
-			)
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		createdPrivileges := CreatePrivilegesFromDefaultPrivileges(
+		createdPrivileges, err := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges,
 			schemaDefaultPrivileges,
 			tc.dbID,
 			tc.objectCreator,
 			tc.targetObject,
 		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		for _, userAndGrant := range tc.expectedGrantsOnObject {
 			for _, grant := range userAndGrant.grants {
@@ -730,21 +769,25 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 				Role: creatorUser,
 			})
 
-		defaultPrivileges.RevokeDefaultPrivileges(
+		if err := defaultPrivileges.RevokeDefaultPrivileges(
 			catpb.DefaultPrivilegesRole{Role: creatorUser},
 			tc.revokeAndGrantPrivileges,
 			[]username.SQLUsername{creatorUser},
 			tc.targetObject, false, /* grantOptionFor */
-		)
+		); err != nil {
+			t.Fatal(err)
+		}
 		if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForCreator, tc.targetObject) {
 			t.Errorf("expected role to not have ALL privileges on %s", tc.targetObject)
 		}
-		defaultPrivileges.GrantDefaultPrivileges(
+		if err := defaultPrivileges.GrantDefaultPrivileges(
 			catpb.DefaultPrivilegesRole{Role: creatorUser},
 			tc.revokeAndGrantPrivileges,
 			[]username.SQLUsername{creatorUser},
 			tc.targetObject, false, /* withGrantOption */
-		)
+		); err != nil {
+			t.Fatal(err)
+		}
 		if !GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForCreator, tc.targetObject) {
 			t.Errorf("expected role to have ALL privileges on %s", tc.targetObject)
 		}
@@ -763,35 +806,41 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 			Role: creatorUser,
 		})
 
-	defaultPrivileges.RevokeDefaultPrivileges(
+	if err := defaultPrivileges.RevokeDefaultPrivileges(
 		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]username.SQLUsername{username.PublicRoleName()},
 		privilege.Types,
 		false, /* grantOptionFor */
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
 		t.Errorf("expected public to not have USAGE privilege on types")
 	}
-	defaultPrivileges.GrantDefaultPrivileges(
+	if err := defaultPrivileges.GrantDefaultPrivileges(
 		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]username.SQLUsername{username.PublicRoleName()},
 		privilege.Types,
 		false, /* withGrantOption */
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 	if !GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
 		t.Errorf("expected public to have USAGE privilege on types")
 	}
 
 	// Test a complete revoke afterwards.
-	defaultPrivileges.RevokeDefaultPrivileges(
+	if err := defaultPrivileges.RevokeDefaultPrivileges(
 		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]username.SQLUsername{username.PublicRoleName()},
 		privilege.Types,
 		false, /* grantOptionFor */
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
 		t.Errorf("expected public to not have USAGE privilege on types")
 	}
@@ -854,12 +903,20 @@ func TestApplyDefaultPrivileges(t *testing.T) {
 	for tcNum, tc := range testCases {
 		applyDefaultPrivileges(tc.pd, tc.user, tc.grantPrivileges, tc.grantGrantOptions)
 		if tc.pd.Users[0].Privileges != tc.expectedPrivileges.ToBitField() {
+			actualPrivs, err := privilege.ListFromBitField(tc.pd.Users[0].Privileges, tc.objectType)
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Errorf("#%d: Incorrect privileges, returned %v, expected %v",
-				tcNum, privilege.ListFromBitField(tc.pd.Users[0].Privileges, tc.objectType), tc.expectedPrivileges)
+				tcNum, actualPrivs, tc.expectedPrivileges)
 		}
 		if tc.pd.Users[0].WithGrantOption != tc.expectedGrantOption.ToBitField() {
+			actualGrantOption, err := privilege.ListFromBitField(tc.pd.Users[0].WithGrantOption, tc.objectType)
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Errorf("#%d: Incorrect grant option, returned %v, expected %v",
-				tcNum, privilege.ListFromBitField(tc.pd.Users[0].WithGrantOption, tc.objectType), tc.expectedGrantOption)
+				tcNum, actualGrantOption, tc.expectedGrantOption)
 		}
 	}
 }

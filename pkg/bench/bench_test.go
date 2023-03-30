@@ -13,6 +13,7 @@ package bench
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -967,6 +968,28 @@ CREATE TABLE bench.insert_distinct (
 `
 	db.Exec(b, schema)
 
+	// When running against SQL databases, create all the connections in advance.
+	// Without this, if the workers use the connection pool directly, on OSX and
+	// FreeBSD the server cannot accept connections fast enough and so opening
+	// some connections fails. This happens when we attempt to open 1000
+	// connections concurrently because of the default kernel limit of
+	// kern.ipc.somaxconn=128.
+	ctx := context.Background()
+	conns := make([]sqlutils.DBHandle, numUsers)
+	for i := 0; i < numUsers; i++ {
+		sqldb, ok := db.DB.(*gosql.DB)
+		if ok {
+			conn, err := sqldb.Conn(ctx)
+			require.NoError(b, err)
+			defer func() {
+				_ = conn.Close()
+			}()
+			conns[i] = conn
+		} else {
+			conns[i] = db.DB
+		}
+	}
+
 	b.ResetTimer()
 
 	errChan := make(chan error)
@@ -1000,7 +1023,7 @@ CREATE TABLE bench.insert_distinct (
 						fmt.Fprintf(&buf, "(%d, %d)", zipf.Uint64(), n)
 					}
 
-					if _, err := db.DB.ExecContext(context.Background(), buf.String()); err != nil {
+					if _, err := conns[i].ExecContext(context.Background(), buf.String()); err != nil {
 						return err
 					}
 				}

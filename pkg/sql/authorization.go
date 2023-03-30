@@ -151,9 +151,11 @@ func (p *planner) HasPrivilege(
 	if (user.IsRootUser() || user.IsAdminRole() || user.IsNodeUser()) &&
 		!privilegeObject.GetObjectType().IsDescriptorBacked() &&
 		privilegeKind != privilege.NOSQLLOGIN {
-		if privilege.GetValidPrivilegesForObject(
-			privilegeObject.GetObjectType(),
-		).Contains(privilegeKind) {
+		validPrivs, err := privilege.GetValidPrivilegesForObject(privilegeObject.GetObjectType())
+		if err != nil {
+			return false, err
+		}
+		if validPrivs.Contains(privilegeKind) {
 			return true, nil
 		}
 		return false, nil
