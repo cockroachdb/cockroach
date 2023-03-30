@@ -171,10 +171,18 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 			privilegeObjectType := objectType.ToObjectType()
-			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
+			valid, u, remaining, err := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
+			if err != nil {
+				return err
+			}
 			if !valid {
+				privList, err := privilege.ListFromBitField(remaining, privilege.Any)
+				if err != nil {
+					return err
+				}
 				return errors.AssertionFailedf("user %s must not have %s privileges on %s",
-					u.User(), privilege.ListFromBitField(remaining, privilege.Any), privilegeObjectType)
+					u.User(), privList, privilegeObjectType,
+				)
 			}
 		}
 	}

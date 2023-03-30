@@ -143,25 +143,32 @@ func TestFixPrivileges(t *testing.T) {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
 
-		catprivilege.MaybeFixPrivileges(
+		if _, err := catprivilege.MaybeFixPrivileges(
 			&desc,
 			descpb.InvalidID,
 			descpb.InvalidID,
 			privilege.Database,
-			testCase.name)
+			testCase.name,
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		if a, e := len(desc.Users), len(testCase.output); a != e {
 			t.Errorf("#%d: expected %d users (%v), got %d (%v)", num, e, testCase.output, a, desc.Users)
 			continue
 		}
 
-		for u, p := range testCase.output {
+		for u, expected := range testCase.output {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
-				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, e, a)
+			actual, err := privilege.ListFromBitField(outputUser.Privileges, privilege.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if actual.ToBitField() != expected.ToBitField() {
+				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, expected, actual)
 			}
 		}
 	}
@@ -382,20 +389,26 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 			t.Errorf("expected modifed to be %v, was %v", tc.modified, modified)
 		}
 
-		for u, p := range tc.output {
+		for u, expected := range tc.output {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Errorf("#%d: expected user %s in output, but not found (%v)\n%s",
 					num, u, desc.Users, tc.description,
 				)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
+			actual, err := privilege.ListFromBitField(outputUser.Privileges, privilege.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if actual.ToBitField() != expected.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v\n%s",
-					num, u, e, a, tc.description,
+					num, u, expected, actual, tc.description,
 				)
 			}
 
-			err := privilege.ValidatePrivileges(p, tc.objectType)
+			if err := privilege.ValidatePrivileges(expected, tc.objectType); err != nil {
+				t.Fatal(err)
+			}
 			if tc.isValid && err != nil {
 				t.Errorf("%s\n%s", err.Error(), tc.description)
 			}
@@ -473,28 +486,33 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
 		testParentID := descpb.ID(bootstrap.TestingMinNonDefaultUserDescID())
-		catprivilege.MaybeFixPrivileges(&desc,
+		if _, err := catprivilege.MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,
 			privilege.Schema,
 			"whatever",
-		)
+		); err != nil {
+			t.Fatal(err)
+		}
 
-		for u, p := range tc.output {
+		for u, expected := range tc.output {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Errorf("#%d: expected user %s in output, but not found (%v)",
 					num, u, desc.Users,
 				)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
+			actual, err := privilege.ListFromBitField(outputUser.Privileges, privilege.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if actual.ToBitField() != expected.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v",
-					num, u, e, a,
+					num, u, expected, actual,
 				)
 			}
 
-			err := privilege.ValidatePrivileges(p, privilege.Schema)
-			if err != nil {
+			if err := privilege.ValidatePrivileges(expected, privilege.Schema); err != nil {
 				t.Errorf("%s\n", err.Error())
 			}
 		}

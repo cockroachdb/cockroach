@@ -139,12 +139,15 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 		)
 	}
 
-	privsChanged := catprivilege.MaybeFixPrivileges(
+	privsChanged, err := catprivilege.MaybeFixPrivileges(
 		&ddb.maybeModified.Privileges,
 		descpb.InvalidID,
 		descpb.InvalidID,
 		privilege.Database,
 		ddb.maybeModified.GetName())
+	if err != nil {
+		return err
+	}
 	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
 		ddb.changes.Add(catalog.UpgradedPrivileges)
 	}

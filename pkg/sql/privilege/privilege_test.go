@@ -39,7 +39,10 @@ func TestPrivilegeDecode(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		pl := privilege.ListFromBitField(tc.raw, privilege.Any)
+		pl, err := privilege.ListFromBitField(tc.raw, privilege.Any)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(pl) != len(tc.privileges) {
 			t.Fatalf("%+v: wrong privilege list from raw: %+v", tc, pl)
 		}
