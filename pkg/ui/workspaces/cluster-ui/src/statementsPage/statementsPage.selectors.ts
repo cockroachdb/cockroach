@@ -36,18 +36,6 @@ export const selectDatabases = createSelector(databasesListSelector, state => {
     .sort();
 });
 
-// selectTotalFingerprints returns the count of distinct statement fingerprints
-// present in the data.
-export const selectTotalFingerprints = createSelector(
-  sqlStatsSelector,
-  state => {
-    if (!state?.data) {
-      return 0;
-    }
-    return state.data.statements?.length ?? 0;
-  },
-);
-
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(sqlStatsSelector, state => {
