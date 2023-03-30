@@ -188,6 +188,7 @@ type CreateOpts struct {
 	CustomLabels map[string]string
 
 	GeoDistributed bool
+	EnableFIPS     bool
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool
