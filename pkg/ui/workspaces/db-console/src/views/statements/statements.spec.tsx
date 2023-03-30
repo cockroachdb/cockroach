@@ -22,11 +22,7 @@ import {
   statementAttr,
   unset,
 } from "src/util/constants";
-import {
-  selectStatements,
-  selectTotalFingerprints,
-  selectLastReset,
-} from "./statementsPage";
+import { selectStatements, selectLastReset } from "./statementsPage";
 import { selectStatementDetails } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -36,7 +32,6 @@ import {
   util,
   selectStmtsAllApps as selectApps,
 } from "@cockroachlabs/cluster-ui";
-import { allSchedulesFixture } from "@cockroachlabs/cluster-ui/dist/types/schedules/schedulesPage/schedulesPage.fixture";
 
 const { generateStmtDetailsToID, longToInt } = util;
 
@@ -205,27 +200,6 @@ describe("selectApps", () => {
       "hello",
       "world",
     ]);
-  });
-});
-
-describe("selectTotalFingerprints", () => {
-  it("returns zero if the statements data is invalid", () => {
-    const state = makeInvalidState();
-
-    const result = selectTotalFingerprints(state);
-
-    expect(result).toBe(0);
-  });
-
-  it("returns the number of statement fingerprints", () => {
-    const state = makeStateWithStatements(
-      [makeFingerprint(1), makeFingerprint(2), makeFingerprint(3)],
-      timeScale,
-    );
-
-    const result = selectTotalFingerprints(state);
-
-    expect(result).toBe(3);
   });
 });
 
