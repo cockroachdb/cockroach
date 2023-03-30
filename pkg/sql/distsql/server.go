@@ -85,9 +85,12 @@ func NewServer(
 		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
-			cfg.Metrics.CurBytesCount,
-			cfg.Metrics.MaxBytesHist,
-			-1, /* increment: use default block size */
+			// Note that we don't use 'sql.mem.distsql.*' metrics here since
+			// that would double count them with the 'flow' monitor in
+			// setupFlow.
+			nil, /* curCount */
+			nil, /* maxHist */
+			-1,  /* increment: use default block size */
 			noteworthyMemoryUsageBytes,
 			cfg.Settings,
 		),
