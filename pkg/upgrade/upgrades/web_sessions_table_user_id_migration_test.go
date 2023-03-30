@@ -98,6 +98,11 @@ VALUES (
 	'2023-02-14 20:56:30.699447'
 )
 `, i))
+
+		// Drop every tenth user.
+		if i%10 == 0 {
+			txRunner.Exec(t, fmt.Sprintf("DROP USER testuser%d", i))
+		}
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions", [][]string{{strconv.Itoa(numUsers)}})
 
@@ -134,7 +139,8 @@ VALUES (
 
 	// Check that the backfill was successful and correct.
 	tdb.CheckQueryResults(t, "SELECT * FROM system.web_sessions WHERE user_id IS NULL", [][]string{})
-	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions", [][]string{{strconv.Itoa(numUsers)}})
+	// Multiply by 9/10 because we dropped every tenth user.
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions", [][]string{{strconv.Itoa((numUsers * 9) / 10)}})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions AS a JOIN system.users AS b ON a.username = b.username AND a.user_id <> b.user_id", [][]string{{"0"}})
 }
 

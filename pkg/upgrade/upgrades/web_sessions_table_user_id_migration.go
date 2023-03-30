@@ -75,6 +75,16 @@ func backfillWebSessionsTableUserIDColumn(
 		}
 	}
 
+	// There may stil be rows with no user_id, since it's possible that the
+	// user was dropped, but left behind rows in the web_sessions table.
+	if _, err := ie.ExecEx(ctx, "delete-rows-for-dropped-users-web-sessions-table", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride, `
+	DELETE FROM system.web_sessions
+	WHERE user_id IS NULL`,
+	); err != nil {
+		return err
+	}
+
 	// After we finish backfilling, we can set the user_id column to be NOT NULL
 	// since any existing rows will now have non-NULL values in the user_id column
 	// and any new rows inserted after the previous version (when the user_id column
