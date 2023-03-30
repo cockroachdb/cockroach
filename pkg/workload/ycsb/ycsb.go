@@ -21,7 +21,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 )
@@ -460,10 +460,8 @@ func (g *ycsb) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	pool, err := workload.NewMultiConnPool(ctx, workload.MultiConnPoolCfg{
-		// We want number of connections = number of workers.
-		MaxTotalConnections: g.connFlags.Concurrency,
-	}, urls...)
+	cfg := workload.NewMultiConnPoolCfgFromFlags(g.connFlags)
+	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

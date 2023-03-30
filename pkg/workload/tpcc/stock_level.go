@@ -13,10 +13,10 @@ package tpcc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/exp/rand"
 )
 
@@ -83,7 +83,7 @@ func createStockLevel(
 		)`,
 	)
 
-	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {
+	if err := s.sr.Init(ctx, "stock-level", mcp); err != nil {
 		return nil, err
 	}
 

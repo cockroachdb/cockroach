@@ -73,6 +73,7 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
 	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
+	w.mu.Lock()
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
 		elapsed = minLatency
@@ -80,7 +81,6 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 		elapsed = maxLatency
 	}
 
-	w.mu.Lock()
 	err := w.mu.current.RecordValue(elapsed.Nanoseconds())
 	w.mu.Unlock()
 

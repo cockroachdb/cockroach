@@ -3123,6 +3123,17 @@ func (s *adminServer) dataDistributionHelper(
 			if err != nil {
 				return err
 			}
+
+			// A range descriptor for a secondary tenant may not contain
+			// a table prefix. Often, the start key for a tenant will be just
+			// the tenant prefix itself, e.g. `/Tenant/2`. Once the tenant prefix
+			// is stripped inside `DecodeTablePrefix`, nothing (aka `/Min`) is left.
+			keySansPrefix, _ := keys.MakeSQLCodec(tenID).StripTenantPrefix(rangeDesc.StartKey.AsRawKey())
+			if keys.MinKey.Equal(keySansPrefix) {
+				// There's no table prefix to be decoded.
+				// Try the next descriptor.
+				continue
+			}
 			_, tableID, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {
 				return err

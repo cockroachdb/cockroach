@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 )
@@ -24,8 +25,14 @@ type ConnFlags struct {
 	*pflag.FlagSet
 	DBOverride  string
 	Concurrency int
-	// Method for issuing queries; see SQLRunner.
-	Method string
+	Method      string // Method for issuing queries; see SQLRunner.
+
+	ConnHealthCheckPeriod time.Duration
+	MaxConnIdleTime       time.Duration
+	MaxConnLifetime       time.Duration
+	MaxConnLifetimeJitter time.Duration
+	MinConns              int
+	WarmupConns           int
 }
 
 // NewConnFlags returns an initialized ConnFlags.
@@ -36,7 +43,13 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 		`Override for the SQL database to use. If empty, defaults to the generator name`)
 	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.GOMAXPROCS(0),
 		`Number of concurrent workers`)
-	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare, simple)`)
+	c.StringVar(&c.Method, `method`, `cache_statement`, `SQL issue method (cache_statement, cache_describe, describe_exec, exec, simple_protocol)`)
+	c.DurationVar(&c.ConnHealthCheckPeriod, `conn-healthcheck-period`, 30*time.Second, `Interval that health checks are run on connections`)
+	c.IntVar(&c.MinConns, `min-conns`, 0, `Minimum number of connections to attempt to keep in the pool`)
+	c.DurationVar(&c.MaxConnIdleTime, `max-conn-idle-time`, 150*time.Second, `Max time an idle connection will be kept around`)
+	c.DurationVar(&c.MaxConnLifetime, `max-conn-lifetime`, 300*time.Second, `Max connection lifetime`)
+	c.DurationVar(&c.MaxConnLifetimeJitter, `max-conn-lifetime-jitter`, 150*time.Second, `Jitter max connection lifetime by this amount`)
+	c.IntVar(&c.WarmupConns, `warmup-conns`, 0, `Number of connections to warmup in each connection pool`)
 	genFlags.AddFlagSet(c.FlagSet)
 	if genFlags.Meta == nil {
 		genFlags.Meta = make(map[string]FlagMeta)

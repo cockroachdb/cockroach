@@ -4799,10 +4799,10 @@ def go_deps():
         name = "com_github_jackc_pgservicefile",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jackc/pgservicefile",
-        sha256 = "8422a25b9d2b0be05c66ee1ccfdbaab144ce98f1ac678bc647064c560d4cd6e2",
-        strip_prefix = "github.com/jackc/pgservicefile@v0.0.0-20200714003250-2b9c44734f2b",
+        sha256 = "1f8bdf75b2a0d750e56c2a94b1d1b0b5be4b29d6df056aebd997162c29bfd8ab",
+        strip_prefix = "github.com/jackc/pgservicefile@v0.0.0-20221227161230-091c0ba34f0a",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgservicefile/com_github_jackc_pgservicefile-v0.0.0-20200714003250-2b9c44734f2b.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgservicefile/com_github_jackc_pgservicefile-v0.0.0-20221227161230-091c0ba34f0a.zip",
         ],
     )
     go_repository(
@@ -4829,10 +4829,10 @@ def go_deps():
         name = "com_github_jackc_pgx_v5",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jackc/pgx/v5",
-        sha256 = "e05b4284fb33e5c0c648b269070dedac6759711c411283177261228ab684f45f",
-        strip_prefix = "github.com/jackc/pgx/v5@v5.2.0",
+        sha256 = "e2f4a98f6b8716a6854d0a910c12c3527d35ff78ec5f2d16bf49f85601071bf0",
+        strip_prefix = "github.com/jackc/pgx/v5@v5.3.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.3.1.zip",
         ],
     )
     go_repository(
@@ -4849,10 +4849,10 @@ def go_deps():
         name = "com_github_jackc_puddle_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jackc/puddle/v2",
-        sha256 = "73ea72b52d0a680442d535cf5d9a9713cb0803929c0b4a8e553eda47ee217c44",
-        strip_prefix = "github.com/jackc/puddle/v2@v2.1.2",
+        sha256 = "b99ea95df0c0298caf2be786c9eba511bfde2046eccfaa06e89b3e460ab406b0",
+        strip_prefix = "github.com/jackc/puddle/v2@v2.2.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/puddle/v2/com_github_jackc_puddle_v2-v2.1.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/puddle/v2/com_github_jackc_puddle_v2-v2.2.0.zip",
         ],
     )
     go_repository(

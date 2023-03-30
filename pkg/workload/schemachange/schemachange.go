@@ -20,7 +20,6 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
-	"runtime"
 	"sync"
 	"time"
 
@@ -30,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spf13/pflag"
 )
 
@@ -65,8 +64,8 @@ const (
 
 type schemaChange struct {
 	flags              workload.Flags
+	connFlags          *workload.ConnFlags
 	dbOverride         string
-	concurrency        int
 	maxOpsPerWorker    int
 	errorRate          int
 	enumPct            int
@@ -91,8 +90,6 @@ var schemaChangeMeta = workload.Meta{
 		s.flags.FlagSet = pflag.NewFlagSet(`schemachange`, pflag.ContinueOnError)
 		s.flags.StringVar(&s.dbOverride, `db`, ``,
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
-		s.flags.IntVar(&s.concurrency, `concurrency`, 2*runtime.GOMAXPROCS(0), /* TODO(spaskob): sensible default? */
-			`Number of concurrent workers`)
 		s.flags.IntVar(&s.maxOpsPerWorker, `max-ops-per-worker`, defaultMaxOpsPerWorker,
 			`Number of operations to execute in a single transaction`)
 		s.flags.IntVar(&s.errorRate, `error-rate`, defaultErrorRate,
@@ -111,6 +108,7 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times to choose an invalid parent column in a fk constraint.`)
 		s.flags.IntVar(&s.fkChildInvalidPct, `fk-child-invalid-pct`, defaultFkChildInvalidPct,
 			`Percentage of times to choose an invalid child column in a fk constraint.`)
+		s.connFlags = workload.NewConnFlags(&s.flags)
 		return s
 	},
 }
@@ -151,9 +149,7 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	cfg := workload.MultiConnPoolCfg{
-		MaxTotalConnections: s.concurrency * 2, //TODO(spaskob): pick a sensible default.
-	}
+	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -182,7 +178,7 @@ func (s *schemaChange) Ops(
 
 	s.dumpLogsOnce = &sync.Once{}
 
-	for i := 0; i < s.concurrency; i++ {
+	for i := 0; i < s.connFlags.Concurrency; i++ {
 
 		opGeneratorParams := operationGeneratorParams{
 			seqNum:             seqNum,
