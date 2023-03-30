@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -967,13 +969,27 @@ CREATE TABLE bench.insert_distinct (
 `
 	db.Exec(b, schema)
 
-	b.ResetTimer()
+	// startWG will ensure the benchmark loops wait until all goroutines
+	// have woken up.
+	var startWG sync.WaitGroup
+	// doneWG will ensure that all the goroutines have completed before
+	// the benchmark function can exit.
+	var doneWG sync.WaitGroup
 
-	errChan := make(chan error)
+	// errChan will receive any errors encountered by the goroutines.
+	errChan := make(chan error, numUsers)
+	// startCh tell the goroutines when they can start their benchmark
+	// loop.
+	startCh := make(chan struct{})
 
 	var count int64
 	for i := 0; i < numUsers; i++ {
+		startWG.Add(1)
+		doneWG.Add(1)
+
 		go func(i int) {
+			defer doneWG.Done()
+
 			errChan <- func() error {
 				var buf bytes.Buffer
 
@@ -983,12 +999,20 @@ CREATE TABLE bench.insert_distinct (
 				// determined, but somewhat arbitrary.
 				zipf := rand.NewZipf(rnd, 2, 10000, 100000)
 
+				// Tell the outer benchmark function this goroutine is ready.
+				startWG.Done()
+				// Wait for the outer benchmark function to tell us to start
+				// benchmarking.
+				<-startCh
+
+				numIterations := 0
 				for {
 					n := atomic.AddInt64(&count, 1)
 					if int(n) >= b.N {
 						return nil
 					}
 
+					numIterations++
 					// Insert between [1,100] articles in a batch.
 					numArticles := 1 + rnd.Intn(100)
 					buf.Reset()
@@ -1001,17 +1025,31 @@ CREATE TABLE bench.insert_distinct (
 					}
 
 					if _, err := db.DB.ExecContext(context.Background(), buf.String()); err != nil {
-						return err
+						return errors.Wrapf(err, "after %d iterations", numIterations)
 					}
 				}
 			}()
 		}(i)
 	}
 
+	// Allow all the goroutines to start inserting after they have initialized successfully.
+	startWG.Wait()
+
+	// Only start measuring performance from here.
+	b.ResetTimer()
+	// Tell the goroutines to start benchmarking.
+	close(startCh)
+
+	hasErr := false
 	for i := 0; i < numUsers; i++ {
 		if err := <-errChan; err != nil {
-			b.Fatal(err)
+			b.Errorf("goroutine for user %d failed: %v", i, err)
+			hasErr = true
 		}
+	}
+	doneWG.Wait()
+	if hasErr {
+		b.FailNow()
 	}
 
 	b.StopTimer()
