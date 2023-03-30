@@ -24,6 +24,7 @@ import {
   recommendDropUnusedIndex,
 } from "../insights";
 import { HexStringToInt64String } from "../util";
+import { QuoteIdentifier } from "./safesql";
 
 // Export for db-console import from clusterUiApi.
 export type { InsightRecommendation } from "../insights";
@@ -72,7 +73,11 @@ function clusterIndexUsageStatsToSchemaInsight(
         results[key] = {
           type: "DropIndex",
           database: row.database_name,
-          query: `DROP INDEX ${row.schema_name}.${row.table_name}@${row.index_name};`,
+          query: `DROP INDEX ${QuoteIdentifier(
+            row.schema_name,
+          )}.${QuoteIdentifier(row.table_name)}@${QuoteIdentifier(
+            row.index_name,
+          )};`,
           indexDetails: {
             table: row.table_name,
             indexID: row.index_id,
