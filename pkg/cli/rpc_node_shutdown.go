@@ -17,7 +17,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -117,7 +116,7 @@ func doDrainNoTimeout(
 	ctx context.Context, c serverpb.AdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	defer func() {
-		if server.IsWaitingForInit(err) {
+		if grpcutil.IsWaitingForInit(err) {
 			log.Infof(ctx, "%v", err)
 			err = errors.New("node cannot be drained before it has been initialized")
 		}
@@ -216,7 +215,7 @@ func doShutdown(
 ) (hardError bool, err error) {
 	defer func() {
 		if err != nil {
-			if server.IsWaitingForInit(err) {
+			if grpcutil.IsWaitingForInit(err) {
 				log.Infof(ctx, "encountered error: %v", err)
 				err = errors.New("node cannot be shut down before it has been initialized")
 				err = errors.WithHint(err, "You can still stop the process using a service manager or a signal.")

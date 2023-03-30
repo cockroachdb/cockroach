@@ -12,18 +12,24 @@ package grpcutil_test
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/status"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
@@ -50,6 +56,25 @@ func (hs healthServer) Check(
 
 func (hs healthServer) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
 	panic("not implemented")
+}
+
+func TestIsWaitingForInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := map[string]struct {
+		err    error
+		expect bool
+	}{
+		"waiting for init":  {server.NewWaitingForInitError("foo"), true},
+		"unavailable error": {status.Errorf(codes.Unavailable, "foo"), false},
+		"non-grpc":          {fmt.Errorf("node waiting for init"), false},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, grpcutil.IsWaitingForInit(tc.err))
+		})
+	}
 }
 
 func TestRequestDidNotStart(t *testing.T) {
