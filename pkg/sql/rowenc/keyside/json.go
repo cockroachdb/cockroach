@@ -79,7 +79,7 @@ func decodeJSONKey(buf []byte, dir encoding.Direction) (json.JSON, []byte, error
 		}
 		buf = buf[1:] // removing the terminator
 		jsonVal = json.FromDecimal(dec)
-	case encoding.JSONArray, encoding.JSONArrayDesc:
+	case encoding.JSONArray, encoding.JSONArrayDesc, encoding.JsonEmptyArray, encoding.JsonEmptyArrayDesc:
 		jsonVal, buf, err = decodeJSONArray(buf, dir)
 		if err != nil {
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "could not decode JSON Array")

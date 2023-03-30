@@ -51,6 +51,8 @@ func _() {
 	_ = x[JSONArrayDesc-39]
 	_ = x[JSONObject-40]
 	_ = x[JSONObjectDesc-41]
+	_ = x[JsonEmptyArray-42]
+	_ = x[JsonEmptyArrayDesc-43]
 }
 
 func (i Type) String() string {
@@ -139,6 +141,10 @@ func (i Type) String() string {
 		return "JSONObject"
 	case JSONObjectDesc:
 		return "JSONObjectDesc"
+	case JsonEmptyArray:
+		return "JsonEmptyArray"
+	case JsonEmptyArrayDesc:
+		return "JsonEmptyArrayDesc"
 	default:
 		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

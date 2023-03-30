@@ -107,13 +107,18 @@ const (
 
 	// Defining different key markers, for the ascending designation,
 	// for handling different JSON values.
-	jsonNullKeyMarker   = voidMarker + 1
-	jsonStringKeyMarker = jsonNullKeyMarker + 1
-	jsonNumberKeyMarker = jsonStringKeyMarker + 1
-	jsonFalseKeyMarker  = jsonNumberKeyMarker + 1
-	jsonTrueKeyMarker   = jsonFalseKeyMarker + 1
-	jsonArrayKeyMarker  = jsonTrueKeyMarker + 1
-	jsonObjectKeyMarker = jsonArrayKeyMarker + 1
+
+	// Postgres currently has a special case (maybe a bug) where the empty JSON
+	// Array sorts before all other JSON values. See the bug report:
+	// https://www.postgresql.org/message-id/17873-826fdc8bbcace4f1%40postgresql.org
+	jsonEmptyArrayKeyMarker = voidMarker + 1
+	jsonNullKeyMarker       = jsonEmptyArrayKeyMarker + 1
+	jsonStringKeyMarker     = jsonNullKeyMarker + 1
+	jsonNumberKeyMarker     = jsonStringKeyMarker + 1
+	jsonFalseKeyMarker      = jsonNumberKeyMarker + 1
+	jsonTrueKeyMarker       = jsonFalseKeyMarker + 1
+	jsonArrayKeyMarker      = jsonTrueKeyMarker + 1
+	jsonObjectKeyMarker     = jsonArrayKeyMarker + 1
 
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
@@ -127,13 +132,14 @@ const (
 
 	// Defining different key markers, for the descending designation,
 	// for handling different JSON values.
-	jsonNullKeyDescendingMarker   = jsonObjectKeyMarker + 7
-	jsonStringKeyDescendingMarker = jsonNullKeyDescendingMarker - 1
-	jsonNumberKeyDescendingMarker = jsonStringKeyDescendingMarker - 1
-	jsonFalseKeyDescendingMarker  = jsonNumberKeyDescendingMarker - 1
-	jsonTrueKeyDescendingMarker   = jsonFalseKeyDescendingMarker - 1
-	jsonArrayKeyDescendingMarker  = jsonTrueKeyDescendingMarker - 1
-	jsonObjectKeyDescendingMarker = jsonArrayKeyDescendingMarker - 1
+	jsonEmptyArrayKeyDescendingMarker = jsonObjectKeyMarker + 8
+	jsonNullKeyDescendingMarker       = jsonEmptyArrayKeyDescendingMarker - 1
+	jsonStringKeyDescendingMarker     = jsonNullKeyDescendingMarker - 1
+	jsonNumberKeyDescendingMarker     = jsonStringKeyDescendingMarker - 1
+	jsonFalseKeyDescendingMarker      = jsonNumberKeyDescendingMarker - 1
+	jsonTrueKeyDescendingMarker       = jsonFalseKeyDescendingMarker - 1
+	jsonArrayKeyDescendingMarker      = jsonTrueKeyDescendingMarker - 1
+	jsonObjectKeyDescendingMarker     = jsonArrayKeyDescendingMarker - 1
 
 	// Terminators for JSON Key encoding.
 	jsonKeyTerminator           byte = 0x00
@@ -1789,6 +1795,9 @@ const (
 	JSONArrayDesc  Type = 39
 	JSONObject     Type = 40
 	JSONObjectDesc Type = 41
+	// Special case
+	JsonEmptyArray     Type = 42
+	JsonEmptyArrayDesc Type = 43
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1849,6 +1858,10 @@ func slowPeekType(b []byte) Type {
 			return JSONArray
 		case m == jsonArrayKeyDescendingMarker:
 			return JSONArrayDesc
+		case m == jsonEmptyArrayKeyMarker:
+			return JsonEmptyArray
+		case m == jsonEmptyArrayKeyDescendingMarker:
+			return JsonEmptyArrayDesc
 		case m == jsonObjectKeyMarker:
 			return JSONObject
 		case m == jsonObjectKeyDescendingMarker:
@@ -2009,10 +2022,12 @@ func PeekLength(b []byte) (int, error) {
 		length, err := getArrayOrJSONLength(b[1:], dir, IsJSONKeyDone)
 		return 1 + length, err
 	case jsonArrayKeyMarker, jsonArrayKeyDescendingMarker,
-		jsonObjectKeyMarker, jsonObjectKeyDescendingMarker:
+		jsonObjectKeyMarker, jsonObjectKeyDescendingMarker,
+		jsonEmptyArrayKeyMarker, jsonEmptyArrayKeyDescendingMarker:
 		dir := Ascending
 		if (m == jsonArrayKeyDescendingMarker) ||
-			(m == jsonObjectKeyDescendingMarker) {
+			(m == jsonObjectKeyDescendingMarker) ||
+			(m == jsonEmptyArrayKeyDescendingMarker) {
 			dir = Descending
 		}
 		// removing the starter tag
@@ -3500,11 +3515,17 @@ func EncodeJSONTrueKeyMarker(buf []byte, dir Direction) []byte {
 
 // EncodeJSONArrayKeyMarker adds a JSON Array key encoding marker
 // to buf and returns the new buffer.
-func EncodeJSONArrayKeyMarker(buf []byte, dir Direction) []byte {
+func EncodeJSONArrayKeyMarker(buf []byte, dir Direction, arrayLength int64) []byte {
 	switch dir {
 	case Ascending:
+		if arrayLength == 0 {
+			return append(buf, jsonEmptyArrayKeyMarker)
+		}
 		return append(buf, jsonArrayKeyMarker)
 	case Descending:
+		if arrayLength == 0 {
+			return append(buf, jsonEmptyArrayKeyDescendingMarker)
+		}
 		return append(buf, jsonArrayKeyDescendingMarker)
 	default:
 		panic("invalid direction")
@@ -3621,7 +3642,7 @@ func ValidateAndConsumeJSONKeyMarker(buf []byte, dir Direction) ([]byte, Type, e
 	case Descending:
 		switch typ {
 		case JSONNullDesc, JSONNumberDesc, JSONStringDesc, JSONFalseDesc,
-			JSONTrueDesc, JSONArrayDesc, JSONObjectDesc:
+			JSONTrueDesc, JSONArrayDesc, JSONObjectDesc, JsonEmptyArrayDesc:
 			return buf[1:], typ, nil
 		default:
 			return nil, Unknown, errors.Newf("invalid type found %s", typ)
@@ -3629,7 +3650,7 @@ func ValidateAndConsumeJSONKeyMarker(buf []byte, dir Direction) ([]byte, Type, e
 	case Ascending:
 		switch typ {
 		case JSONNull, JSONNumber, JSONString, JSONFalse, JSONTrue, JSONArray,
-			JSONObject:
+			JSONObject, JsonEmptyArray:
 			return buf[1:], typ, nil
 		default:
 			return nil, Unknown, errors.Newf("invalid type found %s", typ)
