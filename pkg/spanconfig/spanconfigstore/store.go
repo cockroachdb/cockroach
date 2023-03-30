@@ -54,8 +54,8 @@ var boundsEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.bounds.enabled",
 	"dictates whether span config bounds are consulted when serving span configs for secondary tenants",
-	false,
-)
+	true,
+).WithPublic()
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
 // update the span configuration state. Internally, it makes use of an interval
