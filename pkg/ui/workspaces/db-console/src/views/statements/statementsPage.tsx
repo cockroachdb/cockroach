@@ -113,7 +113,7 @@ export const selectStatements = createSelector(
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
-    if (!state.data || !state.valid) {
+    if (!state?.data || !state?.valid) {
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
@@ -193,7 +193,7 @@ export const selectStatements = createSelector(
 export const selectApps = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return [];
     }
 
@@ -228,7 +228,7 @@ export const selectApps = createSelector(
 export const selectDatabases = createSelector(
   (state: AdminUIState) => state.cachedData.databases,
   (state: CachedDataReducerState<clusterUiApi.DatabasesListResponse>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return [];
     }
 
@@ -243,7 +243,7 @@ export const selectDatabases = createSelector(
 export const selectTotalFingerprints = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return 0;
     }
     const aggregated = aggregateStatementStats(state.data.statements);
@@ -256,7 +256,7 @@ export const selectTotalFingerprints = createSelector(
 export const selectLastReset = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return "unknown";
     }
     return PrintTime(util.TimestampToMoment(state.data.last_reset));

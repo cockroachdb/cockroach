@@ -241,6 +241,9 @@ function formatIdxRecommendations(
   for (let i = 0; i < idxRecs.length; i++) {
     const rec = idxRecs[i];
     let idxType: InsightType;
+    if (!rec?.includes(" : ")) {
+      continue;
+    }
     const t = rec.split(" : ")[0];
     switch (t) {
       case "creation":

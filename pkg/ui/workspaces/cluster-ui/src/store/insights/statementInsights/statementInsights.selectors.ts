@@ -46,7 +46,7 @@ export const selectColumns = createSelector(
   localStorageSelector,
   localStorage =>
     localStorage["showColumns/StatementInsightsPage"]
-      ? localStorage["showColumns/StatementInsightsPage"].split(",")
+      ? localStorage["showColumns/StatementInsightsPage"]?.split(",")
       : null,
 );
 

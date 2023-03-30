@@ -561,7 +561,7 @@ export class StatementsPage extends React.Component<
     // hiding columns that won't be displayed for tenants.
     const columns = makeStatementsColumns(
       statements,
-      filters.app.split(","),
+      filters.app?.split(","),
       this.props.stmtsTotalRuntimeSecs,
       "statement",
       isTenant,
