@@ -247,7 +247,9 @@ type sqlServerOptionalKVArgs struct {
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
 // are only available if the SQL server runs as part of a standalone SQL node.
 type sqlServerOptionalTenantArgs struct {
-	tenantConnect    kvtenant.Connector
+	tenantConnect      kvtenant.Connector
+	spanLimiterFactory spanLimiterFactory
+
 	promRuleExporter *metric.PrometheusRuleExporter
 }
 
@@ -748,13 +750,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		splitter             spanconfig.Splitter
 		limiter              spanconfig.Limiter
 	}{}
+
+	spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 	if codec.ForSystemTenant() {
-		spanConfig.limiter = spanconfiglimiter.NoopLimiter{}
 		spanConfig.splitter = spanconfigsplitter.NoopSplitter{}
 	} else {
-		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		spanConfig.splitter = spanconfigsplitter.New(codec, spanConfigKnobs)
-		spanConfig.limiter = spanconfiglimiter.New(
+	}
+
+	if cfg.spanLimiterFactory == nil {
+		spanConfig.limiter = spanconfiglimiter.NoopLimiter{}
+	} else {
+		spanConfig.limiter = cfg.spanLimiterFactory(
 			cfg.circularInternalExecutor,
 			cfg.Settings,
 			spanConfigKnobs,
