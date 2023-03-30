@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	benchTimeFlag = "bench-time"
-	benchMemFlag  = "bench-mem"
+	benchTimeFlag           = "bench-time"
+	benchMemFlag            = "bench-mem"
+	runSepProcessTenantFlag = "run-sep-process-tenant"
 )
 
 // makeBenchCmd constructs the subcommand used to run the specified benchmarks.
@@ -49,6 +50,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	benchCmd.Flags().Bool(benchMemFlag, false, "print memory allocations for benchmarks")
 	benchCmd.Flags().Bool(streamOutputFlag, false, "stream bench output during run")
 	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
+	benchCmd.Flags().Bool(runSepProcessTenantFlag, false, "run separate process tenant benchmarks (these may freeze due to tenant limits)")
 
 	return benchCmd
 }
@@ -57,17 +59,18 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
-		filter       = mustGetFlagString(cmd, filterFlag)
-		ignoreCache  = mustGetFlagBool(cmd, ignoreCacheFlag)
-		timeout      = mustGetFlagDuration(cmd, timeoutFlag)
-		short        = mustGetFlagBool(cmd, shortFlag)
-		showLogs     = mustGetFlagBool(cmd, showLogsFlag)
-		verbose      = mustGetFlagBool(cmd, vFlag)
-		count        = mustGetFlagInt(cmd, countFlag)
-		benchTime    = mustGetFlagString(cmd, benchTimeFlag)
-		benchMem     = mustGetFlagBool(cmd, benchMemFlag)
-		streamOutput = mustGetFlagBool(cmd, streamOutputFlag)
-		testArgs     = mustGetFlagString(cmd, testArgsFlag)
+		filter              = mustGetFlagString(cmd, filterFlag)
+		ignoreCache         = mustGetFlagBool(cmd, ignoreCacheFlag)
+		timeout             = mustGetFlagDuration(cmd, timeoutFlag)
+		short               = mustGetFlagBool(cmd, shortFlag)
+		showLogs            = mustGetFlagBool(cmd, showLogsFlag)
+		verbose             = mustGetFlagBool(cmd, vFlag)
+		count               = mustGetFlagInt(cmd, countFlag)
+		benchTime           = mustGetFlagString(cmd, benchTimeFlag)
+		benchMem            = mustGetFlagBool(cmd, benchMemFlag)
+		streamOutput        = mustGetFlagBool(cmd, streamOutputFlag)
+		testArgs            = mustGetFlagString(cmd, testArgsFlag)
+		runSepProcessTenant = mustGetFlagBool(cmd, runSepProcessTenantFlag)
 	)
 
 	// Enumerate all benches to run.
@@ -145,6 +148,9 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	}
 	if benchMem {
 		args = append(args, "--test_arg", "-test.benchmem")
+	}
+	if runSepProcessTenant {
+		args = append(args, "--test_arg", "-run-sep-process-tenant")
 	}
 	args = append(args, "--crdb_test_off")
 	if testArgs != "" {
