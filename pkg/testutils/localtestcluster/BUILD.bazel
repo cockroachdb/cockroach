@@ -24,7 +24,6 @@ go_library(
         "//pkg/rpc",
         "//pkg/server/systemconfigwatcher",
         "//pkg/settings/cluster",
-        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",

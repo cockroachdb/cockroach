@@ -19,6 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -45,27 +48,38 @@ func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba kvpb.BatchRequ
 	return ba
 }
 
+// ParseTenantCapabilityUpsert parses all args which have a key that is a
+// capability key and sets it on top of the default tenant capabilities.
 func ParseTenantCapabilityUpsert(
 	t *testing.T, d *datadriven.TestData,
-) (roachpb.TenantID, tenantcapabilitiespb.TenantCapabilities, error) {
+) (roachpb.TenantID, *tenantcapabilitiespb.TenantCapabilities, error) {
 	tID := GetTenantID(t, d)
 	caps := tenantcapabilitiespb.TenantCapabilities{}
 	for _, arg := range d.CmdArgs {
-		if capID, ok := tenantcapabilities.CapabilityIDFromString(arg.Key); ok {
-			capType := capID.CapabilityType()
-			switch capType {
-			case tenantcapabilities.Bool:
-				b, err := strconv.ParseBool(arg.Vals[0])
-				if err != nil {
-					return roachpb.TenantID{}, tenantcapabilitiespb.TenantCapabilities{}, err
-				}
-				caps.Cap(capID).Set(b)
-			default:
-				t.Fatalf("unknown type %q", capType)
+		capability, ok := tenantcapabilities.FromName(arg.Key)
+		if !ok {
+			continue
+		}
+		switch c := capability.(type) {
+		case tenantcapabilities.BoolCapability:
+			b, err := strconv.ParseBool(arg.Vals[0])
+			if err != nil {
+				return roachpb.TenantID{}, nil, err
 			}
+			c.Get(&caps).Set(b)
+		case tenantcapabilities.SpanConfigBoundsCapability:
+			jsonD, err := json.ParseJSON(arg.Vals[0])
+			if err != nil {
+				return roachpb.TenantID{}, nil, err
+			}
+			var v tenantcapabilitiespb.SpanConfigBounds
+			if _, err := protoreflect.JSONBMarshalToMessage(jsonD, &v); err != nil {
+				return roachpb.TenantID{}, nil, err
+			}
+			c.Get(&caps).Set(spanconfigbounds.New(&v))
 		}
 	}
-	return tID, caps, nil
+	return tID, &caps, nil
 }
 
 func ParseTenantCapabilityDelete(t *testing.T, d *datadriven.TestData) *tenantcapabilities.Update {
@@ -94,20 +108,20 @@ func GetTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 
 // AlteredCapabilitiesString prints all altered capability values that no
 // longer match DefaultCapabilities. This is different from
-// TenantCapabilities.String which only prints non-zero value fields.
-func AlteredCapabilitiesString(capabilities tenantcapabilities.TenantCapabilities) string {
+// Capabilities.String which only prints non-zero value fields.
+func AlteredCapabilitiesString(capabilities *tenantcapabilitiespb.TenantCapabilities) string {
 	defaultCapabilities := tenantcapabilities.DefaultCapabilities()
 	var builder strings.Builder
 	builder.WriteByte('{')
 	space := ""
-	for _, capID := range tenantcapabilities.CapabilityIDs {
-		value := capabilities.Cap(capID).Get().String()
-		defaultValue := defaultCapabilities.Cap(capID).Get().String()
-		if value != defaultValue {
+	for _, capID := range tenantcapabilities.IDs {
+		value := tenantcapabilities.MustGetValueByID(capabilities, capID)
+		defaultValue := tenantcapabilities.MustGetValueByID(defaultCapabilities, capID)
+		if value.String() != defaultValue.String() {
 			builder.WriteString(space)
 			builder.WriteString(capID.String())
 			builder.WriteByte(':')
-			builder.WriteString(value)
+			builder.WriteString(value.String())
 			space = " "
 		}
 	}
