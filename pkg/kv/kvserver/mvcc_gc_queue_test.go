@@ -1161,7 +1161,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if expGC := (sp.newStatus == -1); expGC {
+			if expGC := sp.newStatus == -1; expGC {
 				if expGC != !ok {
 					return fmt.Errorf("%s: expected gc: %t, but found %s\n%s", strKey, expGC, txn, roachpb.Key(strKey))
 				}

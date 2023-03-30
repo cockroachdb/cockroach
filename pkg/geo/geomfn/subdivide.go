@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
-	geom "github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom"
 )
 
 // Subdivide returns a geometry divided into parts, where each part contains no more than the number of vertices provided.

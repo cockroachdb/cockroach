@@ -163,7 +163,7 @@ type benchCase struct {
 	str string
 }
 
-var benchCases []benchCase = []benchCase{
+var benchCases = []benchCase{
 	{types.Date, "1996-03-13"},
 	{types.Bool, "true"},
 	{types.Decimal, "21168.23"},

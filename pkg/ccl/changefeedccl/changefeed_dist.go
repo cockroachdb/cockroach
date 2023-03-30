@@ -87,7 +87,7 @@ func distChangefeedFlow(
 	// based on whether we should perform an initial scan.
 	{
 		h := progress.GetHighWater()
-		noHighWater := (h == nil || h.IsEmpty())
+		noHighWater := h == nil || h.IsEmpty()
 		// We want to set the highWater and thus avoid an initial scan if either
 		// this is a cursor and there was no request for one, or we don't have a
 		// cursor but we have a request to not have an initial scan.

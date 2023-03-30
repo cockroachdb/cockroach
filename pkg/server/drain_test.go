@@ -261,7 +261,7 @@ func (t *testDrainContext) assertDraining(resp *serverpb.DrainResponse, drain bo
 
 func (t *testDrainContext) assertRemaining(resp *serverpb.DrainResponse, remaining bool) {
 	t.Helper()
-	if actualRemaining := (resp.DrainRemainingIndicator > 0); remaining != actualRemaining {
+	if actualRemaining := resp.DrainRemainingIndicator > 0; remaining != actualRemaining {
 		t.Fatalf("expected remaining %v, got %v", remaining, actualRemaining)
 	}
 }

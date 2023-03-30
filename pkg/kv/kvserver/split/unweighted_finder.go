@@ -138,7 +138,7 @@ func (f *UnweightedFinder) Key() roachpb.Key {
 			continue
 		}
 		balanceScore := math.Abs(float64(s.left-s.right)) / float64(s.left+s.right)
-		containedScore := (float64(s.contained) / float64(s.left+s.right+s.contained))
+		containedScore := float64(s.contained) / float64(s.left+s.right+s.contained)
 		finalScore := balanceScore + containedScore
 		if balanceScore >= splitKeyThreshold ||
 			containedScore >= splitKeyContainedThreshold {

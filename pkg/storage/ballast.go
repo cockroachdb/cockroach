@@ -24,7 +24,7 @@ import (
 // may want to include `COCKROACH_AUTO_BALLAST=false` in their environment to
 // prevent the automatic creation of large ballast files on their local
 // filesystem.
-var ballastsEnabled bool = envutil.EnvOrDefaultBool("COCKROACH_AUTO_BALLAST", true)
+var ballastsEnabled = envutil.EnvOrDefaultBool("COCKROACH_AUTO_BALLAST", true)
 
 // IsDiskFull examines the store indicated by spec, determining whether the
 // store's underlying disk is out of disk space. A disk is considered to be

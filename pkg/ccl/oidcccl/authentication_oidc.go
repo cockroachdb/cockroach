@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	oidc "github.com/coreos/go-oidc"
+	"github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
 )
 

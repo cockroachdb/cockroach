@@ -11,7 +11,7 @@
 package execinfrapb
 
 import (
-	context "context"
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -71,7 +71,7 @@ func (spec *AggregatorSpec) IsScalar() bool {
 		return false
 	default:
 		// This case exists for backward compatibility.
-		return (len(spec.GroupCols) == 0)
+		return len(spec.GroupCols) == 0
 	}
 }
 

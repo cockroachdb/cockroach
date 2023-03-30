@@ -189,8 +189,8 @@ func TestJoinCardinality(t *testing.T) {
 					h.joinType = group.joinType
 					h.leftProps = &props.Relational{Cardinality: tc.left}
 					h.rightProps = &props.Relational{Cardinality: tc.right}
-					h.filterIsTrue = (group.filter == "true")
-					h.filterIsFalse = (group.filter == "false")
+					h.filterIsTrue = group.filter == "true"
+					h.filterIsFalse = group.filter == "false"
 
 					res := h.cardinality()
 					if res != tc.expected {

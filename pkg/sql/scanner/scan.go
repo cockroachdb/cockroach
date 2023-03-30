@@ -1093,7 +1093,7 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 			curFuncBodyCnt--
 		}
 		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
-			return (lval.id == 0), true, nil
+			return lval.id == 0, true, nil
 		}
 	}
 }

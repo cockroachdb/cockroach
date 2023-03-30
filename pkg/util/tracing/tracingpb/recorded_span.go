@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/redact"
-	types "github.com/gogo/protobuf/types"
+	"github.com/gogo/protobuf/types"
 )
 
 const (

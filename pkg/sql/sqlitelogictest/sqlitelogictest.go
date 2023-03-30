@@ -32,7 +32,7 @@ import (
 
 // Globs is a list of globs capturing the sqlite logic tests we run in our
 // logictests.
-var Globs []string = []string{
+var Globs = []string{
 	"/test/index/between/*/*.test",
 	"/test/index/commute/*/*.test",
 	"/test/index/delete/*/*.test",

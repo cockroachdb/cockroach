@@ -862,13 +862,13 @@ func (s *scope) newAmbiguousColumnError(n tree.Name, matchClass columnMatchClass
 		var match bool
 		switch matchClass {
 		case anonymousSourceMatch:
-			match = (col.visibility == visible && col.table.ObjectName == "")
+			match = col.visibility == visible && col.table.ObjectName == ""
 
 		case qualifiedSourceMatch:
-			match = (col.visibility == visible && col.table.ObjectName != "")
+			match = col.visibility == visible && col.table.ObjectName != ""
 
 		case hiddenMatch:
-			match = (col.visibility == accessibleByName || col.visibility == accessibleByQualifiedStar)
+			match = col.visibility == accessibleByName || col.visibility == accessibleByQualifiedStar
 		}
 
 		if match {

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	isatty "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -587,7 +587,7 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.useSpaces = !cfg.UseTabs
 	sqlfmtCtx.tabWidth = cfg.TabWidth
 	sqlfmtCtx.noSimplify = !cfg.Simplify
-	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
+	sqlfmtCtx.align = cfg.Align != tree.PrettyNoAlign
 	sqlfmtCtx.execStmts = nil
 }
 

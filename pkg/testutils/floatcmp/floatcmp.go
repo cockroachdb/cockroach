@@ -40,7 +40,7 @@ const (
 	//
 	// CloseMargin is greater than 0 otherwise if either expected or actual were
 	// 0 the calculated tolerance from the fraction would be 0.
-	CloseMargin float64 = CloseFraction * CloseFraction
+	CloseMargin = CloseFraction * CloseFraction
 )
 
 // EqualApprox reports whether expected and actual are deeply equal with the

@@ -77,7 +77,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []ro
 			}
 		}
 		// "Send" a message every now and then and once at the end.
-		final := (rowIdx == len(records))
+		final := rowIdx == len(records)
 		if final || (rowIdx > 0 && rng.Intn(10) == 0) {
 			msg := se.FormMessage(context.Background())
 			// Make a copy of the data buffer.

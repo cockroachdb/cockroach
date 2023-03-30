@@ -151,7 +151,7 @@ func (qmc QueryMemoryContext) computeSizeOfSlab(r Resolution) int64 {
 	var sizeOfSlab int64
 	if qmc.Columnar {
 		// Contains an Offset (int32) and Last (float64) for each sample.
-		sizeOfColumns := (sizeOfInt32 + sizeOfFloat64)
+		sizeOfColumns := sizeOfInt32 + sizeOfFloat64
 		if r.IsRollup() {
 			// Five additional float64 (First, Min, Max, Sum, Variance) and one uint32
 			// (count) per sample

@@ -95,7 +95,7 @@ type Spheroid interface {
 }
 
 // ErrProjectionNotFound indicates a project was not found.
-var ErrProjectionNotFound error = errors.Newf("projection not found")
+var ErrProjectionNotFound = errors.Newf("projection not found")
 
 // Projection returns the ProjInfo for the given SRID, as well as an
 // error if the projection does not exist.

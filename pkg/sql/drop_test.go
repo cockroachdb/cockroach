@@ -70,7 +70,7 @@ func zoneExists(sqlDB *gosql.DB, expected *zonepb.ZoneConfig, id descpb.ID) erro
 		return err
 	}
 	defer rows.Close()
-	if exists := (expected != nil); exists != rows.Next() {
+	if exists := expected != nil; exists != rows.Next() {
 		return errors.Errorf("zone config exists = %v", exists)
 	}
 	if expected != nil {

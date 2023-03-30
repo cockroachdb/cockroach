@@ -566,7 +566,7 @@ type planFlags uint32
 const (
 	// planFlagOptCacheHit is set if a plan from the query plan cache was used (and
 	// re-optimized).
-	planFlagOptCacheHit = (1 << iota)
+	planFlagOptCacheHit = 1 << iota
 
 	// planFlagOptCacheMiss is set if we looked for a plan in the query plan cache but
 	// did not find one.

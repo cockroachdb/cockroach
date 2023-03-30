@@ -302,7 +302,7 @@ func ToKey(key roachpb.Key) Key {
 
 // defaultSpanConfig is the span config applied by default to all ranges,
 // unless overwritten.
-var defaultSpanConfig roachpb.SpanConfig = roachpb.SpanConfig{
+var defaultSpanConfig = roachpb.SpanConfig{
 	RangeMinBytes: 128 << 20, // 128 MB
 	RangeMaxBytes: 512 << 20, // 512 MB,
 	NumReplicas:   3,

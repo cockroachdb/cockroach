@@ -146,7 +146,7 @@ func TestNodeLiveness(t *testing.T) {
 	for i, s := range tc.Servers {
 		nl := s.NodeLiveness().(*liveness.NodeLiveness)
 		if c := nl.Metrics().HeartbeatSuccesses.Count(); c < 2 {
-			t.Errorf("node %d: expected metrics count >= 2; got %d", (i + 1), c)
+			t.Errorf("node %d: expected metrics count >= 2; got %d", i+1, c)
 		}
 	}
 }

@@ -114,7 +114,7 @@ const (
 	// database/catalog.
 	PublicSchema string = catconstants.PublicSchemaName
 	// PublicSchemaName is the same, typed as Name.
-	PublicSchemaName Name = Name(PublicSchema)
+	PublicSchemaName = Name(PublicSchema)
 )
 
 // QualifiedNameResolver is the helper interface to resolve qualified

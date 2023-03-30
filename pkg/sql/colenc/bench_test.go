@@ -38,7 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var lineitemSchema string = `CREATE TABLE lineitem (
+var lineitemSchema = `CREATE TABLE lineitem (
 	l_orderkey      INT8 NOT NULL,
 	l_partkey       INT8 NOT NULL,
 	l_suppkey       INT8 NOT NULL,

@@ -114,7 +114,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 

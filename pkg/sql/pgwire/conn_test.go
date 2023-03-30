@@ -51,8 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
-	pgproto3 "github.com/jackc/pgproto3/v2"
-	pgx "github.com/jackc/pgx/v4"
+	"github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )

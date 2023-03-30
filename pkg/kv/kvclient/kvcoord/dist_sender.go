@@ -2519,7 +2519,7 @@ func (ds *DistSender) computeSendRUMultiplier(
 			// Earlier we ensured that numReplicas >= len(replicas). Since
 			// cost multipliers are always non-negative (>= 0), res will never
 			// be negative (< 0).
-			res += (costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion) - 1)
+			res += costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion) - 1
 		}
 	}
 	return res

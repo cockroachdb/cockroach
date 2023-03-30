@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	isatty "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 

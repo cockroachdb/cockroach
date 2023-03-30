@@ -396,7 +396,7 @@ func deltaToPercentString(delta string) string {
 func isSmallerBetter(table *benchstat.Table) bool {
 	// "smaller is better, except speeds"
 	//  https://github.com/golang/perf/blob/master/benchstat/table.go#L110
-	return (table.Metric != "speed")
+	return table.Metric != "speed"
 }
 
 func withSize(pixels int64) *sheets.DimensionProperties {

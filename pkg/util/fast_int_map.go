@@ -76,7 +76,7 @@ func (m FastIntMap) Get(key int) (value int, ok bool) {
 			return -1, false
 		}
 		val := m.getSmallVal(uint32(key))
-		return int(val), (val != -1)
+		return int(val), val != -1
 	}
 	if value, ok = m.large[key]; ok {
 		return value, true
@@ -109,7 +109,7 @@ func (m FastIntMap) Len() int {
 		// the low half of each group, and repeat.
 		// Note: this code assumes that numBits is a power of two.
 		for i := uint32(numBits / 2); i > 0; i /= 2 {
-			v |= (v >> i)
+			v |= v >> i
 		}
 		res += bits.OnesCount64(v & groupLowBitMask)
 	}

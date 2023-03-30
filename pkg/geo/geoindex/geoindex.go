@@ -210,7 +210,7 @@ type RelationshipType uint8
 const (
 	// Covers corresponds to the relationship in which one geospatial object
 	// covers another geospatial object.
-	Covers RelationshipType = (1 << iota)
+	Covers RelationshipType = 1 << iota
 
 	// CoveredBy corresponds to the relationship in which one geospatial object
 	// is covered by another geospatial object.

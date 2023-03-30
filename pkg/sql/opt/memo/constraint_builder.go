@@ -276,7 +276,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 
 	// If any of the LHS entries are not constrained then our constraints are not
 	// tight.
-	tight = (len(constrainedCols) == len(lhs.Elems))
+	tight = len(constrainedCols) == len(lhs.Elems)
 
 	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
 	keyCtx.Columns.Init(constrainedCols)
@@ -551,7 +551,7 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 		cr, tightr := cb.buildConstraints(t.Right)
 		cl = cl.Intersect(cb.evalCtx, cr)
 		tightl = tightl && tightr
-		return cl, (tightl || cl == contradiction)
+		return cl, tightl || cl == contradiction
 
 	case *OrExpr:
 		disjunctions := CollectContiguousOrExprs(e)

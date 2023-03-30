@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
-	cron "github.com/robfig/cron/v3"
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 )
 

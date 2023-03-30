@@ -355,18 +355,18 @@ type TLSMode transportType
 
 const (
 	// TLSVerifyFull checks the server's name against its certificate.
-	TLSVerifyFull TLSMode = TLSMode(tnTLSVerifyFull)
+	TLSVerifyFull = TLSMode(tnTLSVerifyFull)
 	// TLSVerifyCA only checks the server cert is signed by the known root CA.
-	TLSVerifyCA TLSMode = TLSMode(tnTLSVerifyCA)
+	TLSVerifyCA = TLSMode(tnTLSVerifyCA)
 	// TLSRequire requires TLS but does not validate the server sert.
 	// It allows MITM attacks.
-	TLSRequire TLSMode = TLSMode(tnTLSRequire)
+	TLSRequire = TLSMode(tnTLSRequire)
 	// TLSPrefer uses TLS if available, but does not require it.
-	TLSPrefer TLSMode = TLSMode(tnTLSPrefer)
+	TLSPrefer = TLSMode(tnTLSPrefer)
 	// TLSAllow uses TLS if the server requires it.
-	TLSAllow TLSMode = TLSMode(tnTLSAllow)
+	TLSAllow = TLSMode(tnTLSAllow)
 	// TLSUnspecified lets the client driver decide the TLS options.
-	TLSUnspecified TLSMode = TLSMode(tnUnspecified)
+	TLSUnspecified = TLSMode(tnUnspecified)
 )
 
 // TransportOption is the type of the valid arguments to WithTransport.

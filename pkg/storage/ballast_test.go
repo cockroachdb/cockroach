@@ -104,7 +104,7 @@ func TestIsDiskFull(t *testing.T) {
 			BallastSize: nil,
 		}
 		fs, cleanup := setup(t, &spec, 0 /* ballastSize */, vfs.DiskUsage{
-			AvailBytes: (1 << 28), // 256 MiB
+			AvailBytes: 1 << 28,   // 256 MiB
 			TotalBytes: 500 << 30, // 500 GiB
 		})
 		defer cleanup()

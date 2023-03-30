@@ -2013,7 +2013,7 @@ func TestImportRowLimit(t *testing.T) {
 
 	t.Run("row limit multiple csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test; USE test`)
-		defer sqlDB.Exec(t, (`DROP DATABASE test`))
+		defer sqlDB.Exec(t, `DROP DATABASE test`)
 
 		data = "pear\navocado\nwatermelon\nsugar"
 		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)

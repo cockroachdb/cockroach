@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	pgproto3 "github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // cancelInfo contains the information that sqlproxy needs in order to cancel

@@ -55,13 +55,13 @@ func NameString(s string) string {
 // identifier suitable for printing in error messages, avoiding a heap
 // allocation.
 func ErrNameStringP(s *string) string {
-	return ErrString(((*Name)(s)))
+	return ErrString((*Name)(s))
 }
 
 // ErrNameString escapes an identifier stored a string to a SQL
 // identifier suitable for printing in error messages.
 func ErrNameString(s string) string {
-	return ErrString(((*Name)(&s)))
+	return ErrString((*Name)(&s))
 }
 
 // Normalize normalizes to lowercase and Unicode Normalization Form C

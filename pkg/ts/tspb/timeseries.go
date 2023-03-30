@@ -11,7 +11,7 @@
 package tspb
 
 import (
-	context "context"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

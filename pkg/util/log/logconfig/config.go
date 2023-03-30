@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	yaml "gopkg.in/yaml.v2"
 )
 

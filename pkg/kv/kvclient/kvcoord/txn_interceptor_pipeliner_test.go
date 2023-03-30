@@ -1810,7 +1810,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 				if i == tc.expRejectIdx {
 					require.NotNil(t, pErr, "expected rejection, but request succeeded")
 
-					budgetErr := (lockSpansOverBudgetError{})
+					budgetErr := lockSpansOverBudgetError{}
 					if !errors.As(pErr.GoError(), &budgetErr) {
 						t.Fatalf("expected lockSpansOverBudgetError, got %+v", pErr.GoError())
 					}

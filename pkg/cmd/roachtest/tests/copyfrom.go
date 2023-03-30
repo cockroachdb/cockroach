@@ -28,7 +28,7 @@ const tpchLineitemFmt = `https://storage.googleapis.com/cockroach-fixtures/tpch-
 
 // There's an extra dummy field because the file above ends lines with delimiter and standard CSV behavior is to
 // interpret that as a column.
-var lineitemSchema string = `
+var lineitemSchema = `
 CREATE TABLE  lineitem (
 	l_orderkey      INT8 NOT NULL,
 	l_partkey       INT8 NOT NULL,

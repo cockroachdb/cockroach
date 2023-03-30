@@ -75,7 +75,7 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 	}
 }
 
-var _ (metric.Struct) = (*Metrics)(nil)
+var _ metric.Struct = (*Metrics)(nil)
 
 // MetricStruct makes Metrics a metric.Struct.
 func (m Metrics) MetricStruct() {}

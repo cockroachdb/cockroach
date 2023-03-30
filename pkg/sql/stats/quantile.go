@@ -105,7 +105,7 @@ var zeroQuantile = quantile{{p: 0, v: 0}, {p: 1, v: 0}}
 // If you are introducing a new histogram version, please check whether
 // makeQuantile and quantile.toHistogram need to change, and then increase the
 // hard-coded number here.
-const _ uint = 2 - uint(histVersion)
+const _ = 2 - uint(histVersion)
 
 // canMakeQuantile returns true if a quantile function can be created for a
 // histogram of the given type. Note that by not supporting BYTES we rule out

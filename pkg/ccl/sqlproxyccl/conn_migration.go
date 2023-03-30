@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	pgproto3 "github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // defaultTransferTimeout corresponds to the timeout period for the connection

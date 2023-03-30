@@ -677,7 +677,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if table.IsTemporary() {
 			relPersistence = relPersistenceTemporary
 		}
-		var relOptions tree.Datum = tree.DNull
+		var relOptions = tree.DNull
 		if storageParams := table.GetStorageParams(false /* spaceBetweenEqual */); len(storageParams) > 0 {
 			relOptionsArr := tree.NewDArray(types.String)
 			for _, storageParam := range storageParams {
@@ -2838,8 +2838,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 				return err
 			}
 			valueDatum := tree.NewDString(value)
-			var bootDatum tree.Datum = tree.DNull
-			var resetDatum tree.Datum = tree.DNull
+			var bootDatum = tree.DNull
+			var resetDatum = tree.DNull
 			if gen.Set == nil && gen.RuntimeSet == nil {
 				// RESET/SET will leave the variable unchanged. Announce the
 				// current value as boot/reset value.

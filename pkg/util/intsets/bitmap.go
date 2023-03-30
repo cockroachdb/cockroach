@@ -33,9 +33,9 @@ func (v bitmap) IsSet(i int) bool {
 
 func (v *bitmap) Set(i int) {
 	if i < 64 {
-		v.lo |= (1 << uint64(i))
+		v.lo |= 1 << uint64(i)
 	} else {
-		v.hi |= (1 << uint64(i&63))
+		v.hi |= 1 << uint64(i&63)
 	}
 }
 

@@ -519,6 +519,6 @@ func (t *tsGenerator) randomPastTimestamp(rng *rand.Rand) hlc.Timestamp {
 	var result hlc.Timestamp
 
 	// Return a result that's skewed toward the latest wall time.
-	result.WallTime = int64(float64(t.lastTS.WallTime) * float64((zipfMax - t.zipf.Uint64())) / float64(zipfMax))
+	result.WallTime = int64(float64(t.lastTS.WallTime) * float64(zipfMax-t.zipf.Uint64()) / float64(zipfMax))
 	return result
 }

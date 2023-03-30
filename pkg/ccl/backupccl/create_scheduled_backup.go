@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
-	cron "github.com/robfig/cron/v3"
+	"github.com/robfig/cron/v3"
 )
 
 const (

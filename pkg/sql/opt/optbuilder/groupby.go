@@ -701,7 +701,7 @@ func (b *Builder) buildAggregateFunction(
 	info := aggregateInfo{
 		FuncExpr: f,
 		def:      *def,
-		distinct: (f.Type == tree.DistinctFuncType),
+		distinct: f.Type == tree.DistinctFuncType,
 		args:     make(memo.ScalarListExpr, len(f.Exprs)),
 	}
 

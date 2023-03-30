@@ -41,7 +41,7 @@ func UseProvidedIdentity(
 	return []username.SQLUsername{id}, nil
 }
 
-var _ RoleMapper = UseProvidedIdentity
+var _ = UseProvidedIdentity
 
 // HbaMapper implements the "map" option that may be defined in a
 // host-based authentication rule. If the HBA entry does not define a

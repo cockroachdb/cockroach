@@ -1864,7 +1864,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			eqClass,
 			a.Metrics,
 		)
-		if expResult := (i < 3); expResult != result {
+		if expResult := i < 3; expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
 	}
@@ -2637,7 +2637,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		)
 		var gotExpected bool
 		if !ok {
-			gotExpected = (tc.expected == nil)
+			gotExpected = tc.expected == nil
 		} else {
 			for _, expectedStoreID := range tc.expected {
 				if result.StoreID == expectedStoreID {

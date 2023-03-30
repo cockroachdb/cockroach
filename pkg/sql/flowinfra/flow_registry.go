@@ -49,7 +49,7 @@ var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
 
 // expectedConnectionTime is the expected time taken by a flow to connect to its
 // consumers.
-const expectedConnectionTime time.Duration = 500 * time.Millisecond
+const expectedConnectionTime = 500 * time.Millisecond
 
 // InboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a

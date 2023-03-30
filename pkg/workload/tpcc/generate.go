@@ -181,7 +181,7 @@ func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
-	wID := (rowIdx / numStockPerWarehouse)
+	wID := rowIdx / numStockPerWarehouse
 
 	cb.Reset(stockTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(sID)
@@ -255,7 +255,7 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 	lo := lettersOffset(l.rng.Intn(len(lettersAlphabet)))
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numDistrictsPerWarehouse)
+	wID := rowIdx / numDistrictsPerWarehouse
 
 	cb.Reset(districtTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(dID)
@@ -329,7 +329,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numCustomersPerWarehouse)
+	wID := rowIdx / numCustomersPerWarehouse
 
 	// 10% of the customer rows have bad credit.
 	// See section 4.3, under the CUSTOMER table population section.
@@ -437,7 +437,7 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numCustomersPerWarehouse)
+	wID := rowIdx / numCustomersPerWarehouse
 
 	cb.Reset(historyTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Bytes().Set(0, rowID)
@@ -490,7 +490,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
 	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numOrdersPerWarehouse)
+	wID := rowIdx / numOrdersPerWarehouse
 
 	var cID int
 	{
@@ -568,7 +568,7 @@ func (w *tpcc) tpccNewOrderInitialRowBatch(
 	const firstNewOrderOffset = numOrdersPerDistrict - numNewOrdersPerDistrict
 	oID := (rowIdx % numNewOrdersPerDistrict) + firstNewOrderOffset + 1
 	dID := ((rowIdx / numNewOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numNewOrdersPerWarehouse)
+	wID := rowIdx / numNewOrdersPerWarehouse
 
 	cb.Reset(newOrderTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(oID)
@@ -612,7 +612,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	// NB: There is one batch of order_line rows per order
 	oID := (orderRowIdx % numOrdersPerDistrict) + 1
 	dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
-	wID := (orderRowIdx / numOrdersPerWarehouse)
+	wID := orderRowIdx / numOrdersPerWarehouse
 
 	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
 	cb.Reset(orderLineTypes, numOrderLines, coldata.StandardColumnFactory)

@@ -231,7 +231,7 @@ func makeTeeIDGen(id idGen) (genA, genB idGen) {
 				v := id()
 				a, b = append(a, v), append(b, v)
 			}
-			ret, (*s) = (*s)[0], (*s)[1:]
+			ret, *s = (*s)[0], (*s)[1:]
 			return ret
 		}
 	}

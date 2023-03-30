@@ -461,7 +461,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	}
 
 	// The spans are "tight" unless we used just a prefix.
-	tight = (prefixLen == len(lhs.Elems))
+	tight = prefixLen == len(lhs.Elems)
 
 	if nullVal {
 		// NULL is treated semantically as "unknown value", so

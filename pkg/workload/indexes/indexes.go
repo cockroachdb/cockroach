@@ -171,7 +171,7 @@ func (w *indexes) Ops(
 		op := &indexesOp{
 			config: w,
 			hists:  reg.GetHandle(),
-			rand:   rand.New(rand.NewSource(int64((i + 1)) * RandomSeed.Seed())),
+			rand:   rand.New(rand.NewSource(int64(i+1) * RandomSeed.Seed())),
 			buf:    make([]byte, w.payload),
 		}
 		op.stmt = op.sr.Define(stmt)

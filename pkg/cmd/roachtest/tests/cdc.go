@@ -310,7 +310,7 @@ func (cj *changefeedJob) Label() string {
 	return "default"
 }
 
-var allTpccTargets []string = []string{
+var allTpccTargets = []string{
 	`tpcc.warehouse`,
 	`tpcc.district`,
 	`tpcc.customer`,
@@ -322,7 +322,7 @@ var allTpccTargets []string = []string{
 	`tpcc.order_line`,
 }
 
-var allLedgerTargets []string = []string{
+var allLedgerTargets = []string{
 	`ledger.customer`,
 	`ledger.transaction`,
 	`ledger.entry`,

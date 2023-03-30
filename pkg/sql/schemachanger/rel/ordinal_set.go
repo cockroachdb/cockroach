@@ -23,7 +23,7 @@ type ordinal uint8
 // Note that it cannot contain attributes with ordinals greater than 30.
 type ordinalSet uint32
 
-const ordinalSetCapacity = (unsafe.Sizeof(ordinalSet(0)) * 8)
+const ordinalSetCapacity = unsafe.Sizeof(ordinalSet(0)) * 8
 const ordinalSetMaxOrdinal = ordinal(ordinalSetCapacity - 1)
 
 // ForEach iterates the set of attributes.

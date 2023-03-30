@@ -21,7 +21,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-var shorthands map[string]protoutil.Message = map[string]protoutil.Message{}
+var shorthands = map[string]protoutil.Message{}
 
 // RegisterShorthands registers a shorthand alias for a given message type which
 // can be used by NewMessage to look up that message type, when it fails to find

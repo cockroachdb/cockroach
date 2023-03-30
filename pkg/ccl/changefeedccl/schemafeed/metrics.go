@@ -36,4 +36,4 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 	}
 }
 
-var _ (metric.Struct) = (*Metrics)(nil)
+var _ metric.Struct = (*Metrics)(nil)

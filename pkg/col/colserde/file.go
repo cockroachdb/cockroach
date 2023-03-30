@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	mmap "github.com/edsrzf/mmap-go"
+	"github.com/edsrzf/mmap-go"
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 

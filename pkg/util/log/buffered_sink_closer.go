@@ -65,7 +65,7 @@ func newBufferedSinkCloser() *bufferedSinkCloser {
 // needs to be called once the bufferedSink has shutdown.
 func (closer *bufferedSinkCloser) RegisterBufferedSink(
 	bs *bufferedSink,
-) (shutdown <-chan (struct{}), cleanup func()) {
+) (shutdown <-chan struct{}, cleanup func()) {
 	closer.mu.Lock()
 	defer closer.mu.Unlock()
 

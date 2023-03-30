@@ -235,7 +235,7 @@ func (it *spanResolverIterator) Seek(
 	// already positioned. If so, and if the direction also corresponds, there's
 	// no need to change the underlying iterator's state.
 	if it.dir == oldDir && it.it.Valid() {
-		reverse := (it.dir == kvcoord.Descending)
+		reverse := it.dir == kvcoord.Descending
 		desc := it.it.Desc()
 		if (reverse && desc.ContainsKeyInverted(seekKey)) ||
 			(!reverse && desc.ContainsKey(seekKey)) {

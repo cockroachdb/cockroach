@@ -52,7 +52,7 @@ import (
 type libraryUsage uint64
 
 const (
-	usesGEOS libraryUsage = (1 << (iota + 1))
+	usesGEOS libraryUsage = 1 << (iota + 1)
 	usesS2
 	usesGeographicLib
 	usesPROJ

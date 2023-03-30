@@ -40,7 +40,7 @@ const (
 	// HighPri is high priority work.
 	HighPri WorkPriority = math.MaxInt8
 	// OneAboveHighPri is one priority level above the highest priority.
-	OneAboveHighPri int = int(HighPri) + 1
+	OneAboveHighPri = int(HighPri) + 1
 )
 
 func (w WorkPriority) String() string {

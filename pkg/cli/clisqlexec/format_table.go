@@ -643,7 +643,7 @@ func (p *sqlReporter) describe(w io.Writer, cols []string) error {
 		fmt.Fprint(w, "\n")
 	}
 	fmt.Fprint(w, ");\n\n")
-	p.noColumns = (len(cols) == 0)
+	p.noColumns = len(cols) == 0
 	return nil
 }
 

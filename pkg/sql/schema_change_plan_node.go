@@ -334,4 +334,4 @@ func (s schemaChangePlanNode) Next(params runParams) (bool, error) { return fals
 func (s schemaChangePlanNode) Values() tree.Datums                 { return tree.Datums{} }
 func (s schemaChangePlanNode) Close(ctx context.Context)           {}
 
-var _ (planNode) = (*schemaChangePlanNode)(nil)
+var _ planNode = (*schemaChangePlanNode)(nil)

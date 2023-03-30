@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/redact"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 )

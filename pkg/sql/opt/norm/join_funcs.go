@@ -591,7 +591,7 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 	swap := func(f, a, b memo.JoinFlags) memo.JoinFlags {
 		// If the bits are different, flip them both.
 		if f.Has(a) != f.Has(b) {
-			f ^= (a | b)
+			f ^= a | b
 		}
 		return f
 	}

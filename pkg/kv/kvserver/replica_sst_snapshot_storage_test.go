@@ -12,7 +12,7 @@ package kvserver
 
 import (
 	"context"
-	io "io"
+	"io"
 	"path/filepath"
 	"strconv"
 	"sync"

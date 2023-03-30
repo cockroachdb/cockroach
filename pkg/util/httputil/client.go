@@ -23,7 +23,7 @@ import (
 var DefaultClient = NewClientWithTimeout(StandardHTTPTimeout)
 
 // StandardHTTPTimeout is the default timeout to use for HTTP connections.
-const StandardHTTPTimeout time.Duration = 3 * time.Second
+const StandardHTTPTimeout = 3 * time.Second
 
 // NewClientWithTimeout defines a http.Client with the given timeout.
 func NewClientWithTimeout(timeout time.Duration) *Client {

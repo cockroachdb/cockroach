@@ -186,11 +186,11 @@ func (p *Provider) Create(
 	// (*port) to be the following value.
 	getPort := func(port *int) int {
 		for portsTaken.Contains(*port) {
-			(*port)++
+			*port++
 		}
 		result := *port
 		portsTaken.Add(result)
-		(*port)++
+		*port++
 		return result
 	}
 

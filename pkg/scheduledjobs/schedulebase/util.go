@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
-	cron "github.com/robfig/cron/v3"
+	"github.com/robfig/cron/v3"
 )
 
 // ScheduleRecurrence is a helper struct used to set the schedule recurrence.

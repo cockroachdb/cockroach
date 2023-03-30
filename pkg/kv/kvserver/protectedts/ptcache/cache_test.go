@@ -418,7 +418,7 @@ func TestIterate(t *testing.T) {
 type records []*ptpb.Record
 
 func (recs *records) accumulate(r *ptpb.Record) (wantMore bool) {
-	(*recs) = append(*recs, r)
+	*recs = append(*recs, r)
 	return true
 }
 

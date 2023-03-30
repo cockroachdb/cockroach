@@ -206,7 +206,7 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 				endPos--
 			}
 			tokens = tokens[:len(tokens)-1]
-			return p.scanner.In()[startPos:endPos], tokens, (lval.id == 0)
+			return p.scanner.In()[startPos:endPos], tokens, lval.id == 0
 		}
 		lval.pos -= startPos
 	}

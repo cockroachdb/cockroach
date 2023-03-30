@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
-	isatty "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 )
 
 // Context represents the configuration of a SQL shell instance.

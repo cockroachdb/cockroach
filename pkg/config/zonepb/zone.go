@@ -267,10 +267,10 @@ func DefaultSystemZoneConfigRef() *ZoneConfig {
 
 // IsComplete returns whether all the fields are set.
 func (z *ZoneConfig) IsComplete() bool {
-	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
+	return (z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
 		(!z.InheritedVoterConstraints()) && (!z.InheritedConstraints) &&
-		(!z.InheritedLeasePreferences))
+		(!z.InheritedLeasePreferences)
 }
 
 // InheritedVoterConstraints determines whether the `VoterConstraints` field is

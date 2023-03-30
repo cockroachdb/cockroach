@@ -13,7 +13,7 @@ package util
 import (
 	"bytes"
 	"fmt"
-	io "io"
+	"io"
 	"math/rand"
 	"strings"
 	"text/tabwriter"

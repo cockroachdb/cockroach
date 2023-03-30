@@ -171,7 +171,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 					assert.Equal(t, expectedNumBatches, testNumBatches)
 
 					// Progressively increase the batch size.
-					batchSize += (batchSize << 2)
+					batchSize += batchSize << 2
 					expectedNumBatches = int(math.Ceil(float64(expectedNumRecords) / float64(batchSize)))
 				}
 			})

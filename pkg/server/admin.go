@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"

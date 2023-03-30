@@ -260,7 +260,7 @@ func TestDatumOrdering(t *testing.T) {
 			}
 			isMin := d.IsMin(ctx)
 			if isMin != (td.prev == valIsMin) {
-				t.Errorf("%s: IsMin() %v, expected %v", td.datumExpr, isMin, (td.prev == valIsMin))
+				t.Errorf("%s: IsMin() %v, expected %v", td.datumExpr, isMin, td.prev == valIsMin)
 				continue
 			}
 			if !isMin {
@@ -283,7 +283,7 @@ func TestDatumOrdering(t *testing.T) {
 			}
 			isMax := d.IsMax(ctx)
 			if isMax != (td.next == valIsMax) {
-				t.Errorf("%s: IsMax() %v, expected %v", td.datumExpr, isMax, (td.next == valIsMax))
+				t.Errorf("%s: IsMax() %v, expected %v", td.datumExpr, isMax, td.next == valIsMax)
 				continue
 			}
 			if !isMax {

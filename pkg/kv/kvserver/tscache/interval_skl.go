@@ -966,7 +966,7 @@ func (p *sklPage) ratchetValueSet(
 
 			// Remove the hasKey and hasGap flags from the meta. These will be
 			// replaced below.
-			newMeta &^= (hasKey | hasGap)
+			newMeta &^= hasKey | hasGap
 
 			// Update the values, possibly preserving the init bit.
 			b, valMeta := encodeValueSet(arr[:0], keyVal, gapVal)

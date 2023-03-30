@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	kms "cloud.google.com/go/kms/apiv1"
-	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
+	"cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/errors"

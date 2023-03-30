@@ -6473,7 +6473,7 @@ Parameters:` + randgencfg.ConfigDoc,
 				); err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt((tenantID.ToUint64()))), nil
+				return tree.NewDInt(tree.DInt(tenantID.ToUint64())), nil
 			},
 			Info:       "Updates resource limits for the tenant with the provided name. Must be run by the System tenant.",
 			Volatility: volatility.Volatile,

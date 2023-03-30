@@ -41,7 +41,7 @@ func DWithin(
 
 	angleToExpand := s1.Angle(distance / spheroid.SphereRadius())
 	if useSphereOrSpheroid == UseSpheroid {
-		angleToExpand *= (1 + SpheroidErrorFraction)
+		angleToExpand *= 1 + SpheroidErrorFraction
 	}
 	if !a.BoundingCap().Expanded(angleToExpand).Intersects(b.BoundingCap()) {
 		return false, nil

@@ -122,7 +122,7 @@ func (p *PlaceholderTypesInfo) ValueType(idx PlaceholderIdx) (_ *types.T, ok boo
 	if t == nil {
 		t = p.Types[idx]
 	}
-	return t, (t != nil)
+	return t, t != nil
 }
 
 // SetType assigns a known type to a placeholder.

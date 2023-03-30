@@ -113,7 +113,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	pgx "github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

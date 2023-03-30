@@ -95,15 +95,15 @@ type AuthMethod = func(
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error)
 
-var _ AuthMethod = authPassword
-var _ AuthMethod = authScram
-var _ AuthMethod = authCert
-var _ AuthMethod = authCertPassword
-var _ AuthMethod = authCertScram
-var _ AuthMethod = authTrust
-var _ AuthMethod = authReject
-var _ AuthMethod = authSessionRevivalToken([]byte{})
-var _ AuthMethod = authJwtToken
+var _ = authPassword
+var _ = authScram
+var _ = authCert
+var _ = authCertPassword
+var _ = authCertScram
+var _ = authTrust
+var _ = authReject
+var _ = authSessionRevivalToken([]byte{})
+var _ = authJwtToken
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from

@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/errors"
-	pgproto3 "github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // authenticate handles the startup of the pgwire protocol to the point where

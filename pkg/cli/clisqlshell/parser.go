@@ -73,14 +73,14 @@ func (t *parseNode) matches(stmts scanner.Scanner) bool {
 }
 
 // CREATE CHANGEFEED with no INTO clause, or EXPERIMENTAL CHANGEFEED.
-var createSinklessChangefeed statementType = statementType{
+var createSinklessChangefeed = statementType{
 	parseNode{transitions: map[token]*parseNode{
 		lexbase.CREATE:       &sinklessChangefeed,
 		lexbase.EXPERIMENTAL: &sinklessChangefeed,
 	}},
 }
 
-var noMatch parseNode = parseNode{abortMatch: true}
+var noMatch = parseNode{abortMatch: true}
 
 var sinklessChangefeedAnyArg = parseNode{
 	matchEOF: true,
@@ -94,7 +94,7 @@ func init() {
 // Return false on any INTO keyword not preceded by an AS.
 // AS INTO is a result column alias, while any other use of
 // INTO in a changefeed expression creates a sink.
-var sinklessChangefeedArgs parseNode = parseNode{
+var sinklessChangefeedArgs = parseNode{
 	matchEOF: true,
 	transitions: map[token]*parseNode{
 		lexbase.INTO: &noMatch,
@@ -102,7 +102,7 @@ var sinklessChangefeedArgs parseNode = parseNode{
 	},
 }
 
-var sinklessChangefeed parseNode = parseNode{
+var sinklessChangefeed = parseNode{
 	transitions: map[token]*parseNode{lexbase.CHANGEFEED: sinklessChangefeedArgs.repeated()},
 }
 

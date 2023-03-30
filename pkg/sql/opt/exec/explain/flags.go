@@ -43,7 +43,7 @@ type DeflakeFlags uint8
 
 const (
 	// DeflakeDistribution hides the value of the "distribution" field.
-	DeflakeDistribution DeflakeFlags = (1 << iota)
+	DeflakeDistribution DeflakeFlags = 1 << iota
 
 	// DeflakeVectorized hides the value of the "vectorized" field.
 	DeflakeVectorized
@@ -59,7 +59,7 @@ const (
 
 const (
 	// DeflakeAll has all redact flags set.
-	DeflakeAll DeflakeFlags = DeflakeDistribution | DeflakeVectorized | DeflakeNodes | DeflakeVolatile
+	DeflakeAll = DeflakeDistribution | DeflakeVectorized | DeflakeNodes | DeflakeVolatile
 )
 
 // Has returns true if the receiver has the given deflake flag set.

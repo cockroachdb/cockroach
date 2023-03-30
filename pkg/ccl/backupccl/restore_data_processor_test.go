@@ -12,7 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	math "math"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"

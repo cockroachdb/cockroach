@@ -73,7 +73,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 )
 
 // SQLServerWrapper is a utility struct that encapsulates

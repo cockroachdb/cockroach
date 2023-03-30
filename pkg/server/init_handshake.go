@@ -500,7 +500,7 @@ func initHandshakeHelper(
 	// Wait for the server and all the clients to terminate before returning.
 	defer handshaker.wg.Wait()
 
-	peerCACerts := make(map[string]([]byte))
+	peerCACerts := make(map[string][]byte)
 
 	if numExpectedPeers > 0 {
 		handshaker.wg.Add(1)

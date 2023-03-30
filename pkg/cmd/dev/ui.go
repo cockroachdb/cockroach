@@ -542,7 +542,7 @@ launching test in a real browser. Extra flags are passed directly to the
 			ctx := cmd.Context()
 
 			isHeaded := mustGetFlagBool(cmd, headedFlag)
-			var yarnTarget string = "cy:run"
+			var yarnTarget = "cy:run"
 			if isHeaded {
 				yarnTarget = "cy:debug"
 			}

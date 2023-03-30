@@ -72,8 +72,8 @@ func UpdateAddrs(ctx context.Context, addr, advAddr *string, ln net.Addr) error 
 	if err != nil {
 		return err
 	}
-	requestedAll := (desiredHost == "" || desiredHost == "0.0.0.0" || desiredHost == "::")
-	listenedAll := (lnHost == "" || lnHost == "0.0.0.0" || lnHost == "::")
+	requestedAll := desiredHost == "" || desiredHost == "0.0.0.0" || desiredHost == "::"
+	listenedAll := lnHost == "" || lnHost == "0.0.0.0" || lnHost == "::"
 	if (requestedAll && !listenedAll) || (!requestedAll && desiredHost != lnHost) {
 		log.Warningf(ctx, "requested to listen on %q, actually listening on %q", desiredHost, lnHost)
 	}

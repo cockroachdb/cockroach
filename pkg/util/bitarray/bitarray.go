@@ -127,7 +127,7 @@ func (d BitArray) ToWidth(desiredLen uint) BitArray {
 		// Destructive, we have to copy.
 		words, lastBitsUsed := EncodingPartsForBitLen(desiredLen)
 		copy(words, d.words[:len(words)])
-		words[len(words)-1] &= (^word(0) << (numBitsPerWord - lastBitsUsed))
+		words[len(words)-1] &= ^word(0) << (numBitsPerWord - lastBitsUsed)
 		return mustFromEncodingParts(words, lastBitsUsed)
 	}
 
@@ -453,7 +453,7 @@ func Not(d BitArray) BitArray {
 	}
 	if res.lastBitsUsed > 0 {
 		lastWord := len(res.words) - 1
-		res.words[lastWord] &= (^word(0) << (numBitsPerWord - res.lastBitsUsed))
+		res.words[lastWord] &= ^word(0) << (numBitsPerWord - res.lastBitsUsed)
 	}
 	return res
 }
@@ -559,7 +559,7 @@ func Rand(rng *rand.Rand, bitLen uint) BitArray {
 		d.words[i] = rng.Uint64()
 	}
 	if len(d.words) > 0 {
-		d.words[len(d.words)-1] <<= (numBitsPerWord - d.lastBitsUsed)
+		d.words[len(d.words)-1] <<= numBitsPerWord - d.lastBitsUsed
 	}
 	return d
 }

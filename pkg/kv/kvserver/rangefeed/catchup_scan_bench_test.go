@@ -147,7 +147,7 @@ func BenchmarkCatchUpScan(b *testing.B) {
 			for _, withDiff := range []bool{true, false} {
 				b.Run(fmt.Sprintf("withDiff=%v", withDiff), func(b *testing.B) {
 					for _, tsExcludePercent := range []float64{0.0, 0.50, 0.75, 0.95, 0.99} {
-						wallTime := int64((5 * (float64(numKeys)*tsExcludePercent + 1)))
+						wallTime := int64(5 * (float64(numKeys)*tsExcludePercent + 1))
 						ts := hlc.Timestamp{WallTime: wallTime}
 						b.Run(fmt.Sprintf("perc=%2.2f", tsExcludePercent*100), func(b *testing.B) {
 							for _, numRangeKeys := range []int{0, 1, 100} {

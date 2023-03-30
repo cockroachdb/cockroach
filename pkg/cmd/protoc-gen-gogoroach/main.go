@@ -22,7 +22,7 @@ import (
 // As we invoke it, the generator will sometimes prepend the cockroachdb github
 // URL to what should be unqualified standard library imports. This regexp
 // allows us to identify and fix those bad imports.
-var builtinRegex *regexp.Regexp = regexp.MustCompile(`github.com/cockroachdb/cockroach/pkg/(?P<capture>(bytes|context|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)([^a-z]|$$))`)
+var builtinRegex = regexp.MustCompile(`github.com/cockroachdb/cockroach/pkg/(?P<capture>(bytes|context|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)([^a-z]|$$))`)
 
 func fixImports(s string) string {
 	lines := strings.Split(s, "\n")

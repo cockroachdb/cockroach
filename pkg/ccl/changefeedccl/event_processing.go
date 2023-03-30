@@ -40,7 +40,7 @@ import (
 
 // pacerLogEvery is used for logging errors instead of returning terminal
 // errors when pacer.Pace returns an error.
-var pacerLogEvery log.EveryN = log.Every(100 * time.Millisecond)
+var pacerLogEvery = log.Every(100 * time.Millisecond)
 
 // eventContext holds metadata pertaining to event.
 type eventContext struct {

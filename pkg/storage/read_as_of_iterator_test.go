@@ -89,7 +89,7 @@ func TestReadAsOfIterator(t *testing.T) {
 			defer iter.Close()
 
 			subtests := []iterSubtest{
-				{"NextKey", test.expectedNextKey, (SimpleMVCCIterator).NextKey},
+				{"NextKey", test.expectedNextKey, SimpleMVCCIterator.NextKey},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {

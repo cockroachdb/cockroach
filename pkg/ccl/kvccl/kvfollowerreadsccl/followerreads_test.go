@@ -52,7 +52,7 @@ import (
 )
 
 const (
-	expectedFollowerReadOffset time.Duration = -4200 * time.Millisecond
+	expectedFollowerReadOffset = -4200 * time.Millisecond
 )
 
 func TestEvalFollowerReadOffset(t *testing.T) {

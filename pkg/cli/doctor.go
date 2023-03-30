@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"

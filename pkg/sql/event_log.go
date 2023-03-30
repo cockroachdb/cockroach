@@ -475,7 +475,7 @@ const (
 	LogToDevChannelIfVerbose
 
 	// LogEverywhere logs to all the possible outputs.
-	LogEverywhere LogEventDestination = LogExternally | LogToSystemTable | LogToDevChannelIfVerbose
+	LogEverywhere = LogExternally | LogToSystemTable | LogToDevChannelIfVerbose
 )
 
 // InsertEventRecords inserts events into the event log as part
@@ -606,7 +606,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 ) {
 	// perAttemptTimeout is the maximum amount of time to wait on each
 	// eventlog write attempt.
-	const perAttemptTimeout time.Duration = 5 * time.Second
+	const perAttemptTimeout = 5 * time.Second
 	// maxAttempts is the maximum number of attempts to write an
 	// eventlog entry.
 	const maxAttempts = 10

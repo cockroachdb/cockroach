@@ -690,7 +690,7 @@ func (p *PreFilterer) PreFilter(
 				}
 				angleToExpand := s1.Angle(distance / proj.Spheroid.SphereRadius())
 				if useSphereOrSpheroid == geogfn.UseSpheroid {
-					angleToExpand *= (1 + geogfn.SpheroidErrorFraction)
+					angleToExpand *= 1 + geogfn.SpheroidErrorFraction
 				}
 				result[i] = pbb.CapBound().Expanded(angleToExpand).Intersects(bb.CapBound())
 			default:

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/pierrre/geohash"
-	geom "github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	"github.com/twpayne/go-geom/encoding/geojson"

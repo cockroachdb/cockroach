@@ -176,15 +176,15 @@ func (u *UUID) SetVersion(v byte) {
 func (u *UUID) SetVariant(v byte) {
 	switch v {
 	case VariantNCS:
-		u[8] = (u[8]&(0xff>>1) | (0x00 << 7))
+		u[8] = u[8]&(0xff>>1) | (0x00 << 7)
 	case VariantRFC4122:
-		u[8] = (u[8]&(0xff>>2) | (0x02 << 6))
+		u[8] = u[8]&(0xff>>2) | (0x02 << 6)
 	case VariantMicrosoft:
-		u[8] = (u[8]&(0xff>>3) | (0x06 << 5))
+		u[8] = u[8]&(0xff>>3) | (0x06 << 5)
 	case VariantFuture:
 		fallthrough
 	default:
-		u[8] = (u[8]&(0xff>>3) | (0x07 << 5))
+		u[8] = u[8]&(0xff>>3) | (0x07 << 5)
 	}
 }
 

@@ -11,10 +11,10 @@
 package execinfrapb
 
 import (
-	fmt "fmt"
+	"fmt"
 	"strings"
 	"testing"
-	time "time"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 )

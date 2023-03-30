@@ -102,7 +102,7 @@ func TestTimeTZ(t *testing.T) {
 		{
 			t:               weirdTimeZone,
 			toTime:          time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.TimeZoneOffsetToLocation((5*60*60)+(30*60)+15)),
-			toDuration:      time.Duration((10*60*60 - ((5 * 60 * 60) + 30*60 + 15))) * time.Second,
+			toDuration:      time.Duration(10*60*60-((5*60*60)+30*60+15)) * time.Second,
 			largerThan:      []TimeTZ{minTime},
 			smallerThan:     []TimeTZ{maxTime},
 			equalTo:         []TimeTZ{weirdTimeZone},

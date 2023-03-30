@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	pgproto3 "github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
 )
 

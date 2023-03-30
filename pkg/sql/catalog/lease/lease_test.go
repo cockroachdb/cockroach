@@ -1095,7 +1095,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	checkDeadlineErr := func(err error, t *testing.T) {
-		var pqe (*pq.Error)
+		var pqe *pq.Error
 		if !errors.As(err, &pqe) || pgcode.MakeCode(string(pqe.Code)) != pgcode.SerializationFailure ||
 			!testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
 			t.Fatalf("expected deadline exceeded, got: %v", err)

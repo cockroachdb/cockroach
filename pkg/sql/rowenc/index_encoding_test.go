@@ -885,7 +885,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 // Determines if the input array contains only one or more entries of the
 // same non-null element. NULL entries are not considered.
 func containsNonNullUniqueElement(evalCtx *eval.Context, valArr *tree.DArray) bool {
-	var lastVal tree.Datum = tree.DNull
+	var lastVal = tree.DNull
 	for _, val := range valArr.Array {
 		if val != tree.DNull {
 			if lastVal != tree.DNull && lastVal.Compare(evalCtx, val) != 0 {

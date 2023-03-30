@@ -16,7 +16,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	io "io"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"

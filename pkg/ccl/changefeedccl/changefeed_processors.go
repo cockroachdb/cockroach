@@ -739,8 +739,8 @@ type changeFrontier struct {
 }
 
 const (
-	runStatusUpdateFrequency time.Duration = time.Minute
-	slowSpanMaxFrequency                   = 10 * time.Second
+	runStatusUpdateFrequency = time.Minute
+	slowSpanMaxFrequency     = 10 * time.Second
 )
 
 // jobState encapsulates changefeed job state.

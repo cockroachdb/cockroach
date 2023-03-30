@@ -964,7 +964,7 @@ type pgDumpReader struct {
 	kvCh                  chan row.KVBatch
 	opts                  roachpb.PgDumpOptions
 	walltime              int64
-	colMap                map[*row.DatumRowConverter](map[string]int)
+	colMap                map[*row.DatumRowConverter]map[string]int
 	jobID                 int64
 	unsupportedStmtLogger *unsupportedStmtLogger
 	evalCtx               *eval.Context
@@ -986,7 +986,7 @@ func newPgDumpReader(
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
-	colMap := make(map[*row.DatumRowConverter](map[string]int))
+	colMap := make(map[*row.DatumRowConverter]map[string]int)
 	for name, table := range descs {
 		if table.Desc.IsTable() {
 			tableDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()

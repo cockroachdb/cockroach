@@ -263,7 +263,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 	for _, storeKey := range storeKeyList {
 		storeNode := PrettyStoreKey{
 			ID:      storeKey.KeyId,
-			Active:  (storeKey.KeyId == keyRegistry.ActiveStoreKeyId),
+			Active:  storeKey.KeyId == keyRegistry.ActiveStoreKeyId,
 			Type:    storeKey.EncryptionType.String(),
 			Created: JSONTime(timeutil.Unix(storeKey.CreationTime, 0)),
 			Source:  storeKey.Source,
@@ -284,7 +284,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 			for _, c := range children {
 				dataNode := PrettyDataKey{
 					ID:      c.KeyId,
-					Active:  (c.KeyId == keyRegistry.ActiveDataKeyId),
+					Active:  c.KeyId == keyRegistry.ActiveDataKeyId,
 					Exposed: c.WasExposed,
 					Created: JSONTime(timeutil.Unix(c.CreationTime, 0)),
 				}

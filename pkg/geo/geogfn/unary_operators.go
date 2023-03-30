@@ -171,7 +171,7 @@ func length(
 		case s2.Point:
 		case *s2.Polyline:
 			if useSphereOrSpheroid == UseSpheroid {
-				totalLength += spheroid.InverseBatch((*region))
+				totalLength += spheroid.InverseBatch(*region)
 			} else {
 				for edgeIdx, regionNumEdges := 0, region.NumEdges(); edgeIdx < regionNumEdges; edgeIdx++ {
 					edge := region.Edge(edgeIdx)

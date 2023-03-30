@@ -35,7 +35,7 @@ const (
 	// column name if the AS field is not populated.
 	RegionalByRowRegionDefaultCol string = "crdb_region"
 	// RegionalByRowRegionDefaultColName is the same, typed as Name.
-	RegionalByRowRegionDefaultColName Name = Name(RegionalByRowRegionDefaultCol)
+	RegionalByRowRegionDefaultColName = Name(RegionalByRowRegionDefaultCol)
 	// RegionalByRowRegionNotSpecifiedName is the string denoting the REGIONAL BY ROW
 	// has no AS <col> specified.
 	// TODO(#59455): clean this up to use something nicer.

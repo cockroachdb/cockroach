@@ -503,8 +503,8 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 			nullFirst, nullLast = 3, 7
 		}
 		for j := range rows[i] {
-			isNull := (rows[i][j] == tree.DNull)
-			expNull := (j >= nullFirst && j <= nullLast)
+			isNull := rows[i][j] == tree.DNull
+			expNull := j >= nullFirst && j <= nullLast
 			if expNull != isNull {
 				if !expNull {
 					return errors.Errorf("expected NULL column %d", j)

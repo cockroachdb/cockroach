@@ -61,13 +61,13 @@ func NewInstanceMetadataTestClient() *httputil.Client {
 					"privateIp" : "172.31.29.00",
 					"region" : "us-east-1"
 					}`))
-			case (gcpMetadataEndpoint + "machine-type"):
+			case gcpMetadataEndpoint + "machine-type":
 				// response taken from the GCP internal metadata
 				// endpoint on May 2 2019
 				res.Body = io.NopCloser(bytes.NewBufferString(
 					`projects/93358566124/machineTypes/g1-small`,
 				))
-			case (gcpMetadataEndpoint + "zone"):
+			case gcpMetadataEndpoint + "zone":
 				// response taken from the GCP internal metadata
 				// endpoint on June 3 2019
 				res.Body = io.NopCloser(bytes.NewBufferString(

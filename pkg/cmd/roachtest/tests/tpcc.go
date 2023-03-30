@@ -638,7 +638,7 @@ func registerTPCC(r registry.Registry) {
 					regionIdx := iter % len(regions)
 					return option.NewNodeListOptionRange(
 						(nodesPerRegion*regionIdx)+1,
-						(nodesPerRegion * (regionIdx + 1)),
+						nodesPerRegion*(regionIdx+1),
 					)
 				},
 				workloadInstances: func() []workloadInstance {
@@ -657,7 +657,7 @@ func registerTPCC(r registry.Registry) {
 						ret = append(
 							ret,
 							workloadInstance{
-								nodes:          option.NewNodeListOptionRange((i*nodesPerRegion)+1, ((i + 1) * nodesPerRegion)), // 1-indexed
+								nodes:          option.NewNodeListOptionRange((i*nodesPerRegion)+1, (i+1)*nodesPerRegion), // 1-indexed
 								prometheusPort: prometheusLocalPortStart + i,
 								extraRunArgs:   fmt.Sprintf("--partition-affinity=%d", i), // 0-indexed
 							},
@@ -668,7 +668,7 @@ func registerTPCC(r registry.Registry) {
 						ret = append(
 							ret,
 							workloadInstance{
-								nodes:          option.NewNodeListOptionRange((i*nodesPerRegion)+1, ((i + 1) * nodesPerRegion)), // 1-indexed
+								nodes:          option.NewNodeListOptionRange((i*nodesPerRegion)+1, (i+1)*nodesPerRegion), // 1-indexed
 								prometheusPort: prometheusRemotePortStart + i,
 								extraRunArgs:   fmt.Sprintf("--partition-affinity=%d", (i+1)%len(regions)), // 0-indexed
 							},

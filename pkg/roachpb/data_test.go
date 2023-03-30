@@ -114,7 +114,7 @@ func TestKeyNext(t *testing.T) {
 			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, next)
 		}
 		if c.expReallocate != 0 {
-			if expect, reallocated := c.expReallocate > 0, (&next[0] != &c.key[0]); expect != reallocated {
+			if expect, reallocated := c.expReallocate > 0, &next[0] != &c.key[0]; expect != reallocated {
 				t.Errorf("%d: unexpected next reallocation = %t, found reallocation = %t", i, expect, reallocated)
 			}
 		}

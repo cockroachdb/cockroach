@@ -13,7 +13,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	io "io"
+	"io"
 	"math/rand"
 	"path/filepath"
 	"strconv"

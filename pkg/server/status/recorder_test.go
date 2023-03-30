@@ -415,19 +415,19 @@ func TestMetricsRecorder(t *testing.T) {
 			case "counter":
 				c := metric.NewCounter(metric.Metadata{Name: reg.prefix + data.name})
 				reg.reg.AddMetric(c)
-				c.Inc((data.val))
+				c.Inc(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "aggcounter":
 				ac := aggmetric.NewCounter(metric.Metadata{Name: reg.prefix + data.name}, "foo")
 				reg.reg.AddMetric(ac)
 				c := ac.AddChild("bar")
-				c.Inc((data.val))
+				c.Inc(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "agggauge":
 				ac := aggmetric.NewGauge(metric.Metadata{Name: reg.prefix + data.name}, "foo")
 				reg.reg.AddMetric(ac)
 				c := ac.AddChild("bar")
-				c.Inc((data.val))
+				c.Inc(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":
 				h := metric.NewHistogram(metric.HistogramOptions{

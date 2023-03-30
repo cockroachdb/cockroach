@@ -9638,7 +9638,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			}
 
 			// Check proposal status.
-			if sawProp := (propCount > 0); sawProp != c.expProposal {
+			if sawProp := propCount > 0; sawProp != c.expProposal {
 				t.Errorf("expected proposal=%t, found %t", c.expProposal, sawProp)
 			}
 		})

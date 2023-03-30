@@ -32,9 +32,9 @@ type AuthBehaviors struct {
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
-var _ Authenticator = (*AuthBehaviors)(nil).Authenticate
-var _ func() = (*AuthBehaviors)(nil).ConnClose
-var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
+var _ = (*AuthBehaviors)(nil).Authenticate
+var _ = (*AuthBehaviors)(nil).ConnClose
+var _ = (*AuthBehaviors)(nil).MapRole
 
 // This is a hack for the unused-symbols linter. These two functions
 // are, at present, only called by the GSSAPI integration. The code

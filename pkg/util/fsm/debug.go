@@ -218,4 +218,4 @@ func (t Transitions) WriteDotGraphString(w io.Writer, start string) {
 
 // Silence unused warning for Transitions.WriteDotGraphString. The method
 // is used by write_reports.go.tmpl.
-var _ = (Transitions).WriteDotGraphString
+var _ = Transitions.WriteDotGraphString

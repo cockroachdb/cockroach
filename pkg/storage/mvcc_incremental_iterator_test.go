@@ -1540,7 +1540,7 @@ func BenchmarkMVCCIncrementalIterator(b *testing.B) {
 	valueBytes := 1000
 
 	for _, tsExcludePercent := range []float64{0, 0.95} {
-		wallTime := int64((5 * (float64(numVersions)*tsExcludePercent + 1)))
+		wallTime := int64(5 * (float64(numVersions)*tsExcludePercent + 1))
 		ts := hlc.Timestamp{WallTime: wallTime}
 		b.Run(fmt.Sprintf("ts=%d", ts.WallTime), func(b *testing.B) {
 			runIncrementalBenchmark(b, ts, mvccBenchData{

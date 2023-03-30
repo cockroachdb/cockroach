@@ -38,7 +38,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
-	isatty "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 

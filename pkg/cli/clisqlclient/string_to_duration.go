@@ -37,10 +37,10 @@ func stringToDuration(s string) (time.Duration, error) {
 	ts, e3 := strconv.Atoi(m[3])
 	us := m[4] + "000000"[:6-len(m[4])]
 	tus, e4 := strconv.Atoi(us)
-	return (time.Duration(th)*time.Hour +
+	return time.Duration(th)*time.Hour +
 			time.Duration(tm)*time.Minute +
 			time.Duration(ts)*time.Second +
-			time.Duration(tus)*time.Microsecond),
+			time.Duration(tus)*time.Microsecond,
 		errors.CombineErrors(e1,
 			errors.CombineErrors(e2,
 				errors.CombineErrors(e3, e4)))

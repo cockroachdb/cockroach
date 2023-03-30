@@ -148,7 +148,7 @@ func arithmeticMean(vals []float64) float64 {
 }
 
 func roundFraction(val, n, decimals float64) float64 {
-	percent := (val / n)
+	percent := val / n
 	rounding := math.Pow(10, decimals)
 	return math.Round(percent*rounding) / rounding
 }

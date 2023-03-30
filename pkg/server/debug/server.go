@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
-	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"

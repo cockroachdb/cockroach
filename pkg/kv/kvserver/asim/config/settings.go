@@ -150,7 +150,7 @@ func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bo
 	return func(rangeSize int64, add bool) time.Duration {
 		delay := s.ReplicaChangeBaseDelay
 		if add {
-			delay += (time.Duration(rangeSize/(1024*1024)) / time.Duration(s.ReplicaAddRate))
+			delay += time.Duration(rangeSize/(1024*1024)) / time.Duration(s.ReplicaAddRate)
 		}
 		return delay
 	}

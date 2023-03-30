@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
 )
 

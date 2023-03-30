@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 )
 
 // The call stack here is usually:

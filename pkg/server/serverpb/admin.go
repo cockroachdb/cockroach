@@ -10,7 +10,7 @@
 
 package serverpb
 
-import context "context"
+import "context"
 
 // Add adds values from ots to ts.
 func (ts *TableStatsResponse) Add(ots *TableStatsResponse) {

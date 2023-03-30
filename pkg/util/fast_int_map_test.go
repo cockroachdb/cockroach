@@ -60,7 +60,7 @@ func TestFastIntMap(t *testing.T) {
 				}
 
 				// Get maximum key and value and check MaxKey and MaxValue.
-				maxKey, maxVal, maxOk := 0, 0, (len(m) > 0)
+				maxKey, maxVal, maxOk := 0, 0, len(m) > 0
 				for k, v := range m {
 					if maxKey < k {
 						maxKey = k
