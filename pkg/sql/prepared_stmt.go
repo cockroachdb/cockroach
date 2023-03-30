@@ -15,11 +15,13 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -127,15 +129,15 @@ type PortalPausablity int64
 
 const (
 	// PortalPausabilityDisabled is the default status of a portal when
-	// sql.pgwire.multiple_active_portals.enabled is false.
+	// the session variable multiple_active_portals_enabled is false.
 	PortalPausabilityDisabled PortalPausablity = iota
-	// PausablePortal is set when sql.pgwire.multiple_active_portals.enabled is
-	// set to true and the underlying statement is a read-only SELECT query with
-	// no sub-queries or post-queries.
+	// PausablePortal is set when the session variable multiple_active_portals_enabled
+	// is set to true and the underlying statement is a read-only SELECT query
+	// with no sub-queries or post-queries.
 	PausablePortal
 	// NotPausablePortalForUnsupportedStmt is used when the cluster setting
-	// sql.pgwire.multiple_active_portals.enabled is set to true, while we don't
-	// support underlying statement.
+	// the session variable multiple_active_portals_enabled is set to true, while
+	// we don't support underlying statement.
 	NotPausablePortalForUnsupportedStmt
 )
 
@@ -180,7 +182,8 @@ func (ex *connExecutor) makePreparedPortal(
 		OutFormats: outFormats,
 	}
 
-	if EnableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
+	if ex.sessionData().MultipleActivePortalsEnabled {
+		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
 		portal.pauseInfo = &portalPauseInfo{}
 		portal.portalPausablity = PausablePortal
 	}

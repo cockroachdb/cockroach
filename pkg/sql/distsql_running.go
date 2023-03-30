@@ -1542,16 +1542,16 @@ func (r *DistSQLReceiver) PushBatch(
 var (
 	// ErrLimitedResultNotSupported is an error produced by pgwire
 	// indicating the user attempted to have multiple active portals but
-	// either without setting sql.pgwire.multiple_active_portals.enabled to
+	// either without setting session variable multiple_active_portals_enabled to
 	// true or the underlying query does not satisfy the restriction.
 	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(
 		40195,
 		"multiple active portals not supported, "+
-			"please set sql.pgwire.multiple_active_portals.enabled to true. "+
+			"please set session variable multiple_active_portals_enabled to true. "+
 			"Note: this feature is in preview",
 	)
 	// ErrStmtNotSupportedForPausablePortal is returned when the user have set
-	// sql.pgwire.multiple_active_portals.enabled to true but set an unsupported
+	// session variable multiple_active_portals_enabled to true but set an unsupported
 	// statement for a portal.
 	ErrStmtNotSupportedForPausablePortal = unimplemented.NewWithIssue(
 		98911,
