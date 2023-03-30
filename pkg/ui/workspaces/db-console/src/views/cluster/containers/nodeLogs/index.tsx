@@ -23,7 +23,7 @@ import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { getDisplayName } from "src/redux/nodes";
-import { Loading, SortedTable, util } from "@cockroachlabs/cluster-ui";
+import { Loading, SortedTable, util, Timestamp } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 import "./logs.styl";
 
@@ -55,9 +55,10 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         title: "Time",
         name: "time",
         cell: (logEntry: LogEntries) =>
-          util
-            .LongToMoment(logEntry.time)
-            .format(util.DATE_WITH_SECONDS_FORMAT_24_UTC),
+          <Timestamp
+            time={util.LongToMoment(logEntry.time)}
+            format={util.DATE_WITH_SECONDS_FORMAT_24_TZ}
+          />,
       },
       {
         title: "Severity",
