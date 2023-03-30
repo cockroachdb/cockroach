@@ -41,6 +41,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -79,6 +80,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 
@@ -99,6 +101,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.stream_ingestion_stats_pb": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 
@@ -120,6 +123,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.start_replication_stream": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -154,6 +158,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.replication_stream_progress": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -194,6 +199,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.stream_partition": makeBuiltin(
 		tree.FunctionProperties{
 			Category:           builtinconstants.CategoryStreamIngestion,
+			Undocumented:       true,
 			DistsqlBlocklist:   false,
 			VectorizeStreaming: true,
 		},
@@ -224,6 +230,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.replication_stream_spec": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -258,6 +265,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	"crdb_internal.complete_replication_stream": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
