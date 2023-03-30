@@ -103,14 +103,15 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 		sdb.maybeModified.ModificationTime = sdb.mvccTimestamp
 		sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
-	privsChanged := catprivilege.MaybeFixPrivileges(
+	if privsChanged, err := catprivilege.MaybeFixPrivileges(
 		&sdb.maybeModified.Privileges,
 		sdb.maybeModified.GetParentID(),
 		descpb.InvalidID,
 		privilege.Schema,
 		sdb.maybeModified.GetName(),
-	)
-	if privsChanged {
+	); err != nil {
+		return err
+	} else if privsChanged {
 		sdb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	return nil

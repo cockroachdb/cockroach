@@ -48,13 +48,16 @@ func (g *testSchemaGenerator) genSchemas(ctx context.Context, db *dbdesc.Mutable
 	// case because we are not always creating fresh databases. When
 	// reusing a pre-existing database, we must properly reuse its
 	// default privileges.
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		db.GetDefaultPrivilegeDescriptor(),
 		nil, /* schemaDefaultPrivilegeDescriptor */
 		db.GetID(),
 		g.cfg.user,
 		privilege.Schemas,
 	)
+	if err != nil {
+		panic(genError{err})
+	}
 	privs.SetOwner(g.cfg.user)
 
 	// Reject creation of schemas with a name like pg_xxx.

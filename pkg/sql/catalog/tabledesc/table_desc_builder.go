@@ -303,13 +303,16 @@ func maybeFillInDescriptor(
 		objectType = privilege.Table
 	}
 
-	fixedPrivileges := catprivilege.MaybeFixPrivileges(
+	fixedPrivileges, err := catprivilege.MaybeFixPrivileges(
 		&desc.Privileges,
 		desc.GetParentID(),
 		parentSchemaID,
 		objectType,
 		desc.GetName(),
 	)
+	if err != nil {
+		return catalog.PostDeserializationChanges{}, err
+	}
 	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
