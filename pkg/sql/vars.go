@@ -2649,6 +2649,23 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(execinfra.UseStreamerEnabled.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	`multiple_active_portals_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`multiple_active_portals_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("multiple_active_portals_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetMultipleActivePortalsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().MultipleActivePortalsEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.
