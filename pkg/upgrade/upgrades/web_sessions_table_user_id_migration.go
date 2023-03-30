@@ -45,6 +45,12 @@ func alterWebSessionsTableAddUserIDColumn(
 	return nil
 }
 
+const deleteRowsForDroppedUsersWebSessionsTableStmt = `
+DELETE FROM system.web_sessions
+WHERE username NOT IN (SELECT username FROM system.users)
+LIMIT 1000
+`
+
 const backfillUserIDColumnWebSessionsTableStmt = `
 UPDATE system.web_sessions AS w
 SET user_id = u.user_id
@@ -62,16 +68,27 @@ func backfillWebSessionsTableUserIDColumn(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
-	for {
-		rowsAffected, err := ie.ExecEx(ctx, "backfill-user-id-col-web-sessions-table", nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			backfillUserIDColumnWebSessionsTableStmt,
-		)
-		if err != nil {
-			return err
-		}
-		if rowsAffected == 0 {
-			break
+	for _, op := range []struct {
+		name  string
+		query string
+	}{
+		{
+			name:  "delete-rows-for-dropped-users-web-sessions-table",
+			query: deleteRowsForDroppedUsersWebSessionsTableStmt,
+		},
+		{
+			name:  "backfill-user-id-col-web-sessions-table",
+			query: backfillUserIDColumnWebSessionsTableStmt,
+		},
+	} {
+		for {
+			rowsAffected, err := ie.ExecEx(ctx, op.name, nil /* txn */, sessiondata.NodeUserSessionDataOverride, op.query)
+			if err != nil {
+				return err
+			}
+			if rowsAffected == 0 {
+				break
+			}
 		}
 	}
 
