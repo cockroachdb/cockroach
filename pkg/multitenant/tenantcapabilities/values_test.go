@@ -8,22 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tenantcapabilitiespb
+package tenantcapabilities
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCapabilityGetSet(t *testing.T) {
-	capabilities := TenantCapabilities{}
-	for _, capID := range tenantcapabilities.CapabilityIDs {
-		capability := capabilities.Cap(capID)
-		value := capability.Get().Unwrap()
-		capability.Set(value)
-		gotVal := capability.Get().Unwrap()
-		require.Equal(t, value, gotVal)
+// TestIDs ensures that iterating IDs always works for the ID lookup functions.
+func TestIDs(t *testing.T) {
+	for _, id := range IDs {
+		_, err := GetValueByID(DefaultCapabilities(), id)
+		require.NoError(t, err, id)
+		_, ok := FromID(id)
+		require.True(t, ok, id)
 	}
 }
