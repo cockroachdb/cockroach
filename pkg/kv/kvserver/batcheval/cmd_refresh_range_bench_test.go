@@ -124,6 +124,8 @@ func runRefreshRangeBenchmark(b *testing.B, emk engineMaker, opts benchOptions) 
 	startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
 	endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(opts.dataOpts.numKeys)))
 
+	var refreshErr *kvpb.RefreshFailedError
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
@@ -156,7 +158,7 @@ func runRefreshRangeBenchmark(b *testing.B, emk engineMaker, opts benchOptions) 
 				require.NoError(b, err)
 			} else {
 				require.Error(b, err)
-				require.Regexp(b, "encountered recently written committed value", err)
+				require.ErrorAs(b, err, &refreshErr)
 			}
 		}()
 	}
