@@ -304,6 +304,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemStatisticsActivityTableMigration,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"change TTL for SQL Stats system tables",
+		toCV(clusterversion.V23_1ChangeSQLStatsTTL),
+		sqlStatsTTLChange,
+		"change TTL for SQL Stats system tables",
+	),
 	upgrade.NewTenantUpgrade(
 		"stop writing payload and progress to system.jobs",
 		toCV(clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs),
