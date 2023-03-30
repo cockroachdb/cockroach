@@ -48,6 +48,20 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"column type removed before column family",
+		scgraph.Precedence,
+		"column-type", "column-family",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnType)(nil)),
+				to.Type((*scpb.ColumnFamily)(nil)),
+				JoinOnColumnFamilyID(from, to, "table-id", "family-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+			}
+		},
+	)
 }
 
 // Special cases of the above.

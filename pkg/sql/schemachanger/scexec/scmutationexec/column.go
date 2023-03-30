@@ -235,6 +235,22 @@ func (i *immediateVisitor) AddColumnFamily(ctx context.Context, op scop.AddColum
 	return nil
 }
 
+func (i *immediateVisitor) AssertColumnFamilyIsRemoved(
+	ctx context.Context, op scop.AssertColumnFamilyIsRemoved,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	for idx := range tbl.Families {
+		if tbl.Families[idx].ID == op.FamilyID {
+			return errors.AssertionFailedf("column family was leaked during schema change %v",
+				tbl.Families[idx])
+		}
+	}
+	return nil
+}
+
 func (i *immediateVisitor) SetColumnName(ctx context.Context, op scop.SetColumnName) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {

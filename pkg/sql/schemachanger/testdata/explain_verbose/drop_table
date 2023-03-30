@@ -59,8 +59,23 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   ├── • ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 107}
-│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │         rule: "column type removed before column family"
 │       │   │
 │       │   ├── • Column:{DescID: 107, ColumnID: 1}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -227,10 +242,6 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           ├── • RemoveTableComment
 │           │     TableID: 107
 │           │
-│           ├── • NotImplementedForPublicObjects
-│           │     DescID: 107
-│           │     ElementType: scpb.ColumnFamily
-│           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 1
 │           │     TableID: 107
@@ -308,9 +319,12 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │     DescriptorID: 107
 │           │     User: admin
 │           │
-│           └── • RemoveUserPrivileges
-│                 DescriptorID: 107
-│                 User: root
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 107
+│           │     User: root
+│           │
+│           └── • AssertColumnFamilyIsRemoved
+│                 TableID: 107
 │
 ├── • PreCommitPhase
 │   │
@@ -451,8 +465,23 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   ├── • ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 107}
-│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   │     rule: "column type removed before column family"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │         rule: "column type removed before column family"
 │       │   │
 │       │   ├── • Column:{DescID: 107, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -718,10 +747,6 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           ├── • RemoveTableComment
 │           │     TableID: 107
 │           │
-│           ├── • NotImplementedForPublicObjects
-│           │     DescID: 107
-│           │     ElementType: scpb.ColumnFamily
-│           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 1
 │           │     TableID: 107
@@ -821,6 +846,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │
 │           ├── • MakeWriteOnlyColumnDeleteOnly
 │           │     ColumnID: 4294967294
+│           │     TableID: 107
+│           │
+│           ├── • AssertColumnFamilyIsRemoved
 │           │     TableID: 107
 │           │
 │           ├── • MakeWriteOnlyColumnDeleteOnly

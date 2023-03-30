@@ -120,6 +120,56 @@ func TestRollback_add_column_no_default(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", sctest.SingleNodeCluster)
 }
+func TestEndToEndSideEffects_add_column_with_stored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_add_column_with_stored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_add_column_with_stored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", sctest.SingleNodeCluster)
+}
+func TestPause_add_column_with_stored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", sctest.SingleNodeCluster)
+}
+func TestRollback_add_column_with_stored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", sctest.SingleNodeCluster)
+}
+func TestEndToEndSideEffects_add_column_with_stored_family(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_add_column_with_stored_family(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_add_column_with_stored_family(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", sctest.SingleNodeCluster)
+}
+func TestPause_add_column_with_stored_family(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", sctest.SingleNodeCluster)
+}
+func TestRollback_add_column_with_stored_family(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", sctest.SingleNodeCluster)
+}
 func TestEndToEndSideEffects_alter_table_add_check_udf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

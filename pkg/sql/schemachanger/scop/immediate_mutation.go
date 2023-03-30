@@ -429,6 +429,16 @@ type AddColumnFamily struct {
 	Name     string
 }
 
+// AssertColumnFamilyIsRemoved asserts that a column family is removed, which
+// is used as a validation to make sure that the family the element reaches
+// absent. The column family cleaned up with the last ColumnType element
+// referencing it.
+type AssertColumnFamilyIsRemoved struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	FamilyID descpb.FamilyID
+}
+
 // AddColumnDefaultExpression adds a DEFAULT expression to a column.
 type AddColumnDefaultExpression struct {
 	immediateMutationOp
