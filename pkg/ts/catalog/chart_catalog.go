@@ -1744,6 +1744,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"requests.slow.lease"},
 			},
 			{
+				Title:   "Lease Request Latency",
+				Metrics: []string{"leases.requests.latency"},
+			},
+			{
 				Title: "Succcess Rate",
 				Metrics: []string{
 					"leases.error",
