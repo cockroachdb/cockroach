@@ -51,7 +51,7 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 				Server: &server.TestingKnobs{
 					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1RoleMembersTableHasIDColumns - 1),
 				},
 			},
 		},

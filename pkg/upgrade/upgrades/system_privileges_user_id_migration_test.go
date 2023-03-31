@@ -18,17 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -55,18 +46,12 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn-1),
-		false, /* initializeVersion */
-	)
-
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn - 1),
 				},
 			},
@@ -77,11 +62,6 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	db := tc.ServerConn(0)
 	defer db.Close()
 	tdb := sqlutils.MakeSQLRunner(db)
-	s := tc.Server(0)
-
-	// Inject the descriptor for the system.privileges table from before the
-	// user_id column was added.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.SystemPrivilegeTable, getTableDescForSystemPrivilegesTableBeforeUserIDCol)
 
 	// Create test users and add rows for each user to system.privileges.
 	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
@@ -125,43 +105,4 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 		fmt.Sprintf("SELECT count(*) FROM system.privileges WHERE username = '%s' AND user_id <> %d",
 			username.PublicRole, username.PublicRoleID),
 		[][]string{{"0"}})
-}
-
-func getTableDescForSystemPrivilegesTableBeforeUserIDCol() *descpb.TableDescriptor {
-	return &descpb.TableDescriptor{
-		Name:                    string(catconstants.SystemPrivilegeTableName),
-		ID:                      descpb.InvalidID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "username", ID: 1, Type: types.String},
-			{Name: "path", ID: 2, Type: types.String},
-			{Name: "privileges", ID: 3, Type: types.StringArray},
-			{Name: "grant_options", ID: 4, Type: types.StringArray},
-		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ID:          0,
-				ColumnNames: []string{"username", "path", "privileges", "grant_options"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
-			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"username", "path"},
-			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-		},
-		NextIndexID:      2,
-		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
-		FormatVersion:    descpb.InterleavedFormatVersion,
-		NextMutationID:   1,
-		NextConstraintID: 1,
-	}
 }

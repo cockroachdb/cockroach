@@ -17,15 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,6 +34,7 @@ func TestAlterSystemSqlInstancesTableAddSqlAddr(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.V23_1AlterSystemSQLInstancesAddSQLAddr - 1),
 				},
@@ -63,9 +57,7 @@ func TestAlterSystemSqlInstancesTableAddSqlAddr(t *testing.T) {
 		}
 	)
 
-	// Inject the old copy of the descriptor.
 	sqlInstancesTable := systemschema.SQLInstancesTable()
-	upgrades.InjectLegacyTable(ctx, t, s, sqlInstancesTable, getDeprecatedSqlInstancesDescriptorWithoutSqlAddr)
 	// Validate that the table sql_instances has the old schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -98,46 +90,4 @@ func TestAlterSystemSqlInstancesTableAddSqlAddr(t *testing.T) {
 		validationSchemas,
 		true, /* expectExists */
 	)
-}
-
-// getDeprecatedSqlInstancesDescriptor returns the system.sql_instances
-// table descriptor that was being used before adding a new column in the
-// current version.
-func getDeprecatedSqlInstancesDescriptorWithoutSqlAddr() *descpb.TableDescriptor {
-	return &descpb.TableDescriptor{
-		Name:                    string(catconstants.SQLInstancesTableName),
-		ID:                      keys.SQLInstancesTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, Nullable: false},
-			{Name: "addr", ID: 2, Type: types.String, Nullable: true},
-			{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
-			{Name: "locality", ID: 4, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "primary",
-				ID:              0,
-				ColumnNames:     []string{"id", "addr", "session_id", "locality"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
-				DefaultColumnID: 0,
-			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "id",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1},
-		},
-		NextIndexID:    2,
-		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
-		NextMutationID: 1,
-		FormatVersion:  3,
-	}
 }
