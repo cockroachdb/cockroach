@@ -689,14 +689,11 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	leaseStatus := repl.LeaseStatusAt(ctx, now)
-	if !leaseStatus.IsValid() && leaseStatus.Lease.Type() != roachpb.LeaseExpiration {
-		// The epoch lease for this range is currently invalid. If this replica is
-		// the raft leader then we'd like it to hold a valid lease. We enqueue it
-		// regardless of being a leader or follower, where the leader at the time of
-		// processing will succeed.
-		//
-		// We don't do this for expiration leases, because we'd like them to expire
-		// if the range is idle.
+	if !leaseStatus.IsValid() {
+		// The range has an invalid lease. If this replica is the raft leader then
+		// we'd like it to hold a valid lease. We enqueue it regardless of being a
+		// leader or follower, where the leader at the time of processing will
+		// succeed.
 		log.KvDistribution.VEventf(ctx, 2, "invalid lease, enqueuing")
 		return true, 0
 	}
