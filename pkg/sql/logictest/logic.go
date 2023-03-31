@@ -3028,8 +3028,11 @@ func (t *logicTest) processSubtest(
 				}
 				delete(m, nodeIdx)
 			}
-			db := t.getOrOpenClient(t.user, nodeIdx)
-			t.db = db
+			// If we upgraded the node we are currently on, we need to open a new
+			// connection since the previous one might now be invalid.
+			if t.nodeIdx == nodeIdx {
+				t.setUser(t.user, nodeIdx)
+			}
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
