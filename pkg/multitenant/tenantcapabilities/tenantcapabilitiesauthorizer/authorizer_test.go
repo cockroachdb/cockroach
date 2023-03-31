@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -75,7 +76,7 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		clusterSettings := cluster.MakeTestingClusterSettings()
 		ctx := context.Background()
-		mockReader := mockReader(make(map[roachpb.TenantID]tenantcapabilities.TenantCapabilities))
+		mockReader := mockReader(make(map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities))
 		authorizer := New(clusterSettings, nil /* TestingKnobs */)
 		authorizer.BindReader(mockReader)
 
@@ -94,7 +95,7 @@ func TestDataDriven(t *testing.T) {
 					{
 						Entry: tenantcapabilities.Entry{
 							TenantID:           tenID,
-							TenantCapabilities: &caps,
+							TenantCapabilities: caps,
 						},
 					},
 				})
@@ -149,7 +150,7 @@ var supportedClusterSettings = map[string]*settings.BoolSetting{
 	authorizerEnabled.Key(): authorizerEnabled,
 }
 
-type mockReader map[roachpb.TenantID]tenantcapabilities.TenantCapabilities
+type mockReader map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities
 
 var _ tenantcapabilities.Reader = mockReader{}
 
@@ -166,13 +167,13 @@ func (m mockReader) updateState(updates []*tenantcapabilities.Update) {
 // GetCapabilities implements the tenantcapabilities.Reader interface.
 func (m mockReader) GetCapabilities(
 	id roachpb.TenantID,
-) (tenantcapabilities.TenantCapabilities, bool) {
+) (*tenantcapabilitiespb.TenantCapabilities, bool) {
 	cp, found := m[id]
 	return cp, found
 }
 
 // GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
-func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]tenantcapabilities.TenantCapabilities {
+func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities {
 	return m
 }
 
@@ -182,8 +183,8 @@ func TestAllBatchCapsAreBoolean(t *testing.T) {
 			// One of the special values.
 			continue
 		}
-		if actual, expected := capID.CapabilityType(), tenantcapabilities.Bool; actual != expected {
-			t.Errorf("cap %s  has type %d, expected %d", capID, actual, expected)
-		}
+		caps := tenantcapabilities.DefaultCapabilities()
+		var v *tenantcapabilities.BoolValue
+		require.Implements(t, v, tenantcapabilities.MustGetValueByID(caps, capID))
 	}
 }

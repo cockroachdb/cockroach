@@ -37,13 +37,13 @@ func (f leasePreferencesField) FieldValue(sc *roachpb.SpanConfig) Value {
 	return nil
 }
 
-func (f leasePreferencesField) FieldBound(b Bounds) ValueBounds {
-	if b.b.ConstraintBounds == nil {
+func (f leasePreferencesField) FieldBound(b *Bounds) ValueBounds {
+	if b.ConstraintBounds == nil {
 		return unbounded{}
 	}
 	switch f {
 	case leasePreferences:
-		return (*leasePreferencesBound)(b.b.ConstraintBounds)
+		return (*leasePreferencesBound)(b.ConstraintBounds)
 	default:
 		// This is safe because we test that all the fields in the proto have
 		// a corresponding field, and we call this for each of them, and the user

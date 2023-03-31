@@ -28,6 +28,7 @@ go_test(
     embed = [":tenantcapabilitiesauthorizer"],
     deps = [
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
         "//pkg/roachpb",
         "//pkg/settings",

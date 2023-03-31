@@ -38,6 +38,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 subtest end
 
@@ -60,6 +61,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
@@ -75,6 +77,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 subtest end
 
@@ -97,6 +100,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 subtest end
 
@@ -119,6 +123,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 subtest end
 
@@ -141,6 +146,7 @@ can_admin_unsplit          false
 can_view_node_info         true
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
@@ -156,6 +162,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" GRANT CAPABILITY exempt_from_rate_limiting
@@ -171,6 +178,7 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  true
+span_config_bounds         {}
 
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY exempt_from_rate_limiting
@@ -186,5 +194,6 @@ can_admin_unsplit          false
 can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
+span_config_bounds         {}
 
 subtest end

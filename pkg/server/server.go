@@ -71,12 +71,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
@@ -177,7 +177,7 @@ type Server struct {
 	spanConfigSubscriber spanconfig.KVSubscriber
 	spanConfigReporter   spanconfig.Reporter
 
-	tenantCapabilitiesWatcher tenantcapabilities.Watcher
+	tenantCapabilitiesWatcher *tenantcapabilitieswatcher.Watcher
 
 	// pgL is the SQL listener for pgwire connections coming over the network.
 	pgL net.Listener
@@ -678,7 +678,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				1<<20, /* 1 MB */
 				fallbackConf,
 				cfg.Settings,
-				spanconfigbounds.NewReader(tenantCapabilitiesWatcher),
+				spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),
 				spanConfigKnobs,
 				registry,
 			)
