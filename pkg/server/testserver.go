@@ -1073,7 +1073,9 @@ func (ts *TestServer) StartTenant(
 				if !found {
 					return errors.Newf("capabilities not yet ready")
 				}
-				if !capabilities.GetBool(tenantcapabilities.CanUseNodelocalStorage) {
+				if !tenantcapabilities.MustGetBoolByID(
+					capabilities, tenantcapabilities.CanUseNodelocalStorage,
+				) {
 					return errors.Newf("capabilities not yet ready")
 				}
 				return nil

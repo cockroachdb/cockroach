@@ -239,7 +239,9 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 			tenID,
 		)
 	}
-	if !found || !cp.GetBool(tenantcapabilities.CanUseNodelocalStorage) {
+	if !found || !tenantcapabilities.MustGetBoolByID(
+		cp, tenantcapabilities.CanUseNodelocalStorage,
+	) {
 		return errors.Newf("client tenant does not have capability to use nodelocal storage")
 	}
 	return nil
