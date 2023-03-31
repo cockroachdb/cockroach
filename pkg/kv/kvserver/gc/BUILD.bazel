@@ -51,6 +51,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

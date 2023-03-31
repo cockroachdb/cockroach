@@ -28,12 +28,12 @@ SELECT sc2.f2()
 123
 
 exec-sql
-BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
 ----
 
 query-sql
 WITH descs AS (
-  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
 )
 SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
 ----
@@ -73,7 +73,7 @@ DROP DATABASE db1
 ----
 
 exec-sql
-RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://0/test/' WITH new_db_name = db1_new
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
 ----
 
 exec-sql
@@ -172,12 +172,12 @@ SELECT sc2.f2()
 123
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 query-sql
 WITH descs AS (
-  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
 )
 SELECT
   database_name, parent_schema_name, object_name, object_type, is_full_cluster
@@ -223,7 +223,7 @@ new-cluster name=s2 share-io-dir=s1
 
 # Restore into the new cluster.
 exec-sql cluster=s2
-RESTORE FROM LATEST IN 'nodelocal://0/test/'
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 exec-sql
@@ -337,11 +337,11 @@ SELECT d->'schema'->>'functions'::string FROM to_json;
 {"f": {"signatures": [{"id": 111, "returnType": {"family": "IntFamily", "oid": 20, "width": 64}}]}}
 
 exec-sql
-BACKUP TABLE sc1.t INTO 'nodelocal://0/test/'
+BACKUP TABLE sc1.t INTO 'nodelocal://1/test/'
 ----
 
 exec-sql
-RESTORE TABLE sc1.t FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db1';
+RESTORE TABLE sc1.t FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db1';
 ----
 
 exec-sql

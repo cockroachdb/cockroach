@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -61,7 +62,7 @@ const (
 	multiNode                   = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
-	localFoo                    = "nodelocal://0/foo"
+	localFoo                    = "nodelocal://1/foo"
 )
 
 // smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
@@ -99,6 +100,9 @@ func backupRestoreTestSetupWithParams(
 
 	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap:        true,
+		SkipZoneConfigBootstrap: true,
+	}
+	params.ServerArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
 		SkipZoneConfigBootstrap: true,
 	}
 	tc = testcluster.StartTestCluster(t, clusterSize, params)

@@ -47,9 +47,10 @@ func (e *externalStorageBuilder) init(
 	ctx context.Context,
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
-	nodeIDContainer *base.NodeIDContainer,
+	nodeIDContainer *base.SQLIDContainer,
 	nodeDialer *nodedialer.Dialer,
 	testingKnobs base.TestingKnobs,
+	allowLocalFastpath bool,
 	db isql.DB,
 	recorder multitenant.TenantSideExternalIORecorder,
 	registry *metric.Registry,
@@ -59,7 +60,7 @@ func (e *externalStorageBuilder) init(
 		blobClientFactory = p.BlobClientFactory
 	}
 	if blobClientFactory == nil {
-		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, settings.ExternalIODir)
+		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, settings.ExternalIODir, allowLocalFastpath)
 	}
 	e.conf = conf
 	e.settings = settings

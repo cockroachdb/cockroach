@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -935,6 +936,7 @@ func (TransactionStatus) SafeValue() {}
 func MakeTransaction(
 	name string,
 	baseKey Key,
+	isoLevel isolation.Level,
 	userPriority UserPriority,
 	now hlc.Timestamp,
 	maxOffsetNs int64,
@@ -950,6 +952,7 @@ func MakeTransaction(
 		TxnMeta: enginepb.TxnMeta{
 			Key:               baseKey,
 			ID:                u,
+			IsoLevel:          isoLevel,
 			WriteTimestamp:    now,
 			MinTimestamp:      now,
 			Priority:          MakePriority(userPriority),

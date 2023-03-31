@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -134,7 +135,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	intentHlc := hlc.Timestamp{
 		WallTime: intentTs.Nanoseconds(),
 	}
-	txn := roachpb.MakeTransaction("txn", key, roachpb.NormalUserPriority, intentHlc, 1000, 0)
+	txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0)
 	require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, intentHlc, hlc.ClockTimestamp{}, value, &txn))
 	require.NoError(t, eng.Flush())
 
@@ -193,7 +194,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	}
 	for _, prefix := range txnPrefixes {
 		key := []byte{prefix, objectKeys[0]}
-		txn := roachpb.MakeTransaction("txn", key, roachpb.NormalUserPriority, intentHlc, 1000, 0)
+		txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0)
 		for _, suffix := range objectKeys {
 			key := []byte{prefix, suffix}
 			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, intentHlc, hlc.ClockTimestamp{}, value, &txn))

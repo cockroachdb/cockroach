@@ -43,6 +43,21 @@ func ClearIncomingContext(ctx context.Context) context.Context {
 	return ctx
 }
 
+// ClearIncomingContextExcept removes the gRPC incoming metadata if
+// there is any, except for metadata items identified by the given
+// keys.
+func ClearIncomingContextExcept(ctx context.Context, keys ...string) context.Context {
+	oldMD, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ClearIncomingContext(ctx)
+	}
+	newMD := metadata.New(nil)
+	for _, k := range keys {
+		newMD[k] = oldMD.Get(k)
+	}
+	return metadata.NewIncomingContext(ctx, newMD)
+}
+
 // FastFirstValueFromIncomingContext is a specialization of
 // metadata.ValueFromIncomingContext() which extracts the first string
 // from the given metadata key, if it exists. No extra objects are

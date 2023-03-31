@@ -1087,7 +1087,7 @@ func (f *cloudFeedFactory) Feed(
 	}
 
 	feedDir := feedSubDir()
-	sinkURI := `nodelocal://0/` + feedDir
+	sinkURI := `nodelocal://1/` + feedDir
 	// TODO(dan): This is a pretty unsatisfying way to test that the uri passes
 	// through params it doesn't understand to ExternalStorage.
 	sinkURI += `?should_be=ignored`

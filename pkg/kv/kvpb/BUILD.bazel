@@ -63,6 +63,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvnemesis/kvnemesisutil",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",

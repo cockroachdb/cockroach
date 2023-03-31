@@ -60,6 +60,7 @@ func PrepareTransactionForRetry(
 		txn = roachpb.MakeTransaction(
 			txn.Name,
 			nil, // baseKey
+			txn.IsoLevel,
 			// We have errTxnPri, but this wants a roachpb.UserPriority. So
 			// we're going to overwrite the priority below.
 			roachpb.NormalUserPriority,

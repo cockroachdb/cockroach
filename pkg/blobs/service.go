@@ -70,6 +70,7 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 	if filename == "" {
 		return errors.New("invalid filename in metadata")
 	}
+
 	reader := newPutStreamReader(stream)
 	defer reader.Close(stream.Context())
 	ctx, cancel := context.WithCancel(stream.Context())
@@ -80,9 +81,10 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 		cancel()
 		return err
 	}
+
 	if _, err := io.Copy(w, ioctx.ReaderCtxAdapter(stream.Context(), reader)); err != nil {
 		cancel()
-		return errors.CombineErrors(w.Close(), err)
+		return errors.CombineErrors(err, w.Close())
 	}
 	err = w.Close()
 	cancel()
