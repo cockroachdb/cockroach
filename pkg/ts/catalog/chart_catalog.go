@@ -3698,6 +3698,17 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "SQL Activity Updater",
+				Metrics: []string{
+					"jobs.auto_update_sql_activity.fail_or_cancel_completed",
+					"jobs.auto_update_sql_activity.fail_or_cancel_failed",
+					"jobs.auto_update_sql_activity.fail_or_cancel_retry_error",
+					"jobs.auto_update_sql_activity.resume_completed",
+					"jobs.auto_update_sql_activity.resume_failed",
+					"jobs.auto_update_sql_activity.resume_retry_error",
+				},
+			},
+			{
 				Title: "Jobs Stats Polling Job",
 				Metrics: []string{
 					"jobs.poll_jobs_stats.fail_or_cancel_completed",
