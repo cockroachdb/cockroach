@@ -34,7 +34,7 @@ func RunningJobExists(
 SELECT
   id, payload
 FROM
-  system.jobs
+  crdb_internal.system_jobs
 WHERE
   status IN ` + NonTerminalStatusTupleString + `
 ORDER BY created`

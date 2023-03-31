@@ -510,6 +510,10 @@ const (
 	// that are optimized for the console.
 	V23_1AddSystemActivityTables
 
+	// V23_1StopWritingPayloadAndProgressToSystemJobs is the version where the
+	// payload and progress columns are no longer written to system.jobs.
+	V23_1StopWritingPayloadAndProgressToSystemJobs
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -882,6 +886,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AddSystemActivityTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     V23_1StopWritingPayloadAndProgressToSystemJobs,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
 	},
 
 	// *************************************************
