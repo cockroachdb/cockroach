@@ -12,6 +12,7 @@ package persistedsqlstats
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -67,8 +68,13 @@ type jobMonitor struct {
 	}
 }
 
-func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "sql-stats-scheduled-compaction-job-monitor", func(ctx context.Context) {
+func (j *jobMonitor) start(
+	ctx context.Context, stopper *stop.Stopper, drain chan struct{}, tasksWG *sync.WaitGroup,
+) {
+	tasksWG.Add(1)
+	err := stopper.RunAsyncTask(ctx, "sql-stats-scheduled-compaction-job-monitor", func(ctx context.Context) {
+		defer tasksWG.Done()
+
 		nextJobScheduleCheck := timeutil.Now()
 		currentRecurrence := SQLStatsCleanupRecurrence.Get(&j.st.SV)
 
@@ -93,7 +99,11 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 			select {
 			case <-timer.C:
 				timer.Read = true
+			case <-drain:
+				// Graceful shutdown.
+				return
 			case <-stopCtx.Done():
+				// Expedited shutdown.
 				return
 			}
 
@@ -109,6 +119,10 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 			timer.Reset(updateCheckInterval)
 		}
 	})
+	if err != nil {
+		tasksWG.Done()
+		log.Warningf(ctx, "error starting sql stats scheduled compaction job monitor: %v", err)
+	}
 }
 
 func (j *jobMonitor) getSchedule(

@@ -16,6 +16,7 @@ package persistedsqlstats
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -68,10 +69,15 @@ type PersistedSQLStats struct {
 
 	lastFlushStarted time.Time
 	jobMonitor       jobMonitor
-
-	atomic struct {
+	atomic           struct {
 		nextFlushAt atomic.Value
 	}
+
+	// drain is closed when a graceful drain is initiated.
+	drain       chan struct{}
+	setDraining sync.Once
+	// tasksDoneWG is used to wait for all background tasks to finish.
+	tasksDoneWG sync.WaitGroup
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
@@ -82,6 +88,7 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		SQLStats:             memSQLStats,
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
+		drain:                make(chan struct{}),
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -100,10 +107,21 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 // Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.startSQLStatsFlushLoop(ctx, stopper)
-	s.jobMonitor.start(ctx, stopper)
+	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
 	stopper.AddCloser(stop.CloserFn(func() {
 		s.cfg.InternalExecutorMonitor.Stop(ctx)
 	}))
+}
+
+// Stop stops the background tasks. This is used during graceful drain
+// to quiesce just the SQL activity.
+func (s *PersistedSQLStats) Stop(ctx context.Context) {
+	log.Infof(ctx, "stopping persisted SQL stats tasks")
+	defer log.Infof(ctx, "persisted SQL stats tasks successfully shut down")
+	s.setDraining.Do(func() {
+		close(s.drain)
+	})
+	s.tasksDoneWG.Wait()
 }
 
 // GetController returns the controller of the PersistedSQLStats.
@@ -112,7 +130,9 @@ func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Cont
 }
 
 func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "sql-stats-worker", func(ctx context.Context) {
+	s.tasksDoneWG.Add(1)
+	err := stopper.RunAsyncTask(ctx, "sql-stats-worker", func(ctx context.Context) {
+		defer s.tasksDoneWG.Done()
 		var resetIntervalChanged = make(chan struct{}, 1)
 
 		SQLStatsFlushInterval.SetOnChange(&s.cfg.Settings.SV, func(ctx context.Context) {
@@ -142,6 +162,8 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.
 				continue
+			case <-s.drain:
+				return
 			case <-stopper.ShouldQuiesce():
 				return
 			}
@@ -149,6 +171,10 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			s.Flush(ctx)
 		}
 	})
+	if err != nil {
+		s.tasksDoneWG.Done()
+		log.Warningf(ctx, "failed to start sql-stats-worker: %v", err)
+	}
 }
 
 // GetLocalMemProvider returns a sqlstats.Provider that can only be used to
