@@ -299,6 +299,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		alterPayloadColumnToNullable,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create sql activity updater job",
+		toCV(clusterversion.V23_1CreateSystemActivityUpdateJob),
+		createActivityUpdateJobMigration,
+		"create statement_activity and transaction_activity job",
+	),
 }
 
 func init() {
