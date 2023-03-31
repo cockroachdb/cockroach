@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,9 +48,10 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	sp := restoreSpecs{
 		hardware: makeHardwareSpecs(hardwareSpecs{}),
 		backup: makeBackupSpecs(
-			backupSpecs{workload: tpceRestore{customers: 5000},
+			backupSpecs{workload: tpceRestore{customers: 1000},
 				version: "v22.2.1"}),
-		timeout: 1 * time.Hour,
+		timeout:     1 * time.Hour,
+		fingerprint: 8445446819555404274,
 	}
 
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
@@ -75,6 +78,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
+			sp.checkFingerprint(ctx)
 		},
 	})
 
@@ -97,6 +101,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
+			sp.checkFingerprint(ctx)
 		},
 	})
 }
@@ -112,10 +117,11 @@ func registerRestore(r registry.Registry) {
 	withPauseSpecs := restoreSpecs{
 		hardware: makeHardwareSpecs(hardwareSpecs{}),
 		backup: makeBackupSpecs(
-			backupSpecs{workload: tpceRestore{customers: 5000},
+			backupSpecs{workload: tpceRestore{customers: 1000},
 				version: "v22.2.1"}),
-		timeout:    3 * time.Hour,
-		namePrefix: "pause",
+		timeout:     3 * time.Hour,
+		namePrefix:  "pause",
+		fingerprint: 8445446819555404274,
 	}
 	withPauseSpecs.initTestName()
 
@@ -254,6 +260,7 @@ func registerRestore(r registry.Registry) {
 					}
 				}
 				metricCollector()
+				withPauseSpecs.checkFingerprint(ctx)
 				return nil
 			})
 			m.Wait()
@@ -327,6 +334,15 @@ func registerRestore(r registry.Registry) {
 			timeout: 24 * time.Hour,
 			tags:    []string{"weekly", "aws-weekly"},
 		},
+		{
+			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
+			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			backup: makeBackupSpecs(
+				backupSpecs{workload: tpceRestore{customers: 1000},
+					version: "v22.2.1"}),
+			timeout:     3 * time.Hour,
+			fingerprint: 8445446819555404274,
+		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:
 		// - restore/tpce/400GB/nodes=30
@@ -372,6 +388,7 @@ func registerRestore(r registry.Registry) {
 						return err
 					}
 					metricCollector()
+					sp.checkFingerprint(ctx)
 					return nil
 				})
 				m.Wait()
@@ -578,6 +595,8 @@ func (tpce tpceRestore) String() string {
 	var builder strings.Builder
 	builder.WriteString("tpce/")
 	switch tpce.customers {
+	case 1000:
+		builder.WriteString("15GB")
 	case 5000:
 		builder.WriteString("80GB")
 	case 25000:
@@ -601,9 +620,10 @@ type restoreSpecs struct {
 	// namePrefix appears in the name of the roachtest, i.e. `restore/{prefix}/{config}`.
 	namePrefix string
 
-	t        test.Test
-	c        cluster.Cluster
-	testName string
+	t           test.Test
+	c           cluster.Cluster
+	testName    string
+	fingerprint int
 }
 
 func (sp *restoreSpecs) initTestName() {
@@ -688,6 +708,34 @@ func (sp *restoreSpecs) initRestorePerfMetrics(
 			throughput)
 		exportToRoachperf(ctx, sp.t, sp.c, sp.testName, int64(throughput))
 	}
+}
+
+// checkFingerprint runs a stripped fingerprint on all user tables in the cluster if the restore
+// spec has a nonzero fingerprint.
+func (sp *restoreSpecs) checkFingerprint(ctx context.Context) {
+	if sp.fingerprint == 0 {
+		sp.t.L().Printf("Fingerprint not found in specs. Skipping fingerprint check.")
+		return
+	}
+
+	conn, err := sp.c.ConnE(ctx, sp.t.L(), sp.c.Node(1)[0])
+	require.NoError(sp.t, err)
+	sql := sqlutils.MakeSQLRunner(conn)
+
+	var minUserTableID, maxUserTableID uint32
+	sql.QueryRow(sp.t, `SELECT min(id), max(id) FROM system.namespace WHERE "parentID" >1`).Scan(
+		&minUserTableID, &maxUserTableID)
+
+	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
+	startKey := codec.TablePrefix(minUserTableID)
+	endkey := codec.TablePrefix(maxUserTableID).PrefixEnd()
+
+	startTime := timeutil.Now()
+	var fingerprint int
+	sql.QueryRow(sp.t, `SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES],true)`,
+		startKey, endkey).Scan(&fingerprint)
+	sp.t.L().Printf("Fingerprint is %d. Took %.2f minutes", fingerprint, timeutil.Since(startTime).Minutes())
+	require.Equal(sp.t, sp.fingerprint, fingerprint, "user table fingerprint mismatch")
 }
 
 // exportToRoachperf exports a single perf metric for the given test to roachperf.
