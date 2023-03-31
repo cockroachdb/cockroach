@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -141,6 +142,8 @@ type kafkaSink struct {
 	throttler struct {
 		syncutil.RWMutex
 		throttleUntil time.Time
+		sampler       saramaMetrics.Meter
+		rateLimiter   *cdcutils.Throttler
 	}
 
 	disableInternalRetry bool
@@ -466,7 +469,9 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 }
 
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
-	s.maybeThrottle(ctx)
+	if err := s.maybeThrottle(ctx, msg); err != nil {
+		return err
+	}
 	if err := s.startInflightMessage(ctx); err != nil {
 		return err
 	}
@@ -482,14 +487,62 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 
 func (s *kafkaSink) throttleForMs(t int64) {
 	s.throttler.Lock()
+
+	// All new EmitRow() calls will block for the next t milliseconds.
 	throttleUntil := time.Now().Add(time.Millisecond * time.Duration(t))
 	if throttleUntil.After(s.throttler.throttleUntil) {
 		s.throttler.throttleUntil = throttleUntil
+		log.Errorf(s.ctx, "No more Kafka messages until %s", throttleUntil.String())
+	}
+
+	// (re-)calculate the byte rate we should limit ourselves to in order
+	// to keep the changefeed as a whole within quota. We only know our
+	// own byte rate at the point where we were throttled, but if every
+	// processor uses that as its estimate for the overall byte rate,
+	// we'll average out to the correct rate in aggregate.
+	// Kafka throttling messages give the amount of time we need to send
+	// no messages in order to get back under its per-second quota,
+	// so in addition to adhering to that, we want our future byte rate to be
+	// equal to the bytes we sent over the past second divided by the time
+	// we should have spent sending them, one second plus the throttle time.
+	recentBytesPerSecond := s.throttler.sampler.Rate1()
+	// There's a potential race condition where we get the throttling message
+	// before we've recorded metrics. Make an effort to block until we see the
+	// relevant metrics show up.
+	ctxWithDeadline, cancel := context.WithDeadline(s.ctx, time.Now().Add(time.Minute))
+	for recentBytesPerSecond == 0 {
+		select {
+		case <-ctxWithDeadline.Done():
+			if log.V(1) {
+				log.Error(s.ctx, "Recieved throttling message from Kafka but could not determine recent bytes per second")
+			}
+			recentBytesPerSecond = math.Inf(1)
+		default:
+			recentBytesPerSecond = s.throttler.sampler.Rate1()
+		}
+	}
+	cancel()
+
+	targetByteRate := (recentBytesPerSecond / float64(t+1000)) * 1000
+
+	if log.V(1) {
+		log.Warningf(s.ctx, "Now targeting a byte rate of %f/sec", targetByteRate)
+	}
+
+	if s.throttler.rateLimiter == nil {
+		metrics := cdcutils.MakeMetrics(time.Minute)
+		s.throttler.rateLimiter = cdcutils.NewThrottler(
+			"kafka-broker-throttling",
+			changefeedbase.SinkThrottleConfig{ByteRate: targetByteRate},
+			&metrics,
+		)
+	} else {
+		s.throttler.rateLimiter.UpdateBytePerSecondRate(targetByteRate)
 	}
 	s.throttler.Unlock()
 }
 
-func (s *kafkaSink) maybeThrottle(ctx context.Context) {
+func (s *kafkaSink) maybeThrottle(ctx context.Context, msg *sarama.ProducerMessage) error {
 	s.throttler.RLock()
 	throttleFor := s.throttler.throttleUntil.Sub(time.Now())
 	s.throttler.RUnlock()
@@ -500,6 +553,15 @@ func (s *kafkaSink) maybeThrottle(ctx context.Context) {
 		case <-time.After(throttleFor):
 		}
 	}
+	s.throttler.RLock()
+	defer s.throttler.RUnlock()
+	if s.throttler.rateLimiter != nil {
+		sz := msg.Key.Length() + msg.Value.Length()
+		log.Errorf(ctx, "Now I'll wait for rateLimiter quota...")
+		defer log.Errorf(ctx, "Done waiting for quota")
+		return s.throttler.rateLimiter.AcquireMessageQuota(ctx, sz)
+	}
+	return nil
 }
 
 // isInternallyRetryable returns true if the sink should attempt to re-emit the
@@ -1109,6 +1171,11 @@ func makeKafkaSink(
 	}
 
 	addOnThrottleCallback(sink, config)
+	sampler, ok := config.MetricRegistry.GetOrRegister("outgoing-byte-rate", saramaMetrics.NewMeter).(saramaMetrics.Meter)
+	if !ok {
+		return nil, errors.AssertionFailedf("Expected outgoing-byte-rate to be a Meter but found %T", sampler)
+	}
+	sink.throttler.sampler = sampler
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
@@ -1148,6 +1215,7 @@ func (m *metricSpyInjector) GetOrRegister(name string, i interface{}) interface{
 
 func (m *metricSpyInjector) Get(name string) interface{} {
 	reg := m.Registry.Get(name)
+	// strings.Contains is needed because the broker id gets prepended
 	if strings.Contains(name, m.pattern) {
 		hist, ok := reg.(saramaMetrics.Histogram)
 		if !ok {
@@ -1199,3 +1267,57 @@ func (s *kafkaStats) String() string {
 		atomic.LoadInt64(&s.largestMessageSize),
 	)
 }
+
+/* type byteRatePerSecondBucket struct {
+	windowStart time.Time
+	totalBytes  int64
+	sync.RWMutex
+}
+
+type byteRatePerSecondSampler struct {
+	buckets [60]*byteRatePerSecondBucket
+}
+
+func newByteRatePerSecondSampler() *byteRatePerSecondSampler {
+	b := byteRatePerSecondSampler{}
+	for i := 0; i < 60; i++ {
+		b.buckets[i] = &byteRatePerSecondBucket{}
+	}
+	return &b
+}
+
+func (b *byteRatePerSecondSampler) recordBytesEmitted(bytes int64) {
+	now := time.Now()
+	bucket := b.buckets[now.Second()]
+	bucket.RLock()
+	if now.Sub(bucket.windowStart) > time.Minute {
+		bucket.RUnlock()
+		bucket.Lock()
+		bucket.windowStart = now
+		bucket.totalBytes = bytes
+		bucket.Unlock()
+	} else {
+		atomic.AddInt64(&bucket.totalBytes, bytes)
+		bucket.RUnlock()
+	}
+}
+
+func (b *byteRatePerSecondSampler) recentBytesPerSecond() int64 {
+	var totalBytes, numNonEmptyBuckets int64
+	for numNonEmptyBuckets == 0 {
+		log.Errorf(context.Background(), "Waiting a second to let buckets fill up")
+		time.Sleep(time.Second)
+		for _, bucket := range b.buckets {
+			subTotal := atomic.LoadInt64(&bucket.totalBytes)
+			if subTotal > 0 {
+				totalBytes += bucket.totalBytes
+				numNonEmptyBuckets += 1
+			}
+		}
+	}
+
+	log.Errorf(context.Background(), "byteRatePerSecond calculation: %d / %d", totalBytes, numNonEmptyBuckets)
+
+	return totalBytes / numNonEmptyBuckets
+}
+*/
