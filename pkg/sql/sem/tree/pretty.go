@@ -1267,6 +1267,10 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 			title = pretty.ConcatSpace(title,
 				p.bracket("(", p.Doc(&node.Defs), ")"))
 		}
+		if node.StorageParams != nil {
+			title = pretty.ConcatSpace(title, pretty.Keyword("WITH"))
+			title = pretty.ConcatSpace(title, p.bracket(`(`, p.Doc(&node.StorageParams), `)`))
+		}
 		title = pretty.ConcatSpace(title, pretty.Keyword("AS"))
 	} else {
 		title = pretty.ConcatSpace(title,
@@ -1281,7 +1285,7 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.PartitionByTable != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByTable))
 	}
-	if node.StorageParams != nil {
+	if node.StorageParams != nil && !node.As() {
 		clauses = append(
 			clauses,
 			pretty.ConcatSpace(
