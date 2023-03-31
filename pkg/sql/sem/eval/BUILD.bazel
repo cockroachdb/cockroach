@@ -116,6 +116,7 @@ go_test(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/faketreeeval",

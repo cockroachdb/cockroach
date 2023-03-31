@@ -48,7 +48,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		require.NoError(t, err)
 	}
 	writeIntent := func(k string, ts int64) {
-		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0, 1)
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 1)
 		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, &txn)
 		require.NoError(t, err)
 	}

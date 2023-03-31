@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -127,7 +128,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 
 				// Write an intent.
 				val := roachpb.MakeValueFromBytes([]byte("val"))
-				txn := roachpb.MakeTransaction("test", key, roachpb.NormalUserPriority, ts, 0, 1)
+				txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 1)
 				var err error
 				if delete {
 					_, err = storage.MVCCDelete(ctx, db, nil, key, ts, hlc.ClockTimestamp{}, &txn)

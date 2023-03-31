@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -615,7 +616,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	ds := NewDistSender(cfg)
 
 	txn := roachpb.MakeTransaction(
-		"test", nil /* baseKey */, roachpb.NormalUserPriority,
+		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.getNodeID()),
 	)
 	origTxnTs := txn.WriteTimestamp
@@ -2450,8 +2451,9 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	txn := roachpb.MakeTransaction(
 		"foo",
-		nil, // baseKey
-		1.0, // userPriority
+		nil,                    // baseKey
+		isolation.Serializable, // isoLevel
+		1.0,                    // userPriority
 		clock.Now(),
 		0, // maxOffsetNs
 		1, // coordinatorNodeID
@@ -3260,7 +3262,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 
 	key := roachpb.Key("a")
 	txn := roachpb.MakeTransaction(
-		"test", key, roachpb.NormalUserPriority,
+		"test", key, isolation.Serializable, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
 	)
 
@@ -3598,7 +3600,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	)
 
 	txn := roachpb.MakeTransaction(
-		"test", nil /* baseKey */, roachpb.NormalUserPriority,
+		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
 	)
 	// We're also going to check that the highest bumped WriteTimestamp makes it

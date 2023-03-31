@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -941,7 +942,9 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
 			db := setup(test.nodeID)
 			now := db.Clock().NowAsClockTimestamp()
-			kvTxn := roachpb.MakeTransaction("unnamed", nil /* baseKey */, roachpb.NormalUserPriority, now.ToTimestamp(), db.Clock().MaxOffset().Nanoseconds(), int32(test.nodeID))
+			kvTxn := roachpb.MakeTransaction(
+				"unnamed", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
+				now.ToTimestamp(), db.Clock().MaxOffset().Nanoseconds(), int32(test.nodeID))
 			txn := kv.NewTxnFromProto(ctx, db, test.nodeID, now, test.typ, &kvTxn)
 			ots := txn.TestingCloneTxn().ObservedTimestamps
 			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {

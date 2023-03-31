@@ -37,7 +37,7 @@ func TestEvaluateBatch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0, 0)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 0)
 
 	tcs := []testCase{
 		//

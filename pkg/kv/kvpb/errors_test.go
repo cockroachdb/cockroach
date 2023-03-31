@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,7 +54,7 @@ func TestNewErrorNil(t *testing.T) {
 // TestSetTxn verifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 1, hlc.Timestamp{}, 0, 99)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), isolation.Serializable, 1, hlc.Timestamp{}, 0, 99)
 	e.SetTxn(&txn)
 	if !strings.HasPrefix(
 		e.String(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
@@ -172,7 +173,7 @@ func TestErrorRedaction(t *testing.T) {
 			hlc.Timestamp{WallTime: 2},
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
-		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1, 99)
+		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
