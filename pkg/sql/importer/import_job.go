@@ -1036,7 +1036,10 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 			// single-column stats to avoid the appearance of perfectly correlated
 			// columns.
 			multiColEnabled := false
-			statistics, err := sql.StubTableStats(desc, jobspb.ImportStatsName, multiColEnabled)
+			defaultHistogramBuckets := uint32(stats.DefaultHistogramBuckets.Get(execCfg.SV()))
+			statistics, err := sql.StubTableStats(
+				desc, jobspb.ImportStatsName, multiColEnabled, defaultHistogramBuckets,
+			)
 			if err == nil {
 				for _, statistic := range statistics {
 					statistic.RowCount = rowCount
