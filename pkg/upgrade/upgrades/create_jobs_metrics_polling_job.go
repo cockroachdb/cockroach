@@ -19,7 +19,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/jobs/metricspoller" // Ensure job implementation is linked.
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -30,32 +29,15 @@ func createJobsMetricsPollingJob(
 		return nil
 	}
 	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		row, err := d.DB.Executor().QueryRowEx(
-			ctx,
-			"check for existing job metrics polling job",
-			nil,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"SELECT * FROM system.jobs WHERE id = $1",
-			jobs.JobMetricsPollerJobID,
-		)
-		if err != nil {
-			return err
+		jr := jobs.Record{
+			JobID:         jobs.JobMetricsPollerJobID,
+			Description:   jobspb.TypePollJobsStats.String(),
+			Details:       jobspb.PollJobsStatsDetails{},
+			Progress:      jobspb.PollJobsStatsProgress{},
+			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
+			Username:      username.RootUserName(),
+			NonCancelable: true,
 		}
-
-		if row == nil {
-			jr := jobs.Record{
-				JobID:         jobs.JobMetricsPollerJobID,
-				Description:   jobspb.TypePollJobsStats.String(),
-				Details:       jobspb.PollJobsStatsDetails{},
-				Progress:      jobspb.PollJobsStatsProgress{},
-				CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
-				Username:      username.RootUserName(),
-				NonCancelable: true,
-			}
-			if _, err := d.JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobs.JobMetricsPollerJobID, txn); err != nil {
-				return err
-			}
-		}
-		return nil
+		return d.JobRegistry.CreateIfNotExistAdoptableJobWithTxn(ctx, jr, txn)
 	})
 }

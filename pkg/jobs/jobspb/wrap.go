@@ -51,6 +51,7 @@ var (
 	_ Details = AutoConfigRunnerDetails{}
 	_ Details = AutoConfigEnvRunnerDetails{}
 	_ Details = AutoConfigTaskDetails{}
+	_ Details = AutoUpdateSQLActivityDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -74,6 +75,7 @@ var (
 	_ ProgressDetails = AutoConfigRunnerProgress{}
 	_ ProgressDetails = AutoConfigEnvRunnerProgress{}
 	_ ProgressDetails = AutoConfigTaskProgress{}
+	_ ProgressDetails = AutoUpdateSQLActivityProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -156,6 +158,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoConfigEnvRunner,
 	TypeAutoConfigTask,
 	TypeKeyVisualizer,
+	TypeAutoUpdateSQLActivity,
 }
 
 // DetailsType returns the type for a payload detail.
@@ -207,6 +210,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeAutoConfigEnvRunner, nil
 	case *Payload_AutoConfigTask:
 		return TypeAutoConfigTask, nil
+	case *Payload_AutoUpdateSqlActivities:
+		return TypeAutoUpdateSQLActivity, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -250,6 +255,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeAutoConfigRunner:             AutoConfigRunnerDetails{},
 	TypeAutoConfigEnvRunner:          AutoConfigEnvRunnerDetails{},
 	TypeAutoConfigTask:               AutoConfigTaskDetails{},
+	TypeAutoUpdateSQLActivity:        AutoUpdateSQLActivityDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -303,6 +309,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_AutoConfigEnvRunner{AutoConfigEnvRunner: &d}
 	case AutoConfigTaskProgress:
 		return &Progress_AutoConfigTask{AutoConfigTask: &d}
+	case AutoUpdateSQLActivityProgress:
+		return &Progress_UpdateSqlActivity{UpdateSqlActivity: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -354,6 +362,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.AutoConfigEnvRunner
 	case *Payload_AutoConfigTask:
 		return *d.AutoConfigTask
+	case *Payload_AutoUpdateSqlActivities:
+		return *d.AutoUpdateSqlActivities
 	default:
 		return nil
 	}
@@ -405,6 +415,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.AutoConfigEnvRunner
 	case *Progress_AutoConfigTask:
 		return *d.AutoConfigTask
+	case *Progress_UpdateSqlActivity:
+		return *d.UpdateSqlActivity
 	default:
 		return nil
 	}
@@ -480,6 +492,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_AutoConfigEnvRunner{AutoConfigEnvRunner: &d}
 	case AutoConfigTaskDetails:
 		return &Payload_AutoConfigTask{AutoConfigTask: &d}
+	case AutoUpdateSQLActivityDetails:
+		return &Payload_AutoUpdateSqlActivities{AutoUpdateSqlActivities: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -515,7 +529,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 23
+const NumJobTypes = 24
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

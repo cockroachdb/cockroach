@@ -447,6 +447,39 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 		}))
 		runTests(t, createdJob)
 	})
+
+	t.Run("CreateIfNotExistAdoptableJobWithTxn", func(t *testing.T) {
+		tempRecord := Record{
+			JobID:    r.MakeJobID(),
+			Details:  jobspb.ImportDetails{},
+			Progress: jobspb.ImportProgress{},
+			Username: username.RootUserName(),
+		}
+
+		// loop to verify no errors if create if not exist is called multiple times
+		for i := 0; i < 3; i++ {
+			err := ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return r.CreateIfNotExistAdoptableJobWithTxn(ctx, tempRecord, txn)
+			})
+			require.NoError(t, err)
+		}
+
+		require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			row, err := txn.QueryRowEx(
+				ctx,
+				"check if job exists",
+				txn.KV(),
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				"SELECT * FROM system.jobs WHERE id = $1",
+				tempRecord.JobID,
+			)
+			if err != nil {
+				return err
+			}
+			require.NotNil(t, row)
+			return nil
+		}))
+	})
 }
 
 func TestBatchJobsCreation(t *testing.T) {
