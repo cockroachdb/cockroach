@@ -12876,7 +12876,16 @@ CREATE TABLE t85353 (a INT, b INT)
 ----
 
 exec-ddl
-CREATE TABLE u85353 (a INT, b INT, INDEX (a,b) USING HASH, INDEX (b) USING HASH)
+CREATE TABLE u85353 (
+  a INT,
+  b INT,
+  a_b_hash INT NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a, b)), 8)) VIRTUAL,
+  b_hash INT NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)) VIRTUAL,
+  INDEX a_b_idx (a_b_hash, a, b),
+  INDEX b_idx (b_hash, b),
+  CHECK (a_b_hash IN (0, 1, 2, 3, 4, 5, 6, 7)),
+  CHECK (b_hash IN (0, 1, 2, 3, 4, 5, 6, 7))
+)
 ----
 
 exec-ddl
@@ -12946,71 +12955,91 @@ ALTER TABLE u85353 INJECT STATISTICS
 # should not reduce join selectivity and cause the following to
 # choose lookup join.
 opt
-EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@u85353_b_idx USING (b) WHERE u85353.a < 10;
+EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@b_idx USING (b) WHERE u85353.a < 10;
 ----
 explain
- ├── columns: info:11
+ ├── columns: info:13
  ├── mode: opt
+ ├── immutable
  └── project
-      ├── columns: b:2!null a:1 a:6!null
-      └── inner-join (merge)
-           ├── columns: t85353.a:1 t85353.b:2!null u85353.a:6!null u85353.b:7!null
-           ├── left ordering: +7
-           ├── right ordering: +2
-           ├── fd: (2)==(7), (7)==(2)
-           ├── select
-           │    ├── columns: u85353.a:6!null u85353.b:7
-           │    ├── ordering: +7
-           │    ├── index-join u85353
-           │    │    ├── columns: u85353.a:6 u85353.b:7
-           │    │    ├── ordering: +7
-           │    │    └── scan u85353@u85353_b_idx
-           │    │         ├── columns: u85353.b:7 u85353.rowid:8!null
-           │    │         ├── flags: force-index=u85353_b_idx
-           │    │         ├── key: (8)
-           │    │         ├── fd: (8)-->(7)
-           │    │         └── ordering: +7
-           │    └── filters
-           │         └── u85353.a:6 < 10 [outer=(6), constraints=(/6: (/NULL - /9]; tight)]
-           ├── sort
-           │    ├── columns: t85353.a:1 t85353.b:2
-           │    ├── ordering: +2
-           │    └── scan t85353
-           │         └── columns: t85353.a:1 t85353.b:2
-           └── filters (true)
+      ├── columns: b:2!null a:1 a:6!null a_b_hash:8 b_hash:9
+      ├── immutable
+      ├── fd: (2,6)-->(8), (2)-->(9)
+      └── inner-join (hash)
+           ├── columns: t85353.a:1 t85353.b:2!null u85353.a:6!null u85353.b:7!null a_b_hash:8 b_hash:9
+           ├── immutable
+           ├── fd: (6,7)-->(8), (7)-->(9), (2)==(7), (7)==(2)
+           ├── project
+           │    ├── columns: a_b_hash:8 b_hash:9 u85353.a:6!null u85353.b:7
+           │    ├── immutable
+           │    ├── fd: (6,7)-->(8), (7)-->(9)
+           │    ├── select
+           │    │    ├── columns: u85353.a:6!null u85353.b:7
+           │    │    ├── index-join u85353
+           │    │    │    ├── columns: u85353.a:6 u85353.b:7
+           │    │    │    └── scan u85353@b_idx
+           │    │    │         ├── columns: u85353.b:7 u85353.rowid:10!null
+           │    │    │         ├── constraint: /9/7/10: [/0 - /7]
+           │    │    │         ├── flags: force-index=b_idx
+           │    │    │         ├── key: (10)
+           │    │    │         └── fd: (10)-->(7)
+           │    │    └── filters
+           │    │         └── u85353.a:6 < 10 [outer=(6), constraints=(/6: (/NULL - /9]; tight)]
+           │    └── projections
+           │         ├── mod(fnv32(crdb_internal.datums_to_bytes(u85353.a:6, u85353.b:7)), 8) [as=a_b_hash:8, outer=(6,7), immutable]
+           │         └── mod(fnv32(crdb_internal.datums_to_bytes(u85353.b:7)), 8) [as=b_hash:9, outer=(7), immutable]
+           ├── scan t85353
+           │    └── columns: t85353.a:1 t85353.b:2
+           └── filters
+                └── t85353.b:2 = u85353.b:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # The derived equijoin condition between the hash bucket column in
 # u85353@u85353_a_b_idx and a similar hash bucket function expression on t85353.b
 # should not reduce join selectivity and cause the following to
 # choose lookup join.
 opt
-EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@u85353_a_b_idx USING (a,b) WHERE u85353.a < 10;
+EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@a_b_idx USING (a,b) WHERE u85353.a < 10;
 ----
 explain
- ├── columns: info:11
+ ├── columns: info:13
  ├── mode: opt
+ ├── immutable
  └── project
-      ├── columns: a:1!null b:2!null
-      └── inner-join (merge)
-           ├── columns: t85353.a:1!null t85353.b:2!null u85353.a:6!null u85353.b:7!null
-           ├── left ordering: +6,+7
-           ├── right ordering: +1,+2
-           ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
-           ├── scan u85353@u85353_a_b_idx
-           │    ├── columns: u85353.a:6!null u85353.b:7
-           │    ├── constraint: /6/7/8: (/NULL - /9]
-           │    ├── flags: force-index=u85353_a_b_idx
-           │    └── ordering: +6,+7
-           ├── sort
+      ├── columns: a:1!null b:2!null a_b_hash:8 b_hash:9
+      ├── immutable
+      ├── fd: (1,2)-->(8), (2)-->(9)
+      └── inner-join (hash)
+           ├── columns: t85353.a:1!null t85353.b:2!null u85353.a:6!null u85353.b:7!null a_b_hash:8 b_hash:9
+           ├── immutable
+           ├── fd: (6,7)-->(8), (7)-->(9), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+           ├── project
+           │    ├── columns: a_b_hash:8 b_hash:9 u85353.a:6!null u85353.b:7
+           │    ├── immutable
+           │    ├── fd: (6,7)-->(8), (7)-->(9)
+           │    ├── scan u85353@a_b_idx
+           │    │    ├── columns: u85353.a:6!null u85353.b:7
+           │    │    ├── constraint: /8/6/7/10
+           │    │    │    ├── (/0/NULL - /0/9]
+           │    │    │    ├── (/1/NULL - /1/9]
+           │    │    │    ├── (/2/NULL - /2/9]
+           │    │    │    ├── (/3/NULL - /3/9]
+           │    │    │    ├── (/4/NULL - /4/9]
+           │    │    │    ├── (/5/NULL - /5/9]
+           │    │    │    ├── (/6/NULL - /6/9]
+           │    │    │    └── (/7/NULL - /7/9]
+           │    │    └── flags: force-index=a_b_idx
+           │    └── projections
+           │         ├── mod(fnv32(crdb_internal.datums_to_bytes(u85353.a:6, u85353.b:7)), 8) [as=a_b_hash:8, outer=(6,7), immutable]
+           │         └── mod(fnv32(crdb_internal.datums_to_bytes(u85353.b:7)), 8) [as=b_hash:9, outer=(7), immutable]
+           ├── select
            │    ├── columns: t85353.a:1!null t85353.b:2
-           │    ├── ordering: +1,+2
-           │    └── select
-           │         ├── columns: t85353.a:1!null t85353.b:2
-           │         ├── scan t85353
-           │         │    └── columns: t85353.a:1 t85353.b:2
-           │         └── filters
-           │              └── t85353.a:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
-           └── filters (true)
+           │    ├── scan t85353
+           │    │    └── columns: t85353.a:1 t85353.b:2
+           │    └── filters
+           │         └── t85353.a:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+           └── filters
+                ├── t85353.a:1 = u85353.a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+                └── t85353.b:2 = u85353.b:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 ### BEGIN Regression tests for issue #69617
 
