@@ -240,6 +240,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			DontUseJobs:                       true,
 			SkipJobMetricsPollingJobBootstrap: true,
 			SkipAutoConfigRunnerJobBootstrap:  true,
+			SkipUpdateSQLActivityJobBootstrap: true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 
