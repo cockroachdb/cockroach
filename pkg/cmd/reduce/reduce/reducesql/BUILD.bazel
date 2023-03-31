@@ -17,7 +17,10 @@ go_library(
 go_test(
     name = "reducesql_test",
     size = "small",
-    srcs = ["reducesql_test.go"],
+    srcs = [
+        "main_test.go",
+        "reducesql_test.go",
+    ],
     args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [
@@ -26,8 +29,10 @@ go_test(
         "//pkg/cmd/reduce/reduce",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
