@@ -636,12 +636,12 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 		var sync redact.SafeString
 		if s.append.Sync {
 			if s.append.NonBlocking {
-				sync = "-non-blocking-sync"
+				sync = "non-blocking-sync" // actual sync time not reflected in this case
 			} else {
-				sync = "-sync"
+				sync = "sync"
 			}
 		}
-		p.Printf("raft ready handling: %.2fs [append=%.2fs, apply=%.2fs, commit-batch%s=%.2fs",
+		p.Printf("raft ready handling: %.2fs [append=%.2fs, apply=%.2fs, commit-append-%s=%.2fs",
 			dTotal.Seconds(), dAppend.Seconds(), dApply.Seconds(), sync, dPebble.Seconds())
 	}
 	if dSnap > 0 {
@@ -649,17 +649,10 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 	p.Printf(", other=%.2fs]", dUnaccounted.Seconds())
 
-	p.Printf(", wrote %s",
-		humanizeutil.IBytes(s.append.PebbleBytes),
-	)
-	if s.append.Sync {
-		p.SafeString(" sync")
-		if s.append.NonBlocking {
-			p.SafeString("(non-blocking)")
-		}
+	p.Printf(", wrote [")
+	if b := s.append.PebbleBytes; b > 0 {
+		p.Printf("append-batch=%s, ", humanizeutil.IBytes(b))
 	}
-	p.SafeString(" [")
-
 	if b, n := s.append.RegularBytes, s.append.RegularEntries; n > 0 || b > 0 {
 		p.Printf("append-ent=%s (%d), ", humanizeutil.IBytes(b), n)
 	}
