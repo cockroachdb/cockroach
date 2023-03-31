@@ -95,7 +95,7 @@ stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_
 >> put k=m v=m8 t=B
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+92
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=8.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=8.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -104,12 +104,12 @@ rangekey: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<e
 rangekey: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/7.000000000,0 -> /BYTES/a7
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
-meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/8.000000000,0 -> /BYTES/d8
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "e"/3.000000000,0 -> /BYTES/e3
@@ -120,14 +120,14 @@ data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /<empty>
 data: "h"/3.000000000,0 -> /BYTES/h3
-meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "j"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/7.000000000,0 -> /BYTES/j7
 data: "k"/5.000000000,0 -> /BYTES/k5
-meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "l"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "l"/7.000000000,0 -> /BYTES/l7
-meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "m"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "m"/8.000000000,0 -> /BYTES/m8
-meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "o"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "o"/7.000000000,0 -> /BYTES/o7
 stats: key_count=12 key_bytes=252 val_count=19 val_bytes=400 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=9 live_bytes=477 gc_bytes_age=34303 intent_count=6 intent_bytes=114 separated_intent_count=6 intent_age=556
 
@@ -137,13 +137,13 @@ iter_new_incremental types=pointsOnly intents=emit
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
 iter_scan: "b"/4.000000000,0=/<empty>
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "d"/8.000000000,0=/BYTES/d8
 iter_scan: "d"/4.000000000,0=/BYTES/d4
 iter_scan: "e"/3.000000000,0=/BYTES/e3
@@ -154,14 +154,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/4.000000000,0=/<empty>
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -170,15 +170,15 @@ iter_new_incremental types=pointsAndRanges intents=emit
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -192,14 +192,14 @@ iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -225,15 +225,15 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=1
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
 iter_scan: {b-c}/[3.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty>]
@@ -246,14 +246,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty>]
 iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty>]
 iter_scan: "h"/4.000000000,0=/<empty> !
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -262,14 +262,14 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=2
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: {b-c}/[3.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty>]
@@ -280,14 +280,14 @@ iter_scan: {g-h}/[3.000000000,0=/<empty>] !
 iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty>]
 iter_scan: "h"/4.000000000,0=/<empty> !
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -296,13 +296,13 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=3
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: "b"/4.000000000,0=/<empty>
 iter_scan: {c-d}/[5.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: {f-g}/[5.000000000,0=/<empty>] !
@@ -310,14 +310,14 @@ iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty>]
 iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty>]
 iter_scan: "g"/4.000000000,0=/BYTES/g4 !
 iter_scan: "h"/4.000000000,0=/<empty>
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -326,22 +326,22 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=4
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
 iter_scan: {c-d}/[5.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
 iter_scan: {f-g}/[5.000000000,0=/<empty>] !
 iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -350,19 +350,19 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=5
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "d"/8.000000000,0=/BYTES/d8
 iter_scan: "f"/6.000000000,0=/BYTES/f6
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -371,18 +371,18 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=6
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "d"/8.000000000,0=/BYTES/d8
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -391,10 +391,10 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=7
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "d"/8.000000000,0=/BYTES/d8
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
 iter_scan: .
 
@@ -412,15 +412,15 @@ iter_new_incremental types=pointsAndRanges intents=emit endTs=8
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -434,14 +434,14 @@ iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -450,8 +450,8 @@ iter_new_incremental types=pointsAndRanges intents=emit endTs=7
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
@@ -471,13 +471,13 @@ iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
 iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -701,14 +701,14 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=6 endTs=7
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -717,10 +717,10 @@ iter_new_incremental types=pointsAndRanges intents=emit startTs=7 endTs=8
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "d"/8.000000000,0=/BYTES/d8
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
 iter_scan: .
 
@@ -766,19 +766,19 @@ iter_next_key
 iter_next_key
 iter_next_key
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_next_key: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_next_key: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_next_key: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_next_key: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_next_key: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_next_key: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_next_key: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_next_key: {h-k}/[1.000000000,0=/<empty>] !
-iter_next_key: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_next_key: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_next_key: "k"/5.000000000,0=/BYTES/k5 !
-iter_next_key: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_next_key: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-iter_next_key: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_next_key: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_key: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_next_key: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_next_key: .
 
 run ok
@@ -1134,7 +1134,7 @@ iter_next_ignoring_time: "a"/2.000000000,0=/BYTES/a2 (+{a-b}/[1.000000000,0=/<em
 iter_next_ignoring_time: {b-c}/[3.000000000,0=/<empty>] (+{b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next_ignoring_time: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>] (+{b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>])
 iter_next_ignoring_time: {c-d}/[3.000000000,0=/<empty>] (+{c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
-iter_next_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
+iter_next_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next_ignoring_time: "d"/8.000000000,0=/BYTES/d8 (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>])
 iter_next_ignoring_time: "d"/4.000000000,0=/BYTES/d4 (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>])
 iter_next_ignoring_time: "e"/3.000000000,0=/BYTES/e3 (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>])
@@ -1148,14 +1148,14 @@ iter_next_ignoring_time: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empt
 iter_next_ignoring_time: (+{h-k}/[1.000000000,0=/<empty>] !) !
 iter_next_ignoring_time: "h"/4.000000000,0=/<empty> (+{h-k}/[1.000000000,0=/<empty>])
 iter_next_ignoring_time: "h"/3.000000000,0=/BYTES/h3 (+{h-k}/[1.000000000,0=/<empty>])
-iter_next_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{h-k}/[1.000000000,0=/<empty>])
+iter_next_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{h-k}/[1.000000000,0=/<empty>])
 iter_next_ignoring_time: "j"/7.000000000,0=/BYTES/j7 (+{h-k}/[1.000000000,0=/<empty>])
 iter_next_ignoring_time: "k"/5.000000000,0=/BYTES/k5
-iter_next_ignoring_time: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_ignoring_time: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_next_ignoring_time: "l"/7.000000000,0=/BYTES/l7
-iter_next_ignoring_time: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_next_ignoring_time: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_next_ignoring_time: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_next_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_next_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_next_ignoring_time: "o"/7.000000000,0=/BYTES/o7
 
 # Switch from ignoring to respecting time at point key.
@@ -1210,7 +1210,7 @@ iter_seek_ge: "a"/4.000000000,0=/<empty>
 iter_next: {b-c}/[3.000000000,0=/<empty>] !
 iter_next_ignoring_time: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>] (+{b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>])
 iter_next: {c-d}/[3.000000000,0=/<empty>] !
-iter_next_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
+iter_next_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next: "d"/4.000000000,0=/BYTES/d4
 iter_next_ignoring_time: "e"/3.000000000,0=/BYTES/e3 (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>])
 iter_next: {f-g}/[3.000000000,0=/<empty>] !
@@ -1255,16 +1255,16 @@ iter_next_key_ignoring_time
 iter_seek_ge: "a"/4.000000000,0=/<empty>
 iter_next_key_ignoring_time: {b-c}/[3.000000000,0=/<empty>] (+{b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next_key_ignoring_time: {c-d}/[3.000000000,0=/<empty>] (+{c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
-iter_next_key_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
+iter_next_key_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next_key_ignoring_time: "e"/3.000000000,0=/BYTES/e3 (+{d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>])
 iter_next_key_ignoring_time: {f-g}/[3.000000000,0=/<empty>] (+{f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next_key_ignoring_time: {g-h}/[3.000000000,0=/<empty>] (+{g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !) !
 iter_next_key_ignoring_time: (+{h-k}/[1.000000000,0=/<empty>] !) !
-iter_next_key_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{h-k}/[1.000000000,0=/<empty>])
+iter_next_key_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{h-k}/[1.000000000,0=/<empty>])
 iter_next_key_ignoring_time: "k"/5.000000000,0=/BYTES/k5
-iter_next_key_ignoring_time: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_next_key_ignoring_time: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-iter_next_key_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_next_key_ignoring_time: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_key_ignoring_time: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_next_key_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_next_key_ignoring_time: .
 
 # Switch between ignoring and respecting time with NextKeyIgnoringTime across span.
@@ -1295,9 +1295,9 @@ iter_next_key_ignoring_time: {g-h}/[3.000000000,0=/<empty>] (+{g-h}/[3.000000000
 iter_next: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty>]
 iter_next_key_ignoring_time: (+{h-k}/[1.000000000,0=/<empty>] !) !
 iter_next: "h"/4.000000000,0=/<empty>
-iter_next_key_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{h-k}/[1.000000000,0=/<empty>])
+iter_next_key_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true (+{h-k}/[1.000000000,0=/<empty>])
 iter_next: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-iter_next_key_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_next_key_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_next: .
 
 # NextKeyIgnoringTime with only range keys.
@@ -1315,13 +1315,13 @@ iter_new_incremental types=pointsOnly k=a end=z endTs=8 intents=emit
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "a"/7.000000000,0=/BYTES/a7
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
 iter_scan: "b"/4.000000000,0=/<empty>
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "d"/8.000000000,0=/BYTES/d8
 iter_scan: "d"/4.000000000,0=/BYTES/d4
 iter_scan: "e"/3.000000000,0=/BYTES/e3
@@ -1332,14 +1332,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/4.000000000,0=/<empty>
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "m"/8.000000000,0=/BYTES/m8
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -1368,16 +1368,16 @@ iter_seek_ge k=i
 iter_seek_ge k=j
 iter_seek_ge k=k
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_ge: "b"/4.000000000,0=/<empty>
-iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_ge: "e"/3.000000000,0=/BYTES/e3
 iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
 iter_seek_ge: "g"/4.000000000,0=/BYTES/g4
 iter_seek_ge: "h"/4.000000000,0=/<empty>
-iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_ge: "k"/5.000000000,0=/BYTES/k5
 
 run ok
@@ -1477,15 +1477,15 @@ iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=1
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -1499,14 +1499,14 @@ iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -1515,15 +1515,15 @@ iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=2
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -1537,14 +1537,14 @@ iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -1553,15 +1553,15 @@ iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=3
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -1573,14 +1573,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -1589,15 +1589,15 @@ iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=4
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -1609,14 +1609,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -1625,15 +1625,15 @@ iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=5
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -1642,14 +1642,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 
@@ -1658,15 +1658,15 @@ iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=6
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>] !
 iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
 iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
 iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -1675,14 +1675,14 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000
 iter_scan: {h-k}/[1.000000000,0=/<empty>] !
 iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
 iter_scan: "k"/5.000000000,0=/BYTES/k5 !
-iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "l"/7.000000000,0=/BYTES/l7
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 iter_scan: "o"/7.000000000,0=/BYTES/o7
 iter_scan: .
 

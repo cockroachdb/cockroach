@@ -116,9 +116,9 @@ iterator_next(iter1) -> valid = false
 mvcc_delete(engine, t2, "gukoaxqohrakhx"/4) -> ok
 mvcc_delete(engine, t2, "gukoaxqohrakhx"/4) -> ok
 iterator_seeklt(iter1, "gukoaxqohrakhx"/4) -> valid = false
-mvcc_inconsistent_scan("qxaisbnoe"/4, "coivcnwg"/2, 3, 0.8319, 0.3660, true, true) -> kvs = [], intents = [{{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4} {{"ineoliklwoegq"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("qxaisbnoe"/4, "coivcnwg"/2, 3, 0.8319, 0.3660, true, true) -> kvs = [], intents = [{{"gukoaxqohrakhx"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4} {{"ineoliklwoegq"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_reverse_scan("gukoaxqohrakhx"/4, "gukoaxqohrakhx"/4, t2, 0.7234, 0.1763, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
-mvcc_inconsistent_scan("gukoaxqohrakhx"/4, "ineoliklwoegq"/2, 3, 0.3394, 0.8966, true, false) -> kvs = [], intents = [{{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("gukoaxqohrakhx"/4, "ineoliklwoegq"/2, 3, 0.3394, 0.8966, true, false) -> kvs = [], intents = [{{"gukoaxqohrakhx"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_get(engine, "aoclxttgscj"/4, t2) -> val = <nil>, intent = <nil>
 iterator_close(iter1) -> ok
 txn_open(5, t3) -> t3
@@ -135,7 +135,7 @@ mvcc_put(engine, t3, "gqpapurgp"/6, rwgyypofud) -> ok
 iterator_nextkey(iter2) -> valid = false
 mvcc_put(engine, t2, "aoclxttgscj"/4, dmcppruyjxusum) -> ok
 mvcc_reverse_scan("pkgerlaju"/6, "ineoliklwoegq"/2, t2, 0.7722, 0.0298, false, true) -> kvs = [{"ineoliklwoegq" {[0 0 0 0 3 98 111 99 105 101] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 41, numKeys = 1
-mvcc_inconsistent_scan("vpdhnkpam"/0, "coivcnwg"/2, 6, 0.8474, 0.1611, false, true) -> kvs = [], intents = [{{"gqpapurgp"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=1} {{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4} {{"ineoliklwoegq"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2} {{"rfdgrsmg"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5} {{"tktluohcljr"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("vpdhnkpam"/0, "coivcnwg"/2, 6, 0.8474, 0.1611, false, true) -> kvs = [], intents = [{{"gqpapurgp"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=1} {{"gukoaxqohrakhx"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4} {{"ineoliklwoegq"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2} {{"rfdgrsmg"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5} {{"tktluohcljr"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_put(engine, t2, "coivcnwg"/2, klltabhwe) -> ok
 mvcc_inconsistent_scan("vpdhnkpam"/0, "xepnphkbkbykq"/6, 5, 0.2138, 0.5211, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_put(engine, t2, "wbpcepef"/6, hhgldqltudmgr) -> ok
@@ -144,7 +144,7 @@ mvcc_reverse_scan("tktluohcljr"/4, "ycqyfkeom"/6, t2, 0.6096, 0.8422, true, true
 iterator_nextkey(iter2) -> valid = false
 mvcc_scan("thqatgbqt"/6, "tktluohcljr"/4, t2, 0.2758, 0.6241, true, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_put(engine, t3, "mrxatnht"/6, uooxrnfmynbrhmq) -> ok
-mvcc_inconsistent_scan("tjbotfrbtxoyta"/6, "leyxhmxqrcbxsm"/6, 5, 0.4386, 0.9055, true, false) -> kvs = [], intents = [{{"leyxhmxqrcbxsm"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=2} {{"mrxatnht"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=3} {{"rfdgrsmg"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("tjbotfrbtxoyta"/6, "leyxhmxqrcbxsm"/6, 5, 0.4386, 0.9055, true, false) -> kvs = [], intents = [{{"leyxhmxqrcbxsm"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=2} {{"mrxatnht"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=3} {{"rfdgrsmg"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 iterator_seekge(iter2, "dowuentqinoinc"/6) -> key = "gukoaxqohrakhx"/0.000000003,0
 iterator_seekge(iter2, "vpdhnkpam"/0) -> valid = false
 mvcc_put(engine, t3, "yggswhfeyqv"/6, etewicdmbq) -> ok
@@ -160,7 +160,7 @@ batch_commit(engine) -> noop
 mvcc_put(engine, t2, "tktluohcljr"/4, mbiyym) -> ok
 iterator_nextkey(iter3) -> valid = false
 mvcc_put(engine, t3, "thqatgbqt"/6, idnmxjlvsw) -> ok
-mvcc_inconsistent_scan("ycqyfkeom"/6, "wbpcepef"/6, 5, 0.0160, 0.1770, true, true) -> kvs = [], intents = [{{"wbpcepef"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=8}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("ycqyfkeom"/6, "wbpcepef"/6, 5, 0.0160, 0.1770, true, true) -> kvs = [], intents = [{{"wbpcepef"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=8}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_get(engine, "gukoaxqohrakhx"/4, t3) -> error: conflicting intents on "gukoaxqohrakhx"
 iterator_prev(iter2) -> valid = false
 mvcc_conditional_put(engine, t3, "yhegqgfufrmod"/6, jtvyp, blbkqemlet) -> ok
@@ -168,7 +168,7 @@ mvcc_reverse_scan("rfdgrsmg"/6, "snoojmhoaqte"/6, t3, 0.6166, 0.7049, false, tru
 txn_create_savepoint(t2, 0) -> savepoint 0
 iterator_next(iter2) -> valid = false
 mvcc_reverse_scan("epqbxyaxptyypsf"/6, "xqylijbfdvmcqh"/6, t3, 0.5848, 0.6004, false, false) -> error: conflicting intents on "wbpcepef", "tktluohcljr", "rfdgrsmg", "ineoliklwoegq", "gukoaxqohrakhx"
-mvcc_inconsistent_scan("xqylijbfdvmcqh"/6, "gqpapurgp"/6, 5, 0.7619, 0.3199, true, true) -> kvs = [], intents = [{{"gqpapurgp"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=1} {{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=9} {{"ineoliklwoegq"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2} {{"leyxhmxqrcbxsm"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=2} {{"mrxatnht"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=3} {{"rfdgrsmg"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5} {{"tktluohcljr"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=10} {{"wbpcepef"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=8}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("xqylijbfdvmcqh"/6, "gqpapurgp"/6, 5, 0.7619, 0.3199, true, true) -> kvs = [], intents = [{{"gqpapurgp"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=1} {{"gukoaxqohrakhx"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=9} {{"ineoliklwoegq"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2} {{"leyxhmxqrcbxsm"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=2} {{"mrxatnht"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=3} {{"rfdgrsmg"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5} {{"tktluohcljr"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=10} {{"wbpcepef"} id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=8}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
 mvcc_put(engine, t3, "fphfjiotu"/6, kfsbxc) -> ok
 mvcc_get(engine, "uwdvyohbpsgcr"/6, t3) -> val = <nil>, intent = <nil>
 batch_commit(engine) -> noop

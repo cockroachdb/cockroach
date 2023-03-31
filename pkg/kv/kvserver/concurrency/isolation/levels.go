@@ -43,3 +43,6 @@ func (l Level) ToleratesWriteSkew() bool {
 func (l Level) PerStatementReadSnapshot() bool {
 	return l == ReadCommitted
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (Level) SafeValue() {}

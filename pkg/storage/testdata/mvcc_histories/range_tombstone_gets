@@ -33,7 +33,7 @@ put k=o ts=6 v=o6
 del: "b": found key false
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
 rangekey: {a-c}/[2.000000000,0=/<empty>]
 rangekey: {c-e}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
 rangekey: {e-i}/[4.000000000,0=/<empty>]
@@ -44,7 +44,7 @@ data: "a"/1.000000000,0 -> /BYTES/a1
 data: "b"/1.000000000,0 -> /<empty>
 data: "c"/1.000000000,0 -> /BYTES/c1
 data: "d"/3.000000000,0 -> /BYTES/d3
-meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "e"/0,0 -> txn={id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "e"/6.000000000,0 -> /BYTES/e6
 data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/3.000000000,0 -> /BYTES/f3
@@ -142,12 +142,12 @@ get k=e ts=6 tombstones inconsistent
 get: "e" -> <no data>
 get: "e" -> <no data>
 get: "e" -> <no data>
-get: "e" -> intent {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+get: "e" -> intent {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 get: "e" -> <no data>
 get: "e" -> <no data>
 get: "e" -> /<empty> @4.000000000,0
 get: "e" -> /<empty> @4.000000000,0
-get: "e" -> intent {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+get: "e" -> intent {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 get: "e" -> /<empty> @4.000000000,0
 
 run ok

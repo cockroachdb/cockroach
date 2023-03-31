@@ -1197,6 +1197,7 @@ func (t *Transaction) Update(o *Transaction) {
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
+	t.IsoLevel = o.IsoLevel
 
 	// Update epoch-scoped state, depending on the two transactions' epochs.
 	if t.Epoch < o.Epoch {

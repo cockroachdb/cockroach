@@ -31,7 +31,7 @@ with t=A
 del: "b": found key false
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
 rangekey: {a-c}/[2.000000000,0=/<empty>]
 rangekey: {c-e}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
 rangekey: {e-i}/[4.000000000,0=/<empty>]
@@ -41,7 +41,7 @@ data: "a"/1.000000000,0 -> /BYTES/a1
 data: "b"/1.000000000,0 -> /<empty>
 data: "c"/1.000000000,0 -> /BYTES/c1
 data: "d"/3.000000000,0 -> /BYTES/d3
-meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "e"/0,0 -> txn={id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "e"/6.000000000,0 -> /BYTES/e6
 data: "f"/5.000000000,0 -> /BYTES/f5
 data: "f"/3.000000000,0 -> /BYTES/f3
@@ -82,7 +82,7 @@ scan: "f" -> /BYTES/f5 @5.000000000,0
 run ok
 scan k=a end=z ts=6 inconsistent
 ----
-scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: intent "e" {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 scan: "f" -> /BYTES/f5 @5.000000000,0
 
 # Run tombstone scans at all timestamps.
@@ -136,7 +136,7 @@ scan: "h" -> /<empty> @4.000000000,0
 run ok
 scan k=a end=z ts=6 tombstones inconsistent
 ----
-scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: intent "e" {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
@@ -163,7 +163,7 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: intent "e" {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 scan: "e"-"f" -> <no data>
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "g"-"h" -> <no data>
@@ -234,7 +234,7 @@ scan: "f" -> /BYTES/f5 @5.000000000,0
 run ok
 scan k=a end=z ts=6 inconsistent reverse
 ----
-scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: intent "e" {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 scan: "f" -> /BYTES/f5 @5.000000000,0
 
 # Run tombstone scans at all timestamps in reverse.
@@ -288,7 +288,7 @@ scan: "a" -> /<empty> @3.000000000,0
 run ok
 scan k=a end=z ts=6 tombstones inconsistent reverse
 ----
-scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: intent "e" {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
@@ -315,7 +315,7 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: intent "e" {id=00000000 key="e" iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
 scan: "e"-"f" -> <no data>
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "g"-"h" -> <no data>
