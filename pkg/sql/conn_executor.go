@@ -880,6 +880,7 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 		},
 		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
 			RemoteAddr: args.RemoteAddr,
+			IsSSL:      args.IsSSL,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize:   args.ConnResultsBufferSize,

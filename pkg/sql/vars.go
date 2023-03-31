@@ -1330,8 +1330,7 @@ var varGen = map[string]sessionVar{
 	`ssl`: {
 		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			insecure := evalCtx.ExecCfg.RPCContext.Config.Insecure || evalCtx.ExecCfg.RPCContext.Config.AcceptSQLWithoutTLS
-			return formatBoolAsPostgresSetting(!insecure), nil
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().IsSSL), nil
 		},
 	},
 
