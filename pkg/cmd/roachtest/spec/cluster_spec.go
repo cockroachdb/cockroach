@@ -189,7 +189,7 @@ func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
-	clusterName string, useIOBarrier bool,
+	clusterName string, useIOBarrier bool, enableFIPS bool,
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
 
 	createVMOpts := vm.DefaultCreateOpts()
@@ -220,6 +220,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	createVMOpts.GeoDistributed = s.Geo
+	createVMOpts.EnableFIPS = enableFIPS
 	machineType := s.InstanceType
 	ssdCount := s.SSDs
 	if s.CPUs != 0 {
@@ -275,6 +276,11 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
+	if createVMOpts.EnableFIPS && !(s.Cloud == GCE || s.Cloud == AWS) {
+		return vm.CreateOpts{}, nil, errors.Errorf(
+			"node creation with enableFIPS enabled not yet supported on %s", s.Cloud,
+		)
+	}
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
