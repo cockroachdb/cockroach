@@ -2119,6 +2119,7 @@ type SessionDefaults map[string]string
 type SessionArgs struct {
 	User                        username.SQLUsername
 	IsSuperuser                 bool
+	IsSSL                       bool
 	SystemIdentity              username.SQLUsername
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults
