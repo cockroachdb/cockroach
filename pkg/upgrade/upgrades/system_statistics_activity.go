@@ -14,8 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -38,5 +42,20 @@ func systemStatisticsActivityTableMigration(
 		}
 	}
 
-	return nil
+	if d.TestingKnobs != nil && d.TestingKnobs.SkipUpdateSQLActivityJobBootstrap {
+		return nil
+	}
+
+	record := jobs.Record{
+		JobID:         jobs.AutoConfigSqlActivityID,
+		Description:   "sql activity job",
+		Username:      username.NodeUserName(),
+		Details:       jobspb.AutoUpdateSQLActivityDetails{},
+		Progress:      jobspb.AutoConfigRunnerProgress{},
+		NonCancelable: true, // The job can't be canceled, but it can be paused.
+	}
+
+	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return d.JobRegistry.CreateIfNotExistAdoptableJobWithTxn(ctx, record, txn)
+	})
 }

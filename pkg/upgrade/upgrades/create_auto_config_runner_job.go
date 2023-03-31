@@ -30,6 +30,16 @@ func createAutoConfigRunnerJob(
 		return nil
 	}
 
+	jr := jobs.Record{
+		JobID:         jobs.AutoConfigRunnerJobID,
+		Description:   "applies automatic configuration",
+		Details:       jobspb.AutoConfigRunnerDetails{},
+		Progress:      jobspb.AutoConfigRunnerProgress{},
+		CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
+		Username:      username.RootUserName(),
+		NonCancelable: true,
+	}
+
 	if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		row, err := d.DB.Executor().QueryRowEx(
 			ctx,
@@ -48,15 +58,6 @@ func createAutoConfigRunnerJob(
 			return nil
 		}
 
-		jr := jobs.Record{
-			JobID:         jobs.AutoConfigRunnerJobID,
-			Description:   "applies automatic configuration",
-			Details:       jobspb.AutoConfigRunnerDetails{},
-			Progress:      jobspb.AutoConfigRunnerProgress{},
-			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
-			Username:      username.RootUserName(),
-			NonCancelable: true,
-		}
 		// Use CreateJob instead of CreateAdoptableJob to ensure this node
 		// has a claim on the job and can start it immediately below.
 		_, err = d.JobRegistry.CreateJobWithTxn(ctx, jr, jobs.AutoConfigRunnerJobID, txn)
