@@ -493,13 +493,15 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PartialIndexDelCols)+len(del.PassthroughCols))
+	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PassthroughCols)+len(del.PartialIndexDelCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
-	colList = appendColsWhenPresent(colList, del.PartialIndexDelCols)
-
+	// The RETURNING clause of the Delete can refer to the columns in any of the
+	// USING tables. As a result, the Update may need to passthrough those
+	// columns so the projection above can use them.
 	if del.NeedResults() {
 		colList = append(colList, del.PassthroughCols...)
 	}
+	colList = appendColsWhenPresent(colList, del.PartialIndexDelCols)
 
 	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
