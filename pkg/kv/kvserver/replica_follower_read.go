@@ -99,7 +99,7 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.Batc
 	switch repDesc.Type {
 	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER:
 	default:
-		log.Eventf(ctx, "%s replicas cannot serve follower reads", repDesc.Type)
+		log.VEventf(ctx, 2, "%s replicas cannot serve follower reads", repDesc.Type)
 		return false
 	}
 
@@ -115,7 +115,7 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.Batc
 
 		// We can't actually serve the read based on the closed timestamp.
 		// Signal the clients that we want an update so that future requests can succeed.
-		log.Eventf(ctx, "can't serve follower read; closed timestamp too low by: %s; maxClosed: %s ts: %s uncertaintyLimit: %s",
+		log.VEventf(ctx, 2, "can't serve follower read; closed timestamp too low by: %s; maxClosed: %s ts: %s uncertaintyLimit: %s",
 			tsDiff, maxClosed, ba.Timestamp, uncertaintyLimitStr)
 		return false
 	}

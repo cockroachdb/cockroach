@@ -2032,6 +2032,8 @@ func (ds *DistSender) sendToReplicas(
 	var leaseholderFirst bool
 	switch ba.RoutingPolicy {
 	case kvpb.RoutingPolicy_LEASEHOLDER:
+
+		log.VEventf(ctx, 2, "routing to leaseholder %v %v %v", ds.locality, replicas, ba)
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
@@ -2053,8 +2055,9 @@ func (ds *DistSender) sendToReplicas(
 
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
-		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
+		log.VEventf(ctx, 2, "routing to nearest replica; leaseholder not required %v %v", ds.locality, replicas)
 		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+		log.VEventf(ctx, 2, "ordered routing to nearest replica; leaseholder not required %v %v", ds.locality, replicas)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)

@@ -19,9 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -46,9 +49,8 @@ import (
 func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 96334)
 	skip.UnderRace(t, "too slow")
-	skip.UnderStress(t, "too slow")
+	//skip.UnderStress(t, "too slow")
 
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
@@ -116,6 +118,11 @@ func TestColdStartLatency(t *testing.T) {
 			},
 		}
 		args.Knobs.Server = serverKnobs
+		args.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
+			LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+				return 0, false
+			},
+		}
 		perServerArgs[i] = args
 	}
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
@@ -154,8 +161,10 @@ func TestColdStartLatency(t *testing.T) {
 	// to closed timestamp propagation proves to be insufficient. This value is
 	// very cautious, and makes this already slow test even slower.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '1500ms'`)
 	tdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
 
 	applyGlobalTables := func(t *testing.T, db *gosql.DB, isTenant bool) {
 		stmts := []string{
@@ -254,6 +263,11 @@ func TestColdStartLatency(t *testing.T) {
 			TenantID: serverutils.TestTenantID(),
 			TestingKnobs: base.TestingKnobs{
 				Server: tenantServerKnobs(0),
+				KVClient: &kvcoord.ClientTestingKnobs{
+					LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+						return 0, false
+					},
+				},
 			},
 			Locality: localities[0],
 		})
@@ -266,56 +280,57 @@ func TestColdStartLatency(t *testing.T) {
 		// propagated, we'll shut down the tenant and wait for them to get
 		// applied.
 		tdb.Exec(t, "CREATE TABLE after AS SELECT now() AS after")
-		tdb.CheckQueryResultsRetry(t, `
-  WITH progress AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'progress',
-                            progress
-                           )->'AutoSpanConfigReconciliation' AS p
-                      FROM crdb_internal.system_jobs
-                     WHERE status = 'running'
-                ),
-       checkpoint AS (
-                    SELECT (p->'checkpoint'->>'wallTime')::FLOAT8 / 1e9 AS checkpoint
-                      FROM progress
-                     WHERE p IS NOT NULL
-                  )
-SELECT checkpoint > extract(epoch from after)
-  FROM checkpoint, after`,
-			[][]string{{"true"}})
+		now := tenant.Clock().Now()
+		reconciler := tenant.ExecutorConfig().(sql.ExecutorConfig).SpanConfigReconciler
+		testutils.SucceedsSoon(t, func() error {
+			if cp := reconciler.Checkpoint(); cp.Less(now) {
+				return errors.Errorf("checkpoint too early by %v", now.GoTime().Sub(cp.GoTime()))
+			}
+			return nil
+		})
 		tenant.Stopper().Stop(ctx)
 	}
+	for i := 0; i < numNodes; i++ {
+		closedts.LeadForGlobalReadsOverride.Override(ctx, &tc.Server(i).ClusterSettings().SV, 1500*time.Millisecond)
+	}
 	// Wait for the configs to be applied.
-	testutils.SucceedsWithin(t, func() error {
-		reporter := tc.Servers[0].Server.SpanConfigReporter()
-		report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
-			{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
-		})
-		if err != nil {
-			return err
-		}
-		if !report.IsEmpty() {
-			var g errgroup.Group
-			for _, r := range report.ViolatingConstraints {
-				r := r // for closure
-				g.Go(func() error {
-					_, err := tc.Server(0).DB().AdminScatter(
-						ctx, r.RangeDescriptor.StartKey.AsRawKey(), 0,
-					)
-					return err
-				})
-			}
-			if err := g.Wait(); err != nil {
+	balance := func() {
+		var successes int
+		testutils.SucceedsWithin(t, func() error {
+			reporter := tc.Servers[0].Server.SpanConfigReporter()
+			report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
+				{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
+			})
+			if err != nil {
 				return err
 			}
-			return errors.Errorf("expected empty report, got: {over: %d, under: %d, violating: %d, unavailable: %d}",
-				len(report.OverReplicated),
-				len(report.UnderReplicated),
-				len(report.ViolatingConstraints),
-				len(report.Unavailable))
-		}
-		return nil
-	}, 5*time.Minute)
+			if !report.IsEmpty() && successes == 0 {
+				var g errgroup.Group
+				for _, r := range report.ViolatingConstraints {
+					r := r // for closure
+					g.Go(func() error {
+						_, err := tc.Server(0).DB().AdminScatter(
+							ctx, r.RangeDescriptor.StartKey.AsRawKey(), 0,
+						)
+						return err
+					})
+				}
+				if err := g.Wait(); err != nil {
+					return err
+				}
+				return errors.Errorf("expected empty report, got: {over: %d, under: %d, violating: %d, unavailable: %d}",
+					len(report.OverReplicated),
+					len(report.UnderReplicated),
+					len(report.ViolatingConstraints),
+					len(report.Unavailable))
+			}
+			if successes++; successes < 5 {
+				return errors.Errorf("not enough successes yet: %d", successes)
+			}
+			return nil
+		}, 5*time.Minute)
+	}
+	balance()
 
 	doTest := func(wg *sync.WaitGroup, qp *quotapool.IntPool, i int, duration *time.Duration) {
 		defer wg.Done()
@@ -329,6 +344,11 @@ SELECT checkpoint > extract(epoch from after)
 			SkipTenantCheck:     true,
 			TestingKnobs: base.TestingKnobs{
 				Server: sn,
+				KVClient: &kvcoord.ClientTestingKnobs{
+					LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+						return 0, false
+					},
+				},
 			},
 			Locality: localities[i],
 		})
@@ -373,6 +393,7 @@ SELECT checkpoint > extract(epoch from after)
 	t.Log("result", localities, runAllTests())
 	t.Log("running test with no connectivity from sql pods to remote regions")
 	blockCrossRegionTenantAccess.Store(true)
+	time.Sleep(time.Second)
 	t.Log("result", localities, runAllTests())
 	blockCrossRegionTenantAccess.Store(false)
 }
