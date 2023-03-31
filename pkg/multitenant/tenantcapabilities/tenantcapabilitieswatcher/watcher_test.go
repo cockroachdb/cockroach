@@ -208,7 +208,7 @@ func TestDataDriven(t *testing.T) {
 				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
-					Capabilities: caps,
+					Capabilities: *caps,
 				}
 				buf, err := protoutil.Marshal(&info)
 				require.NoError(t, err)

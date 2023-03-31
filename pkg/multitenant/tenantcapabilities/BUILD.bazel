@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -6,26 +6,44 @@ go_library(
     name = "tenantcapabilities",
     srcs = [
         "capabilities.go",
+        "capability.go",
+        "interfaces.go",
         "testingknobs.go",
-        ":capabilityid-stringer",  # keep
+        "value.go",
+        "values.go",
+        ":id-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
+        "//pkg/spanconfig/spanconfigbounds",
         "//pkg/util/stringerutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 
 stringer(
-    name = "capabilityid-stringer",
+    name = "id-stringer",
     src = "capabilities.go",
     additional_args = ["--linecomment"],
-    typ = "CapabilityID",
+    typ = "ID",
+)
+
+go_test(
+    name = "tenantcapabilities_test",
+    srcs = ["values_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":tenantcapabilities"],
+    deps = [
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")
