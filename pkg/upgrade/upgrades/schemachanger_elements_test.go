@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -202,4 +204,12 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 			}
 		})
 	}
+}
+
+func shortInterval() *time.Duration {
+	shortInterval := 10 * time.Millisecond
+	if util.RaceEnabled {
+		shortInterval *= 5
+	}
+	return &shortInterval
 }

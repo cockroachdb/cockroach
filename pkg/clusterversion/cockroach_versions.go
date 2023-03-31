@@ -254,10 +254,6 @@ const (
 	TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull
 	// TODODelete_V22_2RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
 	TODODelete_V22_2RangefeedUseOneStreamPerNode
-	// TODODelete_V22_2NoNonMVCCAddSSTable adds a migration which waits for all
-	// schema changes to complete. After this point, no non-MVCC
-	// AddSSTable calls will be used outside of tenant streaming.
-	TODODelete_V22_2NoNonMVCCAddSSTable
 	// TODODelete_V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
 	// leaseholder nodes.
 	TODODelete_V22_2TTLDistSQL
@@ -677,10 +673,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2RangefeedUseOneStreamPerNode,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
-	},
-	{
-		Key:     TODODelete_V22_2NoNonMVCCAddSSTable,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
 	},
 	{
 		Key:     TODODelete_V22_2TTLDistSQL,
