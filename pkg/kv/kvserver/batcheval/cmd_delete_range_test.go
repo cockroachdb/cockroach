@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -57,7 +58,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 		t.Helper()
 		var localTS hlc.ClockTimestamp
 
-		txn := roachpb.MakeTransaction("test", nil /* baseKey */, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 5e9}, 0, 0)
+		txn := roachpb.MakeTransaction("test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 5e9}, 0, 0)
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("b"), hlc.Timestamp{WallTime: 2e9}, localTS, roachpb.MakeValueFromString("b2"), nil))
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("c"), hlc.Timestamp{WallTime: 4e9}, localTS, roachpb.MakeValueFromString("c4"), nil))
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 2e9}, localTS, roachpb.MakeValueFromString("d2"), nil))
@@ -215,7 +216,8 @@ func TestDeleteRangeTombstone(t *testing.T) {
 						Timestamp: rangeKey.Timestamp,
 					}
 					if tc.txn {
-						txn := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
+						txn := roachpb.MakeTransaction(
+							"txn", nil, isolation.Serializable, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
 						h.Txn = &txn
 					}
 					var predicates kvpb.DeleteRangePredicates

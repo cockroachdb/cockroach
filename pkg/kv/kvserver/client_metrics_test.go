@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -199,7 +200,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	require.NoError(t, err)
 	span := roachpb.Span{Key: key, EndKey: key.Next()}
 
-	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()))
+	txn := roachpb.MakeTransaction("foo", span.Key, isolation.Serializable, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()))
 
 	const resolveCommitCount = int64(200)
 	const resolveAbortCount = int64(800)

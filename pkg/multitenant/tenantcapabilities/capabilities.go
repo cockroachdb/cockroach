@@ -54,6 +54,10 @@ const (
 	// cluster.
 	CanAdminUnsplit // can_admin_unsplit
 
+	// CanUseNodelocalStorage allows the tenant to access the
+	// nodelocal storage service on the KV nodes.
+	CanUseNodelocalStorage // can_use_nodelocal_storage
+
 	// CanViewNodeInfo describes the ability of a tenant to read the
 	// metadata for KV nodes. These operations need a capability because
 	// the KV node record contains sensitive operational data which we
@@ -112,6 +116,7 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	CanAdminScatter:        boolCapability(CanAdminScatter),
 	CanAdminSplit:          boolCapability(CanAdminSplit),
 	CanAdminUnsplit:        boolCapability(CanAdminUnsplit),
+	CanUseNodelocalStorage: boolCapability(CanUseNodelocalStorage),
 	CanViewNodeInfo:        boolCapability(CanViewNodeInfo),
 	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
 	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),

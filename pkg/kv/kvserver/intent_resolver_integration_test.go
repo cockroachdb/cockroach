@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -466,6 +467,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 					pusherProto := roachpb.MakeTransaction(
 						"pusher",
 						nil, // baseKey
+						isolation.Serializable,
 						roachpb.MaxUserPriority,
 						now.ToTimestamp(),
 						srv.Clock().MaxOffset().Nanoseconds(),

@@ -26,6 +26,7 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/keysbase",
         "//pkg/kv/kvserver/allocator/load",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/util",

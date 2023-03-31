@@ -84,6 +84,10 @@ message TenantCapabilities {
   // ExemptFromRateLimiting, if set to true, exempts the tenant from the KV-side tenant
   // rate limiter.
   bool exempt_from_rate_limiting = 8;
+
+  // CanUseNodelocalStorage if set to true, grants the tenant the ability
+  // to use nodelocal storage  on any KV node.
+  bool can_use_nodelocal_storage = 9;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

@@ -27,11 +27,11 @@ INSERT INTO foo VALUES (3,'z');
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test-root/';
+BACKUP INTO 'nodelocal://1/test-root/';
 ----
 
 exec-sql
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' with new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
 ----
 
 query-sql
@@ -65,11 +65,11 @@ INSERT INTO baz VALUES (33,'zz');
 ----
 
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://0/test-root/';
+BACKUP INTO LATEST IN 'nodelocal://1/test-root/';
 ----
 
 exec-sql
-RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' with new_db_name='orig1';
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
 ----
 
 query-sql

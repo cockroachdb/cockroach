@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -889,6 +890,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			origTxnProto := roachpb.MakeTransaction(
 				"test txn",
 				key,
+				isolation.Serializable,
 				roachpb.UserPriority(0),
 				now.ToTimestamp(),
 				clock.MaxOffset().Nanoseconds(),

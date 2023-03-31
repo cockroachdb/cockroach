@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -136,7 +138,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	left, middle, right := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction("test", key, 0, ts, 0, int32(s.SQLInstanceID()))
+		txn := roachpb.MakeTransaction("test", key, 0, 0, ts, 0, int32(s.SQLInstanceID()))
 		return &txn
 	}
 
@@ -455,6 +457,7 @@ func TestQueryLocksAcrossRanges(t *testing.T) {
 	txn3Proto := roachpb.MakeTransaction(
 		"waiter",
 		nil, // baseKey
+		isolation.Serializable,
 		roachpb.NormalUserPriority,
 		s.Clock().NowAsClockTimestamp().ToTimestamp(),
 		s.Clock().MaxOffset().Nanoseconds(),
@@ -629,7 +632,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Increments are a good way of testing idempotency. Up here, we
 	// address them to the original range, then later to the one that
 	// contains the key.
-	txn := roachpb.MakeTransaction("test", []byte("c"), 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", []byte("c"), isolation.Serializable, 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()))
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := txn
 	lTxn.Sequence++
@@ -2599,6 +2602,7 @@ func TestUnsplittableRange(t *testing.T) {
 				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipZoneConfigBootstrap: true},
+			SQLStatsKnobs: &sqlstats.TestingKnobs{SkipZoneConfigBootstrap: true},
 		},
 	})
 	s := serv.(*server.TestServer)
@@ -3214,7 +3218,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn := roachpb.MakeTransaction("test", key2, 1,
+	txn := roachpb.MakeTransaction("test", key2, isolation.Serializable, 1,
 		store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds(),
 		int32(s.SQLInstanceID()))
 	// Officially begin the transaction. If not for this, the intent resolution

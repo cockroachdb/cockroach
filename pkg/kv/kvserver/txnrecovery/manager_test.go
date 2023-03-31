@@ -40,7 +40,7 @@ func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 func makeStagingTransaction(clock *hlc.Clock) roachpb.Transaction {
 	now := clock.Now()
 	offset := clock.MaxOffset().Nanoseconds()
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, now, offset, 0)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, now, offset, 0)
 	txn.Status = roachpb.STAGING
 	return txn
 }

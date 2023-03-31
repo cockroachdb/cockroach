@@ -9,7 +9,7 @@ INSERT INTO d.t VALUES (1), (2), (3);
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 # Restores should succeed as a non-root user with admin role.
@@ -23,7 +23,7 @@ DROP DATABASE d;
 ----
 
 exec-sql user=testuser
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/test/';
 ----
 
 # Start a new cluster with the same IO dir.
@@ -36,12 +36,12 @@ CREATE USER testuser
 
 # Restore into the new cluster.
 exec-sql cluster=s2 user=testuser
-RESTORE FROM LATEST IN 'nodelocal://0/test/'
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
 ----
 pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE privilege on global 
 
 exec-sql cluster=s2 user=testuser
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/test/'
 ----
 pq: only users with the CREATEDB privilege can restore databases
 HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
@@ -51,7 +51,7 @@ CREATE DATABASE d
 ----
 
 exec-sql cluster=s2 user=testuser
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/test/'
 ----
 pq: user testuser does not have CREATE privilege on database d
 HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database d.
@@ -61,7 +61,7 @@ GRANT CREATE ON DATABASE d TO testuser
 ----
 
 exec-sql cluster=s2 user=testuser
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/test/'
 ----
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases d
 
@@ -81,7 +81,7 @@ ALTER USER testuser CREATEDB
 ----
 
 exec-sql cluster=s2 user=testuser
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/test/'
 ----
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
@@ -101,6 +101,6 @@ CREATE USER testuser
 ----
 
 exec-sql cluster=s3 user=testuser
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/test/'
 ----
 pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI

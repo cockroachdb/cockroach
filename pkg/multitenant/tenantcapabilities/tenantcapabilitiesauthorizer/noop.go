@@ -51,6 +51,13 @@ func (n *NoopAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roach
 	return nil
 }
 
+// HasNodelocalStorageCapability implements the tenantcapabilities.Authorizer interface
+func (n *NoopAuthorizer) HasNodelocalStorageCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return nil
+}
+
 // IsExemptFromRateLimiting implements the tenantcapabilities.Authorizer interface
 func (n *NoopAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
 	return false

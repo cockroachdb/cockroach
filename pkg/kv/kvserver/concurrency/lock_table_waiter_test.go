@@ -133,7 +133,7 @@ func setupLockTableWaiterTest() (
 }
 
 func makeTxnProto(name string) roachpb.Transaction {
-	return roachpb.MakeTransaction(name, []byte("key"), 0, hlc.Timestamp{WallTime: 10}, 0, 6)
+	return roachpb.MakeTransaction(name, []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6)
 }
 
 // TestLockTableWaiterWithTxn tests the lockTableWaiter's behavior under

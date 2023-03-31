@@ -381,11 +381,11 @@ INSERT INTO t7 VALUES (1),(2),(3);
 ----
 
 exec
-EXPORT INTO CSV 'nodelocal://0/t7' FROM TABLE t7;
+EXPORT INTO CSV 'nodelocal://1/t7' FROM TABLE t7;
 ----
 
 feature-usage
-IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
+IMPORT INTO t7 CSV DATA ('nodelocal://1/t7/export*.csv')
 ----
 sql.multiregion.import
 

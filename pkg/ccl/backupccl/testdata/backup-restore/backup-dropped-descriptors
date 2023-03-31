@@ -35,18 +35,18 @@ SELECT orig->'database'->'name', orig->'database'->'state' FROM tbls WHERE id = 
 # A database backup should fail since we are explicitly targeting a dropped
 # object.
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/dropped-database';
+BACKUP DATABASE d INTO 'nodelocal://1/dropped-database';
 ----
 pq: failed to resolve targets specified in the BACKUP stmt: database "d" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
 
 # A cluster backup should succeed but should ignore the dropped database
 # and table descriptors.
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/dropped-database';
+BACKUP INTO 'nodelocal://1/cluster/dropped-database';
 ----
 
 query-sql
-SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-database'] WHERE object_name = 'd' OR object_name = 'foo';
+SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://1/cluster/dropped-database'] WHERE object_name = 'd' OR object_name = 'foo';
 ----
 0
 
@@ -59,20 +59,20 @@ CREATE TABLE d.bar (id INT);
 # A database backup should succeed since we have a public database descriptor that matches the
 # target.
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/dropped-database';
+BACKUP DATABASE d INTO 'nodelocal://1/dropped-database';
 ----
 
 # A cluster backup should succeed and include the public database descriptor and
 # its table.
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/dropped-database';
+BACKUP INTO 'nodelocal://1/cluster/dropped-database';
 ----
 
 # Restore from the database backup to ensure it is valid.
 # Sanity check that we did not backup the table 'foo' that belonged to the
 # dropped database 'd'.
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/dropped-database' WITH new_db_name = 'd1';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/dropped-database' WITH new_db_name = 'd1';
 ----
 
 exec-sql
@@ -88,7 +88,7 @@ public bar
 # Sanity check that we did not backup the table 'foo' that belonged to the
 # dropped database 'd'.
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/dropped-database' WITH new_db_name = 'd2';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster/dropped-database' WITH new_db_name = 'd2';
 ----
 
 exec-sql
@@ -165,11 +165,11 @@ SELECT orig->'type'->'name', orig->'type'->'state' FROM tbls WHERE id = 110 OR i
 # A database backup should succeed but should not include the dropped schema,
 # type, and table.
 exec-sql
-BACKUP DATABASE d2 INTO 'nodelocal://0/dropped-schema-in-database';
+BACKUP DATABASE d2 INTO 'nodelocal://1/dropped-schema-in-database';
 ----
 
 query-sql
-SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/dropped-schema-in-database'] WHERE
+SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://1/dropped-schema-in-database'] WHERE
 object_name = 's' OR object_name = 'typ';
 ----
 0
@@ -178,18 +178,18 @@ object_name = 's' OR object_name = 'typ';
 # A cluster backup should succeed but should not include the dropped schema,
 # type, and table.
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/dropped-schema-in-database';
+BACKUP INTO 'nodelocal://1/cluster/dropped-schema-in-database';
 ----
 
 query-sql
-SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database']
+SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://1/cluster/dropped-schema-in-database']
 WHERE object_name = 's' OR object_name = 'typ';
 ----
 0
 
 # Restore the backups to check they are valid.
 exec-sql
-RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/dropped-schema-in-database' WITH new_db_name = 'd3';
+RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://1/dropped-schema-in-database' WITH new_db_name = 'd3';
 ----
 
 exec-sql
@@ -213,7 +213,7 @@ public t2
 
 
 exec-sql
-RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
+RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://1/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
 ----
 
 exec-sql

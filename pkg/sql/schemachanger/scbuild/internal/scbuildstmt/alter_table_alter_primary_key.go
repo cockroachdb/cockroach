@@ -929,6 +929,9 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 			if !mustRetrieveIndexElement(b, tableID, candidate.IndexID).IsUnique {
 				return
 			}
+			if isIndexPartial(b, tableID, candidate.IndexID) {
+				return
+			}
 			if !keyColumnIDsAndDirsMatch(b, tableID, oldPrimaryIndexID,
 				candidate.IndexID, false /* excludeShardedCol */) {
 				return
@@ -954,6 +957,27 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 
 	// In all other cases, we need to create unique indexes just to be sure.
 	return true
+}
+
+func isIndexPartial(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (ret bool) {
+	scpb.ForEachSecondaryIndexPartial(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndexPartial,
+	) {
+		if e.IndexID == indexID {
+			ret = true
+		}
+	})
+	if ret {
+		return ret
+	}
+	scpb.ForEachSecondaryIndex(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex,
+	) {
+		if e.IndexID == indexID && e.EmbeddedExpr != nil {
+			ret = true
+		}
+	})
+	return ret
 }
 
 // getPrimaryIndexDefaultRowIDColumn checks whether the primary key is on the

@@ -1881,3 +1881,26 @@ t_96730  CREATE TABLE public.t_96730 (
            CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
            UNIQUE INDEX t_96730_i_key (i ASC)
          )
+
+# If we had a partial unique index on the old primary key columns, and after a
+# ALTER PRIMARY KEY, we will create a unique secondary index on the old primary
+# key columns. This subtest ensures that such a partial unique index is NOT a
+# good candidate and a new, non-partial, unique secondary will be created.
+subtest 99303
+
+statement ok
+CREATE TABLE t_99303 (i INT NOT NULL PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX (i) WHERE (i > 0), FAMILY "primary" (i, j));
+
+statement ok
+ALTER TABLE t_99303 ALTER PRIMARY KEY USING COLUMNS (j);
+
+query TT
+SHOW CREATE t_99303
+----
+t_99303  CREATE TABLE public.t_99303 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
+           UNIQUE INDEX t_99303_i_key1 (i ASC),
+           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8
+         )

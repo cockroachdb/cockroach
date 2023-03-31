@@ -54,7 +54,7 @@ SELECT count(1) FROM [ SHOW STATISTICS FOR TABLE tab WITH MERGE ] WHERE statisti
 1
 
 exec-sql
-BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
 ----
 
 query-sql
@@ -64,8 +64,8 @@ SELECT
             'cockroach.ccl.backupccl.StatsTable',
             crdb_internal.read_file(
                 concat(
-                    'nodelocal://0/test/',
-                    (SELECT PATH FROM [SHOW BACKUPS IN 'nodelocal://0/test/']),
+                    'nodelocal://1/test/',
+                    (SELECT PATH FROM [SHOW BACKUPS IN 'nodelocal://1/test/']),
                     '/BACKUP-STATISTICS'
                 )
             )

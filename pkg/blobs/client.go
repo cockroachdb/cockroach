@@ -178,23 +178,36 @@ func (c *localClient) Stat(ctx context.Context, file string) (*blobspb.BlobStat,
 }
 
 // BlobClientFactory creates a blob client based on the nodeID we are dialing.
-type BlobClientFactory func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error)
+type BlobClientFactory func(ctx context.Context, dialTarget roachpb.NodeID) (BlobClient, error)
 
-// NewBlobClientFactory returns a BlobClientFactory
+// NewBlobClientFactory returns a BlobClientFactory.
+//
+// externalIODIr is used to construct a local client when the local
+// node is being targetted and the fast path is allowed.
+//
+// allowLocalFastpath indicates whether the client should create a
+// local client (which doesn't go through the network). The fast path
+// skips client capability checking so should be used with care.
 func NewBlobClientFactory(
-	localNodeIDContainer *base.NodeIDContainer, dialer *nodedialer.Dialer, externalIODir string,
+	localNodeIDContainer *base.SQLIDContainer,
+	dialer *nodedialer.Dialer,
+	externalIODir string,
+	allowLocalFastpath bool,
 ) BlobClientFactory {
-	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
-		localNodeID := localNodeIDContainer.Get()
-		if dialing == 0 {
-			dialing = localNodeID
+	return func(ctx context.Context, dialTarget roachpb.NodeID) (BlobClient, error) {
+		localNodeID, ok := localNodeIDContainer.OptionalNodeID()
+		if ok && dialTarget == 0 {
+			dialTarget = localNodeID
+		} else if dialTarget == 0 {
+			return nil, errors.New("node ID 0 not supported")
 		}
-		if localNodeID == dialing {
+
+		if localNodeID == dialTarget && allowLocalFastpath {
 			return NewLocalClient(externalIODir)
 		}
-		conn, err := dialer.Dial(ctx, dialing, rpc.DefaultClass)
+		conn, err := dialer.Dial(ctx, dialTarget, rpc.DefaultClass)
 		if err != nil {
-			return nil, errors.Wrapf(err, "connecting to node %d", dialing)
+			return nil, errors.Wrapf(err, "connecting to node %d", dialTarget)
 		}
 		return newRemoteClient(blobspb.NewBlobClient(conn)), nil
 	}

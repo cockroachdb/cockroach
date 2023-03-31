@@ -58,6 +58,11 @@ type Authorizer interface {
 	// is not allowed to access cluster-level node metadata and liveness.
 	HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error
 
+	// HasNodelocalStorageCapability returns an error if a tenant,
+	// referenced by its ID, is not allowed to use the nodelocal
+	// storage service.
+	HasNodelocalStorageCapability(ctx context.Context, tenID roachpb.TenantID) error
+
 	// HasTSDBQueryCapability returns an error if a tenant, referenced by its ID,
 	// is not allowed to query the TSDB for metrics.
 	HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error
