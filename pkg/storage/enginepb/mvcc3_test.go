@@ -14,12 +14,18 @@ package enginepb
 import (
 	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTxnMetaSizeOf(t *testing.T) {
+	var tm TxnMeta
+	require.Equal(t, 96, int(unsafe.Sizeof(tm)))
+}
 
 func populatedMVCCValueHeader() MVCCValueHeader {
 	allFieldsSet := MVCCValueHeader{

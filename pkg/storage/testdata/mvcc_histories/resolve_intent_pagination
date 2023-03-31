@@ -12,18 +12,18 @@ with t=A
   put k=f v=f
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
-meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 # Resolve none since targetBytes < 0.
@@ -32,17 +32,17 @@ resolve_intent t=A k=c status=COMMITTED targetBytes=-1 batched
 ----
 resolve_intent: batch after write is empty
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
-meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 # Resolve intent "b".
@@ -51,16 +51,16 @@ resolve_intent t=A k=b status=COMMITTED targetBytes=1 batched
 ----
 resolve_intent: batch after write is non-empty
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 # Resolve none since maxKeys < 0.
@@ -69,16 +69,16 @@ resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=-1 batched
 ----
 resolve_intent_range: batch after write is empty
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
-meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 # Resolve 2 intents "a" and "c".
@@ -90,11 +90,11 @@ resolve_intent_range: batch after write is non-empty
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 # Resolve none since targetBytes < 0.
@@ -106,11 +106,11 @@ resolve_intent_range: batch after write is empty
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/b
 data: "c"/1.000000000,0 -> /BYTES/c
-meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
-meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f
 
 run ok
@@ -123,5 +123,5 @@ data: "b"/1.000000000,0 -> /BYTES/b
 data: "c"/1.000000000,0 -> /BYTES/c
 data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
 data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/1.000000000,0 -> /BYTES/f

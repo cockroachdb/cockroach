@@ -435,6 +435,16 @@ func StartTenant(
 	return tenant, goDB
 }
 
+func StartSharedProcessTenant(
+	t testing.TB, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
+) (TestTenantInterface, *gosql.DB) {
+	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	return tenant, goDB
+}
+
 // TestTenantID returns a roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.

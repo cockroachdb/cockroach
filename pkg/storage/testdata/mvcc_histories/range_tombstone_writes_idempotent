@@ -33,7 +33,7 @@ del: "a": found key false
 del: "f": found key false
 del: "n": found key false
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
 rangekey: {a-d}/[3.000000000,0=/<empty>]
 rangekey: {k-m}/[4.000000000,0=/<empty>]
 rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
@@ -43,7 +43,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -64,7 +64,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -85,7 +85,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -106,7 +106,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -128,7 +128,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -149,7 +149,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -171,7 +171,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -204,7 +204,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -233,7 +233,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -259,7 +259,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -289,7 +289,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
@@ -320,7 +320,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "e"/4.000000000,0 -> /BYTES/e4
 data: "f"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
-meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
