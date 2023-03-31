@@ -65,7 +65,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/worker",
 		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: sp.hardware.makeClusterSpecs(r),
+		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 		Timeout: sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -85,7 +85,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/coordinator",
 		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: sp.hardware.makeClusterSpecs(r),
+		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 		Timeout: sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
@@ -128,7 +128,7 @@ func registerRestore(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    withPauseSpecs.testName,
 		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r),
+		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
 		Timeout: withPauseSpecs.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
@@ -353,7 +353,7 @@ func registerRestore(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    sp.testName,
 			Owner:   registry.OwnerDisasterRecovery,
-			Cluster: sp.hardware.makeClusterSpecs(r),
+			Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 			Timeout: sp.timeout,
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
@@ -419,7 +419,7 @@ type hardwareSpecs struct {
 	mem spec.MemPerCPU
 }
 
-func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
+func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string) spec.ClusterSpec {
 	clusterOpts := make([]spec.Option, 0)
 	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
 	if hw.volumeSize != 0 {
@@ -430,7 +430,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	}
 	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
 
-	if s.Cloud == "aws" && s.VolumeSize != 0 {
+	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
