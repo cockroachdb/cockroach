@@ -7424,6 +7424,10 @@ func populateTxnExecutionInsights(
 	// We should truncate the query if it surpasses some absurd limit.
 	queryMax := 5000
 	for _, insight := range response.Insights {
+		if insight.Transaction == nil {
+			continue
+		}
+
 		var errorCode string
 		var queryBuilder strings.Builder
 		for i := range insight.Statements {
@@ -7600,6 +7604,12 @@ func populateStmtInsights(
 		return err
 	}
 	for _, insight := range response.Insights {
+		// We don't expect the transaction to be null here, but we should provide
+		// this check to ensure we only show valid data.
+		if insight.Transaction == nil {
+			continue
+		}
+
 		for _, s := range insight.Statements {
 
 			causes := tree.NewDArray(types.String)
