@@ -3028,8 +3028,7 @@ func (t *logicTest) processSubtest(
 				}
 				delete(m, nodeIdx)
 			}
-			db := t.getOrOpenClient(t.user, nodeIdx)
-			t.db = db
+			t.setUser(t.user, nodeIdx)
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
