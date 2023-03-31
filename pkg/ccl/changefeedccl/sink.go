@@ -670,6 +670,4 @@ type SinkWithEncoder interface {
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
-
-	Flush(ctx context.Context) error
 }

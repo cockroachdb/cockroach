@@ -12,8 +12,10 @@ import (
 	"bytes"
 	"context"
 
+	_ "github.com/apache/arrow/go/v11/parquet"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -22,6 +24,15 @@ import (
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/fraugster/parquet-go/parquetschema"
+)
+
+// EnableNewParquetExporter enables changefeeds to use apache arrow for
+// encoding parquet files.
+var EnableNewParquetExporter = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.parquet_exporter_v2.enabled",
+	"polling interval for the table descriptors",
+	true,
 )
 
 // This variable controls whether we add primary keys of the table to the
@@ -46,7 +57,7 @@ const (
 // parquet encoder should have access to the buffer object inside
 // cloudStorageSinkFile file. This means that the parquet writer has to be
 // embedded in the cloudStorageSinkFile file. If we wanted to maintain the
-// existing separation between encoder and the sync, then we would need to
+// existing separation between encoder and the sink, then we would need to
 // figure out a way to get the embedded parquet writer in the
 // cloudStorageSinkFile and pass it to the encode function in the encoder.
 // Instead of this it logically made sense to have a single sink for parquet
@@ -143,6 +154,29 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	}
 	file.alloc.Merge(&alloc)
 
+	// TODO what happens when you change this in the middle of operation.
+	if EnableNewParquetExporter.Get(&s.settings.SV) {
+		if file.parquetCodec2 == nil {
+			file.parquetCodec2, err = NewCDCParquetWriterFromRow(updatedRow, &file.buf)
+			if err != nil {
+				return err
+			}
+		}
+
+		if err = file.parquetCodec2.AddData(updatedRow, prevRow); err != nil {
+			return err
+		}
+		file.numMessages++
+
+		if file.parquetCodec2.CurrentSize() > s.targetMaxFileSize {
+			s.metrics.recordSizeBasedFlush()
+			if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	if file.parquetCodec == nil {
 		var err error
 		file.parquetCodec, err = makeParquetWriterWrapper(ctx, updatedRow, &file.buf, parquetSink.compression)
@@ -189,6 +223,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	if err = file.parquetCodec.parquetWriter.AddData(parquetRow); err != nil {
 		return err
 	}
+	file.numMessages++
 
 	if file.parquetCodec.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
@@ -237,10 +272,10 @@ func makeParquetWriterWrapper(
 	)
 
 	pqww := &parquetFileWriter{
-		pqw,
-		schema,
-		parquetColumns,
-		len(parquetColumns),
+		parquetWriter:  pqw,
+		schema:         schema,
+		parquetColumns: parquetColumns,
+		numCols:        len(parquetColumns),
 	}
 	return pqww, nil
 }
