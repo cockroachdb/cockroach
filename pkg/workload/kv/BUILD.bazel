@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/types",
         "//pkg/util/bufalloc",
+        "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",

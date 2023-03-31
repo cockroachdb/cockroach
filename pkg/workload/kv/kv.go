@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hash"
 	"math"
+	"math/big"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -39,20 +41,20 @@ import (
 
 const (
 	kvSchema = `(
-		k BIGINT NOT NULL PRIMARY KEY,
+		k %s NOT NULL PRIMARY KEY,
 		v BYTES NOT NULL
 	)`
 	kvSchemaWithIndex = `(
-		k BIGINT NOT NULL PRIMARY KEY,
+		k %s NOT NULL PRIMARY KEY,
 		v BYTES NOT NULL,
 		INDEX (v)
 	)`
 	shardedKvSchema = `(
-		k BIGINT NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d),
+		k %s NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d),
 		v BYTES NOT NULL
 	)`
 	shardedKvSchemaWithIndex = `(
-		k BIGINT NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d,
+		k %s NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d),
 		v BYTES NOT NULL,
 		INDEX (v)
 	)`
@@ -90,6 +92,7 @@ type kv struct {
 	shards                               int
 	targetCompressionRatio               float64
 	enum                                 bool
+	keySize                              int
 	insertCount                          int
 }
 
@@ -104,9 +107,9 @@ var kvMeta = workload.Meta{
 	By default, keys are picked uniformly at random across the cluster.
 	--concurrency workers alternate between doing selects and upserts (according
 	to a --read-percent ratio). Each select/upsert reads/writes a batch of --batch
-	rows. The write keys are randomly generated in a deterministic fashion (or
-	sequentially if --sequential is specified). Reads select a random batch of ids
-	out of the ones previously written.
+	rows. The write keys are randomly generated in a deterministic fashion
+	(alternatively it could changed to use --sequential or --zipfian distribution).
+	Reads select a random batch of ids out of the ones previously written.
 	--write-seq can be used to incorporate data produced by a previous run into
 	the current run.
 	`,
@@ -167,6 +170,8 @@ var kvMeta = workload.Meta{
 				`uniformly over the key range.`)
 		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout.`)
 		RandomSeed.AddFlag(&g.flags)
+		g.flags.IntVar(&g.keySize, `key-size`, 0,
+			`Use string key of appropriate size instead of int`)
 		g.flags.DurationVar(&g.sfuDelay, `sfu-wait-delay`, 10*time.Millisecond,
 			`Delay before sfu write transaction commits or aborts`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -225,6 +230,13 @@ func (w *kv) validateConfig() (err error) {
 	if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
 		return errors.New("'target-compression-ratio' must be a number >= 1.0")
 	}
+	if w.keySize != 0 && w.keySize < minStringKeyDigits {
+		return errors.Errorf("key size must be >= %d to fit integer part, requested %d",
+			minStringKeyDigits, w.keySize)
+	}
+	if w.keySize > 0 && w.insertCount > 0 {
+		return errors.New("string keys used by --key-size doesn't support --insert-count")
+	}
 	if w.writeSeq != "" {
 		first := w.writeSeq[0]
 		if len(w.writeSeq) < 2 || (first != 'R' && first != 'S' && first != 'Z') {
@@ -250,7 +262,7 @@ func (w *kv) validateConfig() (err error) {
 	}
 	// We create generator and discard it to have a single piece of code that
 	// handles generator type which affects target key range.
-	_, _, kr := w.createKeyGenerator()
+	_, _, _, kr := w.createKeyGenerator()
 	if kr.totalKeys() < uint64(w.insertCount) {
 		return errors.Errorf(
 			"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
@@ -261,7 +273,7 @@ func (w *kv) validateConfig() (err error) {
 
 // Note that sequence is only exposed for testing purposes and is used by
 // returned keyGenerators.
-func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyRange) {
+func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransformer, keyRange) {
 	writeSeq := 0
 	if w.writeSeq != "" {
 		var err error
@@ -303,10 +315,17 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyRange) {
 		}
 	}
 
-	return gen, seq, kr
+	if w.keySize == 0 {
+		return gen, seq, intKeyTransformer{}, kr
+	}
+
+	return gen, seq, stringKeyTransformer{
+		startOffset: kr.min,
+		fillerSize:  w.keySize - minStringKeyDigits,
+	}, kr
 }
 
-func splitFinder(i, splits int, r keyRange) int {
+func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
 	if i >= splits {
 		panic(fmt.Sprintf("programming error: split index (%d) cannot be less than 0, "+
 			"greater than or equal to the total splits (%d)",
@@ -316,7 +335,7 @@ func splitFinder(i, splits int, r keyRange) int {
 
 	stride := r.max/int64(splits+1) - r.min/int64(splits+1)
 	splitPoint := r.min + int64(i+1)*stride
-	return int(splitPoint)
+	return k.getKey(splitPoint)
 }
 
 func (w *kv) insertCountKey(idx, count int64, kr keyRange) int64 {
@@ -335,13 +354,13 @@ func (w *kv) Tables() []workload.Table {
 	// Tables should only run on initialized workload, safe to call create without
 	// having a panic. We don't need to defer this to the actual table callbacks
 	// like Splits or InitialRows.
-	_, _, kr := w.createKeyGenerator()
+	_, _, kt, kr := w.createKeyGenerator()
 
 	table := workload.Table{Name: `kv`}
 	table.Splits = workload.Tuples(
 		w.splits,
 		func(splitIdx int) []interface{} {
-			return []interface{}{splitFinder(splitIdx, w.splits, kr)}
+			return []interface{}{splitFinder(splitIdx, w.splits, kr, kt)}
 		},
 	)
 
@@ -350,16 +369,18 @@ func (w *kv) Tables() []workload.Table {
 		if w.secondaryIndex {
 			schema = shardedKvSchemaWithIndex
 		}
-		table.Schema = fmt.Sprintf(schema, w.shards)
+		table.Schema = fmt.Sprintf(schema, kt.keySQLType(), w.shards)
 	} else {
+		schema := kvSchema
 		if w.secondaryIndex {
-			table.Schema = kvSchemaWithIndex
-		} else {
-			table.Schema = kvSchema
+			schema = kvSchemaWithIndex
 		}
+		table.Schema = fmt.Sprintf(schema, kt.keySQLType())
 	}
 
 	if w.insertCount > 0 {
+		// TODO: make this function parametric to allow different key types.
+		// Conside making a fillColumn method on key type interface for that.
 		const batchSize = 1000
 		table.InitialRows = workload.BatchedTuples{
 			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
@@ -486,7 +507,7 @@ func (w *kv) Ops(
 	buf.WriteString(`)`)
 	delStmtStr := buf.String()
 
-	gen, _, _ := w.createKeyGenerator()
+	gen, _, kt, _ := w.createKeyGenerator()
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	numEmptyResults := new(int64)
 	for i := 0; i < w.connFlags.Concurrency; i++ {
@@ -507,6 +528,7 @@ func (w *kv) Ops(
 		}
 		op.mcp = mcp
 		op.g = gen()
+		op.t = kt
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
 	}
@@ -524,6 +546,7 @@ type kvOp struct {
 	sfuStmt         workload.StmtHandle
 	delStmt         workload.StmtHandle
 	g               keyGenerator
+	t               keyTransformer
 	numEmptyResults *int64 // accessed atomically
 }
 
@@ -538,7 +561,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.g.readKey()
+			args[i] = o.t.getKey(o.g.readKey())
 		}
 		start := timeutil.Now()
 		rows, err := o.readStmt.Query(ctx, args...)
@@ -595,7 +618,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	}
 	for i := 0; i < o.config.batchSize; i++ {
 		j := i * argCount
-		writeArgs[j+0] = o.g.writeKey()
+		writeArgs[j+0] = o.t.getKey(o.g.writeKey())
 		if sfuArgs != nil {
 			sfuArgs[i] = writeArgs[j]
 		}
@@ -680,6 +703,51 @@ func (s *sequence) write() int64 {
 // require that the key is present.
 func (s *sequence) read() int64 {
 	return atomic.LoadInt64(&s.val) % s.max
+}
+
+// Converts int64 based keys into database keys. Workload uses int64 based
+// keyspace to allow predictable sharding and splitting. Transformer allows
+// mapping integer key into string of arbitrary size for testing keys size.
+type keyTransformer interface {
+	// getKey transforms int keys into table keys for read and write operations.
+	getKey(int64) interface{}
+	// keySQLType returns an SQL type used by create table for key column.
+	keySQLType() string
+}
+
+// intKeyTransformer is a noop transformer that passes int keys as is.
+type intKeyTransformer struct{}
+
+func (e intKeyTransformer) getKey(key int64) interface{} {
+	return key
+}
+
+func (e intKeyTransformer) keySQLType() string {
+	return "BIGINT"
+}
+
+const minStringKeyDigits = 20
+
+// stringKeyTransformer turns int into a zero padded string representation (for
+// 64 bit unsigned integers) and appends a random characters up to desired
+// length. Note that filler is number of extra bytes on top of 20 digits and
+// the the key size parameter as passed to workload.
+type stringKeyTransformer struct {
+	fillerSize  int
+	startOffset int64
+}
+
+func (s stringKeyTransformer) getKey(i int64) interface{} {
+	filler := randutil.RandString(randutil.NewTestRandWithSeed(i), s.fillerSize, randutil.PrintableKeyAlphabet)
+	var bigKey big.Int
+	bigKey.Sub(big.NewInt(i), big.NewInt(s.startOffset))
+	strKey := bigKey.String()
+	prefix := strings.Repeat("0", minStringKeyDigits-len(strKey))
+	return fmt.Sprintf("%s%s%s", prefix, strKey, filler)
+}
+
+func (s stringKeyTransformer) keySQLType() string {
+	return "STRING"
 }
 
 // keyGenerator generates read and write keys. Read keys may not yet exist and
@@ -808,7 +876,6 @@ func (g *zipfGenerator) rand() *rand.Rand {
 }
 
 func (g *zipfGenerator) state() string {
-	// TODO(oleg): add zipfian parsing
 	return fmt.Sprintf("Z%d", g.seq.read())
 }
 
