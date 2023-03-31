@@ -121,6 +121,69 @@ s1               {a}           256        4               0           true
 let $json_stats
 SHOW STATISTICS USING JSON FOR TABLE data
 
+# Verify that we can control the number of samples and buckets collected.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_buckets.count = 3
+
+statement ok
+CREATE STATISTICS s2 ON a FROM data
+
+let $hist_id_2
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's2'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_2
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    64
+3            64          1                    64
+4            0           0                    64
+
+# We can verify the number of samples collected based on the number of
+# buckets produced.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_buckets.count = 20000
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 20000
+
+statement ok
+CREATE TABLE big (i INT PRIMARY KEY);
+INSERT INTO big SELECT generate_series(1, 20000)
+
+statement ok
+CREATE STATISTICS s20000 FROM big
+
+let $hist_id_20000
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's20000'
+
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_20000]
+----
+20000
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 500
+
+statement ok
+CREATE STATISTICS s500 FROM big
+
+let $hist_id_500
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's500'
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_500]
+----
+500
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_buckets.count
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
+
 # ANALYZE is syntactic sugar for CREATE STATISTICS with default columns.
 statement ok
 ANALYZE data

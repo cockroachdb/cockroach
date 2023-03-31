@@ -261,7 +261,9 @@ sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cl
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour
 sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables
+sql.stats.histogram_buckets.count	integer	200	maximum number of histogram buckets to build during table statistics collection
 sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode
+sql.stats.histogram_samples.count	integer	10000	number of rows sampled for histogram construction during table statistics collection
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode
 sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables
