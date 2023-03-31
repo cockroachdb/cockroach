@@ -127,6 +127,12 @@ var (
 		Measurement: "Lease Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaseRequestLatency = metric.Metadata{
+		Name:        "leases.requests.latency",
+		Help:        "Lease request latency (all kinds and outcomes, coalesced)",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaLeaseTransferSuccessCount = metric.Metadata{
 		Name:        "leases.transfers.success",
 		Help:        "Number of successful lease transfers",
@@ -1797,6 +1803,7 @@ type StoreMetrics struct {
 	// lease).
 	LeaseRequestSuccessCount  *metric.Counter
 	LeaseRequestErrorCount    *metric.Counter
+	LeaseRequestLatency       metric.IHistogram
 	LeaseTransferSuccessCount *metric.Counter
 	LeaseTransferErrorCount   *metric.Counter
 	LeaseExpirationCount      *metric.Gauge
@@ -2355,8 +2362,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
 
 		// Lease request metrics.
-		LeaseRequestSuccessCount:  metric.NewCounter(metaLeaseRequestSuccessCount),
-		LeaseRequestErrorCount:    metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
+		LeaseRequestErrorCount:   metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseRequestLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaLeaseRequestLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.NetworkLatencyBuckets,
+		}),
 		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
 		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
 		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
