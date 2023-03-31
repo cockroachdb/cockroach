@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -242,6 +243,15 @@ type Refresher struct {
 
 	// numTablesEnsured is an internal counter for testing ensureAllTables.
 	numTablesEnsured int
+
+	// drainAutoStats is a channel that is closed when the server starts
+	// to shut down gracefully.
+	drainAutoStats chan struct{}
+	setDraining    sync.Once
+
+	// startedTasksWG is a sync group that tracks the auto-stats
+	// background tasks.
+	startedTasksWG sync.WaitGroup
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
@@ -284,6 +294,7 @@ func MakeRefresher(
 		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
 		mutationCounts:   make(map[descpb.ID]int64, 16),
 		settingOverrides: make(map[descpb.ID]catpb.AutoStatsSettings),
+		drainAutoStats:   make(chan struct{}),
 	}
 }
 
@@ -364,6 +375,23 @@ func (r *Refresher) getTableDescriptor(
 	return desc
 }
 
+// WaitForJobShutdown(ctx context.Context) {
+func (r *Refresher) WaitForAutoStatsShutdown(ctx context.Context) {
+	log.Infof(ctx, "starting to wait for auto-stats tasks to shut down")
+	defer log.Infof(ctx, "auto-stats tasks successfully shut down")
+	r.startedTasksWG.Wait()
+}
+
+// SetDraining informs the job system if the node is draining.
+//
+// NB: Check the implementation of drain before adding code that would
+// make this block.
+func (r *Refresher) SetDraining() {
+	r.setDraining.Do(func() {
+		close(r.drainAutoStats)
+	})
+}
+
 // Start starts the stats refresher thread, which polls for messages about
 // new SQL mutations and refreshes the table statistics with probability
 // proportional to the percentage of rows affected.
@@ -371,7 +399,10 @@ func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
 	bgCtx := r.AnnotateCtx(context.Background())
-	_ = stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
+	r.startedTasksWG.Add(1)
+	if err := stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
+		defer r.startedTasksWG.Done()
+
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime
@@ -416,8 +447,11 @@ func (r *Refresher) Start(
 					}
 				}
 
+				r.startedTasksWG.Add(1)
 				if err := stopper.RunAsyncTask(
 					ctx, "stats.Refresher: maybeRefreshStats", func(ctx context.Context) {
+						defer r.startedTasksWG.Done()
+
 						// Record the start time of processing this batch of tables.
 						start := timeutil.Now()
 
@@ -428,6 +462,8 @@ func (r *Refresher) Start(
 						select {
 						case <-timerAsOf.C:
 							break
+						case <-r.drainAutoStats:
+							return
 						case <-stopper.ShouldQuiesce():
 							return
 						}
@@ -470,19 +506,23 @@ func (r *Refresher) Start(
 									explicitSettings = &settings
 								}
 							}
-							r.maybeRefreshStats(ctx, tableID, explicitSettings, rowsAffected, r.asOfTime)
+							r.maybeRefreshStats(ctx, stopper, tableID, explicitSettings, rowsAffected, r.asOfTime)
 
 							select {
 							case <-stopper.ShouldQuiesce():
 								// Don't bother trying to refresh the remaining tables if we
 								// are shutting down.
 								return
+							case <-r.drainAutoStats:
+								// Ditto.
+								return
 							default:
 							}
 						}
 						timer.Reset(refreshInterval)
 					}); err != nil {
-					log.Errorf(ctx, "failed to refresh stats: %v", err)
+					r.startedTasksWG.Done()
+					log.Errorf(ctx, "failed to start async stats task: %v", err)
 				}
 				// This clears out any tables that may have been added to the
 				// mutationCounts map by ensureAllTables and any mutation counts that
@@ -503,12 +543,18 @@ func (r *Refresher) Start(
 			case clusterSettingOverride := <-r.settings:
 				r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
 
+			case <-r.drainAutoStats:
+				log.Infof(ctx, "draining auto stats refresher")
+				return
 			case <-stopper.ShouldQuiesce():
 				log.Info(ctx, "quiescing auto stats refresher")
 				return
 			}
 		}
-	})
+	}); err != nil {
+		r.startedTasksWG.Done()
+		log.Warningf(ctx, "refresher task failed to start: %v", err)
+	}
 	return nil
 }
 
@@ -676,6 +722,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 // for this table.
 func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
+	stopper *stop.Stopper,
 	tableID descpb.ID,
 	explicitSettings *catpb.AutoStatsSettings,
 	rowsAffected int64,
@@ -734,6 +781,7 @@ func (r *Refresher) maybeRefreshStats(
 		if errors.Is(err, ConcurrentCreateStatsError) {
 			// Another stats job was already running. Attempt to reschedule this
 			// refresh.
+			var newEvent mutation
 			if mustRefresh {
 				// For the cases where mustRefresh=true (stats don't yet exist or it
 				// has been 2x the average time since a refresh), we want to make sure
@@ -741,16 +789,29 @@ func (r *Refresher) maybeRefreshStats(
 				// cycle so that we have another chance to trigger a refresh. We pass
 				// rowsAffected=0 so that we don't force a refresh if another node has
 				// already done it.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
+				newEvent = mutation{tableID: tableID, rowsAffected: 0}
 			} else {
 				// If this refresh was caused by a "dice roll", we want to make sure
 				// that the refresh is rescheduled so that we adhere to the
 				// AutomaticStatisticsFractionStaleRows statistical ideal. We
 				// ensure that the refresh is triggered during the next cycle by
 				// passing a very large number for rowsAffected.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+				newEvent = mutation{tableID: tableID, rowsAffected: math.MaxInt32}
 			}
-			return
+			select {
+			case r.mutations <- newEvent:
+				return
+			case <-r.drainAutoStats:
+				// Shutting down due to a graceful drain.
+				// We don't want to force a write to the mutations here
+				// otherwise we could block the graceful shutdown.
+				err = errors.New("server is shutting down")
+			case <-stopper.ShouldQuiesce():
+				// Shutting down due to direct stopper Stop call.
+				// This is not strictly required for correctness but
+				// helps avoiding log spam.
+				err = errors.New("server is shutting down")
+			}
 		}
 
 		// Log other errors but don't automatically reschedule the refresh, since

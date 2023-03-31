@@ -358,6 +358,9 @@ func (s *drainServer) drainClients(
 	// Inform the job system that the node is draining.
 	s.sqlServer.jobRegistry.SetDraining()
 
+	// Inform the auto-stats tasks that the node is draining.
+	s.sqlServer.statsRefresher.SetDraining()
+
 	// Drain any remaining SQL connections.
 	// The queryWait duration is a timeout for waiting for SQL queries to finish.
 	// If the timeout is reached, any remaining connections
@@ -373,6 +376,10 @@ func (s *drainServer) drainClients(
 
 	// Flush in-memory SQL stats into the statement stats system table.
 	s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	// Inform the async tasks for table stats that the ode is draining
+	// and wait for task shutdown.
+	s.sqlServer.statsRefresher.WaitForAutoStatsShutdown(ctx)
 
 	// Inform the job system that the node is draining and wait for task
 	// shutdown.
