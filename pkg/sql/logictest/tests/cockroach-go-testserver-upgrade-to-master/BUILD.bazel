@@ -11,7 +11,7 @@ go_test(
         "//pkg/cmd/cockroach-short",  # keep
         "//pkg/sql/logictest:testdata",  # keep
     ],
-    shard_count = 6,
+    shard_count = 7,
     tags = [
         "cpu:2",
     ],

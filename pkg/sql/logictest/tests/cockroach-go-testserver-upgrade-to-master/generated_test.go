@@ -100,6 +100,13 @@ func TestLogic_mixed_version_new_system_privileges(
 	runLogicTest(t, "mixed_version_new_system_privileges")
 }
 
+func TestLogic_mixed_version_range_tombstones(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_range_tombstones")
+}
+
 func TestLogic_mixed_version_role_members_user_ids(
 	t *testing.T,
 ) {
