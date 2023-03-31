@@ -223,7 +223,10 @@ func (sr *schemaResolver) GetQualifiedTableNameByID(
 func (sr *schemaResolver) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := sr.descCollection.ByID(sr.txn).Get().Database(ctx, desc.GetParentID())
+	// When getting the fully qualified name allow use of leased descriptors,
+	// since these will not involve any round trip.
+	descGetter := sr.descCollection.ByIDWithLeased(sr.txn)
+	dbDesc, err := descGetter.Get().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +240,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 	// information from the namespace table.
 	var schemaName tree.Name
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := sr.descCollection.ByID(sr.txn).Get().Schema(ctx, schemaID)
+	scDesc, err := descGetter.Get().Schema(ctx, schemaID)
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
