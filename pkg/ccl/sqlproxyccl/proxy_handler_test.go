@@ -139,6 +139,14 @@ func TestProxyProtocol(t *testing.T) {
 
 	makeHttpReq := func(t *testing.T, client *http.Client, addr string, success bool) {
 		resp, err := client.Get(fmt.Sprintf("http://%s/_status/healthz/", addr))
+		if err != nil && !success {
+			// It appears that if we make a bad request to the server (e.g.
+			// sending a PROXY header when the server does not expect one),
+			// there's a possibility where the server returns a response that
+			// the client doesn't understand, which is reasonable. In that case,
+			// just assert that we have an error, and we're done here.
+			return
+		}
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		if success {
@@ -175,8 +183,8 @@ func TestProxyProtocol(t *testing.T) {
 		// Test HTTP. Should support with or without PROXY.
 		client := http.Client{Timeout: timeout}
 		makeHttpReq(t, &client, httpAddr, true)
-		client.Transport = &http.Transport{DialContext: proxyDialer}
-		makeHttpReq(t, &client, httpAddr, true)
+		proxyClient := http.Client{Transport: &http.Transport{DialContext: proxyDialer}}
+		makeHttpReq(t, &proxyClient, httpAddr, true)
 	})
 
 	t.Run("allow=false", func(t *testing.T) {
@@ -200,8 +208,8 @@ func TestProxyProtocol(t *testing.T) {
 		// Test HTTP.
 		client := http.Client{Timeout: timeout}
 		makeHttpReq(t, &client, httpAddr, true)
-		client.Transport = &http.Transport{DialContext: proxyDialer}
-		makeHttpReq(t, &client, httpAddr, false)
+		proxyClient := http.Client{Transport: &http.Transport{DialContext: proxyDialer}}
+		makeHttpReq(t, &proxyClient, httpAddr, false)
 	})
 }
 
