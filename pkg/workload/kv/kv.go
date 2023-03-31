@@ -60,6 +60,14 @@ const (
 
 var RandomSeed = workload.NewInt64RandomSeed()
 
+type keyRange struct {
+	min, max int64
+}
+
+func (r keyRange) totalKeys() uint64 {
+	return uint64(r.max - r.min)
+}
+
 type kv struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
@@ -184,43 +192,137 @@ CREATE TYPE enum_type AS ENUM ('v');
 ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 			return err
 		},
-		Validate: func() error {
-			if w.maxBlockSizeBytes < w.minBlockSizeBytes {
-				return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
-					w.maxBlockSizeBytes, w.minBlockSizeBytes)
-			}
-			if w.splits < 0 {
-				return errors.Errorf("Value of `--splits` (%d) must not be negative",
-					w.splits)
-			}
-			if w.cycleLength < 1 {
-				return errors.Errorf("Value of `--cycle-length` (%d) must be greater than 0",
-					w.cycleLength)
-			}
-			if w.cycleLength <= int64(w.splits) {
-				return errors.Errorf("Value of `--splits` (%d) must be less than the value of `--cycle-length` (%d)",
-					w.splits, w.cycleLength)
-			}
-			if w.sequential && w.zipfian {
-				return errors.New("'sequential' and 'zipfian' cannot both be enabled")
-			}
-			if w.shards > 0 && !(w.sequential || w.zipfian) {
-				return errors.New("'num-shards' only work with 'sequential' or 'zipfian' key distributions")
-			}
-			if w.readPercent+w.spanPercent+w.delPercent > 100 {
-				return errors.New("'read-percent', 'span-percent' and 'del-precent' combined exceed 100%")
-			}
-			if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
-				return errors.New("'target-compression-ratio' must be a number >= 1.0")
-			}
-			if rangeMin, rangeMax := w.keyRange(); rangeMax <= rangeMin+int64(w.insertCount) {
-				return errors.Errorf(
-					"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
-					w.insertCount, rangeMin, rangeMax)
-			}
-			return nil
-		},
+		Validate: w.validateConfig,
 	}
+}
+
+func (w *kv) validateConfig() (err error) {
+	if w.maxBlockSizeBytes < w.minBlockSizeBytes {
+		return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
+			w.maxBlockSizeBytes, w.minBlockSizeBytes)
+	}
+	if w.splits < 0 {
+		return errors.Errorf("Value of `--splits` (%d) must not be negative",
+			w.splits)
+	}
+	if w.cycleLength < 1 {
+		return errors.Errorf("Value of `--cycle-length` (%d) must be greater than 0",
+			w.cycleLength)
+	}
+	if w.sequential && w.cycleLength <= int64(w.splits) {
+		return errors.Errorf("Value of `--splits` (%d) must be less than the value of `--cycle-length` (%d) if --sequential is used",
+			w.splits, w.cycleLength)
+	}
+	if w.sequential && w.zipfian {
+		return errors.New("'sequential' and 'zipfian' cannot both be enabled")
+	}
+	if w.shards > 0 && !(w.sequential || w.zipfian) {
+		return errors.New("'num-shards' only work with 'sequential' or 'zipfian' key distributions")
+	}
+	if w.readPercent+w.spanPercent+w.delPercent > 100 {
+		return errors.New("'read-percent', 'span-percent' and 'del-precent' combined exceed 100%")
+	}
+	if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
+		return errors.New("'target-compression-ratio' must be a number >= 1.0")
+	}
+	if w.writeSeq != "" {
+		first := w.writeSeq[0]
+		if len(w.writeSeq) < 2 || (first != 'R' && first != 'S' && first != 'Z') {
+			return fmt.Errorf("--write-seq has to be of the form '(R|S|Z)<num>'")
+		}
+		rest := w.writeSeq[1:]
+		var err error
+		_, err = strconv.Atoi(rest)
+		if err != nil {
+			return errors.Errorf("--write-seq has to be of the form '(R|S|Z)<num>'")
+		}
+		if first == 'R' && (w.sequential || w.zipfian) {
+			return errors.Errorf("random --write-seq incompatible with a --sequential and --zipfian")
+		}
+		if first == 'S' && !w.sequential {
+			return errors.Errorf(
+				"sequential --write-seq is incompatible with a --zipfian and default (random) key sequence")
+		}
+		if first == 'Z' && !w.zipfian {
+			return errors.Errorf(
+				"zipfian --write-seq is incompatible with a --sequential or default (random) key sequence")
+		}
+	}
+	// We create generator and discard it to have a single piece of code that
+	// handles generator type which affects target key range.
+	_, _, kr := w.createKeyGenerator()
+	if kr.totalKeys() < uint64(w.insertCount) {
+		return errors.Errorf(
+			"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
+			w.insertCount, kr.min, kr.max)
+	}
+	return nil
+}
+
+// Note that sequence is only exposed for testing purposes and is used by
+// returned keyGenerators.
+func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyRange) {
+	writeSeq := 0
+	if w.writeSeq != "" {
+		var err error
+		writeSeq, err = strconv.Atoi(w.writeSeq[1:])
+		if err != nil {
+			panic("creating generator from unvalidated workload")
+		}
+	}
+
+	// Sequence is shared between all generators.
+	seq := &sequence{max: w.cycleLength, val: int64(writeSeq)}
+
+	var gen func() keyGenerator
+	var kr keyRange
+	switch {
+	case w.zipfian:
+		gen = func() keyGenerator {
+			return newZipfianGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		}
+		kr = keyRange{
+			min: 0,
+			max: math.MaxInt64,
+		}
+	case w.sequential:
+		gen = func() keyGenerator {
+			return newSequentialGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		}
+		kr = keyRange{
+			min: 0,
+			max: w.cycleLength,
+		}
+	default:
+		gen = func() keyGenerator {
+			return newHashGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		}
+		kr = keyRange{
+			min: math.MinInt64,
+			max: math.MaxInt64,
+		}
+	}
+
+	return gen, seq, kr
+}
+
+func splitFinder(i, splits int, r keyRange) int {
+	if splits < 0 || i >= splits {
+		panic(fmt.Sprintf("programming error: split index (%d) cannot be less than 0, "+
+			"greater than or equal to the total splits (%d)",
+			i, splits,
+		))
+	}
+
+	stride := r.max/int64(splits+1) - r.min/int64(splits+1)
+	splitPoint := r.min + int64(i+1)*stride
+	return int(splitPoint)
+}
+
+func (w *kv) insertCountKey(idx, count int64, kr keyRange) int64 {
+	stride := kr.max/(count+1) - kr.min/(count+1)
+	key := kr.min + (idx+1)*stride
+	return key
 }
 
 var kvtableTypes = []*types.T{
@@ -228,52 +330,18 @@ var kvtableTypes = []*types.T{
 	types.Bytes,
 }
 
-func (w *kv) keyRange() (int64, int64) {
-	rangeMin := int64(0)
-	rangeMax := w.cycleLength
-	if w.sequential {
-		// Sequential can generate keys in the range [0, cycleLength)
-	} else if w.zipfian {
-		// Zipfian can generate keys in the range [0, MaxInt64)
-		rangeMax = math.MaxInt64
-	} else {
-		// Hash can generate keys in the range [MinInt64, MaxInt64)
-		rangeMax = math.MaxInt64
-		rangeMin = math.MinInt64
-	}
-	return rangeMin, rangeMax
-}
-
-// splitFinder returns the ith split point, given the key access distribution
-// and number of splits.
-func (w *kv) splitFinder(i int) int {
-	splits := int64(w.splits)
-	if splits < 0 || (splits >= w.cycleLength && w.sequential) {
-		panic(fmt.Sprintf("programming error: splits (%d) cannot be less than 0, "+
-			"greater than or equal to the cycle-length (%d) with sequential",
-			splits, w.cycleLength,
-		))
-	}
-	rangeMin, rangeMax := w.keyRange()
-
-	stride := rangeMax/(splits+1) - rangeMin/(splits+1)
-	splitPoint := int(rangeMin + int64(i+1)*stride)
-	return splitPoint
-}
-
-func (w *kv) insertCountKey(idx, min, max, count int64) int64 {
-	stride := max/(count+1) - min/(count+1)
-	key := min + (idx+1)*stride
-	return key
-}
-
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
+	// Tables should only run on initialized workload, safe to call create without
+	// having a panic. We don't need to defer this to the actual table callbacks
+	// like Splits or InitialRows.
+	_, _, kr := w.createKeyGenerator()
+
 	table := workload.Table{Name: `kv`}
 	table.Splits = workload.Tuples(
 		w.splits,
 		func(splitIdx int) []interface{} {
-			return []interface{}{w.splitFinder(splitIdx)}
+			return []interface{}{splitFinder(splitIdx, w.splits, kr)}
 		},
 	)
 
@@ -293,7 +361,6 @@ func (w *kv) Tables() []workload.Table {
 
 	if w.insertCount > 0 {
 		const batchSize = 1000
-		rangeMin, rangeMax := w.keyRange()
 		table.InitialRows = workload.BatchedTuples{
 			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -313,7 +380,7 @@ func (w *kv) Tables() []workload.Table {
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
 
-					key := w.insertCountKey(int64(rowIdx), rangeMin, rangeMax, int64(w.insertCount))
+					key := w.insertCountKey(int64(rowIdx), int64(w.insertCount), kr)
 					keyCol.Set(rowOffset, key)
 
 					var payload []byte
@@ -333,27 +400,6 @@ func (w *kv) Tables() []workload.Table {
 func (w *kv) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	writeSeq := 0
-	if w.writeSeq != "" {
-		first := w.writeSeq[0]
-		if len(w.writeSeq) < 2 || (first != 'R' && first != 'S') {
-			return workload.QueryLoad{}, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
-		}
-		rest := w.writeSeq[1:]
-		var err error
-		writeSeq, err = strconv.Atoi(rest)
-		if err != nil {
-			return workload.QueryLoad{}, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
-		}
-		if first == 'R' && w.sequential {
-			return workload.QueryLoad{}, fmt.Errorf("--sequential incompatible with a Random --write-seq")
-		}
-		if first == 'S' && !w.sequential {
-			return workload.QueryLoad{}, fmt.Errorf(
-				"--sequential=false incompatible with a Sequential --write-seq")
-		}
-	}
-
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -440,8 +486,8 @@ func (w *kv) Ops(
 	buf.WriteString(`)`)
 	delStmtStr := buf.String()
 
+	gen, _, _ := w.createKeyGenerator()
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	seq := &sequence{config: w, val: int64(writeSeq)}
 	numEmptyResults := new(int64)
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := &kvOp{
@@ -460,13 +506,7 @@ func (w *kv) Ops(
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
-		if w.sequential {
-			op.g = newSequentialGenerator(seq)
-		} else if w.zipfian {
-			op.g = newZipfianGenerator(seq)
-		} else {
-			op.g = newHashGenerator(seq)
-		}
+		op.g = gen()
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
 	}
@@ -623,31 +663,23 @@ func (o *kvOp) close(context.Context) {
 	if empty := atomic.LoadInt64(o.numEmptyResults); empty != 0 {
 		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
 	}
-	seq := o.g.sequence()
-	var ch string
-	if o.config.sequential {
-		ch = "S"
-	} else {
-		ch = "R"
-	}
-	fmt.Printf("Highest sequence written: %d. Can be passed as --write-seq=%s%d to the next run.\n",
-		seq, ch, seq)
+	fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
+		o.g.state())
 }
 
 type sequence struct {
-	config *kv
-	val    int64
+	val, max int64
 }
 
 func (s *sequence) write() int64 {
-	return (atomic.AddInt64(&s.val, 1) - 1) % s.config.cycleLength
+	return (atomic.AddInt64(&s.val, 1) - 1) % s.max
 }
 
 // read returns the last key index that has been written. Note that the returned
 // index might not actually have been written yet, so a read operation cannot
 // require that the key is present.
 func (s *sequence) read() int64 {
-	return atomic.LoadInt64(&s.val) % s.config.cycleLength
+	return atomic.LoadInt64(&s.val) % s.max
 }
 
 // keyGenerator generates read and write keys. Read keys may not yet exist and
@@ -656,7 +688,7 @@ type keyGenerator interface {
 	writeKey() int64
 	readKey() int64
 	rand() *rand.Rand
-	sequence() int64
+	state() string
 }
 
 type hashGenerator struct {
@@ -666,10 +698,10 @@ type hashGenerator struct {
 	buf    [sha1.Size]byte
 }
 
-func newHashGenerator(seq *sequence) *hashGenerator {
+func newHashGenerator(seq *sequence, rng *rand.Rand) *hashGenerator {
 	return &hashGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+		random: rng,
 		hasher: sha1.New(),
 	}
 }
@@ -699,8 +731,8 @@ func (g *hashGenerator) rand() *rand.Rand {
 	return g.random
 }
 
-func (g *hashGenerator) sequence() int64 {
-	return atomic.LoadInt64(&g.seq.val)
+func (g *hashGenerator) state() string {
+	return fmt.Sprintf("R%d", g.seq.read())
 }
 
 type sequentialGenerator struct {
@@ -708,10 +740,10 @@ type sequentialGenerator struct {
 	random *rand.Rand
 }
 
-func newSequentialGenerator(seq *sequence) *sequentialGenerator {
+func newSequentialGenerator(seq *sequence, rng *rand.Rand) *sequentialGenerator {
 	return &sequentialGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+		random: rng,
 	}
 }
 
@@ -731,8 +763,8 @@ func (g *sequentialGenerator) rand() *rand.Rand {
 	return g.random
 }
 
-func (g *sequentialGenerator) sequence() int64 {
-	return atomic.LoadInt64(&g.seq.val)
+func (g *sequentialGenerator) state() string {
+	return fmt.Sprintf("S%d", g.seq.read())
 }
 
 type zipfGenerator struct {
@@ -742,11 +774,10 @@ type zipfGenerator struct {
 }
 
 // Creates a new zipfian generator.
-func newZipfianGenerator(seq *sequence) *zipfGenerator {
-	random := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
 	return &zipfGenerator{
 		seq:    seq,
-		random: random,
+		random: rng,
 		zipf:   newZipf(1.1, 1, uint64(math.MaxInt64)),
 	}
 }
@@ -776,8 +807,9 @@ func (g *zipfGenerator) rand() *rand.Rand {
 	return g.random
 }
 
-func (g *zipfGenerator) sequence() int64 {
-	return atomic.LoadInt64(&g.seq.val)
+func (g *zipfGenerator) state() string {
+	// TODO(oleg): add zipfian parsing
+	return fmt.Sprintf("Z%d", g.seq.read())
 }
 
 // randBlock returns a sequence of random bytes according to the kv
