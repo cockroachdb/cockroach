@@ -43,7 +43,7 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":coldata"],
-    tags = ["no-remote"],
+    tags = ["no-remote"],  # keep
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
@@ -67,6 +67,7 @@ GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
 export PATH=$$GO_ABS_PATH:$$PATH
 export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
+export GOROOT=
 $(location //pkg/sql/colexec/execgen/cmd/execgen) \
     -fmt=false pkg/col/coldata/$@ > $@
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
@@ -76,6 +77,7 @@ $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@go_sdk//:bin/go",
     ],
+    tags = ["no-remote"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
