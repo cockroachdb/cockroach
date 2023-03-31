@@ -117,12 +117,6 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		ensureSQLSchemaTelemetrySchedule,
 	),
-	upgrade.NewTenantUpgrade(
-		"wait for all in-flight schema changes",
-		toCV(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable),
-		upgrade.NoPrecondition,
-		waitForAllSchemaChanges,
-	),
 	upgrade.NewTenantUpgrade("fix corrupt user-file related table descriptors",
 		toCV(clusterversion.TODODelete_V22_2FixUserfileRelatedDescriptorCorruption),
 		upgrade.NoPrecondition,
