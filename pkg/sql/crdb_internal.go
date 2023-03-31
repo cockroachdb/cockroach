@@ -882,7 +882,7 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 }
 
 const (
-	// systemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
+	// SystemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
 	// `system.job_info` tables to return relevant information about a job.
 	//
 	// NB: Every job on creation writes a row each for its payload and progress to
@@ -892,7 +892,7 @@ const (
 	// Theoretically, a job could have no rows corresponding to its progress and
 	// so we perform a LEFT JOIN to get a NULL value when no progress row is
 	// found.
-	systemJobsAndJobInfoBaseQuery = `
+	SystemJobsAndJobInfoBaseQuery = `
 WITH
 	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'),
 	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress')
@@ -941,7 +941,7 @@ func getInternalSystemJobsQueryFromClusterVersion(
 ) string {
 	var baseQuery string
 	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
-		baseQuery = systemJobsAndJobInfoBaseQuery
+		baseQuery = SystemJobsAndJobInfoBaseQuery
 	} else if version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
 		baseQuery = systemJobsBaseQuery
 	} else {
