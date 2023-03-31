@@ -2381,11 +2381,15 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 			// TODO(irfansharif): For symmetry with the system config span variant,
 			// we queue blindly; we could instead only queue it if we knew the
 			// range's keyspans has a split in there somewhere, or was now part of a
-			// larger range and eligible for a merge.
+			// larger range and eligible for a merge, or the span config implied a
+			// need for {up,down}replication.
 			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			return nil // more
