@@ -11,7 +11,6 @@ package acl
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -112,7 +112,9 @@ denylist:
 		for i, tc := range testCases {
 			filename := filepath.Join(tempDir, fmt.Sprintf("denylist%d.yaml", i))
 			require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
-			controller, _, err := newAccessControllerFromFile[*Denylist](ctx, filename, defaultPollingInterval, nil)
+			controller, _, err := newAccessControllerFromFile[*Denylist](
+				ctx, filename, timeutil.DefaultTimeSource{}, defaultPollingInterval, nil,
+			)
 			require.NoError(t, err)
 			entries := emptyMap
 			if controller != nil {
@@ -153,8 +155,8 @@ func TestDenylistLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	startTime := time.Date(2021, 1, 1, 15, 20, 39, 0, time.UTC)
-	expirationTimeString := "2021-01-01T15:30:39Z"
-	futureTime := startTime.Add(time.Minute * 20)
+	longExpirationTimeString := "2030-01-01T15:30:39Z"
+	shortExpirationTimeString := "2021-01-01T15:30:39Z"
 
 	type denyIOSpec struct {
 		connection ConnectionTags
@@ -163,21 +165,23 @@ func TestDenylistLogic(t *testing.T) {
 
 	// This is a time evolution of a denylist.
 	testCases := []struct {
-		input string
-		time  time.Time
-		specs []denyIOSpec
+		name   string
+		input  string
+		preRun func(timeSource *timeutil.ManualTime)
+		specs  []denyIOSpec
 	}{
 		// Blocks IP address only.
 		{
+			"block_ip_address",
 			fmt.Sprintf(`
 SequenceNumber: 9
 denylist:
 - entity: {"item": "1.2.3.4", "type": "IP"}
   expiration: %s
   reason: over quota`,
-				expirationTimeString,
+				longExpirationTimeString,
 			),
-			startTime.Add(10 * time.Second),
+			nil,
 			[]denyIOSpec{
 				{ConnectionTags{"1.2.3.4", "foo"}, "connection ip '1.2.3.4' denied: over quota"},
 				{ConnectionTags{"1.1.1.1", "61"}, ""},
@@ -186,6 +190,7 @@ denylist:
 		},
 		// Blocks both IP address and tenant cluster.
 		{
+			"block_both_ip_address_and_tenant",
 			fmt.Sprintf(`
 SequenceNumber: 10
 denylist:
@@ -195,10 +200,10 @@ denylist:
 - entity: {"item": 61, "type": "Cluster"}
   expiration: %s
   reason: splunk pipeline`,
-				expirationTimeString,
-				expirationTimeString,
+				longExpirationTimeString,
+				longExpirationTimeString,
 			),
-			startTime.Add(20 * time.Second),
+			nil,
 			[]denyIOSpec{
 				{ConnectionTags{"1.2.3.4", "foo"}, "connection ip '1.2.3.4' denied: over quota"},
 				{ConnectionTags{"1.2.3.4", "61"}, "connection ip '1.2.3.4' denied: over quota"},
@@ -206,61 +211,95 @@ denylist:
 				{ConnectionTags{"1.2.3.5", "foo"}, ""},
 			},
 		},
-		// Entry that has expired.
-		{
-			fmt.Sprintf(`
-SequenceNumber: 11
-denylist:
-- entity: {"item": "1.2.3.4", "type": "ip"}
-  expiration: %s
-  reason: over quota`,
-				expirationTimeString,
-			),
-			futureTime,
-			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", "foo"}, ""},
-				{ConnectionTags{"1.1.1.1", "61"}, ""},
-				{ConnectionTags{"1.2.3.5", "foo"}, ""},
-			},
-		},
 		// Entry without any expiration.
 		{
+			"entry_without_expiration",
 			`
 SequenceNumber: 11
 denylist:
 - entity: {"item": "1.2.3.4", "type": "ip"}
   reason: over quota`,
-			futureTime,
+			nil,
 			[]denyIOSpec{
 				{ConnectionTags{"1.2.3.4", "foo"}, "connection ip '1.2.3.4' denied: over quota"},
 				{ConnectionTags{"1.1.1.1", "61"}, ""},
 				{ConnectionTags{"1.2.3.5", "foo"}, ""},
 			},
 		},
+		// Entry that has expired.
+		{
+			"expired_entry",
+			fmt.Sprintf(`
+SequenceNumber: 12
+denylist:
+- entity: {"item": "1.2.3.4", "type": "ip"}
+  expiration: %s
+  reason: over quota`,
+				shortExpirationTimeString,
+			),
+			func(timeSource *timeutil.ManualTime) {
+				// Move the manual time to a date that has expired.
+				timeSource.AdvanceTo(startTime.Add(20 * time.Minute))
+			},
+			[]denyIOSpec{
+				{ConnectionTags{"1.2.3.4", "foo"}, ""},
+				{ConnectionTags{"1.1.1.1", "61"}, ""},
+				{ConnectionTags{"1.2.3.5", "foo"}, ""},
+			},
+		},
 	}
+
 	// Use cancel to prevent leaked goroutines from file watches.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	tempDir := t.TempDir()
 
+	tempDir := t.TempDir()
 	filename := filepath.Join(tempDir, "denylist.yaml")
 	require.NoError(t, os.WriteFile(filename, []byte("{}"), 0777))
-	manualTime := timeutil.NewManualTime(startTime)
+
+	timeSource := timeutil.NewManualTime(startTime)
+	loadInterval := 100 * time.Millisecond
 	_, channel, err := newAccessControllerFromFile[*Denylist](
-		ctx, filename, 100*time.Millisecond, nil)
+		ctx, filename, timeSource, loadInterval, nil,
+	)
 	require.NoError(t, err)
-	for _, tc := range testCases {
-		require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
-		manualTime.AdvanceTo(tc.time)
-		controller := <-channel
-		for _, ioPairs := range tc.specs {
-			err := controller.CheckConnection(ioPairs.connection, manualTime)
+
+	validateSpecs := func(controller AccessController, spec []denyIOSpec) error {
+		for _, ioPairs := range spec {
+			err := controller.CheckConnection(ioPairs.connection, timeSource)
 			if ioPairs.outcome == "" {
-				require.Nil(t, err)
+				if err != nil {
+					return errors.Newf("expected no error, but got %v", err) // nolint:errwrap
+				}
 			} else {
-				require.EqualError(t, err, ioPairs.outcome)
+				if err.Error() != ioPairs.outcome {
+					return errors.Newf("expected %v, but got %v", ioPairs.outcome, err) // nolint:errwrap
+				}
 			}
 		}
+		return nil
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Write the denylist file.
+			require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
+
+			if tc.preRun != nil {
+				tc.preRun(timeSource)
+			}
+
+			// Keep advancing time source until we match all the specs.
+			testutils.SucceedsSoon(t, func() error {
+				timeSource.Advance(loadInterval)
+				select {
+				case controller := <-channel:
+					return validateSpecs(controller, tc.specs)
+				default:
+					return errors.New("no data yet")
+				}
+			})
+		})
 	}
 }
 
@@ -382,7 +421,8 @@ allowlist:
 		for i, tc := range testCases {
 			filename := filepath.Join(tempDir, fmt.Sprintf("allowlist%d.yaml", i))
 			require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
-			controller, _, err := newAccessControllerFromFile[*Allowlist](ctx, filename, defaultPollingInterval, nil)
+			controller, _, err := newAccessControllerFromFile[*Allowlist](
+				ctx, filename, timeutil.DefaultTimeSource{}, defaultPollingInterval, nil)
 			require.NoError(t, err)
 			dl := controller.(*Allowlist)
 			var entries map[string]AllowEntry
@@ -430,7 +470,7 @@ allowlist:
 	filename := filepath.Join(tempDir, "allowlist.yaml")
 	require.NoError(t, os.WriteFile(filename, []byte("{}"), 0777))
 	_, channel, err := newAccessControllerFromFile[*Allowlist](
-		ctx, filename, 100*time.Millisecond, nil)
+		ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, nil)
 	require.NoError(t, err)
 	for _, tc := range testCases {
 		require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
@@ -461,7 +501,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		require.NoError(t, os.WriteFile(filename, []byte("not yaml"), 0777))
 
 		_, _, err := newAccessControllerFromFile[*Allowlist](
-			ctx, filename, 100*time.Millisecond, errorCountMetric)
+			ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, errorCountMetric)
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "error when creating access controller from file")
@@ -477,7 +517,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		require.NoError(t, os.WriteFile(filename, []byte(`{"allowlist":{"tenant":{"ips": ["1.1.1.1/32"]}}}`), 0777))
 
 		controller, next, err := newAccessControllerFromFile[*Allowlist](
-			ctx, filename, 100*time.Millisecond, errorCountMetric)
+			ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, errorCountMetric)
 
 		require.NoError(t, err)
 		require.NotNil(t, next)
