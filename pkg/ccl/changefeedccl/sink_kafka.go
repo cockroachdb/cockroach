@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	saramaMetrics "github.com/rcrowley/go-metrics"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -133,6 +134,13 @@ type kafkaSink struct {
 		inflight int64
 		flushErr error
 		flushCh  chan struct{}
+	}
+
+	// Enforces throttling from the broker by passing along backpressure to the
+	// changefeed.
+	throttler struct {
+		syncutil.RWMutex
+		throttleUntil time.Time
 	}
 
 	disableInternalRetry bool
@@ -300,6 +308,7 @@ func (s *kafkaSink) newSyncProducer(client kafkaClient) (sarama.SyncProducer, er
 	} else {
 		producer, err = sarama.NewSyncProducerFromClient(client.(sarama.Client))
 	}
+	addOnThrottleCallback(s, client.Config())
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
@@ -457,6 +466,7 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 }
 
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+	s.maybeThrottle(ctx)
 	if err := s.startInflightMessage(ctx); err != nil {
 		return err
 	}
@@ -468,6 +478,28 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 	}
 
 	return nil
+}
+
+func (s *kafkaSink) throttleForMs(t int64) {
+	s.throttler.Lock()
+	throttleUntil := time.Now().Add(time.Millisecond * time.Duration(t))
+	if throttleUntil.After(s.throttler.throttleUntil) {
+		s.throttler.throttleUntil = throttleUntil
+	}
+	s.throttler.Unlock()
+}
+
+func (s *kafkaSink) maybeThrottle(ctx context.Context) {
+	s.throttler.RLock()
+	throttleFor := s.throttler.throttleUntil.Sub(time.Now())
+	s.throttler.RUnlock()
+	if throttleFor > 0 {
+		log.Errorf(ctx, "throttling due to broker response for %v", throttleFor)
+		select {
+		case <-ctx.Done():
+		case <-time.After(throttleFor):
+		}
+	}
 }
 
 // isInternallyRetryable returns true if the sink should attempt to re-emit the
@@ -635,6 +667,7 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 
 		log.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
 		activeConfig = newConfig
+		addOnThrottleCallback(s, newConfig)
 
 		newClient, err := s.newClient(newConfig)
 		if err != nil {
@@ -1033,6 +1066,7 @@ func buildKafkaConfig(
 	if err := saramaCfg.Apply(config); err != nil {
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
 	}
+
 	return config, nil
 }
 
@@ -1074,12 +1108,69 @@ func makeKafkaSink(
 		disableInternalRetry: !internalRetryEnabled,
 	}
 
+	addOnThrottleCallback(sink, config)
+
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
 	return sink, nil
+}
+
+type metricSpy struct {
+	saramaMetrics.Histogram
+	hook func(int64)
+}
+
+func (m *metricSpy) Update(stat int64) {
+	m.hook(stat)
+	m.Histogram.Update(stat)
+}
+
+type metricSpyInjector struct {
+	saramaMetrics.Registry
+	hook    func(int64)
+	pattern string
+}
+
+func (m *metricSpyInjector) GetOrRegister(name string, i interface{}) interface{} {
+	reg := m.Registry.GetOrRegister(name, i)
+	if strings.Contains(name, m.pattern) {
+		hist, ok := reg.(saramaMetrics.Histogram)
+		if !ok {
+			hist = saramaMetrics.NilHistogram{}
+		}
+		return &metricSpy{Histogram: hist, hook: m.hook}
+	}
+	return reg
+}
+
+func (m *metricSpyInjector) Get(name string) interface{} {
+	reg := m.Registry.Get(name)
+	if strings.Contains(name, m.pattern) {
+		hist, ok := reg.(saramaMetrics.Histogram)
+		if !ok {
+			hist = saramaMetrics.NilHistogram{}
+		}
+		return &metricSpy{Histogram: hist, hook: m.hook}
+	}
+	return reg
+}
+
+// It's difficult to get the asyncProducer to tell us about internal events, so this
+// fairly terrible hack injects a spy into the metric update function for one we care
+// about.  metricName must be a magic string from registerMetrics in
+// https://github.com/Shopify/sarama/blob/main/broker.go#L165
+func addMetricSpy(metricName string, config *sarama.Config, onUpdate func(int64)) {
+	config.MetricRegistry = &metricSpyInjector{Registry: config.MetricRegistry, hook: onUpdate, pattern: metricName}
+}
+
+func addOnThrottleCallback(s *kafkaSink, config *sarama.Config) {
+	addMetricSpy("throttle-time-in-ms", config, func(t int64) {
+		log.Errorf(s.ctx, "Honoring broker request to pause for %d ms", t)
+		s.throttleForMs(t)
+	})
 }
 
 type kafkaStats struct {
