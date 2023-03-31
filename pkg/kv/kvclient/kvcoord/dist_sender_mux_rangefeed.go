@@ -129,7 +129,7 @@ type activeMuxRangeFeed struct {
 	*activeRangeFeed
 	token      rangecache.EvictionToken
 	startAfter hlc.Timestamp
-	catchupRes limit.Reservation
+	catchupRes catchupAlloc
 }
 
 func (a *activeMuxRangeFeed) release() {
