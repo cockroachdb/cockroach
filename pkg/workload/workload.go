@@ -256,6 +256,8 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 					col.Bool()[0] = d
 				case int:
 					col.Int64()[0] = int64(d)
+				case int64:
+					col.Int64()[0] = d
 				case float64:
 					col.Float64()[0] = d
 				case string:
