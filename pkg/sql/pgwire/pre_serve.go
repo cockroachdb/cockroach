@@ -404,6 +404,7 @@ func (s *PreServeConnHandler) PreServe(
 		st.Reserved.Close(ctx)
 		return conn, st, s.sendErr(ctx, conn, err)
 	}
+	st.clientParameters.IsSSL = st.ConnType == hba.ConnHostSSL
 
 	st.State = PreServeReady
 	return conn, st, nil
