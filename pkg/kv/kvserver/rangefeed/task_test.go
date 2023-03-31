@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -229,10 +230,11 @@ func TestInitResolvedTSScan(t *testing.T) {
 	startKey := roachpb.RKey("d")
 	endKey := roachpb.RKey("w")
 
-	makeTxn := func(key string, id uuid.UUID, ts hlc.Timestamp) roachpb.Transaction {
+	makeTxn := func(key string, id uuid.UUID, iso isolation.Level, ts hlc.Timestamp) roachpb.Transaction {
 		txnMeta := enginepb.TxnMeta{
 			Key:            []byte(key),
 			ID:             id,
+			IsoLevel:       iso,
 			Epoch:          1,
 			WriteTimestamp: ts,
 			MinTimestamp:   ts,
@@ -246,12 +248,12 @@ func TestInitResolvedTSScan(t *testing.T) {
 	txn1ID := uuid.MakeV4()
 	txn1TS := hlc.Timestamp{WallTime: 15}
 	txn1Key := "txnKey1"
-	txn1 := makeTxn(txn1Key, txn1ID, txn1TS)
+	txn1 := makeTxn(txn1Key, txn1ID, isolation.Serializable, txn1TS)
 
 	txn2ID := uuid.MakeV4()
 	txn2TS := hlc.Timestamp{WallTime: 21}
 	txn2Key := "txnKey2"
-	txn2 := makeTxn(txn2Key, txn2ID, txn2TS)
+	txn2 := makeTxn(txn2Key, txn2ID, isolation.ReadCommitted, txn2TS)
 
 	type op struct {
 		kv  storage.MVCCKeyValue
@@ -305,13 +307,13 @@ func TestInitResolvedTSScan(t *testing.T) {
 
 	expEvents := []*event{
 		{ops: []enginepb.MVCCLogicalOp{
-			writeIntentOpWithKey(txn2ID, []byte("txnKey2"), hlc.Timestamp{WallTime: 21}),
+			writeIntentOpWithKey(txn2ID, []byte("txnKey2"), isolation.ReadCommitted, hlc.Timestamp{WallTime: 21}),
 		}},
 		{ops: []enginepb.MVCCLogicalOp{
-			writeIntentOpWithKey(txn1ID, []byte("txnKey1"), hlc.Timestamp{WallTime: 15}),
+			writeIntentOpWithKey(txn1ID, []byte("txnKey1"), isolation.Serializable, hlc.Timestamp{WallTime: 15}),
 		}},
 		{ops: []enginepb.MVCCLogicalOp{
-			writeIntentOpWithKey(txn1ID, []byte("txnKey1"), hlc.Timestamp{WallTime: 15}),
+			writeIntentOpWithKey(txn1ID, []byte("txnKey1"), isolation.Serializable, hlc.Timestamp{WallTime: 15}),
 		}},
 		{initRTS: true},
 	}
