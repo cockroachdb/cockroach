@@ -389,8 +389,8 @@ func getSelectStmtForJobUpdate(
 	const (
 		selectWithoutSession = `
 WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress')
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
 	SELECT
 		status, payload.value AS payload, progress.value AS progress`
 		selectWithSession = selectWithoutSession + `, claim_session_id`

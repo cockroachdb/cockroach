@@ -86,7 +86,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	if _, err := sqlDB.DB.ExecContext(ctx, "RESTORE TENANT 10 FROM $1", dst); err != nil {
 		t.Fatal(err)
 	}
-	tSrv, tSQL = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+	_, tSQL = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantID:     roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
@@ -98,14 +98,14 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	if _, err := tSQL.Exec(`DELETE FROM system.lease`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tSQL.Exec(`CANCEL JOB $1`, jobID); err != nil {
-		t.Fatal(err)
-	}
-	tSrv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 	testutils.SucceedsSoon(t, func() error {
+		if _, err := tSQL.Exec(`CANCEL JOB $1`, jobID); err != nil {
+			return err
+		}
+
 		var status string
 		if err := tSQL.QueryRow(`SELECT status FROM [show jobs] WHERE job_id = $1`, jobID).Scan(&status); err != nil {
-			t.Fatal(err)
+			return err
 		}
 		if status == string(jobs.StatusCanceled) {
 			return nil
