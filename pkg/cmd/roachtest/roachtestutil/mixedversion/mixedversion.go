@@ -275,6 +275,17 @@ func NewTest(
 	}
 }
 
+// RNG returns the underlying random number generator used by the
+// mixedversion framework to generate a test plan. This rng can be
+// used to make random decisions during test setup.
+//
+// Do NOT use the rng returned by this function in mixedversion hooks
+// (functions passed to `InMixeddVersion` and similar). Instead, use
+// the rng instance directly passed as argument to those functions.
+func (t *Test) RNG() *rand.Rand {
+	return t.prng
+}
+
 // InMixedVersion adds a new mixed-version hook to the test. The
 // functionality in the function passed as argument to this function
 // will be tested in arbitrary mixed-version states. If multiple
