@@ -11,6 +11,7 @@
 package tenantcapabilities
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -37,4 +38,29 @@ func TestGetSet(t *testing.T) {
 			c.Value(&v).Set(c.Value(DefaultCapabilities()).Get())
 		}
 	}
+}
+
+// TestSpanConfigBoundsSetGet ensures calling Get on SpanConfigBounds that have
+// been previously modified using a Set returns the correct value.
+func TestSpanConfigBoundsSetGet(t *testing.T) {
+	capability := spanConfigBoundsCapability(TenantSpanConfigBounds)
+	val := capability.Value(DefaultCapabilities())
+
+	// Construct some span config bounds that apply to GC TTLs.
+	var v tenantcapabilitiespb.TenantCapabilities
+	const ttlStart = int32(500)
+	const ttlEnd = int32(1000)
+	v.SpanConfigBounds = &tenantcapabilitiespb.SpanConfigBounds{
+		GCTTLSeconds: &tenantcapabilitiespb.SpanConfigBounds_Int32Range{
+			Start: ttlStart,
+			End:   ttlEnd,
+		},
+	}
+
+	// Modify the default capabilities we're working with by setting the bounds.
+	val.Set(capability.Value(&v).Get())
+	// Ensure getting the bounds returns the correct values.
+	require.Equal(t, val.Get().GCTTLSeconds.Start, ttlStart)
+	require.Equal(t, val.Get().GCTTLSeconds.End, ttlEnd)
+	t.Fatalf(fmt.Sprintf("%v", val))
 }
