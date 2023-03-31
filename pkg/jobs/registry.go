@@ -310,6 +310,9 @@ const (
 
 	// AutoConfigRunnerJobID A static job ID is used for the auto config runner job.
 	AutoConfigRunnerJobID = jobspb.JobID(102)
+
+	// AutoConfigSqlActivityID A static job ID is used for the SQL activity tables.
+	AutoConfigSqlActivityID = jobspb.JobID(103)
 )
 
 // MakeJobID generates a new job ID.
