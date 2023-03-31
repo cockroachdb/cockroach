@@ -2715,13 +2715,14 @@ func (rpcCtx *Context) loadOrCreateConnAttempt(
 		select {
 		case <-previousAttempt.initialHeartbeatDone:
 			// The connection attempt was completed, return the outcome of it.
-			err := previousAttempt.err.Load().(error)
+			err := previousAttempt.err.Load()
 			if err == nil {
 				// If it completed without error then don't track the connection
 				// anymore. If it did have an error we need to track it until it later gets cleared.
 				rpcCtx.dialbackMu.m[nodeID] = nil
+				return nil
 			}
-			return err
+			return err.(error)
 		default:
 			// We still don't know the outcome of the previous attempt. For now
 			// allow this attempt to continue and check in the future.
