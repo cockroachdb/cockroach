@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,14 +27,12 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
-
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
 				},
 			},
 		},
@@ -49,9 +46,9 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	v := clusterversion.ByKey(clusterversion.TODODelete_V22_2Start).String()
-	// Check that the builtin returns false when comparing against 22.1-2
-	// version because we are still on 22.1-0.
+	v := clusterversion.ByKey(clusterversion.V23_1Start).String()
+	// Check that the builtin returns false when comparing against the new version
+	// version because we are still on the bootstrap version.
 	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('"+v+"')", [][]string{{"false"}})
 
 	// Run the upgrade.
