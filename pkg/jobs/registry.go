@@ -301,6 +301,9 @@ const (
 
 	// AutoConfigRunnerJobID A static job ID is used for the auto config runner job.
 	AutoConfigRunnerJobID = jobspb.JobID(102)
+
+	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
+	SqlActivityUpdaterJobID = jobspb.JobID(103)
 )
 
 // MakeJobID generates a new job ID.
@@ -690,6 +693,44 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 	return j, nil
+}
+
+// CreateIfNotExistAdoptableJobWithTxn checks if a job already exists in
+// the system.jobs table, and if it does not it will create the job. The job
+// will be adopted for execution at a later time by some node in the cluster.
+func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
+	ctx context.Context, record Record, txn isql.Txn,
+) error {
+	if record.JobID == 0 {
+		return fmt.Errorf("invalid record.JobID value: %d", record.JobID)
+	}
+
+	if txn == nil {
+		return fmt.Errorf("txn is required for job: %d", record.JobID)
+	}
+
+	// Make sure job with id doesn't already exist in system.jobs.
+	// Use a txn to avoid race conditions
+	row, err := txn.QueryRowEx(
+		ctx,
+		"check if job exists",
+		txn.KV(),
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		"SELECT id FROM system.jobs WHERE id = $1",
+		record.JobID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// If there isn't a row for the job, create the job.
+	if row == nil {
+		if _, err = r.CreateAdoptableJobWithTxn(ctx, record, record.JobID, txn); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution

@@ -67,6 +67,9 @@ type PersistedSQLStats struct {
 	// exceeded.
 	memoryPressureSignal chan struct{}
 
+	// Use the signal the flush completed.
+	flushDoneCallback func()
+
 	lastFlushStarted time.Time
 	jobMonitor       jobMonitor
 	atomic           struct {
@@ -89,6 +92,7 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
 		drain:                make(chan struct{}),
+		flushDoneCallback:    nil,
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -126,6 +130,10 @@ func (s *PersistedSQLStats) Stop(ctx context.Context) {
 		close(s.drain)
 	})
 	s.tasksDoneWG.Wait()
+}
+
+func (s *PersistedSQLStats) SetFlushDoneCallback(callBackFunc func()) {
+	s.flushDoneCallback = callBackFunc
 }
 
 // GetController returns the controller of the PersistedSQLStats.
@@ -173,6 +181,9 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			}
 
 			s.Flush(ctx)
+			if s.flushDoneCallback != nil {
+				s.flushDoneCallback()
+			}
 		}
 	})
 	if err != nil {
