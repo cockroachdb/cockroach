@@ -230,7 +230,7 @@ func WaitForClusterUpgrade(
 
 	l.Printf("waiting for cluster to auto-upgrade to %s", newVersion)
 	for _, node := range nodes {
-		err := retry.ForDuration(5*time.Minute, func() error {
+		err := retry.ForDuration(10*time.Minute, func() error {
 			currentVersion, err := ClusterVersion(ctx, dbFunc(node))
 			if err != nil {
 				return err
