@@ -48,7 +48,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
 	writes := []roachpb.SequencedWrite{{Key: k, Sequence: 0}}
 	intents := []roachpb.Span{{Key: k2}}
 
@@ -1093,7 +1093,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
 	endKey := roachpb.Key("z")
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
@@ -1244,7 +1244,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 
 				now := clock.Now()
 				commitTS := cfg.commitTS(now)
-				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0, 1)
+				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, 0, now, 0, 1)
 				txn.ReadTimestamp = commitTS
 				txn.WriteTimestamp = commitTS
 
@@ -1558,7 +1558,7 @@ func TestResolveLocalLocks(t *testing.T) {
 			defer batch.Close()
 
 			ts := hlc.Timestamp{WallTime: 1}
-			txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0, 1)
+			txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1)
 			txn.Status = roachpb.COMMITTED
 
 			for i := 0; i < numKeys; i++ {

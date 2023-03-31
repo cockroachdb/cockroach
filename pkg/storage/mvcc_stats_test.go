@@ -1751,7 +1751,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 	actions["EnsureTxn"] = func(s *state) (bool, string) {
 		if s.Txn == nil {
-			txn := roachpb.MakeTransaction("test", nil, 0, s.TS, 0, 1)
+			txn := roachpb.MakeTransaction("test", nil, 0, 0, s.TS, 0, 1)
 			s.Txn = &txn
 		}
 		return true, ""
