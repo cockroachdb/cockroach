@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -186,7 +187,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("b"),
 		tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
 
-	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), roachpb.NormalUserPriority, tsIntent, 100, 0)
+	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), isolation.Serializable, roachpb.NormalUserPriority, tsIntent, 100, 0)
 	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("d"),
 		tsIntent, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("intent"), &txn))
 

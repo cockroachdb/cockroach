@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -2023,7 +2024,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	})
 
 	// Add an intent at k3@ts3.
-	txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, ts3, 1, 1)
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, ts3, 1, 1)
 	addIntent := func(t *testing.T, rw ReadWriter) {
 		require.NoError(t, MVCCPut(ctx, rw, nil, testKey3, ts3, hlc.ClockTimestamp{}, value3, &txn))
 	}

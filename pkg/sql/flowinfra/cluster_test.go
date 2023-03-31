@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -95,6 +96,7 @@ func runTestClusterFlow(
 	txnProto := roachpb.MakeTransaction(
 		"cluster-test",
 		nil, // baseKey
+		isolation.Serializable,
 		roachpb.NormalUserPriority,
 		now.ToTimestamp(),
 		0, // maxOffsetNs
@@ -413,6 +415,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	txnProto := roachpb.MakeTransaction(
 		"deadlock-test",
 		nil, // baseKey
+		isolation.Serializable,
 		roachpb.NormalUserPriority,
 		now.ToTimestamp(),
 		0, // maxOffsetNs
@@ -707,6 +710,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					txnProto := roachpb.MakeTransaction(
 						"cluster-test",
 						nil, // baseKey
+						isolation.Serializable,
 						roachpb.NormalUserPriority,
 						now.ToTimestamp(),
 						0, // maxOffsetNs
