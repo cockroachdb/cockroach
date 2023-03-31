@@ -77,6 +77,8 @@ func ParseTenantCapabilityUpsert(
 				return roachpb.TenantID{}, nil, err
 			}
 			c.Value(&caps).Set(spanconfigbounds.New(&v))
+		default:
+			t.Fatalf("unknown capability type %T for capability %s", c, arg.Key)
 		}
 	}
 	return tID, &caps, nil
