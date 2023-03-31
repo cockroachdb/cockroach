@@ -11,7 +11,9 @@
 package spanconfigbounds
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -51,7 +53,13 @@ func New(b *tenantcapabilitiespb.SpanConfigBounds) *Bounds {
 }
 
 func (b *Bounds) String() string {
-	return redact.Sprint(b).StripMarkers()
+	var buf strings.Builder
+	sep := ""
+	for _, field := range fields {
+		_, _ = fmt.Fprintf(&buf, "%s%s: %s", sep, field, field.FieldBound(b))
+		sep = "\n"
+	}
+	return buf.String()
 }
 
 // Clamp will update the SpanConfig in place, clamping any properties
