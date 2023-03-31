@@ -69,17 +69,93 @@ func TestSplitFinder(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			splits := tc.config.splits
+			_, _, r := tc.config.createKeyGenerator()
 
 			if tc.expectPanic {
-				require.Panics(t, func() { tc.config.splitFinder(0) })
+				require.Panics(t, func() { splitFinder(0, 0, r) })
 				return
 			}
 
 			results := make([]int, splits)
 			for i := range results {
-				results[i] = tc.config.splitFinder(i)
+				results[i] = splitFinder(i, splits, r)
 			}
 			require.Equal(t, tc.expected, results)
+		})
+	}
+}
+
+func TestInitialSeqValidation(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		config   *kv
+		expected int64
+		err      string
+	}{
+		{
+			desc:     "--sequential",
+			config:   &kv{sequential: true, writeSeq: "S13"},
+			expected: 13,
+		},
+		{
+			desc:     "random",
+			config:   &kv{writeSeq: "R17"},
+			expected: 17,
+		},
+		{
+			desc:     "--zipfian",
+			config:   &kv{zipfian: true, writeSeq: "Z19"},
+			expected: 19,
+		},
+		{
+			desc:   "wrong",
+			config: &kv{writeSeq: "G10"},
+			err:    "--write-seq has to be of the form",
+		},
+		{
+			desc:   "--zipfian with S",
+			config: &kv{zipfian: true, writeSeq: "S10"},
+			err:    "sequential --write-seq is incompatible",
+		},
+		{
+			desc:   "--zipfian with R",
+			config: &kv{zipfian: true, writeSeq: "R10"},
+			err:    "random --write-seq incompatible",
+		},
+		{
+			desc:   "--sequential with Z",
+			config: &kv{sequential: true, writeSeq: "Z10"},
+			err:    "zipfian --write-seq is incompatible",
+		},
+		{
+			desc:   "--sequential with R",
+			config: &kv{sequential: true, writeSeq: "R10"},
+			err:    "random --write-seq incompatible",
+		},
+		{
+			desc:   "random with Z",
+			config: &kv{writeSeq: "Z10"},
+			err:    "zipfian --write-seq is incompatible",
+		},
+		{
+			desc:   "random with S",
+			config: &kv{writeSeq: "S10"},
+			err:    "sequential --write-seq is incompatible",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Fill in defaults for params that are typically filled from flags.
+			tc.config.cycleLength = math.MaxInt64
+			tc.config.targetCompressionRatio = 1
+
+			err := tc.config.validateConfig()
+			if len(tc.err) > 0 {
+				require.ErrorContains(t, err, tc.err, "incorrect validation error")
+			} else {
+				require.NoError(t, err, "valid config rejected")
+			}
 		})
 	}
 }
