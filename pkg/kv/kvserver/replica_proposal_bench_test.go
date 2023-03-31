@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -56,7 +55,7 @@ func BenchmarkReplicaProposal(b *testing.B) {
 
 func runBenchmarkReplicaProposal(b *testing.B, bytes int64, withFollower bool) {
 	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
+	//defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	nodes := 1

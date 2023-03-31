@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"runtime/debug"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -89,6 +90,9 @@ func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
 	r.maybeCampaignOnWakeLocked(ctx)
 	// Propose an empty command which will wake the leader.
 	data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
+	if r.RangeID > 60 {
+		log.Infof(ctx, "XXX UNQUIESCE li=%t", r.raftLastIndexRLocked())
+	}
 	_ = r.mu.internalRaftGroup.Propose(data)
 	return true
 }
@@ -185,6 +189,9 @@ func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
+	}
+	if r.RangeID > 60 {
+		log.Infof(ctx, "XXX SHOULD QUIESCE c=%d a=%d li=%t\n%s", status.Commit, status.Applied, r.raftLastIndexRLocked(), debug.Stack())
 	}
 	return r.quiesceAndNotifyRaftMuLockedReplicaMuLocked(ctx, status, lagging)
 }
