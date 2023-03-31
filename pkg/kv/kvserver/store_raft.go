@@ -651,7 +651,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	// use for warning about excessive raft mutex lock hold times. Long
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
-	if elapsed >= defaultReplicaRaftMuWarnThreshold {
+	if elapsed >= defaultReplicaRaftMuWarnThreshold || stats.append.PebbleBytes > 1<<20 || stats.apply.numEntriesProcessedBytes > 1<<20 {
 		log.Infof(ctx, "%s; node might be overloaded", stats)
 	}
 }
