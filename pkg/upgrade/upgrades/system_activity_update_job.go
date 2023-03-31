@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -16,28 +16,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	_ "github.com/cockroachdb/cockroach/pkg/jobs/metricspoller" // Ensure job implementation is linked.
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-func createJobsMetricsPollingJob(
+// createActivityUpdateJobMigration creates the job to update the
+// system.statement_activity and system.transaction_activity tables.
+func createActivityUpdateJobMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	if d.TestingKnobs != nil && d.TestingKnobs.SkipJobMetricsPollingJobBootstrap {
+
+	if d.TestingKnobs != nil && d.TestingKnobs.SkipUpdateSQLActivityJobBootstrap {
 		return nil
 	}
+
+	record := jobs.Record{
+		JobID:         jobs.SqlActivityUpdaterJobID,
+		Description:   "sql activity job",
+		Username:      username.NodeUserName(),
+		Details:       jobspb.AutoUpdateSQLActivityDetails{},
+		Progress:      jobspb.AutoConfigRunnerProgress{},
+		NonCancelable: true, // The job can't be canceled, but it can be paused.
+	}
+
 	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jr := jobs.Record{
-			JobID:         jobs.JobMetricsPollerJobID,
-			Description:   jobspb.TypePollJobsStats.String(),
-			Details:       jobspb.PollJobsStatsDetails{},
-			Progress:      jobspb.PollJobsStatsProgress{},
-			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
-			Username:      username.RootUserName(),
-			NonCancelable: true,
-		}
-		return d.JobRegistry.CreateIfNotExistAdoptableJobWithTxn(ctx, jr, txn)
+		return d.JobRegistry.CreateIfNotExistAdoptableJobWithTxn(ctx, record, txn)
 	})
 }
