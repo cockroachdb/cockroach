@@ -381,7 +381,9 @@ func (s *drainServer) drainClients(
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
 	// Flush in-memory SQL stats into the statement stats system table.
-	s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	statsProvider.Flush(ctx)
+	statsProvider.Stop(ctx)
 
 	// Inform the async tasks for table stats that the node is draining
 	// and wait for task shutdown.
