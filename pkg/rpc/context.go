@@ -2715,7 +2715,7 @@ func (rpcCtx *Context) loadOrCreateConnAttempt(
 		select {
 		case <-previousAttempt.initialHeartbeatDone:
 			// The connection attempt was completed, return the outcome of it.
-			err := previousAttempt.err.Load().(error)
+			err, _ := previousAttempt.err.Load().(error)
 			if err == nil {
 				// If it completed without error then don't track the connection
 				// anymore. If it did have an error we need to track it until it later gets cleared.
