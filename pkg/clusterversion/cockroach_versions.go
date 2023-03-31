@@ -512,6 +512,11 @@ const (
 	// SQL Stats tables.
 	V23_1ChangeSQLStatsTTL
 
+	// V23_1CreateSystemActivityUpdateJob is the version at which Cockroach adds a
+	// job that periodically updates the statement_activity and transaction_activity.
+	// tables.
+	V23_1CreateSystemActivityUpdateJob
+
 	// **********************************************************
 	// ** If we haven't yet selected a final 23.1 RC candidate **
 	// Step 1a: Add new versions for release-23.1 branch above here.
@@ -904,7 +909,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1ChangeSQLStatsTTL,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
 	},
-
+	{
+		Key:     V23_1CreateSystemActivityUpdateJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 100},
+	},
 	// **********************************************************
 	// ** If we haven't yet selected a final 23.1 RC candidate **
 	// Step 2a: Add new versions for release-23.1 branch above here.
