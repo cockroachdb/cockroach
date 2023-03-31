@@ -1,12 +1,21 @@
 setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 SET experimental_enable_unique_without_index_constraints = true;
-INSERT INTO t VALUES(-1, -1);
-INSERT INTO t VALUES(-2, -2);
-INSERT INTO t VALUES(-3, -3);
+INSERT INTO t(i, j) VALUES(-1, -1), (-2, -2), (-3, -3);
 ----
 ...
 +object {100 101 t} -> 104
+
+#For rollback testing intentionally inject an error.
+stage-exec phase=PreCommitPhase stage=1 schemaChangeExecErrorForRollback=(.*could not create unique constraint "unique_j".*)
+UPDATE t SET j=-3 WHERE i = -1;
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=2: rollback=true
+INSERT INTO t(i) VALUES(-$stageKey);
+INSERT INTO t(i) VALUES(-$stageKey - 1);
+----
+
 
 stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t (i, j) VALUES($stageKey, $stageKey);
