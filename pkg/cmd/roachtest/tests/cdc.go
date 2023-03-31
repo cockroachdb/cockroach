@@ -156,24 +156,51 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		// data.
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	case webhookSink:
-		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
-		if err != nil {
-			ct.t.Fatal(err)
-		}
-		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		ct.t.Status("webhook install")
+		webhookNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		rootFolder := `/home/ubuntu`
+		nodeIPs, _ := ct.cluster.ExternalIP(ct.ctx, ct.logger, webhookNode)
+
+		// We use a different port every time to support multiple webhook sinks.
+		webhookPort := nextWebhookPort
+		nextWebhookPort++
+		serverSrcPath := filepath.Join(rootFolder, fmt.Sprintf(`webhook-server-%d.go`, webhookPort))
+		err := ct.cluster.PutString(ct.ctx, webhookServerScript(webhookPort), serverSrcPath, 0700, webhookNode)
 		if err != nil {
 			ct.t.Fatal(err)
 		}
 
-		sinkDestHost, err := url.Parse(sinkDest.URL())
+		certs, err := makeTestCerts(nodeIPs[0])
+		if err != nil {
+			ct.t.Fatal(err)
+		}
+		err = ct.cluster.PutString(ct.ctx, certs.SinkKey, filepath.Join(rootFolder, "key.pem"), 0700, webhookNode)
+		if err != nil {
+			ct.t.Fatal(err)
+		}
+		err = ct.cluster.PutString(ct.ctx, certs.SinkCert, filepath.Join(rootFolder, "cert.pem"), 0700, webhookNode)
+		if err != nil {
+			ct.t.Fatal(err)
+		}
+
+		ct.cluster.Run(ct.ctx, webhookNode, `sudo apt --yes install golang-go;`)
+
+		// Start the server in its own monitor to not block ct.mon.Wait()
+		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
+		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
+		m.Go(func(ctx context.Context) error {
+			return ct.cluster.RunE(ct.ctx, webhookNode, serverExecCmd, rootFolder)
+		})
+
+		sinkDestHost, err := url.Parse(fmt.Sprintf(`https://%s:%d`, nodeIPs[0], webhookPort))
 		if err != nil {
 			ct.t.Fatal(err)
 		}
 
 		params := sinkDestHost.Query()
-		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		params.Set(changefeedbase.SinkParamCACert, certs.CACertBase64())
+		params.Set(changefeedbase.SinkParamTLSEnabled, "true")
 		sinkDestHost.RawQuery = params.Encode()
-
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
@@ -391,6 +418,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		opts:           feedOptions,
 		db:             db,
 		tolerateErrors: args.tolerateErrors,
+		logger:         ct.logger,
 	}
 
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
@@ -1196,34 +1224,38 @@ func registerCDC(r registry.Registry) {
 			ct.waitForWorkload()
 		},
 	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/webhook-sink",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
 
-	// TODO(zinger): uncomment once connectivity issue is fixed,
-	// currently fails with "initial scan did not complete" because sink
-	// URI is set as localhost, need to expose it to the other nodes via IP
-	/*
-				r.Add(registry.TestSpec{
-					Name:            "cdc/webhook-sink",
-					Owner:           `cdc`,
-					Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-					RequiresLicense: true,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		        ct := newCDCTester(ctx, t, c)
-		        defer ct.Close()
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
-		        ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+			// The deprecated webhook sink is unable to handle the throughput required for 100 warehouses
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true;"); err != nil {
+				ct.t.Fatal(err)
+			}
 
-		        feed := ct.newChangefeed(feedArgs{
-		          sinkType:   webhookSink,
-		          targets:    allTpccTargets,
-		        })
-		        ct.runFeedLatencyVerifier(feed, latencyTargets{
-		          initialScanLatency: 30 * time.Minute,
-		          steadyLatency:      time.Minute,
-		        })
-		        ct.waitForWorkload()
-					},
-				})
-	*/
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: webhookSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"metrics_label":       "'webhook'",
+					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+				},
+			})
+
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+
+			ct.waitForWorkload()
+		},
+	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
@@ -1300,25 +1332,25 @@ const (
 )
 
 type testCerts struct {
-	CACert    string
-	CAKey     string
-	KafkaCert string
-	KafkaKey  string
+	CACert   string
+	CAKey    string
+	SinkCert string
+	SinkKey  string
 }
 
 func (t *testCerts) CACertBase64() string {
 	return base64.StdEncoding.EncodeToString([]byte(t.CACert))
 }
 
-func makeTestCerts(kafkaNodeIP string) (*testCerts, error) {
+func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
 	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "CA private key")
 	}
 
-	KafkaKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	SinkKey, err := rsa.GenerateKey(rand.Reader, keyLength)
 	if err != nil {
-		return nil, errors.Wrap(err, "kafka private key")
+		return nil, errors.Wrap(err, "sink private key")
 	}
 
 	CACert, CACertSpec, err := generateCACert(CAKey)
@@ -1326,7 +1358,7 @@ func makeTestCerts(kafkaNodeIP string) (*testCerts, error) {
 		return nil, errors.Wrap(err, "CA cert gen")
 	}
 
-	KafkaCert, err := generateKafkaCert(kafkaNodeIP, KafkaKey, CACertSpec, CAKey)
+	SinkCert, err := generateSinkCert(sinkNodeIP, SinkKey, CACertSpec, CAKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "kafka cert gen")
 	}
@@ -1341,30 +1373,30 @@ func makeTestCerts(kafkaNodeIP string) (*testCerts, error) {
 		return nil, errors.Wrap(err, "pem encode CA cert")
 	}
 
-	KafkaKeyPEM, err := pemEncodePrivateKey(KafkaKey)
+	SinkKeyPEM, err := pemEncodePrivateKey(SinkKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "pem encode kafka key")
+		return nil, errors.Wrap(err, "pem encode sink key")
 	}
 
-	KafkaCertPEM, err := pemEncodeCert(KafkaCert)
+	SinkCertPEM, err := pemEncodeCert(SinkCert)
 	if err != nil {
-		return nil, errors.Wrap(err, "pem encode kafka cert")
+		return nil, errors.Wrap(err, "pem encode sink cert")
 	}
 
 	return &testCerts{
-		CACert:    CACertPEM,
-		CAKey:     CAKeyPEM,
-		KafkaCert: KafkaCertPEM,
-		KafkaKey:  KafkaKeyPEM,
+		CACert:   CACertPEM,
+		CAKey:    CAKeyPEM,
+		SinkCert: SinkCertPEM,
+		SinkKey:  SinkKeyPEM,
 	}, nil
 }
 
-func generateKafkaCert(
-	kafkaIP string, priv *rsa.PrivateKey, CACert *x509.Certificate, CAKey *rsa.PrivateKey,
+func generateSinkCert(
+	sinkIP string, priv *rsa.PrivateKey, CACert *x509.Certificate, CAKey *rsa.PrivateKey,
 ) ([]byte, error) {
-	ip := net.ParseIP(kafkaIP)
+	ip := net.ParseIP(sinkIP)
 	if ip == nil {
-		return nil, fmt.Errorf("invalid IP address: %s", kafkaIP)
+		return nil, fmt.Errorf("invalid IP address: %s", sinkIP)
 	}
 
 	serial, err := randomSerial()
@@ -1378,7 +1410,7 @@ func generateKafkaCert(
 			Country:            []string{"US"},
 			Organization:       []string{"Cockroach Labs"},
 			OrganizationalUnit: []string{"Engineering"},
-			CommonName:         "kafka-node",
+			CommonName:         "sink-node",
 		},
 		NotBefore:   timeutil.Now(),
 		NotAfter:    timeutil.Now().Add(certLifetime),
@@ -1441,6 +1473,24 @@ func randomSerial() (*big.Int, error) {
 		return nil, errors.Wrap(err, "generate random serial")
 	}
 	return ret, nil
+}
+
+var nextWebhookPort = 3001 // 3000 is used by grafana
+
+var webhookServerScript = func(port int) string {
+	return fmt.Sprintf(`
+package main
+
+import (
+	"log"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+	log.Fatal(http.ListenAndServeTLS(":%d",  "/home/ubuntu/cert.pem",  "/home/ubuntu/key.pem", nil))
+}
+`, port)
 }
 
 const (
@@ -1880,8 +1930,8 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 		keystorePassword,
 	)
 
-	k.PutConfigContent(ctx, testCerts.KafkaKey, kafkaKeyPath)
-	k.PutConfigContent(ctx, testCerts.KafkaCert, kafkaCertPath)
+	k.PutConfigContent(ctx, testCerts.SinkKey, kafkaKeyPath)
+	k.PutConfigContent(ctx, testCerts.SinkCert, kafkaCertPath)
 	k.PutConfigContent(ctx, testCerts.CAKey, caKeyPath)
 	k.PutConfigContent(ctx, testCerts.CACert, caCertPath)
 	k.PutConfigContent(ctx, kafkaConfig, kafkaConfigPath)
