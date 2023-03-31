@@ -66,9 +66,9 @@ const nonIndexColHistogramBuckets = 2
 // StubTableStats generates "stub" statistics for a table which are missing
 // histograms and have 0 for all values.
 func StubTableStats(
-	desc catalog.TableDescriptor, name string, multiColEnabled bool,
+	desc catalog.TableDescriptor, name string, multiColEnabled bool, defaultHistogramBuckets uint32,
 ) ([]*stats.TableStatisticProto, error) {
-	colStats, err := createStatsDefaultColumns(desc, multiColEnabled)
+	colStats, err := createStatsDefaultColumns(desc, multiColEnabled, defaultHistogramBuckets)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,10 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			multiColEnabled = stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
 			deleteOtherStats = true
 		}
-		if colStats, err = createStatsDefaultColumns(tableDesc, multiColEnabled); err != nil {
+		defaultHistogramBuckets := uint32(stats.DefaultHistogramBuckets.Get(n.p.ExecCfg().SV()))
+		if colStats, err = createStatsDefaultColumns(
+			tableDesc, multiColEnabled, defaultHistogramBuckets,
+		); err != nil {
 			return nil, err
 		}
 	} else {
@@ -300,12 +303,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		// STATISTICS or other SQL on table_statistics.
 		_ = stats.MakeSortedColStatKey(columnIDs)
 		isInvIndex := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
+		defaultHistogramBuckets := uint32(stats.DefaultHistogramBuckets.Get(n.p.ExecCfg().SV()))
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
 			// with a single column that doesn't use an inverted index.
 			HasHistogram:        len(columnIDs) == 1 && !isInvIndex,
-			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
+			HistogramMaxBuckets: defaultHistogramBuckets,
 		}}
 		// Make histograms for inverted index column types.
 		if len(columnIDs) == 1 && isInvIndex {
@@ -313,7 +317,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 				ColumnIDs:           columnIDs,
 				HasHistogram:        true,
 				Inverted:            true,
-				HistogramMaxBuckets: stats.DefaultHistogramBuckets,
+				HistogramMaxBuckets: defaultHistogramBuckets,
 			})
 		}
 	}
@@ -382,7 +386,7 @@ const maxNonIndexCols = 100
 // other columns from the table. We only collect histograms for index columns,
 // plus any other boolean or enum columns (where the "histogram" is tiny).
 func createStatsDefaultColumns(
-	desc catalog.TableDescriptor, multiColEnabled bool,
+	desc catalog.TableDescriptor, multiColEnabled bool, defaultHistogramBuckets uint32,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
 	colStats := make([]jobspb.CreateStatsDetails_ColStat, 0, len(desc.ActiveIndexes()))
 
@@ -428,7 +432,7 @@ func createStatsDefaultColumns(
 		colStat := jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colIDs,
 			HasHistogram:        !isInverted,
-			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
+			HistogramMaxBuckets: defaultHistogramBuckets,
 		}
 		colStats = append(colStats, colStat)
 
@@ -570,7 +574,7 @@ func createStatsDefaultColumns(
 		// for those types, up to DefaultHistogramBuckets.
 		maxHistBuckets := uint32(nonIndexColHistogramBuckets)
 		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
-			maxHistBuckets = stats.DefaultHistogramBuckets
+			maxHistBuckets = defaultHistogramBuckets
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colIDs,
