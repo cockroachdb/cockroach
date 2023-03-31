@@ -254,7 +254,7 @@ func registerAutoUpgrade(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    `autoupgrade`,
-		Owner:   registry.OwnerKV,
+		Owner:   registry.OwnerTestEng,
 		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
