@@ -5,19 +5,19 @@ subtest grant_revoke_error
 statement ok
 CREATE TENANT "grant-revoke-error-tenant";
 
-statement error unknown capability: "not_a_capability"
+statement error pgcode 42601 unknown capability: "not_a_capability"
 ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY not_a_capability=true
 
-statement error argument of ALTER TENANT CAPABILITY can_admin_split must be type bool, not type int
+statement error pgcode 42804 argument of ALTER TENANT CAPABILITY can_admin_split must be type bool, not type int
 ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY can_admin_split=1
 
-statement error parameter "can_admin_split" requires a Boolean value
+statement error pgcode 22023 parameter "can_admin_split" requires a Boolean value
 ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY can_admin_split=NULL
 
-statement error unknown capability: "not_a_capability"
+statement error pgcode 42601 unknown capability: "not_a_capability"
 ALTER TENANT "grant-revoke-error-tenant" REVOKE CAPABILITY not_a_capability
 
-statement error no value allowed in revoke: "can_admin_split"
+statement error pgcode 42601 no value allowed in revoke: "can_admin_split"
 ALTER TENANT "grant-revoke-error-tenant" REVOKE CAPABILITY can_admin_split=false
 
 subtest end
@@ -195,5 +195,80 @@ can_view_node_info         false
 can_view_tsdb_metrics      false
 exempt_from_rate_limiting  false
 span_config_bounds         {}
+
+subtest end
+
+
+subtest span_config_bounds
+
+statement ok
+CREATE TENANT scb;
+
+# Test that you can't REVOKE span_config_bounds. The reason is that it'd be
+# confusing; removing the bounds is like setting the capability to be a
+# wildcard. That's hardly REVOKE-ing anything.
+
+statement error pgcode 22023 cannot REVOKE CAPABILITY span_config_bounds
+ALTER TENANT scb REVOKE CAPABILITY span_config_bounds;
+
+statement ok
+ALTER TENANT scb GRANT CAPABILITY span_config_bounds = crdb_internal.json_to_pb(
+    'cockroach.multitenant.tenantcapabilitiespb.SpanConfigBounds',
+    '{"gcTtlSeconds": {"start": 60, "end":600}, "rangeMaxBytes": {"start": 100, "end":200}}'
+)
+
+# Observe the side-effect.
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT scb WITH CAPABILITIES]
+----
+capability_name            capability_value
+can_admin_relocate_range   false
+can_admin_scatter          true
+can_admin_split            true
+can_admin_unsplit          false
+can_view_node_info         false
+can_view_tsdb_metrics      false
+exempt_from_rate_limiting  false
+span_config_bounds         range_min_bytes: *
+                           range_max_bytes: [100, 200]
+                           global_reads: *
+                           num_voters: *
+                           num_replicas: *
+                           gc.ttlseconds: [60, 600]
+                           constraints: *
+                           voter_constraints: *
+                           lease_preferences: *
+
+# Ensure that you can set the bounds to NULL, which means there now are no
+# bounds.
+
+statement ok
+ALTER TENANT scb GRANT CAPABILITY span_config_bounds = NULL;
+
+query TT colnames
+SELECT capability_name, capability_value FROM [SHOW TENANT scb WITH CAPABILITIES]
+----
+capability_name            capability_value
+can_admin_relocate_range   false
+can_admin_scatter          true
+can_admin_split            true
+can_admin_unsplit          false
+can_view_node_info         false
+can_view_tsdb_metrics      false
+exempt_from_rate_limiting  false
+span_config_bounds         {}
+
+# Check that there are appropriate errors for invalid types, malformed and
+# malformed data.
+
+statement error pgcode 22023 invalid span_config_bounds value
+ALTER TENANT scb GRANT CAPABILITY span_config_bounds = x'01ab';
+
+statement error pgcode 42804 argument of ALTER TENANT CAPABILITY span_config_bounds must be type bytes, not type bool
+ALTER TENANT scb GRANT CAPABILITY span_config_bounds = false;
+
+statement error pgcode 42601 value required for capability: span_config_bounds
+ALTER TENANT scb GRANT CAPABILITY span_config_bounds;
 
 subtest end
