@@ -104,7 +104,7 @@ func registerGORM(r registry.Registry) {
 		err = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf(`cd %s && go get -u -t ./... && go mod download && go mod tidy `, gormTestPath),
+			fmt.Sprintf(`cd %s && go mod tidy && go mod download`, gormTestPath),
 		)
 		require.NoError(t, err)
 
