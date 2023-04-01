@@ -1078,31 +1078,27 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 // (4) the lease is valid, held locally, and capable of serving the
 //
 //	given request. In this case, no error is returned.
-//
-// In addition to the lease status, the method also returns whether the
-// lease should be considered for extension using maybeExtendLeaseAsync
-// after the replica's read lock has been dropped.
 func (r *Replica) leaseGoodToGoRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+) (kvserverpb.LeaseStatus, error) {
 	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
-	shouldExtend, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+	err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
 	if err != nil {
-		return kvserverpb.LeaseStatus{}, false, err
+		return kvserverpb.LeaseStatus{}, err
 	}
-	return st, shouldExtend, err
+	return st, err
 }
 
 func (r *Replica) leaseGoodToGoForStatusRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp, st kvserverpb.LeaseStatus,
-) (shouldExtend bool, _ error) {
+) error {
 	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
 		// Case (1): invalid request.
-		return false, err
+		return err
 	}
 	if !st.IsValid() {
 		// Case (2): invalid lease.
-		return false, &kvpb.InvalidLeaseError{}
+		return &kvpb.InvalidLeaseError{}
 	}
 	if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Case (3): not leaseholder.
@@ -1144,19 +1140,19 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 		}
 		// Otherwise, if the lease is currently held by another replica, redirect
 		// to the holder.
-		return false, kvpb.NewNotLeaseHolderError(
+		return kvpb.NewNotLeaseHolderError(
 			st.Lease, r.store.StoreID(), r.descRLocked(), "lease held by different store",
 		)
 	}
 	// Case (4): all good.
-	return r.shouldExtendLeaseRLocked(st), nil
+	return nil
 }
 
 // leaseGoodToGo is like leaseGoodToGoRLocked, but will acquire the replica read
 // lock.
 func (r *Replica) leaseGoodToGo(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+) (kvserverpb.LeaseStatus, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.leaseGoodToGoRLocked(ctx, now, reqTS)
@@ -1213,11 +1209,8 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
-		status, shouldExtend, err := r.leaseGoodToGo(ctx, now, reqTS)
+		status, err := r.leaseGoodToGo(ctx, now, reqTS)
 		if err == nil {
-			if shouldExtend {
-				r.maybeExtendLeaseAsync(ctx, status)
-			}
 			return status, nil
 		} else if !errors.HasType(err, (*kvpb.InvalidLeaseError)(nil)) {
 			return kvserverpb.LeaseStatus{}, kvpb.NewError(err)

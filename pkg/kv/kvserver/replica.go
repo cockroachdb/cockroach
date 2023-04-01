@@ -1591,13 +1591,8 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	var shouldExtend bool
-	postRUnlock := func() {}
 	r.mu.RLock()
-	defer func() {
-		r.mu.RUnlock()
-		postRUnlock()
-	}()
+	defer r.mu.RUnlock()
 
 	// Has the replica been initialized?
 	// NB: this should have already been checked in Store.Send, so we don't need
@@ -1622,7 +1617,7 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	st, shouldExtend, err := r.checkLeaseRLocked(ctx, ba)
+	st, err := r.checkLeaseRLocked(ctx, ba)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
@@ -1646,13 +1641,6 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		}
 	}
 
-	if shouldExtend {
-		// If we're asked to extend the lease, trigger (async) lease renewal.
-		// Kicking this off requires an exclusive lock, and we hold a read-only lock
-		// already, so we jump through a hoop to run it in a suitably positioned
-		// defer.
-		postRUnlock = func() { r.maybeExtendLeaseAsync(ctx, st) }
-	}
 	return st, nil
 }
 
@@ -1716,12 +1704,10 @@ func (r *Replica) checkExecutionCanProceedRWOrAdmin(
 // checkLeaseRLocked checks the provided batch against the GC
 // threshold and lease. A nil error indicates to go ahead with the batch, and
 // is accompanied either by a valid or zero lease status, the latter case
-// indicating that the request was permitted to bypass the lease check. The
-// returned bool indicates whether the lease should be extended (only on nil
-// error).
+// indicating that the request was permitted to bypass the lease check.
 func (r *Replica) checkLeaseRLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (kvserverpb.LeaseStatus, bool, error) {
+) (kvserverpb.LeaseStatus, error) {
 	now := r.Clock().NowAsClockTimestamp()
 	// If the request is a write or a consistent read, it requires the
 	// replica serving it to hold the range lease. We pass the write
@@ -1733,7 +1719,6 @@ func (r *Replica) checkLeaseRLocked(
 	reqTS := ba.WriteTimestamp()
 	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 
-	var shouldExtend bool
 	// Write commands that skip the lease check in practice are exactly
 	// RequestLease and TransferLease. Both use the provided previous lease for
 	// verification below raft. We return a zero lease status from this method and
@@ -1744,14 +1729,13 @@ func (r *Replica) checkLeaseRLocked(
 	// doesn't check the lease.
 	if !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != kvpb.INCONSISTENT {
 		// Check the lease.
-		var err error
-		shouldExtend, err = r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+		err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
 		if err != nil {
 			// No valid lease, but if we can serve this request via follower reads,
 			// we may continue.
 			if !r.canServeFollowerReadRLocked(ctx, ba) {
 				// If not, return the error.
-				return kvserverpb.LeaseStatus{}, false, err
+				return kvserverpb.LeaseStatus{}, err
 			}
 			// Otherwise, suppress the error. Also, remember that we're not serving
 			// this under the lease by zeroing out the status. We also intentionally
@@ -1759,11 +1743,11 @@ func (r *Replica) checkLeaseRLocked(
 			// this method assumes that a valid status indicates that this replica
 			// holds the lease (see #73123). `shouldExtend` is already false in this
 			// branch, but for completeness we zero it out as well.
-			st, shouldExtend, err = kvserverpb.LeaseStatus{}, false, nil
+			st, err = kvserverpb.LeaseStatus{}, nil
 		}
 	}
 
-	return st, shouldExtend, nil
+	return st, nil
 }
 
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
