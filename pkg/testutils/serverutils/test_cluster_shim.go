@@ -209,6 +209,10 @@ type TestClusterInterface interface {
 	// range is lazily split off on the first call to ScratchRange.
 	ScratchRange(t testing.TB) roachpb.Key
 
+	// ScratchRangeWithExpirationLease is like ScratchRange, but returns a system
+	// range with an expiration lease.
+	ScratchRangeWithExpirationLease(t testing.TB) roachpb.Key
+
 	// WaitForFullReplication waits until all stores in the cluster
 	// have no ranges with replication pending.
 	WaitForFullReplication() error
