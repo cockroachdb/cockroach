@@ -95,11 +95,11 @@ func CheckForcedErr(
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
 	}
 	if idKey == "" {
-		// This is an empty Raft command (which is sent by Raft after elections
-		// to trigger reproposals or during concurrent configuration changes).
-		// Nothing to do here except making sure that the corresponding batch
-		// (which is bogus) doesn't get executed (for it is empty and so
-		// properties like key range are undefined).
+		// This is an empty Raft command (which is sent by Raft after elections to
+		// trigger reproposals, during concurrent configuration changes, or to
+		// unquiesce the Raft group). Nothing to do here except making sure that the
+		// corresponding batch (which is bogus) doesn't get executed (for it is
+		// empty and so properties like key range are undefined).
 		return ForcedErrResult{
 			LeaseIndex:  leaseIndex,
 			Rejection:   ProposalRejectionPermanent,
