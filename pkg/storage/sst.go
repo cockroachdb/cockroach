@@ -375,7 +375,7 @@ func CheckSSTConflicts(
 	var extErr error
 	var sstPrevRangeKeys, extPrevRangeKeys MVCCRangeKeyStack
 	var sstFirstRangeKey MVCCRangeKeyStack
-	var extPrevKey MVCCKey
+	var extPrevKey, extPrevDeletedKey MVCCKey
 
 	if usePrefixSeek {
 		// In the case of prefix seeks, do not look at engine iter exhaustion. This
@@ -551,10 +551,11 @@ func CheckSSTConflicts(
 						return enginepb.MVCCStats{}, errors.AssertionFailedf("expected range tombstone above timestamp %v", extKey.Timestamp)
 					}
 					sstPointShadowsExtPoint := sstHasPoint && sstIter.UnsafeKey().Key.Equal(extKey.Key)
-					if (extKeyChanged || sstRangeKeysChanged) && !sstPointShadowsExtPoint {
+					if (extKeyChanged || sstRangeKeysChanged) && !sstPointShadowsExtPoint && !extKey.Equal(extPrevDeletedKey) {
+						extKey.CloneInto(&extPrevDeletedKey)
 						statsDiff.Add(updateStatsOnRangeKeyCover(
 							sstRangeKeyVersion.Timestamp, extKey, extValueLen, extValueIsTombstone))
-					} else if !extKeyChanged && sstPointShadowsExtPoint {
+					} else if extKey.Equal(extPrevDeletedKey) && sstPointShadowsExtPoint {
 						// This is either a conflict, shadow, or idempotent operation.
 						// Subtract the RangeKeyCover stats diff from the last iteration, as
 						// compareForCollision will account for the shadow.
@@ -993,6 +994,8 @@ func CheckSSTConflicts(
 					sstOK, sstErr = sstIter.Valid()
 					extIter.SeekGE(extPrevKey)
 					extOK, extErr = extIter.Valid()
+					// We could have reset extHasRange above, so set it back.
+					_, extHasRange = extIter.HasPointAndRange()
 				}
 			}
 		}

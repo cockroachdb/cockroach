@@ -1089,6 +1089,30 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:          kvs{rangeKV("a", "b", 10, ""), pointKV("d", 9, "foo")},
 			ignoreExpect: true,
 		},
+		"DisallowConflict does not double count deleted ext key": {
+			noConflict:   true,
+			data:         kvs{pointKV("e", 6, "foo"), rangeKV("e", "g", 5, "")},
+			sst:          kvs{rangeKV("a", "j", 10, ""), pointKV("b", 11, "bar"), pointKV("c", 11, "foo"), pointKV("d", 11, "foo"), pointKV("f", 11, "foo")},
+			ignoreExpect: true,
+		},
+		"DisallowConflict does not double count deleted ext key 2": {
+			noConflict:   true,
+			data:         kvs{pointKV("b", 7, "foo"), pointKV("d", 6, "foo"), rangeKV("d", "e", 5, "")},
+			sst:          kvs{rangeKV("a", "j", 10, ""), pointKV("c", 11, "foo"), pointKV("d", 12, "bar")},
+			ignoreExpect: true,
+		},
+		"DisallowConflict handles complex range key cases": {
+			noConflict:   true,
+			data:         kvs{pointKV("cb", 6, "foo"), pointKV("cm", 6, "foo"), pointKV("cn", 6, ""), pointKV("co", 6, "foo"), rangeKV("c", "co", 5, "")},
+			sst:          kvs{rangeKV("cd", "cnr", 9, ""), pointKV("cn", 8, "bar"), rangeKV("cnr", "d", 10, ""), pointKV("co", 8, "bar")},
+			ignoreExpect: true,
+		},
+		"DisallowConflict handles complex range key cases 2": {
+			noConflict:   true,
+			data:         kvs{pointKV("cb", 6, "foo"), pointKV("cm", 6, "foo"), pointKV("cn", 6, ""), pointKV("cx", 6, "foo"), rangeKV("c", "co", 5, "")},
+			sst:          kvs{rangeKV("cd", "cnr", 9, ""), pointKV("cn", 8, "bar"), rangeKV("cnr", "d", 10, ""), pointKV("co", 8, "bar")},
+			ignoreExpect: true,
+		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
 		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {
