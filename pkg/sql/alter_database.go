@@ -419,6 +419,9 @@ func (p *planner) AlterDatabaseDropRegion(
 			)
 		}
 
+		// If this is the system database, we can only drop a rtegion if it is
+		// not a part of any of
+
 		// When the last region is removed from the database, we also clean up
 		// detritus multi-region type descriptor. This includes both the
 		// type descriptor and its array counterpart.
@@ -470,9 +473,39 @@ func (p *planner) AlterDatabaseDropRegion(
 // - or be an owner of the table.
 // - or have the CREATE privilege on the table.
 // privilege on the table descriptor.
+//
+// For the system database, the conditions are more stringent. The user must
+// be the node user, and this must be a secondary tenant.
 func (p *planner) checkPrivilegesForMultiRegionOp(
 	ctx context.Context, desc catalog.Descriptor,
 ) error {
+
+	// Ensure that only secondary tenants may have their system database
+	// set up for multi-region operations. Even then, ensure that only the
+	// node user may configure the system database.
+	//
+	// Operations to configure the system database will be sent as tasks using
+	// the autoconfig infrastucture.
+	//
+	// TODO(ajwerner): Adopt the auto-config infrastructure for configuring
+	// multi-region primitives in the system database. For now, we also allow
+	// root to perform the various operations to enable testing.
+	if desc.GetID() == keys.SystemDatabaseID {
+		if p.execCfg.Codec.ForSystemTenant() {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"modifying the regions of system database is not supported",
+			)
+		}
+		if u := p.SessionData().User(); !u.IsNodeUser() && !u.IsRootUser() {
+			return pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"user %s may not modify the system database",
+				u,
+			)
+		}
+	}
+
 	hasAdminRole, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return err
@@ -996,23 +1029,18 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		}
 		return err
 	}
+
+	// If this is the system database, we need to do some additional magic to
+	// reconfigure the various tables and set the correct localities.
+	if n.desc.GetID() == keys.SystemDatabaseID {
+		if err := params.p.optimizeSystemDatabase(params.ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
-	// Block adding a primary region to the system database unless the user is
-	// root. This ensures that the system database can only be made into a
-	// multi-region database by the root user.
-	//
-	// TODO(ajwerner): In the future, lock this down even further under clearer
-	// semantics.
-	if n.desc.GetID() == keys.SystemDatabaseID &&
-		!params.SessionData().User().IsRootUser() {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"adding a primary region to the system database is not supported",
-		)
-	}
 
 	// There are two paths to consider here: either this is the first setting of
 	// the primary region, OR we're updating the primary region. In the case where

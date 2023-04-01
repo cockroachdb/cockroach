@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,13 +32,20 @@ func TestRegionalByRowTablesInTheSystemDatabase(t *testing.T) {
 	defer cleanup()
 	defer tc.Stopper().Stop(ctx)
 
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `
-BEGIN;
-ALTER DATABASE system CONFIGURE ZONE DISCARD;
-ALTER DATABASE system SET PRIMARY REGION "us-east1";
-COMMIT;
-`)
+	// Allow the tenant to make itself multi-region.
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `
+ALTER TENANT ALL
+SET CLUSTER SETTING
+sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true;`)
+	tenant, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantName:  "test",
+		TenantID:    serverutils.TestTenantID(),
+		UseDatabase: "defaultdb",
+	})
+	defer tenant.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tenantDB)
+	tdb.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1";`)
 	// Pick an arbitrary table that we don't interact with via KV to make
 	// REGIONAL BY ROW.
 	tdb.Exec(t, `ALTER TABLE system.web_sessions SET LOCALITY REGIONAL BY ROW`)

@@ -137,12 +137,6 @@ func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	return errors.WithStack(errRegionOperator)
 }
 
-// OptimizeSystemDatabase is part of the eval.RegionOperator
-// interface.
-func (so *DummyRegionOperator) OptimizeSystemDatabase(_ context.Context) error {
-	return errors.WithStack(errRegionOperator)
-}
-
 // DummyStreamManagerFactory implements the eval.StreamManagerFactory interface by
 // returning errors.
 type DummyStreamManagerFactory struct{}
