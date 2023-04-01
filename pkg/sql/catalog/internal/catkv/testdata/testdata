@@ -330,9 +330,11 @@ catalog:
   "042":
     descriptor: relation
     namespace: (1, 29, "statement_statistics")
+    zone: gc.ttlseconds=3600
   "043":
     descriptor: relation
     namespace: (1, 29, "transaction_statistics")
+    zone: gc.ttlseconds=3600
   "044":
     descriptor: relation
     namespace: (1, 29, "database_role_settings")
@@ -383,9 +385,11 @@ catalog:
   "060":
     descriptor: relation
     namespace: (1, 29, "statement_activity")
+    zone: gc.ttlseconds=3600
   "061":
     descriptor: relation
     namespace: (1, 29, "transaction_activity")
+    zone: gc.ttlseconds=3600
   "100":
     comments:
       database: this is the default database
