@@ -11,6 +11,7 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"testing"
@@ -96,21 +97,21 @@ func TestRunWithMaybeRetry(t *testing.T) {
 
 	attempt := 0
 	cases := []struct {
-		f                func() (*RunResultDetails, error)
+		f                func(ctx context.Context) (*RunResultDetails, error)
 		shouldRetryFn    func(*RunResultDetails) bool
 		nilRetryOpts     bool
 		expectedAttempts int
 		shouldError      bool
 	}{
 		{ // 1. Happy path: no error, no retry required
-			f: func() (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*RunResultDetails, error) {
 				return newResult(0), nil
 			},
 			expectedAttempts: 1,
 			shouldError:      false,
 		},
 		{ // 2. Error, but with no retries
-			f: func() (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*RunResultDetails, error) {
 				return newResult(1), nil
 			},
 			shouldRetryFn: func(*RunResultDetails) bool {
@@ -120,14 +121,14 @@ func TestRunWithMaybeRetry(t *testing.T) {
 			shouldError:      true,
 		},
 		{ // 3. Error, but no retry function specified
-			f: func() (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*RunResultDetails, error) {
 				return newResult(1), nil
 			},
 			expectedAttempts: 3,
 			shouldError:      true,
 		},
 		{ // 4. Error, with retries exhausted
-			f: func() (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*RunResultDetails, error) {
 				return newResult(255), nil
 			},
 			shouldRetryFn:    func(d *RunResultDetails) bool { return d.RemoteExitStatus == 255 },
@@ -135,7 +136,7 @@ func TestRunWithMaybeRetry(t *testing.T) {
 			shouldError:      true,
 		},
 		{ // 5. Eventual success after retries
-			f: func() (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*RunResultDetails, error) {
 				attempt++
 				if attempt == 3 {
 					return newResult(0), nil
@@ -147,7 +148,7 @@ func TestRunWithMaybeRetry(t *testing.T) {
 			shouldError:      false,
 		},
 		{ // 6. Error, runs once because nil retryOpts
-			f: func() (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*RunResultDetails, error) {
 				return newResult(255), nil
 			},
 			nilRetryOpts:     true,
@@ -163,7 +164,7 @@ func TestRunWithMaybeRetry(t *testing.T) {
 			if !tc.nilRetryOpts {
 				retryOpts = newRunRetryOpts(testRetryOpts, tc.shouldRetryFn)
 			}
-			res, _ := runWithMaybeRetry(l, retryOpts, tc.f)
+			res, _ := runWithMaybeRetry(context.Background(), l, retryOpts, tc.f)
 
 			require.Equal(t, tc.shouldError, res.Err != nil)
 			require.Equal(t, tc.expectedAttempts, res.Attempt)

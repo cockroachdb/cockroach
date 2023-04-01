@@ -183,7 +183,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	l.Printf("%s: starting nodes", c.Name)
 
 	// SSH retries are disabled by passing nil RunRetryOpts
-	if err := c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) (*RunResultDetails, error) {
+	if err := c.Parallel(ctx, l, "", len(nodes), parallelism, func(ctx context.Context, nodeIdx int) (*RunResultDetails, error) {
 		node := nodes[nodeIdx]
 		res := &RunResultDetails{Node: node}
 		// NB: if cockroach started successfully, we ignore the output as it is
@@ -329,7 +329,7 @@ func (c *SyncedCluster) ExecSQL(
 	resultChan := make(chan result, len(c.Nodes))
 
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
+	if err := c.Parallel(ctx, l, display, len(c.Nodes), 0, func(ctx context.Context, nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
 
 		var cmd string
