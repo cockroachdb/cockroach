@@ -1969,7 +1969,7 @@ func (c *clusterImpl) Get(
 	}
 	c.status(fmt.Sprintf("getting %v", src))
 	defer c.status("")
-	return errors.Wrap(roachprod.Get(l, c.MakeNodes(opts...), src, dest), "cluster.Get")
+	return errors.Wrap(roachprod.Get(ctx, l, c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
 // Put a string into the specified file on the remote(s).

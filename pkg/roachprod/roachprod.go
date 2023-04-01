@@ -877,7 +877,7 @@ func Put(
 // Get copies a remote file from the nodes in a cluster.
 // If the file is retrieved from multiple nodes the destination
 // file name will be prefixed with the node number.
-func Get(l *logger.Logger, clusterName, src, dest string) error {
+func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -885,7 +885,7 @@ func Get(l *logger.Logger, clusterName, src, dest string) error {
 	if err != nil {
 		return err
 	}
-	return c.Get(l, c.Nodes, src, dest)
+	return c.Get(ctx, l, c.Nodes, src, dest)
 }
 
 type PGURLOptions struct {
@@ -913,8 +913,7 @@ func PgURL(
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		var err error
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
+		if err := c.Parallel(ctx, l, "", len(nodes), 0, func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
 			res.Stdout, res.Err = c.GetInternalIP(node)
@@ -1016,7 +1015,7 @@ type PprofOpts struct {
 }
 
 // Pprof TODO
-func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
+func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts PprofOpts) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -1048,7 +1047,7 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
 	nodes := c.TargetNodes()
-	failed, err := c.ParallelE(l, description, len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
+	failed, err := c.ParallelE(ctx, l, description, len(nodes), 0, func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 		node := nodes[i]
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
@@ -1715,11 +1714,11 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, err := c.ParallelE(l,
+	_, err := c.ParallelE(ctx, l,
 		fmt.Sprintf("Performing workload capture %s", action),
 		len(nodes),
 		0,
-		func(i int) (*install.RunResultDetails, error) {
+		func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
