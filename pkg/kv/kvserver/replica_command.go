@@ -805,7 +805,7 @@ func (r *Replica) AdminMerge(
 		}
 		if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 			if err != nil {
-				return reply, kvpb.NewErrorf("merge failed: %s", err)
+				return reply, kvpb.NewError(errors.Wrap(err, "merge failed"))
 			}
 			return reply, nil
 		}

@@ -637,8 +637,9 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			err = errors.New("value missing in reader")
 		}
 		if err != nil {
-			r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
-				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
+
+			r.disconnectRangefeedWithErr(p, kvpb.NewError(
+				errors.Wrapf(err, "error consuming %T for key %v @ ts %v", op, key, ts, err),
 			))
 			return
 		}
