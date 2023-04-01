@@ -183,10 +183,15 @@ func (e *Entry) load() error {
 		}
 		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
 		raftCmdBytes = e.ConfChangeContext.Payload
+	} else if len(raftCmdBytes) == 0 {
+		// Empty commands may be proposed to wake the leader, e.g. during
+		// unquiescence. Ignore them during application by clearing the command ID
+		// and other fields (see CheckForcedErr), similarly to those submitted by
+		// Raft on leader changes (see EntryEncodingEmpty).
+		*e = Entry{Entry: e.Entry}
+		return nil
 	}
 
-	// TODO(tbg): can len(payload)==0 if we propose an empty command to wake up leader?
-	// If so, is that a problem here?
 	return errors.Wrap(protoutil.Unmarshal(raftCmdBytes, &e.Cmd), "unmarshalling RaftCommand")
 }
 
