@@ -376,19 +376,11 @@ func (r *Replica) leasePostApplyLocked(
 
 	if newLease.Type() == roachpb.LeaseExpiration && (leaseChangingHands || maybeSplit) &&
 		iAmTheLeaseHolder && r.ownsValidLeaseRLocked(ctx, now) {
-		if r.requiresExpirationLeaseRLocked() {
-			// Whenever we first acquire an expiration-based lease for a range that
-			// requires it (i.e. the liveness or meta ranges), notify the lease
-			// renewer worker that we want it to keep proactively renewing the lease
-			// before it expires. We don't eagerly renew other expiration leases,
-			// because a more sophisticated scheduler is needed to handle large
-			// numbers of expiration leases.
+		if r.shouldUseExpirationLeaseRLocked() {
+			// Whenever we acquire a permanent expiration-based lease, notify the
+			// lease renewer to proactively renew it before it expires.
 			r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
-			select {
-			case r.store.renewableLeasesSignal <- struct{}{}:
-			default:
-			}
-		} else if !r.shouldUseExpirationLeaseRLocked() {
+		} else {
 			// We received an expiration lease for a range that shouldn't keep using
 			// it, most likely as part of a lease transfer (which is always
 			// expiration-based). We've also applied it before it has expired. Upgrade

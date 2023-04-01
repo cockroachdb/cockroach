@@ -12,19 +12,16 @@ package kvserver
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,86 +132,4 @@ func TestLeaseRenewer(t *testing.T) {
 		}
 		return true
 	}, 20*time.Second, 100*time.Millisecond)
-}
-
-func setupLeaseRenewerTest(
-	ctx context.Context, t *testing.T, init func(*base.TestClusterArgs),
-) (
-	cycles *int32, /* atomic */
-	_ serverutils.TestClusterInterface,
-) {
-	cycles = new(int32)
-	var args base.TestClusterArgs
-	args.ServerArgs.Knobs.Store = &StoreTestingKnobs{
-		LeaseRenewalOnPostCycle: func() {
-			atomic.AddInt32(cycles, 1)
-		},
-	}
-	init(&args)
-	tc := serverutils.StartNewTestCluster(t, 1, args)
-	t.Cleanup(func() { tc.Stopper().Stop(ctx) })
-
-	desc := tc.LookupRangeOrFatal(t, tc.ScratchRangeWithExpirationLease(t))
-	srv := tc.Server(0)
-	s, err := srv.GetStores().(*Stores).GetStore(srv.GetFirstStoreID())
-	require.NoError(t, err)
-
-	_, err = s.DB().Get(ctx, desc.StartKey)
-	require.NoError(t, err)
-
-	repl, err := s.GetReplica(desc.RangeID)
-	require.NoError(t, err)
-
-	// There's a lease since we just split off the range.
-	lease, _ := repl.GetLease()
-	require.Equal(t, s.NodeID(), lease.Replica.NodeID)
-
-	return cycles, tc
-}
-
-func TestLeaseRenewerExtendsExpirationBasedLeases(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	t.Run("triggered", func(t *testing.T) {
-		renewCh := make(chan struct{})
-		cycles, tc := setupLeaseRenewerTest(ctx, t, func(args *base.TestClusterArgs) {
-			args.ServerArgs.Knobs.Store.(*StoreTestingKnobs).LeaseRenewalSignalChan = renewCh
-		})
-		defer tc.Stopper().Stop(ctx)
-
-		trigger := func() {
-			// Need to signal the chan twice to make sure we see the effect
-			// of at least the first iteration.
-			for i := 0; i < 2; i++ {
-				select {
-				case renewCh <- struct{}{}:
-				case <-time.After(10 * time.Second):
-					t.Fatal("unable to send on renewal chan for 10s")
-				}
-			}
-		}
-
-		for i := 0; i < 5; i++ {
-			trigger()
-			n := atomic.LoadInt32(cycles)
-			require.NotZero(t, n, "during cycle #%v", i+1)
-			atomic.AddInt32(cycles, -n)
-		}
-	})
-
-	t.Run("periodic", func(t *testing.T) {
-		cycles, tc := setupLeaseRenewerTest(ctx, t, func(args *base.TestClusterArgs) {
-			args.ServerArgs.Knobs.Store.(*StoreTestingKnobs).LeaseRenewalDurationOverride = 10 * time.Millisecond
-		})
-		defer tc.Stopper().Stop(ctx)
-
-		testutils.SucceedsSoon(t, func() error {
-			if n := atomic.LoadInt32(cycles); n < 5 {
-				return errors.Errorf("saw only %d renewal cycles", n)
-			}
-			return nil
-		})
-	})
 }

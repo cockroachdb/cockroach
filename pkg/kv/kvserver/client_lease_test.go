@@ -1466,11 +1466,7 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 					WallClock: manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					// Outlandishly high to disable proactive renewal of
-					// expiration based leases. Lease upgrades happen
-					// immediately after applying without needing active
-					// renewal.
-					LeaseRenewalDurationOverride: 100 * time.Hour,
+					DisableAutomaticLeaseRenewal: true,
 					LeaseUpgradeInterceptor: func(lease *roachpb.Lease) {
 						mu.Lock()
 						defer mu.Unlock()

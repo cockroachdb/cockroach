@@ -131,6 +131,9 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 // also avoiding starvation by excessive sharding.
 var storeSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
 
+// leaseRenewers specifies the number of goroutines to use for lease renewals.
+var leaseRenewers = envutil.EnvOrDefaultInt("COCKROACH_LEASE_RENEWERS", 4)
+
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
@@ -808,11 +811,8 @@ type Store struct {
 	// Queue to limit concurrent non-empty snapshot sending.
 	snapshotSendQueue *multiqueue.MultiQueue
 
-	// Track newly-acquired expiration-based leases that we want to proactively
-	// renew. An object is sent on the signal whenever a new entry is added to
-	// the map.
-	renewableLeases       syncutil.IntMap // map[roachpb.RangeID]*Replica
-	renewableLeasesSignal chan struct{}   // 1-buffered
+	// Track expiration-based leases for proactive renewal.
+	renewableLeases syncutil.IntMap // map[roachpb.RangeID]*Replica
 
 	// draining holds a bool which indicates whether this store is draining. See
 	// SetDraining() for a more detailed explanation of behavior changes.
@@ -1337,11 +1337,6 @@ func NewStore(
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotApplyLimit))
 	s.snapshotSendQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotSendLimit))
-	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
-		s.renewableLeasesSignal = ch
-	} else {
-		s.renewableLeasesSignal = make(chan struct{}, 1)
-	}
 
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), kvserverbase.BulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
@@ -2133,18 +2128,19 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 // request and reduces ping-ponging of r1's lease to different replicas as
 // maybeGossipFirstRange is called on each (e.g.  #24753).
 //
-// Currently, this is only used for ranges that _require_ expiration-based
-// leases, as determined by Replica.requiresExpirationLeaseRLocked(), i.e. the
-// meta and liveness ranges. For large numbers of expiration-based leases, e.g.
-// with kv.expiration_leases_only.enabled, a more sophisticated scheduler is
-// needed since the linear scan here can't keep up. See:
-// https://github.com/cockroachdb/cockroach/issues/98433
+// TODO(erikgrinaker): This should assume responsibility for all eager lease
+// management, including lease acquisition, extension, and type switching,
+// instead of using the replicate queue and request-driven extensions.
+//
+// TODO(erikgrinaker): If/when we get rid of quiescence, we should do this
+// during Raft ticks, since they already have an optimized goroutine scheduler
+// and they're already holding the replica mutex.
 func (s *Store) startLeaseRenewer(ctx context.Context) {
-	// Start a goroutine that watches and proactively renews certain
-	// expiration-based leases.
+	// Spawn the lease renewal coordinator.
+	ch := make(chan *Replica, leaseRenewers)
 	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 
 		// Determine how frequently to attempt to ensure that we have each lease.
 		// The divisor used here is somewhat arbitrary, but needs to be large
@@ -2153,40 +2149,73 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		// up more often that strictly necessary, but it's more maintainable than
 		// attempting to accurately determine exactly when each iteration of a
 		// lease expires and when we should attempt to renew it as a result.
-		renewalDuration := s.cfg.RangeLeaseDuration / 5
-		if d := s.cfg.TestingKnobs.LeaseRenewalDurationOverride; d > 0 {
-			renewalDuration = d
-		}
+		ticker := time.NewTicker(s.cfg.RangeLeaseDuration / 6)
+		defer ticker.Stop()
+
 		for {
-			var numRenewableLeases int
 			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
-				numRenewableLeases++
-				repl := (*Replica)(v)
-				annotatedCtx := repl.AnnotateCtx(ctx)
-				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
-					if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
-						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
-					}
-					s.renewableLeases.Delete(k)
+				select {
+				case ch <- (*Replica)(v):
+					return true
+				case <-ctx.Done():
+					return false
 				}
-				return true
 			})
 
-			if numRenewableLeases > 0 {
-				timer.Reset(renewalDuration)
-			}
-			if fn := s.cfg.TestingKnobs.LeaseRenewalOnPostCycle; fn != nil {
-				fn()
-			}
 			select {
-			case <-s.renewableLeasesSignal:
-			case <-timer.C:
-				timer.Read = true
-			case <-s.stopper.ShouldQuiesce():
+			case <-ticker.C:
+			case <-ctx.Done():
 				return
 			}
 		}
 	})
+
+	// Spawn lease renewal workers. Mostly to avoid head-of-line mutex blocking.
+	for i := 0; i < leaseRenewers; i++ {
+		_ = s.stopper.RunAsyncTask(ctx, "lease-renewer-worker", func(ctx context.Context) {
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+
+			var repl *Replica
+			for {
+				select {
+				case repl = <-ch:
+				case <-ctx.Done():
+					return
+				}
+				ctx := repl.AnnotateCtx(ctx)
+				now := s.Clock().NowAsClockTimestamp()
+
+				repl.mu.RLock()
+				// Sanity-check that the replica still exists.
+				if repl.mu.destroyStatus.Removed() {
+					s.renewableLeases.Delete(int64(repl.RangeID))
+					repl.mu.RUnlock()
+					continue
+				}
+
+				st := repl.leaseStatusAtRLocked(ctx, now)
+				// If the lease is no longer ours, or it's no longer an expiration
+				// lease, stop renewing it. This is checked under Replica.mu, so if a
+				// concurrent expiration lease is being applied for this replica, it
+				// will be scheduled for renewal again after we remove it.
+				if !st.OwnedBy(s.Ident.StoreID) || st.Lease.Type() != roachpb.LeaseExpiration {
+					s.renewableLeases.Delete(int64(repl.RangeID))
+					repl.mu.RUnlock()
+					continue
+				}
+				shouldExtend := repl.shouldExtendLeaseRLocked(st) // handles expired leases too
+				repl.mu.RUnlock()
+
+				if shouldExtend {
+					// NB: call maybeExtendLeaseAsync() with a new lease status instead of
+					// requestLease() since someone may have raced with us.
+					repl.maybeExtendLeaseAsync(ctx,
+						repl.leaseStatusAtRLocked(ctx, s.Clock().NowAsClockTimestamp()))
+				}
+			}
+		})
+	}
 }
 
 // startRangefeedUpdater periodically informs all the replicas with rangefeeds
