@@ -786,7 +786,7 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Get(roachprodLibraryLogger, args[0], src, dest)
+		return roachprod.Get(context.Background(), roachprodLibraryLogger, args[0], src, dest)
 	}),
 }
 
@@ -842,7 +842,7 @@ Examples:
 		if cmd.CalledAs() == "pprof-heap" {
 			pprofOpts.Heap = true
 		}
-		return roachprod.Pprof(roachprodLibraryLogger, args[0], pprofOpts)
+		return roachprod.Pprof(context.Background(), roachprodLibraryLogger, args[0], pprofOpts)
 	}),
 }
 
