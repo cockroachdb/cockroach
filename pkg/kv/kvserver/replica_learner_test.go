@@ -1723,7 +1723,9 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	var activateSnapshotTestingKnob int64
+	var snapshotStarted int64
 	blockSnapshot := make(chan struct{})
+	snapshotInProgress := make(chan struct{})
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -1735,6 +1737,14 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 						DisableLoadBasedSplitting: true,
 						ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
 							if atomic.LoadInt64(&activateSnapshotTestingKnob) == 1 {
+								// While the snapshot RPC should only happen once given
+								// that the cluster is running under manual replication,
+								// retries or other mechanisms can cause this to be called
+								// multiple times, so let's ensure we only close the channel
+								// snapshotInProgress once by using the snapshotStarted flag.
+								if atomic.CompareAndSwapInt64(&snapshotStarted, 0, 1) {
+									close(snapshotInProgress)
+								}
 								<-blockSnapshot
 							}
 							return nil
@@ -1763,7 +1773,7 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 	require.NoError(t, err)
 
 	select {
-	case <-time.After(100 * time.Millisecond):
+	case <-snapshotInProgress:
 	// Continue.
 	case <-replicationChange:
 		t.Fatal("did not expect the replication change to complete")
@@ -1778,18 +1788,16 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 	// TestCluster currently overrides this when used with ReplicationManual.
 	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
 
-	testutils.SucceedsSoon(t, func() error {
-		// While this replication change is stalled, we'll trigger a merge and
-		// ensure that the merge correctly notices that there is a snapshot in
-		// flight and ignores the range.
-		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
-		_, processErr, enqueueErr := store.Enqueue(
-			ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
-		)
-		require.NoError(t, enqueueErr)
-		require.True(t, kvserver.IsReplicationChangeInProgressError(processErr))
-		return nil
-	})
+	// While this replication change is stalled, we'll trigger a merge and
+	// ensure that the merge correctly notices that there is a snapshot in
+	// flight and ignores the range.
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
+	_, processErr, enqueueErr := store.Enqueue(
+		ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, enqueueErr)
+	require.Truef(t, kvserver.IsReplicationChangeInProgressError(processErr),
+		"expected replication change in progress error, got %+v", processErr)
 }
 
 func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
