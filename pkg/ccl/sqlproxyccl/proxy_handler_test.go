@@ -387,48 +387,87 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	_, port, err := net.SplitHostPort(addr)
 	require.NoError(t, err)
 
-	url := fmt.Sprintf("postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
-	_ = te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
-
-	url = fmt.Sprintf("postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
-	_ = te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
-
-	// SNI provides tenant ID.
-	url = fmt.Sprintf("postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require", port)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
-	// SNI tried but doesn't parse to valid tenant ID and DB/Options not provided
-	url = fmt.Sprintf("postgres://bob:builder@tenant_cluster_28.blah:%s/defaultdb?sslmode=require", port)
-	_ = te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "missing cluster identifier")
-
-	// Database provides valid ID
-	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
-	// SNI and database provide tenant IDs that match.
-	url = fmt.Sprintf(
-		"postgres://bob:builder@tenant-cluster-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require", port,
-	)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
-	// SNI and database provide tenant IDs that don't match. SNI is ignored.
-	url = fmt.Sprintf(
-		"postgres://bob:builder@tick-data-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require", port,
-	)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
+	for _, tc := range []struct {
+		name    string
+		url     string
+		expCode errorCode
+		expErr  string
+	}{
+		{
+			name: "failed_SASL_auth_1",
+			url: fmt.Sprintf(
+				"postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require",
+				addr,
+			),
+			expErr: "failed SASL auth",
+		},
+		{
+			name: "failed_SASL_auth_2",
+			url: fmt.Sprintf(
+				"postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require",
+				addr,
+			),
+			expErr: "failed SASL auth",
+		},
+		{
+			// SNI tried but doesn't parse to valid tenant ID and DB/Options not provided.
+			name: "invalid_SNI",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tenant_cluster_28.blah:%s/defaultdb?sslmode=require",
+				port,
+			),
+			expCode: codeParamsRoutingFailed,
+			expErr:  "missing cluster identifier",
+		},
+		{
+			name: "SNI_provides_tenant_ID",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require",
+				port,
+			),
+		},
+		{
+			name: "database_provides_tenant_ID",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require",
+				addr,
+			),
+		},
+		{
+			name: "SNI_and_database_provide_tenant_ID",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tenant-cluster-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require",
+				port,
+			),
+		},
+		{
+			// SNI and database provide tenant IDs that don't match. SNI is ignored.
+			name: "SNI_and_database_provided_but_SNI_ignored",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tick-data-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require",
+				port,
+			),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Ensure that CurConnCount is 0 before proceeding.
+			testutils.SucceedsSoon(t, func() error {
+				val := s.metrics.CurConnCount.Value()
+				if val != 0 {
+					return errors.Newf("CurConnCount is not 0, got %d", val)
+				}
+				return nil
+			})
+			if tc.expErr == "" {
+				te.TestConnect(ctx, t, tc.url, func(conn *pgx.Conn) {
+					require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+					require.NoError(t, runTestQuery(ctx, conn))
+				})
+			} else {
+				_ = te.TestConnectErr(ctx, t, tc.url, tc.expCode, tc.expErr)
+			}
+		})
+	}
 	require.Equal(t, int64(4), s.metrics.SuccessfulConnCount.Count())
 	require.Equal(t, int64(4), s.metrics.ConnectionLatency.TotalCount())
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
