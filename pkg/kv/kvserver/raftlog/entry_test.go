@@ -18,17 +18,46 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-func TestLoadInvalidEntry(t *testing.T) {
-	invalidEnt := raftpb.Entry{
-		Term:  1,
-		Index: 1,
-		Data: EncodeRaftCommand(
-			// It would be nice to have an "even more invalid" command here but it
-			// turns out that DecodeRaftCommand "handles" errors via panic().
-			EntryEncodingStandardWithAC, "foobarzz", []byte("definitely not a protobuf"),
-		),
+func TestNewEntry(t *testing.T) {
+	// TODO(replication): Add more cases.
+	testcases := map[string]struct {
+		data        []byte
+		expectEmpty bool
+		expectErr   bool
+	}{
+		// Proposed by Raft on leader change.
+		"empty entry": {data: nil, expectEmpty: true},
+		// Proposed by CRDB on unquiescence.
+		"empty payload": {
+			data:        EncodeRaftCommand(EntryEncodingStandardWithoutAC, "00000000", nil),
+			expectEmpty: true,
+		},
+		"invalid": {
+			data:      EncodeRaftCommand(EntryEncodingStandardWithAC, "00000000", []byte("not a protobuf")),
+			expectErr: true,
+		},
 	}
-	ent, err := NewEntry(invalidEnt)
-	require.Error(t, err) // specific error doesn't matter
-	require.Zero(t, ent)
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			ent, err := NewEntry(raftpb.Entry{
+				Term:  1,
+				Index: 1,
+				Data:  tc.data,
+			})
+			if tc.expectErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Clear out the passed Raft entry, and only assert on the decoded entry.
+			require.NotNil(t, ent)
+			ent.Entry = raftpb.Entry{}
+			if tc.expectEmpty {
+				require.Zero(t, *ent)
+			} else {
+				require.NotZero(t, *ent)
+			}
+		})
+	}
 }
