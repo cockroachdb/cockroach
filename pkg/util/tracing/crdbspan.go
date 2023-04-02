@@ -980,28 +980,28 @@ func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
 // convention between parents and children.
 func (s *crdbSpan) notifyEventListeners(item Structured) {
 	s.mu.Lock()
+	var unlocked bool
+	defer func() {
+		if !unlocked {
+			s.mu.Unlock()
+		}
+	}()
 
 	// Check if the span has been finished concurrently with this notify call.
 	// This can happen when the signal comes from a child span; in that case the
 	// child calls into the parent without holding the child's lock, so the call
 	// can race with parent.Finish().
 	if s.mu.finished {
-		s.mu.Unlock()
 		return
 	}
-	s.mu.Unlock()
 
 	// Notify s' eventListeners first, before passing the event to parent.
-	//
-	// We can operate on s' eventListeners without holding the mutex because the
-	// slice is only written to once during span creation.
 	for _, listener := range s.eventListeners {
 		if listener.Notify(item) == EventConsumed {
 			return
 		}
 	}
 
-	s.mu.Lock()
 	if s.mu.recording.notifyParentOnStructuredEvent {
 		parent := s.mu.parent.Span.i.crdb
 		// Take a reference of s' parent before releasing the mutex. This ensures
@@ -1010,9 +1010,8 @@ func (s *crdbSpan) notifyEventListeners(item Structured) {
 		parentRef := makeSpanRef(s.mu.parent.Span)
 		defer parentRef.release()
 		s.mu.Unlock()
+		unlocked = true
 		parent.notifyEventListeners(item)
-	} else {
-		s.mu.Unlock()
 	}
 }
 
