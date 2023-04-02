@@ -115,6 +115,7 @@ type SessionEventListener interface {
 // to replace a session that has expired and deleted from the table.
 // TODO(rima): Rename Instance to avoid confusion with sqlinstance.SQLInstance.
 type Instance struct {
+	log.AmbientContext
 	clock    *hlc.Clock
 	settings *cluster.Settings
 	stopper  *stop.Stopper
@@ -369,6 +370,7 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 //
 // sessionEvents, if not nil, gets notified of some session state transitions.
 func NewSQLInstance(
+	ambientCtx log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	storage Writer,
@@ -381,11 +383,12 @@ func NewSQLInstance(
 	}
 
 	l := &Instance{
-		clock:         clock,
-		settings:      settings,
-		storage:       storage,
-		stopper:       stopper,
-		sessionEvents: sessionEvents,
+		AmbientContext: ambientCtx,
+		clock:          clock,
+		settings:       settings,
+		storage:        storage,
+		stopper:        stopper,
+		sessionEvents:  sessionEvents,
 		ttl: func() time.Duration {
 			return DefaultTTL.Get(&settings.SV)
 		},
@@ -406,7 +409,8 @@ func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
 
 	log.Infof(ctx, "starting SQL liveness instance")
 	// Detach from ctx's cancelation.
-	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	taskCtx := l.AnnotateCtx(context.Background())
+	taskCtx = logtags.WithTags(taskCtx, logtags.FromContext(ctx))
 	_ = l.stopper.RunAsyncTask(taskCtx, "slinstance", l.heartbeatLoop)
 }
 
