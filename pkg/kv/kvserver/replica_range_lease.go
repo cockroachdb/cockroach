@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -380,6 +381,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()
+
+			// Grow the goroutine stack, to avoid having to re-grow it during request
+			// processing. This is normally done when processing batch requests via
+			// RPC, but here we submit the request directly to the local replica.
+			growstack.Grow()
 
 			err := p.requestLease(ctx, nextLeaseHolder, status, leaseReq)
 			// Error will be handled below.
