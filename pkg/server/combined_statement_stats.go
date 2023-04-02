@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -105,7 +106,7 @@ func getCombinedStatementStats(
 		return nil, serverError(ctx, err)
 	}
 
-	stmtsRunTime, txnsRunTime, err := getTotalRuntimeSecs(ctx, req, ie, testingKnobs)
+	stmtsRunTime, txnsRunTime, err := getTotalRuntimeSecs(ctx, req, ie, testingKnobs, settings)
 
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -128,6 +129,7 @@ func getTotalRuntimeSecs(
 	req *serverpb.CombinedStatementsStatsRequest,
 	ie *sql.InternalExecutor,
 	testingKnobs *sqlstats.TestingKnobs,
+	settings *cluster.Settings,
 ) (stmtsRuntime float32, txnsRuntime float32, err error) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
@@ -162,12 +164,16 @@ FROM crdb_internal.%s_statistics%s
 `
 
 	getRuntime := func(table string) (float32, error) {
+		tableSuffix := "_persisted"
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1AddSQLStatsComputedIndexes) {
+			tableSuffix = "_persisted_v22_2"
+		}
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			fmt.Sprintf(`%s-total-runtime`, table),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(queryWithPlaceholders, table, `_persisted`, whereClause),
+			fmt.Sprintf(queryWithPlaceholders, table, tableSuffix, whereClause),
 			args...)
 
 		defer func() {
