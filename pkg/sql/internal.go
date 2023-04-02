@@ -374,6 +374,10 @@ func (r *rowsIterator) Types() colinfo.ResultColumns {
 	return r.resultCols
 }
 
+func (r *rowsIterator) HasResults() bool {
+	return r.first.row != nil
+}
+
 // QueryBuffered executes the supplied SQL statement and returns the resulting
 // rows (meaning all of them are buffered at once). If no user has been
 // previously set through SetSessionData, the statement is executed as the root

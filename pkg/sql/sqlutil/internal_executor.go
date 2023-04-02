@@ -194,6 +194,9 @@ type InternalRows interface {
 	// WARNING: this method is safe to call anytime *after* the first call to
 	// Next() (including after Close() was called).
 	Types() colinfo.ResultColumns
+
+	// HasResults returns true if there are results to the query, false otherwise.
+	HasResults() bool
 }
 
 // SessionBoundInternalExecutorFactory is a function that produces a "session
