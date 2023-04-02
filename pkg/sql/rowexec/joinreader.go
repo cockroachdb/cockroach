@@ -50,11 +50,12 @@ type joinReaderState int
 
 const (
 	jrStateUnknown joinReaderState = iota
-	// jrReadingInput means that a batch of rows is being read from the input.
+	// jrReadingInput means that a batch of rows is being read from the input and
+	// matching KVs from the lookup index are being scanned.
 	jrReadingInput
-	// jrPerformingLookup means we are performing an index lookup for the current
-	// input row batch.
-	jrPerformingLookup
+	// jrFetchingLookupRows means we are fetching an index lookup row from the
+	// buffered batch of lookup rows that were previously read from the KV layer.
+	jrFetchingLookupRows
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
 	// jrReadyToDrain means we are done but have not yet started draining.
@@ -748,8 +749,8 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		switch jr.runningState {
 		case jrReadingInput:
 			jr.runningState, row, meta = jr.readInput()
-		case jrPerformingLookup:
-			jr.runningState, meta = jr.performLookup()
+		case jrFetchingLookupRows:
+			jr.runningState, meta = jr.fetchLookupRow()
 		case jrEmittingRows:
 			jr.runningState, row, meta = jr.emitRow()
 		case jrReadyToDrain:
@@ -819,7 +820,8 @@ func sortSpans(spans roachpb.Spans, spanIDs []int) {
 	}
 }
 
-// readInput reads the next batch of input rows and starts an index scan.
+// readInput reads the next batch of input rows and starts an index scan, which
+// for lookup join is the lookup of matching KVs for a batch of input rows.
 // It can sometimes emit a single row on behalf of the previous batch.
 func (jr *joinReader) readInput() (
 	joinReaderState,
@@ -967,6 +969,17 @@ func (jr *joinReader) readInput() (
 		// All of the input rows were filtered out. Skip the index lookup.
 		return jrEmittingRows, outRow, nil
 	}
+	if jr.errorOnLookup {
+		// If spans has a non-zero length, the call to StartScan below will
+		// perform a batch lookup of kvs, so error out before that happens if
+		// we were instructed to do so via the errorOnLookup flag.
+		err = noHomeRegionError
+		if jr.allowEnforceHomeRegionFollowerReads {
+			err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
+		}
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
 
 	// Sort the spans by key order, except for a special case: an index-join with
 	// maintainOrdering. That case can be executed efficiently if we don't sort:
@@ -1022,23 +1035,18 @@ func (jr *joinReader) readInput() (
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 
-	return jrPerformingLookup, outRow, nil
+	return jrFetchingLookupRows, outRow, nil
 }
 
 var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
 	"Query has no home region. Try using a lower LIMIT value or running the query from a different region. %s",
 	sqlerrors.EnforceHomeRegionFurtherInfo)
 
-// performLookup reads the next batch of index rows.
-func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
-	if jr.errorOnLookup {
-		err := noHomeRegionError
-		if jr.allowEnforceHomeRegionFollowerReads {
-			err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
-		}
-		jr.MoveToDraining(err)
-		return jrStateUnknown, jr.DrainHelper()
-	}
+// fetchLookupRow fetches the next lookup row from the fetcher's batchResponse
+// buffer, which was filled via a call to StartScan in joinReader.readInput.
+// It also starts the KV lookups for the remote branch of locality-optimized
+// join, if those have not yet started.
+func (jr *joinReader) fetchLookupRow() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	for {
 		// Fetch the next row and tell the strategy to process it.
 		lookedUpRow, spanID, err := jr.fetcher.NextRow(jr.Ctx())
@@ -1056,7 +1064,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx(), lookedUpRow, spanID); err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
-		} else if nextState != jrPerformingLookup {
+		} else if nextState != jrFetchingLookupRows {
 			return nextState, nil
 		}
 	}
@@ -1097,7 +1105,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
 			}
-			return jrPerformingLookup, nil
+			return jrFetchingLookupRows, nil
 		}
 	}
 
