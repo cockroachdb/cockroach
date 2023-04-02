@@ -1047,7 +1047,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
 	nodes := c.TargetNodes()
-	failed, err := c.ParallelE(ctx, l, description, len(nodes), 0, func(ctx context.Context, i int) (*install.RunResultDetails, error) {
+	err = c.Parallel(ctx, l, description, len(nodes), 0, func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 		node := nodes[i]
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
@@ -1116,10 +1116,6 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	}
 
 	if err != nil {
-		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
-		for _, f := range failed {
-			l.Errorf("%d: %+v: %s\n", f.Index, f.Err, f.Out)
-		}
 		exit.WithCode(exit.UnspecifiedError())
 	}
 
