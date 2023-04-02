@@ -271,5 +271,3 @@ type timing time.Duration
 
 func (t timing) String() string { return time.Duration(t).Round(time.Second).String() }
 func (t timing) SafeValue()     {}
-
-var _ bulk.TracingAggregatorEvent = &IngestionPerformanceStats{}

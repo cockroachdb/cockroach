@@ -241,6 +241,14 @@ func (s *spanInner) SetLazyTag(key string, value interface{}) *spanInner {
 	return s
 }
 
+func (s *spanInner) setLazyTagLocked(key string, value interface{}) *spanInner {
+	if s.isNoop() {
+		return s
+	}
+	s.crdb.setLazyTagLocked(key, value)
+	return s
+}
+
 // GetLazyTag returns the value of the tag with the given key. If that tag doesn't
 // exist, the bool retval is false.
 func (s *spanInner) GetLazyTag(key string) (interface{}, bool) {
