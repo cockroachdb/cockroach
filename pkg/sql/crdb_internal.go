@@ -181,6 +181,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalSessionVariablesTableID:            crdbInternalSessionVariablesTable,
 		catconstants.CrdbInternalStmtStatsTableID:                   crdbInternalStmtStatsView,
 		catconstants.CrdbInternalStmtStatsPersistedTableID:          crdbInternalStmtStatsPersistedView,
+		catconstants.CrdbInternalStmtStatsPersistedV22_2TableID:     crdbInternalStmtStatsPersistedViewV22_2,
 		catconstants.CrdbInternalTableColumnsTableID:                crdbInternalTableColumnsTable,
 		catconstants.CrdbInternalTableIndexesTableID:                crdbInternalTableIndexesTable,
 		catconstants.CrdbInternalTableSpansTableID:                  crdbInternalTableSpansTable,
@@ -189,6 +190,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterTxnStatsTableID:             crdbInternalClusterTxnStatsTable,
 		catconstants.CrdbInternalTxnStatsTableID:                    crdbInternalTxnStatsView,
 		catconstants.CrdbInternalTxnStatsPersistedTableID:           crdbInternalTxnStatsPersistedView,
+		catconstants.CrdbInternalTxnStatsPersistedV22_2TableID:      crdbInternalTxnStatsPersistedViewV22_2,
 		catconstants.CrdbInternalTransactionStatsTableID:            crdbInternalTransactionStatisticsTable,
 		catconstants.CrdbInternalZonesTableID:                       crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:          crdbInternalInvalidDescriptorsTable,
@@ -6450,6 +6452,41 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 	},
 }
 
+// crdb_internal.statement_statistics_persisted_v22_2 view selects persisted statement
+// statistics from the system table. This view is primarily used to query statement
+// stats info by date range. This view is created to be used in mixed version state cluster.
+var crdbInternalStmtStatsPersistedViewV22_2 = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.statement_statistics_persisted_v22_2 AS
+      SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          node_id,
+          agg_interval,
+          metadata,
+          statistics,
+          plan,
+          index_recommendations
+      FROM
+          system.statement_statistics`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "plan", Typ: types.Jsonb},
+		{Name: "index_recommendations", Typ: types.StringArray},
+	},
+}
+
 var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running range feeds`,
 	// NB: startTS is exclusive; consider renaming to startAfter.
@@ -6684,6 +6721,33 @@ CREATE VIEW crdb_internal.transaction_statistics_persisted AS
 		{Name: "contention_time", Typ: types.Float},
 		{Name: "total_estimated_execution_time", Typ: types.Float},
 		{Name: "p99_latency", Typ: types.Float},
+	},
+}
+
+// crdb_internal.transaction_statistics_persisted_v22_2 view selects persisted transaction
+// statistics from the system table. This view is primarily used to query transaction
+// stats info by date range. This view is created to be used in mixed version state cluster.
+var crdbInternalTxnStatsPersistedViewV22_2 = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.transaction_statistics_persisted_v22_2 AS
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        app_name,
+        node_id,
+        agg_interval,
+        metadata,
+        statistics
+      FROM
+        system.transaction_statistics`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
 	},
 }
 
