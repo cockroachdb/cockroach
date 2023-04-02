@@ -28,7 +28,18 @@ import (
 
 // onDemandServer represents a server that can be started on demand.
 type onDemandServer interface {
+	// preStart activates background tasks and initializes subsystems
+	// but does not yet accept incoming connections.
+	preStart(context.Context) error
+
+	// acceptClients starts accepting incoming connections.
+	acceptClients(context.Context) error
+
+	// stop stops this server.
 	stop(context.Context)
+
+	// annotateCtx annotates the context with server-specific logging tags.
+	annotateCtx(context.Context) context.Context
 
 	// getHTTPHandlerFn retrieves the function that can serve HTTP
 	// requests for this server.
@@ -183,6 +194,18 @@ type tenantServerWrapper struct {
 
 var _ onDemandServer = (*tenantServerWrapper)(nil)
 
+func (t *tenantServerWrapper) annotateCtx(ctx context.Context) context.Context {
+	return t.server.AnnotateCtx(ctx)
+}
+
+func (t *tenantServerWrapper) preStart(ctx context.Context) error {
+	return t.server.PreStart(ctx)
+}
+
+func (t *tenantServerWrapper) acceptClients(ctx context.Context) error {
+	return t.server.AcceptClients(ctx)
+}
+
 func (t *tenantServerWrapper) stop(ctx context.Context) {
 	ctx = t.server.AnnotateCtx(ctx)
 	t.stopper.Stop(ctx)
@@ -226,6 +249,20 @@ type systemServerWrapper struct {
 }
 
 var _ onDemandServer = (*systemServerWrapper)(nil)
+
+func (s *systemServerWrapper) annotateCtx(ctx context.Context) context.Context {
+	return s.server.AnnotateCtx(ctx)
+}
+
+func (s *systemServerWrapper) preStart(ctx context.Context) error {
+	// No-op: the SQL service for the system tenant is started elsewhere.
+	return nil
+}
+
+func (s *systemServerWrapper) acceptClients(ctx context.Context) error {
+	// No-op: the SQL service for the system tenant is started elsewhere.
+	return nil
+}
 
 func (s *systemServerWrapper) stop(ctx context.Context) {
 	// No-op: the SQL service for the system tenant never shuts down.
