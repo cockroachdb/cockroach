@@ -43,7 +43,7 @@ func New(
 	sessionEvents slinstance.SessionEventListener,
 ) sqlliveness.Provider {
 	storage := slstorage.NewStorage(ambientCtx, stopper, clock, db, codec, settings, settingsWatcher)
-	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, testingKnobs, sessionEvents)
+	instance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, storage, settings, testingKnobs, sessionEvents)
 	return &provider{
 		Storage:  storage,
 		Instance: instance,
