@@ -83,7 +83,7 @@ func (s *Server) newTenantServer(
 	// Apply the TestTenantArgs, if any.
 	baseCfg.TestingKnobs = testArgs.Knobs
 
-	tenantServer, err := s.startTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
+	tenantServer, err := startTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (s *Server) getTenantID(
 //
 // Note that even if an error is returned, tasks might have been started with
 // the stopper, so the caller needs to Stop() it.
-func (s *Server) startTenantServerInternal(
+func startTenantServerInternal(
 	ctx context.Context,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
@@ -146,7 +146,7 @@ func (s *Server) startTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err := NewSharedProcessTenantServer(startCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
+	tenantServer, err := newSharedProcessTenantServer(startCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
 	if err != nil {
 		return nil, err
 	}
