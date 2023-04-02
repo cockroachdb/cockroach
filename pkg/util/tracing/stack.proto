@@ -1,0 +1,30 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.tracing;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/tracing";
+
+import "gogoproto/gogo.proto";
+
+message CapturedStack {
+  option (gogoproto.goproto_stringer) = false;
+  // Stack is the stack trace, or distinct prefix of the stack trace if a
+  // previous capture of this stack is also being recorded.
+  string stack = 1;
+  // SharedSuffix indicates the length of the elided suffix of this stack that
+  // was identical to the previous capture of this stack.
+  int32 shared_suffix = 2;
+  // SharedLines indicated how many newlines were in the elided shared suffix.
+  int32 shared_lines = 3;
+  // Age indicates the duration prior to being recorded that this stack was captured.
+  int64 age = 4 [(gogoproto.casttype) = "time.Duration"];
+  // NEXT ID: 5.
+}

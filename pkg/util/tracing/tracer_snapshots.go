@@ -335,7 +335,7 @@ func (sp *Span) MaybeRecordStackHistory(since time.Time) {
 
 func stackDelta(base, change string, age time.Duration) Structured {
 	if base == "" {
-		return &tracingpb.CapturedStack{Stack: change, Age: age}
+		return &CapturedStack{Stack: change, Age: age}
 	}
 
 	var i, lines int
@@ -348,7 +348,9 @@ func stackDelta(base, change string, age time.Duration) Structured {
 			lines++
 		}
 	}
-	return &tracingpb.CapturedStack{
-		Stack: change[:len(change)-i], SharedSuffix: int32(i), SharedLines: int32(lines),
+	return &CapturedStack{
+		Stack:        change[:len(change)-i],
+		SharedSuffix: int32(i),
+		SharedLines:  int32(lines),
 	}
 }

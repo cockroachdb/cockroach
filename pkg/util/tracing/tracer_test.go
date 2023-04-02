@@ -1015,7 +1015,7 @@ func TestTracerStackHistory(t *testing.T) {
 		require.Len(t, rec.StructuredRecords, 3)
 		stacks := make([]string, 3)
 		for i, rec := range rec.StructuredRecords {
-			var stack tracingpb.CapturedStack
+			var stack CapturedStack
 			require.NoError(t, types.UnmarshalAny(rec.Payload, &stack))
 			stacks[i] = stack.Stack
 		}
