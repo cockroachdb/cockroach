@@ -208,40 +208,44 @@ func (c *serverController) startControlledServer(
 	}
 
 	topCtx := ctx
+
 	// Use a different context for the tasks below, because the tenant
 	// stopper will have its own tracer which is incompatible with the
 	// tracer attached to the incoming context.
-
 	tenantCtx := logtags.AddTag(context.Background(), "tenant-orchestration", nil)
 
-	tenantStopper := stop.NewStopper()
+	// ctlStopper is a stopper uniquely responsible for the control
+	// loop. It is separate from the tenantStopper defined below so
+	// that we can retry the server instantiation if it fails.
+	ctlStopper := stop.NewStopper()
 
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
 	if err := c.stopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
 		select {
-		case <-tenantStopper.ShouldQuiesce():
-			// Tenant is terminating on their own; nothing else to do here.
+		case <-stoppedCh:
+			// Server control loop is terminating prematurely before a
+			// request was made to terminate it.
 			log.Infof(ctx, "tenant %q terminating", tenantName)
 		case <-c.stopper.ShouldQuiesce():
 			// Surrounding server is stopping; propagate the stop to the
 			// control goroutine below.
 			log.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
-			tenantStopper.Stop(tenantCtx)
+			ctlStopper.Stop(tenantCtx)
 		case <-stopRequestCh:
 			// Someone requested a shutdown.
 			log.Infof(ctx, "received request for tenant %q to terminate", tenantName)
-			tenantStopper.Stop(tenantCtx)
+			ctlStopper.Stop(tenantCtx)
 		case <-topCtx.Done():
 			// Someone requested a shutdown.
 			log.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
-			tenantStopper.Stop(tenantCtx)
+			ctlStopper.Stop(tenantCtx)
 		}
 	}); err != nil {
-		// The goroutine above is responsible for stopping the
-		// tenantStopper. If it fails to stop, we stop it here
-		// to avoid leaking the stopper.
-		tenantStopper.Stop(ctx)
+		// The goroutine above is responsible for stopping the ctlStopper.
+		// If it fails to stop, we stop it here to avoid leaking a
+		// stopper.
+		ctlStopper.Stop(ctx)
 		return nil, err
 	}
 
@@ -258,7 +262,7 @@ func (c *serverController) startControlledServer(
 			entry.state.started.Set(false)
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
-				entry.state.startErr = errors.New("server stop before start")
+				entry.state.startErr = errors.New("server stop before successful start")
 				close(startedOrStoppedCh)
 			}
 
@@ -278,30 +282,41 @@ func (c *serverController) startControlledServer(
 		// tenant.ShouldQuiesce() channel but are sensitive to context
 		// cancellation.
 		var cancel func()
-		ctx, cancel = tenantStopper.WithCancelOnQuiesce(ctx)
+		ctx, cancel = ctlStopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
 		// Stop retrying startup/initialization if we are being shut
 		// down early.
 		retryOpts := retry.Options{
-			Closer: tenantStopper.ShouldQuiesce(),
+			Closer: ctlStopper.ShouldQuiesce(),
 		}
+
+		// tenantStopper is the stopper specific to one tenant server
+		// instance. We define a new tenantStopper on every attempt to
+		// instantiate the tenant server below. It is then linked to
+		// ctlStopper below once the instantiation and start have
+		// succeeded.
+		var tenantStopper *stop.Stopper
 
 		var s onDemandServer
 		for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
+			tenantStopper = stop.NewStopper()
 			err := func() error {
 				var err error
 				s, err = c.newServerInternal(ctx, entry.nameContainer, tenantStopper)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "while creating server")
 				}
 				startCtx := s.annotateCtx(context.Background())
+				startCtx = logtags.AddTag(startCtx, "start-server", nil)
+				log.Infof(startCtx, "starting tenant server")
 				if err := s.preStart(startCtx); err != nil {
-					return err
+					return errors.Wrap(err, "while starting server")
 				}
-				return s.acceptClients(startCtx)
+				return errors.Wrap(s.acceptClients(startCtx), "while accepting clients")
 			}()
 			if err != nil {
+				tenantStopper.Stop(ctx)
 				c.logStartEvent(ctx, roachpb.TenantID{}, 0,
 					entry.nameContainer.Get(), false /* success */, err)
 				log.Warningf(ctx,
@@ -319,6 +334,11 @@ func (c *serverController) startControlledServer(
 			// will take care of cleaning up.
 			return
 		}
+
+		// Link the control stopper to this server's stopper.
+		ctlStopper.AddCloser(stop.CloserFn(func() {
+			tenantStopper.Stop(ctx)
+		}))
 
 		// Log the start event and ensure the stop event is logged eventually.
 		tid, iid := s.getTenantID(), s.getInstanceID()
