@@ -86,6 +86,7 @@ type SQLServerWrapper struct {
 	// TODO(knz): Find a way to merge these two togethers so there is just
 	// one implementation.
 
+	cfg        *BaseConfig
 	clock      *hlc.Clock
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
@@ -418,6 +419,8 @@ func newTenantServer(
 	)
 
 	return &SQLServerWrapper{
+		cfg: args.BaseConfig,
+
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
