@@ -83,7 +83,7 @@ func (s *Server) newTenantServer(
 	// Apply the TestTenantArgs, if any.
 	baseCfg.TestingKnobs = testArgs.Knobs
 
-	tenantServer, err := startTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
+	tenantServer, err := newTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -124,12 +124,12 @@ func (s *Server) getTenantID(
 	return tenantID, nil
 }
 
-// startTenantServerInternal starts a server for the given target
+// newTenantServerInternal instantiates a server for the given target
 // tenant ID.
 //
-// Note that even if an error is returned, tasks might have been started with
-// the stopper, so the caller needs to Stop() it.
-func startTenantServerInternal(
+// Note that even if an error is returned, closers may have been
+// registered with the stopper, so the caller needs to Stop() it.
+func newTenantServerInternal(
 	ctx context.Context,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
@@ -140,28 +140,13 @@ func startTenantServerInternal(
 	stopper.SetTracer(baseCfg.Tracer)
 
 	// New context, since we're using a separate tracer.
-	startCtx := ambientCtx.AnnotateCtx(context.Background())
+	newCtx := ambientCtx.AnnotateCtx(context.Background())
 
 	// Inform the logs we're starting a new server.
-	log.Infof(startCtx, "starting tenant server")
+	log.Infof(newCtx, "creating tenant server")
 
-	// Now start the tenant proper.
-	tenantServer, err := newSharedProcessTenantServer(startCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tenantServer.Start(startCtx); err != nil {
-		return tenantServer, err
-	}
-
-	// Show the tenant details in logs.
-	// TODO(knz): Remove this once we can use a single listener.
-	if err := tenantServer.reportTenantInfo(startCtx); err != nil {
-		return tenantServer, err
-	}
-
-	return tenantServer, nil
+	// Now instantiate the tenant server proper.
+	return newSharedProcessTenantServer(newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
 }
 
 func (s *Server) makeSharedProcessTenantConfig(

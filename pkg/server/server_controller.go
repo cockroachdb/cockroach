@@ -203,7 +203,12 @@ func (t *tenantServerWrapper) preStart(ctx context.Context) error {
 }
 
 func (t *tenantServerWrapper) acceptClients(ctx context.Context) error {
-	return t.server.AcceptClients(ctx)
+	if err := t.server.AcceptClients(ctx); err != nil {
+		return err
+	}
+	// Show the tenant details in logs.
+	// TODO(knz): Remove this once we can use a single listener.
+	return t.server.reportTenantInfo(ctx)
 }
 
 func (t *tenantServerWrapper) stop(ctx context.Context) {
