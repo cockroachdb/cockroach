@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bulk_test
+package tracing_test
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
@@ -30,7 +29,7 @@ func TestAggregator(t *testing.T) {
 	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
 
-	ctx, agg := bulk.MakeTracingAggregatorWithSpan(ctx, "mockAggregator", tr)
+	ctx, agg := tracing.MakeAggregatorWithSpan(ctx, "mockAggregator", tr)
 	aggSp := tracing.SpanFromContext(ctx)
 	defer agg.Close()
 
@@ -136,7 +135,7 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	// First, start a root tracing span with a tracing aggregator.
 	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
-	ctx, agg := bulk.MakeTracingAggregatorWithSpan(ctx, "mockAggregator", tr)
+	ctx, agg := tracing.MakeAggregatorWithSpan(ctx, "mockAggregator", tr)
 	aggSp := tracing.SpanFromContext(ctx)
 	defer agg.Close()
 
@@ -144,7 +143,7 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	// aggregator.
 	_, child1 := tracing.ChildSpan(ctx, "child1")
 	defer child1.Finish()
-	child1Ctx, child1Agg := bulk.MakeTracingAggregatorWithSpan(ctx, "mockChildAggregator", tr)
+	child1Ctx, child1Agg := tracing.MakeAggregatorWithSpan(ctx, "mockChildAggregator", tr)
 	child1AggSp := tracing.SpanFromContext(child1Ctx)
 	defer child1Agg.Close()
 

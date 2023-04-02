@@ -32,11 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -71,7 +71,7 @@ type restoreDataProcessor struct {
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan backuppb.RestoreProgress
 
-	agg *bulkutil.TracingAggregator
+	agg *tracing.Aggregator
 }
 
 var (
@@ -161,7 +161,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.input.Start(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, rd.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx, fmt.Sprintf("%s-aggregator", restoreDataProcName), rd.EvalCtx.Tracer)
+	ctx, rd.agg = tracing.MakeAggregatorWithSpan(ctx, fmt.Sprintf("%s-aggregator", restoreDataProcName), rd.EvalCtx.Tracer)
 
 	rd.cancelWorkersAndWait = func() {
 		cancel()
@@ -331,7 +331,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			return err
 		}
 
-		ctx, agg := bulkutil.MakeTracingAggregatorWithSpan(ctx,
+		ctx, agg := tracing.MakeAggregatorWithSpan(ctx,
 			fmt.Sprintf("%s-worker-%d-aggregator", restoreDataProcName, worker), rd.EvalCtx.Tracer)
 		defer agg.Close()
 

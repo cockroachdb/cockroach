@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -119,7 +118,7 @@ type backupDataProcessor struct {
 
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
-	agg *bulk.TracingAggregator
+	agg *tracing.Aggregator
 }
 
 var (
@@ -169,7 +168,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 
 	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
 	// bps' trace recording.
-	ctx, bp.agg = bulk.MakeTracingAggregatorWithSpan(ctx,
+	ctx, bp.agg = tracing.MakeAggregatorWithSpan(ctx,
 		fmt.Sprintf("%s-aggregator", backupProcessorName), bp.EvalCtx.Tracer)
 
 	bp.cancelAndWaitForWorker = func() {
