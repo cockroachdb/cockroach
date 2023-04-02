@@ -36,6 +36,7 @@ func TestSQLInstance(t *testing.T) {
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	var ambientCtx log.AmbientContext
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 42)))
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
@@ -45,11 +46,11 @@ func TestSQLInstance(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
+	sqlInstance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
 	sqlInstance.Start(ctx, nil)
 
 	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
+	dummy := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
 	dummy.Start(ctx, nil)
 
 	s1, err := sqlInstance.Session(ctx)
@@ -114,7 +115,8 @@ func TestSQLInstanceWithRegion(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
+	var ambientCtx log.AmbientContext
+	sqlInstance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
 	sqlInstance.Start(ctx, []byte{42})
 
 	s1, err := sqlInstance.Session(ctx)
