@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1491,9 +1490,6 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		}
 	}
 
-	// Flush stats, as combinedstmts reads only from system.
-	thirdServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
-
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
 	if err := getStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
@@ -1866,8 +1862,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
@@ -1905,8 +1899,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	for _, stmt := range statements {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
-
-	testCluster.Server(2).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 
 	var resp serverpb.StatementsResponse
 	// Test that non-admin without VIEWACTIVITY privileges cannot access.
@@ -2037,8 +2029,6 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	// The liveness session might expire before the stress race can finish.
 	skip.UnderStressRace(t, "expensive tests")
 
-	ctx := context.Background()
-
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
@@ -2097,9 +2087,6 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	testPath := func(path string, expected resultValues) {
-		// Need to flush since this EP reads only flushed data.
-		testCluster.Server(2).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
-
 		err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false)
 		require.NoError(t, err)
 		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
