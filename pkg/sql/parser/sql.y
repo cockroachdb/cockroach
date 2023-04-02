@@ -4603,9 +4603,9 @@ func_param:
 
 func_param_class:
   IN { $$.val = tree.FunctionParamIn }
-| OUT { return unimplemented(sqllex, "create function with 'OUT' argument class") }
-| INOUT { return unimplemented(sqllex, "create function with 'INOUT' argument class") }
-| IN OUT { return unimplemented(sqllex, "create function with 'IN OUT' argument class") }
+| OUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'OUT' argument class") }
+| INOUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'INOUT' argument class") }
+| IN OUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'IN OUT' argument class") }
 | VARIADIC { return unimplementedWithIssueDetail(sqllex, 88947, "variadic user-defined functions") }
 
 func_param_type:
