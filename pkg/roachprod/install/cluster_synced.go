@@ -23,7 +23,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -2441,17 +2440,16 @@ func (c *SyncedCluster) Parallel(
 ) error {
 	failed, err := c.ParallelE(ctx, l, display, count, concurrency, fn, runRetryOpts)
 	if err != nil {
-		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
-		for _, f := range failed {
-			fmt.Fprintf(l.Stderr, "%d: %+v: %s\n", f.Index, f.Err, f.Out)
-		}
+		fmt.Fprintf(l.Stderr, "%d: %+v: %s\n", failed.Index, failed.Err, failed.Out)
 		return err
 	}
 	return nil
 }
 
 // ParallelE runs the given function in parallel across the given
-// nodes, returning an error if function returns an error.
+// nodes. In the event of an error on any of the nodes, the function
+// will fail fast and return the error and the accompanying ParallelResult.
+// Successful invocation will return a nil result and nil error.
 //
 // ParallelE runs the user-defined functions on the first `count`
 // nodes in the cluster. It runs at most `concurrency` (or
@@ -2465,9 +2463,6 @@ func (c *SyncedCluster) Parallel(
 // the function fails, but returns a nil error. A non-nil error returned by the
 // function denotes a roachprod error and will not be retried regardless of the
 // retry options.
-//
-// If err is non-nil, the slice of ParallelResults will contain the
-// results from any of the failed invocations.
 func (c *SyncedCluster) ParallelE(
 	ctx context.Context,
 	l *logger.Logger,
@@ -2475,7 +2470,7 @@ func (c *SyncedCluster) ParallelE(
 	count, concurrency int,
 	fn func(ctx context.Context, i int) (*RunResultDetails, error),
 	runRetryOpts *RunRetryOpts,
-) ([]ParallelResult, error) {
+) (ParallelResult, error) {
 	if concurrency == 0 || concurrency > count {
 		concurrency = count
 	}
@@ -2542,8 +2537,11 @@ func (c *SyncedCluster) ParallelE(
 			}
 		case r, ok := <-results:
 			if r.Err != nil {
+				// We no longer wait for failures from other goroutines but instead cancel the context.
+				// If required, we could restore or control the previous behavior by not cancelling and
+				// and returning here, but instead return a slice at the end.
 				groupCancel()
-				return nil, errors.Wrap(r.Err, "parallel execution failure")
+				return r, errors.Wrap(r.Err, "parallel execution failure")
 			}
 			done = !ok
 			if ok {
@@ -2576,7 +2574,7 @@ func (c *SyncedCluster) ParallelE(
 		fmt.Fprintf(out, "\n")
 	}
 
-	return nil, nil
+	return ParallelResult{}, nil
 }
 
 // Init initializes the cluster. It does it through node 1 (as per TargetNodes)
