@@ -1034,3 +1034,86 @@ func TestTracerStackHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestStackDelta(t *testing.T) {
+	notUsed := time.Duration(1)
+	for _, tc := range []struct {
+		name          string
+		base          string
+		change        string
+		expectedStack CapturedStack
+	}{
+		{
+			name:   "same",
+			base:   "abcd",
+			change: "abcd",
+			expectedStack: CapturedStack{
+				Stack:        "",
+				SharedSuffix: 4,
+				SharedLines:  0,
+				Age:          notUsed,
+			},
+		},
+		{
+			name:   "base longer",
+			base:   "abcd",
+			change: "bcd",
+			expectedStack: CapturedStack{
+				Stack:        "",
+				SharedSuffix: 3,
+				SharedLines:  0,
+				Age:          notUsed,
+			},
+		},
+		{
+			name:   "change longer",
+			base:   "bcd",
+			change: "abcd",
+			expectedStack: CapturedStack{
+				Stack:        "a",
+				SharedSuffix: 3,
+				SharedLines:  0,
+				Age:          notUsed,
+			},
+		},
+		{
+			name:   "no matching suffix",
+			base:   "abc",
+			change: "abcd",
+			expectedStack: CapturedStack{
+				Stack:        "abcd",
+				SharedSuffix: 0,
+				SharedLines:  0,
+				Age:          notUsed,
+			},
+		},
+		{
+			name:   "empty base",
+			base:   "",
+			change: "a",
+			expectedStack: CapturedStack{
+				Stack:        "a",
+				SharedSuffix: 0,
+				SharedLines:  0,
+				Age:          notUsed,
+			},
+		},
+		{
+			name:   "empty change",
+			base:   "a",
+			change: "",
+			expectedStack: CapturedStack{
+				Stack:        "",
+				SharedSuffix: 0,
+				SharedLines:  0,
+				Age:          notUsed,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := stackDelta(tc.base, tc.change, notUsed)
+			stack := s.(*CapturedStack)
+			require.Equal(t, tc.expectedStack, *stack)
+		})
+	}
+}

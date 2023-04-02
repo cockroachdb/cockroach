@@ -12,8 +12,11 @@ package tracing
 
 import (
 	"context"
+	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // AggregatorEvent describes an event that can be aggregated and stored by the
@@ -31,6 +34,16 @@ type AggregatorEvent interface {
 	Tag() string
 }
 
+// WrappedAggregatorEvent wraps an AggregatorEvent with the timestamp at which
+// the Aggregator was notified about this event.
+type WrappedAggregatorEvent struct {
+	AggregatorEvent
+
+	// ts is the time at which the Aggregator is notified about the
+	// AggregatorEvent.
+	ts time.Time
+}
+
 // An Aggregator can be used to aggregate and render AggregatorEvents that are
 // emitted as part of its tracing spans' recording.
 type Aggregator struct {
@@ -41,7 +54,7 @@ type Aggregator struct {
 		syncutil.Mutex
 		// aggregatedEvents is a mapping from the tag identifying the
 		// AggregatorEvent to the running aggregate of the AggregatorEvent.
-		aggregatedEvents map[string]AggregatorEvent
+		aggregatedEvents map[string]*WrappedAggregatorEvent
 	}
 }
 
@@ -59,10 +72,13 @@ func (b *Aggregator) Notify(event Structured) EventConsumptionStatus {
 	// the associated tracing span.
 	eventTag := bulkEvent.Tag()
 	if _, ok := b.mu.aggregatedEvents[bulkEvent.Tag()]; !ok {
-		b.mu.aggregatedEvents[eventTag] = bulkEvent.Identity()
-		b.mu.sp.SetLazyTagLocked(eventTag, b.mu.aggregatedEvents[eventTag])
+		b.mu.aggregatedEvents[eventTag] = &WrappedAggregatorEvent{
+			AggregatorEvent: bulkEvent.Identity(),
+		}
+		b.sp.SetLazyTagLocked(eventTag, b.mu.aggregatedEvents[eventTag].AggregatorEvent)
 	}
 	b.mu.aggregatedEvents[eventTag].Combine(bulkEvent)
+	b.mu.aggregatedEvents[eventTag].ts = timeutil.Now()
 	return EventNotConsumed
 }
 
@@ -71,6 +87,36 @@ func (b *Aggregator) Notify(event Structured) EventConsumptionStatus {
 // NOTE: it must be called exactly once.
 func (b *Aggregator) Close() {
 	b.sp.Finish()
+}
+
+// Reset resets the Aggregator state.
+func (b *Aggregator) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.aggregatedEvents = make(map[string]*WrappedAggregatorEvent)
+}
+
+// ForEachAggregatedEvent loops over the Aggregator's current aggregated events.
+// The events are looped over in chronological order of when the Aggregator was
+// notified about them.
+func (b *Aggregator) ForEachAggregatedEvent(
+	_ context.Context, f func(tag string, aggregatorEvent AggregatorEvent),
+) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	keys := make([]string, len(b.mu.aggregatedEvents))
+	i := 0
+	for tag := range b.mu.aggregatedEvents {
+		keys[i] = tag
+		i++
+	}
+	sort.SliceStable(keys, func(i, j int) bool {
+		return b.mu.aggregatedEvents[keys[i]].ts.Before(
+			b.mu.aggregatedEvents[keys[j]].ts)
+	})
+	for _, k := range keys {
+		f(k, b.mu.aggregatedEvents[k].AggregatorEvent)
+	}
 }
 
 var _ EventListener = &Aggregator{}
@@ -90,7 +136,7 @@ func MakeAggregatorWithSpan(
 
 	agg.mu.Lock()
 	defer agg.mu.Unlock()
-	agg.mu.aggregatedEvents = make(map[string]AggregatorEvent)
+	agg.mu.aggregatedEvents = make(map[string]*WrappedAggregatorEvent)
 	agg.sp = aggSpan
 
 	return aggCtx, agg
