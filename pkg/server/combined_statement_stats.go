@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -37,6 +38,14 @@ func getTimeFromSeconds(seconds int64) *time.Time {
 		return &t
 	}
 	return nil
+}
+
+func closeIterator(it isql.Rows, err error) error {
+	closeErr := it.Close()
+	if closeErr != nil {
+		err = errors.CombineErrors(err, closeErr)
+	}
+	return err
 }
 
 func (s *statusServer) CombinedStatementStats(
@@ -146,7 +155,7 @@ COALESCE(
     (statistics-> 'statistics' ->> 'cnt')::FLOAT
   )
 , 0)
-FROM crdb_internal.%s_statistics_persisted
+FROM crdb_internal.%s_statistics%s
 %s
 `
 
@@ -156,25 +165,16 @@ FROM crdb_internal.%s_statistics_persisted
 			fmt.Sprintf(`%s-total-runtime`, table),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(queryWithPlaceholders, table, whereClause),
+			fmt.Sprintf(queryWithPlaceholders, table, `_persisted`, whereClause),
 			args...)
 
 		if err != nil {
 			return 0, err
 		}
-
-		defer func() {
-			closeErr := it.Close()
-			if closeErr != nil {
-				err = errors.CombineErrors(err, closeErr)
-			}
-		}()
-
 		ok, err := it.Next(ctx)
 		if err != nil {
 			return 0, err
 		}
-
 		if !ok {
 			return 0, errors.New("expected one row but got none")
 		}
@@ -183,6 +183,41 @@ FROM crdb_internal.%s_statistics_persisted
 		if row = it.Cur(); row == nil {
 			return 0, errors.New("unexpected null row")
 		}
+
+		// If the total runtime is 0 there were no results from the persisted table,
+		// so we retrieve the data from the combined view with data in-memory.
+		if tree.MustBeDFloat(row[0]) == 0 {
+			err := closeIterator(it, err)
+			if err != nil {
+				return 0, err
+			}
+			it, err = ie.QueryIteratorEx(
+				ctx,
+				fmt.Sprintf(`%s-total-runtime-with-memory`, table),
+				nil,
+				sessiondata.NodeUserSessionDataOverride,
+				fmt.Sprintf(queryWithPlaceholders, table, ``, whereClause),
+				args...)
+
+			if err != nil {
+				return 0, err
+			}
+			ok, err = it.Next(ctx)
+			if err != nil {
+				return 0, err
+			}
+			if !ok {
+				return 0, errors.New("expected one row but got none")
+			}
+
+			if row = it.Cur(); row == nil {
+				return 0, errors.New("unexpected null row")
+			}
+		}
+
+		defer func() {
+			err = closeIterator(it, err)
+		}()
 
 		return float32(tree.MustBeDFloat(row[0])), nil
 
@@ -356,7 +391,8 @@ func collectCombinedStatements(
 	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
-	query := fmt.Sprintf(`
+	const expectedNumDatums = 6
+	queryFormat := `
 SELECT * FROM (
 SELECT
     fingerprint_id,
@@ -365,29 +401,47 @@ SELECT
     max(aggregated_ts) as aggregated_ts,
     metadata,
     crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-FROM crdb_internal.statement_statistics_persisted %s
+FROM %s %s
 GROUP BY
     fingerprint_id,
     transaction_fingerprint_id,
     app_name,
     metadata
 ) %s
-%s`, whereClause, aostClause, orderAndLimit)
+%s`
 
-	const expectedNumDatums = 6
-
+	query := fmt.Sprintf(
+		queryFormat,
+		`crdb_internal.statement_statistics_persisted`,
+		whereClause,
+		aostClause,
+		orderAndLimit)
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
-
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	defer func() {
-		closeErr := it.Close()
-		if closeErr != nil {
-			err = errors.CombineErrors(err, closeErr)
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if !it.HasResults() {
+		err = closeIterator(it, err)
+
+		query = fmt.Sprintf(
+			queryFormat,
+			`crdb_internal.statement_statistics`,
+			whereClause,
+			aostClause,
+			orderAndLimit)
+		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-by-interval-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if err != nil {
+			return nil, serverError(ctx, err)
 		}
+	}
+
+	defer func() {
+		err = closeIterator(it, err)
 	}()
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
@@ -459,8 +513,8 @@ func collectCombinedTransactions(
 	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
-
-	query := fmt.Sprintf(`
+	const expectedNumDatums = 5
+	queryFormat := `
 SELECT * FROM (
 SELECT
     app_name,
@@ -468,15 +522,20 @@ SELECT
     fingerprint_id,
     metadata,
     crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-FROM crdb_internal.transaction_statistics_persisted %s
+FROM %s %s
 GROUP BY
     app_name,
     fingerprint_id,
     metadata
 ) %s
-%s`, whereClause, aostClause, orderAndLimit)
+%s`
 
-	const expectedNumDatums = 5
+	query := fmt.Sprintf(
+		queryFormat,
+		`crdb_internal.transaction_statistics_persisted`,
+		whereClause,
+		aostClause,
+		orderAndLimit)
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-txns-by-interval", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -485,11 +544,26 @@ GROUP BY
 		return nil, serverError(ctx, err)
 	}
 
-	defer func() {
-		closeErr := it.Close()
-		if closeErr != nil {
-			err = errors.CombineErrors(err, closeErr)
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if !it.HasResults() {
+		err = closeIterator(it, err)
+
+		query = fmt.Sprintf(
+			queryFormat,
+			`crdb_internal.transaction_statistics`,
+			whereClause,
+			aostClause,
+			orderAndLimit)
+		it, err = ie.QueryIteratorEx(ctx, "combined-txn-by-interval-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if err != nil {
+			return nil, serverError(ctx, err)
 		}
+	}
+
+	defer func() {
+		err = closeIterator(it, err)
 	}()
 
 	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
@@ -684,27 +758,38 @@ func getStatementDetailsQueryClausesAndArgs(
 func getTotalStatementDetails(
 	ctx context.Context, ie *sql.InternalExecutor, whereClause string, args []interface{},
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
-	query := fmt.Sprintf(
-		`SELECT
+	const expectedNumDatums = 4
+	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
+	queryFormat := `SELECT
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				array_agg(app_name) as app_names,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				encode(fingerprint_id, 'hex') as fingerprint_id
-		FROM crdb_internal.statement_statistics_persisted %s
+		FROM %s %s
 		GROUP BY
 				fingerprint_id
-		LIMIT 1`, whereClause)
-
-	const expectedNumDatums = 4
-	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
+		LIMIT 1`
+	query := fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_persisted`, whereClause)
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
-
 	if err != nil {
 		return statement, serverError(ctx, err)
 	}
-	if len(row) == 0 {
+
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if row.Len() == 0 {
+		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause)
+		row, err = ie.QueryRowEx(ctx, "combined-stmts-details-total-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if err != nil {
+			return statement, serverError(ctx, err)
+		}
+	}
+
+	// If there are no results in-memory, return empty statement object.
+	if row.Len() == 0 {
 		return statement, nil
 	}
 	if row.Len() != expectedNumDatums {
@@ -752,32 +837,39 @@ func getStatementDetailsPerAggregatedTs(
 	args []interface{},
 	limit int64,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs, error) {
-	query := fmt.Sprintf(
-		`SELECT
+	const expectedNumDatums = 3
+	queryFormat := `SELECT
 				aggregated_ts,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-		FROM crdb_internal.statement_statistics_persisted %s
+		FROM %s %s
 		GROUP BY
 				aggregated_ts
 		ORDER BY aggregated_ts ASC
-		LIMIT $%d`, whereClause, len(args)+1)
-
+		LIMIT $%d`
+	query := fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_persisted`, whereClause, len(args)+1)
 	args = append(args, limit)
-	const expectedNumDatums = 3
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
-
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	defer func() {
-		closeErr := it.Close()
-		if closeErr != nil {
-			err = errors.CombineErrors(err, closeErr)
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if !it.HasResults() {
+		err = closeIterator(it, err)
+		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause, len(args))
+		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if err != nil {
+			return nil, serverError(ctx, err)
 		}
+	}
+
+	defer func() {
+		err = closeIterator(it, err)
 	}()
 
 	var statements []serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs
@@ -892,37 +984,42 @@ func getStatementDetailsPerPlanHash(
 	args []interface{},
 	limit int64,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
-
-	query := fmt.Sprintf(
-		`SELECT
+	expectedNumDatums := 5
+	queryFormat := `SELECT
 				plan_hash,
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				index_recommendations
-		FROM crdb_internal.statement_statistics_persisted %s
+		FROM %s %s
 		GROUP BY
 				plan_hash,
 				plan_gist,
 				index_recommendations
-		LIMIT $%d`, whereClause, len(args)+1)
-
-	expectedNumDatums := 5
-
+		LIMIT $%d`
+	query := fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_persisted`, whereClause, len(args)+1)
 	args = append(args, limit)
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
-
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	defer func() {
-		closeErr := it.Close()
-		if closeErr != nil {
-			err = errors.CombineErrors(err, closeErr)
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if !it.HasResults() {
+		err = closeIterator(it, err)
+		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause, len(args))
+		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if err != nil {
+			return nil, serverError(ctx, err)
 		}
+	}
+
+	defer func() {
+		err = closeIterator(it, err)
 	}()
 
 	var statements []serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash
