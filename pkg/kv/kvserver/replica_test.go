@@ -13888,9 +13888,6 @@ func TestRangeInfoReturned(t *testing.T) {
 	var tc testContext
 	tc.Start(ctx, t, stopper)
 
-	key := roachpb.Key("a")
-	gArgs := getArgs(key)
-
 	ri := tc.repl.GetRangeInfo(ctx)
 	require.False(t, ri.Lease.Empty())
 	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, ri.ClosedTimestampPolicy)
@@ -13898,18 +13895,22 @@ func TestRangeInfoReturned(t *testing.T) {
 	staleLeaseSeq := ri.Lease.Sequence - 1
 	wrongCTPolicy := roachpb.LEAD_FOR_GLOBAL_READS
 
+	requestLease := ri.Lease
+	requestLease.Sequence = 0
+
 	for _, test := range []struct {
-		req roachpb.ClientRangeInfo
+		cri roachpb.ClientRangeInfo
+		req kvpb.Request
 		exp *roachpb.RangeInfo
 	}{
 		{
 			// Empty client info. This case shouldn't happen.
-			req: roachpb.ClientRangeInfo{},
+			cri: roachpb.ClientRangeInfo{},
 			exp: &ri,
 		},
 		{
 			// Correct descriptor, missing lease, correct closedts policy.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  ri.Desc.Generation,
 				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
@@ -13917,7 +13918,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Correct descriptor, stale lease, correct closedts policy.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  ri.Desc.Generation,
 				LeaseSequence:         staleLeaseSeq,
 				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
@@ -13926,7 +13927,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Correct descriptor, correct lease, incorrect closedts policy.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  ri.Desc.Generation,
 				LeaseSequence:         ri.Lease.Sequence,
 				ClosedTimestampPolicy: wrongCTPolicy,
@@ -13935,7 +13936,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Correct descriptor, correct lease, correct closedts policy.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  ri.Desc.Generation,
 				LeaseSequence:         ri.Lease.Sequence,
 				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
@@ -13944,7 +13945,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Stale descriptor, no lease, correct closedts policy.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  staleDescGen,
 				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
@@ -13952,7 +13953,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Stale descriptor, stale lease, incorrect closedts policy.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  staleDescGen,
 				LeaseSequence:         staleLeaseSeq,
 				ClosedTimestampPolicy: wrongCTPolicy,
@@ -13962,20 +13963,35 @@ func TestRangeInfoReturned(t *testing.T) {
 		{
 			// Stale desc, good lease, correct closedts policy. This case
 			// shouldn't happen.
-			req: roachpb.ClientRangeInfo{
+			cri: roachpb.ClientRangeInfo{
 				DescriptorGeneration:  staleDescGen,
 				LeaseSequence:         staleLeaseSeq,
 				ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
 			},
 			exp: &ri,
 		},
+		{
+			// RequestLeaseRequest without ClientRangeInfo. These bypass
+			// DistSender and don't need range info returned.
+			cri: roachpb.ClientRangeInfo{},
+			req: &kvpb.RequestLeaseRequest{
+				Lease:     requestLease,
+				PrevLease: ri.Lease,
+			},
+			exp: nil,
+		},
 	} {
 		t.Run("", func(t *testing.T) {
 			ba := &kvpb.BatchRequest{}
-			ba.Add(&gArgs)
-			ba.Header.ClientRangeInfo = test.req
+			ba.Header.ClientRangeInfo = test.cri
+			req := test.req
+			if req == nil {
+				args := getArgs(roachpb.Key("a"))
+				req = &args
+			}
+			ba.Add(req)
 			br, pErr := tc.Sender().Send(ctx, ba)
-			require.Nil(t, pErr)
+			require.NoError(t, pErr.GoError())
 			if test.exp == nil {
 				require.Empty(t, br.RangeInfos)
 			} else {
