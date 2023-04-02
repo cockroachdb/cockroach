@@ -274,7 +274,7 @@ func (c *serverController) startControlledServer(
 		ctx := tenantCtx
 		// We want a context that gets cancelled when the tenant is
 		// shutting down, for the possible few cases in
-		// startServerInternal which are not looking at the
+		// newServerInternal/preStart/acceptClients which are not looking at the
 		// tenant.ShouldQuiesce() channel but are sensitive to context
 		// cancellation.
 		var cancel func()
@@ -289,8 +289,18 @@ func (c *serverController) startControlledServer(
 
 		var s onDemandServer
 		for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
-			var err error
-			s, err = c.startServerInternal(ctx, entry.nameContainer, tenantStopper)
+			err := func() error {
+				var err error
+				s, err = c.newServerInternal(ctx, entry.nameContainer, tenantStopper)
+				if err != nil {
+					return err
+				}
+				startCtx := s.annotateCtx(context.Background())
+				if err := s.preStart(startCtx); err != nil {
+					return err
+				}
+				return s.acceptClients(startCtx)
+			}()
 			if err != nil {
 				c.logStartEvent(ctx, roachpb.TenantID{}, 0,
 					entry.nameContainer.Get(), false /* success */, err)
@@ -404,7 +414,7 @@ func (c *serverController) startAndWaitForRunningServer(
 	}
 }
 
-func (c *serverController) startServerInternal(
+func (c *serverController) newServerInternal(
 	ctx context.Context, nameContainer *roachpb.TenantNameContainer, tenantStopper *stop.Stopper,
 ) (onDemandServer, error) {
 	tenantName := nameContainer.Get()
