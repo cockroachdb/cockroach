@@ -339,9 +339,9 @@ func stackDelta(base, change string, age time.Duration) Structured {
 	}
 
 	var i, lines int
-	for i = range base {
+	for i = 0; i < len(base); i++ {
 		c := base[len(base)-1-i]
-		if i > len(change) || change[len(change)-1-i] != c {
+		if i >= len(change) || change[len(change)-1-i] != c {
 			break
 		}
 		if c == '\n' {
@@ -352,5 +352,6 @@ func stackDelta(base, change string, age time.Duration) Structured {
 		Stack:        change[:len(change)-i],
 		SharedSuffix: int32(i),
 		SharedLines:  int32(lines),
+		Age:          age,
 	}
 }

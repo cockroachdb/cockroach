@@ -160,6 +160,37 @@ func newBackupDataProcessor(
 	return bp, nil
 }
 
+// flushAggregator periodically flushes the aggregated trace events.
+//
+// TODO(adityamaru): This method will change in 23.2 once we start persisting
+// aggregated stats in the job_info table.
+func flushAggregator(ctx context.Context, agg *tracing.Aggregator) {
+	var flushTimer timeutil.Timer
+	defer flushTimer.Stop()
+
+	for {
+		// TODO(adityamaru): Make this a cluster setting.
+		flushTimer.Reset(30 * time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-flushTimer.C:
+			flushTimer.Read = true
+			agg.ForEachAggregatedEvent(ctx, func(tag string, aggregatorEvent tracing.AggregatorEvent) {
+				// TODO(adityamaru): For now we're only logging the CapturedStacks, in the future
+				// we will want to persist other aggregated events as well.
+				switch t := aggregatorEvent.(type) {
+				case *tracing.CapturedStack:
+					log.Infof(ctx, "slow request stack during backup: %s", t.String())
+				}
+			})
+			// Now that we have processed all the aggregated events we can clear the
+			// underlying map.
+			agg.Reset()
+		}
+	}
+}
+
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", bp.spec.JobID)
@@ -167,9 +198,21 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
-	// bps' trace recording.
+	// backupDataProcessors' trace recording.
 	ctx, bp.agg = tracing.MakeAggregatorWithSpan(ctx,
 		fmt.Sprintf("%s-aggregator", backupProcessorName), bp.EvalCtx.Tracer)
+	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "backupDataProcessor.flushAggregator",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
+		ctx, cancel := bp.flowCtx.Stopper().WithCancelOnQuiesce(ctx)
+		defer cancel()
+		flushAggregator(ctx, bp.agg)
+	}); err != nil {
+		// The closure above hasn't run, so we have to do the cleanup.
+		bp.backupErr = err
+		cancel()
+	}
 
 	bp.cancelAndWaitForWorker = func() {
 		cancel()
