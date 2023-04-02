@@ -1802,6 +1802,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/row/expr_walker_test.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
 				stream.GrepNot(`pkg/sql/schemachanger/scbuild/tree_context_builder.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
 				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports \(ST1001\)`),
+				// TODO(yuzefovich): remove this exclusion (#100438).
+				stream.GrepNot(`pkg/util/bulk/tracing_aggregator.go:.*SetLazyTagLocked is deprecated: .*`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

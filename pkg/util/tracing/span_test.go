@@ -1373,16 +1373,12 @@ func TestWithRemoteParentFromTraceInfo(t *testing.T) {
 
 type mockEventListener struct {
 	eventsSeen int
-	notifyImpl func()
 	// If set, then the events are "consumed" by this listener.
 	consuming bool
 }
 
 func (f *mockEventListener) Notify(_ Structured) EventConsumptionStatus {
 	f.eventsSeen++
-	if f.notifyImpl != nil {
-		f.notifyImpl()
-	}
 	if f.consuming {
 		return EventConsumed
 	}
@@ -1453,25 +1449,6 @@ func TestEventListener(t *testing.T) {
 	childSp2.RecordStructured(&types.Int32Value{Value: 12})
 	require.Equal(t, 7, rootEventListener.eventsSeen)
 	childSp2.Finish()
-}
-
-func TestEventListenerNotifiedWithoutHoldingSpanMutex(t *testing.T) {
-	tr := NewTracer()
-	rootEventListener := &mockEventListener{}
-	sp := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured),
-		WithEventListeners(rootEventListener))
-	defer sp.Finish()
-
-	// Set the EventListeners Notify() method to acquire the span's mutex.
-	rootEventListener.notifyImpl = func() {
-		sp.i.crdb.mu.Lock()
-		defer sp.i.crdb.mu.Unlock()
-	}
-
-	// Record a StructuredEvent, if Notify() were called holding the span's mutex
-	// this would deadlock.
-	sp.RecordStructured(&types.Int32Value{Value: 5})
-	require.Equal(t, 1, rootEventListener.eventsSeen)
 }
 
 // TestFinishedChildrenMetadata tests that on Finish() the parent span's

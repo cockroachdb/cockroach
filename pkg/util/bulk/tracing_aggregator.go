@@ -62,7 +62,7 @@ func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsum
 	eventTag := bulkEvent.Tag()
 	if _, ok := b.mu.aggregatedEvents[bulkEvent.Tag()]; !ok {
 		b.mu.aggregatedEvents[eventTag] = bulkEvent.Identity()
-		b.mu.sp.SetLazyTag(eventTag, b.mu.aggregatedEvents[eventTag])
+		b.mu.sp.SetLazyTagLocked(eventTag, b.mu.aggregatedEvents[eventTag])
 	}
 	b.mu.aggregatedEvents[eventTag].Combine(bulkEvent)
 	return tracing.EventNotConsumed
