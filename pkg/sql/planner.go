@@ -282,7 +282,11 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	}
 	recv.discardRows = p.instrumentation.ShouldDiscardRows()
 	recv.outputTypes = p.pausablePortal.pauseInfo.resumableFlow.outputTypes
-	p.pausablePortal.pauseInfo.resumableFlow.flow.Resume(recv)
+	flow := p.pausablePortal.pauseInfo.resumableFlow.flow
+	finishedSetupFn, cleanup := getFinishedSetupFn(p)
+	finishedSetupFn(flow)
+	defer cleanup()
+	flow.Resume(recv)
 	return recv.commErr
 }
 
