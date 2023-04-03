@@ -355,13 +355,16 @@ func CreateEnumTypeDesc(
 		}
 	}
 
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Types,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
@@ -429,13 +432,16 @@ func CreateCompositeTypeDesc(
 		seenLabels[value.Label] = struct{}{}
 	}
 
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Types,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return typedesc.NewBuilder(&descpb.TypeDescriptor{
 		Name:           typeName.Type(),

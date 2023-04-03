@@ -104,14 +104,15 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 		tdb.maybeModified.ModificationTime = tdb.mvccTimestamp
 		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
-	fixedPrivileges := catprivilege.MaybeFixPrivileges(
+	if fixedPrivileges, err := catprivilege.MaybeFixPrivileges(
 		&tdb.maybeModified.Privileges,
 		tdb.maybeModified.GetParentID(),
 		tdb.maybeModified.GetParentSchemaID(),
 		privilege.Type,
 		tdb.maybeModified.GetName(),
-	)
-	if fixedPrivileges {
+	); err != nil {
+		return err
+	} else if fixedPrivileges {
 		tdb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	return nil

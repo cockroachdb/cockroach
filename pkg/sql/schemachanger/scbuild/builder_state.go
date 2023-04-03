@@ -1279,13 +1279,16 @@ func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
 	if err != nil {
 		panic(err)
 	}
-	pd := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	pd, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		db.DatabaseID,
 		b.CurrentUser(),
 		objType,
 	)
+	if err != nil {
+		panic(err)
+	}
 
 	owner := &scpb.Owner{
 		DescriptorID: descID,

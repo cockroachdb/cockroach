@@ -140,13 +140,16 @@ func CreateSchemaDescriptorWithPrivileges(
 		}
 	}
 
-	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		db.GetDefaultPrivilegeDescriptor(),
 		nil, /* schemaDefaultPrivilegeDescriptor */
 		db.GetID(),
 		user,
 		privilege.Schemas,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	privs.SetOwner(owner)
 
