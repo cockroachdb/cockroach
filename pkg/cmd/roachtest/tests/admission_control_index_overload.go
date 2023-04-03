@@ -35,7 +35,7 @@ func registerIndexOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "admission-control/index-overload",
 		Owner:   registry.OwnerAdmissionControl,
-		Tags:    []string{`weekly`},
+		Tags:    registry.Tags("weekly"),
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8)),
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

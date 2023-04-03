@@ -286,6 +286,8 @@ Examples:
 	}
 	listCmd.Flags().BoolVar(
 		&listBench, "bench", false, "list benchmarks instead of tests")
+	listCmd.Flags().StringVar(
+		&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
 
 	runFn := func(args []string, benchOnly bool) error {
 		if literalArtifacts == "" {

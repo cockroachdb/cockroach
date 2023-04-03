@@ -330,7 +330,7 @@ type replicationSpec struct {
 	skip string
 
 	// tags are used to categorize the test.
-	tags []string
+	tags map[string]struct{}
 }
 
 // replicationDriver manages c2c roachtest execution.
@@ -823,7 +823,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
-			tags:               []string{"aws"},
+			tags:               registry.Tags("aws"),
 		},
 		{
 			name:     "c2c/UnitTest",
