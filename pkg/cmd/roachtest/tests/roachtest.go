@@ -25,14 +25,14 @@ import (
 func registerRoachtest(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "roachtest/noop",
-		Tags:    []string{"roachtest"},
+		Tags:    registry.Tags("roachtest"),
 		Owner:   registry.OwnerTestEng,
 		Run:     func(_ context.Context, _ test.Test, _ cluster.Cluster) {},
 		Cluster: r.MakeClusterSpec(0),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "roachtest/noop-maybefail",
-		Tags:  []string{"roachtest"},
+		Tags:  registry.Tags("roachtest"),
 		Owner: registry.OwnerTestEng,
 		Run: func(_ context.Context, t test.Test, _ cluster.Cluster) {
 			if rand.Float64() <= 0.2 {
@@ -45,7 +45,7 @@ func registerRoachtest(r registry.Registry) {
 	// In particular, can manually verify that suitable artifacts are created.
 	r.Add(registry.TestSpec{
 		Name:  "roachtest/hang",
-		Tags:  []string{"roachtest"},
+		Tags:  registry.Tags("roachtest"),
 		Owner: registry.OwnerTestEng,
 		Run: func(_ context.Context, t test.Test, c cluster.Cluster) {
 			ctx := context.Background() // intentional

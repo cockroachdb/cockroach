@@ -63,7 +63,7 @@ func registerKV(r registry.Registry) {
 		raid0                    bool
 		duration                 time.Duration
 		tracing                  bool // `trace.debug.enable`
-		tags                     []string
+		tags                     map[string]struct{}
 		owner                    registry.Owner // defaults to KV
 	}
 	computeNumSplits := func(opts kvOptions) int {
@@ -239,8 +239,8 @@ func registerKV(r registry.Registry) {
 		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
 
 		// Weekly larger scale configurations.
-		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
-		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 0, tags: registry.Tags("weekly"), duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 95, tags: registry.Tags("weekly"), duration: time.Hour},
 	} {
 		opts := opts
 
@@ -251,7 +251,11 @@ func registerKV(r registry.Registry) {
 		}
 		nameParts = append(nameParts, fmt.Sprintf("kv%d%s", opts.readPercent, limitedSpanStr))
 		if len(opts.tags) > 0 {
-			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
+			var keys []string
+			for k := range opts.tags {
+				keys = append(keys, k)
+			}
+			nameParts = append(nameParts, strings.Join(keys, "/"))
 		}
 		nameParts = append(nameParts, fmt.Sprintf("enc=%t", opts.encryption))
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
@@ -300,7 +304,7 @@ func registerKV(r registry.Registry) {
 
 		// All the kv0|95 tests should run on AWS by default
 		if opts.tags == nil && (opts.readPercent == 95 || opts.readPercent == 0) {
-			opts.tags = []string{"aws"}
+			opts.tags = registry.Tags("aws")
 		}
 
 		var skip string
@@ -937,7 +941,7 @@ func registerKVRestartImpact(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name: "kv/restart/nodes=12",
 		// This test is expensive (104vcpu), we run it weekly.
-		Tags:    []string{`weekly`},
+		Tags:    registry.Tags(`weekly`),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(13, spec.CPU(8)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
