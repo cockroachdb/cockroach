@@ -361,9 +361,9 @@ type EngineIterator interface {
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() ([]byte, error)
-	// GetRawIter is a low-level method only for use in the storage package,
-	// that returns the underlying pebble Iterator.
-	GetRawIter() pebbleiter.Iterator
+	// CloneContext is a low-level method only for use in the storage package,
+	// that provides sufficient context that the iterator may be cloned.
+	CloneContext() CloneContext
 	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
 	// additional exclusive upper limit parameter. The limit is semantically
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
@@ -386,6 +386,13 @@ type EngineIterator interface {
 	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
+}
+
+// CloneContext is an opaque type encapsulating sufficient context to construct
+// a clone of an existing iterator.
+type CloneContext struct {
+	rawIter       pebbleiter.Iterator
+	statsReporter statsReporter
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
@@ -462,6 +469,7 @@ type IterOptions struct {
 	// Range keys themselves are not affected by the masking, and will be
 	// emitted as normal.
 	RangeKeyMaskingBelow hlc.Timestamp
+
 	// useL6Filters allows the caller to opt into reading filter blocks for
 	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
 	// Seeks are expected in quick succession, that are also likely to not
@@ -1013,15 +1021,7 @@ type WriteBatch interface {
 // *pebble.Metrics struct, which has its own documentation.
 type Metrics struct {
 	*pebble.Metrics
-	// WriteStallCount counts the number of times Pebble intentionally delayed
-	// incoming writes. Currently, the only two reasons for this to happen are:
-	// - "memtable count limit reached"
-	// - "L0 file count limit exceeded"
-	//
-	// We do not split this metric across these two reasons, but they can be
-	// distinguished in the pebble logs.
-	WriteStallCount    int64
-	WriteStallDuration time.Duration
+	Iterator AggregatedIteratorStats
 	// DiskSlowCount counts the number of times Pebble records disk slowness.
 	DiskSlowCount int64
 	// DiskStallCount counts the number of times Pebble observes slow writes
@@ -1031,6 +1031,56 @@ type Metrics struct {
 	SharedStorageWriteBytes int64
 	// SharedStorageReadBytes counts the number of bytes read from shared storage.
 	SharedStorageReadBytes int64
+	// WriteStallCount counts the number of times Pebble intentionally delayed
+	// incoming writes. Currently, the only two reasons for this to happen are:
+	// - "memtable count limit reached"
+	// - "L0 file count limit exceeded"
+	//
+	// We do not split this metric across these two reasons, but they can be
+	// distinguished in the pebble logs.
+	WriteStallCount    int64
+	WriteStallDuration time.Duration
+}
+
+// AggregatedIteratorStats holds cumulative stats, collected and summed over all
+// of an engine's iterators.
+type AggregatedIteratorStats struct {
+	// BlockBytes holds the sum of sizes of all loaded blocks. If the block was
+	// compressed, this is the compressed bytes. This value includes blocks that
+	// were loaded from the cache, and bytes that needed to be read from
+	// persistent storage.
+	//
+	// Currently, there may be some gaps in coverage. (At the time of writing,
+	// 2nd-level index blocks are excluded.)
+	BlockBytes uint64
+	// BlockBytesInCache holds the subset of BlockBytes that were already in the
+	// block cache, requiring no I/O.
+	BlockBytesInCache uint64
+	// BlockReadDuration accumulates the duration spent fetching blocks due to
+	// block cache misses.
+	//
+	// Currently, there may be some gaps in coverage. (At the time of writing,
+	// range deletion and range key blocks, meta index blocks and properties
+	// blocks are all excluded.)
+	BlockReadDuration time.Duration
+	// ExternalSeeks is the total count of seeks in forward and backward
+	// directions performed on pebble.Iterators.
+	ExternalSeeks int
+	// ExternalSteps is the total count of relative positioning operations (eg,
+	// Nexts, Prevs, NextPrefix, NextWithLimit, etc) in forward and backward
+	// directions performed on pebble.Iterators.
+	ExternalSteps int
+	// InternalSeeks is the total count of steps in forward and backward
+	// directions performed on Pebble's internal iterator. If this is high
+	// relative to ExternalSeeks, it's a good indication that there's an
+	// accumulation of garbage within the LSM (NOT MVCC garbage).
+	InternalSeeks int
+	// InternalSteps is the total count of relative positioning operations (eg,
+	// Nexts, Prevs, NextPrefix, etc) in forward and backward directions
+	// performed on pebble's internal iterator. If this is high relative to
+	// ExternalSteps, it's a good indication that there's an accumulation of
+	// garbage within the LSM (NOT MVCC garbage).
+	InternalSteps int
 }
 
 // MetricsForInterval is a set of pebble.Metrics that need to be saved in order to
