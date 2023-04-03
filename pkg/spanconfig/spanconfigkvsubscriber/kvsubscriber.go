@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -401,17 +402,20 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	}
 	s.mu.Lock()
 	s.mu.internal = freshStore
-	if len(events) != 0 {
+	if len(events) != 0 || buildutil.CrdbTestBuild {
 		// In very rare cases, right during cluster bootstrap before the span
 		// config reconciler has ever had a chance to run (i.e.
 		// system.span_configurations is empty), it's possible that the
-		// subscriber has subscribed to an empty span config state. We've only
-		// seen this happen in unit tests with 50ms scan intervals. So it's not
+		// subscriber has subscribed to an empty span config state. So it's not
 		// been meaningfully "updated" in any sense of the word -- we'll perhaps
 		// get the initial state in the next partial update. We don't set the
 		// last-updated timestamp until then -- various components in KV rely on
 		// this timestamp to be non-empty as proof we have span configs as of
 		// some timestamp.
+		//
+		// NB: We ignore these empty snapshot concerns for test builds. The
+		// synchronization we need for unit tests that want to use KV queues
+		// (and thus need a snapshot) adds seconds to the test run.
 		s.setLastUpdatedLocked(ts)
 	}
 	handlers := s.mu.handlers
