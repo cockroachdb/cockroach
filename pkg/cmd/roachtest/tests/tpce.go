@@ -33,7 +33,7 @@ func registerTPCE(r registry.Registry) {
 		cpus      int
 		ssds      int
 
-		tags    []string
+		tags    map[string]struct{}
 		timeout time.Duration
 	}
 
@@ -110,7 +110,7 @@ func registerTPCE(r registry.Registry) {
 		// Nightly, small scale configurations.
 		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1},
 		// Weekly, large scale configurations.
-		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: []string{"weekly"}, timeout: 36 * time.Hour},
+		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: registry.Tags("weekly"), timeout: 36 * time.Hour},
 	} {
 		opts := opts
 		owner := registry.OwnerTestEng

@@ -648,7 +648,7 @@ func registerRestore(r registry.Registry) {
 		Cluster:   r.MakeClusterSpec(10),
 		Benchmark: true,
 		Timeout:   withPauseTimeout,
-		Tags:      []string{`aws`},
+		Tags:      registry.Tags("aws"),
 
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")

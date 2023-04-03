@@ -707,7 +707,7 @@ func registerCDC(r registry.Registry) {
 		Owner:           registry.OwnerCDC,
 		Benchmark:       true,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Tags:            []string{"manual"},
+		Tags:            registry.Tags("manual"),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{

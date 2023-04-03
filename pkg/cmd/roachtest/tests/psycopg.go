@@ -150,7 +150,7 @@ func registerPsycopg(r registry.Registry) {
 		Name:    "psycopg",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `driver`},
+		Tags:    registry.Tags(`default`, `driver`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPsycopg(ctx, t, c)
 		},

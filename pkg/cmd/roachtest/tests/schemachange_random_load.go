@@ -29,7 +29,7 @@ type randomLoadBenchSpec struct {
 	Nodes       int
 	Ops         int
 	Concurrency int
-	Tags        []string
+	Tags        map[string]struct{}
 }
 
 func registerSchemaChangeRandomLoad(r registry.Registry) {
@@ -64,7 +64,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Nodes:       3,
 		Ops:         2000,
 		Concurrency: 1,
-		Tags:        []string{"aws"},
+		Tags:        registry.Tags("aws"),
 	})
 
 	registerRandomLoadBenchSpec(r, randomLoadBenchSpec{

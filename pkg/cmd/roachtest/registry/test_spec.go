@@ -51,7 +51,7 @@ type TestSpec struct {
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.
-	Tags []string
+	Tags map[string]struct{}
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster spec.ClusterSpec
 	// NativeLibs specifies the native libraries required to be present on
@@ -117,10 +117,9 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 		return Matched
 	}
 
-	testTags := stringSliceToSet(t.Tags)
 	for tag := range filter.Tags {
 		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
-		if matchesAll(testTags, strings.Split(tag, ",")) {
+		if matchesAll(t.Tags, strings.Split(tag, ",")) {
 			return Matched
 		}
 	}
@@ -144,9 +143,10 @@ func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
 	return true
 }
 
-func stringSliceToSet(slice []string) map[string]struct{} {
+// Tags returns a set of strings.
+func Tags(values ...string) map[string]struct{} {
 	set := make(map[string]struct{})
-	for _, s := range slice {
+	for _, s := range values {
 		set[s] = struct{}{}
 	}
 	return set
