@@ -1646,8 +1646,14 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		}
 	}
 
-	if shouldExtend {
-		// If we're asked to extend the lease, trigger (async) lease renewal.
+	if shouldExtend && !ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) {
+		// If we're asked to extend the lease, trigger (async) lease renewal. We
+		// don't do this if kv.expiration_leases_only.enabled is true, since we in
+		// that case eagerly extend expiration leases during Raft ticks instead.
+		//
+		// TODO(erikgrinaker): Remove this when we always eagerly extend
+		// expiration leases.
+		//
 		// Kicking this off requires an exclusive lock, and we hold a read-only lock
 		// already, so we jump through a hoop to run it in a suitably positioned
 		// defer.
