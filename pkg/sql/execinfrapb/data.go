@@ -184,7 +184,8 @@ type ProducerMetadata struct {
 	Ranges []roachpb.RangeInfo
 	// TODO(vivek): change to type Error
 	Err error
-	// TraceData is sent if tracing is enabled.
+	// TraceData is sent if tracing is enabled, by all processors on the remote
+	// nodes.
 	TraceData []tracingpb.RecordedSpan
 	// LeafTxnFinalState contains the final state of the LeafTxn to be
 	// sent from leaf flows to the RootTxn held by the flow's ultimate

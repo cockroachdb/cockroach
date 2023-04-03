@@ -57,11 +57,10 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	// If tracing is enabled, we need to start a child span so that the only
-	// contention events present in the recording would be because of this
-	// fetcher. Note that ProcessorSpan method itself will check whether tracing
-	// is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchdirectscan")
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
+		s.Ctx, s.flowCtx, "colbatchdirectscan", s.processorID,
+		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+	)
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
 	err := s.fetcher.SetupNextFetch(
 		ctx, s.Spans, nil /* spanIDs */, s.batchBytesLimit, firstBatchLimit, false, /* spansCanOverlap */
@@ -147,6 +146,9 @@ func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 	return s.fetcher.GetBatchRequestsIssued()
 }
 
+// TODO(yuzefovich): check whether GetScanStats and GetConsumedRU should be
+// reimplemented.
+
 // GetKVCPUTime is part of the colexecop.KVReader interface.
 //
 // Note that this KV CPU time, unlike for the ColBatchScan, includes the
@@ -178,12 +180,13 @@ func NewColBatchDirectScan(
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchDirectScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
-		ctx, kvFetcherMemAcc, flowCtx, spec, post, typeResolver,
+		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver,
 	)
 	if err != nil {
 		return nil, nil, err
