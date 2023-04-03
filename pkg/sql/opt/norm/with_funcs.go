@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // CanInlineWith returns whether or not it's valid to inline binding in expr.
@@ -60,4 +61,25 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 	}
 
 	return replace(input).(memo.RelExpr)
+}
+
+// MakeBindingPropsForRecursiveCTE makes a Relational struct that applies to all
+// iterations of a recursive CTE. The caller must verify that the supplied
+// cardinality applies to all iterations.
+func MakeBindingPropsForRecursiveCTE(
+	card props.Cardinality, outCols opt.ColSet, rowCount float64,
+) *props.Relational {
+	// The working table will always have at least one row, because any iteration
+	// that returns zero rows will end the loop.
+	card = card.AtLeast(props.OneCardinality)
+	bindingProps := &props.Relational{}
+	bindingProps.OutputCols = outCols
+	bindingProps.Cardinality = card
+	bindingProps.Stats.RowCount = rowCount
+	// Row count must be greater than 0 or the stats code will throw an error.
+	// Set it to 1 to match the cardinality.
+	if bindingProps.Stats.RowCount < 1 {
+		bindingProps.Stats.RowCount = 1
+	}
+	return bindingProps
 }
