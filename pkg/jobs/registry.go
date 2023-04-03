@@ -501,7 +501,7 @@ func batchJobInsertStmt(
 
 	// TODO(adityamaru: Remove this once we are outside the compatability
 	// window for 22.2.
-	if r.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+	if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
 		columns = []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`}
 		valueFns = map[string]func(*Job) (interface{}, error){
 			`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
@@ -615,7 +615,7 @@ func (r *Registry) CreateJobWithTxn(
 		cols := []string{"id", "created", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
 		vals := []interface{}{jobID, created, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
 		log.Infof(ctx, "active version is %s", r.settings.Version.ActiveVersion(ctx))
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
 			cols = []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
 			vals = []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
 		}
@@ -739,7 +739,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
 			nCols -= 1
 		}
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs) {
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
 			cols = []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
 			placeholders = []string{"$1", "$2", "$3", "$4", "$5"}
 			values = []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
