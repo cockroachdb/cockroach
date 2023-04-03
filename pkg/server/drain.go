@@ -397,8 +397,15 @@ func (s *drainServer) drainClients(
 	// given sessions a chance to finish ongoing work.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
+	// Mark this phase in the logs to clarify the context of any subsequent
+	// errors/warnings, if any.
+	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
+
 	// FIXME(Jeff): Add code here to remove the sql_instances row or
 	// something similar.
+
+	// Mark the node as fully drained.
+	s.sqlServer.gracefulDrainComplete.Set(true)
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil
