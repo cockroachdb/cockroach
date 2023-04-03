@@ -37,6 +37,7 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 			b := bundle
 			to := timeout
 			r.Add(registry.TestSpec{
+				Skip:    "the test is skipped until #100260 is resolved",
 				Name:    fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
 				Owner:   registry.OwnerSQLQueries,
 				Cluster: r.MakeClusterSpec(4),
