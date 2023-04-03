@@ -16,12 +16,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSystemJobInfoMigration(t *testing.T) {
@@ -51,9 +54,22 @@ func TestSystemJobInfoMigration(t *testing.T) {
 	db := tc.ServerConn(0)
 	defer db.Close()
 
-	// NB: this isn't actually doing anything, since the table is baked into the
-	// bootstrap schema, so this is really just showing the upgrade is idempotent,
-	// but this is in line with the other tests of createSystemTable upgrades.
+	// Advance to the version immediately before the one that
+	// interests us.
+	upgrades.Upgrade(
+		t,
+		db,
+		clusterversion.V23_1CreateSystemJobInfoTable-1,
+		nil,
+		false,
+	)
+
+	// We verify that the jobs table gets its version upgraded through
+	// the upgrade, to ensure the creation of job_info synchronizes with
+	// concurrent accesses to the jobs table.
+	kvDB := tc.Server(0).(*server.TestServer).DB()
+	tblBefore := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "system", "public", "jobs")
+
 	upgrades.Upgrade(
 		t,
 		db,
@@ -61,4 +77,7 @@ func TestSystemJobInfoMigration(t *testing.T) {
 		nil,
 		false,
 	)
+
+	tblAfter := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "system", "public", "jobs")
+	require.Greater(t, tblAfter.GetVersion(), tblBefore.GetVersion())
 }
