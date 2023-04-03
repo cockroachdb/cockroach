@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
@@ -41,27 +40,34 @@ func convertToVecTree(
 	flowCtx *execinfra.FlowCtx,
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
-	isPlanLocal bool,
 	recordingStats bool,
 ) (opChains execopnode.OpChains, cleanup func(), err error) {
-	if !isPlanLocal && len(localProcessors) > 0 {
+	if !flowCtx.Local && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
+	flowBase := flowinfra.NewFlowBase(
+		*flowCtx,
+		nil,                     /* sp */
+		nil,                     /* flowReg */
+		&execinfra.RowChannel{}, /* rowSyncFlowConsumer */
+		// We optimistically assume that sql.DistSQLReceiver can be used as an
+		// execinfra.BatchReceiver, so we always pass in a fakeBatchReceiver to
+		// the creator.
+		&fakeBatchReceiver{},
+		localProcessors,
+		nil,       /* localVectorSources */
+		func() {}, /* onFlowCleanupEnd */
+		"",        /* statementSQL */
+	)
+	creator := newVectorizedFlowCreator(
+		flowBase, nil /* componentCreator */, recordingStats,
+		colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore,
+	)
 	fuseOpt := flowinfra.FuseNormally
-	if isPlanLocal && !execinfra.HasParallelProcessors(flow) {
+	if flowCtx.Local && !execinfra.HasParallelProcessors(flow) {
 		fuseOpt = flowinfra.FuseAggressively
 	}
-	// We optimistically assume that sql.DistSQLReceiver can be used as an
-	// execinfra.BatchReceiver, so we always pass in a fakeBatchReceiver to the
-	// creator.
-	creator := newVectorizedFlowCreator(
-		nil /* flowBase */, newNoopFlowCreatorHelper(), nil, /* componentCreator */
-		recordingStats, false /* isGatewayNode */, nil, /* waitGroup */
-		&execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer,
-		colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore,
-		flowCtx.NewTypeResolver(flowCtx.Txn), admission.WorkInfo{},
-	)
-	opChains, _, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, nil /*localVectorSources*/, fuseOpt)
+	opChains, _, err = creator.setupFlow(ctx, flow.Processors, fuseOpt)
 	cleanup = func() {
 		creator.cleanup(ctx)
 		creator.Release()
@@ -102,7 +108,6 @@ func ExplainVec(
 	opChains execopnode.OpChains,
 	gatewaySQLInstanceID base.SQLInstanceID,
 	verbose bool,
-	distributed bool,
 	recordingStats bool,
 ) ([]string, error) {
 	tp := treeprinter.NewWithStyle(treeprinter.CompactStyle)
@@ -125,7 +130,7 @@ func ExplainVec(
 			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].sqlInstanceID < sortedFlows[j].sqlInstanceID })
 			for _, flow := range sortedFlows {
 				var cleanup func()
-				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed, recordingStats)
+				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, recordingStats)
 				// We need to delay the cleanup until after the tree has been
 				// formatted.
 				defer cleanup()
