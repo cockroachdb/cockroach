@@ -159,7 +159,7 @@ func registerActiveRecord(r registry.Registry) {
 			"installing gems",
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
-					`RAILS_VERSION=%s sudo bundle install`, supportedRailsVersion),
+					`sudo RAILS_VERSION=%s bundle install`, supportedRailsVersion),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -178,8 +178,9 @@ func registerActiveRecord(r registry.Registry) {
 		t.Status("running activerecord test suite")
 
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
-			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
-				`sudo RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`,
+			fmt.Sprintf(
+				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
+					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`, supportedRailsVersion),
 		)
 
 		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
