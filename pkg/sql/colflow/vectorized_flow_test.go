@@ -14,12 +14,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -33,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -235,22 +233,28 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
-	f := &flowinfra.FlowBase{
-		FlowCtx: execinfra.FlowCtx{
+	flowBase := flowinfra.NewFlowBase(
+		execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{},
 			EvalCtx: &evalCtx,
 			Mon:     evalCtx.TestingMon,
 			NodeID:  base.TestingIDContainer,
 		},
-	}
-	var wg sync.WaitGroup
+		nil,                     /* sp */
+		nil,                     /* flowReg */
+		&execinfra.RowChannel{}, /* rowSyncFlowConsumer */
+		nil,                     /* batchSyncFlowConsumer */
+		nil,                     /* localProcessors */
+		nil,                     /* localVectorSources */
+		nil,                     /* onFlowCleanupEnd */
+		"",                      /* statementSQL */
+	)
 	vfc := newVectorizedFlowCreator(
-		f, nil /* helper */, componentCreator, false, false, &wg, &execinfra.RowChannel{},
-		nil /* batchSyncFlowConsumer */, nil /* podNodeDialer */, colcontainer.DiskQueueCfg{},
-		nil /* fdSemaphore */, descs.DistSQLTypeResolver{}, admission.WorkInfo{},
+		flowBase, componentCreator, false, /* recordingStats */
+		colcontainer.DiskQueueCfg{}, nil, /* fdSemaphore */
 	)
 
-	_, _, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, nil /* localProcessors */, nil /*localVectorSources*/, flowinfra.FuseNormally)
+	_, _, err := vfc.setupFlow(ctx, procs, flowinfra.FuseNormally)
 	defer vfc.cleanup(ctx)
 	require.NoError(t, err)
 
@@ -263,6 +267,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 // subtests for a more thorough explanation.
 func TestVectorizedFlowTempDirectory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)

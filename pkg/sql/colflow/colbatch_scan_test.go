@@ -44,6 +44,7 @@ import (
 // about the spans that have been read.
 func TestColBatchScanMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
