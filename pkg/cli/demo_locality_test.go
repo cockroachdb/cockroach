@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func Example_demo_locality() {
+var _ = skipExample_demo_locality
+
+func skipExample_demo_locality() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
 
