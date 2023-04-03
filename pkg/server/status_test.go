@@ -277,6 +277,8 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	}
 	defer s.Stopper().Stop(context.Background())
 
+	t.Logf("using admin URL %s", s.AdminURL())
+
 	var engineStats serverpb.EngineStatsResponse
 	// Using SucceedsSoon because we have seen in the wild that
 	// occasionally requests don't go through with error "transport:
