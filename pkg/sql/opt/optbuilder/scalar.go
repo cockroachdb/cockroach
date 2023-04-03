@@ -542,6 +542,7 @@ func (b *Builder) buildFunction(
 	if overload.IsUDF {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
+	b.factory.Metadata().AddBuiltin(f.Func.ReferenceByName)
 
 	if overload.Class == tree.AggregateClass {
 		panic(errors.AssertionFailedf("aggregate function should have been replaced"))
@@ -610,6 +611,7 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Build the input expressions.
 	var input memo.ScalarListExpr
