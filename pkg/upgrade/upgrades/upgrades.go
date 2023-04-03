@@ -312,7 +312,7 @@ var upgrades = []upgradebase.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"stop writing payload and progress to system.jobs",
-		toCV(clusterversion.V23_2StopWritingPayloadAndProgressToSystemJobs),
+		toCV(clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs),
 		upgrade.NoPrecondition,
 		alterPayloadColumnToNullable,
 	),
