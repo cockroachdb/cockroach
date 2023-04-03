@@ -20,14 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -745,7 +743,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			if err := validateZoneAttrsAndLocalities(params.ctx, params.p.ExecCfg(), &newZone); err != nil {
+			if err := validateZoneAttrsAndLocalities(
+				params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), &newZone,
+			); err != nil {
 				return err
 			}
 
@@ -847,13 +847,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// all the way down here.
 		n.run.numAffected, err = writeZoneConfig(
 			params.ctx,
-			params.p.txn,
+			params.p.InternalSQLTxn(),
 			targetID,
 			table,
 			zoneToWrite,
 			partialZoneWithRaw.GetRawBytesInStorage(),
 			execConfig,
-			params.p.Descriptors(),
 			hasNewSubzones,
 			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		)
@@ -897,7 +896,7 @@ func (*setZoneConfigNode) Close(context.Context)          {}
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
-type regionsGetter func(context.Context, *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error)
+type regionsGetter func(context.Context) (*serverpb.RegionsResponse, error)
 
 // Check that there are not duplicated values for a particular
 // constraint. For example, constraints [+region=us-east1,+region=us-east2]
@@ -998,9 +997,13 @@ func accumulateUniqueConstraints(zone *zonepb.ZoneConfig) []zonepb.Constraint {
 //
 // validateZoneAttrsAndLocalities is tenant aware in its validation. Secondary
 // tenants don't have access to the NodeStatusServer, and as such, aren't
-// allowed to set non-locality attributes in their constraints.
+// allowed to set non-locality attributes in their constraints. Furthermore,
+// their access is validated using the RegionProvider.
 func validateZoneAttrsAndLocalities(
-	ctx context.Context, execCfg *ExecutorConfig, zone *zonepb.ZoneConfig,
+	ctx context.Context,
+	regionProvider descs.RegionProvider,
+	execCfg *ExecutorConfig,
+	zone *zonepb.ZoneConfig,
 ) error {
 	// Avoid RPCs to the Node/Region server if we don't have anything to validate.
 	if len(zone.Constraints) == 0 && len(zone.VoterConstraints) == 0 && len(zone.LeasePreferences) == 0 {
@@ -1013,7 +1016,7 @@ func validateZoneAttrsAndLocalities(
 		}
 		return validateZoneAttrsAndLocalitiesForSystemTenant(ctx, ss.ListNodesInternal, zone)
 	}
-	return validateZoneLocalitiesForSecondaryTenants(ctx, execCfg.TenantStatusServer.Regions, zone)
+	return validateZoneLocalitiesForSecondaryTenants(ctx, regionProvider.GetRegions, zone)
 }
 
 // validateZoneAttrsAndLocalitiesForSystemTenant performs all the constraint/
@@ -1082,7 +1085,7 @@ func validateZoneLocalitiesForSecondaryTenants(
 	ctx context.Context, getRegions regionsGetter, zone *zonepb.ZoneConfig,
 ) error {
 	toValidate := accumulateUniqueConstraints(zone)
-	resp, err := getRegions(ctx, &serverpb.RegionsRequest{})
+	resp, err := getRegions(ctx)
 	if err != nil {
 		return err
 	}
@@ -1164,13 +1167,12 @@ func prepareZoneConfigWrites(
 
 func writeZoneConfig(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn descs.Txn,
 	targetID descpb.ID,
 	table catalog.TableDescriptor,
 	zone *zonepb.ZoneConfig,
 	expectedExistingRawBytes []byte,
 	execCfg *ExecutorConfig,
-	descriptors *descs.Collection,
 	hasNewSubzones bool,
 	kvTrace bool,
 ) (numAffected int, err error) {
@@ -1178,28 +1180,24 @@ func writeZoneConfig(
 	if err != nil {
 		return 0, err
 	}
-	return writeZoneConfigUpdate(ctx, txn, kvTrace, descriptors, update)
+	return writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 }
 
 func writeZoneConfigUpdate(
-	ctx context.Context,
-	txn *kv.Txn,
-	kvTrace bool,
-	descriptors *descs.Collection,
-	update *zoneConfigUpdate,
+	ctx context.Context, txn descs.Txn, kvTrace bool, update *zoneConfigUpdate,
 ) (numAffected int, err error) {
-	b := txn.NewBatch()
+	b := txn.KV().NewBatch()
 	if update.zoneConfig == nil {
-		err = descriptors.DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
+		err = txn.Descriptors().DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
 	} else {
 		numAffected = 1
-		err = descriptors.WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
+		err = txn.Descriptors().WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
 	}
 	if err != nil {
 		return 0, err
 	}
 
-	if err := txn.Run(ctx, b); err != nil {
+	if err := txn.KV().Run(ctx, b); err != nil {
 		return 0, err
 	}
 	r := b.Results[0]
@@ -1223,13 +1221,13 @@ func writeZoneConfigUpdate(
 // reuse an existing client.Txn safely.
 func RemoveIndexZoneConfigs(
 	ctx context.Context,
-	txn isql.Txn,
+	txn descs.Txn,
 	execCfg *ExecutorConfig,
 	kvTrace bool,
-	descriptors *descs.Collection,
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
+	descriptors := txn.Descriptors()
 	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn.KV(), tableDesc.GetID())
 	if err != nil {
 		return err
@@ -1259,8 +1257,8 @@ func RemoveIndexZoneConfigs(
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
 		_, err = writeZoneConfig(
-			ctx, txn.KV(), tableDesc.GetID(), tableDesc, zone,
-			zoneWithRaw.GetRawBytesInStorage(), execCfg, descriptors,
+			ctx, txn, tableDesc.GetID(), tableDesc, zone,
+			zoneWithRaw.GetRawBytesInStorage(), execCfg,
 			false /* hasNewSubzones */, kvTrace,
 		)
 		if err != nil && !sqlerrors.IsCCLRequiredError(err) {

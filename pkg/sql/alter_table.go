@@ -669,7 +669,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					params.ctx,
 					params.p.InternalSQLTxn(),
 					n.tableDesc,
-					params.p.Descriptors(),
 					n.tableDesc.GetPrimaryIndexID(),
 					oldPartitioning,
 					n.tableDesc.GetPrimaryIndex().GetPartitioning(),

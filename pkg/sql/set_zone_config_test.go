@@ -70,7 +70,7 @@ func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	getRegions := func(ctx context.Context, request *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error) {
+	getRegions := func(ctx context.Context) (*serverpb.RegionsResponse, error) {
 		return &serverpb.RegionsResponse{
 			Regions: map[string]*serverpb.RegionsResponse_Region{
 				"us-east1": {

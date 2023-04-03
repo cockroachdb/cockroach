@@ -323,7 +323,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			err = withDatabaseRegionChangeFinalizer(ctx, txn, func(
 				finalizer *databaseRegionChangeFinalizer,
 			) (err error) {
-				repartitioned, _, err = finalizer.repartitionRegionalByRowTables(ctx, txn.KV())
+				repartitioned, _, err = finalizer.repartitionRegionalByRowTables(ctx, txn)
 				return err
 			})
 			return repartitioned, err

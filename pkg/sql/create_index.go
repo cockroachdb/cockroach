@@ -901,10 +901,9 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
-			p.Txn(),
+			p.InternalSQLTxn(),
 			p.ExecCfg(),
 			p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-			p.Descriptors(),
 			regionConfig,
 			tableDesc,
 			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),

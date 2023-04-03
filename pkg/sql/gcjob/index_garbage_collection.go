@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -119,17 +118,17 @@ func gcIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		removeIndexZoneConfigs := func(
-			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn descs.Txn,
 		) error {
-			freshParentTableDesc, err := descriptors.MutableByID(txn.KV()).Table(ctx, parentID)
+			freshParentTableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, parentID)
 			if err != nil {
 				return err
 			}
 			return sql.RemoveIndexZoneConfigs(
-				ctx, txn, execCfg, false /* kvTrace */, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
+				ctx, txn, execCfg, false /* kvTrace */, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
-		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
+		err := execCfg.InternalDB.DescsTxn(ctx, removeIndexZoneConfigs)
 		if isMissingDescriptorError(err) {
 			handleTableDescriptorDeleted(ctx, parentID, progress)
 			return nil
@@ -199,17 +198,17 @@ func deleteIndexZoneConfigsAfterGC(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		removeIndexZoneConfigs := func(
-			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn descs.Txn,
 		) error {
-			freshParentTableDesc, err := descriptors.MutableByID(txn.KV()).Table(ctx, parentID)
+			freshParentTableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, parentID)
 			if err != nil {
 				return err
 			}
 			return sql.RemoveIndexZoneConfigs(
-				ctx, txn, execCfg, false /* kvTrace */, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
+				ctx, txn, execCfg, false /* kvTrace */, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
-		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
+		err := execCfg.InternalDB.DescsTxn(ctx, removeIndexZoneConfigs)
 		switch {
 		case isMissingDescriptorError(err):
 			log.Infof(ctx, "removing index %d zone config from table %d failed: %v",
