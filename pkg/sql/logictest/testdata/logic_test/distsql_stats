@@ -123,7 +123,7 @@ SHOW STATISTICS USING JSON FOR TABLE data
 
 # Verify that we can control the number of samples and buckets collected.
 statement ok
-SET CLUSTER SETTING sql.stats.histogram_buckets.count = 3
+SET CLUSTER SETTING sql.stats.histogram_buckets.count = 2
 
 statement ok
 CREATE STATISTICS s2 ON a FROM data
@@ -136,8 +136,28 @@ SHOW HISTOGRAM $hist_id_2
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
 1            0           0                    64
+4            128         2                    64
+
+# We can also control this with a table setting.
+statement ok
+ALTER TABLE data SET (sql_stats_histogram_buckets_count = 3)
+
+statement ok
+CREATE STATISTICS s3 ON a FROM data
+
+let $hist_id_3
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's3'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_3
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    64
 3            64          1                    64
 4            0           0                    64
+
+statement ok
+ALTER TABLE data RESET (sql_stats_histogram_buckets_count)
 
 # We can verify the number of samples collected based on the number of
 # buckets produced.
@@ -162,8 +182,9 @@ SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_20000]
 ----
 20000
 
+# We can also control this with a table setting.
 statement ok
-SET CLUSTER SETTING sql.stats.histogram_samples.count = 500
+ALTER TABLE big SET (sql_stats_histogram_samples_count = 500)
 
 statement ok
 CREATE STATISTICS s500 FROM big

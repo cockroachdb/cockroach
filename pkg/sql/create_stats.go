@@ -272,7 +272,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			multiColEnabled = stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
 			deleteOtherStats = true
 		}
-		defaultHistogramBuckets := uint32(stats.DefaultHistogramBuckets.Get(n.p.ExecCfg().SV()))
+		defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(n.p.ExecCfg().SV(), tableDesc)
 		if colStats, err = createStatsDefaultColumns(
 			tableDesc, multiColEnabled, defaultHistogramBuckets,
 		); err != nil {
@@ -303,7 +303,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		// STATISTICS or other SQL on table_statistics.
 		_ = stats.MakeSortedColStatKey(columnIDs)
 		isInvIndex := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
-		defaultHistogramBuckets := uint32(stats.DefaultHistogramBuckets.Get(n.p.ExecCfg().SV()))
+		defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(n.p.ExecCfg().SV(), tableDesc)
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
