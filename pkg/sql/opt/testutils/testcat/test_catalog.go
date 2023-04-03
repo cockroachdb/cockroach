@@ -343,6 +343,19 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 		"\"%q\" is not a table", tree.ErrString(name)))
 }
 
+// Table returns the test table that was previously added with the given name.
+func (tc *Catalog) LookupTable(name *tree.TableName) (*Table, error) {
+	ds, _, err := tc.ResolveDataSource(context.TODO(), cat.Flags{}, name)
+	if err != nil {
+		return nil, err
+	}
+	if tab, ok := ds.(*Table); ok {
+		return tab, nil
+	}
+	return nil, pgerror.Newf(pgcode.WrongObjectType,
+		"\"%q\" is not a table", tree.ErrString(name))
+}
+
 // Tables returns a list of all tables added to the test catalog.
 func (tc *Catalog) Tables() []*Table {
 	tables := make([]*Table, 0, len(tc.testSchema.dataSources))
@@ -1183,6 +1196,7 @@ type TableStat struct {
 	evalCtx       *eval.Context
 	histogram     []cat.HistogramBucket
 	histogramType *types.T
+	tc            *Catalog
 }
 
 var _ cat.TableStatistic = &TableStat{}
@@ -1243,7 +1257,10 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	if err != nil {
 		panic(err)
 	}
-	colType := tree.MustBeStaticallyKnownType(colTypeRef)
+	colType, err := tree.ResolveType(context.Background(), colTypeRef, ts.tc)
+	if err != nil {
+		return nil
+	}
 
 	var offset int
 	if ts.js.NullCount > 0 {
