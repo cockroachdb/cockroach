@@ -2013,7 +2013,7 @@ func TestImportRowLimit(t *testing.T) {
 
 	t.Run("row limit multiple csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test; USE test`)
-		defer sqlDB.Exec(t, (`DROP DATABASE test`))
+		defer sqlDB.Exec(t, `DROP DATABASE test`)
 
 		data = "pear\navocado\nwatermelon\nsugar"
 		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
@@ -6609,18 +6609,20 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", "nodelocal://1/cockroachdump/dump.sql")
 
 	// Verify that statistics have been created.
+	// Depending on timing, the statistics name may either be __auto__ or
+	// __import__, so we don't check the name in the results.
 	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+		`SELECT column_names, row_count, distinct_count, null_count
 	  FROM [SHOW STATISTICS FOR TABLE t]`,
 		[][]string{
-			{"__auto__", "{i}", "2", "2", "0"},
-			{"__auto__", "{t}", "2", "2", "0"},
+			{"{i}", "2", "2", "0"},
+			{"{t}", "2", "2", "0"},
 		})
 	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+		`SELECT column_names, row_count, distinct_count, null_count
 	  FROM [SHOW STATISTICS FOR TABLE a]`,
 		[][]string{
-			{"__auto__", "{i}", "1", "1", "0"},
+			{"{i}", "1", "1", "0"},
 		})
 }
 
