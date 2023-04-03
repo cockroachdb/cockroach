@@ -74,8 +74,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -4055,18 +4053,10 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 91548)
-
 	// Set TestingKnobs to return a known session for easier
 	// comparison.
-	testSession := sqllivenesstestutils.NewAlwaysAliveSession("known-test-session")
 	adoptionInterval := 20 * time.Minute
 	sessionOverride := withKnobsFn(func(knobs *base.TestingKnobs) {
-		knobs.SQLLivenessKnobs = &sqlliveness.TestingKnobs{
-			SessionOverride: func(_ context.Context) (sqlliveness.Session, error) {
-				return testSession, nil
-			},
-		}
 		// This is a hack to avoid the job adoption loop from
 		// immediately re-adopting the job that is running. The job
 		// adoption loop basically just sets the claim ID, which will
@@ -4101,6 +4091,10 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 		// another node.
 		sqlDB.Exec(t, `UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`, jobID)
 
+		timeout := 5 * time.Second
+		if util.RaceEnabled {
+			timeout = 30 * time.Second
+		}
 		// Expect that the distflow fails since it can't
 		// update the checkpoint.
 		select {
@@ -4108,9 +4102,9 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 			require.Error(t, err)
 			// TODO(ssd): Replace this error in the jobs system with
 			// an error type we can check against.
-			require.Contains(t, err.Error(), fmt.Sprintf("expected session \"%s\" but found NULL", testSession.ID().String()))
-		case <-time.After(5 * time.Second):
-			t.Fatal("expected distflow to fail but it hasn't after 5 seconds")
+			require.Regexp(t, "expected session .* but found NULL", err.Error())
+		case <-time.After(timeout):
+			t.Fatal("expected distflow to fail")
 		}
 	}
 
@@ -5654,67 +5648,6 @@ func TestUnspecifiedPrimaryKey(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
-}
-
-// TestChangefeedNodeShutdown ensures that an enterprise changefeed continues
-// running after the original job-coordinator node is shut down.
-func TestChangefeedNodeShutdown(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 32232)
-
-	knobs := base.TestingKnobs{
-		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-	}
-
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			UseDatabase: "d",
-			Knobs:       knobs,
-		},
-	})
-	defer tc.Stopper().Stop(context.Background())
-
-	db := tc.ServerConn(1)
-	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", time.Millisecond)
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-
-	// Create a factory which uses server 1 as the output of the Sink, but
-	// executes the CREATE CHANGEFEED statement on server 0.
-	sink, cleanup := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanup()
-	f := makeTableFeedFactory(tc.Server(1), tc.ServerConn(0), sink)
-	foo := feed(t, f, "CREATE CHANGEFEED FOR foo")
-	defer closeFeed(t, foo)
-
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'second')`)
-	assertPayloads(t, foo, []string{
-		`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
-		`foo: [1]->{"after": {"a": 1, "b": "second"}}`,
-	})
-
-	// TODO(mrtracy): At this point we need to wait for a resolved timestamp,
-	// in order to ensure that there isn't a repeat when the job is picked up
-	// again. As an alternative, we could use a verifier instead of assertPayloads.
-
-	// Wait for the high-water mark on the job to be updated after the initial
-	// scan, to make sure we don't get the initial scan data again.
-
-	// Stop server 0, which is where the table feed connects.
-	tc.StopServer(0)
-
-	sqlDB.Exec(t, `UPSERT INTO foo VALUES(0, 'updated')`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (3, 'third')`)
-
-	assertPayloads(t, foo, []string{
-		`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
-		`foo: [3]->{"after": {"a": 3, "b": "third"}}`,
-	})
 }
 
 func TestChangefeedTelemetry(t *testing.T) {
