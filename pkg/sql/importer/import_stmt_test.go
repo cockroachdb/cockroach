@@ -3047,6 +3047,9 @@ func TestImportIntoCSV(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
+	ctx, cancel := tc.Stopper().WithCancelOnQuiesce(context.Background())
+	defer cancel()
+
 	var forceFailure bool
 	var importBodyFinished chan struct{}
 	var delayImportFinish chan struct{}
@@ -3057,10 +3060,18 @@ func TestImportIntoCSV(t *testing.T) {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if importBodyFinished != nil {
-						importBodyFinished <- struct{}{}
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case importBodyFinished <- struct{}{}:
+						}
 					}
 					if delayImportFinish != nil {
-						<-delayImportFinish
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-delayImportFinish:
+						}
 					}
 
 					if forceFailure {
@@ -3458,7 +3469,11 @@ func TestImportIntoCSV(t *testing.T) {
 		})
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(delayImportFinish)
-			<-importBodyFinished
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-importBodyFinished:
+			}
 
 			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM t`).Scan(&unused)
 			if !testutils.IsError(err, `relation "t" is offline: importing`) {
