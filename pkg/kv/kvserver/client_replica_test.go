@@ -1964,6 +1964,8 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 100491, "flaky test")
+
 	numServers := 2
 	var manuals []*hlc.HybridManualClock
 	for i := 0; i < numServers; i++ {
