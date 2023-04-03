@@ -223,11 +223,11 @@ func BenchmarkMVCCGet_Pebble(b *testing.B) {
 	ctx := context.Background()
 	for _, batch := range []bool{false, true} {
 		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
-			for _, numVersions := range []int{1, 10, 100} {
+			for _, numVersions := range []int{10} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							for _, numRangeKeys := range []int{0, 1, 100} {
+							for _, numRangeKeys := range []int{0} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									runMVCCGet(ctx, b, mvccBenchData{
 										numVersions:  numVersions,
