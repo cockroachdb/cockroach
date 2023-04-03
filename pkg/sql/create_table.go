@@ -474,10 +474,9 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		if err := ApplyZoneConfigForMultiRegionTable(
 			params.ctx,
-			params.p.Txn(),
+			params.p.InternalSQLTxn(),
 			params.p.ExecCfg(),
 			params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-			params.p.Descriptors(),
 			regionConfig,
 			desc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,

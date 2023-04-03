@@ -985,8 +985,8 @@ func createImportingDescriptors(
 	}
 
 	if !details.PrepareCompleted {
-		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
 			// A couple of pieces of cleanup are required for multi-region databases.
 			// First, we need to find all of the MULTIREGION_ENUMs types and remap the
@@ -1042,9 +1042,8 @@ func createImportingDescriptors(
 							ctx,
 							desc.GetID(),
 							regionConfig,
-							txn.KV(),
+							txn,
 							p.ExecCfg(),
-							descsCol,
 							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 						); err != nil {
 							return err
@@ -1060,7 +1059,7 @@ func createImportingDescriptors(
 					table.RowLevelTTL.ScheduleID = 0
 				}
 			}
-
+			descsCol := txn.Descriptors()
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := ingesting.WriteDescriptors(
 				ctx, p.ExecCfg().Codec, txn.KV(), p.User(), descsCol,
@@ -1177,10 +1176,9 @@ func createImportingDescriptors(
 						}
 						if err := sql.ApplyZoneConfigForMultiRegionTable(
 							ctx,
-							txn.KV(),
+							txn,
 							p.ExecCfg(),
 							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-							descsCol,
 							regionConfig,
 							mutTable,
 							sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
