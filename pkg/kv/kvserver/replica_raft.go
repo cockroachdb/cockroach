@@ -1210,6 +1210,26 @@ func (r *Replica) tick(
 
 	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 
+	// Eagerly extend expiration leases if kv.expiration_leases_only.enabled is
+	// set. We can do this here because we don't allow ranges with expiration
+	// leases to quiesce in this case. We check the lease type and owner first,
+	// since leaseStatusAtRLocked() is moderately expensive.
+	//
+	// TODO(erikgrinaker): we should remove the store lease renewer and always
+	// do this, but we keep it for now out of caution.
+	//
+	// TODO(erikgrinaker): the replicate queue is responsible for acquiring leases
+	// for ranges that don't have one, and for switching the lease type when e.g.
+	// kv.expiration_leases_only.enabled changes. We should do this here when we
+	// remove quiescence.
+	if !r.store.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
+		if l := r.mu.state.Lease; l.Type() == roachpb.LeaseExpiration && l.OwnedBy(r.StoreID()) {
+			if ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) {
+				r.maybeExtendLeaseAsyncLocked(ctx, r.leaseStatusAtRLocked(ctx, now))
+			}
+		}
+	}
+
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update
 	// it whenever it ticks. In effect, this makes sure it always sees itself as

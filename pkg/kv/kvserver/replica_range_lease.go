@@ -1412,12 +1412,16 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	}
 }
 
-// shouldExtendLeaseRLocked determines whether the lease should be
-// extended asynchronously, even if it is currently valid. The method
-// returns true if this range uses expiration-based leases, the lease is
-// in need of renewal, and there's not already an extension pending.
+// shouldExtendLeaseRLocked determines whether the lease should be extended
+// asynchronously, even if it is currently valid. The method returns true if
+// this range uses expiration-based leases, it is or was owned by this replica,
+// the lease is in need of renewal, and there's not already an extension
+// pending.
 func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
 	if st.Lease.Type() != roachpb.LeaseExpiration {
+		return false
+	}
+	if !st.Lease.OwnedBy(r.StoreID()) {
 		return false
 	}
 	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -28,8 +29,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLeaseRenewer tests that the store lease renewer correctly tracks and
-// extends expiration-based leases.
+// TestLeaseRenewer tests that the store lease renewer or the Raft scheduler
+// correctly tracks and extends expiration-based leases. The responsibility
+// is given by kv.expiration_leases_only.enabled.
 func TestLeaseRenewer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -38,103 +40,163 @@ func TestLeaseRenewer(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	ctx := context.Background()
-
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			RaftConfig: base.RaftConfig{
-				RangeLeaseDuration: time.Second,
+	// When kv.expiration_leases_only.enabled is true, the Raft scheduler is
+	// responsible for extensions, but we still track expiration leases for system
+	// ranges in the store lease renewer in case the setting changes.
+	testutils.RunTrueAndFalse(t, "kv.expiration_leases_only.enabled", func(t *testing.T, expOnly bool) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
+		tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				RaftConfig: base.RaftConfig{
+					RangeLeaseDuration: time.Second,
+					RaftTickInterval:   100 * time.Millisecond,
+				},
 			},
-		},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		require.NoError(t, tc.WaitForFullReplication())
+
+		lookupNode := func(nodeID roachpb.NodeID) int {
+			for idx, id := range tc.NodeIDs() {
+				if id == nodeID {
+					return idx
+				}
+			}
+			t.Fatalf("couldn't look up node %d", nodeID)
+			return 0
+		}
+
+		getNodeStore := func(nodeID roachpb.NodeID) *Store {
+			srv := tc.Server(lookupNode(nodeID))
+			s, err := srv.GetStores().(*Stores).GetStore(srv.GetFirstStoreID())
+			require.NoError(t, err)
+			return s
+		}
+
+		getNodeReplica := func(nodeID roachpb.NodeID, rangeID roachpb.RangeID) *Replica {
+			repl, err := getNodeStore(nodeID).GetReplica(rangeID)
+			require.NoError(t, err)
+			return repl
+		}
+
+		getLeaseRenewers := func(rangeID roachpb.RangeID) []roachpb.NodeID {
+			var renewers []roachpb.NodeID
+			for _, nodeID := range tc.NodeIDs() {
+				if _, ok := getNodeStore(nodeID).renewableLeases.Load(int64(rangeID)); ok {
+					renewers = append(renewers, nodeID)
+				}
+			}
+			return renewers
+		}
+
+		// assertLeaseExtension asserts that the given range has an expiration-based
+		// lease that is eagerly extended.
+		assertLeaseExtension := func(rangeID roachpb.RangeID) {
+			repl := getNodeReplica(1, rangeID)
+			lease, _ := repl.GetLease()
+			require.Equal(t, roachpb.LeaseExpiration, lease.Type())
+
+			var extensions int
+			require.Eventually(t, func() bool {
+				newLease, _ := repl.GetLease()
+				require.Equal(t, roachpb.LeaseExpiration, newLease.Type())
+				if *newLease.Expiration != *lease.Expiration {
+					extensions++
+					lease = newLease
+					t.Logf("r%d lease extended: %v", rangeID, lease)
+				}
+				return extensions >= 3
+			}, 20*time.Second, 100*time.Millisecond)
+		}
+
+		// assertLeaseUpgrade asserts that the range is eventually upgraded
+		// to an epoch lease.
+		assertLeaseUpgrade := func(rangeID roachpb.RangeID) {
+			repl := getNodeReplica(1, rangeID)
+			require.Eventually(t, func() bool {
+				lease, _ := repl.GetLease()
+				return lease.Type() == roachpb.LeaseEpoch
+			}, 20*time.Second, 100*time.Millisecond)
+		}
+
+		// assertStoreLeaseRenewer asserts that the range is tracked by the store lease
+		// renewer on the leaseholder.
+		assertStoreLeaseRenewer := func(rangeID roachpb.RangeID) {
+			repl := getNodeReplica(1, rangeID)
+			require.Eventually(t, func() bool {
+				lease, _ := repl.GetLease()
+				renewers := getLeaseRenewers(rangeID)
+				renewedByLeaseholder := len(renewers) == 1 && renewers[0] == lease.Replica.NodeID
+				// If kv.expiration_leases_only.enabled is true, then the store lease
+				// renewer is disabled -- it will still track the ranges in case the
+				// setting changes, but won't detect the new lease and untrack them as
+				// long as it has a replica. We therefore allow multiple nodes to track
+				// it, as long as the leaseholder is one of them.
+				if expOnly {
+					for _, renewer := range renewers {
+						if renewer == lease.Replica.NodeID {
+							renewedByLeaseholder = true
+							break
+						}
+					}
+				}
+				if !renewedByLeaseholder {
+					t.Logf("r%d renewers: %v", rangeID, renewers)
+				}
+				return renewedByLeaseholder
+			}, 20*time.Second, 100*time.Millisecond)
+		}
+
+		// assertNoStoreLeaseRenewer asserts that the range is not tracked by any
+		// lease renewer.
+		assertNoStoreLeaseRenewer := func(rangeID roachpb.RangeID) {
+			require.Eventually(t, func() bool {
+				renewers := getLeaseRenewers(rangeID)
+				if len(renewers) > 0 {
+					t.Logf("r%d renewers: %v", rangeID, renewers)
+					return false
+				}
+				return true
+			}, 20*time.Second, 100*time.Millisecond)
+		}
+
+		// The meta range should always be eagerly renewed.
+		firstRangeID := tc.LookupRangeOrFatal(t, keys.MinKey).RangeID
+		assertLeaseExtension(firstRangeID)
+		assertStoreLeaseRenewer(firstRangeID)
+
+		// Split off an expiration-based range, and assert that the lease is extended.
+		desc := tc.LookupRangeOrFatal(t, tc.ScratchRangeWithExpirationLease(t))
+		assertLeaseExtension(desc.RangeID)
+		assertStoreLeaseRenewer(desc.RangeID)
+
+		// Transfer the lease to a different leaseholder, and assert that the lease is
+		// still extended.
+		lease, _ := getNodeReplica(1, desc.RangeID).GetLease()
+		target := tc.Target(lookupNode(lease.Replica.NodeID%3 + 1))
+		tc.TransferRangeLeaseOrFatal(t, desc, target)
+		assertLeaseExtension(desc.RangeID)
+		assertStoreLeaseRenewer(desc.RangeID)
+
+		// Merge the range back. This should unregister it from the lease renewer.
+		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, desc.StartKey.AsRawKey().Prevish(16)))
+		assertNoStoreLeaseRenewer(desc.RangeID)
+
+		// Split off a regular non-system range. This should only be eagerly
+		// extended if kv.expiration_leases_only.enabled is true, and should never
+		// be tracked by the store lease renewer (which only handles system ranges).
+		desc = tc.LookupRangeOrFatal(t, tc.ScratchRange(t))
+		if expOnly {
+			assertLeaseExtension(desc.RangeID)
+		} else {
+			assertLeaseUpgrade(desc.RangeID)
+		}
+		assertNoStoreLeaseRenewer(desc.RangeID)
 	})
-	defer tc.Stopper().Stop(ctx)
-
-	require.NoError(t, tc.WaitForFullReplication())
-
-	lookupNode := func(nodeID roachpb.NodeID) int {
-		for idx, id := range tc.NodeIDs() {
-			if id == nodeID {
-				return idx
-			}
-		}
-		t.Fatalf("couldn't look up node %d", nodeID)
-		return 0
-	}
-
-	getNodeStore := func(nodeID roachpb.NodeID) *Store {
-		srv := tc.Server(lookupNode(nodeID))
-		s, err := srv.GetStores().(*Stores).GetStore(srv.GetFirstStoreID())
-		require.NoError(t, err)
-		return s
-	}
-
-	getNodeReplica := func(nodeID roachpb.NodeID, rangeID roachpb.RangeID) *Replica {
-		repl, err := getNodeStore(nodeID).GetReplica(rangeID)
-		require.NoError(t, err)
-		return repl
-	}
-
-	getLeaseRenewers := func(rangeID roachpb.RangeID) []roachpb.NodeID {
-		var renewers []roachpb.NodeID
-		for _, nodeID := range tc.NodeIDs() {
-			if _, ok := getNodeStore(nodeID).renewableLeases.Load(int64(rangeID)); ok {
-				renewers = append(renewers, nodeID)
-			}
-		}
-		return renewers
-	}
-
-	// assertLeaseRenewal asserts that the given range has an expiration-based
-	// lease, that it's eagerly extended, and only actively renewed by the
-	// leaseholder.
-	assertLeaseRenewal := func(rangeID roachpb.RangeID) {
-		repl := getNodeReplica(1, rangeID)
-		lease, _ := repl.GetLease()
-		require.Equal(t, roachpb.LeaseExpiration, lease.Type())
-
-		var extensions int
-		require.Eventually(t, func() bool {
-			newLease, _ := repl.GetLease()
-			require.Equal(t, roachpb.LeaseExpiration, newLease.Type())
-			if *newLease.Expiration != *lease.Expiration {
-				extensions++
-				lease = newLease
-				t.Logf("r%d lease extended: %v", rangeID, lease)
-			}
-
-			renewers := getLeaseRenewers(repl.RangeID)
-			renewedByLeaseholder := len(renewers) == 1 && renewers[0] == lease.Replica.NodeID
-			if !renewedByLeaseholder {
-				t.Logf("r%d renewers: %v", rangeID, renewers)
-			}
-
-			return extensions >= 3 && renewedByLeaseholder
-		}, 20*time.Second, 100*time.Millisecond)
-	}
-
-	// The meta range should always be eagerly renewed.
-	assertLeaseRenewal(tc.LookupRangeOrFatal(t, keys.MinKey).RangeID)
-
-	// Split off an expiration-based range, and assert that the lease is extended.
-	desc := tc.LookupRangeOrFatal(t, tc.ScratchRangeWithExpirationLease(t))
-	assertLeaseRenewal(desc.RangeID)
-
-	// Transfer the lease to a different leaseholder, and assert that the lease is
-	// still extended.
-	lease, _ := getNodeReplica(1, desc.RangeID).GetLease()
-	target := tc.Target(lookupNode(lease.Replica.NodeID%3 + 1))
-	tc.TransferRangeLeaseOrFatal(t, desc, target)
-	assertLeaseRenewal(desc.RangeID)
-
-	// Merge the range back. This should unregister it from the lease renewer.
-	require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, desc.StartKey.AsRawKey().Prevish(16)))
-	require.Eventually(t, func() bool {
-		if renewers := getLeaseRenewers(desc.RangeID); len(renewers) > 0 {
-			t.Logf("r%d renewers: %v", desc.RangeID, renewers)
-			return false
-		}
-		return true
-	}, 20*time.Second, 100*time.Millisecond)
 }
 
 func setupLeaseRenewerTest(
