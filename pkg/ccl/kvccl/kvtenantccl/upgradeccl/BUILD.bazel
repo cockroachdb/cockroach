@@ -1,0 +1,40 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "upgradeccl_test",
+    srcs = [
+        "main_test.go",
+        "tenant_upgrade_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    tags = ["ccl_test"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/sql/sqlinstance/instancestorage",
+        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/upgrade",
+        "//pkg/upgrade/upgradebase",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
