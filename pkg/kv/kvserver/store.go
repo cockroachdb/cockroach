@@ -2381,11 +2381,15 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 			// TODO(irfansharif): For symmetry with the system config span variant,
 			// we queue blindly; we could instead only queue it if we knew the
 			// range's keyspans has a split in there somewhere, or was now part of a
-			// larger range and eligible for a merge.
+			// larger range and eligible for a merge, or the span config implied a
+			// need for {up,down}replication.
 			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			return nil // more
@@ -2986,7 +2990,10 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageReadsPerSecond += loadStats.ReadKeysPerSecond
 		averageReadBytesPerSecond += loadStats.ReadBytesPerSecond
 		averageWriteBytesPerSecond += loadStats.WriteBytesPerSecond
-		averageCPUNanosPerSecond += loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
+		replicaCPUNanosPerSecond := loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
+		averageCPUNanosPerSecond += replicaCPUNanosPerSecond
+		s.metrics.RecentReplicaCPUNanosPerSecond.RecordValue(replicaCPUNanosPerSecond)
+		s.metrics.RecentReplicaQueriesPerSecond.RecordValue(loadStats.QueriesPerSecond)
 
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
@@ -3056,6 +3063,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	if !minMaxClosedTS.IsEmpty() {
 		nanos := timeutil.Since(minMaxClosedTS.GoTime()).Nanoseconds()
 		s.metrics.ClosedTimestampMaxBehindNanos.Update(nanos)
+	}
+
+	if err := s.metrics.RecentReplicaCPUNanosPerSecond.Rotate(); err != nil {
+		return err
+	}
+	if err := s.metrics.RecentReplicaQueriesPerSecond.Rotate(); err != nil {
+		return err
 	}
 
 	return nil
@@ -3215,7 +3229,10 @@ func (s *Store) ComputeMetricsPeriodically(
 		if err != nil {
 			return m, err
 		}
-		windowFsyncLatency = subtractPrometheusMetrics(windowFsyncLatency, prevFsync)
+		metric.SubtractPrometheusHistograms(
+			windowFsyncLatency.GetHistogram(),
+			prevFsync.GetHistogram(),
+		)
 
 		s.metrics.FsyncLatency.Update(m.LogWriter.FsyncLatency, windowFsyncLatency.Histogram)
 	}
@@ -3248,24 +3265,6 @@ func (s *Store) ComputeMetricsPeriodically(
 		log.StructuredEvent(ctx, &e)
 	}
 	return m, nil
-}
-
-func subtractPrometheusMetrics(
-	curFsync *prometheusgo.Metric, prevFsync prometheusgo.Metric,
-) *prometheusgo.Metric {
-	prevBuckets := prevFsync.Histogram.GetBucket()
-	curBuckets := curFsync.Histogram.GetBucket()
-
-	*curFsync.Histogram.SampleCount -= prevFsync.Histogram.GetSampleCount()
-	*curFsync.Histogram.SampleSum -= prevFsync.Histogram.GetSampleSum()
-
-	for idx, v := range prevBuckets {
-		if *curBuckets[idx].UpperBound != *v.UpperBound {
-			panic("Bucket Upperbounds don't match")
-		}
-		*curBuckets[idx].CumulativeCount -= *v.CumulativeCount
-	}
-	return curFsync
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which

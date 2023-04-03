@@ -224,9 +224,11 @@ const (
 	TODODelete_V22_2SystemUsersIDColumnIsBackfilled
 	// TODODelete_V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
 	TODODelete_V22_2SetSystemUsersUserIDColumnNotNull
-	// TODODelete_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
+	// Permanent_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
-	TODODelete_V22_2SQLSchemaTelemetryScheduledJobs
+	//
+	// This is a permanent migration which should exist forever.
+	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
 	// TODODelete_V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
 	TODODelete_V22_2SchemaChangeSupportsCreateFunction
@@ -651,7 +653,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
-		Key:     TODODelete_V22_2SQLSchemaTelemetryScheduledJobs,
+		Key:     Permanent_V22_2SQLSchemaTelemetryScheduledJobs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	{

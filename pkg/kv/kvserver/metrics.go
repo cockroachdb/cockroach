@@ -327,7 +327,7 @@ var (
 	metaAverageQueriesPerSecond = metric.Metadata{
 		Name:        "rebalancing.queriespersecond",
 		Help:        "Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.",
-		Measurement: "Keys/Sec",
+		Measurement: "Queries/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageWritesPerSecond = metric.Metadata{
@@ -365,6 +365,20 @@ var (
 		Help:        "Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.",
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRecentReplicaCPUNanosPerSecond = metric.Metadata{
+		Name: "rebalancing.replicas.cpunanospersecond",
+		Help: "Histogram of average CPU nanoseconds spent on processing " +
+			"replica operations in the last 30 minutes.",
+		Measurement: "Nanoseconds/Sec",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRecentReplicaQueriesPerSecond = metric.Metadata{
+		Name: "rebalancing.replicas.queriespersecond",
+		Help: "Histogram of average kv-level requests received per second by " +
+			"replicas on the store in the last 30 minutes.",
+		Measurement: "Queries/Sec",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Metric for tracking follower reads.
@@ -1880,6 +1894,12 @@ type StoreMetrics struct {
 	AverageWriteBytesPerSecond *metric.GaugeFloat64
 	AverageReadBytesPerSecond  *metric.GaugeFloat64
 	AverageCPUNanosPerSecond   *metric.GaugeFloat64
+	// NB: Even though we could average the histogram in order to get
+	// AverageCPUNanosPerSecond from RecentReplicaCPUNanosPerSecond, we duplicate
+	// both for backwards compatibility since the cost of the gauge is small.
+	// This includes all replicas, including quiesced ones.
+	RecentReplicaCPUNanosPerSecond *metric.ManualWindowHistogram
+	RecentReplicaQueriesPerSecond  *metric.ManualWindowHistogram
 	// l0SublevelsWindowedMax doesn't get recorded to metrics itself, it maintains
 	// an ad-hoc history for gosipping information for allocator use.
 	l0SublevelsWindowedMax syncutil.AtomicFloat64
@@ -2462,6 +2482,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
 		AverageReadBytesPerSecond:  metric.NewGaugeFloat64(metaAverageReadBytesPerSecond),
 		AverageCPUNanosPerSecond:   metric.NewGaugeFloat64(metaAverageCPUNanosPerSecond),
+		RecentReplicaCPUNanosPerSecond: metric.NewManualWindowHistogram(
+			metaRecentReplicaCPUNanosPerSecond,
+			metric.ReplicaCPUTimeBuckets,
+			true, /* withRotate */
+		),
+		RecentReplicaQueriesPerSecond: metric.NewManualWindowHistogram(
+			metaRecentReplicaQueriesPerSecond,
+			metric.ReplicaBatchRequestCountBuckets,
+			true, /* withRotate */
+		),
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
@@ -2757,7 +2787,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
-		FsyncLatency:     metric.NewManualWindowHistogram(metaStorageFsyncLatency, pebble.FsyncLatencyBuckets),
+		FsyncLatency: metric.NewManualWindowHistogram(
+			metaStorageFsyncLatency,
+			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
 
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),

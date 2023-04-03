@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
 	"github.com/cockroachdb/redact"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -771,6 +772,53 @@ func TestClientAddrOverride(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestSSLSessionVar checks that the read-only SSL session variable correctly
+// reflects the state of the connection.
+func TestSSLSessionVar(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	// Start a server.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s.(*server.TestServer).Cfg.AcceptSQLWithoutTLS = true
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// Ensure the test user exists.
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'abc'`, username.TestUser)); err != nil {
+		t.Fatal(err)
+	}
+
+	pgURLWithCerts, cleanupFuncCerts := sqlutils.PGUrlWithOptionalClientCerts(
+		t, s.ServingSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,
+	)
+	defer cleanupFuncCerts()
+
+	pgURLWithoutCerts, cleanupFuncWithoutCerts := sqlutils.PGUrlWithOptionalClientCerts(
+		t, s.ServingSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false,
+	)
+	defer cleanupFuncWithoutCerts()
+	q := pgURLWithoutCerts.Query()
+	q.Set("sslmode", "disable")
+	pgURLWithoutCerts.RawQuery = q.Encode()
+
+	// Connect with certs.
+	connWithCerts, err := pgx.Connect(ctx, pgURLWithCerts.String())
+	require.NoError(t, err)
+	var result string
+	err = connWithCerts.QueryRow(ctx, "SHOW ssl").Scan(&result)
+	require.NoError(t, err)
+	require.Equal(t, "on", result)
+
+	// Connect without certs.
+	connWithoutCerts, err := pgx.Connect(ctx, pgURLWithoutCerts.String())
+	require.NoError(t, err)
+	err = connWithoutCerts.QueryRow(ctx, "SHOW ssl").Scan(&result)
+	require.NoError(t, err)
+	require.Equal(t, "off", result)
 }
 
 var sessionTerminatedRe = regexp.MustCompile("client_session_end")
