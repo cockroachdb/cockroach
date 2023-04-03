@@ -62,19 +62,19 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 	}()
 
 	tc := serverutils.StartNewTestCluster(t, nodeCount, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true},
+		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				DisableDefaultTestTenant: true,
-				ExternalIODir:            dirs[0],
+				DefaultTestTenant: base.TestTenantDisabled,
+				ExternalIODir:     dirs[0],
 			},
 			1: {
-				DisableDefaultTestTenant: true,
-				ExternalIODir:            dirs[1],
+				DefaultTestTenant: base.TestTenantDisabled,
+				ExternalIODir:     dirs[1],
 			},
 			2: {
-				DisableDefaultTestTenant: true,
-				ExternalIODir:            dirs[2],
+				DefaultTestTenant: base.TestTenantDisabled,
+				ExternalIODir:     dirs[2],
 			},
 		},
 	})
@@ -131,7 +131,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -308,7 +308,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer s.Stopper().Stop(ctx)
 
 	_, sql, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
@@ -390,7 +390,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	numNodes := 3
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -424,7 +424,7 @@ func TestServerStartStop(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

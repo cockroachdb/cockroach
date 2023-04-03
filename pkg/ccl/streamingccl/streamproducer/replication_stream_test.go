@@ -235,7 +235,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		// This test fails when run from within a test tenant. This is likely
 		// due to the lack of support for tenant streaming, but more
 		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -331,7 +331,7 @@ func TestStreamPartition(t *testing.T) {
 		base.TestServerArgs{
 			// Test fails within a test tenant. More investigation is required.
 			// Tracked with #76378.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -481,7 +481,7 @@ func TestStreamAddSSTable(t *testing.T) {
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -571,7 +571,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		})
 	defer cleanup()
 	srcTenantID := serverutils.TestTenantID()
@@ -654,7 +654,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")

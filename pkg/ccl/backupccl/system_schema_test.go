@@ -31,7 +31,7 @@ func TestAllSystemTablesHaveBackupConfig(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Disabling the test tenant due to test failures. More
 				// investigation is required. Tracked with #76378.
-				DisableDefaultTestTenant: true,
+				DefaultTestTenant: base.TestTenantDisabled,
 			}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])

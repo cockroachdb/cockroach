@@ -44,7 +44,7 @@ func makeRunControlTestCases(t *testing.T) ([]runControlTestCase, func()) {
 		t, 2 /* numNodes */, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Disable the implicit default test tenant so that we can start our own.
-				DisableDefaultTestTenant: true,
+				DefaultTestTenant: base.TestTenantDisabled,
 			},
 			ReplicationMode: base.ReplicationManual,
 		},

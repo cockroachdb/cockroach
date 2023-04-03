@@ -59,7 +59,7 @@ func TestSQLStatsRegions(t *testing.T) {
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i%len(regionNames)]}},
 			},
 			// We'll start our own test tenant manually below.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		}
 	}
 

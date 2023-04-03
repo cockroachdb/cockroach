@@ -388,7 +388,10 @@ func TestExportInsideTenant(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantProbabilistic,
+		ExternalIODir:     dir,
+	})
 	defer srv.Stopper().Stop(context.Background())
 
 	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -418,7 +421,7 @@ func TestImportInTenant(t *testing.T) {
 		ExternalIODir: baseDir,
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
-		DisableDefaultTestTenant: true,
+		DefaultTestTenant: base.TestTenantDisabled,
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -469,7 +472,12 @@ func TestImportInMultiServerTenant(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	args := base.TestServerArgs{
+		// Test is designed to run inside a tenant so no need to
+		// probabilistically run it inside the default test tenant.
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     baseDir,
+	}
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 

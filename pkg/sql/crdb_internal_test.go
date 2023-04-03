@@ -933,7 +933,7 @@ func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Test is designed to run with explicit tenants. No need to
 				// implicitly create a tenant.
-				DisableDefaultTestTenant: true,
+				DefaultTestTenant: base.TestTenantDisabled,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
