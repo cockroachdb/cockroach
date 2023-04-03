@@ -316,8 +316,17 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 		`ALTER DATABASE db ADD REGION "us-east3"`)
 	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east2"`)
 
+	// Check that a region cannot be dropped from the system database while
+	// it is in use in any database in that tenant.
+	tenSQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
+		`database while that region is still in use\s+HINT: region is in use by `+
+		`databases: db`,
+		`ALTER DATABASE system DROP REGION "us-east2"`)
+	tenSQLDB.Exec(t, `ALTER DATABASE db DROP REGION "us-east2"`)
+	tenSQLDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east2"`)
+
 	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
-	checkRegions(t, "us-east1", "us-east2", "us-east3")
+	checkRegions(t, "us-east1", "us-east3")
 	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east3"`)
 }
 
