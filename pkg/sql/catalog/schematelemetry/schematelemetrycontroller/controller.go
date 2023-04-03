@@ -17,7 +17,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -134,9 +133,8 @@ func (c *Controller) Start(ctx context.Context, stopper *stop.Stopper) {
 		})
 	}
 	// Trigger a schedule update to ensure it exists at startup.
-	if c.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs) {
-		notify("ensure-at-startup")
-	}
+	notify("ensure-at-startup")
+
 	// Add a change hook on the recurrence cluster setting that will notify
 	// a schedule update.
 	SchemaTelemetryRecurrence.SetOnChange(&c.st.SV, func(ctx context.Context) {
@@ -145,9 +143,6 @@ func (c *Controller) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clusterID uuid.UUID) {
-	if !st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs) {
-		log.Infof(ctx, "failed to update SQL schema telemetry schedule: %s", ErrVersionGate)
-	}
 	retryOptions := retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     10 * time.Minute,
@@ -223,9 +218,6 @@ var cronExprRewrites = map[string]func(r *rand.Rand) string{
 func (c *Controller) CreateSchemaTelemetryJob(
 	ctx context.Context, createdByName string, createdByID int64,
 ) (id int64, _ error) {
-	if !c.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs) {
-		return 0, ErrVersionGate
-	}
 	var j *jobs.Job
 	if err := c.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		r := CreateSchemaTelemetryJobRecord(createdByName, createdByID)
