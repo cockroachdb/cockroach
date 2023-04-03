@@ -1,15 +1,8 @@
 # LogicTest: !metamorphic-batch-sizes
 
-# Disable automatic stats
+# Enable automatic stats for this table.
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
-statement ok
-CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d))
-
-# Enable automatic stats
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d)) WITH (sql_stats_automatic_collection_enabled = true)
 
 # Generate all combinations of values 1 to 10.
 statement ok
@@ -36,7 +29,7 @@ __auto__         {d}           1000       1               1000
 
 # Disable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+ALTER TABLE data SET (sql_stats_automatic_collection_enabled = false)
 
 # Update more than 20% of the table.
 statement ok
@@ -57,7 +50,7 @@ __auto__         {d}           1000       1               1000
 
 # Enable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+ALTER TABLE data SET (sql_stats_automatic_collection_enabled = true)
 
 # Update more than 20% of the table.
 statement ok
@@ -125,7 +118,7 @@ __auto__         {d}           550        1               0
 
 # Test CREATE TABLE ... AS
 statement ok
-CREATE TABLE copy AS SELECT * FROM data
+CREATE TABLE copy WITH (sql_stats_automatic_collection_enabled = true) AS SELECT * FROM data
 
 # Distinct count for rowid can be flaky, so don't show it. The estimate is
 # almost always 550, but occasionally it is 549...
@@ -141,7 +134,7 @@ __auto__         {d}           550        0
 __auto__         {rowid}       550        0
 
 statement ok
-CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR)
+CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR) WITH (sql_stats_automatic_collection_enabled = true)
 
 query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
@@ -171,15 +164,12 @@ __auto__         {rowid}       0          0
 
 # Disable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
-statement ok
 CREATE SCHEMA my_schema;
-CREATE TABLE my_schema.my_table (k INT PRIMARY KEY, v STRING);
+CREATE TABLE my_schema.my_table (k INT PRIMARY KEY, v STRING) WITH (sql_stats_automatic_collection_enabled = false)
 
 # Enable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+ALTER TABLE my_schema.my_table SET (sql_stats_automatic_collection_enabled = true)
 
 # Insert 10 rows.
 statement ok
