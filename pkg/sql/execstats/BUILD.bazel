@@ -16,6 +16,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/util/buildutil",
         "//pkg/util/optional",
+        "//pkg/util/protoutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",

@@ -779,6 +779,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		Mon:     evalCtx.TestingMon,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 		Txn:     leafTxn,
+		Gateway: false,
 	}
 
 	testReaderProcessorDrain(ctx, t, func() (execinfra.Processor, error) {

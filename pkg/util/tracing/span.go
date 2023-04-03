@@ -520,6 +520,19 @@ func (sp *Span) SetLazyTag(key string, value interface{}) {
 	sp.i.SetLazyTag(key, value)
 }
 
+// SetLazyTagLocked is the same as SetLazyTag but assumes that the mutex of sp
+// is being held.
+//
+// Deprecated: this method should not be used because it's introduced only to go
+// around some tech debt (#100438). Once that issue is addressed, this method
+// should be removed.
+func (sp *Span) SetLazyTagLocked(key string, value interface{}) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.setLazyTagLocked(key, value)
+}
+
 // GetLazyTag returns the value of the tag with the given key. If that tag doesn't
 // exist, the bool retval is false.
 func (sp *Span) GetLazyTag(key string) (interface{}, bool) {
@@ -535,12 +548,26 @@ type EventListener interface {
 	// Notify is invoked on every Structured event recorded by the span and its
 	// children, recursively.
 	//
-	// Note that this method should not run for a long time as it will hold up the
-	// span recording Structured events during traced operations.
+	// The caller holds the mutex of the span.
 	//
 	// Notify will not be called concurrently on the same span.
-	Notify(event Structured)
+	Notify(event Structured) EventConsumptionStatus
 }
+
+// EventConsumptionStatus describes whether the structured event has been "consumed"
+// by the EventListener.
+type EventConsumptionStatus int
+
+const (
+	// EventNotConsumed indicates that the event wasn't "consumed" by the
+	// EventListener, so other listeners as well as any ancestor spans should be
+	// notified about the event.
+	EventNotConsumed EventConsumptionStatus = iota
+	// EventConsumed indicates that the event has been "consumed" by the
+	// EventListener, so neither other listeners for the span nor the ancestor
+	// spans should be notified about it.
+	EventConsumed
+)
 
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {

@@ -117,6 +117,8 @@ type externalSorter struct {
 	colexecop.InitHelper
 	colexecop.NonExplainable
 	colexecop.CloserHelper
+	flowCtx     *execinfra.FlowCtx
+	processorID int32
 
 	// mergeUnlimitedAllocator is used to track the memory under the batches
 	// dequeued from partitions during the merge operation.
@@ -220,6 +222,8 @@ var _ colexecop.ClosableOperator = &externalSorter{}
 // the partitioned disk queue acquire file descriptors instead of acquiring
 // them up front in Next. This should only be true in tests.
 func NewExternalSorter(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
 	sortUnlimitedAllocator *colmem.Allocator,
 	mergeUnlimitedAllocator *colmem.Allocator,
 	outputUnlimitedAllocator *colmem.Allocator,
@@ -298,6 +302,8 @@ func NewExternalSorter(
 	}
 	es := &externalSorter{
 		OneInputNode:             colexecop.NewOneInputNode(inMemSorter),
+		flowCtx:                  flowCtx,
+		processorID:              processorID,
 		mergeUnlimitedAllocator:  mergeUnlimitedAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
 		mergeMemoryLimit:         mergeMemoryLimit,
@@ -711,8 +717,8 @@ func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchr
 		outputBatchMemSize = minOutputBatchMemSize
 	}
 	return colexec.NewOrderedSynchronizer(
-		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs,
-		s.inputTypes, s.columnOrdering, tuplesToMerge,
+		s.flowCtx, s.processorID, s.outputUnlimitedAllocator, outputBatchMemSize,
+		syncInputs, s.inputTypes, s.columnOrdering, tuplesToMerge,
 	)
 }
 

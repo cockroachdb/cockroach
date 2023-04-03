@@ -81,7 +81,7 @@ func TestOutbox(t *testing.T) {
 		NodeID: base.TestingIDContainer,
 	}
 	streamID := execinfrapb.StreamID(42)
-	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+	outbox := flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 	outbox.Init(types.OneIntCol)
 	var outboxWG sync.WaitGroup
 	var cancel func()
@@ -247,7 +247,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 		NodeID: base.TestingIDContainer,
 	}
 	streamID := execinfrapb.StreamID(42)
-	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+	outbox := flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 
 	var outboxWG sync.WaitGroup
 	outbox.Init(types.OneIntCol)
@@ -326,7 +326,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			var cancel func()
 			ctx, cancel = context.WithCancel(ctx)
 			defer cancel()
-			outbox = flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+			outbox = flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 			outbox.Init(types.OneIntCol)
 			outbox.Start(ctx, &wg, cancel)
 
@@ -411,7 +411,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		ctxCanceled = true
 	}
 
-	outbox = flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+	outbox = flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 	outbox.Init(types.OneIntCol)
 	outbox.Start(ctx, &wg, mockCancel)
 
@@ -460,7 +460,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	outbox = flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+	outbox = flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 	outbox.Init(types.OneIntCol)
 
 	// Fill up the outbox.
@@ -529,7 +529,7 @@ func BenchmarkOutbox(b *testing.B) {
 				},
 				NodeID: base.TestingIDContainer,
 			}
-			outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+			outbox := flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 			outbox.Init(types.MakeIntCols(numCols))
 			var outboxWG sync.WaitGroup
 			var cancel func()

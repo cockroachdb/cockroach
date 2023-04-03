@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +41,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	input.Init(ctx)
-	outbox, err := NewOutbox(testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
+	outbox, err := NewOutbox(&execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -96,6 +97,8 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
+			&execinfra.FlowCtx{Gateway: false},
+			0, /* processorID */
 			testAllocator,
 			testMemAcc,
 			colexecargs.OpWithMetaInfo{

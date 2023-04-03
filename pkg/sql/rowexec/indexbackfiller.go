@@ -49,7 +49,8 @@ type indexBackfiller struct {
 
 	out execinfra.ProcOutputHelper
 
-	flowCtx *execinfra.FlowCtx
+	flowCtx     *execinfra.FlowCtx
+	processorID int32
 
 	filter backfill.MutationFilter
 }
@@ -67,15 +68,19 @@ var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
 )
 
 func newIndexBackfiller(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.BackfillerSpec,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	spec execinfrapb.BackfillerSpec,
 ) (*indexBackfiller, error) {
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
-		desc:    flowCtx.TableDescriptor(ctx, &spec.Table),
-		spec:    spec,
-		flowCtx: flowCtx,
-		filter:  backfill.IndexMutationFilter,
+		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
+		spec:        spec,
+		flowCtx:     flowCtx,
+		processorID: processorID,
+		filter:      backfill.IndexMutationFilter,
 	}
 
 	if err := ib.IndexBackfiller.InitForDistributedUse(ctx, flowCtx, ib.desc,
@@ -336,10 +341,10 @@ func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver
 	opName := "indexBackfillerProcessor"
 	ctx = logtags.AddTag(ctx, "job", ib.spec.JobID)
 	ctx = logtags.AddTag(ctx, opName, int(ib.spec.Table.ID))
-	ctx, span := execinfra.ProcessorSpan(ctx, opName)
+	ctx, span := execinfra.ProcessorSpan(ctx, ib.flowCtx, opName, ib.processorID)
 	defer span.Finish()
 	defer output.ProducerDone()
-	defer execinfra.SendTraceData(ctx, output)
+	defer execinfra.SendTraceData(ctx, ib.flowCtx, output)
 	defer ib.Close(ctx)
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
