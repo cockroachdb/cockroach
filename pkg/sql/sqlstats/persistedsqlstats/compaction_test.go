@@ -144,6 +144,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 	// Disable automatic flush since the test will handle the flush manually.
 	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
+	// Change the automatic compaction job to avoid it running during the test.
+	// Test creates a new compactor and calls it directly.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("stmtCount=%d/maxPersistedRowLimit=%d/rowsDeletePerTxn=%d",
@@ -212,32 +215,29 @@ func TestSQLStatsCompactor(t *testing.T) {
 			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedStmtFingerprints))
 			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedTxnFingerprints))
 
-			run := func() {
-				// The two interceptors (kvInterceptor and cleanupInterceptor) are
-				// injected into kvserver and StatsCompactor respectively.
-				// The cleanupInterceptor calculates the number of expected "wide scan"
-				// that should be issued by the StatsCompactor.
-				// The kvInterceptor counts the number of actual "wide scan" KV Request
-				// issued.
-				kvInterceptor.reset()
-				cleanupInterceptor.reset()
-				kvInterceptor.enable()
-				defer kvInterceptor.disable()
+			// The two interceptors (kvInterceptor and cleanupInterceptor) are
+			// injected into kvserver and StatsCompactor respectively.
+			// The cleanupInterceptor calculates the number of expected "wide scan"
+			// that should be issued by the StatsCompactor.
+			// The kvInterceptor counts the number of actual "wide scan" KV Request
+			// issued.
+			kvInterceptor.reset()
+			cleanupInterceptor.reset()
+			kvInterceptor.enable()
 
-				err := statsCompactor.DeleteOldestEntries(ctx)
-				require.NoError(t, err)
+			err = statsCompactor.DeleteOldestEntries(ctx)
+			kvInterceptor.disable()
+			require.NoError(t, err)
 
-				expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
-				actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
+			expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
+			actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
 
-				require.Equal(t,
-					expectedNumberOfWideScans,
-					actualNumberOfWideScans,
-					"expected %d number of wide scans issued, but %d number of "+
-						"wide scan issued", expectedNumberOfWideScans, actualNumberOfWideScans,
-				)
-			}
-			run()
+			require.Equal(t,
+				expectedNumberOfWideScans,
+				actualNumberOfWideScans,
+				"expected %d number of wide scans issued, but %d number of "+
+					"wide scan issued", expectedNumberOfWideScans, actualNumberOfWideScans,
+			)
 
 			actualStmtFingerprints, actualTxnFingerprints :=
 				getTopSortedFingerprints(t, sqlConn, 0 /* limit */)
