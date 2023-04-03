@@ -19,12 +19,12 @@ CREATE VIEW v1 AS SELECT a, b FROM t
 statement error pgcode 42P07 relation \"test.public.t\" already exists
 CREATE VIEW t AS SELECT a, b FROM t
 
-# view statement ignored if other way around.
-statement ok
-CREATE VIEW IF NOT EXISTS v1 AS SELECT b, a FROM v1
-
 statement ok
 CREATE VIEW IF NOT EXISTS v2 (x, y) AS SELECT a, b FROM t
+
+# view statement ignored if other way around.
+statement ok
+CREATE VIEW IF NOT EXISTS v2 AS SELECT b, a FROM v1
 
 statement error pgcode 42601 CREATE VIEW specifies 1 column name, but data source has 2 columns
 CREATE VIEW v3 (x) AS SELECT a, b FROM t
@@ -1260,3 +1260,37 @@ li  CREATE MATERIALIZED VIEW public.li (
       test_t1,
       rowid
     ) AS (SELECT 1 AS test_t1)
+
+subtest circular_dependency
+
+statement ok
+CREATE TABLE cd_t (a INT PRIMARY KEY, b INT);
+
+statement ok
+CREATE VIEW cd_v1 AS SELECT a, b FROM cd_t;
+
+statement ok
+CREATE VIEW cd_v2 AS SELECT a, b FROM cd_v1;
+
+# Note: Creating a circular dependency in views does not result in an error in
+# postgres. In postgres, we only encounter errors during queries on the views.
+statement error pgcode 42P17 pq: cyclic view dependency for relation db2.public.cd_v1
+CREATE OR REPLACE VIEW cd_v1 AS SELECT a, b FROM cd_v2;
+
+statement ok
+CREATE VIEW cd_v3 AS SELECT a, b FROM cd_v2;
+
+statement ok
+SELECT * FROM cd_v3;
+
+statement error pgcode 42P17 pq: cyclic view dependency for relation db2.public.cd_v1
+CREATE OR REPLACE VIEW cd_v1 AS SELECT a, b FROM cd_v3;
+
+statement ok
+SELECT * FROM cd_v3;
+
+statement error pq: cannot drop relation "cd_v1" because view "cd_v2" depends on it
+DROP VIEW cd_v1;
+
+statement ok
+DROP VIEW cd_v1 CASCADE;
