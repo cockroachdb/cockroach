@@ -125,8 +125,8 @@ type StoreTestingKnobs struct {
 	// should get rid of such practices once we make TestServer take a
 	// ManualClock.
 	DisableMaxOffsetCheck bool
-	// DisableAutomaticLeaseRenewal enables turning off the background worker
-	// that attempts to automatically renew expiration-based leases.
+	// DisableAutomaticLeaseRenewal disables eager renewal of expiration-based
+	// leases.
 	DisableAutomaticLeaseRenewal bool
 	// LeaseRequestEvent, if set, is called when replica.requestLeaseLocked() is
 	// called to acquire a new lease. This can be used to assert that a request
