@@ -2246,9 +2246,9 @@ func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	return r.leaseHistory.get()
 }
 
-// EnableLeaseHistory turns on the lease history for testing purposes. Returns
-// a function to return it to its original state that can be deferred.
-func EnableLeaseHistory(maxEntries int) func() {
+// EnableLeaseHistoryForTesting turns on the lease history for testing purposes.
+// Returns a function to return it to its original state that can be deferred.
+func EnableLeaseHistoryForTesting(maxEntries int) func() {
 	originalValue := leaseHistoryMaxEntries
 	leaseHistoryMaxEntries = maxEntries
 	return func() {
