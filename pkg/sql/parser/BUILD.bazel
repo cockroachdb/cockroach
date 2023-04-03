@@ -98,6 +98,7 @@ GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
 export PATH=$$GO_ABS_PATH:$$PATH
 export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
+export GOROOT=
 $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
     $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
     $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
@@ -108,6 +109,7 @@ $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
+    tags = ["no-remote"],  # keep
     visibility = ["//visibility:public"],
 )
 
