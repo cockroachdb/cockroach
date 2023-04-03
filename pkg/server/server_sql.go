@@ -50,9 +50,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	// Ensure the auto config runner job is registered to avoid log spam.
-	// Pending merge of https://github.com/cockroachdb/cockroach/pull/98466.
-	_ "github.com/cockroachdb/cockroach/pkg/server/autoconfig"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
+	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -190,6 +189,11 @@ type SQLServer struct {
 	// connection management tools learning this status from health checks.
 	// This is set to true when the server has started accepting client conns.
 	isReady syncutil.AtomicBool
+
+	// gracefulDrainComplete indicates when a graceful drain has
+	// completed successfully. We use this to document cases where a
+	// graceful drain did _not_ occur.
+	gracefulDrainComplete syncutil.AtomicBool
 
 	// internalDBMemMonitor is the memory monitor corresponding to the
 	// InternalDB singleton. It only gets closed when
@@ -1026,6 +1030,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
+		// TODO(knz): We will replace this provider by an actual provider
+		// in a later commit.
+		AutoConfigProvider: acprovider.NoTaskProvider{},
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1101,6 +1108,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	if externalConnKnobs := cfg.TestingKnobs.ExternalConnection; externalConnKnobs != nil {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
+	}
+	if autoConfigKnobs := cfg.TestingKnobs.AutoConfig; autoConfigKnobs != nil {
+		knobs := autoConfigKnobs.(*autoconfig.TestingKnobs)
+		if knobs.Provider != nil {
+			execCfg.AutoConfigProvider = knobs.Provider
+		}
 	}
 
 	statsRefresher := stats.MakeRefresher(
@@ -1649,6 +1662,24 @@ func (s *SQLServer) preStart(
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+
+	// Report a warning if the server is being shut down via the stopper
+	// before it was gracefully drained. This warning may be innocuous
+	// in tests where there is no use of the test server/cluster after
+	// shutdown; but may be a sign of a problem in production or for
+	// tests that need to restart a server.
+	stopper.AddCloser(stop.CloserFn(func() {
+		if !s.gracefulDrainComplete.Get() {
+			warnCtx := s.AnnotateCtx(context.Background())
+
+			if knobs.Server != nil && knobs.Server.(*TestingKnobs).RequireGracefulDrain {
+				log.Fatalf(warnCtx, "drain required but not performed")
+			}
+
+			log.Warningf(warnCtx, "server shutdown without a prior graceful drain")
+		}
+	}))
+
 	return nil
 }
 

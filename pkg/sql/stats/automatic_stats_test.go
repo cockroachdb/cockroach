@@ -84,7 +84,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// There are no stats yet, so this must refresh the statistics on table t
 	// even though rowsAffected=0.
 	refresher.maybeRefreshStats(
-		ctx, descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
 	refresher.maybeRefreshStats(
-		ctx, descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	minStaleRows := int64(100000000)
 	explicitSettings := catpb.AutoStatsSettings{MinStaleRows: &minStaleRows}
 	refresher.maybeRefreshStats(
-		ctx, descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	fractionStaleRows := float64(100000000)
 	explicitSettings = catpb.AutoStatsSettings{FractionStaleRows: &fractionStaleRows}
 	refresher.maybeRefreshStats(
-		ctx, descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// With rowsAffected=10, refreshing should work. Since there are more rows
 	// updated than exist in the table, the probability of a refresh is 100%.
 	refresher.maybeRefreshStats(
-		ctx, descA.GetID(), nil /* explicitSettings */, 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), nil /* explicitSettings */, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 2 /* expected */); err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descRoleOptions :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "role_options")
 	refresher.maybeRefreshStats(
-		ctx, descRoleOptions.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descRoleOptions.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descRoleOptions, 5 /* expected */); err != nil {
 		t.Fatal(err)
@@ -144,7 +144,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descLease :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "lease")
 	refresher.maybeRefreshStats(
-		ctx, descLease.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descLease.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descTableStats :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "table_statistics")
 	refresher.maybeRefreshStats(
-		ctx, descTableStats.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descTableStats.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descTableStats, 0 /* expected */); err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// TODO(rytaft): Should not enqueue views to begin with.
 	descVW := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
-		ctx, descVW.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descVW.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	select {
 	case <-refresher.mutations:
@@ -461,7 +461,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// the statistics on table t. With rowsAffected=0, the probability of refresh
 	// is 0.
 	refresher.maybeRefreshStats(
-		ctx, table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
 		t.Fatal(err)
@@ -511,7 +511,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// remain (5 from column k and 5 from column v), since the old stats on k
 	// and v were deleted.
 	refresher.maybeRefreshStats(
-		ctx, table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, table, 10 /* expected */); err != nil {
 		t.Fatal(err)
@@ -654,7 +654,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(
-		ctx, 100 /* tableID */, nil /* explicitSettings */, math.MaxInt32,
+		ctx, s.Stopper(), 100 /* tableID */, nil /* explicitSettings */, math.MaxInt32,
 		time.Microsecond, /* asOfTime */
 	)
 
