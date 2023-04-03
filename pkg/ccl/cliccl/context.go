@@ -37,6 +37,7 @@ func setProxyContextDefaults() {
 	proxyContext.PollConfigInterval = 30 * time.Second
 	proxyContext.ThrottleBaseDelay = time.Second
 	proxyContext.DisableConnectionRebalancing = false
+	proxyContext.RequireProxyProtocol = false
 }
 
 var testDirectorySvrContext struct {

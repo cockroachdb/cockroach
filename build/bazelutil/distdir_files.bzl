@@ -844,7 +844,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pierrre/compare/com_github_pierrre_compare-v1.0.2.zip": "99af9543f52487c6e7015721def85aa2d9eb7661e37b151f1db91875dcda2ee7",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pierrre/geohash/com_github_pierrre_geohash-v1.0.0.zip": "8c94a7e1f93170b53cf6e9d615967c24ff5342d5182d510f4829b3f39e249b4d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pingcap/errors/com_github_pingcap_errors-v0.11.4.zip": "df62e548162429501a88d936a3e8330f2379ddfcd4d23c22b78bc1b157e05b97",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pires/go-proxyproto/com_github_pires_go_proxyproto-v0.0.0-20191211124218-517ecdf5bb2b.zip": "ad00aa7f321a1b560d2c6fb33f0bfaf2a0ce056a25c9a756cbd198b655fcbbf9",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pires/go-proxyproto/com_github_pires_go_proxyproto-v0.7.0.zip": "5ba5921ebf2f5d1186268740ebf6e594e4512fcbb503f2974b1038781a5920f8",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pkg/browser/com_github_pkg_browser-v0.0.0-20210115035449-ce105d075bb4.zip": "84db38d8db553ccc34c75f867396126eac07774b979c470f97a20854d3a3af6d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pkg/diff/com_github_pkg_diff-v0.0.0-20210226163009-20ebb0f2a09e.zip": "f35b23fdd2b9522ddd46cc5c0161b4f0765c514475d5d4ca2a86aca31388c8bd",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pkg/errors/com_github_pkg_errors-v0.9.1.zip": "d4c36b8bcd0616290a3913215e0f53b931bd6e00670596f2960df1b44af2bd07",
