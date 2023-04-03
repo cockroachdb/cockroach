@@ -500,7 +500,7 @@ func registerTPCC(r registry.Registry) {
 		// running with the max supported warehouses.
 		Name:              "tpcc/headroom/" + headroomSpec.String(),
 		Owner:             registry.OwnerTestEng,
-		Tags:              []string{`default`, `release_qualification`, `aws`},
+		Tags:              registry.Tags(`default`, `release_qualification`, `aws`),
 		Cluster:           headroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -527,7 +527,7 @@ func registerTPCC(r registry.Registry) {
 		Owner:   registry.OwnerTestEng,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
-		Tags:              []string{`default`},
+		Tags:              registry.Tags(`default`),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -539,7 +539,7 @@ func registerTPCC(r registry.Registry) {
 		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomSpec.String(),
 		Timeout:           5 * time.Hour,
 		Owner:             registry.OwnerTestEng,
-		Tags:              []string{`default`},
+		Tags:              registry.Tags(`default`),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -563,7 +563,7 @@ func registerTPCC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "weekly/tpcc/headroom",
 		Owner:   registry.OwnerTestEng,
-		Tags:    []string{`weekly`},
+		Tags:    registry.Tags(`weekly`),
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		// Give the test a generous extra 10 hours to load the dataset and
 		// slowly ramp up the load.
@@ -836,7 +836,7 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
 		EstimatedMax:   gceOrAws(cloud, 2900, 3500),
-		Tags:           []string{`aws`},
+		Tags:           registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -845,7 +845,7 @@ func registerTPCC(r registry.Registry) {
 		LoadWarehouses: gceOrAws(cloud, 11500, 11500),
 		EstimatedMax:   gceOrAws(cloud, 10000, 10000),
 
-		Tags: []string{`weekly`},
+		Tags: registry.Tags(`weekly`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:        6,
@@ -892,7 +892,7 @@ func registerTPCC(r registry.Registry) {
 		LoadWarehouses:    gceOrAws(cloud, 3500, 3900),
 		EstimatedMax:      gceOrAws(cloud, 2900, 3500),
 		EncryptionEnabled: true,
-		Tags:              []string{`aws`},
+		Tags:              registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -902,7 +902,7 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMax:      gceOrAws(cloud, 10000, 10000),
 		EncryptionEnabled: true,
 
-		Tags: []string{`weekly`},
+		Tags: registry.Tags(`weekly`),
 	})
 }
 
@@ -992,7 +992,7 @@ type tpccBenchSpec struct {
 	// MinVersion to pass to testRegistryImpl.Add.
 	MinVersion string
 	// Tags to pass to testRegistryImpl.Add.
-	Tags []string
+	Tags map[string]struct{}
 	// EncryptionEnabled determines if the benchmark uses encrypted stores (i.e.
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
