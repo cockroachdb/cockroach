@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1257,6 +1258,9 @@ type extraTxnState struct {
 	descCollection     *descs.Collection
 	jobs               *txnJobsCollection
 	schemaChangerState *SchemaChangerState
+
+	// regionsProvider is populated lazily.
+	regionsProvider *regions.Provider
 }
 
 // InternalDB stored information needed to construct a new
@@ -1310,6 +1314,18 @@ var _ isql.DB = &InternalDB{}
 type internalTxn struct {
 	internalExecutor
 	txn *kv.Txn
+}
+
+func (txn *internalTxn) Regions() descs.RegionProvider {
+	if txn.extraTxnState.regionsProvider == nil {
+		txn.extraTxnState.regionsProvider = regions.NewProvider(
+			txn.s.cfg.Codec,
+			txn.s.cfg.TenantStatusServer,
+			txn.txn,
+			txn.extraTxnState.descCollection,
+		)
+	}
+	return txn.extraTxnState.regionsProvider
 }
 
 func (txn *internalTxn) Descriptors() *descs.Collection {

@@ -204,7 +204,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			desc = mut.ImmutableCopy().(catalog.TableDescriptor)
 		}
 		leaseManager := s.LeaseManager().(*lease.Manager)
-		collection := descs.MakeTestCollection(ctx, leaseManager)
+		collection := descs.MakeTestCollection(ctx, keys.SystemSQLCodec, leaseManager)
 
 		gen, err := sql.CreateTestTableDescriptor(
 			context.Background(),

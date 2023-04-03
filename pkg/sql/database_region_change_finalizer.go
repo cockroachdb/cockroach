@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -100,7 +99,7 @@ func (r *databaseRegionChangeFinalizer) cleanup() {
 // finalize updates the zone configurations of the database and all enclosed
 // REGIONAL BY ROW tables once the region promotion/demotion is complete.
 func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn descs.Txn) error {
-	if err := r.updateDatabaseZoneConfig(ctx, txn.KV()); err != nil {
+	if err := r.updateDatabaseZoneConfig(ctx, txn); err != nil {
 		return err
 	}
 	if err := r.preDrop(ctx, txn); err != nil {
@@ -114,14 +113,16 @@ func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn descs.
 // advance of the type descriptor change, to ensure that the table and type
 // descriptors never become incorrect (from a query perspective). For more info,
 // see the callers.
-func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn isql.Txn) error {
-	repartitioned, zoneConfigUpdates, err := r.repartitionRegionalByRowTables(ctx, txn.KV())
+func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn descs.Txn) error {
+	repartitioned, zoneConfigUpdates, err := r.repartitionRegionalByRowTables(ctx, txn)
 	if err != nil {
 		return err
 	}
 	for _, update := range zoneConfigUpdates {
 		if _, err := writeZoneConfigUpdate(
-			ctx, txn.KV(), r.localPlanner.ExtendedEvalContext().Tracing.KVTracingEnabled(), r.localPlanner.Descriptors(), update,
+			ctx, txn,
+			r.localPlanner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			update,
 		); err != nil {
 			return err
 		}
@@ -177,9 +178,9 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 // encloses the multi-region enum such that there is an entry for all PUBLIC
 // region values.
 func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn descs.Txn,
 ) error {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn, r.dbID, r.localPlanner.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors())
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,6 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 		regionConfig,
 		txn,
 		r.localPlanner.ExecCfg(),
-		r.localPlanner.Descriptors(),
 		r.localPlanner.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 }
@@ -214,9 +214,9 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 // write the descriptors through the collection or inject them as synthetic
 // descriptors.
 func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn descs.Txn,
 ) (repartitioned []*tabledesc.Mutable, zoneConfigUpdates []*zoneConfigUpdate, _ error) {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn, r.dbID, r.localPlanner.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -276,7 +276,6 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 			ctx,
 			txn,
 			r.localPlanner.ExecCfg(),
-			r.localPlanner.Descriptors(),
 			regionConfig,
 			tableDesc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,

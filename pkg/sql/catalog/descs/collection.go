@@ -1203,12 +1203,15 @@ func (tc *Collection) GetConstraintComment(
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.
-func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collection {
+func MakeTestCollection(
+	ctx context.Context, codec keys.SQLCodec, leaseManager LeaseManager,
+) Collection {
 	settings := cluster.MakeTestingClusterSettings()
 	return Collection{
 		settings: settings,
 		version:  settings.Version.ActiveVersion(ctx),
 		leased:   makeLeasedDescriptors(leaseManager),
+		cr:       catkv.NewUncachedCatalogReader(codec),
 	}
 }
 

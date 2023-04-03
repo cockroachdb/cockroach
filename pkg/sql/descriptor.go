@@ -264,10 +264,25 @@ func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) 
 	}
 }
 
-func (p *planner) checkRegionIsCurrentlyActive(ctx context.Context, region catpb.RegionName) error {
-	liveRegions, err := p.getLiveClusterRegions(ctx)
-	if err != nil {
-		return err
+// checkRegionIsCurrentlyActive looks up the set of active regions and
+// checks whether the region argument is in that set. If this is a secondary
+// tenant, and this check is for the system database, we augment the behavior
+// to only look up the host regions.
+func (p *planner) checkRegionIsCurrentlyActive(
+	ctx context.Context, region catpb.RegionName, isSystemDatabase bool,
+) error {
+	var liveRegions LiveClusterRegions
+	if !p.execCfg.Codec.ForSystemTenant() && isSystemDatabase {
+		systemRegions, err := p.regionsProvider().GetSystemRegions(ctx)
+		if err != nil {
+			return err
+		}
+		liveRegions = regionsResponseToLiveClusterRegions(systemRegions)
+	} else {
+		var err error
+		if liveRegions, err = p.getLiveClusterRegions(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Ensure that the region we're adding is currently active.

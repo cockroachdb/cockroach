@@ -1149,7 +1149,6 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				tbl,
 				m,
 				false, // isDone
-				txn.Descriptors(),
 			); err != nil {
 				return err
 			}
@@ -1444,7 +1443,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				scTable,
 				m,
 				true, // isDone
-				txn.Descriptors(),
 			); err != nil {
 				return err
 			}
@@ -1820,14 +1818,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 // tenant.
 func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
-	txn isql.Txn,
+	txn descs.Txn,
 	execCfg *ExecutorConfig,
 	kvTrace bool,
-	descriptors *descs.Collection,
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn.KV(), table.GetID())
+	zoneWithRaw, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), table.GetID())
 	if err != nil {
 		return err
 	}
@@ -1867,9 +1864,9 @@ func maybeUpdateZoneConfigsForPKChange(
 	// Write the zone back. This call regenerates the index spans that apply
 	// to each partition in the index.
 	_, err = writeZoneConfig(
-		ctx, txn.KV(), table.ID, table,
+		ctx, txn, table.ID, table,
 		zoneWithRaw.ZoneConfigProto(), zoneWithRaw.GetRawBytesInStorage(),
-		execCfg, descriptors, false, kvTrace,
+		execCfg, false, kvTrace,
 	)
 	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 		return err
@@ -2935,12 +2932,11 @@ func (sc *SchemaChanger) queueCleanupJob(
 
 func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 	ctx context.Context,
-	txn isql.Txn,
+	txn descs.Txn,
 	dbDesc catalog.DatabaseDescriptor,
 	tableDesc *tabledesc.Mutable,
 	mutation catalog.Mutation,
 	isDone bool,
-	descsCol *descs.Collection,
 ) error {
 	if pkSwap := mutation.AsPrimaryKeySwap(); pkSwap != nil {
 		if pkSwap.HasLocalityConfig() {
@@ -3003,16 +2999,15 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				)
 			}
 
-			regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), dbDesc.GetID(), descsCol)
+			regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), dbDesc.GetID(), txn.Descriptors())
 			if err != nil {
 				return err
 			}
 			if err := ApplyZoneConfigForMultiRegionTable(
 				ctx,
-				txn.KV(),
+				txn,
 				sc.execCfg,
 				false, /* kvTrace */
-				descsCol,
 				regionConfig,
 				tableDesc,
 				opts...,
@@ -3025,7 +3020,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 		// Note this is done even for isDone = true, though not strictly
 		// necessary.
 		return maybeUpdateZoneConfigsForPKChange(
-			ctx, txn, sc.execCfg, false /* kvTrace */, descsCol, tableDesc, pkSwap.PrimaryKeySwapDesc(),
+			ctx, txn, sc.execCfg, false /* kvTrace */, tableDesc, pkSwap.PrimaryKeySwapDesc(),
 		)
 	}
 	return nil
