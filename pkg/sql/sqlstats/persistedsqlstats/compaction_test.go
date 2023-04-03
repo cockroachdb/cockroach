@@ -143,6 +143,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 	// Disable automatic flush since the test will handle the flush manually.
 	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
+	// Disable automatic compaction job
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.enabled = false")
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("stmtCount=%d/maxPersistedRowLimit=%d/rowsDeletePerTxn=%d",
@@ -216,9 +218,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 				kvInterceptor.reset()
 				cleanupInterceptor.reset()
 				kvInterceptor.enable()
-				defer kvInterceptor.disable()
 
 				err := statsCompactor.DeleteOldestEntries(ctx)
+				kvInterceptor.disable()
 				require.NoError(t, err)
 
 				expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()

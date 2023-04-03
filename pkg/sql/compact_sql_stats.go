@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,6 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
+)
+
+// CompactSqlStatsJobEnabled is the cluster setting that controls
+// the execution of the Automatic SQL Stats Compaction Job.
+var CompactSqlStatsJobEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.cleanup.enabled",
+	"if set, SQL stats compaction job is executed",
+	true,
 )
 
 type sqlStatsCompactionResumer struct {
@@ -68,13 +78,15 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		return err
 	}
 
-	statsCompactor := persistedsqlstats.NewStatsCompactor(
-		r.st,
-		p.ExecCfg().InternalDB,
-		p.ExecCfg().InternalDB.server.ServerMetrics.StatsMetrics.SQLStatsRemovedRows,
-		p.ExecCfg().SQLStatsTestingKnobs)
-	if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
-		return err
+	if !CompactSqlStatsJobEnabled.Get(&r.st.SV) {
+		statsCompactor := persistedsqlstats.NewStatsCompactor(
+			r.st,
+			p.ExecCfg().InternalDB,
+			p.ExecCfg().InternalDB.server.ServerMetrics.StatsMetrics.SQLStatsRemovedRows,
+			p.ExecCfg().SQLStatsTestingKnobs)
+		if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
+			return err
+		}
 	}
 
 	return r.maybeNotifyJobTerminated(
