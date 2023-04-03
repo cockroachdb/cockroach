@@ -417,7 +417,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	if usingClausePresent {
 		usingScope := mb.b.buildFromTables(using, noRowLocking, inScope)
 
-		// Check that the same table name is not used multiple times
+		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.fetchScope, usingScope)
 
 		// The USING table columns can be accessed by the RETURNING clause of the
@@ -460,7 +460,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.outScope = projectionsScope
 
 	// Build a distinct on to ensure there is at most one row in the joined output
-	// for every row in the table
+	// for every row in the table.
 	if usingClausePresent {
 		var pkCols opt.ColSet
 

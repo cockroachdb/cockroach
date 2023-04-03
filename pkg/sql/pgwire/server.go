@@ -746,8 +746,7 @@ func (s *Server) ServeConn(
 		return s.sendErr(ctx, st, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
-	sArgs, err := finalizeClientParameters(ctx, preServeStatus.clientParameters,
-		&st.SV)
+	sArgs, err := finalizeClientParameters(ctx, preServeStatus.clientParameters, &st.SV)
 	if err != nil {
 		preServeStatus.Reserved.Close(ctx)
 		return s.sendErr(ctx, st, conn, err)

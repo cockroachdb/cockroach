@@ -294,7 +294,7 @@ export class TransactionsPage extends React.Component<
 
   isSortSettingSameAsReqSort = (): boolean => {
     return (
-      getSortColumn(this.state.reqSortSetting) ==
+      getSortColumn(this.props.reqSortSetting) ==
       this.props.sortSetting.columnTitle
     );
   };
