@@ -156,7 +156,6 @@ func verifyStorageStats(t *testing.T, s *kvserver.Store) {
 		{m.RdbBlockCacheHits, 10},
 		{m.RdbBlockCacheMisses, 0},
 		{m.RdbBlockCacheUsage, 0},
-		{m.RdbBlockCachePinnedUsage, 0},
 		{m.RdbBloomFilterPrefixChecked, 0},
 		{m.RdbBloomFilterPrefixUseful, 0},
 		{m.RdbMemtableTotalSize, 5000},

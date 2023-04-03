@@ -455,12 +455,6 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaRdbBlockCachePinnedUsage = metric.Metadata{
-		Name:        "rocksdb.block.cache.pinned-usage",
-		Help:        "Bytes pinned by the block cache",
-		Measurement: "Memory",
-		Unit:        metric.Unit_BYTES,
-	}
 	metaRdbBloomFilterPrefixChecked = metric.Metadata{
 		Name:        "rocksdb.bloom.filter.prefix.checked",
 		Help:        "Number of times the bloom filter was checked",
@@ -1938,7 +1932,6 @@ type StoreMetrics struct {
 	RdbBlockCacheHits           *metric.Gauge
 	RdbBlockCacheMisses         *metric.Gauge
 	RdbBlockCacheUsage          *metric.Gauge
-	RdbBlockCachePinnedUsage    *metric.Gauge
 	RdbBloomFilterPrefixChecked *metric.Gauge
 	RdbBloomFilterPrefixUseful  *metric.Gauge
 	RdbMemtableTotalSize        *metric.Gauge
@@ -2518,7 +2511,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
 		RdbBlockCacheMisses:         metric.NewGauge(metaRdbBlockCacheMisses),
 		RdbBlockCacheUsage:          metric.NewGauge(metaRdbBlockCacheUsage),
-		RdbBlockCachePinnedUsage:    metric.NewGauge(metaRdbBlockCachePinnedUsage),
 		RdbBloomFilterPrefixChecked: metric.NewGauge(metaRdbBloomFilterPrefixChecked),
 		RdbBloomFilterPrefixUseful:  metric.NewGauge(metaRdbBloomFilterPrefixUseful),
 		RdbMemtableTotalSize:        metric.NewGauge(metaRdbMemtableTotalSize),
@@ -2862,10 +2854,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbBlockCacheHits.Update(m.BlockCache.Hits)
 	sm.RdbBlockCacheMisses.Update(m.BlockCache.Misses)
 	sm.RdbBlockCacheUsage.Update(m.BlockCache.Size)
-	// TODO(jackson): Delete RdbBlockCachePinnedUsage or calculate the
-	// equivalent (the sum of IteratorMetrics.ReadAmp for all open iterator,
-	// times the block size).
-	sm.RdbBlockCachePinnedUsage.Update(0)
 	sm.RdbBloomFilterPrefixUseful.Update(m.Filter.Hits)
 	sm.RdbBloomFilterPrefixChecked.Update(m.Filter.Hits + m.Filter.Misses)
 	sm.RdbMemtableTotalSize.Update(int64(m.MemTable.Size))
