@@ -3024,6 +3024,7 @@ func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 100477, "programming error in dropTableAfterJobComplete below")
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
