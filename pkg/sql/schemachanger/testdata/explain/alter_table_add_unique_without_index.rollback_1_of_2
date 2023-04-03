@@ -10,7 +10,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
-           │    └── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104, ConstraintID: 2}
+           │    └── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
            └── 3 Mutation operations
                 ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
