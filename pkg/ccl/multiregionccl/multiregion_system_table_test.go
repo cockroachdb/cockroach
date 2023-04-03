@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -39,7 +38,6 @@ import (
 func TestMrSystemDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	skip.WithIssue(t, 98039, "flaky test")
 
@@ -73,8 +71,6 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
-
-	tDB.Exec(t, `SELECT crdb_internal.unsafe_optimize_system_database()`)
 
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
@@ -236,11 +232,10 @@ func TestMrSystemDatabase(t *testing.T) {
 	})
 
 	t.Run("QueryByEnum", func(t *testing.T) {
-		// This is a regression test for a bug triggered by
-		// unsafe_optimize_system_database. If usnafe_optimize_system_database
-		// does not clear table statistics, this query will fail in the
-		// optimizer, because the stats will have the wrong type for the
-		// crdb_column.
+		// This is a regression test for a bug triggered by setting up the system
+		// database. If the operation to configure the does not clear table
+		// statistics, this query will fail in the optimizer, because the stats
+		// will have the wrong type for the crdb_column.
 		row := tDB.QueryRow(t, `
 			SELECT crdb_region, session_id, expiration 
 			FROM system.sqlliveness 
@@ -257,7 +252,6 @@ func TestMrSystemDatabase(t *testing.T) {
 func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
 	cs := cluster.MakeTestingClusterSettings()
@@ -307,6 +301,7 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	region, _, err := slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, enum.One, region)
+	ten1SessionID := sessionID
 
 	// Ensure that the sqlliveness entry created by the second SQL server has
 	// the right region and session UUID.
@@ -318,14 +313,21 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 
 	rows := tenSQLDB2.Query(t, `SELECT crdb_region, session_id FROM system.sqlliveness`)
 	defer rows.Close()
-	livenessMap := map[string][]byte{}
+	livenessMap := map[string]string{}
 	for rows.Next() {
 		var region, ID string
 		require.NoError(t, rows.Scan(&region, &ID))
-		livenessMap[ID] = []byte(region)
+		livenessMap[ID] = region
 	}
 	require.NoError(t, rows.Err())
-	r, ok := livenessMap[sessionID]
-	require.True(t, ok)
-	require.Equal(t, r, region)
+	{
+		r, ok := livenessMap[sessionID]
+		require.True(t, ok)
+		require.Equal(t, r, "us-east3")
+	}
+	{
+		r, ok := livenessMap[ten1SessionID]
+		require.True(t, ok)
+		require.Equal(t, r, "us-east1")
+	}
 }

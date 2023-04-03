@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -50,7 +49,6 @@ func TestColdStartLatency(t *testing.T) {
 	skip.WithIssue(t, 96334)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
@@ -159,22 +157,21 @@ func TestColdStartLatency(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '1500ms'`)
 	tdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`)
 
-	applyGlobalTables := func(t *testing.T, db *gosql.DB, isTenant bool) {
-		stmts := []string{
-			`alter database system configure zone discard;`,
-			`alter database system set primary region "us-east1";`,
-			`alter database system add region "us-west1";`,
-			`alter database system add region "europe-west1"`,
-		}
-
+	configureSystem := func(t *testing.T, db *gosql.DB, isTenant bool) {
+		var stmts []string
 		if !isTenant {
-			stmts = append(stmts,
+			stmts = []string{
 				"ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
 				"ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true",
-				`alter range meta configure zone using constraints = '{"+region=us-east1": 1, "+region=us-west1": 1, "+region=europe-west1": 1}';`)
+				`alter range meta configure zone using constraints = '{"+region=us-east1": 1, "+region=us-west1": 1, "+region=europe-west1": 1}';`,
+			}
 		} else {
-			stmts = append(stmts,
-				`SELECT crdb_internal.unsafe_optimize_system_database()`)
+			stmts = []string{`
+BEGIN;
+ALTER DATABASE system PRIMARY REGION "us-east1";
+ALTER DATABASE system ADD REGION "us-west1";
+ALTER DATABASE system ADD REGION "europe-west1";
+COMMIT;`}
 		}
 		tdb := sqlutils.MakeSQLRunner(db)
 		for i, stmt := range stmts {
@@ -182,7 +179,7 @@ func TestColdStartLatency(t *testing.T) {
 			tdb.Exec(t, stmt)
 		}
 	}
-	applyGlobalTables(t, tc.ServerConn(0), false)
+	configureSystem(t, tc.ServerConn(0), false)
 
 	var blockCrossRegionTenantAccess atomic.Bool
 	maybeWait := func(ctx context.Context, a, b int) {
@@ -259,7 +256,7 @@ func TestColdStartLatency(t *testing.T) {
 			},
 			Locality: localities[0],
 		})
-		applyGlobalTables(t, tenantDB, true)
+		configureSystem(t, tenantDB, true)
 		tdb := sqlutils.MakeSQLRunner(tenantDB)
 		tdb.Exec(t, "CREATE USER foo PASSWORD $1 LOGIN", password)
 		tdb.Exec(t, "GRANT admin TO foo")
@@ -274,7 +271,7 @@ func TestColdStartLatency(t *testing.T) {
                             'progress',
                             progress
                            )->'AutoSpanConfigReconciliation' AS p
-                      FROM system.jobs
+                      FROM crdb_internal.system_jobs
                      WHERE status = 'running'
                 ),
        checkpoint AS (
