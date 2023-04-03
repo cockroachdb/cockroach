@@ -2796,7 +2796,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	)
 	defer cleanupFunc()
 
-	startTestUser := func() *gosql.DB {
+	startTestUser := func(t *testing.T) *gosql.DB {
 		testuser, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(t, err)
 		return testuser
@@ -2806,7 +2806,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	filename := "path/to/file"
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
-	writeToUserfile := func(filename, data string) {
+	writeToUserfile := func(t *testing.T, filename, data string) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ief := tc.Server(0).InternalDB().(isql.DB)
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(
@@ -2820,7 +2820,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 	t.Run("import-RBAC", func(t *testing.T) {
 		userFileDest := dest + "/" + t.Name()
-		testuser := startTestUser()
+		testuser := startTestUser(t)
 
 		// User has no privileges at this point. Check that an IMPORT requires
 		// CREATE privileges on the database.
@@ -2834,11 +2834,11 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		// the testuser SQL connection, understand why.
 		require.NoError(t, testuser.Close())
 
-		testuser = startTestUser()
+		testuser = startTestUser(t)
 		defer testuser.Close()
 
 		// Write to userfile now that the user has CREATE privileges.
-		writeToUserfile(t.Name(), `
+		writeToUserfile(t, t.Name(), `
 CREATE TABLE simple (id INT);
 `)
 
@@ -2851,7 +2851,7 @@ CREATE TABLE simple (id INT);
 		// Create table to IMPORT INTO.
 		rootDB.Exec(t, `CREATE TABLE rbac_import_into_priv (a INT8 PRIMARY KEY, b STRING)`)
 		userFileDest := dest + "/" + t.Name()
-		testuser := startTestUser()
+		testuser := startTestUser(t)
 
 		// User has no privileges at this point. Check that an IMPORT INTO requires
 		// INSERT and DROP privileges.
@@ -2871,11 +2871,11 @@ b) CSV DATA ('%s')`, userFileDest))
 		// TODO(adityamaru): The above GRANT does not reflect unless we restart
 		// the testuser SQL connection, understand why.
 		require.NoError(t, testuser.Close())
-		testuser = startTestUser()
+		testuser = startTestUser(t)
 		defer testuser.Close()
 
 		// Write to userfile now that the user has CREATE privileges.
-		writeToUserfile(t.Name(), "1,aaa")
+		writeToUserfile(t, t.Name(), "1,aaa")
 
 		// Import should now have the required privileges to start the job.
 		_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_import_into_priv (a,b) CSV DATA ('%s')`,
@@ -3024,6 +3024,7 @@ func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 100477, "programming error in dropTableAfterJobComplete below")
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
@@ -3046,6 +3047,9 @@ func TestImportIntoCSV(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
+	ctx, cancel := tc.Stopper().WithCancelOnQuiesce(context.Background())
+	defer cancel()
+
 	var forceFailure bool
 	var importBodyFinished chan struct{}
 	var delayImportFinish chan struct{}
@@ -3056,10 +3060,18 @@ func TestImportIntoCSV(t *testing.T) {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if importBodyFinished != nil {
-						importBodyFinished <- struct{}{}
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case importBodyFinished <- struct{}{}:
+						}
 					}
 					if delayImportFinish != nil {
-						<-delayImportFinish
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-delayImportFinish:
+						}
 					}
 
 					if forceFailure {
@@ -3099,7 +3111,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// because _all_ errors that "rpc error" are
 	// retriable. If we end up with a cross-node nodelocal
 	// request, we get a pause.
-	dropTableAfterJobComplete := func(tableName string) {
+	dropTableAfterJobComplete := func(t *testing.T, tableName string) {
 		var jobID int
 		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status IN ('paused', 'pause-requested', 'reverting')")
 		err := row.Scan(&jobID)
@@ -3291,7 +3303,7 @@ func TestImportIntoCSV(t *testing.T) {
 				skip.IgnoreLint(t, "bzip2 not available on PATH?")
 			}
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-			defer dropTableAfterJobComplete("t")
+			defer dropTableAfterJobComplete(t, "t")
 
 			var tableID int64
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
@@ -3364,7 +3376,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("import-into-unique_rowid", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3398,7 +3410,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 			t.Run(subtestName, func(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-				defer dropTableAfterJobComplete("t")
+				defer dropTableAfterJobComplete(t, "t")
 
 				if emptyTable != false {
 					// Insert the test data
@@ -3429,7 +3441,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Verify that during IMPORT INTO the table is offline.
 	t.Run("offline-state", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3457,7 +3469,11 @@ func TestImportIntoCSV(t *testing.T) {
 		})
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(delayImportFinish)
-			<-importBodyFinished
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-importBodyFinished:
+			}
 
 			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM t`).Scan(&unused)
 			if !testutils.IsError(err, `relation "t" is offline: importing`) {
@@ -3496,7 +3512,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
-			defer dropTableAfterJobComplete("t")
+			defer dropTableAfterJobComplete(t, "t")
 
 			data = "1"
 			sqlDB.Exec(t, `IMPORT INTO t (a) CSV DATA ($1)`, srv.URL)
@@ -3506,7 +3522,7 @@ func TestImportIntoCSV(t *testing.T) {
 		})
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
-			defer dropTableAfterJobComplete("t")
+			defer dropTableAfterJobComplete(t, "t")
 
 			data = "1,teststr"
 			sqlDB.Exec(t, `IMPORT INTO t (a, f) CSV DATA ($1)`, srv.URL)
@@ -3516,7 +3532,7 @@ func TestImportIntoCSV(t *testing.T) {
 		})
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
-			defer dropTableAfterJobComplete("t")
+			defer dropTableAfterJobComplete(t, "t")
 
 			data = "7,12,teststr"
 			sqlDB.Exec(t, `IMPORT INTO t (d, e, f) CSV DATA ($1)`, srv.URL)
@@ -3529,7 +3545,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Tests IMPORT INTO with a target column set, and an explicit PK.
 	t.Run("target-cols-with-explicit-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3568,7 +3584,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// get an error indicating the error.
 	t.Run("csv-with-more-than-targeted-columns", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Expect an error if attempting to IMPORT INTO with CSV having more columns
 		// than targeted.
@@ -3583,7 +3599,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// until we support DEFAULT expressions.
 	t.Run("target-cols-excluding-explicit-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Expect an error if attempting to IMPORT INTO a target list which does
 		// not include all the PKs of the table.
@@ -3597,7 +3613,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// in its schema then the source CSV file.
 	t.Run("more-table-cols-than-csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING, c INT)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3617,7 +3633,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// defines in what order columns should be imported to align with table definition
 	t.Run("target-cols-reordered", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b INT, c STRING NOT NULL, d DECIMAL NOT NULL)")
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		const data = "3.14,c is a string,1\n2.73,another string,2"
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3637,7 +3653,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// reserved keywords.
 	t.Run("cols-named-with-reserved-keywords", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t ("select" INT PRIMARY KEY, "from" INT, "Some-c,ol-'Name'" STRING NOT NULL)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		const data = "today,1,2"
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3656,7 +3672,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// in its schema then the source CSV file.
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		sqlDB.ExpectErr(
 			t, "row 1: expected 1 fields, got 2",
@@ -3668,7 +3684,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// import of all columns in the exisiting table.
 	t.Run("no-target-cols-specified", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3702,7 +3718,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 		}))
 		defer srv.Close()
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 		sqlDB.ExpectErr(t, `violated by column "b"`,
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL),
 		)
@@ -3713,7 +3729,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// exercises the row_id generation in IMPORT.
 	t.Run("multiple-import-into-without-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3742,7 +3758,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// row_id generation logic.
 	t.Run("multiple-file-import-into-without-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s, %s)`, testFiles.files[0], testFiles.files[0]),
@@ -3764,7 +3780,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// collision.
 	t.Run("import-into-same-file-diff-imports", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
@@ -3787,7 +3803,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// value, and succeeds in doing so.
 	t.Run("import-into-dups-in-sst", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.fileWithDupKeySameValue[0]),
@@ -3805,7 +3821,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// colliding key sandwiched between valid keys.
 	t.Run("import-into-key-collision", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
@@ -3824,7 +3840,7 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE ref (b STRING PRIMARY KEY)`)
 		defer sqlDB.Exec(t, `DROP TABLE ref`)
 		sqlDB.Exec(t, `CREATE TABLE t (a INT CHECK (a >= 0), b STRING, CONSTRAINT fk_ref FOREIGN KEY (b) REFERENCES ref)`)
-		defer dropTableAfterJobComplete("t")
+		defer dropTableAfterJobComplete(t, "t")
 
 		var checkValidated, fkValidated bool
 		sqlDB.QueryRow(t, `SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`).Scan(&checkValidated)
@@ -5613,7 +5629,7 @@ func TestImportDelimited(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	testRows, configs := getMysqlOutfileTestdata(t)
-	checkQueryResults := func(validationQuery string) {
+	checkQueryResults := func(t *testing.T, validationQuery string) {
 		for idx, row := range sqlDB.QueryStr(t, validationQuery) {
 			expected, actual := testRows[idx].s, row[1]
 			if expected == injectNull {
@@ -5658,7 +5674,7 @@ func TestImportDelimited(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
+				checkQueryResults(t, fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
 			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
@@ -5668,7 +5684,7 @@ func TestImportDelimited(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
+				checkQueryResults(t, fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
 		})
 	}
@@ -5694,7 +5710,7 @@ func TestImportPgCopy(t *testing.T) {
 
 	testRows, configs := getPgCopyTestdata(t)
 
-	checkQueryResults := func(validationQuery string) {
+	checkQueryResults := func(t *testing.T, validationQuery string) {
 		for idx, row := range sqlDB.QueryStr(t, validationQuery) {
 			{
 				expected, actual := testRows[idx].s, row[1]
@@ -5744,7 +5760,7 @@ func TestImportPgCopy(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				checkQueryResults(fmt.Sprintf(`SELECT * FROM into%d ORDER BY i`, i))
+				checkQueryResults(t, fmt.Sprintf(`SELECT * FROM into%d ORDER BY i`, i))
 			})
 			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
@@ -5754,7 +5770,7 @@ func TestImportPgCopy(t *testing.T) {
 					intoCmd += " WITH " + strings.Join(flags, ", ")
 				}
 				sqlDB.Exec(t, intoCmd, opts...)
-				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
+				checkQueryResults(t, fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
 		})
 	}

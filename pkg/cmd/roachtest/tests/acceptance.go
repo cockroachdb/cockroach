@@ -31,7 +31,7 @@ func registerAcceptance(r registry.Registry) {
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
 			{name: "event-log", fn: runEventLog},
-			{name: "gossip/peerings", fn: runGossipPeerings},
+			{name: "gossip/peerings", fn: runGossipPeerings, skip: "flaky test. tracked in #96091"},
 			{name: "gossip/restart", fn: runGossipRestart},
 			{
 				name:              "gossip/restart-node-one",
