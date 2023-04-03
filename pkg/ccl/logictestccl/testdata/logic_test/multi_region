@@ -540,8 +540,12 @@ statement error pgcode 42501 user testuser may not modify the system database
 ALTER DATABASE system PRIMARY REGION "ap-southeast-2"
 
 # Note that nobody can add a region to the system database of the system tenant.
+# However, because of logic to metamorphically run as a secondary tenant, we
+# cannot rely on the fact that in these configs not marked "tenant", that we
+# are in the system tenant. Hence the lack of error code checking and the
+# regex matching both possible outcomes.
 skipif config multiregion-9node-3region-3azs-tenant
-statement error pgcode 0A000 modifying the regions of system database is not supported
+statement error user testuser may not modify the system database|modifying the regions of system database is not supported
 ALTER DATABASE system PRIMARY REGION "ap-southeast-2"
 
 user root
