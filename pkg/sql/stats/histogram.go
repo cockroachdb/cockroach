@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,6 +76,15 @@ Please add new entries at the top.
   omitted on Version 0 histograms.
 
 */
+
+// GetDefaultHistogramBuckets gets the default number of histogram buckets to
+// create for the given table.
+func GetDefaultHistogramBuckets(sv *settings.Values, desc catalog.TableDescriptor) uint32 {
+	if count, ok := desc.HistogramBucketsCount(); ok {
+		return count
+	}
+	return uint32(DefaultHistogramBuckets.Get(sv))
+}
 
 // EquiDepthHistogram creates a histogram where each bucket contains roughly
 // the same number of samples (though it can vary when a boundary value has

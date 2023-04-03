@@ -89,7 +89,11 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	// since we only support one reqStat at a time.
 	for _, s := range reqStats {
 		if s.histogram {
-			sampler.SampleSize = uint32(histogramSamples.Get(&dsp.st.SV))
+			if count, ok := desc.HistogramSamplesCount(); ok {
+				sampler.SampleSize = count
+			} else {
+				sampler.SampleSize = uint32(histogramSamples.Get(&dsp.st.SV))
+			}
 			// This could be anything >= 2 to produce a histogram, but the max number
 			// of buckets is probably also a reasonable minimum number of samples. (If
 			// there are fewer rows than this in the table, there will be fewer
