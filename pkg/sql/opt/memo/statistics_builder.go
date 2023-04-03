@@ -4472,9 +4472,14 @@ func (sb *statisticsBuilder) selectivityFromInvertedJoinCondition(
 	return props.MakeSelectivity(unknownInvertedJoinSelectivity)
 }
 
+const maxUnappliedConjuncts = 5.0
+
 func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 	numUnappliedConjuncts float64,
 ) (selectivity props.Selectivity) {
+	if numUnappliedConjuncts > maxUnappliedConjuncts {
+		numUnappliedConjuncts = maxUnappliedConjuncts
+	}
 	selectivity = props.MakeSelectivity(math.Pow(unknownFilterSelectivity, numUnappliedConjuncts))
 
 	return selectivity
