@@ -190,6 +190,11 @@ type SQLServer struct {
 	// This is set to true when the server has started accepting client conns.
 	isReady syncutil.AtomicBool
 
+	// gracefulDrainComplete indicates when a graceful drain has
+	// completed successfully. We use this to document cases where a
+	// graceful drain did _not_ occur.
+	gracefulDrainComplete syncutil.AtomicBool
+
 	// internalDBMemMonitor is the memory monitor corresponding to the
 	// InternalDB singleton. It only gets closed when
 	// Server is closed. Every Executor created via the factory
@@ -1639,6 +1644,24 @@ func (s *SQLServer) preStart(
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+
+	// Report a warning if the server is being shut down via the stopper
+	// before it was gracefully drained. This warning may be innocuous
+	// in tests where there is no use of the test server/cluster after
+	// shutdown; but may be a sign of a problem in production or for
+	// tests that need to restart a server.
+	stopper.AddCloser(stop.CloserFn(func() {
+		if !s.gracefulDrainComplete.Get() {
+			warnCtx := s.AnnotateCtx(context.Background())
+
+			if knobs.Server != nil && knobs.Server.(*TestingKnobs).RequireGracefulDrain {
+				log.Fatalf(warnCtx, "drain required but not performed")
+			}
+
+			log.Warningf(warnCtx, "server shutdown without a prior graceful drain")
+		}
+	}))
+
 	return nil
 }
 
