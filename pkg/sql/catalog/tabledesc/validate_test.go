@@ -135,6 +135,8 @@ var validationMap = []struct {
 			"AutoStatsSettings":             {status: iSolemnlySwearThisFieldIsValidated},
 			"ForecastStats":                 {status: thisFieldReferencesNoObjects},
 			"ImportStartWallTime":           {status: thisFieldReferencesNoObjects},
+			"HistogramBuckets":              {status: thisFieldReferencesNoObjects},
+			"HistogramSamples":              {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
