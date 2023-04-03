@@ -429,6 +429,11 @@ func (p *pendingLeaseRequest) requestLease(
 	status kvserverpb.LeaseStatus,
 	leaseReq kvpb.Request,
 ) error {
+	started := timeutil.Now()
+	defer func() {
+		p.repl.store.metrics.LeaseRequestLatency.RecordValue(timeutil.Since(started).Nanoseconds())
+	}()
+
 	// If requesting an epoch-based lease & current state is expired,
 	// potentially heartbeat our own liveness or increment epoch of
 	// prior owner. Note we only do this if the previous lease was
