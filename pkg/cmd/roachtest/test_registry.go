@@ -115,9 +115,9 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
 	if len(spec.Tags) == 0 {
-		spec.Tags = []string{registry.DefaultTag}
+		spec.Tags = registry.Tags(registry.DefaultTag)
 	}
-	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
+	spec.Tags["owner-"+string(spec.Owner)] = struct{}{}
 
 	// At the time of writing, we expect the roachtest job to finish within 24h
 	// and have corresponding timeouts set up in CI. Since each individual test
@@ -127,10 +127,8 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	const maxTimeout = 18 * time.Hour
 	if spec.Timeout > maxTimeout {
 		var weekly bool
-		for _, tag := range spec.Tags {
-			if tag == "weekly" {
-				weekly = true
-			}
+		if _, ok := spec.Tags["weekly"]; ok {
+			weekly = true
 		}
 		if !weekly {
 			return fmt.Errorf(
