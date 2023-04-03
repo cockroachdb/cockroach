@@ -531,10 +531,10 @@ func registerBackup(r registry.Registry) {
 	for _, item := range []struct {
 		kmsProvider string
 		machine     string
-		tags        []string
+		tags        map[string]struct{}
 	}{
 		{kmsProvider: "GCS", machine: spec.GCE},
-		{kmsProvider: "AWS", machine: spec.AWS, tags: []string{"aws"}},
+		{kmsProvider: "AWS", machine: spec.AWS, tags: registry.Tags("aws")},
 	} {
 		item := item
 		r.Add(registry.TestSpec{

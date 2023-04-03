@@ -1016,7 +1016,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:       true,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
-		Tags:            []string{"manual"},
+		Tags:            registry.Tags("manual"),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)

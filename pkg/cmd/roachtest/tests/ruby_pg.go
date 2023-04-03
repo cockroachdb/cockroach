@@ -232,7 +232,7 @@ func registerRubyPG(r registry.Registry) {
 		Cluster:    r.MakeClusterSpec(1),
 		Leases:     registry.MetamorphicLeases,
 		NativeLibs: registry.LibGEOS,
-		Tags:       []string{`default`, `orm`},
+		Tags:       registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRubyPGTest(ctx, t, c)
 		},
