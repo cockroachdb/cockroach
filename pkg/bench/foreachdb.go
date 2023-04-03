@@ -13,6 +13,7 @@ package bench
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
 	"fmt"
 	"net"
 	"net/url"
@@ -36,6 +37,8 @@ import (
 	_ "github.com/lib/pq"              // registers the pg driver to gosql
 	"github.com/stretchr/testify/require"
 )
+
+var runSepProcessTenant = flag.Bool("run-sep-process-tenant", false, "run separate process tenant benchmarks (these may freeze due to tenant limits)")
 
 // BenchmarkFn is a function that runs a benchmark using the given SQLRunner.
 type BenchmarkFn func(b *testing.B, db *sqlutils.SQLRunner)
@@ -73,12 +76,6 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 			TenantName:  roachpb.TenantName(tenantName),
 			UseDatabase: "bench",
 		})
-	require.NoError(b, err)
-
-	// The benchmarks sometime hit the default span limit, so we increase it.
-	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
-	// if hitting this limit is expected.
-	_, err = db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
 	require.NoError(b, err)
 
 	// Exempt the tenant from rate limiting. We expect most
@@ -166,7 +163,7 @@ func benchmarkPostgres(b *testing.B, f BenchmarkFn) {
 	// -----------------------------------------
 	//  /usr/local/var/postgres/postgresql.conf
 	// (1 row)
-	//```
+	// ```
 	//
 	// Now open this file and set the following values:
 	// ```
@@ -225,14 +222,23 @@ func benchmarkMySQL(b *testing.B, f BenchmarkFn) {
 
 // ForEachDB iterates the given benchmark over multiple database engines.
 func ForEachDB(b *testing.B, fn BenchmarkFn) {
-	for _, dbFn := range []func(*testing.B, BenchmarkFn){
+
+	dbFns := []func(*testing.B, BenchmarkFn){
 		benchmarkCockroach,
 		benchmarkSharedProcessTenantCockroach,
-		benchmarkSepProcessTenantCockroach,
+	}
+
+	if *runSepProcessTenant {
+		dbFns = append(dbFns, benchmarkSepProcessTenantCockroach)
+	}
+
+	dbFns = append(dbFns,
 		benchmarkMultinodeCockroach,
 		benchmarkPostgres,
 		benchmarkMySQL,
-	} {
+	)
+
+	for _, dbFn := range dbFns {
 		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
 		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
 		b.Run(dbName, func(b *testing.B) {
