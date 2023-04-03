@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -470,7 +471,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 94808)
+
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	ctx := context.Background()
@@ -614,8 +615,11 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		tenID := roachpb.MustMakeTenantID(10)
 		sqlDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 
+		tenantStopper := stop.NewStopper()
+		defer tenantStopper.Stop(ctx) // in case the test fails prematurely.
+
 		ten, conn10 := serverutils.StartTenant(t, srv,
-			base.TestTenantArgs{TenantID: tenID, Stopper: srv.Stopper()})
+			base.TestTenantArgs{TenantID: tenID, Stopper: tenantStopper})
 		defer conn10.Close()
 
 		// Write a cluster PTS record as the tenant.
@@ -630,6 +634,10 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			return tenPtp.WithTxn(txn).Protect(ctx, rec)
 		}))
 
+		// Ensure the secondary tenant is not running any more tasks.
+		tenantStopper.Stop(ctx)
+
+		// Drop the record.
 		sqlDB.Exec(t, `DROP TENANT [$1]`, tenID.ToUint64())
 
 		sqlDB.CheckQueryResultsRetry(
