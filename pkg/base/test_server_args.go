@@ -188,6 +188,11 @@ type TestClusterArgs struct {
 	// waits for all nodes to start before returning.
 	ParallelStart bool
 
+	// If true, the test synchronously waits for span config subscription. This
+	// is needed if manually relocating ranges, or enqueueing them through
+	// select KV queues.
+	WaitForSpanConfigs bool
+
 	// ServerArgsPerNode override the default ServerArgs with the value in this
 	// map. The map's key is an index within TestCluster.Servers. If there is
 	// no entry in the map for a particular server, the default ServerArgs are

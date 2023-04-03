@@ -453,6 +453,24 @@ func (tc *TestCluster) Start(t testing.TB) {
 		}
 		return err
 	})
+
+	if tc.clusterArgs.WaitForSpanConfigs || tc.clusterArgs.ReplicationMode == base.ReplicationManual {
+		if !startedTestTenant {
+			var err error
+			_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1ms'")
+			require.NoError(t, err)
+			_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '1ms'")
+			require.NoError(t, err)
+			defer func() {
+				_, err = tc.ServerConn(0).Exec("RESET CLUSTER SETTING kv.closed_timestamp.target_duration")
+				require.NoError(t, err)
+
+				_, err = tc.ServerConn(0).Exec("RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval")
+				require.NoError(t, err)
+			}()
+		}
+		tc.WaitForSpanConfigSubscription(t)
+	}
 }
 
 type checkType bool
@@ -1447,6 +1465,20 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 				return fmt.Errorf("no liveness record")
 			}
 			fmt.Printf("n%d: found liveness\n", s.NodeID())
+		}
+		return nil
+	})
+}
+
+// WaitForSpanConfigSubscription waits until the store is wholly subscribed to
+// the global span configurations state.
+func (tc *TestCluster) WaitForSpanConfigSubscription(t testing.TB) {
+	ctx := context.Background()
+	testutils.SucceedsSoon(t, func() error {
+		for _, s := range tc.Servers {
+			store, err := s.Stores().GetStore(s.GetFirstStoreID())
+			require.NoError(t, err)
+			return store.WaitForSpanConfigSubscription(ctx)
 		}
 		return nil
 	})

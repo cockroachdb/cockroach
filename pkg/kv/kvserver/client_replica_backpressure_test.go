@@ -69,6 +69,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		unblockCh := make(chan struct{}, 1)
 		var rangesBlocked sync.Map
 		args = base.TestClusterArgs{
+			WaitForSpanConfigs: true,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{

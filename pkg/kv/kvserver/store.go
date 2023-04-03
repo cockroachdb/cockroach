@@ -3525,7 +3525,11 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 		return nil // nothing to do here
 	}
 
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	ctx = s.AnnotateCtx(ctx)
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     50 * time.Millisecond,
+	}); r.Next(); {
 		if !s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
 			return nil
 		}
