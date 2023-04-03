@@ -134,15 +134,15 @@ func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 }
 
 type clusterCfg struct {
-	name           string
-	iodir          string
-	nodes          int
-	splits         int
-	ioConf         base.ExternalIODirConfig
-	localities     string
-	beforeVersion  string
-	testingKnobCfg string
-	disableTenant  bool
+	name              string
+	iodir             string
+	nodes             int
+	splits            int
+	ioConf            base.ExternalIODirConfig
+	localities        string
+	beforeVersion     string
+	testingKnobCfg    string
+	defaultTestTenant base.DefaultTestTenantOptions
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -150,7 +150,8 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	var cleanup func()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
-	params.ServerArgs.DisableDefaultTestTenant = cfg.disableTenant
+
+	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
@@ -285,7 +286,7 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
 //   - disable-tenant : ensures the test is never run in a multitenant environment by
-//     setting testserverargs.DisableDefaultTestTenant to true.
+//     setting testserverargs.DefaultTestTenant to base.TestTenantDisabled.
 //
 //   - "upgrade-cluster version=<version>"
 //     Upgrade the cluster version of the active cluster to the passed in
@@ -473,7 +474,7 @@ func TestDataDriven(t *testing.T) {
 			case "new-cluster":
 				var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
 				var splits int
-				var disableTenant bool
+				var defaultTestTenant base.DefaultTestTenantOptions
 				nodes := singleNode
 				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
@@ -509,20 +510,20 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
 				}
 				if d.HasArg("disable-tenant") {
-					disableTenant = true
+					defaultTestTenant = base.TestTenantDisabled
 				}
 
 				lastCreatedCluster = name
 				cfg := clusterCfg{
-					name:           name,
-					iodir:          iodir,
-					nodes:          nodes,
-					splits:         splits,
-					ioConf:         io,
-					localities:     localities,
-					beforeVersion:  beforeVersion,
-					testingKnobCfg: testingKnobCfg,
-					disableTenant:  disableTenant,
+					name:              name,
+					iodir:             iodir,
+					nodes:             nodes,
+					splits:            splits,
+					ioConf:            io,
+					localities:        localities,
+					beforeVersion:     beforeVersion,
+					testingKnobCfg:    testingKnobCfg,
+					defaultTestTenant: defaultTestTenant,
 				}
 				err := ds.addCluster(t, cfg)
 				if err != nil {

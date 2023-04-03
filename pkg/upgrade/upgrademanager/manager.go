@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -196,7 +197,9 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 		// without using jobs, so that the side effect of the migrations are
 		// minimized and tests continue to be happy as they were before the
 		// permanent migrations were introduced.
-		return m.runPermanentMigrationsWithoutJobsForTests(ctx, user)
+		// We use WithoutChecks here as this is test only code and we don't want
+		// to blindly retry multiple migrations in one go.
+		return m.runPermanentMigrationsWithoutJobsForTests(startup.WithoutChecks(ctx), user)
 	}
 
 	// Do a best-effort check to see if all upgrades have already executed and so
@@ -209,13 +212,16 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	latest := permanentUpgrades[len(permanentUpgrades)-1]
 	lastVer := latest.Version()
 	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
-	lastUpgradeCompleted, err := migrationstable.CheckIfMigrationCompleted(
-		ctx, lastVer, nil /* txn */, m.ie,
-		// We'll do a follower read. This is all best effort anyway, and the
-		// follower read should keep the startup time low in the common case where
-		// all upgrades have run a long time ago before this node start.
-		enterpriseEnabled,
-		migrationstable.StaleRead)
+	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx, "check if migration completed",
+		func(ctx context.Context) (bool, error) {
+			return migrationstable.CheckIfMigrationCompleted(
+				ctx, lastVer, nil /* txn */, m.ie,
+				// We'll do a follower read. This is all best effort anyway, and the
+				// follower read should keep the startup time low in the common case where
+				// all upgrades have run a long time ago before this node start.
+				enterpriseEnabled,
+				migrationstable.StaleRead)
+		})
 	if err != nil {
 		return err
 	}
@@ -261,7 +267,9 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 				u.Version())
 			// Mark the upgrade as completed so that we can get rid of this logic when
 			// compatibility with 22.2 is no longer necessary.
-			if err := migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version()); err != nil {
+			if err := startup.RunIdempotentWithRetry(ctx, "mark upgrade complete", func(ctx context.Context) (err error) {
+				return migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version())
+			}); err != nil {
 				return err
 			}
 			continue
@@ -285,7 +293,10 @@ func checkOldStartupMigrationRan(
 		return false, nil
 	}
 	migrationKey := append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(migrationName)...)
-	kv, err := db.Get(ctx, migrationKey)
+	kv, err := startup.RunIdempotentWithRetryEx(ctx, "check old startup migration",
+		func(ctx context.Context) (kv kv.KeyValue, err error) {
+			return db.Get(ctx, migrationKey)
+		})
 	if err != nil {
 		return false, err
 	}
@@ -656,7 +667,10 @@ func (m *Manager) runMigration(
 	if !useJob {
 		// Some tests don't like it when jobs are run at server startup, because
 		// they pollute the jobs table. So, we run the upgrade directly.
-
+		// To run jobs synchronously we must also disable startup retry assertions
+		// since this code doesn't do retries and we also don't want to complicate
+		// test only code.
+		ctx := startup.WithoutChecks(ctx)
 		alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
 			ctx, version, nil /* txn */, m.ie, false /* enterpriseEnabled */, migrationstable.ConsistentRead,
 		)
@@ -697,16 +711,27 @@ func (m *Manager) runMigration(
 		// long-running upgrades, this is useful.
 		//
 		// If the job already exists, we wait for it to finish.
-		alreadyCompleted, alreadyExisting, id, err := m.getOrCreateMigrationJob(ctx, user, version, mig.Name())
-		if alreadyCompleted || err != nil {
+		var (
+			alreadyCompleted, alreadyExisting bool
+			id                                jobspb.JobID
+		)
+		if err := startup.RunIdempotentWithRetry(ctx, "upgrade create job", func(ctx context.Context) (err error) {
+			alreadyCompleted, alreadyExisting, id, err = m.getOrCreateMigrationJob(ctx, user, version,
+				mig.Name())
+			return err
+		}); alreadyCompleted || err != nil {
 			return err
 		}
 		if alreadyExisting {
 			log.Infof(ctx, "waiting for %s", mig.Name())
-			return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
+			return startup.RunIdempotentWithRetry(ctx, "upgrade wait jobs", func(ctx context.Context) error {
+				return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
+			})
 		} else {
 			log.Infof(ctx, "running %s", mig.Name())
-			return m.jr.Run(ctx, []jobspb.JobID{id})
+			return startup.RunIdempotentWithRetry(ctx, "upgrade run jobs", func(ctx context.Context) error {
+				return m.jr.Run(ctx, []jobspb.JobID{id})
+			})
 		}
 	}
 }

@@ -8,6 +8,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/roachpb",

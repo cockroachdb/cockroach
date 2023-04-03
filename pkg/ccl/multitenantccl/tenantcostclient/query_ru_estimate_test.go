@@ -61,8 +61,8 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*500)
 
 	params := base.TestServerArgs{
-		Settings:                 st,
-		DisableDefaultTestTenant: true,
+		Settings:          st,
+		DefaultTestTenant: base.TestTenantDisabled,
 	}
 
 	s, mainDB, _ := serverutils.StartServer(t, params)

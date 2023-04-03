@@ -64,7 +64,7 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			var db *gosql.DB
 			params, _ := tests.CreateTestServerParams()
 			// Test fails within a test tenant. Tracked with #76378.
-			params.DisableDefaultTestTenant = true
+			params.DefaultTestTenant = base.TestTenantDisabled
 			params.Locality.Tiers = []roachpb.Tier{
 				{Key: "region", Value: "ajstorm-1"},
 			}

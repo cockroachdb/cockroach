@@ -19,6 +19,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/spanconfig",
         "//pkg/sql/catalog",
         "//pkg/sql/randgen",
         "//pkg/storage",

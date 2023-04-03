@@ -1315,13 +1315,21 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
+	defaultTestTenant := t.cfg.DefaultTestTenant
+	if defaultTestTenant == base.TestTenantEnabled {
+		// If the test tenant is explicitly enabled then `logic test` will handle
+		// the creation of a configured test tenant, thus for this case we disable
+		// the implicit creation of the default test tenant.
+		defaultTestTenant = base.TestTenantDisabled
+	}
+
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
 			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
 				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
 			),
-			DisableDefaultTestTenant: t.cfg.UseTenant || t.cfg.DisableDefaultTestTenant,
+			DefaultTestTenant: defaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -1363,7 +1371,7 @@ func (t *logicTest) newCluster(
 	}
 
 	cfg := t.cfg
-	if cfg.UseTenant {
+	if cfg.DefaultTestTenant == base.TestTenantEnabled {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
 		params.ReplicationMode = base.ReplicationAuto
@@ -1434,7 +1442,7 @@ func (t *logicTest) newCluster(
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.UseTenant {
+	if cfg.DefaultTestTenant == base.TestTenantEnabled {
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			tenantArgs := base.TestTenantArgs{
@@ -1500,7 +1508,7 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
+	if cfg.DefaultTestTenant == base.TestTenantEnabled || t.cluster.StartedDefaultTestTenant() {
 
 		conn := t.cluster.StorageClusterConn()
 		clusterSettings := toa.clusterSettings
@@ -2909,7 +2917,7 @@ func (t *logicTest) processSubtest(
 			t.setUser(fields[1], nodeIdx)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
-			if t.cfg.UseTenant && strings.HasPrefix(fields[1], "host-cluster-") {
+			if t.cfg.DefaultTestTenant == base.TestTenantEnabled && strings.HasPrefix(fields[1], "host-cluster-") {
 				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}

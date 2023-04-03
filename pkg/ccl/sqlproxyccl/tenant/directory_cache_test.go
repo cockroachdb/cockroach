@@ -500,7 +500,7 @@ func newTestDirectoryCache(
 			Insecure: true,
 			// Test fails when run within a tenant. More investigation
 			// is required here. Tracked with #76387.
-			DisableDefaultTestTenant: true,
+			DefaultTestTenant: base.TestTenantDisabled,
 		},
 	})
 	clusterStopper := tc.Stopper()
