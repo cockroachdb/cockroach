@@ -116,7 +116,7 @@ func newUninitializedReplica(
 	r.mu.proposalBuf.testing.submitProposalFilter = store.cfg.TestingKnobs.TestingProposalSubmitFilter
 
 	if leaseHistoryMaxEntries > 0 {
-		r.leaseHistory = newLeaseHistory()
+		r.leaseHistory = newLeaseHistory(leaseHistoryMaxEntries)
 	}
 
 	if store.cfg.StorePool != nil {

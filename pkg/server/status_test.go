@@ -1158,7 +1158,7 @@ func TestHotRanges2ResponseWithViewActivityOptions(t *testing.T) {
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer kvserver.EnableLeaseHistory(100)()
+	defer kvserver.EnableLeaseHistoryForTesting(100)()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
@@ -1511,7 +1511,7 @@ func TestDiagnosticsResponse(t *testing.T) {
 func TestRangeResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer kvserver.EnableLeaseHistory(100)()
+	defer kvserver.EnableLeaseHistoryForTesting(100)()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 

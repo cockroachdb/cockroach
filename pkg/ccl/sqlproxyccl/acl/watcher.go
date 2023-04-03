@@ -122,14 +122,26 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 	}
 
 	if options.allowlistFile != "" {
-		c, next, err := newAccessControllerFromFile[*Allowlist](ctx, options.allowlistFile, w.options.pollingInterval, w.options.errorCount)
+		c, next, err := newAccessControllerFromFile[*Allowlist](
+			ctx,
+			options.allowlistFile,
+			options.timeSource,
+			w.options.pollingInterval,
+			w.options.errorCount,
+		)
 		if err != nil {
 			return nil, err
 		}
 		w.addAccessController(c, next)
 	}
 	if options.denylistFile != "" {
-		c, next, err := newAccessControllerFromFile[*Denylist](ctx, options.denylistFile, w.options.pollingInterval, w.options.errorCount)
+		c, next, err := newAccessControllerFromFile[*Denylist](
+			ctx,
+			options.denylistFile,
+			options.timeSource,
+			w.options.pollingInterval,
+			w.options.errorCount,
+		)
 		if err != nil {
 			return nil, err
 		}

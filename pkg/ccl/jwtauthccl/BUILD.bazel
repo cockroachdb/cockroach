@@ -46,6 +46,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql/pgwire/identmap",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
