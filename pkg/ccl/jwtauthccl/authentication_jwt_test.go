@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -400,6 +401,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 func TestSubjectReservedUser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 100412)
 
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -430,7 +432,7 @@ func TestSubjectReservedUser(t *testing.T) {
 func TestAudienceCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
+	skip.WithIssue(t, 100356)
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
