@@ -168,7 +168,7 @@ func registerRustPostgres(r registry.Registry) {
 		Name:    "rust-postgres",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
-		Tags:    []string{`default`, `orm`},
+		Tags:    registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRustPostgres(ctx, t, c)
 		},

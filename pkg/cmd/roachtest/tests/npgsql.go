@@ -169,7 +169,7 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 		Name:    "npgsql",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `driver`},
+		Tags:    registry.Tags(`default`, `driver`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNpgsql(ctx, t, c)
 		},

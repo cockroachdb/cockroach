@@ -989,7 +989,7 @@ func registerCDC(r registry.Registry) {
 		Name:            "cdc/tpcc-1000/sink=null",
 		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Tags:            []string{"manual"},
+		Tags:            registry.Tags("manual"),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)

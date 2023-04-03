@@ -220,6 +220,8 @@ Examples:
 	}
 	listCmd.Flags().BoolVar(
 		&listBench, "bench", false, "list benchmarks instead of tests")
+	listCmd.Flags().StringVar(
+		&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
 
 	var runCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -405,6 +407,9 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
 	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
+
+	// actual registering of tests
+	// TODO: don't register if we can't run on the specified registry cloud
 	register(&r)
 	cr := newClusterRegistry()
 	stopper := stop.NewStopper()
