@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -515,7 +516,9 @@ func GetJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	return httputil.GetJSON(httpClient, ts.AdminURL()+path, response)
+	fullURL := ts.AdminURL() + path
+	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
 // PostJSONProto uses the supplied client to POST the URL specified by the parameters
@@ -534,5 +537,7 @@ func PostJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	return httputil.PostJSON(httpClient, ts.AdminURL()+path, request, response)
+	fullURL := ts.AdminURL() + path
+	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	return httputil.PostJSON(httpClient, fullURL, request, response)
 }
