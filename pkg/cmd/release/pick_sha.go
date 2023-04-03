@@ -103,6 +103,7 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 	fmt.Println("Previous version:", nextRelease.prevReleaseVersion)
 	fmt.Println("Next version:", nextRelease.nextReleaseVersion)
 	fmt.Println("Release SHA:", nextRelease.buildInfo.SHA)
+	panic("nope")
 
 	// TODO: before copying check if it's already there and bail if exists, can be forced by -f
 	releaseInfoPath := fmt.Sprintf("%s/%s.json", pickSHAFlags.releaseObjectPrefix, nextRelease.nextReleaseVersion)

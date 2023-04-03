@@ -46,13 +46,45 @@ func findNextVersion(releaseSeries string) (string, error) {
 
 // findNextRelease finds all required information for the next release.
 func findNextRelease(releaseSeries string) (releaseInfo, error) {
+	semReleaseSeries, err := semver.NewVersion(releaseSeries)
+	if err != nil {
+		return releaseInfo{}, fmt.Errorf("cannot parse release series %s: %w", releaseSeries, err)
+	}
 	prevReleaseVersion, err := findPreviousRelease(releaseSeries, false)
 	if err != nil {
 		return releaseInfo{}, fmt.Errorf("cannot find previous release: %w", err)
 	}
-	nextReleaseVersion, err := bumpVersion(prevReleaseVersion)
-	if err != nil {
-		return releaseInfo{}, fmt.Errorf("cannot bump version: %w", err)
+	var nextReleaseVersion string
+	// Starting with 23.1 we keep the version saved in a file. For previous releases the version is calculated base on the previous released version.
+	if semReleaseSeries.Major() >= 23 {
+		// check the following branches: release-23.1, release-23.1.0, master
+		branchesToCheck := []string{
+			fmt.Sprintf("origin/release-%s", releaseSeries),
+			fmt.Sprintf("origin/release-%s.0", releaseSeries),
+			"master",
+		}
+		// make sure it start with 23
+		var content []byte
+		for _, branch := range branchesToCheck {
+			fmt.Println("git", "show", fmt.Sprintf("%s:%s", branch, versionFile))
+			cmd := exec.Command("git", "show", fmt.Sprintf("%s:%s", branch, versionFile))
+			output, err := cmd.Output()
+			if err != nil {
+				fmt.Println("err", err)
+				continue
+			}
+			content = output
+			fmt.Println("content ", branch, " ", string(output))
+			break
+		}
+		nextReleaseVersion = strings.Fields(string(content))[0]
+	} else {
+		// TODO(rail): remove this logic once we stop releasing anything older than v23 releases.
+		var err error
+		nextReleaseVersion, err = bumpVersion(prevReleaseVersion)
+		if err != nil {
+			return releaseInfo{}, fmt.Errorf("cannot bump version: %w", err)
+		}
 	}
 	candidateCommits, err := findCandidateCommits(prevReleaseVersion, releaseSeries)
 	if err != nil {
