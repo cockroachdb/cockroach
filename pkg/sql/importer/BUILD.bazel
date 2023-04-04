@@ -70,6 +70,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/exprutil",
         "//pkg/sql/faketreeeval",
+        "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob",
         "//pkg/sql/lexbase",
         "//pkg/sql/opt/memo",

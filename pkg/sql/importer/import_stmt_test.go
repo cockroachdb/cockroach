@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -107,6 +108,66 @@ func CreateAvroData(
 	}
 	// Retrieve the AVRO encoded data.
 	return data.String()
+}
+
+// TestImportIntoCSVCancel cancels a distributed import. This test
+// currently has few assertions but is essentially a regression test
+// since the cancellation process would previously leak go routines.
+func TestImportIntoCSVCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
+
+	const nodes = 3
+
+	numFiles := nodes + 2
+	rowsPerFile := 5000
+	rowsPerRaceFile := 16
+
+	defer TestingSetParallelImporterReaderBatchSize(1)()
+
+	ctx := context.Background()
+	baseDir := testutils.TestDataPath(t, "csv")
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	setupDoneCh := make(chan struct{})
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.onSetupFinish = func(flowinfra.Flow) {
+					close(setupDoneCh)
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+	var jobID int
+	row := sqlDB.QueryRow(t, fmt.Sprintf("IMPORT INTO t (a, b) CSV DATA (%s) WITH DETACHED", strings.Join(testFiles.files, ",")))
+	row.Scan(&jobID)
+	<-setupDoneCh
+	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", jobID))
+	sqlDB.Exec(t, fmt.Sprintf("SHOW JOB WHEN COMPLETE %d", jobID))
+	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM t", [][]string{{"0"}})
 }
 
 func TestImportData(t *testing.T) {
