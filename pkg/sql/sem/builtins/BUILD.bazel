@@ -50,7 +50,6 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
