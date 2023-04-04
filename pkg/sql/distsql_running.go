@@ -984,8 +984,8 @@ type DistSQLReceiver struct {
 
 	testingKnobs struct {
 		// pushCallback, if set, will be called every time DistSQLReceiver.Push
-		// is called, with the same arguments.
-		pushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
+		// or DistSQLReceiver.PushBatch is called, with the same arguments.
+		pushCallback func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
 	}
 }
 
@@ -1413,7 +1413,7 @@ func (r *DistSQLReceiver) Push(
 ) execinfra.ConsumerStatus {
 	r.checkConcurrentError()
 	if r.testingKnobs.pushCallback != nil {
-		r.testingKnobs.pushCallback(row, meta)
+		r.testingKnobs.pushCallback(row, nil /* batch */, meta)
 	}
 	if meta != nil {
 		return r.pushMeta(meta)
@@ -1492,6 +1492,9 @@ func (r *DistSQLReceiver) PushBatch(
 	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	r.checkConcurrentError()
+	if r.testingKnobs.pushCallback != nil {
+		r.testingKnobs.pushCallback(nil /* row */, batch, meta)
+	}
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
