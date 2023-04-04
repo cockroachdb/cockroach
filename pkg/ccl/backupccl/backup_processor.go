@@ -168,25 +168,31 @@ func flushAggregator(ctx context.Context, agg *tracing.Aggregator) {
 	var flushTimer timeutil.Timer
 	defer flushTimer.Stop()
 
+	flush := func() {
+		agg.ForEachAggregatedEvent(ctx, func(tag string, aggregatorEvent tracing.AggregatorEvent) {
+			// TODO(adityamaru): For now we're only logging the CapturedStacks, in the future
+			// we will want to persist other aggregated events as well.
+			switch t := aggregatorEvent.(type) {
+			case *tracing.CapturedStack:
+				log.Infof(ctx, "slow request stack during backup: %s", t.String())
+			}
+		})
+		// Now that we have processed all the aggregated events we can clear the
+		// underlying map.
+		agg.Reset()
+	}
+
 	for {
 		// TODO(adityamaru): Make this a cluster setting.
 		flushTimer.Reset(30 * time.Second)
 		select {
 		case <-ctx.Done():
+			log.Infof(ctx, "GOING TO BE DONE")
+			flush()
 			return
 		case <-flushTimer.C:
 			flushTimer.Read = true
-			agg.ForEachAggregatedEvent(ctx, func(tag string, aggregatorEvent tracing.AggregatorEvent) {
-				// TODO(adityamaru): For now we're only logging the CapturedStacks, in the future
-				// we will want to persist other aggregated events as well.
-				switch t := aggregatorEvent.(type) {
-				case *tracing.CapturedStack:
-					log.Infof(ctx, "slow request stack during backup: %s", t.String())
-				}
-			})
-			// Now that we have processed all the aggregated events we can clear the
-			// underlying map.
-			agg.Reset()
+			flush()
 		}
 	}
 }

@@ -844,9 +844,7 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 			s.Printf(", [txn: %s]", ba.Txn.Short())
 		}
 	}
-	if ba.WaitPolicy != lock.WaitPolicy_Block {
-		s.Printf(", [wait-policy: %s]", ba.WaitPolicy)
-	}
+	s.Printf(", [wait-policy: %s]", ba.WaitPolicy)
 	if ba.CanForwardReadTimestamp {
 		s.Printf(", [can-forward-ts]")
 	}
