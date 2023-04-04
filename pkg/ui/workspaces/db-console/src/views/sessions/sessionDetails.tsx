@@ -39,7 +39,7 @@ export const selectSession = createSelector(
     state: CachedDataReducerState<SessionsResponseMessage>,
     props: RouteComponentProps<any>,
   ) => {
-    if (!state.data) {
+    if (!state?.data) {
       return null;
     }
     const sessionID = getMatchParamByName(props.match, sessionAttr);

@@ -259,7 +259,7 @@ function add(a: string, b: string): string {
 // to an int64 (in string form).
 export function HexStringToInt64String(s: string): string {
   let dec = "0";
-  s.split("").forEach(function (chr: string) {
+  s?.split("").forEach(function (chr: string) {
     const n = parseInt(chr, 16);
     for (let t = 8; t; t >>= 1) {
       dec = add(dec, dec);

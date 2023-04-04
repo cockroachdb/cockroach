@@ -48,7 +48,7 @@ export const selectSessions = createSelector(
     state: CachedDataReducerState<SessionsResponseMessage>,
     _: RouteComponentProps<any>,
   ) => {
-    if (!state.data) {
+    if (!state?.data) {
       return null;
     }
     return state.data.sessions.map(session => {
@@ -64,7 +64,7 @@ export const selectAppName = createSelector(
     state: CachedDataReducerState<SessionsResponseMessage>,
     _: RouteComponentProps<any>,
   ) => {
-    if (!state.data) {
+    if (!state?.data) {
       return null;
     }
     return state.data.internal_app_name_prefix;

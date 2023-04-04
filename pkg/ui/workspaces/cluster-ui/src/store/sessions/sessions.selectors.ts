@@ -20,7 +20,7 @@ export const selectSession = createSelector(
   (state: AppState) => state.adminUI?.sessions,
   (_state: AppState, props: RouteComponentProps) => props,
   (state: SessionsState, props: RouteComponentProps<any>) => {
-    if (!state.data) {
+    if (!state?.data) {
       return null;
     }
     const sessionID = getMatchParamByName(props.match, sessionAttr);

@@ -42,6 +42,6 @@ export const selectColumns = createSelector(
   // return array of columns if user have customized it or `null` otherwise
   localStorage =>
     localStorage["showColumns/JobsPage"]
-      ? localStorage["showColumns/JobsPage"].split(",")
+      ? localStorage["showColumns/JobsPage"]?.split(",")
       : null,
 );

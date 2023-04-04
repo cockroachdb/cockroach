@@ -102,11 +102,12 @@ export const MultiSelectCheckbox = (props: MultiSelectCheckboxProps) => {
     field: string,
     parent: any,
   ) => {
-    const selected = selectedOptions
-      .map(function (option: SelectOption) {
-        return option.label;
-      })
-      .toString();
+    const selected =
+      selectedOptions
+        ?.map(function (option: SelectOption) {
+          return option.label;
+        })
+        .toString() || "";
     parent.setState({
       filters: {
         ...parent.state.filters,
