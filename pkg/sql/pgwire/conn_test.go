@@ -1915,6 +1915,13 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	setMaxNonRootConnectionsReason := func(reason string) {
+		conn, cleanup := openConnWithUserSuccess(rootUser)
+		defer cleanup()
+		_, err := conn.Exec(ctx, "SET CLUSTER SETTING server.cockroach_cloud.max_client_connections_per_gateway_reason = $1", reason)
+		require.NoError(t, err)
+	}
+
 	createUser := func(user string, isAdmin bool) {
 		conn, cleanup := openConnWithUserSuccess(rootUser)
 		defer cleanup()
@@ -2021,6 +2028,19 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 		rootCleanup()
 		nonAdminCleanup()
 		requireConnectionCount(t, 0)
+	})
+
+	t.Run("max_non_root_connections_reason", func(t *testing.T) {
+		setMaxNonRootConnections(0)
+		setMaxNonRootConnectionsReason("foobar")
+		requireConnectionCount(t, 0)
+		_, cleanup, err := openConnWithUser(admin)
+		defer cleanup()
+		require.Error(t, err)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, pgcode.TooManyConnections.String(), pgErr.Code)
+		require.Regexp(t, "foobar", pgErr.Error())
 	})
 }
 
